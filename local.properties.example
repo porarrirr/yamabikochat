@@ -1,13 +1,14 @@
 # This file contains machine/user-specific settings for the Android SDK.
-# Replace 'your_sdk_path' with your actual Android SDK path
-sdk.dir=C\:\\Users\\{YOUR_USERNAME}\\AppData\\Local\\Android\\Sdk
-
-# Signing configuration for release builds
-# Copy this to local.properties and fill in the actual passwords
+# Copy this file to local.properties and edit for your machine.
 # NEVER commit local.properties to version control
-YAMABIKO_KEY_ALIAS=yamabiko
-YAMABIKO_KEY_PASSWORD=YOUR_KEY_PASSWORD_HERE
-YAMABIKO_STORE_PASSWORD=YOUR_KEYSTORE_PASSWORD_HERE
+sdk.dir=/path/to/Android/Sdk
+
+# Release signing configuration (optional; required for real release signing)
+# Provide via local.properties, Gradle properties (-P...), or environment variables
+RELEASE_KEY_ALIAS=your_key_alias
+RELEASE_KEY_PASSWORD=YOUR_KEY_PASSWORD_HERE
+RELEASE_STORE_FILE=release.keystore
+RELEASE_STORE_PASSWORD=YOUR_KEYSTORE_PASSWORD_HERE
 
 # Gemini OAuth (required for Gemini Auth login)
 GEMINI_OAUTH_CLIENT_ID=YOUR_GOOGLE_OAUTH_CLIENT_ID_HERE

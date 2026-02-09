@@ -15,6 +15,24 @@ android {
     fun String.escapeForKotlinString(): String =
         replace("\\", "\\\\").replace("\"", "\\\"")
 
+    val localProperties = java.util.Properties().apply {
+        val file = rootProject.file("local.properties")
+        if (file.isFile) {
+            file.inputStream().use { load(it) }
+        }
+    }
+
+    fun signingProperty(name: String): String? =
+        (project.findProperty(name) as String?)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: localProperties.getProperty(name)
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+            ?: System.getenv(name)
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+
     val geminiOauthClientId = (project.findProperty("GEMINI_OAUTH_CLIENT_ID") as String?)
         ?.trim()
         .orEmpty()
@@ -50,12 +68,24 @@ android {
         }
     }
 
+    val releaseKeyAlias = signingProperty("RELEASE_KEY_ALIAS")
+    val releaseKeyPassword = signingProperty("RELEASE_KEY_PASSWORD")
+    val releaseStoreFilePath = signingProperty("RELEASE_STORE_FILE")
+    val releaseStorePassword = signingProperty("RELEASE_STORE_PASSWORD")
+    val hasReleaseSigning =
+        !releaseKeyAlias.isNullOrBlank() &&
+            !releaseKeyPassword.isNullOrBlank() &&
+            !releaseStoreFilePath.isNullOrBlank() &&
+            !releaseStorePassword.isNullOrBlank()
+
     signingConfigs {
-        create("release") {
-            keyAlias = project.findProperty("YAMABIKO_KEY_ALIAS") as String? ?: "yamabiko"
-            keyPassword = project.findProperty("YAMABIKO_KEY_PASSWORD") as String? ?: ""
-            storeFile = file("../yamabiko-release-key.keystore")
-            storePassword = project.findProperty("YAMABIKO_STORE_PASSWORD") as String? ?: ""
+        if (hasReleaseSigning) {
+            create("release") {
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+                storeFile = rootProject.file(releaseStoreFilePath!!)
+                storePassword = releaseStorePassword
+            }
         }
     }
 
@@ -68,7 +98,8 @@ android {
                 "proguard-rules.pro"
             )
             isDebuggable = false
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig =
+                if (hasReleaseSigning) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
         create("diagnostic") {
             isMinifyEnabled = true

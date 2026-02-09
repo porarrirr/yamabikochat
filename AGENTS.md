@@ -35,6 +35,6 @@
 
 ## Security & Configuration Tips
 - Do not commit secrets. Keep `local.properties` untracked; use the example as a template.
-- Release signing uses `YAMABIKO_*` entries and `yamabiko-release-key.keystore`; protect keystores and rotate if exposed.
+- Release signing uses local-only properties (e.g., `RELEASE_*`) and a private keystore file; protect keystores and rotate if exposed.
 - Provide API keys via app settings; avoid embedding in code.
 
