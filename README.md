@@ -3,8 +3,6 @@
 Android向けのAIチャットアプリです。複数プロバイダーのモデルを切り替えながら会話でき、Markdown（数式）表示や、デュアル比較・自動会話にも対応します。
 
 ## Screenshots
-> `docs/images/*.png` はプレースホルダーです。実際のスクショに差し替えるとREADMEの見た目が完成します。
-
 | 設定ホーム | API / モデル | システムプロンプト | チャット（Thinking） |
 |---|---|---|---|
 | ![設定ホーム](docs/images/settings-home.png) | ![API / モデル](docs/images/settings-api-provider.png) | ![システムプロンプト](docs/images/settings-system-prompt-preset.png) | ![Thinking](docs/images/chat-thinking.png) |
