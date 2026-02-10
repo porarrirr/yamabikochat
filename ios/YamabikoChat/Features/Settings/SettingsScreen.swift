@@ -76,7 +76,7 @@ struct SettingsScreen: View {
             }
             .fileImporter(
                 isPresented: $showGeminiOAuthConfigImporter,
-                allowedContentTypes: [.propertyList],
+                allowedContentTypes: [.propertyList, .xml],
                 allowsMultipleSelection: false
             ) { result in
                 switch result {

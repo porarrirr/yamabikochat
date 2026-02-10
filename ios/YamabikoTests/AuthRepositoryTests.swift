@@ -292,6 +292,29 @@ final class AuthRepositoryTests: XCTestCase {
         XCTAssertFalse(repo.hasImportedOAuthClientConfig())
     }
 
+    func testGeminiOAuthImportAcceptsCaseInsensitiveKeys() throws {
+        let store = InMemoryCredentialStore()
+        let repo = GeminiAuthRepository(
+            credentialStore: store,
+            oauthConfigProvider: StubGeminiOAuthConfigProvider(
+                config: GeminiOAuthClientConfig(clientID: "", clientSecret: "")
+            )
+        )
+
+        let plistURL = try createTemporaryPlistFile(
+            dictionary: [
+                "gemini_oauth_client_id": "case-client-id",
+                "GEMINI_oauth_CLIENT_secret": "case-client-secret"
+            ]
+        )
+        defer { try? FileManager.default.removeItem(at: plistURL) }
+
+        let imported = try repo.importOAuthClientConfig(fileURL: plistURL)
+        XCTAssertEqual(imported.clientID, "case-client-id")
+        XCTAssertEqual(imported.clientSecret, "case-client-secret")
+        XCTAssertTrue(repo.hasImportedOAuthClientConfig())
+    }
+
     func testGeminiOAuthImportedConfigCanBeCleared() throws {
         let store = InMemoryCredentialStore()
         let repo = GeminiAuthRepository(

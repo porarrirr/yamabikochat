@@ -131,15 +131,18 @@ final class GeminiAuthRepository {
     }
 
     func importOAuthClientConfig(fileURL: URL) throws -> GeminiOAuthClientConfig {
-        let data = try Data(contentsOf: fileURL)
+        let copiedURL = try coordinateAndCopyImportFile(fileURL)
+        defer { try? FileManager.default.removeItem(at: copiedURL) }
+
+        let data = try Data(contentsOf: copiedURL)
         let raw = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
         guard let dictionary = raw as? [String: Any] else {
             throw ProviderClientError.parseFailure("Selected file is not a plist dictionary.")
         }
 
         let imported = GeminiOAuthClientConfig(
-            clientID: dictionary["GEMINI_OAUTH_CLIENT_ID"] as? String ?? "",
-            clientSecret: dictionary["GEMINI_OAUTH_CLIENT_SECRET"] as? String ?? ""
+            clientID: Self.lookupPlistString(key: "GEMINI_OAUTH_CLIENT_ID", in: dictionary),
+            clientSecret: Self.lookupPlistString(key: "GEMINI_OAUTH_CLIENT_SECRET", in: dictionary)
         )
         let normalized = Self.normalizedOAuthClientConfig(imported)
         let missing = Self.missingOAuthClientParts(from: normalized)
@@ -152,6 +155,44 @@ final class GeminiAuthRepository {
         try credentialStore.saveSecret(normalized.clientID, key: Constants.importedOAuthClientIDKey)
         try credentialStore.saveSecret(normalized.clientSecret, key: Constants.importedOAuthClientSecretKey)
         return normalized
+    }
+
+    private func coordinateAndCopyImportFile(_ fileURL: URL) throws -> URL {
+        let secured = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if secured {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("yamabiko-gemini-oauth-import-\(UUID().uuidString)")
+            .appendingPathExtension(fileURL.pathExtension.isEmpty ? "plist" : fileURL.pathExtension)
+
+        var coordinationError: NSError?
+        var copyError: Error?
+        let coordinator = NSFileCoordinator()
+        coordinator.coordinate(readingItemAt: fileURL, options: [.withoutChanges], error: &coordinationError) { coordinatedURL in
+            do {
+                if FileManager.default.fileExists(atPath: tempURL.path) {
+                    try FileManager.default.removeItem(at: tempURL)
+                }
+                try FileManager.default.copyItem(at: coordinatedURL, to: tempURL)
+            } catch {
+                copyError = error
+            }
+        }
+
+        if let coordinationError {
+            throw coordinationError
+        }
+        if let copyError {
+            throw copyError
+        }
+        if !FileManager.default.fileExists(atPath: tempURL.path) {
+            throw ProviderClientError.parseFailure("Selected file could not be read.")
+        }
+        return tempURL
     }
 
     func clearImportedOAuthClientConfig() throws {
@@ -868,6 +909,16 @@ final class GeminiAuthRepository {
 
     private static func normalizeOAuthConfigValue(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func lookupPlistString(key: String, in dictionary: [String: Any]) -> String {
+        if let exact = dictionary[key] as? String {
+            return exact
+        }
+        if let first = dictionary.first(where: { $0.key.caseInsensitiveCompare(key) == .orderedSame })?.value as? String {
+            return first
+        }
+        return ""
     }
 
     private static func normalizedOAuthClientConfig(_ config: GeminiOAuthClientConfig) -> GeminiOAuthClientConfig {
