@@ -30,6 +30,9 @@ jobs:
   build_ipa:
     runs-on: macos-15
     timeout-minutes: 45
+    env:
+      GEMINI_OAUTH_CLIENT_ID: ${{ secrets.GEMINI_OAUTH_CLIENT_ID }}
+      GEMINI_OAUTH_CLIENT_SECRET: ${{ secrets.GEMINI_OAUTH_CLIENT_SECRET }}
 
     steps:
       - name: Checkout
@@ -63,6 +66,8 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER= \
             PROVISIONING_PROFILE= \
             ASSETCATALOG_COMPILER_APPICON_NAME= \
+            GEMINI_OAUTH_CLIENT_ID="${GEMINI_OAUTH_CLIENT_ID}" \
+            GEMINI_OAUTH_CLIENT_SECRET="${GEMINI_OAUTH_CLIENT_SECRET}" \
             build
 
       - name: Package Unsigned IPA

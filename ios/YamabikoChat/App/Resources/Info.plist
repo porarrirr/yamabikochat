@@ -18,6 +18,10 @@
     <string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>GEMINI_OAUTH_CLIENT_ID</key>
+    <string>$(GEMINI_OAUTH_CLIENT_ID)</string>
+    <key>GEMINI_OAUTH_CLIENT_SECRET</key>
+    <string>$(GEMINI_OAUTH_CLIENT_SECRET)</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UIApplicationSceneManifest</key>
