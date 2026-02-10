@@ -3,8 +3,8 @@
 <plist version="1.0">
 <dict>
     <key>GEMINI_OAUTH_CLIENT_ID</key>
-    <string>__SET_ME__</string>
+    <string></string>
     <key>GEMINI_OAUTH_CLIENT_SECRET</key>
-    <string>__SET_ME__</string>
+    <string></string>
 </dict>
 </plist>

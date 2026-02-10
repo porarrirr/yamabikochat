@@ -35,9 +35,6 @@ struct RootView: View {
                 )
             }
         }
-        .navigationDestination(for: Int64.self) { conversationID in
-            ConversationDetailHost(conversationID: conversationID)
-        }
         .task {
             listViewModel.bind(repository: container.chatRepository)
             if appState.selectedConversationID == nil {

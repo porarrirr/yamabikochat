@@ -10,25 +10,28 @@ struct ConversationListScreen: View {
     var body: some View {
         List(selection: $selection) {
             ForEach(viewModel.filteredConversations) { entry in
-                NavigationLink(value: entry.id) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(entry.title)
-                                .font(.headline)
-                                .lineLimit(1)
-                            if entry.isSecret {
-                                Image(systemName: "lock.fill")
-                                    .foregroundStyle(.secondary)
-                                    .imageScale(.small)
-                            }
-                        }
-                        if let preview = entry.lastMessagePreview, !preview.isEmpty {
-                            Text(preview)
-                                .font(.caption)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(entry.title)
+                            .font(.headline)
+                            .lineLimit(1)
+                        if entry.isSecret {
+                            Image(systemName: "lock.fill")
                                 .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                                .imageScale(.small)
                         }
                     }
+                    if let preview = entry.lastMessagePreview, !preview.isEmpty {
+                        Text(preview)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selection = entry.id
+                    onSelect(entry.id)
                 }
                 .tag(entry.id)
                 .swipeActions {
@@ -69,10 +72,6 @@ struct ConversationListScreen: View {
                     Label("設定", systemImage: "gearshape")
                 }
             }
-        }
-        .onChange(of: selection) { _, newValue in
-            guard let id = newValue else { return }
-            onSelect(id)
         }
         .overlay(alignment: .bottom) {
             if let error = viewModel.errorMessage {
