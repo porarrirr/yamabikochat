@@ -790,11 +790,18 @@ struct SettingsScreen: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            if !viewModel.isGeminiOAuthConfigured {
+                Text("Gemini OAuth client ID/secret が未設定です。Info.plist を設定してください。")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+
             HStack {
                 Button("Sign in") {
                     Task { await viewModel.loginGeminiAuth() }
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(viewModel.isGeminiAuthActionRunning || !viewModel.isGeminiOAuthConfigured)
 
                 Button("Refresh") {
                     Task { await viewModel.refreshGeminiAuth(force: true) }

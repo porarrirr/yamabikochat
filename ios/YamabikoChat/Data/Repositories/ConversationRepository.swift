@@ -88,7 +88,22 @@ final class ConversationRepository {
                 db,
                 sql: """
                 SELECT c.id, c.title, c.updatedAtMs, c.isSecret,
-                       (SELECT text FROM chat_messages m WHERE m.conversationId = c.id ORDER BY m.createdAtMs DESC LIMIT 1) AS lastMessagePreview
+                       (
+                           SELECT CASE
+                               WHEN m.role = 'model' AND m.selectedVariantIndex > 0 THEN COALESCE(
+                                   (SELECT v.text
+                                    FROM chat_message_variants v
+                                    WHERE v.baseMessageId = m.id AND v.variantIndex = m.selectedVariantIndex
+                                    LIMIT 1),
+                                   m.text
+                               )
+                               ELSE m.text
+                           END
+                           FROM chat_messages m
+                           WHERE m.conversationId = c.id
+                           ORDER BY m.createdAtMs DESC
+                           LIMIT 1
+                       ) AS lastMessagePreview
                 FROM conversations c
                 ORDER BY c.updatedAtMs DESC
                 """
@@ -121,38 +136,31 @@ final class ConversationRepository {
 
     func observeFullMessages(conversationId: Int64) -> AnyPublisher<[FullChatMessage], Never> {
         ValueObservation.tracking { db -> [FullChatMessage] in
-            let rows = try Row.fetchAll(
-                db,
-                sql: """
-                SELECT m.id, m.conversationId, m.role, m.text, m.attachmentsJSON, m.createdAtMs,
-                       t.thinkingStream
-                FROM chat_messages m
-                LEFT JOIN chat_message_thinking t ON t.messageId = m.id
-                WHERE m.conversationId = ?
-                ORDER BY m.createdAtMs ASC
-                """,
-                arguments: [conversationId]
-            )
+            let messages = try ChatMessage
+                .filter(Column("conversationId") == conversationId)
+                .order(Column("createdAtMs").asc)
+                .fetchAll(db)
 
-            return rows.compactMap { row in
-                guard let id: Int64 = row["id"] else { return nil }
-                let messageConversationID: Int64 = row["conversationId"] ?? conversationId
-                let role: String = row["role"] ?? "assistant"
-                let text: String = row["text"] ?? ""
-                let attachmentsJSON: String = row["attachmentsJSON"] ?? "[]"
-                let createdAtMs: Int64 = row["createdAtMs"] ?? 0
-                let message = ChatMessage(
-                    id: id,
-                    conversationId: messageConversationID,
-                    role: role,
-                    text: text,
-                    attachmentsJSON: attachmentsJSON,
-                    createdAtMs: createdAtMs
-                )
+            let messageIds = messages.compactMap(\.id)
+            let variantsByMessageID = try self.fetchVariantsByBaseMessageIDs(db: db, messageIds: messageIds)
+
+            let thinkingRows: [ChatMessageThinking]
+            if messageIds.isEmpty {
+                thinkingRows = []
+            } else {
+                thinkingRows = try ChatMessageThinking
+                    .filter(Column("messageId").in(messageIds))
+                    .fetchAll(db)
+            }
+            let thinkingByMessageID = Dictionary(uniqueKeysWithValues: thinkingRows.map { ($0.messageId, $0.thinkingStream) })
+
+            return messages.compactMap { message in
+                guard let id = message.id else { return nil }
                 return FullChatMessage(
                     id: id,
                     message: message,
-                    thinkingStream: row["thinkingStream"]
+                    thinkingStream: thinkingByMessageID[id],
+                    variants: variantsByMessageID[id] ?? []
                 )
             }
         }
@@ -200,13 +208,27 @@ final class ConversationRepository {
         }
     }
 
+    func fetchLastAssistantMessage(conversationId: Int64) throws -> ChatMessage? {
+        try dbQueue.read { db in
+            try ChatMessage
+                .filter(Column("conversationId") == conversationId)
+                .filter(Column("role") == "model")
+                .order(Column("createdAtMs").desc)
+                .fetchOne(db)
+        }
+    }
+
     func fetchFullMessage(id: Int64) throws -> FullChatMessage? {
         try dbQueue.read { db in
             guard let message = try ChatMessage.fetchOne(db, key: id), let messageId = message.id else { return nil }
             let thinking = try ChatMessageThinking
                 .filter(Column("messageId") == messageId)
                 .fetchOne(db)?.thinkingStream
-            return FullChatMessage(id: messageId, message: message, thinkingStream: thinking)
+            let variants = try ChatMessageVariant
+                .filter(Column("baseMessageId") == messageId)
+                .order(Column("variantIndex").asc)
+                .fetchAll(db)
+            return FullChatMessage(id: messageId, message: message, thinkingStream: thinking, variants: variants)
         }
     }
 
@@ -252,6 +274,90 @@ final class ConversationRepository {
         }
     }
 
+    func insertMessageVariant(
+        baseMessageId: Int64,
+        text: String,
+        attachmentsJSON: String = "[]",
+        thinkingStream: String? = nil
+    ) throws -> ChatMessageVariant {
+        try dbQueue.write { db in
+            guard let baseMessage = try ChatMessage.fetchOne(db, key: baseMessageId) else {
+                throw ProviderClientError.parseFailure("Base message not found")
+            }
+
+            let maxIndex = try Int.fetchOne(
+                db,
+                sql: "SELECT MAX(variantIndex) FROM chat_message_variants WHERE baseMessageId = ?",
+                arguments: [baseMessageId]
+            ) ?? 0
+            let nextIndex = max(1, maxIndex + 1)
+
+            var variant = ChatMessageVariant(
+                baseMessageId: baseMessageId,
+                variantIndex: nextIndex,
+                text: text,
+                attachmentsJSON: attachmentsJSON,
+                thinkingStream: thinkingStream
+            )
+            try variant.insert(db)
+
+            try db.execute(
+                sql: "UPDATE chat_messages SET selectedVariantIndex = ? WHERE id = ?",
+                arguments: [nextIndex, baseMessageId]
+            )
+            try touchConversation(db: db, conversationId: baseMessage.conversationId)
+
+            return variant
+        }
+    }
+
+    func updateMessageSelectedVariantIndex(messageId: Int64, variantIndex: Int) throws {
+        try dbQueue.write { db in
+            guard (try ChatMessage.fetchOne(db, key: messageId)) != nil else { return }
+            try db.execute(
+                sql: "UPDATE chat_messages SET selectedVariantIndex = ? WHERE id = ?",
+                arguments: [max(0, variantIndex), messageId]
+            )
+        }
+    }
+
+    func updateMessageVariantText(variantId: Int64, text: String) throws {
+        try dbQueue.write { db in
+            guard var variant = try ChatMessageVariant.fetchOne(db, key: variantId) else { return }
+            variant.text = text
+            try variant.update(db)
+        }
+    }
+
+    func saveMessageVariantThinking(variantId: Int64, stream: String) throws {
+        try dbQueue.write { db in
+            guard var variant = try ChatMessageVariant.fetchOne(db, key: variantId) else { return }
+            variant.thinkingStream = stream
+            try variant.update(db)
+        }
+    }
+
+    func fetchProviderHistory(conversationId: Int64) throws -> [ProviderHistoryMessage] {
+        try dbQueue.read { db in
+            let messages = try ChatMessage
+                .filter(Column("conversationId") == conversationId)
+                .order(Column("createdAtMs").asc)
+                .fetchAll(db)
+            let variantsByMessageID = try fetchVariantsByBaseMessageIDs(db: db, messageIds: messages.compactMap(\.id))
+
+            return messages.compactMap { message in
+                guard let messageId = message.id else { return nil }
+                let resolved = resolveMessageContent(message: message, variantsByMessageID: variantsByMessageID)
+                return ProviderHistoryMessage(
+                    messageId: messageId,
+                    role: message.role == "model" ? "assistant" : message.role,
+                    text: resolved.text,
+                    attachments: decodeArray(resolved.attachmentsJSON)
+                )
+            }
+        }
+    }
+
     func insertDualMessage(_ message: DualChatMessage) throws -> Int64 {
         try dbQueue.write { db in
             var mutable = message
@@ -279,7 +385,22 @@ final class ConversationRepository {
                 db,
                 sql: """
                 SELECT DISTINCT c.id, c.title, c.updatedAtMs, c.isSecret,
-                    (SELECT text FROM chat_messages m2 WHERE m2.conversationId = c.id ORDER BY m2.createdAtMs DESC LIMIT 1) AS lastMessagePreview
+                    (
+                        SELECT CASE
+                            WHEN m2.role = 'model' AND m2.selectedVariantIndex > 0 THEN COALESCE(
+                                (SELECT v.text
+                                 FROM chat_message_variants v
+                                 WHERE v.baseMessageId = m2.id AND v.variantIndex = m2.selectedVariantIndex
+                                 LIMIT 1),
+                                m2.text
+                            )
+                            ELSE m2.text
+                        END
+                        FROM chat_messages m2
+                        WHERE m2.conversationId = c.id
+                        ORDER BY m2.createdAtMs DESC
+                        LIMIT 1
+                    ) AS lastMessagePreview
                 FROM conversations c
                 LEFT JOIN chat_messages m ON m.conversationId = c.id
                 WHERE c.title LIKE ? OR m.text LIKE ?
@@ -303,27 +424,65 @@ final class ConversationRepository {
     }
 
     private func fetchMessageSummaries(db: Database, conversationId: Int64) throws -> [ChatMessageSummary] {
-        let rows = try Row.fetchAll(
-            db,
-            sql: """
-            SELECT id, role, text, createdAtMs, attachmentsJSON
-            FROM chat_messages
-            WHERE conversationId = ?
-            ORDER BY createdAtMs ASC
-            """,
-            arguments: [conversationId]
-        )
+        let messages = try ChatMessage
+            .filter(Column("conversationId") == conversationId)
+            .order(Column("createdAtMs").asc)
+            .fetchAll(db)
 
-        return rows.compactMap { row in
-            guard let id: Int64 = row["id"] else { return nil }
-            let text: String = row["text"] ?? ""
+        let variantsByMessageID = try fetchVariantsByBaseMessageIDs(db: db, messageIds: messages.compactMap(\.id))
+        return messages.compactMap { message in
+            guard let id = message.id else { return nil }
+            let resolved = resolveMessageContent(message: message, variantsByMessageID: variantsByMessageID)
             return ChatMessageSummary(
                 id: id,
-                role: row["role"] ?? "assistant",
-                textPreview: String(text.prefix(200)),
-                createdAtMs: row["createdAtMs"] ?? 0,
-                hasAttachments: ((row["attachmentsJSON"] as String?) ?? "[]") != "[]"
+                role: message.role,
+                textPreview: String(resolved.text.prefix(200)),
+                createdAtMs: message.createdAtMs,
+                hasAttachments: resolved.attachmentsJSON != "[]"
             )
         }
+    }
+
+    private func resolveMessageContent(
+        message: ChatMessage,
+        variantsByMessageID: [Int64: [ChatMessageVariant]]
+    ) -> (text: String, attachmentsJSON: String) {
+        guard message.role == "model",
+              message.selectedVariantIndex > 0,
+              let messageId = message.id,
+              let selectedVariant = variantsByMessageID[messageId]?.first(where: { $0.variantIndex == message.selectedVariantIndex })
+        else {
+            return (message.text, message.attachmentsJSON)
+        }
+        return (selectedVariant.text, selectedVariant.attachmentsJSON)
+    }
+
+    private func fetchVariantsByBaseMessageIDs(db: Database, messageIds: [Int64]) throws -> [Int64: [ChatMessageVariant]] {
+        guard !messageIds.isEmpty else { return [:] }
+        let variants = try ChatMessageVariant
+            .filter(Column("baseMessageId").in(messageIds))
+            .order(Column("baseMessageId").asc, Column("variantIndex").asc)
+            .fetchAll(db)
+
+        var grouped: [Int64: [ChatMessageVariant]] = [:]
+        for variant in variants {
+            grouped[variant.baseMessageId, default: []].append(variant)
+        }
+        return grouped
+    }
+
+    private func decodeArray(_ raw: String) -> [String] {
+        guard let data = raw.data(using: .utf8), let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return decoded
+    }
+
+    private func touchConversation(db: Database, conversationId: Int64) throws {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.execute(
+            sql: "UPDATE conversations SET updatedAtMs = ? WHERE id = ?",
+            arguments: [now, conversationId]
+        )
     }
 }

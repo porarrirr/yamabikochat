@@ -1,32 +1,32 @@
 import Foundation
 import GRDB
 
-struct ChatMessage: Codable, FetchableRecord, MutablePersistableRecord, Identifiable, Equatable {
-    static let databaseTableName = "chat_messages"
+struct ChatMessageVariant: Codable, FetchableRecord, MutablePersistableRecord, Identifiable, Equatable {
+    static let databaseTableName = "chat_message_variants"
 
     var id: Int64?
-    var conversationId: Int64
-    var role: String
+    var baseMessageId: Int64
+    var variantIndex: Int
     var text: String
     var attachmentsJSON: String
-    var selectedVariantIndex: Int
+    var thinkingStream: String?
     var createdAtMs: Int64
 
     init(
         id: Int64? = nil,
-        conversationId: Int64,
-        role: String,
+        baseMessageId: Int64,
+        variantIndex: Int,
         text: String,
         attachmentsJSON: String = "[]",
-        selectedVariantIndex: Int = 0,
+        thinkingStream: String? = nil,
         createdAtMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
     ) {
         self.id = id
-        self.conversationId = conversationId
-        self.role = role
+        self.baseMessageId = baseMessageId
+        self.variantIndex = variantIndex
         self.text = text
         self.attachmentsJSON = attachmentsJSON
-        self.selectedVariantIndex = selectedVariantIndex
+        self.thinkingStream = thinkingStream
         self.createdAtMs = createdAtMs
     }
 

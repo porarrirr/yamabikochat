@@ -10,6 +10,9 @@ enum ProviderClientError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case let .missingCredential(provider):
+            if provider.uppercased() == "GEMINI_OAUTH_CLIENT" {
+                return "Gemini OAuth client ID/secret is missing. Configure GEMINI_OAUTH_CLIENT_ID and GEMINI_OAUTH_CLIENT_SECRET in Info.plist."
+            }
             return "Missing credential for \(provider)."
         case let .invalidBaseURL(value):
             return "Invalid base URL: \(value)."

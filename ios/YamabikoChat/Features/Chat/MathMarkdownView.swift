@@ -3,6 +3,7 @@ import WebKit
 
 struct MathMarkdownView: UIViewRepresentable {
     let markdownText: String
+    @Environment(\.colorScheme) private var colorScheme
 
     func makeUIView(context: Context) -> WKWebView {
         let webView = WKWebView(frame: .zero)
@@ -26,13 +27,16 @@ struct MathMarkdownView: UIViewRepresentable {
             scriptTag = "<script src=\"https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js\"></script>"
         }
 
+        let bodyTextColor = colorScheme == .dark ? "#F2F2F7" : "#1C1C1E"
+
         let html = """
         <html>
         <head>
           <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+          <meta name=\"color-scheme\" content=\"light dark\" />
           \(scriptTag)
           <style>
-            body { font-family: -apple-system; font-size: 15px; color: #222; margin: 0; padding: 0; }
+            body { font-family: -apple-system; font-size: 15px; color: \(bodyTextColor); margin: 0; padding: 0; background: transparent; }
             code, pre { font-family: Menlo, monospace; }
           </style>
         </head>

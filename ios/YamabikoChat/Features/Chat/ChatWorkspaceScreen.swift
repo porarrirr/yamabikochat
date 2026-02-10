@@ -7,21 +7,18 @@ struct ChatWorkspaceScreen: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @ObservedObject var viewModel: ChatViewModel
-    @State private var selectedSegment: Segment = .chat
 
-    enum Segment: String, CaseIterable, Identifiable {
-        case chat = "チャット"
-        case dual = "デュアル"
-        case auto = "自動会話"
-
-        var id: String { rawValue }
+    private enum WorkspaceMode {
+        case chat
+        case dual
+        case auto
     }
 
     var body: some View {
         VStack(spacing: 0) {
             topBar
 
-            switch selectedSegment {
+            switch currentMode {
             case .chat:
                 ChatScreen(viewModel: viewModel)
             case .dual:
@@ -50,16 +47,33 @@ struct ChatWorkspaceScreen: View {
         Color(uiColor: .systemGroupedBackground)
     }
 
-    private var titleLabel: String {
-        switch selectedSegment {
-        case .chat:
-            let model = viewModel.settings.currentModel().trimmingCharacters(in: .whitespacesAndNewlines)
-            return model.isEmpty ? "Chat" : model
-        case .dual:
-            return "Dual Chat"
-        case .auto:
-            return "Auto Conversation"
+    private var currentMode: WorkspaceMode {
+        if viewModel.settings.isDualModeEnabled {
+            return .dual
         }
+        if viewModel.settings.isAutoConversationEnabled {
+            return .auto
+        }
+        return .chat
+    }
+
+    private var modelPresetLabel: String {
+        let model = viewModel.settings.currentModel().trimmingCharacters(in: .whitespacesAndNewlines)
+        return model.isEmpty ? "Chat" : model
+    }
+
+    private var currentProvider: String {
+        viewModel.settings.apiProvider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    }
+
+    private var currentModel: String {
+        viewModel.settings.currentModel().trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func isActiveChatPreset(_ preset: ModelPreset) -> Bool {
+        let presetProvider = preset.apiProvider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let presetModel = preset.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        return presetProvider == currentProvider && presetModel == currentModel
     }
 
     private var topBar: some View {
@@ -84,22 +98,26 @@ struct ChatWorkspaceScreen: View {
             .accessibilityLabel("チャット履歴")
 
             Menu {
-                Section("モード") {
-                    ForEach(Segment.allCases) { item in
+                let chatPresets = viewModel.availableChatPresets()
+                if chatPresets.isEmpty {
+                    Button("利用可能なプリセットがありません") {}
+                        .disabled(true)
+                } else {
+                    ForEach(chatPresets) { preset in
                         Button {
-                            selectedSegment = item
+                            viewModel.applyChatPreset(preset)
                         } label: {
-                            if selectedSegment == item {
-                                Label(item.rawValue, systemImage: "checkmark")
+                            if isActiveChatPreset(preset) {
+                                Label(preset.name, systemImage: "checkmark")
                             } else {
-                                Text(item.rawValue)
+                                Text(preset.name)
                             }
                         }
                     }
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text(titleLabel)
+                    Text(modelPresetLabel)
                         .font(.system(size: 19, weight: .semibold))
                         .lineLimit(1)
                     Image(systemName: "chevron.right")
@@ -122,8 +140,9 @@ struct ChatWorkspaceScreen: View {
 
             Menu {
                 Button("再生成") {
-                    viewModel.regenerateLastAssistantMessage()
+                    viewModel.regenerateLastAssistantVariant()
                 }
+                .disabled(!viewModel.canRegenerateLastAssistant)
 
                 Button(viewModel.settings.isDualModeEnabled ? "デュアルをOFF" : "デュアルをON") {
                     viewModel.toggleDualMode()
@@ -136,16 +155,6 @@ struct ChatWorkspaceScreen: View {
                 if viewModel.isAutoConversationRunning {
                     Button("自動会話を停止") {
                         viewModel.stopAutoConversation()
-                    }
-                }
-
-                let chatPresets = viewModel.availableChatPresets()
-                if !chatPresets.isEmpty {
-                    Divider()
-                    ForEach(chatPresets) { preset in
-                        Button("Chat Preset: \(preset.name)") {
-                            viewModel.applyChatPreset(preset)
-                        }
                     }
                 }
 
@@ -181,7 +190,6 @@ struct ChatWorkspaceScreen: View {
         do {
             let conversationID = try container.chatRepository.createConversation()
             appState.selectedConversationID = conversationID
-            selectedSegment = .chat
         } catch {
             viewModel.errorMessage = error.localizedDescription
             DiagnosticsLogger.log(

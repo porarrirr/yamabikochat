@@ -41,6 +41,15 @@ final class SettingsViewModel: ObservableObject {
     private var repository: ChatRepository?
     private var credentialStore: SecureCredentialStore?
     private var cancellables: Set<AnyCancellable> = []
+    private let geminiOAuthMissingMessage =
+        "Gemini OAuth client ID/secret が未設定です。Info.plist の GEMINI_OAUTH_CLIENT_ID / GEMINI_OAUTH_CLIENT_SECRET を設定してください。"
+
+    var isGeminiOAuthConfigured: Bool {
+        if let repository {
+            return repository.isGeminiOAuthClientConfigured()
+        }
+        return GeminiAuthRepository.isDefaultOAuthClientConfigured()
+    }
 
     func bind(repository: ChatRepository, credentialStore: SecureCredentialStore) {
         guard self.repository == nil else { return }
@@ -430,6 +439,17 @@ final class SettingsViewModel: ObservableObject {
 
     func loginGeminiAuth() async {
         guard let repository = requireRepository(action: "gemini_login") else { return }
+        guard isGeminiOAuthConfigured else {
+            statusMessage = nil
+            errorMessage = geminiOAuthMissingMessage
+            DiagnosticsLogger.log(
+                "Gemini auth login blocked because oauth client config is missing",
+                level: .warning,
+                category: .auth
+            )
+            refreshDiagnosticsLog()
+            return
+        }
         isGeminiAuthActionRunning = true
         statusMessage = "Geminiログインを開始しました"
         errorMessage = nil

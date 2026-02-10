@@ -210,13 +210,82 @@ final class ChatViewModel: ObservableObject {
         return persisted
     }
 
-    func regenerateLastAssistantMessage() {
-        guard let lastUser = fullMessages.last(where: { $0.message.role == "user" })?.message else {
-            errorMessage = "再生成できるユーザーメッセージがありません。"
+    var canRegenerateLastAssistant: Bool {
+        !settings.isDualModeEnabled &&
+            !isSending &&
+            fullMessages.last(where: { $0.message.role == "model" })?.id ==
+            fullMessages.last?.id
+    }
+
+    func regenerateLastAssistantVariant() {
+        guard let repository else {
+            errorMessage = "チャット初期化中です。少し待ってから再試行してください。"
             return
         }
-        inputText = lastUser.text
-        sendMessage()
+        guard !settings.isDualModeEnabled else {
+            errorMessage = "デュアルモードでは再生成できません。"
+            return
+        }
+        guard let lastAssistant = fullMessages.last(where: { $0.message.role == "model" }),
+              fullMessages.last?.id == lastAssistant.id
+        else {
+            errorMessage = "最後のAIメッセージのみ再生成できます。"
+            return
+        }
+
+        isSending = true
+        errorMessage = nil
+        Task {
+            defer { isSending = false }
+            do {
+                _ = try await repository.regenerateLastAssistantVariant(
+                    conversationId: conversationID,
+                    onStreamEvent: { [weak self] event in
+                        guard case let .reasoningDelta(delta) = event else { return }
+                        Task { @MainActor in
+                            self?.autoConversationStatus = delta.isEmpty ? self?.autoConversationStatus : "推論中..."
+                        }
+                    }
+                )
+            } catch {
+                errorMessage = error.localizedDescription
+                DiagnosticsLogger.log(
+                    "Regenerate last assistant failed conversation=\(conversationID)",
+                    category: .chat,
+                    error: error
+                )
+            }
+        }
+    }
+
+    func showPrevVariant(messageId: Int64) {
+        shiftVariantSelection(messageId: messageId, delta: -1)
+    }
+
+    func showNextVariant(messageId: Int64) {
+        shiftVariantSelection(messageId: messageId, delta: 1)
+    }
+
+    private func shiftVariantSelection(messageId: Int64, delta: Int) {
+        guard let repository,
+              let target = fullMessages.first(where: { $0.id == messageId })
+        else {
+            return
+        }
+        let nextIndex = target.normalizedSelectedVariantIndex + delta
+        guard nextIndex >= 0, nextIndex < target.variantCount else {
+            return
+        }
+        do {
+            try repository.setSelectedVariant(messageId: messageId, variantIndex: nextIndex)
+        } catch {
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log(
+                "Switch message variant failed conversation=\(conversationID) message=\(messageId)",
+                category: .chat,
+                error: error
+            )
+        }
     }
 
     func toggleDualMode() {

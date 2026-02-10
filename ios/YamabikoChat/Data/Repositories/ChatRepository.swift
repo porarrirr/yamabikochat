@@ -65,6 +65,10 @@ final class ChatRepository {
         try settings.save(normalized)
     }
 
+    func setSelectedVariant(messageId: Int64, variantIndex: Int) throws {
+        try conversations.updateMessageSelectedVariantIndex(messageId: messageId, variantIndex: variantIndex)
+    }
+
     func conversation(id: Int64) throws -> Conversation? {
         try conversations.fetchConversation(id: id)
     }
@@ -159,16 +163,15 @@ final class ChatRepository {
 
         for summary in selected {
             guard let full = try conversations.fetchFullMessage(id: summary.id) else { continue }
-            let source = full.message
             let newMessageId = try conversations.insertMessage(
                 ChatMessage(
                     conversationId: newConversationId,
-                    role: source.role,
-                    text: source.text,
-                    attachmentsJSON: source.attachmentsJSON
+                    role: full.message.role,
+                    text: full.displayText,
+                    attachmentsJSON: full.displayAttachmentsJSON
                 )
             )
-            if let thinking = full.thinkingStream, !thinking.isEmpty {
+            if let thinking = full.displayThinkingStream, !thinking.isEmpty {
                 try conversations.saveThinking(messageId: newMessageId, stream: thinking)
             }
         }
@@ -289,6 +292,58 @@ final class ChatRepository {
         )
     }
 
+    func regenerateLastAssistantVariant(
+        conversationId: Int64,
+        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil
+    ) async throws -> Int64 {
+        let settings = try self.settings.load()
+        guard let conversation = try conversations.fetchConversation(id: conversationId) else {
+            throw ProviderClientError.parseFailure("Conversation not found")
+        }
+
+        let history = try conversations.fetchProviderHistory(conversationId: conversationId)
+        guard let targetIndex = history.lastIndex(where: { $0.role == "assistant" }) else {
+            throw ProviderClientError.parseFailure("再生成できるAIメッセージがありません。")
+        }
+        guard targetIndex == history.count - 1 else {
+            throw ProviderClientError.parseFailure("最後のAIメッセージのみ再生成できます。")
+        }
+        guard targetIndex > 0, history[targetIndex - 1].role == "user" else {
+            throw ProviderClientError.parseFailure("再生成対象の直前にユーザーメッセージがありません。")
+        }
+
+        let targetMessageID = history[targetIndex].messageId
+        let requestMessages = Array(history.prefix(targetIndex)).map {
+            ProviderRequestMessage(role: $0.role, content: $0.text, attachments: $0.attachments)
+        }
+        let request = try buildProviderRequest(
+            conversation: conversation,
+            settings: settings,
+            conversationId: conversationId,
+            providerMessages: requestMessages
+        )
+        let provider = LLMProvider(rawOrDefault: conversation.apiProvider)
+
+        if settings.isStreamingEnabled {
+            try await streamRegeneratedVariant(
+                request: request,
+                provider: provider,
+                baseMessageId: targetMessageID,
+                onStreamEvent: onStreamEvent
+            )
+            return targetMessageID
+        }
+
+        let response = try await providers.generate(request: request, provider: provider)
+        _ = try conversations.insertMessageVariant(
+            baseMessageId: targetMessageID,
+            text: response.text,
+            attachmentsJSON: "[]",
+            thinkingStream: response.reasoningSummary
+        )
+        return targetMessageID
+    }
+
     private func streamMessage(
         conversationId: Int64,
         userMessageId: Int64,
@@ -345,18 +400,64 @@ final class ChatRepository {
         )
     }
 
+    private func streamRegeneratedVariant(
+        request: ProviderRequest,
+        provider: LLMProvider,
+        baseMessageId: Int64,
+        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?
+    ) async throws {
+        let variant = try conversations.insertMessageVariant(
+            baseMessageId: baseMessageId,
+            text: "",
+            attachmentsJSON: "[]",
+            thinkingStream: nil
+        )
+        guard let variantId = variant.id else {
+            throw ProviderClientError.parseFailure("Variant creation failed")
+        }
+
+        var fullText = ""
+        var reasoningText = ""
+        let stream = try await providers.stream(request: request, provider: provider)
+
+        for try await event in stream {
+            onStreamEvent?(event)
+            switch event {
+            case let .textDelta(delta):
+                fullText += delta
+                try conversations.updateMessageVariantText(variantId: variantId, text: fullText)
+            case let .reasoningDelta(delta):
+                reasoningText += delta
+                try conversations.saveMessageVariantThinking(variantId: variantId, stream: reasoningText)
+            case .toolCallDelta:
+                continue
+            case let .completed(response):
+                if fullText.isEmpty {
+                    fullText = response.text
+                    try conversations.updateMessageVariantText(variantId: variantId, text: fullText)
+                }
+                if let reasoning = response.reasoningSummary, !reasoning.isEmpty {
+                    reasoningText = reasoning
+                    try conversations.saveMessageVariantThinking(variantId: variantId, stream: reasoningText)
+                }
+            }
+        }
+    }
+
     private func buildProviderRequest(
         conversation: Conversation,
         settings: AppSettings,
-        conversationId: Int64
+        conversationId: Int64,
+        providerMessages: [ProviderRequestMessage]? = nil
     ) throws -> ProviderRequest {
-        let history = try conversations.fetchMessages(conversationId: conversationId)
-        let providerMessages = history.map { message in
-            ProviderRequestMessage(
-                role: message.role == "model" ? "assistant" : message.role,
-                content: message.text,
-                attachments: decodeArray(message.attachmentsJSON)
-            )
+        let resolvedMessages: [ProviderRequestMessage]
+        if let providerMessages {
+            resolvedMessages = providerMessages
+        } else {
+            let history = try conversations.fetchProviderHistory(conversationId: conversationId)
+            resolvedMessages = history.map {
+                ProviderRequestMessage(role: $0.role, content: $0.text, attachments: $0.attachments)
+            }
         }
 
         let tools = toolsForProvider(settings: settings, provider: conversation.apiProvider)
@@ -373,7 +474,7 @@ final class ChatRepository {
 
         return ProviderRequest(
             model: conversation.model,
-            messages: providerMessages,
+            messages: resolvedMessages,
             systemPrompt: conversation.systemPrompt,
             stream: settings.isStreamingEnabled,
             tools: tools,
@@ -530,6 +631,10 @@ final class ChatRepository {
 
     func loginGeminiAuthWithBrowser() async -> Result<GeminiAuthState, Error> {
         await geminiAuthRepository.loginWithBrowser()
+    }
+
+    func isGeminiOAuthClientConfigured() -> Bool {
+        geminiAuthRepository.isOAuthClientConfigured()
     }
 
     func logoutGeminiAuth() async -> Result<GeminiAuthState, Error> {
@@ -876,13 +981,6 @@ final class ChatRepository {
             return "[]"
         }
         return text
-    }
-
-    private func decodeArray(_ raw: String) -> [String] {
-        guard let data = raw.data(using: .utf8), let decoded = try? JSONDecoder().decode([String].self, from: data) else {
-            return []
-        }
-        return decoded
     }
 }
 

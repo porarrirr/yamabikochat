@@ -3,6 +3,30 @@ import Combine
 import Security
 import UIKit
 
+struct GeminiOAuthClientConfig: Equatable, Sendable {
+    var clientID: String
+    var clientSecret: String
+}
+
+protocol GeminiOAuthConfigProviding {
+    func loadOAuthClientConfig() -> GeminiOAuthClientConfig
+}
+
+struct BundleGeminiOAuthConfigProvider: GeminiOAuthConfigProviding {
+    private let bundle: Bundle
+
+    init(bundle: Bundle = .main) {
+        self.bundle = bundle
+    }
+
+    func loadOAuthClientConfig() -> GeminiOAuthClientConfig {
+        GeminiOAuthClientConfig(
+            clientID: bundle.object(forInfoDictionaryKey: "GEMINI_OAUTH_CLIENT_ID") as? String ?? "",
+            clientSecret: bundle.object(forInfoDictionaryKey: "GEMINI_OAUTH_CLIENT_SECRET") as? String ?? ""
+        )
+    }
+}
+
 final class GeminiAuthRepository {
     struct BearerToken: Sendable, Equatable {
         var token: String
@@ -21,8 +45,16 @@ final class GeminiAuthRepository {
         static let refreshBufferSeconds: TimeInterval = 60
         static let refreshFallbackSeconds: TimeInterval = 45 * 60
         static let storageKey = "gemini_auth_json_v2"
-        static let clientID = Bundle.main.object(forInfoDictionaryKey: "GEMINI_OAUTH_CLIENT_ID") as? String ?? ""
-        static let clientSecret = Bundle.main.object(forInfoDictionaryKey: "GEMINI_OAUTH_CLIENT_SECRET") as? String ?? ""
+        static let invalidOAuthValueTokens: Set<String> = [
+            "?",
+            "??",
+            "???",
+            "__set_me__",
+            "set_me",
+            "todo",
+            "changeme",
+            "replace_me"
+        ]
     }
 
     private let scopes = [
@@ -33,19 +65,31 @@ final class GeminiAuthRepository {
 
     private let credentialStore: SecureCredentialStore
     private let httpClient: HTTPClientProtocol
+    private let oauthConfigProvider: any GeminiOAuthConfigProviding
     private let subject: CurrentValueSubject<GeminiAuthState, Never>
 
     init(
         credentialStore: SecureCredentialStore,
-        httpClient: HTTPClientProtocol = URLSessionHTTPClient()
+        httpClient: HTTPClientProtocol = URLSessionHTTPClient(),
+        oauthConfigProvider: any GeminiOAuthConfigProviding = BundleGeminiOAuthConfigProvider()
     ) {
         self.credentialStore = credentialStore
         self.httpClient = httpClient
+        self.oauthConfigProvider = oauthConfigProvider
         subject = CurrentValueSubject(Self.readState(credentialStore: credentialStore))
     }
 
     var state: AnyPublisher<GeminiAuthState, Never> {
         subject.eraseToAnyPublisher()
+    }
+
+    func isOAuthClientConfigured() -> Bool {
+        Self.missingOAuthClientParts(from: oauthConfigProvider.loadOAuthClientConfig()).isEmpty
+    }
+
+    static func isDefaultOAuthClientConfigured(bundle: Bundle = .main) -> Bool {
+        let provider = BundleGeminiOAuthConfigProvider(bundle: bundle)
+        return missingOAuthClientParts(from: provider.loadOAuthClientConfig()).isEmpty
     }
 
     func currentState() -> GeminiAuthState {
@@ -88,8 +132,16 @@ final class GeminiAuthRepository {
 
     func loginWithBrowser() async -> Result<GeminiAuthState, Error> {
         do {
-            guard !Constants.clientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  !Constants.clientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            let oauthConfig = Self.normalizedOAuthClientConfig(
+                oauthConfigProvider.loadOAuthClientConfig()
+            )
+            let missingOAuthParts = Self.missingOAuthClientParts(from: oauthConfig)
+            if !missingOAuthParts.isEmpty {
+                DiagnosticsLogger.log(
+                    "Gemini auth oauth client config missing parts=\(missingOAuthParts.joined(separator: ","))",
+                    level: .error,
+                    category: .auth
+                )
                 throw ProviderClientError.missingCredential("GEMINI_OAUTH_CLIENT")
             }
             let stateToken = Self.generateState()
@@ -102,7 +154,11 @@ final class GeminiAuthRepository {
             let redirectURI = "http://127.0.0.1:\(port)/oauth2callback"
             DiagnosticsLogger.log("Gemini auth callback server bound port=\(port)", category: .auth)
 
-            let authURL = try buildAuthorizeURL(redirectURI: redirectURI, state: stateToken)
+            let authURL = try buildAuthorizeURL(
+                clientID: oauthConfig.clientID,
+                redirectURI: redirectURI,
+                state: stateToken
+            )
             let listenerReady = AuthFlowReadySignal()
             let callbackTask = Task {
                 try await callbackServer.awaitCallback(
@@ -161,7 +217,12 @@ final class GeminiAuthRepository {
             }
             DiagnosticsLogger.log("Gemini auth callback received, exchanging tokens", category: .auth)
 
-            var auth = try await exchangeCodeForTokens(code: code, redirectURI: redirectURI)
+            var auth = try await exchangeCodeForTokens(
+                code: code,
+                redirectURI: redirectURI,
+                clientID: oauthConfig.clientID,
+                clientSecret: oauthConfig.clientSecret
+            )
             guard let accessToken = auth.tokens?.accessToken, !accessToken.isEmpty else {
                 throw ProviderClientError.missingCredential("GEMINI_AUTH")
             }
@@ -232,7 +293,23 @@ final class GeminiAuthRepository {
             }
 
             if shouldRefresh, let refreshToken = tokens.refreshToken, !refreshToken.isEmpty {
-                let refreshed = try await refreshTokens(refreshToken: refreshToken)
+                let oauthConfig = Self.normalizedOAuthClientConfig(
+                    oauthConfigProvider.loadOAuthClientConfig()
+                )
+                let missingOAuthParts = Self.missingOAuthClientParts(from: oauthConfig)
+                if !missingOAuthParts.isEmpty {
+                    DiagnosticsLogger.log(
+                        "Gemini auth refresh blocked because oauth config is missing parts=\(missingOAuthParts.joined(separator: ","))",
+                        level: .warning,
+                        category: .auth
+                    )
+                    throw ProviderClientError.missingCredential("GEMINI_OAUTH_CLIENT")
+                }
+                let refreshed = try await refreshTokens(
+                    refreshToken: refreshToken,
+                    clientID: oauthConfig.clientID,
+                    clientSecret: oauthConfig.clientSecret
+                )
                 tokens.accessToken = refreshed.accessToken.isEmpty ? tokens.accessToken : refreshed.accessToken
                 tokens.refreshToken = refreshed.refreshToken ?? tokens.refreshToken
                 tokens.idToken = refreshed.idToken ?? tokens.idToken
@@ -352,10 +429,10 @@ final class GeminiAuthRepository {
         try credentialStore.saveSecret(auth.lastRefresh, key: "gemini_last_refresh")
     }
 
-    private func buildAuthorizeURL(redirectURI: String, state: String) throws -> URL {
+    private func buildAuthorizeURL(clientID: String, redirectURI: String, state: String) throws -> URL {
         var components = URLComponents(string: Constants.authURL)
         components?.queryItems = [
-            URLQueryItem(name: "client_id", value: Constants.clientID),
+            URLQueryItem(name: "client_id", value: clientID),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "access_type", value: "offline"),
@@ -404,13 +481,18 @@ final class GeminiAuthRepository {
         }
     }
 
-    private func exchangeCodeForTokens(code: String, redirectURI: String) async throws -> GeminiAuthJSON {
+    private func exchangeCodeForTokens(
+        code: String,
+        redirectURI: String,
+        clientID: String,
+        clientSecret: String
+    ) async throws -> GeminiAuthJSON {
         let form = [
             "grant_type": "authorization_code",
             "code": code,
             "redirect_uri": redirectURI,
-            "client_id": Constants.clientID,
-            "client_secret": Constants.clientSecret
+            "client_id": clientID,
+            "client_secret": clientSecret
         ]
             .map { "\($0.key)=\(Self.formURLEncode($0.value))" }
             .joined(separator: "&")
@@ -439,12 +521,16 @@ final class GeminiAuthRepository {
         )
     }
 
-    private func refreshTokens(refreshToken: String) async throws -> GeminiTokenData {
+    private func refreshTokens(
+        refreshToken: String,
+        clientID: String,
+        clientSecret: String
+    ) async throws -> GeminiTokenData {
         let form = [
             "grant_type": "refresh_token",
             "refresh_token": refreshToken,
-            "client_id": Constants.clientID,
-            "client_secret": Constants.clientSecret
+            "client_id": clientID,
+            "client_secret": clientSecret
         ]
             .map { "\($0.key)=\(Self.formURLEncode($0.value))" }
             .joined(separator: "&")
@@ -674,6 +760,43 @@ final class GeminiAuthRepository {
     private static func formURLEncode(_ value: String) -> String {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
         return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+    }
+
+    private static func missingOAuthClientParts(from config: GeminiOAuthClientConfig) -> [String] {
+        var missing: [String] = []
+        let normalized = normalizedOAuthClientConfig(config)
+        let normalizedClientID = normalized.clientID
+        let normalizedClientSecret = normalized.clientSecret
+        if isInvalidOAuthConfigValue(normalizedClientID) {
+            missing.append("client_id")
+        }
+        if isInvalidOAuthConfigValue(normalizedClientSecret) {
+            missing.append("client_secret")
+        }
+        return missing
+    }
+
+    private static func normalizeOAuthConfigValue(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func normalizedOAuthClientConfig(_ config: GeminiOAuthClientConfig) -> GeminiOAuthClientConfig {
+        GeminiOAuthClientConfig(
+            clientID: normalizeOAuthConfigValue(config.clientID),
+            clientSecret: normalizeOAuthConfigValue(config.clientSecret)
+        )
+    }
+
+    private static func isInvalidOAuthConfigValue(_ value: String) -> Bool {
+        if value.isEmpty { return true }
+        let normalized = value.lowercased()
+        if Constants.invalidOAuthValueTokens.contains(normalized) {
+            return true
+        }
+        if normalized.contains("set_me") || normalized.contains("changeme") {
+            return true
+        }
+        return false
     }
 }
 

@@ -13,6 +13,13 @@ xcodegen generate
 open YamabikoChat.xcodeproj
 ```
 
+## Gemini OAuth Setup
+- Edit `ios/YamabikoChat/App/Resources/Info.plist`.
+- Set:
+  - `GEMINI_OAUTH_CLIENT_ID`
+  - `GEMINI_OAUTH_CLIENT_SECRET`
+- Replace `__SET_ME__` placeholders with your Google OAuth client values before using `Gemini Auth (CLI)` sign-in.
+
 ## Targets
 - `YamabikoChat`: iOS app (SwiftUI)
 - `YamabikoShareExtension`: Share extension for text import

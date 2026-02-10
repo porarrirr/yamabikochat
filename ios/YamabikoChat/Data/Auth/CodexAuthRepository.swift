@@ -16,6 +16,7 @@ final class CodexAuthRepository {
         static let clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
         static let scope = "openid profile email offline_access"
         static let originator = "codex_cli_rs"
+        static let loopbackRedirectHost = "localhost"
         static let defaultPort: UInt16 = 1455
         static let refreshIntervalDays: TimeInterval = 8 * 24 * 60 * 60
         static let usageURL = "https://chatgpt.com/backend-api/wham/usage"
@@ -143,7 +144,7 @@ final class CodexAuthRepository {
                 )
                 throw LocalAuthCallbackError.failedToBindAnyPort
             }
-            let redirectURI = "http://127.0.0.1:\(port)/auth/callback"
+            let redirectURI = Self.redirectURI(port: port)
             DiagnosticsLogger.log("Codex auth callback server bound port=\(port)", category: .auth)
 
             let authorizeURL = try buildAuthorizeURL(
@@ -453,6 +454,10 @@ final class CodexAuthRepository {
             throw ProviderClientError.invalidBaseURL(Constants.issuer)
         }
         return url
+    }
+
+    static func redirectURI(port: UInt16) -> String {
+        "http://\(Constants.loopbackRedirectHost):\(port)/auth/callback"
     }
 
     private func launchBrowser(_ url: URL) async throws {

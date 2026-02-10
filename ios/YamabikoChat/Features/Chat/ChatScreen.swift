@@ -56,7 +56,11 @@ struct ChatScreen: View {
                             ForEach(timeline) { item in
                                 switch item {
                                 case let .message(message):
-                                    MessageBubble(message: message)
+                                    MessageBubble(
+                                        message: message,
+                                        onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
+                                        onNextVariant: { viewModel.showNextVariant(messageId: message.id) }
+                                    )
                                         .id(item.id)
                                 case let .dual(message):
                                     DualMessageCard(message: message)
@@ -280,13 +284,15 @@ private struct AttachmentPreviewRow: View {
 
 private struct MessageBubble: View {
     let message: FullChatMessage
+    let onPrevVariant: () -> Void
+    let onNextVariant: () -> Void
 
     private var isUser: Bool {
         message.message.role == "user"
     }
 
     private var attachmentNames: [String] {
-        guard let data = message.message.attachmentsJSON.data(using: .utf8),
+        guard let data = message.displayAttachmentsJSON.data(using: .utf8),
               let values = try? JSONDecoder().decode([String].self, from: data)
         else {
             return []
@@ -307,7 +313,7 @@ private struct MessageBubble: View {
                     }
                 }
 
-                Text(message.message.text)
+                Text(message.displayText)
                     .textSelection(.enabled)
                     .foregroundStyle(Color.chatUserText)
                     .padding(.horizontal, 14)
@@ -316,7 +322,7 @@ private struct MessageBubble: View {
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .frame(maxWidth: .infinity, alignment: .trailing)
             } else {
-                if let thinking = message.thinkingStream, !thinking.isEmpty {
+                if let thinking = message.displayThinkingStream, !thinking.isEmpty {
                     DisclosureGroup {
                         Text(thinking)
                             .font(.caption)
@@ -344,7 +350,7 @@ private struct MessageBubble: View {
                         }
                     }
 
-                    MathMarkdownView(markdownText: message.message.text)
+                    MathMarkdownView(markdownText: message.displayText)
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }
                 .padding(12)
@@ -353,6 +359,35 @@ private struct MessageBubble: View {
                 .overlay {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(Color.chatBubbleBorder.opacity(0.45), lineWidth: 1)
+                }
+
+                if message.variantCount > 1 {
+                    HStack(spacing: 10) {
+                        Button {
+                            onPrevVariant()
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!message.canSelectPreviousVariant)
+
+                        Text("\(message.selectedVariantOrdinal)/\(message.variantCount)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+
+                        Button {
+                            onNextVariant()
+                        } label: {
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!message.canSelectNextVariant)
+                    }
+                    .padding(.horizontal, 4)
+                    .foregroundStyle(.secondary)
                 }
             }
         }

@@ -195,6 +195,28 @@ enum AppDatabase {
             try defaultSettings.insert(db)
         }
 
+        migrator.registerMigration("v2_message_variants") { db in
+            try db.alter(table: "chat_messages") { t in
+                t.add(column: "selectedVariantIndex", .integer).notNull().defaults(to: 0)
+            }
+
+            try db.create(table: "chat_message_variants") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("baseMessageId", .integer).notNull().references("chat_messages", onDelete: .cascade)
+                t.column("variantIndex", .integer).notNull()
+                t.column("text", .text).notNull()
+                t.column("attachmentsJSON", .text).notNull().defaults(to: "[]")
+                t.column("thinkingStream", .text)
+                t.column("createdAtMs", .integer).notNull()
+            }
+            try db.create(
+                index: "idx_message_variants_base_order",
+                on: "chat_message_variants",
+                columns: ["baseMessageId", "variantIndex"],
+                unique: true
+            )
+        }
+
         return migrator
     }
 }

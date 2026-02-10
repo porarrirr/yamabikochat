@@ -46,7 +46,22 @@ private struct StubHTTPClient: HTTPClientProtocol {
     }
 }
 
+private struct StubGeminiOAuthConfigProvider: GeminiOAuthConfigProviding {
+    let config: GeminiOAuthClientConfig
+
+    func loadOAuthClientConfig() -> GeminiOAuthClientConfig {
+        config
+    }
+}
+
 final class AuthRepositoryTests: XCTestCase {
+    func testCodexRedirectURIUsesLocalhostForParity() {
+        XCTAssertEqual(
+            CodexAuthRepository.redirectURI(port: 1455),
+            "http://localhost:1455/auth/callback"
+        )
+    }
+
     func testCodexLoginUpdatesState() async {
         let store = InMemoryCredentialStore()
         let repo = CodexAuthRepository(credentialStore: store)
@@ -101,6 +116,74 @@ final class AuthRepositoryTests: XCTestCase {
             XCTAssertEqual(quota.buckets.first?.modelId, "gemini-2.5-flash")
         case let .failure(error):
             XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testGeminiOAuthConfigValidationRejectsPlaceholder() {
+        let store = InMemoryCredentialStore()
+        let placeholderRepo = GeminiAuthRepository(
+            credentialStore: store,
+            oauthConfigProvider: StubGeminiOAuthConfigProvider(
+                config: GeminiOAuthClientConfig(
+                    clientID: "__SET_ME__",
+                    clientSecret: "secret-value"
+                )
+            )
+        )
+        XCTAssertFalse(placeholderRepo.isOAuthClientConfigured())
+
+        let blankSecretRepo = GeminiAuthRepository(
+            credentialStore: store,
+            oauthConfigProvider: StubGeminiOAuthConfigProvider(
+                config: GeminiOAuthClientConfig(
+                    clientID: "client-id",
+                    clientSecret: "   "
+                )
+            )
+        )
+        XCTAssertFalse(blankSecretRepo.isOAuthClientConfigured())
+    }
+
+    func testGeminiOAuthConfigValidationAcceptsConcreteValues() {
+        let store = InMemoryCredentialStore()
+        let repo = GeminiAuthRepository(
+            credentialStore: store,
+            oauthConfigProvider: StubGeminiOAuthConfigProvider(
+                config: GeminiOAuthClientConfig(
+                    clientID: "client-id.apps.googleusercontent.com",
+                    clientSecret: "client-secret-value"
+                )
+            )
+        )
+        XCTAssertTrue(repo.isOAuthClientConfigured())
+    }
+
+    func testGeminiLoginWithBrowserFailsFastWhenOAuthMissing() async {
+        let store = InMemoryCredentialStore()
+        let repo = GeminiAuthRepository(
+            credentialStore: store,
+            oauthConfigProvider: StubGeminiOAuthConfigProvider(
+                config: GeminiOAuthClientConfig(
+                    clientID: "",
+                    clientSecret: ""
+                )
+            )
+        )
+
+        let result = await repo.loginWithBrowser()
+        switch result {
+        case .success:
+            XCTFail("Expected loginWithBrowser to fail without Gemini OAuth credentials")
+        case let .failure(error):
+            guard let providerError = error as? ProviderClientError else {
+                XCTFail("Unexpected error type: \(error)")
+                return
+            }
+            guard case let .missingCredential(provider) = providerError else {
+                XCTFail("Expected missingCredential, got \(providerError)")
+                return
+            }
+            XCTAssertEqual(provider, "GEMINI_OAUTH_CLIENT")
         }
     }
 }

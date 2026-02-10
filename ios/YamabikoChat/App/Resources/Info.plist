@@ -35,5 +35,9 @@
         <string>UIInterfaceOrientationLandscapeLeft</string>
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
+    <key>GEMINI_OAUTH_CLIENT_ID</key>
+    <string>__SET_ME__</string>
+    <key>GEMINI_OAUTH_CLIENT_SECRET</key>
+    <string>__SET_ME__</string>
 </dict>
 </plist>
