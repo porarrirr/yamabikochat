@@ -149,7 +149,7 @@ final class ConversationRepository {
                 thinkingRows = []
             } else {
                 thinkingRows = try ChatMessageThinking
-                    .filter(Column("messageId").in(messageIds))
+                    .filter(messageIds.contains(Column("messageId")))
                     .fetchAll(db)
             }
             let thinkingByMessageID = Dictionary(uniqueKeysWithValues: thinkingRows.map { ($0.messageId, $0.thinkingStream) })
@@ -460,7 +460,7 @@ final class ConversationRepository {
     private func fetchVariantsByBaseMessageIDs(db: Database, messageIds: [Int64]) throws -> [Int64: [ChatMessageVariant]] {
         guard !messageIds.isEmpty else { return [:] }
         let variants = try ChatMessageVariant
-            .filter(Column("baseMessageId").in(messageIds))
+            .filter(messageIds.contains(Column("baseMessageId")))
             .order(Column("baseMessageId").asc, Column("variantIndex").asc)
             .fetchAll(db)
 
