@@ -59,7 +59,6 @@ api_keys.properties
 secrets.properties
 google-services.json
 local.properties
-ios/.env.local
 
 # Build outputs (do not commit)
 app/build/

@@ -1,5 +1,5 @@
 import Foundation
-import Network
+import Darwin
 
 enum LocalAuthCallbackError: Error {
     case failedToBindAnyPort
@@ -30,10 +30,9 @@ final class LocalAuthCallbackServer {
     private let preferredPort: UInt16
     private let queue = DispatchQueue(label: "yamabiko.auth.callback.server")
     private let bindLock = NSLock()
-    private var preparedListener: NWListener?
+    private var preparedSocketFD: Int32?
     private var preparedPort: UInt16?
     private static let bindRetryCount = 2
-    private static let listenerReadyTimeout: TimeInterval = 3.0
 
     init(expectedPath: String, preferredPort: UInt16) {
         self.expectedPath = expectedPath
@@ -42,8 +41,10 @@ final class LocalAuthCallbackServer {
 
     deinit {
         bindLock.lock()
-        preparedListener?.cancel()
-        preparedListener = nil
+        if let preparedSocketFD {
+            close(preparedSocketFD)
+        }
+        preparedSocketFD = nil
         preparedPort = nil
         bindLock.unlock()
     }
@@ -59,7 +60,7 @@ final class LocalAuthCallbackServer {
                     "Auth callback port available port=\(prepared.port) attempt=\(attempt)",
                     category: .auth
                 )
-                cachePreparedListener(prepared.listener, port: prepared.port)
+                cachePreparedSocket(prepared.fd, port: prepared.port)
                 return prepared.port
             }
         }
@@ -74,7 +75,7 @@ final class LocalAuthCallbackServer {
                     "Auth callback fallback port selected port=\(fallback.port) attempt=\(attempt)",
                     category: .auth
                 )
-                cachePreparedListener(fallback.listener, port: fallback.port)
+                cachePreparedSocket(fallback.fd, port: fallback.port)
                 return fallback.port
             }
         }
@@ -93,15 +94,12 @@ final class LocalAuthCallbackServer {
         onReady: (@Sendable () -> Void)? = nil
     ) async throws -> CallbackResult {
         let usingPreparedListener: Bool
-        let listener: NWListener
-        if let prepared = consumePreparedListener(for: port) {
-            listener = prepared
+        let listeningFD: Int32
+        if let prepared = consumePreparedSocket(for: port) {
+            listeningFD = prepared
             usingPreparedListener = true
         } else {
-            listener = try NWListener(
-                using: Self.loopbackParameters(),
-                on: NWEndpoint.Port(rawValue: port)!
-            )
+            listeningFD = try Self.createListeningSocket(requestedPort: port).fd
             usingPreparedListener = false
         }
         return try await withCheckedThrowingContinuation { continuation in
@@ -113,8 +111,14 @@ final class LocalAuthCallbackServer {
                 defer { stateLock.unlock() }
                 guard !completed else { return }
                 completed = true
-                listener.cancel()
+                close(listeningFD)
                 continuation.resume(with: result)
+            }
+
+            func isCompleted() -> Bool {
+                stateLock.lock()
+                defer { stateLock.unlock() }
+                return completed
             }
 
             let timeoutWork = DispatchWorkItem {
@@ -122,42 +126,44 @@ final class LocalAuthCallbackServer {
             }
             queue.asyncAfter(deadline: .now() + timeoutSeconds, execute: timeoutWork)
 
-            listener.stateUpdateHandler = { state in
-                switch state {
-                case .ready:
-                    DiagnosticsLogger.log("Auth callback listener ready port=\(port)", category: .auth)
-                    onReady?()
-                case let .failed(error):
-                    timeoutWork.cancel()
-                    DiagnosticsLogger.log("Auth callback listener failed port=\(port)", category: .auth, error: error)
-                    finish(.failure(error))
-                default:
-                    break
-                }
+            if usingPreparedListener {
+                DiagnosticsLogger.log("Auth callback listener ready port=\(port) source=prepared", category: .auth)
+            } else {
+                DiagnosticsLogger.log("Auth callback listener ready port=\(port)", category: .auth)
             }
+            onReady?()
 
-            listener.newConnectionHandler = { connection in
-                connection.start(queue: self.queue)
-                guard Self.isAllowedCallbackEndpoint(connection.endpoint) else {
-                    DiagnosticsLogger.log(
-                        "Auth callback rejected non-loopback endpoint endpoint=\(connection.endpoint)",
-                        level: .warning,
-                        category: .auth
-                    )
-                    self.respond(
-                        connection: connection,
-                        status: 403,
-                        message: "Callback must originate from loopback."
-                    )
-                    connection.cancel()
-                    return
-                }
-                self.receiveHTTPRequest(connection: connection) { request in
-                    defer { connection.cancel() }
-                    guard let request, !request.isEmpty
-                    else {
-                        DiagnosticsLogger.log("Auth callback received empty request", category: .auth)
+            queue.async {
+                while true {
+                    let connectionFD: Int32
+                    do {
+                        connectionFD = try Self.acceptConnection(listeningFD: listeningFD)
+                    } catch {
+                        if isCompleted() {
+                            return
+                        }
+                        timeoutWork.cancel()
+                        DiagnosticsLogger.log("Auth callback listener failed port=\(port)", category: .auth, error: error)
+                        finish(.failure(error))
                         return
+                    }
+
+                    defer {
+                        close(connectionFD)
+                    }
+
+                    let request: String
+                    do {
+                        guard let received = try self.receiveHTTPRequest(connectionFD: connectionFD),
+                              !received.isEmpty
+                        else {
+                            DiagnosticsLogger.log("Auth callback received empty request", category: .auth)
+                            continue
+                        }
+                        request = received
+                    } catch {
+                        DiagnosticsLogger.log("Auth callback receive failed", category: .auth, error: error)
+                        continue
                     }
 
                     let requestLine = request
@@ -167,22 +173,22 @@ final class LocalAuthCallbackServer {
                     let methodAndPath = requestLine.split(whereSeparator: { $0 == " " || $0 == "\t" })
                     guard methodAndPath.count >= 2 else {
                         self.respond(
-                            connection: connection,
+                            connectionFD: connectionFD,
                             status: 400,
                             message: "Invalid callback request."
                         )
-                        return
+                        continue
                     }
 
                     let pathWithQuery = String(methodAndPath[1])
                     guard let components = URLComponents(string: "http://127.0.0.1\(pathWithQuery)") else {
                         DiagnosticsLogger.log("Auth callback URL parse failed path=\(pathWithQuery)", category: .auth)
                         self.respond(
-                            connection: connection,
+                            connectionFD: connectionFD,
                             status: 400,
                             message: "Invalid callback URL."
                         )
-                        return
+                        continue
                     }
 
                     guard components.path == self.expectedPath else {
@@ -190,32 +196,26 @@ final class LocalAuthCallbackServer {
                             "Auth callback unexpected path expected=\(self.expectedPath) actual=\(components.path)",
                             category: .auth
                         )
-                        self.respond(connection: connection, status: 404, message: "Not Found")
-                        return
+                        self.respond(connectionFD: connectionFD, status: 404, message: "Not Found")
+                        continue
                     }
 
                     timeoutWork.cancel()
                     DiagnosticsLogger.log("Auth callback received path=\(components.path)", category: .auth)
-                    self.respond(connection: connection, status: 200, message: "Login completed. You can return to the app.")
+                    self.respond(connectionFD: connectionFD, status: 200, message: "Login completed. You can return to the app.")
                     finish(.success(
                         CallbackResult(
                             path: components.path,
                             queryItems: components.queryItems ?? []
                         )
                     ))
+                    return
                 }
-            }
-
-            if usingPreparedListener {
-                DiagnosticsLogger.log("Auth callback listener ready port=\(port) source=prepared", category: .auth)
-                onReady?()
-            } else {
-                listener.start(queue: queue)
             }
         }
     }
 
-    private func respond(connection: NWConnection, status: Int, message: String) {
+    private func respond(connectionFD: Int32, status: Int, message: String) {
         let escaped = message
             .replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
@@ -250,164 +250,175 @@ final class LocalAuthCallbackServer {
         \r
         \(body)
         """
-        connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in
-            connection.cancel()
-        })
+        Self.sendString(response, to: connectionFD)
     }
 
-    private func receiveHTTPRequest(
-        connection: NWConnection,
-        received: Data = Data(),
-        completion: @escaping (String?) -> Void
-    ) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { chunk, _, isComplete, error in
-            if let error {
-                DiagnosticsLogger.log("Auth callback receive failed", category: .auth, error: error)
-                completion(nil)
-                return
+    private func receiveHTTPRequest(connectionFD: Int32) throws -> String? {
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        let maxRequestBytes = 64 * 1024
+
+        while true {
+            let count = recv(connectionFD, &buffer, buffer.count, 0)
+            if count > 0 {
+                data.append(contentsOf: buffer[0 ..< Int(count)])
+                if let request = String(data: data, encoding: .utf8),
+                   request.contains("\r\n\r\n") || request.contains("\n\n") {
+                    return request
+                }
+                if data.count >= maxRequestBytes {
+                    return String(data: data, encoding: .utf8)
+                }
+                continue
             }
 
-            var updated = received
-            if let chunk, !chunk.isEmpty {
-                updated.append(chunk)
+            if count == 0 {
+                return String(data: data, encoding: .utf8)
             }
 
-            if let request = String(data: updated, encoding: .utf8),
-               request.contains("\r\n\r\n") || request.contains("\n\n") {
-                completion(request)
-                return
+            let code = errno
+            if code == EINTR {
+                continue
             }
-
-            if isComplete {
-                completion(String(data: updated, encoding: .utf8))
-                return
-            }
-
-            self.receiveHTTPRequest(connection: connection, received: updated, completion: completion)
+            throw Self.posixError(context: "recv", code: code)
         }
     }
 
-    private func cachePreparedListener(_ listener: NWListener, port: UInt16) {
+    private func cachePreparedSocket(_ fd: Int32, port: UInt16) {
         bindLock.lock()
         defer { bindLock.unlock() }
-        preparedListener?.cancel()
-        preparedListener = listener
+        if let preparedSocketFD {
+            close(preparedSocketFD)
+        }
+        preparedSocketFD = fd
         preparedPort = port
     }
 
-    private func consumePreparedListener(for port: UInt16) -> NWListener? {
+    private func consumePreparedSocket(for port: UInt16) -> Int32? {
         bindLock.lock()
         defer { bindLock.unlock() }
-        guard preparedPort == port, let listener = preparedListener else { return nil }
-        preparedListener = nil
+        guard preparedPort == port, let socketFD = preparedSocketFD else { return nil }
+        preparedSocketFD = nil
         preparedPort = nil
-        return listener
+        return socketFD
     }
 
     private static func tryPrepareListener(
         requestedPort: UInt16,
         stage: String,
         attempt: Int
-    ) -> (listener: NWListener, port: UInt16)? {
-        let endpointPort: NWEndpoint.Port
-        if requestedPort == 0 {
-            endpointPort = .any
-        } else if let explicitPort = NWEndpoint.Port(rawValue: requestedPort) {
-            endpointPort = explicitPort
-        } else {
-            return nil
-        }
-        let listener: NWListener
+    ) -> (fd: Int32, port: UInt16)? {
         do {
-            listener = try NWListener(using: loopbackParameters(), on: endpointPort)
+            return try createListeningSocket(requestedPort: requestedPort)
         } catch {
             DiagnosticsLogger.log(
-                "Auth callback bind init failed stage=\(stage) attempt=\(attempt) requestedPort=\(requestedPort)",
+                "Auth callback bind failed stage=\(stage) attempt=\(attempt) requestedPort=\(requestedPort)",
                 level: .warning,
                 category: .auth,
                 error: error
             )
             return nil
         }
+    }
 
-        let semaphore = DispatchSemaphore(value: 0)
-        let stateLock = NSLock()
-        var boundPort: UInt16?
-        var failedError: NWError?
-        listener.stateUpdateHandler = { state in
-            stateLock.lock()
-            defer { stateLock.unlock() }
-            switch state {
-            case .ready:
-                boundPort = listener.port?.rawValue ?? requestedPort
-                semaphore.signal()
-            case let .failed(error):
-                failedError = error
-                semaphore.signal()
-            default:
-                break
+    private static func createListeningSocket(requestedPort: UInt16) throws -> (fd: Int32, port: UInt16) {
+        let fd = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+        guard fd >= 0 else {
+            throw posixError(context: "socket")
+        }
+
+        do {
+            var enableReuse: Int32 = 1
+            if setsockopt(
+                fd,
+                SOL_SOCKET,
+                SO_REUSEADDR,
+                &enableReuse,
+                socklen_t(MemoryLayout<Int32>.size)
+            ) < 0 {
+                throw posixError(context: "setsockopt(SO_REUSEADDR)")
+            }
+
+            var address = sockaddr_in()
+            address.sin_len = UInt8(MemoryLayout<sockaddr_in>.stride)
+            address.sin_family = sa_family_t(AF_INET)
+            address.sin_port = in_port_t(requestedPort).bigEndian
+            address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
+            memset(&address.sin_zero, 0, MemoryLayout.size(ofValue: address.sin_zero))
+
+            let bindResult = withUnsafePointer(to: &address) { pointer in
+                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                    bind(fd, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
+                }
+            }
+            if bindResult < 0 {
+                throw posixError(context: "bind")
+            }
+
+            if listen(fd, SOMAXCONN) < 0 {
+                throw posixError(context: "listen")
+            }
+
+            let boundPort = try socketBoundPort(fd: fd)
+            return (fd, boundPort)
+        } catch {
+            close(fd)
+            throw error
+        }
+    }
+
+    private static func socketBoundPort(fd: Int32) throws -> UInt16 {
+        var address = sockaddr_in()
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let result = withUnsafeMutablePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                getsockname(fd, sockaddrPointer, &length)
             }
         }
-        listener.start(queue: DispatchQueue(label: "yamabiko.auth.bind.prepare.\(requestedPort).\(attempt)"))
-        let waitResult = semaphore.wait(timeout: .now() + Self.listenerReadyTimeout)
-        listener.stateUpdateHandler = nil
-
-        if let failedError {
-            DiagnosticsLogger.log(
-                "Auth callback bind failed stage=\(stage) attempt=\(attempt) requestedPort=\(requestedPort)",
-                level: .warning,
-                category: .auth,
-                error: failedError
-            )
-            listener.cancel()
-            return nil
+        if result < 0 {
+            throw posixError(context: "getsockname")
         }
-
-        if waitResult == .timedOut {
-            DiagnosticsLogger.log(
-                "Auth callback bind timed out stage=\(stage) attempt=\(attempt) requestedPort=\(requestedPort)",
-                level: .warning,
-                category: .auth
-            )
-            listener.cancel()
-            return nil
-        }
-
-        guard let boundPort else {
-            DiagnosticsLogger.log(
-                "Auth callback bind missing bound port stage=\(stage) attempt=\(attempt) requestedPort=\(requestedPort)",
-                level: .warning,
-                category: .auth
-            )
-            listener.cancel()
-            return nil
-        }
-
-        return (listener, boundPort)
+        return UInt16(bigEndian: address.sin_port)
     }
 
-    private static func isAllowedCallbackEndpoint(_ endpoint: NWEndpoint) -> Bool {
-        guard case let .hostPort(host, _) = endpoint else {
-            // Accept unknown endpoint styles because some Apple stacks can abstract loopback origins.
-            return true
+    private static func acceptConnection(listeningFD: Int32) throws -> Int32 {
+        var storage = sockaddr_storage()
+        var length = socklen_t(MemoryLayout<sockaddr_storage>.size)
+        let fd = withUnsafeMutablePointer(to: &storage) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                accept(listeningFD, sockaddrPointer, &length)
+            }
         }
-        let normalized = host
-            .debugDescription
-            .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-            .lowercased()
-        if normalized == "localhost" || normalized == "::1" || normalized == "0:0:0:0:0:0:0:1" {
-            return true
+        guard fd >= 0 else {
+            throw posixError(context: "accept")
         }
-        if normalized.hasPrefix("127.") || normalized.contains("127.0.0.1") {
-            return true
-        }
-        return false
+        return fd
     }
 
-    private static func loopbackParameters() -> NWParameters {
-        // Avoid requiredInterfaceType(.loopback) for listeners; it can fail on iOS with NWError(22).
-        let parameters = NWParameters.tcp
-        parameters.includePeerToPeer = false
-        return parameters
+    private static func sendString(_ response: String, to fd: Int32) {
+        let data = Data(response.utf8)
+        _ = data.withUnsafeBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else { return 0 }
+            var remaining = rawBuffer.count
+            var sent = 0
+            while remaining > 0 {
+                let wrote = send(fd, baseAddress.advanced(by: sent), remaining, 0)
+                if wrote <= 0 {
+                    return sent
+                }
+                sent += wrote
+                remaining -= wrote
+            }
+            return sent
+        }
+    }
+
+    private static func posixError(context: String, code: Int32 = errno) -> NSError {
+        let description = String(cString: strerror(code))
+        return NSError(
+            domain: NSPOSIXErrorDomain,
+            code: Int(code),
+            userInfo: [NSLocalizedDescriptionKey: "\(context): \(description)"]
+        )
     }
 }

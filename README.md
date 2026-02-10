@@ -32,18 +32,5 @@ xcodegen generate
 open YamabikoChat.xcodeproj
 ```
 
-### Gemini OAuth設定ファイル
-Gemini OAuthを有効化する場合は、`ios/.env.local.example` を `ios/.env.local` にコピーして値を設定してください。
-
-```bash
-cp ios/.env.local.example ios/.env.local
-```
-
-`ios/.env.local` は `.gitignore` に含まれているためコミットされません。  
-GitHub ActionsでIPAを作る場合は、リポジトリ Secrets に以下を設定してください。
-
-- `GEMINI_OAUTH_CLIENT_ID`
-- `GEMINI_OAUTH_CLIENT_SECRET`
-
 ## ライセンス
 MIT

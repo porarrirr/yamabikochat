@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(./gradlew:*)",
+      "WebFetch(domain:openrouter.ai)",
+      "Bash(.gradlew build)",
+      "Bash(gradlew.bat build:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(.gradlew.bat build)",
+      "Bash(.gradlew assembleDebug)",
+      "Bash(rm:*)",
+      "Bash(.gradlew.bat lintDebug:*)",
+      "Bash(find app/src/main/java -name \"*.kt\")",
+      "WebFetch(domain:noties.io)",
+      "Bash(if exist appbuild rd /s /q appbuild)",
+      "Bash(powershell:*)",
+      "WebFetch(domain:ai.google.dev)",
+      "Bash(tail:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(keytool:*)",
+      "Bash(jarsigner:*)",
+      "Bash(mkdir:*)",
+      "Bash(robocopy:*)",
+      "Bash(xcopy:*)",
+      "Bash(grep:*)",
+      "Bash(gradlew:*)",
+      "Bash(.gradlew.bat clean)",
+      "Bash(dir:*)",
+      "Bash(python:*)",
+      "Bash(cat:*)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(gh release create:*)",
+      "Bash(cmd /c gradlew.bat build:*)"
+    ],
+    "deny": []
+  }
+}
