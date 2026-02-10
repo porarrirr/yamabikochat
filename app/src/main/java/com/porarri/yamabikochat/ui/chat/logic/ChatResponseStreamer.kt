@@ -84,18 +84,20 @@ class ChatResponseStreamer(
                     sessionId = sessionId
                 )
                 if (!response.isSuccessful) {
-                    val body = if (BuildConfig.DEBUG || BuildConfig.DIAGNOSTIC) {
-                        response.errorBody()?.string()?.take(2048)
+                    val rawBody = if (BuildConfig.DEBUG || BuildConfig.DIAGNOSTIC) {
+                        response.errorBody()?.string()
                     } else {
                         null
                     }
+                    val bodyLen = rawBody?.length
+                    val body = sanitizeDiagnosticsBody(rawBody, maxChars = 2048)
                     DiagnosticsLogger.log(
-                        "Streaming API failed provider=${provider.uppercase()} model=$model code=${response.code()} body=${body.orEmpty()}"
+                        "Streaming API failed provider=${provider.uppercase()} model=$model code=${response.code()} bodyLen=${bodyLen ?: "-"} body=${body.orEmpty()}"
                     )
                     if (BuildConfig.DEBUG || BuildConfig.DIAGNOSTIC) {
                         android.util.Log.e(
                             "ChatResponseStreamer",
-                            "Streaming API failed: code=${response.code()} body=$body"
+                            "Streaming API failed: code=${response.code()} bodyLen=${bodyLen ?: "-"} body=$body"
                         )
                     } else {
                         android.util.Log.e(
@@ -369,18 +371,20 @@ class ChatResponseStreamer(
                 sessionId = sessionId
             )
             if (!response.isSuccessful) {
-                val errorBody = if (BuildConfig.DEBUG || BuildConfig.DIAGNOSTIC) {
-                    response.errorBody()?.string()?.take(2048)
+                val rawBody = if (BuildConfig.DEBUG || BuildConfig.DIAGNOSTIC) {
+                    response.errorBody()?.string()
                 } else {
                     null
                 }
+                val bodyLen = rawBody?.length
+                val errorBody = sanitizeDiagnosticsBody(rawBody, maxChars = 2048)
                 DiagnosticsLogger.log(
-                    "Generate content failed provider=${provider.uppercase()} model=$model code=${response.code()} body=${errorBody.orEmpty()}"
+                    "Generate content failed provider=${provider.uppercase()} model=$model code=${response.code()} bodyLen=${bodyLen ?: "-"} body=${errorBody.orEmpty()}"
                 )
                 if (BuildConfig.DEBUG || BuildConfig.DIAGNOSTIC) {
                     android.util.Log.e(
                         "ChatResponseStreamer",
-                        "Generate content failed: code=${response.code()} body=$errorBody"
+                        "Generate content failed: code=${response.code()} bodyLen=${bodyLen ?: "-"} body=$errorBody"
                     )
                 } else {
                     android.util.Log.e("ChatResponseStreamer", "Generate content failed: code=${response.code()}")
@@ -419,6 +423,24 @@ class ChatResponseStreamer(
     companion object {
         private const val DONE_TOKEN = "[DONE]"
         private const val STREAMING_GENERIC_ERROR = "応答の取得に失敗しました。しばらくしてから再試行してください。"
+    }
+
+    private fun sanitizeDiagnosticsBody(body: String?, maxChars: Int): String? {
+        val trimmed = body?.trim().orEmpty()
+        if (trimmed.isBlank()) return null
+
+        var sanitized = trimmed
+        sanitized = sanitized.replace(Regex("(?i)\\bBearer\\s+[-._A-Za-z0-9]+\\b"), "Bearer <redacted>")
+        sanitized = sanitized.replace(
+            Regex("eyJ[-_A-Za-z0-9]{10,}\\.[-_A-Za-z0-9]{10,}\\.[-_A-Za-z0-9]{10,}"),
+            "<redacted_jwt>"
+        )
+        sanitized =
+            sanitized.replace(Regex("(?i)\\b(access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|api[_-]?key)\\b\\s*[:=]\\s*[^\\s,\\\"}]+")) {
+                "${it.groupValues[1]}=<redacted>"
+            }
+
+        return if (sanitized.length <= maxChars) sanitized else sanitized.take(maxChars) + "..."
     }
 
     private fun apiFailureMessage(provider: String, code: Int): String {

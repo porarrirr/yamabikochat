@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -15,7 +17,7 @@ android {
     fun String.escapeForKotlinString(): String =
         replace("\\", "\\\\").replace("\"", "\\\"")
 
-    val localProperties = java.util.Properties().apply {
+    val localProperties = Properties().apply {
         val file = rootProject.file("local.properties")
         if (file.isFile) {
             file.inputStream().use { load(it) }

@@ -15,6 +15,11 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Dns
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -645,7 +650,60 @@ class GeminiAuthRepository(
     private fun sanitizeLogBody(body: String, maxChars: Int = 400): String {
         val trimmed = body.trim()
         if (trimmed.isBlank()) return ""
-        return if (trimmed.length <= maxChars) trimmed else trimmed.take(maxChars) + "..."
+        val sanitized = sanitizeSecrets(trimmed)
+        return if (sanitized.length <= maxChars) sanitized else sanitized.take(maxChars) + "..."
+    }
+
+    private fun sanitizeSecrets(raw: String): String {
+        val jsonSanitized = runCatching {
+            val element = json.parseToJsonElement(raw)
+            val sanitized = sanitizeJsonElement(element)
+            json.encodeToString(JsonElement.serializer(), sanitized)
+        }.getOrNull()
+
+        return sanitizeTokenLikeStrings(jsonSanitized ?: raw)
+    }
+
+    private fun sanitizeJsonElement(element: JsonElement): JsonElement {
+        val redactedKeys = setOf(
+            "access_token",
+            "refresh_token",
+            "id_token",
+            "client_secret",
+            "token",
+            "api_key",
+            "authorization"
+        )
+
+        return when (element) {
+            is JsonObject -> {
+                val updated = element.mapValues { (key, value) ->
+                    if (key.lowercase() in redactedKeys) {
+                        val replacement = if (value is JsonPrimitive && value.isString) {
+                            "<redacted:${value.jsonPrimitive.content.length}>"
+                        } else {
+                            "<redacted>"
+                        }
+                        JsonPrimitive(replacement)
+                    } else {
+                        sanitizeJsonElement(value)
+                    }
+                }
+                JsonObject(updated)
+            }
+            is JsonArray -> JsonArray(element.map { sanitizeJsonElement(it) })
+            else -> element
+        }
+    }
+
+    private fun sanitizeTokenLikeStrings(value: String): String {
+        var sanitized = value
+        sanitized = sanitized.replace(Regex("(?i)\\bBearer\\s+[-._A-Za-z0-9]+\\b"), "Bearer <redacted>")
+        sanitized = sanitized.replace(
+            Regex("eyJ[-_A-Za-z0-9]{10,}\\.[-_A-Za-z0-9]{10,}\\.[-_A-Za-z0-9]{10,}"),
+            "<redacted_jwt>"
+        )
+        return sanitized
     }
 
     private fun ensureAuthHostsResolvable() {

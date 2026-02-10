@@ -40,6 +40,10 @@ local.properties
 *.iml
 *.ipr
 *.iws
+.vscode/
+
+# Local patch artifacts
+__patch.diff
 
 # OS generated files
 .DS_Store
@@ -66,6 +70,9 @@ app/release/
 build/
 .gradle/
 .idea/
+
+# Gradle wrapper jar should be committed
+!gradle/wrapper/gradle-wrapper.jar
 
 # Claude Code settings (local only)
 .claude/settings.local.json
