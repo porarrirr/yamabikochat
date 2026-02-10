@@ -791,7 +791,7 @@ struct SettingsScreen: View {
                 .foregroundStyle(.secondary)
 
             if !viewModel.isGeminiOAuthConfigured {
-                Text("Gemini OAuth client ID/secret が未設定です。Info.plist を設定してください。")
+                Text("Gemini OAuth client ID/secret が未設定です。GeminiAuthInfo.plist（または Info.plist）を設定してください。")
                     .font(.caption2)
                     .foregroundStyle(.orange)
             }

@@ -42,7 +42,7 @@ final class SettingsViewModel: ObservableObject {
     private var credentialStore: SecureCredentialStore?
     private var cancellables: Set<AnyCancellable> = []
     private let geminiOAuthMissingMessage =
-        "Gemini OAuth client ID/secret が未設定です。Info.plist の GEMINI_OAUTH_CLIENT_ID / GEMINI_OAUTH_CLIENT_SECRET を設定してください。"
+        "Gemini OAuth client ID/secret が未設定です。GeminiAuthInfo.plist（または Info.plist）の GEMINI_OAUTH_CLIENT_ID / GEMINI_OAUTH_CLIENT_SECRET を設定してください。"
 
     var isGeminiOAuthConfigured: Bool {
         if let repository {

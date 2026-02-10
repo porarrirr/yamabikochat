@@ -54,7 +54,81 @@ private struct StubGeminiOAuthConfigProvider: GeminiOAuthConfigProviding {
     }
 }
 
+private func createTemporaryBundle(
+    infoDictionary: [String: String],
+    dedicatedGeminiDictionary: [String: String]? = nil
+) throws -> URL {
+    let fileManager = FileManager.default
+    let bundleURL = fileManager.temporaryDirectory
+        .appendingPathComponent("yamabiko-test-\(UUID().uuidString)")
+        .appendingPathExtension("bundle")
+    try fileManager.createDirectory(at: bundleURL, withIntermediateDirectories: true, attributes: nil)
+
+    let infoURL = bundleURL.appendingPathComponent("Info.plist")
+    let infoNSDictionary = NSDictionary(dictionary: infoDictionary)
+    guard infoNSDictionary.write(to: infoURL, atomically: true) else {
+        throw NSError(domain: "AuthRepositoryTests", code: 1, userInfo: nil)
+    }
+
+    if let dedicatedGeminiDictionary {
+        let dedicatedURL = bundleURL.appendingPathComponent("GeminiAuthInfo.plist")
+        let dedicatedNSDictionary = NSDictionary(dictionary: dedicatedGeminiDictionary)
+        guard dedicatedNSDictionary.write(to: dedicatedURL, atomically: true) else {
+            throw NSError(domain: "AuthRepositoryTests", code: 2, userInfo: nil)
+        }
+    }
+
+    return bundleURL
+}
+
 final class AuthRepositoryTests: XCTestCase {
+    func testBundleGeminiOAuthConfigProviderPrefersDedicatedPlist() throws {
+        let bundleURL = try createTemporaryBundle(
+            infoDictionary: [
+                "CFBundleIdentifier": "test.bundle",
+                "GEMINI_OAUTH_CLIENT_ID": "fallback-client-id",
+                "GEMINI_OAUTH_CLIENT_SECRET": "fallback-client-secret"
+            ],
+            dedicatedGeminiDictionary: [
+                "GEMINI_OAUTH_CLIENT_ID": "dedicated-client-id",
+                "GEMINI_OAUTH_CLIENT_SECRET": "dedicated-client-secret"
+            ]
+        )
+        defer { try? FileManager.default.removeItem(at: bundleURL) }
+
+        guard let bundle = Bundle(url: bundleURL) else {
+            XCTFail("Failed to open temporary bundle")
+            return
+        }
+        let provider = BundleGeminiOAuthConfigProvider(bundle: bundle)
+        let config = provider.loadOAuthClientConfig()
+
+        XCTAssertEqual(config.clientID, "dedicated-client-id")
+        XCTAssertEqual(config.clientSecret, "dedicated-client-secret")
+    }
+
+    func testBundleGeminiOAuthConfigProviderFallsBackToInfoPlist() throws {
+        let bundleURL = try createTemporaryBundle(
+            infoDictionary: [
+                "CFBundleIdentifier": "test.bundle",
+                "GEMINI_OAUTH_CLIENT_ID": "fallback-client-id",
+                "GEMINI_OAUTH_CLIENT_SECRET": "fallback-client-secret"
+            ],
+            dedicatedGeminiDictionary: nil
+        )
+        defer { try? FileManager.default.removeItem(at: bundleURL) }
+
+        guard let bundle = Bundle(url: bundleURL) else {
+            XCTFail("Failed to open temporary bundle")
+            return
+        }
+        let provider = BundleGeminiOAuthConfigProvider(bundle: bundle)
+        let config = provider.loadOAuthClientConfig()
+
+        XCTAssertEqual(config.clientID, "fallback-client-id")
+        XCTAssertEqual(config.clientSecret, "fallback-client-secret")
+    }
+
     func testCodexRedirectURIUsesLocalhostForParity() {
         XCTAssertEqual(
             CodexAuthRepository.redirectURI(port: 1455),

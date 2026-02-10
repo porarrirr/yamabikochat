@@ -14,15 +14,44 @@ protocol GeminiOAuthConfigProviding {
 
 struct BundleGeminiOAuthConfigProvider: GeminiOAuthConfigProviding {
     private let bundle: Bundle
+    private let dedicatedPlistName: String
 
-    init(bundle: Bundle = .main) {
+    private enum ConfigKey {
+        static let clientID = "GEMINI_OAUTH_CLIENT_ID"
+        static let clientSecret = "GEMINI_OAUTH_CLIENT_SECRET"
+    }
+
+    init(bundle: Bundle = .main, dedicatedPlistName: String = "GeminiAuthInfo") {
         self.bundle = bundle
+        self.dedicatedPlistName = dedicatedPlistName
     }
 
     func loadOAuthClientConfig() -> GeminiOAuthClientConfig {
+        if let fromDedicatedPlist = loadFromDedicatedPlist() {
+            return fromDedicatedPlist
+        }
+        return loadFromInfoDictionary()
+    }
+
+    private func loadFromDedicatedPlist() -> GeminiOAuthClientConfig? {
+        guard let url = bundle.url(forResource: dedicatedPlistName, withExtension: "plist"),
+              let data = try? Data(contentsOf: url),
+              let raw = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil),
+              let dictionary = raw as? [String: Any]
+        else {
+            return nil
+        }
+
+        return GeminiOAuthClientConfig(
+            clientID: dictionary[ConfigKey.clientID] as? String ?? "",
+            clientSecret: dictionary[ConfigKey.clientSecret] as? String ?? ""
+        )
+    }
+
+    private func loadFromInfoDictionary() -> GeminiOAuthClientConfig {
         GeminiOAuthClientConfig(
-            clientID: bundle.object(forInfoDictionaryKey: "GEMINI_OAUTH_CLIENT_ID") as? String ?? "",
-            clientSecret: bundle.object(forInfoDictionaryKey: "GEMINI_OAUTH_CLIENT_SECRET") as? String ?? ""
+            clientID: bundle.object(forInfoDictionaryKey: ConfigKey.clientID) as? String ?? "",
+            clientSecret: bundle.object(forInfoDictionaryKey: ConfigKey.clientSecret) as? String ?? ""
         )
     }
 }
