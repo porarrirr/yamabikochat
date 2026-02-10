@@ -42,7 +42,7 @@ final class LocalAuthCallbackServer {
     deinit {
         bindLock.lock()
         if let preparedSocketFD {
-            close(preparedSocketFD)
+            Darwin.close(preparedSocketFD)
         }
         preparedSocketFD = nil
         preparedPort = nil
@@ -111,7 +111,7 @@ final class LocalAuthCallbackServer {
                 defer { stateLock.unlock() }
                 guard !completed else { return }
                 completed = true
-                close(listeningFD)
+                Darwin.close(listeningFD)
                 continuation.resume(with: result)
             }
 
@@ -149,7 +149,7 @@ final class LocalAuthCallbackServer {
                     }
 
                     defer {
-                        close(connectionFD)
+                        Darwin.close(connectionFD)
                     }
 
                     let request: String
@@ -259,7 +259,7 @@ final class LocalAuthCallbackServer {
         let maxRequestBytes = 64 * 1024
 
         while true {
-            let count = recv(connectionFD, &buffer, buffer.count, 0)
+            let count = Darwin.recv(connectionFD, &buffer, buffer.count, 0)
             if count > 0 {
                 data.append(contentsOf: buffer[0 ..< Int(count)])
                 if let request = String(data: data, encoding: .utf8),
@@ -287,8 +287,8 @@ final class LocalAuthCallbackServer {
     private func cachePreparedSocket(_ fd: Int32, port: UInt16) {
         bindLock.lock()
         defer { bindLock.unlock() }
-        if let preparedSocketFD {
-            close(preparedSocketFD)
+            if let preparedSocketFD {
+            Darwin.close(preparedSocketFD)
         }
         preparedSocketFD = fd
         preparedPort = port
@@ -322,14 +322,14 @@ final class LocalAuthCallbackServer {
     }
 
     private static func createListeningSocket(requestedPort: UInt16) throws -> (fd: Int32, port: UInt16) {
-        let fd = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+        let fd = Darwin.socket(AF_INET, SOCK_STREAM, 0)
         guard fd >= 0 else {
             throw posixError(context: "socket")
         }
 
         do {
             var enableReuse: Int32 = 1
-            if setsockopt(
+            if Darwin.setsockopt(
                 fd,
                 SOL_SOCKET,
                 SO_REUSEADDR,
@@ -348,21 +348,21 @@ final class LocalAuthCallbackServer {
 
             let bindResult = withUnsafePointer(to: &address) { pointer in
                 pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
-                    bind(fd, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
+                    Darwin.bind(fd, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
                 }
             }
             if bindResult < 0 {
                 throw posixError(context: "bind")
             }
 
-            if listen(fd, SOMAXCONN) < 0 {
+            if Darwin.listen(fd, SOMAXCONN) < 0 {
                 throw posixError(context: "listen")
             }
 
             let boundPort = try socketBoundPort(fd: fd)
             return (fd, boundPort)
         } catch {
-            close(fd)
+            Darwin.close(fd)
             throw error
         }
     }
@@ -372,7 +372,7 @@ final class LocalAuthCallbackServer {
         var length = socklen_t(MemoryLayout<sockaddr_in>.size)
         let result = withUnsafeMutablePointer(to: &address) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
-                getsockname(fd, sockaddrPointer, &length)
+                Darwin.getsockname(fd, sockaddrPointer, &length)
             }
         }
         if result < 0 {
@@ -386,7 +386,7 @@ final class LocalAuthCallbackServer {
         var length = socklen_t(MemoryLayout<sockaddr_storage>.size)
         let fd = withUnsafeMutablePointer(to: &storage) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
-                accept(listeningFD, sockaddrPointer, &length)
+                Darwin.accept(listeningFD, sockaddrPointer, &length)
             }
         }
         guard fd >= 0 else {
@@ -402,7 +402,7 @@ final class LocalAuthCallbackServer {
             var remaining = rawBuffer.count
             var sent = 0
             while remaining > 0 {
-                let wrote = send(fd, baseAddress.advanced(by: sent), remaining, 0)
+                let wrote = Darwin.send(fd, baseAddress.advanced(by: sent), remaining, 0)
                 if wrote <= 0 {
                     return sent
                 }
