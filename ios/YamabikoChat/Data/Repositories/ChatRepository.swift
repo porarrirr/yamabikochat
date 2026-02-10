@@ -637,6 +637,27 @@ final class ChatRepository {
         geminiAuthRepository.isOAuthClientConfigured()
     }
 
+    func hasImportedGeminiOAuthClientConfig() -> Bool {
+        geminiAuthRepository.hasImportedOAuthClientConfig()
+    }
+
+    func importGeminiOAuthClientConfig(fileURL: URL) -> Result<GeminiOAuthClientConfig, Error> {
+        do {
+            return .success(try geminiAuthRepository.importOAuthClientConfig(fileURL: fileURL))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    func clearImportedGeminiOAuthClientConfig() -> Bool {
+        do {
+            try geminiAuthRepository.clearImportedOAuthClientConfig()
+            return true
+        } catch {
+            return false
+        }
+    }
+
     func logoutGeminiAuth() async -> Result<GeminiAuthState, Error> {
         await geminiAuthRepository.logout()
     }

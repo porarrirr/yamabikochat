@@ -17,7 +17,7 @@ struct RootView: View {
                 viewModel: listViewModel,
                 selection: $appState.selectedConversationID,
                 onSelect: { id in
-                    appState.selectedConversationID = id
+                    selectConversation(id: id)
                 },
                 onOpenSettings: {
                     isSettingsPresented = true
@@ -26,7 +26,13 @@ struct RootView: View {
             .navigationTitle("会話")
         } detail: {
             if let conversationID = appState.selectedConversationID {
-                ConversationDetailHost(conversationID: conversationID)
+                ConversationDetailHost(
+                    conversationID: conversationID,
+                    onSelectConversation: { id in
+                        selectConversation(id: id)
+                    }
+                )
+                .id(conversationID)
             } else {
                 ContentUnavailableView(
                     "会話がありません",
@@ -66,8 +72,7 @@ struct RootView: View {
                 viewModel: listViewModel,
                 selection: $appState.selectedConversationID,
                 onSelect: { id in
-                    appState.selectedConversationID = id
-                    appState.isConversationHistoryPresented = false
+                    selectConversation(id: id, closeHistory: true)
                 }
             )
             .environmentObject(container)
@@ -115,6 +120,13 @@ struct RootView: View {
         themeColor = settings.themeColor
         themeMode = settings.themeMode
     }
+
+    private func selectConversation(id: Int64, closeHistory: Bool = false) {
+        appState.selectedConversationID = id
+        if closeHistory {
+            appState.isConversationHistoryPresented = false
+        }
+    }
 }
 
 private struct ConversationDetailHost: View {
@@ -122,18 +134,25 @@ private struct ConversationDetailHost: View {
     @EnvironmentObject private var appState: AppState
 
     let conversationID: Int64
+    let onSelectConversation: (Int64) -> Void
     @StateObject private var viewModel: ChatViewModel
 
-    init(conversationID: Int64) {
+    init(
+        conversationID: Int64,
+        onSelectConversation: @escaping (Int64) -> Void
+    ) {
         self.conversationID = conversationID
+        self.onSelectConversation = onSelectConversation
         _viewModel = StateObject(wrappedValue: ChatViewModel(conversationID: conversationID))
     }
 
     var body: some View {
-        ChatWorkspaceScreen(viewModel: viewModel)
+        ChatWorkspaceScreen(
+            viewModel: viewModel,
+            onSelectConversation: onSelectConversation
+        )
             .environmentObject(container)
             .environmentObject(appState)
-            .id(conversationID)
     }
 }
 

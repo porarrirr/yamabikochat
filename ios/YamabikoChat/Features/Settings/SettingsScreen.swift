@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct SettingsScreen: View {
     @EnvironmentObject private var container: AppContainer
@@ -8,6 +9,7 @@ struct SettingsScreen: View {
     @ObservedObject var viewModel: SettingsViewModel
     @State private var selectedTab: SettingsTab = .api
     @State private var showDiagnosticsSheet = false
+    @State private var showGeminiOAuthConfigImporter = false
 
     enum SettingsTab: String, CaseIterable, Identifiable {
         case api = "API設定"
@@ -71,6 +73,25 @@ struct SettingsScreen: View {
             }
             .task {
                 viewModel.bind(repository: container.chatRepository, credentialStore: container.credentialStore)
+            }
+            .fileImporter(
+                isPresented: $showGeminiOAuthConfigImporter,
+                allowedContentTypes: [.propertyList],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case let .success(urls):
+                    guard let url = urls.first else { return }
+                    let secured = url.startAccessingSecurityScopedResource()
+                    defer {
+                        if secured {
+                            url.stopAccessingSecurityScopedResource()
+                        }
+                    }
+                    viewModel.importGeminiOAuthClientConfig(fileURL: url)
+                case let .failure(error):
+                    viewModel.errorMessage = error.localizedDescription
+                }
             }
         }
     }
@@ -791,10 +812,33 @@ struct SettingsScreen: View {
                 .foregroundStyle(.secondary)
 
             if !viewModel.isGeminiOAuthConfigured {
-                Text("Gemini OAuth client ID/secret が未設定です。GeminiAuthInfo.plist（または Info.plist）を設定してください。")
+                Text("Gemini OAuth client ID/secret が未設定です。GeminiAuthInfo.plist（または Info.plist）を設定するか、下の「設定ファイルを取り込む」を実行してください。")
                     .font(.caption2)
                     .foregroundStyle(.orange)
             }
+
+            HStack {
+                Button("設定ファイルを取り込む") {
+                    showGeminiOAuthConfigImporter = true
+                }
+                .buttonStyle(.bordered)
+
+                if viewModel.hasImportedGeminiOAuthClientConfig {
+                    Button("取り込み設定をクリア") {
+                        viewModel.clearImportedGeminiOAuthClientConfig()
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            .disabled(viewModel.isGeminiAuthActionRunning)
+
+            Text(
+                viewModel.hasImportedGeminiOAuthClientConfig
+                    ? "ファイル取り込み済みのOAuth設定を使用中です。"
+                    : "FilesからGeminiAuthInfo.plistを選択すると、アプリ内にOAuth設定を保存します。"
+            )
+            .font(.caption2)
+            .foregroundStyle(.secondary)
 
             HStack {
                 Button("Sign in") {

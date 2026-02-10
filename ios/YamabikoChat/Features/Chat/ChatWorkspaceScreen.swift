@@ -7,6 +7,7 @@ struct ChatWorkspaceScreen: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @ObservedObject var viewModel: ChatViewModel
+    var onSelectConversation: ((Int64) -> Void)?
 
     private enum WorkspaceMode {
         case chat
@@ -189,7 +190,11 @@ struct ChatWorkspaceScreen: View {
     private func createConversation() {
         do {
             let conversationID = try container.chatRepository.createConversation()
-            appState.selectedConversationID = conversationID
+            if let onSelectConversation {
+                onSelectConversation(conversationID)
+            } else {
+                appState.selectedConversationID = conversationID
+            }
         } catch {
             viewModel.errorMessage = error.localizedDescription
             DiagnosticsLogger.log(

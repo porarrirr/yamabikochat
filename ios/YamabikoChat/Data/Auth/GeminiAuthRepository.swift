@@ -74,6 +74,8 @@ final class GeminiAuthRepository {
         static let refreshBufferSeconds: TimeInterval = 60
         static let refreshFallbackSeconds: TimeInterval = 45 * 60
         static let storageKey = "gemini_auth_json_v2"
+        static let importedOAuthClientIDKey = "gemini_oauth_client_id_imported"
+        static let importedOAuthClientSecretKey = "gemini_oauth_client_secret_imported"
         static let invalidOAuthValueTokens: Set<String> = [
             "?",
             "??",
@@ -113,12 +115,48 @@ final class GeminiAuthRepository {
     }
 
     func isOAuthClientConfigured() -> Bool {
-        Self.missingOAuthClientParts(from: oauthConfigProvider.loadOAuthClientConfig()).isEmpty
+        Self.missingOAuthClientParts(from: resolvedOAuthClientConfig()).isEmpty
     }
 
     static func isDefaultOAuthClientConfigured(bundle: Bundle = .main) -> Bool {
         let provider = BundleGeminiOAuthConfigProvider(bundle: bundle)
         return missingOAuthClientParts(from: provider.loadOAuthClientConfig()).isEmpty
+    }
+
+    func hasImportedOAuthClientConfig() -> Bool {
+        guard let imported = readImportedOAuthClientConfig() else {
+            return false
+        }
+        return Self.missingOAuthClientParts(from: imported).isEmpty
+    }
+
+    func importOAuthClientConfig(fileURL: URL) throws -> GeminiOAuthClientConfig {
+        let data = try Data(contentsOf: fileURL)
+        let raw = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+        guard let dictionary = raw as? [String: Any] else {
+            throw ProviderClientError.parseFailure("Selected file is not a plist dictionary.")
+        }
+
+        let imported = GeminiOAuthClientConfig(
+            clientID: dictionary["GEMINI_OAUTH_CLIENT_ID"] as? String ?? "",
+            clientSecret: dictionary["GEMINI_OAUTH_CLIENT_SECRET"] as? String ?? ""
+        )
+        let normalized = Self.normalizedOAuthClientConfig(imported)
+        let missing = Self.missingOAuthClientParts(from: normalized)
+        if !missing.isEmpty {
+            throw ProviderClientError.parseFailure(
+                "Selected file is missing Gemini OAuth \(missing.joined(separator: ", "))."
+            )
+        }
+
+        try credentialStore.saveSecret(normalized.clientID, key: Constants.importedOAuthClientIDKey)
+        try credentialStore.saveSecret(normalized.clientSecret, key: Constants.importedOAuthClientSecretKey)
+        return normalized
+    }
+
+    func clearImportedOAuthClientConfig() throws {
+        try credentialStore.deleteSecret(key: Constants.importedOAuthClientIDKey)
+        try credentialStore.deleteSecret(key: Constants.importedOAuthClientSecretKey)
     }
 
     func currentState() -> GeminiAuthState {
@@ -162,7 +200,7 @@ final class GeminiAuthRepository {
     func loginWithBrowser() async -> Result<GeminiAuthState, Error> {
         do {
             let oauthConfig = Self.normalizedOAuthClientConfig(
-                oauthConfigProvider.loadOAuthClientConfig()
+                resolvedOAuthClientConfig()
             )
             let missingOAuthParts = Self.missingOAuthClientParts(from: oauthConfig)
             if !missingOAuthParts.isEmpty {
@@ -323,7 +361,7 @@ final class GeminiAuthRepository {
 
             if shouldRefresh, let refreshToken = tokens.refreshToken, !refreshToken.isEmpty {
                 let oauthConfig = Self.normalizedOAuthClientConfig(
-                    oauthConfigProvider.loadOAuthClientConfig()
+                    resolvedOAuthClientConfig()
                 )
                 let missingOAuthParts = Self.missingOAuthClientParts(from: oauthConfig)
                 if !missingOAuthParts.isEmpty {
@@ -711,6 +749,29 @@ final class GeminiAuthRepository {
             throw ProviderClientError.parseFailure("Invalid operation response")
         }
         return root
+    }
+
+    private func resolvedOAuthClientConfig() -> GeminiOAuthClientConfig {
+        if let imported = readImportedOAuthClientConfig() {
+            return imported
+        }
+        return oauthConfigProvider.loadOAuthClientConfig()
+    }
+
+    private func readImportedOAuthClientConfig() -> GeminiOAuthClientConfig? {
+        guard let clientID = try? credentialStore.readSecret(key: Constants.importedOAuthClientIDKey),
+              let clientSecret = try? credentialStore.readSecret(key: Constants.importedOAuthClientSecretKey)
+        else {
+            return nil
+        }
+
+        let normalized = Self.normalizedOAuthClientConfig(
+            GeminiOAuthClientConfig(clientID: clientID, clientSecret: clientSecret)
+        )
+        if Self.missingOAuthClientParts(from: normalized).isEmpty {
+            return normalized
+        }
+        return nil
     }
 
     private static func readState(credentialStore: SecureCredentialStore) -> GeminiAuthState {

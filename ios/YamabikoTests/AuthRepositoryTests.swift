@@ -81,6 +81,18 @@ private func createTemporaryBundle(
     return bundleURL
 }
 
+private func createTemporaryPlistFile(dictionary: [String: String]) throws -> URL {
+    let fileManager = FileManager.default
+    let plistURL = fileManager.temporaryDirectory
+        .appendingPathComponent("yamabiko-gemini-oauth-\(UUID().uuidString)")
+        .appendingPathExtension("plist")
+    let nsDictionary = NSDictionary(dictionary: dictionary)
+    guard nsDictionary.write(to: plistURL, atomically: true) else {
+        throw NSError(domain: "AuthRepositoryTests", code: 3, userInfo: nil)
+    }
+    return plistURL
+}
+
 final class AuthRepositoryTests: XCTestCase {
     func testBundleGeminiOAuthConfigProviderPrefersDedicatedPlist() throws {
         let bundleURL = try createTemporaryBundle(
@@ -230,6 +242,79 @@ final class AuthRepositoryTests: XCTestCase {
             )
         )
         XCTAssertTrue(repo.isOAuthClientConfigured())
+    }
+
+    func testGeminiOAuthImportFromFileUsesImportedConfig() throws {
+        let store = InMemoryCredentialStore()
+        let repo = GeminiAuthRepository(
+            credentialStore: store,
+            oauthConfigProvider: StubGeminiOAuthConfigProvider(
+                config: GeminiOAuthClientConfig(
+                    clientID: "",
+                    clientSecret: ""
+                )
+            )
+        )
+        XCTAssertFalse(repo.isOAuthClientConfigured())
+
+        let plistURL = try createTemporaryPlistFile(
+            dictionary: [
+                "GEMINI_OAUTH_CLIENT_ID": " imported-client-id ",
+                "GEMINI_OAUTH_CLIENT_SECRET": " imported-client-secret "
+            ]
+        )
+        defer { try? FileManager.default.removeItem(at: plistURL) }
+
+        let imported = try repo.importOAuthClientConfig(fileURL: plistURL)
+        XCTAssertEqual(imported.clientID, "imported-client-id")
+        XCTAssertEqual(imported.clientSecret, "imported-client-secret")
+        XCTAssertTrue(repo.hasImportedOAuthClientConfig())
+        XCTAssertTrue(repo.isOAuthClientConfigured())
+    }
+
+    func testGeminiOAuthImportRejectsMissingKeys() throws {
+        let store = InMemoryCredentialStore()
+        let repo = GeminiAuthRepository(
+            credentialStore: store,
+            oauthConfigProvider: StubGeminiOAuthConfigProvider(
+                config: GeminiOAuthClientConfig(clientID: "", clientSecret: "")
+            )
+        )
+
+        let plistURL = try createTemporaryPlistFile(
+            dictionary: [
+                "SOME_OTHER_KEY": "value"
+            ]
+        )
+        defer { try? FileManager.default.removeItem(at: plistURL) }
+
+        XCTAssertThrowsError(try repo.importOAuthClientConfig(fileURL: plistURL))
+        XCTAssertFalse(repo.hasImportedOAuthClientConfig())
+    }
+
+    func testGeminiOAuthImportedConfigCanBeCleared() throws {
+        let store = InMemoryCredentialStore()
+        let repo = GeminiAuthRepository(
+            credentialStore: store,
+            oauthConfigProvider: StubGeminiOAuthConfigProvider(
+                config: GeminiOAuthClientConfig(clientID: "", clientSecret: "")
+            )
+        )
+
+        let plistURL = try createTemporaryPlistFile(
+            dictionary: [
+                "GEMINI_OAUTH_CLIENT_ID": "client-id",
+                "GEMINI_OAUTH_CLIENT_SECRET": "client-secret"
+            ]
+        )
+        defer { try? FileManager.default.removeItem(at: plistURL) }
+
+        _ = try repo.importOAuthClientConfig(fileURL: plistURL)
+        XCTAssertTrue(repo.hasImportedOAuthClientConfig())
+
+        try repo.clearImportedOAuthClientConfig()
+        XCTAssertFalse(repo.hasImportedOAuthClientConfig())
+        XCTAssertFalse(repo.isOAuthClientConfigured())
     }
 
     func testGeminiLoginWithBrowserFailsFastWhenOAuthMissing() async {

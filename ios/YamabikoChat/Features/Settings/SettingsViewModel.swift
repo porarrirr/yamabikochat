@@ -21,6 +21,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var geminiUserQuota: GeminiUserQuota?
     @Published var isCodexAuthActionRunning: Bool = false
     @Published var isGeminiAuthActionRunning: Bool = false
+    @Published var hasImportedGeminiOAuthClientConfig: Bool = false
 
     @Published var codexApiKeyInput: String = ""
     @Published var codexAccessTokenInput: String = ""
@@ -42,7 +43,7 @@ final class SettingsViewModel: ObservableObject {
     private var credentialStore: SecureCredentialStore?
     private var cancellables: Set<AnyCancellable> = []
     private let geminiOAuthMissingMessage =
-        "Gemini OAuth client ID/secret が未設定です。GeminiAuthInfo.plist（または Info.plist）の GEMINI_OAUTH_CLIENT_ID / GEMINI_OAUTH_CLIENT_SECRET を設定してください。"
+        "Gemini OAuth client ID/secret が未設定です。GeminiAuthInfo.plist/Info.plist か、設定画面のファイル取り込みで GEMINI_OAUTH_CLIENT_ID / GEMINI_OAUTH_CLIENT_SECRET を設定してください。"
 
     var isGeminiOAuthConfigured: Bool {
         if let repository {
@@ -55,6 +56,7 @@ final class SettingsViewModel: ObservableObject {
         guard self.repository == nil else { return }
         self.repository = repository
         self.credentialStore = credentialStore
+        refreshGeminiOAuthClientConfigStatus()
 
         repository.settingsPublisher()
             .receive(on: DispatchQueue.main)
@@ -119,6 +121,7 @@ final class SettingsViewModel: ObservableObject {
             await refreshOpenRouterModels(force: false)
             await refreshCodexAuth(force: false)
             await refreshGeminiAuth(force: false)
+            refreshGeminiOAuthClientConfigStatus()
             refreshDiagnosticsLog()
         }
     }
@@ -554,6 +557,37 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    func importGeminiOAuthClientConfig(fileURL: URL) {
+        guard let repository = requireRepository(action: "gemini_import_oauth_config") else { return }
+        let result = repository.importGeminiOAuthClientConfig(fileURL: fileURL)
+        switch result {
+        case .success:
+            statusMessage = "Gemini OAuth設定をファイルから取り込みました"
+            errorMessage = nil
+            DiagnosticsLogger.log("Gemini oauth config imported from file", category: .auth)
+        case let .failure(error):
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log("Gemini oauth config import failed", level: .warning, category: .auth, error: error)
+        }
+        refreshGeminiOAuthClientConfigStatus()
+        refreshDiagnosticsLog()
+    }
+
+    func clearImportedGeminiOAuthClientConfig() {
+        guard let repository = requireRepository(action: "gemini_clear_imported_oauth_config") else { return }
+        let ok = repository.clearImportedGeminiOAuthClientConfig()
+        if ok {
+            statusMessage = "取り込み済みGemini OAuth設定をクリアしました"
+            errorMessage = nil
+            DiagnosticsLogger.log("Gemini imported oauth config cleared", category: .auth)
+        } else {
+            errorMessage = "取り込み済みGemini OAuth設定のクリアに失敗しました"
+            DiagnosticsLogger.log("Gemini imported oauth config clear failed", level: .warning, category: .auth)
+        }
+        refreshGeminiOAuthClientConfigStatus()
+        refreshDiagnosticsLog()
+    }
+
     private func requireRepository(action: String) -> ChatRepository? {
         guard let repository else {
             errorMessage = "設定画面の初期化が完了していません。画面を開き直して再試行してください。"
@@ -585,6 +619,14 @@ final class SettingsViewModel: ObservableObject {
         if let selected = settings.selectedSystemPromptPreset?.nilIfBlank {
             systemPromptPresetNameInput = selected
         }
+    }
+
+    private func refreshGeminiOAuthClientConfigStatus() {
+        guard let repository else {
+            hasImportedGeminiOAuthClientConfig = false
+            return
+        }
+        hasImportedGeminiOAuthClientConfig = repository.hasImportedGeminiOAuthClientConfig()
     }
 
     static func isGeminiQuotaMissingCredentialError(_ error: Error) -> Bool {

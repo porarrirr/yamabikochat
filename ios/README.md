@@ -20,6 +20,7 @@ open YamabikoChat.xcodeproj
   - `GEMINI_OAUTH_CLIENT_SECRET`
 - Replace `__SET_ME__` placeholders with your Google OAuth client values before using `Gemini Auth (CLI)` sign-in.
 - Fallback: if `GeminiAuthInfo.plist` is missing, the app also reads the same keys from `ios/YamabikoChat/App/Resources/Info.plist`.
+- Alternatively, in iOS Settings screen (`Gemini Auth (CLI)` section), you can import a `.plist` file from Files app. Imported values are stored securely and override bundled plist values.
 
 ## Targets
 - `YamabikoChat`: iOS app (SwiftUI)
