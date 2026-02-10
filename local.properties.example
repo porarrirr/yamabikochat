@@ -1,0 +1,10 @@
+# This file contains machine/user-specific settings for the Android SDK.
+# Replace 'your_sdk_path' with your actual Android SDK path
+sdk.dir=C\:\\Users\\{YOUR_USERNAME}\\AppData\\Local\\Android\\Sdk
+
+# Signing configuration for release builds
+# Copy this to local.properties and fill in the actual passwords
+# NEVER commit local.properties to version control
+YAMABIKO_KEY_ALIAS=yamabiko
+YAMABIKO_KEY_PASSWORD=YOUR_KEY_PASSWORD_HERE
+YAMABIKO_STORE_PASSWORD=YOUR_KEYSTORE_PASSWORD_HERE

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Internal storage files directory - restricted to exports -->
+    <files-path 
+        name="code_files" 
+        path="exports" />
+    
+    <!-- Cache directory for temporary files - restricted to exports -->
+    <cache-path 
+        name="code_cache" 
+        path="exports" />
+</paths>

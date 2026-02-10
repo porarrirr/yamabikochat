@@ -1,0 +1,474 @@
+import Foundation
+import GRDB
+
+struct OpenAICompatPreset: Codable, Equatable, Identifiable {
+    var id: String { name }
+    var name: String
+    var baseURL: String
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case baseURL
+        case baseUrl
+    }
+
+    init(name: String, baseURL: String) {
+        self.name = name
+        self.baseURL = baseURL
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        baseURL = try container.decodeIfPresent(String.self, forKey: .baseURL)
+            ?? container.decodeIfPresent(String.self, forKey: .baseUrl)
+            ?? AppConstants.defaultOpenAIBaseURL.absoluteString
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode(baseURL, forKey: .baseURL)
+    }
+}
+
+struct SystemPromptPreset: Codable, Equatable, Identifiable {
+    var id: String { name }
+    var name: String
+    var prompt: String
+}
+
+struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatable {
+    static let databaseTableName = "settings"
+
+    var id: Int64
+
+    var defaultModel: String
+    var apiProvider: String
+    var systemPrompt: String?
+    var systemPromptPresetsJSON: String
+    var selectedSystemPromptPreset: String?
+
+    var isStreamingEnabled: Bool
+    var mathRenderingEnabled: Bool
+
+    var dynamicColorEnabled: Bool
+    var themeColor: String
+    var themeMode: String
+
+    var geminiThinkingEnabled: Bool
+    var geminiThinkingBudget: Int
+    var geminiThinkingLevel: String
+    var geminiGoogleSearchEnabled: Bool
+    var geminiCodeExecutionEnabled: Bool
+    var geminiURLContextEnabled: Bool
+    var geminiGoogleMapsEnabled: Bool
+    var geminiComputerUseEnabled: Bool
+    var geminiResponseMimeType: String
+    var geminiResponseJSONSchema: String
+    var geminiFunctionDeclarations: String
+
+    var openRouterThinkingEnabled: Bool
+    var openRouterThinkingBudget: Int
+    var openRouterReasoningMode: String
+    var openRouterReasoningEffort: String
+    var openRouterReasoningExclude: Bool
+    var openRouterGoogleSearchEnabled: Bool
+    var openRouterCodeExecutionEnabled: Bool
+
+    var isDualModeEnabled: Bool
+    var dualModelA: String
+    var dualModelB: String
+    var dualProviderA: String
+    var dualProviderB: String
+    var dualSystemPromptA: String?
+    var dualSystemPromptB: String?
+    var dualSplitLayout: String
+    var dualSplitRatio: Double
+
+    var isAutoConversationEnabled: Bool
+    var autoModelA: String
+    var autoModelB: String
+    var autoProviderA: String
+    var autoProviderB: String
+    var autoSystemPromptA: String
+    var autoSystemPromptB: String
+    var autoMaxTurns: Int
+
+    var providerDefaultModelsJSON: String
+    var preferredProvidersJSON: String
+    var selectedQuantizationsJSON: String
+    var maxPricePerMillionTokens: Double
+    var allowFallbacks: Bool
+    var requireParameters: Bool
+    var providerSelectionMax: Int
+    var providerSort: String
+
+    var openAIBaseURL: String
+    var miniMaxBaseURL: String
+    var openAICompatPresetsJSON: String
+    var selectedOpenAICompatPreset: String?
+
+    var codexUserAgentPreset: String
+    var codexReasoningEnabled: Bool
+    var codexReasoningEffort: String
+    var codexReasoningSummary: String
+    var codexVerbosity: String
+    var codexSupportsReasoningSummaries: Bool
+    var codexShowReasoningSummary: Bool
+    var codexWebSearchEnabled: Bool
+    var codexWebSearchContextSize: String
+    var codexPromptCacheEnabled: Bool
+    var codexPromptCacheMinLength: Int
+    var codexPromptCacheType: String
+
+    var showGlobalProviderPresetsInChat: Bool
+    var showGlobalProviderPresetsInChatByProviderJSON: String
+
+    var extraJSON: String
+
+    init() {
+        id = 1
+        defaultModel = "gemini-2.5-flash"
+        apiProvider = "GEMINI"
+        systemPrompt = nil
+        systemPromptPresetsJSON = "[]"
+        selectedSystemPromptPreset = nil
+
+        isStreamingEnabled = true
+        mathRenderingEnabled = true
+
+        dynamicColorEnabled = true
+        themeColor = "BLUE_PURPLE"
+        themeMode = "SYSTEM"
+
+        geminiThinkingEnabled = false
+        geminiThinkingBudget = 0
+        geminiThinkingLevel = ""
+        geminiGoogleSearchEnabled = false
+        geminiCodeExecutionEnabled = false
+        geminiURLContextEnabled = false
+        geminiGoogleMapsEnabled = false
+        geminiComputerUseEnabled = false
+        geminiResponseMimeType = ""
+        geminiResponseJSONSchema = ""
+        geminiFunctionDeclarations = ""
+
+        openRouterThinkingEnabled = false
+        openRouterThinkingBudget = 0
+        openRouterReasoningMode = "auto"
+        openRouterReasoningEffort = ""
+        openRouterReasoningExclude = false
+        openRouterGoogleSearchEnabled = false
+        openRouterCodeExecutionEnabled = false
+
+        isDualModeEnabled = false
+        dualModelA = "gemini-2.5-flash"
+        dualModelB = "deepseek/deepseek-chat"
+        dualProviderA = "GEMINI"
+        dualProviderB = "OPENROUTER"
+        dualSystemPromptA = nil
+        dualSystemPromptB = nil
+        dualSplitLayout = "VERTICAL"
+        dualSplitRatio = 0.5
+
+        isAutoConversationEnabled = false
+        autoModelA = "gemini-2.5-flash"
+        autoModelB = "deepseek/deepseek-chat"
+        autoProviderA = "GEMINI"
+        autoProviderB = "OPENROUTER"
+        autoSystemPromptA = "あなたは親しみやすい日本語AIアシスタントです。自然で温かみのある会話を心がけてください。"
+        autoSystemPromptB = "あなたは論理的で分析的なAIアシスタントです。深く考えながら詳細に回答してください。"
+        autoMaxTurns = 20
+
+        providerDefaultModelsJSON = "{}"
+        preferredProvidersJSON = "[]"
+        selectedQuantizationsJSON = "[]"
+        maxPricePerMillionTokens = 0
+        allowFallbacks = true
+        requireParameters = false
+        providerSelectionMax = 12
+        providerSort = "price"
+
+        openAIBaseURL = "https://api.openai.com/v1/"
+        miniMaxBaseURL = "https://api.minimax.io/v1/"
+        openAICompatPresetsJSON = "[]"
+        selectedOpenAICompatPreset = nil
+
+        codexUserAgentPreset = "ANDROID"
+        codexReasoningEnabled = true
+        codexReasoningEffort = "medium"
+        codexReasoningSummary = "auto"
+        codexVerbosity = "medium"
+        codexSupportsReasoningSummaries = false
+        codexShowReasoningSummary = true
+        codexWebSearchEnabled = false
+        codexWebSearchContextSize = "medium"
+        codexPromptCacheEnabled = true
+        codexPromptCacheMinLength = 512
+        codexPromptCacheType = "ephemeral"
+
+        showGlobalProviderPresetsInChat = true
+        showGlobalProviderPresetsInChatByProviderJSON = "{}"
+
+        extraJSON = "{}"
+    }
+
+    mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+
+    func currentModel() -> String {
+        modelForProvider(apiProvider)
+    }
+
+    func normalizedForPersistence() -> AppSettings {
+        var normalized = self
+        if normalized.isDualModeEnabled && normalized.isAutoConversationEnabled {
+            normalized.isAutoConversationEnabled = false
+        }
+        return normalized
+    }
+
+    func modelForProvider(_ provider: String) -> String {
+        let map = providerModelMap()
+        return map[provider.uppercased()] ?? defaultModel
+    }
+
+    func providerModelMap() -> [String: String] {
+        guard
+            let data = providerDefaultModelsJSON.data(using: .utf8),
+            let map = try? JSONDecoder().decode([String: String].self, from: data)
+        else {
+            return [apiProvider.uppercased(): defaultModel]
+        }
+
+        if map[apiProvider.uppercased()] == nil {
+            var merged = map
+            merged[apiProvider.uppercased()] = defaultModel
+            return merged
+        }
+        return map
+    }
+
+    func openAICompatPresets() -> [OpenAICompatPreset] {
+        guard
+            let data = openAICompatPresetsJSON.data(using: .utf8),
+            let list = try? JSONDecoder().decode([OpenAICompatPreset].self, from: data)
+        else {
+            return []
+        }
+        return list
+    }
+
+    func preferredProvidersList() -> [String] {
+        let values = Self.parseStringArray(preferredProvidersJSON)
+        return Self.unique(values.map { $0.lowercased() })
+    }
+
+    mutating func setPreferredProvidersList(_ providers: [String]) {
+        let normalized = Self.unique(
+            providers
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty }
+        )
+        let limited: [String]
+        if providerSelectionMax > 0 {
+            limited = Array(normalized.prefix(providerSelectionMax))
+        } else {
+            limited = normalized
+        }
+        preferredProvidersJSON = Self.encodeStringArray(limited)
+    }
+
+    func selectedQuantizationsList() -> [String] {
+        let values = Self.parseStringArray(selectedQuantizationsJSON)
+        return Self.unique(values)
+    }
+
+    mutating func setSelectedQuantizationsList(_ quantizations: [String]) {
+        let normalized = Self.unique(
+            quantizations
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        )
+        selectedQuantizationsJSON = Self.encodeStringArray(normalized)
+    }
+
+    func systemPromptPresets() -> [SystemPromptPreset] {
+        guard
+            let data = systemPromptPresetsJSON.data(using: .utf8),
+            let list = try? JSONDecoder().decode([SystemPromptPreset].self, from: data)
+        else {
+            return []
+        }
+        return list
+    }
+
+    func resolveSelectedSystemPromptPreset() -> SystemPromptPreset? {
+        guard let selectedSystemPromptPreset else { return nil }
+        return systemPromptPresets().first { $0.name.caseInsensitiveCompare(selectedSystemPromptPreset) == .orderedSame }
+    }
+
+    func buildGlobalProviderPresets(includeSystemPrompt: Bool = false) -> [ModelPreset] {
+        let models = providerModelMap()
+        if models.isEmpty {
+            return []
+        }
+
+        let preferredOrder = [
+            "GEMINI",
+            "GEMINI_AUTH",
+            "OPENROUTER",
+            "ZAI",
+            "MINIMAX",
+            "OPENAI",
+            "CODEX_AUTH",
+            "OPENAI_COMPAT"
+        ]
+        let orderedProviders =
+            preferredOrder.filter { models[$0] != nil } +
+            models.keys.filter { !preferredOrder.contains($0) }.sorted()
+
+        let resolvedPrompt: String?
+        if includeSystemPrompt {
+            resolvedPrompt = resolveSelectedSystemPromptPreset()?.prompt ?? systemPrompt
+        } else {
+            resolvedPrompt = nil
+        }
+
+        return orderedProviders.enumerated().compactMap { index, provider in
+            let modelName = (models[provider] ?? modelForProvider(provider))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if modelName.isEmpty {
+                return nil
+            }
+            return ModelPreset(
+                id: -Int64(index + 1),
+                name: "グローバル: \(ProviderCatalog.displayName(for: provider))",
+                model: modelName,
+                apiProvider: provider,
+                systemPrompt: resolvedPrompt,
+                configJSON: "{}",
+                createdAtMs: 0
+            )
+        }
+    }
+
+    func showGlobalProviderPresetsInChatByProviderMap() -> [String: Bool] {
+        if showGlobalProviderPresetsInChatByProviderJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return [:]
+        }
+        return Self.parseStringKeyedBooleanMap(showGlobalProviderPresetsInChatByProviderJSON)
+    }
+
+    func shouldShowGlobalProviderPresetInChat(provider: String) -> Bool {
+        let normalized = provider.uppercased()
+        let overrides = showGlobalProviderPresetsInChatByProviderMap()
+        return overrides[normalized] ?? showGlobalProviderPresetsInChat
+    }
+
+    mutating func setShowGlobalProviderPresetInChat(provider: String, visible: Bool) {
+        let normalized = provider.uppercased()
+        var overrides = showGlobalProviderPresetsInChatByProviderMap()
+        overrides[normalized] = visible
+        showGlobalProviderPresetsInChatByProviderJSON = Self.encodeStringKeyedBooleanMap(overrides)
+    }
+
+    func selectedCompatBaseURL() -> URL? {
+        guard let selectedOpenAICompatPreset else { return nil }
+        let preset = openAICompatPresets().first { $0.name.caseInsensitiveCompare(selectedOpenAICompatPreset) == .orderedSame }
+        guard let preset else { return nil }
+        return URL(string: preset.baseURL)
+    }
+
+    func resolvedOpenAIBaseURL() -> String {
+        Self.resolveBaseURL(
+            openAIBaseURL,
+            fallback: AppConstants.defaultOpenAIBaseURL.absoluteString
+        )
+    }
+
+    func resolvedMiniMaxBaseURL() -> String {
+        Self.resolveBaseURL(
+            miniMaxBaseURL,
+            fallback: AppConstants.defaultMiniMaxBaseURL.absoluteString
+        )
+    }
+
+    private static func resolveBaseURL(_ value: String, fallback: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, URL(string: trimmed) != nil else {
+            return fallback
+        }
+        return trimmed
+    }
+
+    private static func parseStringArray(_ raw: String) -> [String] {
+        guard
+            let data = raw.data(using: .utf8),
+            let decoded = try? JSONDecoder().decode([String].self, from: data)
+        else {
+            return []
+        }
+        return decoded
+    }
+
+    private static func encodeStringArray(_ values: [String]) -> String {
+        guard
+            let data = try? JSONEncoder().encode(values),
+            let text = String(data: data, encoding: .utf8)
+        else {
+            return "[]"
+        }
+        return text
+    }
+
+    private static func parseStringKeyedBooleanMap(_ raw: String) -> [String: Bool] {
+        guard let data = raw.data(using: .utf8) else {
+            return [:]
+        }
+        if let decoded = try? JSONDecoder().decode([String: Bool].self, from: data) {
+            return decoded.reduce(into: [:]) { result, pair in
+                result[pair.key.uppercased()] = pair.value
+            }
+        }
+        if let decodedStrings = try? JSONDecoder().decode([String: String].self, from: data) {
+            return decodedStrings.reduce(into: [:]) { result, pair in
+                let normalizedValue = pair.value
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                if normalizedValue == "true" {
+                    result[pair.key.uppercased()] = true
+                } else if normalizedValue == "false" {
+                    result[pair.key.uppercased()] = false
+                }
+            }
+        }
+        return [:]
+    }
+
+    private static func encodeStringKeyedBooleanMap(_ values: [String: Bool]) -> String {
+        let normalized = values.reduce(into: [String: Bool]()) { result, pair in
+            result[pair.key.uppercased()] = pair.value
+        }
+        guard
+            let data = try? JSONEncoder().encode(normalized),
+            let text = String(data: data, encoding: .utf8)
+        else {
+            return "{}"
+        }
+        return text
+    }
+
+    private static func unique(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for value in values {
+            if seen.insert(value).inserted {
+                result.append(value)
+            }
+        }
+        return result
+    }
+}
