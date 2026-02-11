@@ -6,10 +6,56 @@ import Foundation
 enum MathMarkdownNormalizer {
     static func normalizeEscapedMathIfNeeded(_ markdown: String, mathRenderingEnabled: Bool) -> String {
         guard mathRenderingEnabled else { return markdown }
-        return normalizeEscapedDollarDelimiters(markdown)
+        guard containsMathDelimitersOutsideCode(markdown) else { return markdown }
+
+        let unescaped = normalizeEscapedSequencesOutsideCode(markdown)
+        return normalizeEscapedDollarDelimiters(unescaped)
     }
 
     static func normalizeEscapedDollarDelimiters(_ markdown: String) -> String {
+        transformOutsideCode(markdown) { segment in
+            normalizeEscapedDollarPairs(in: segment)
+        }
+    }
+
+    private static func containsMathDelimitersOutsideCode(_ markdown: String) -> Bool {
+        var hasMathDelimiter = false
+        _ = transformOutsideCode(markdown) { segment in
+            guard !hasMathDelimiter else { return segment }
+            if segment.contains("$$") ||
+                segment.contains("$") ||
+                segment.contains(#"\("#) ||
+                segment.contains(#"\)"#) ||
+                segment.contains(#"\["#) ||
+                segment.contains(#"\]"#) ||
+                segment.contains(#"\$"#)
+            {
+                hasMathDelimiter = true
+            }
+            return segment
+        }
+        return hasMathDelimiter
+    }
+
+    private static func normalizeEscapedSequencesOutsideCode(_ markdown: String) -> String {
+        transformOutsideCode(markdown) { segment in
+            normalizeEscapedSequences(in: segment)
+        }
+    }
+
+    private static func normalizeEscapedSequences(in text: String) -> String {
+        text
+            .replacingOccurrences(of: #"\\n"#, with: "\n")
+            .replacingOccurrences(of: #"\\r"#, with: "\r")
+            .replacingOccurrences(of: #"\\t"#, with: "\t")
+            .replacingOccurrences(of: #"\\("#, with: #"\("#)
+            .replacingOccurrences(of: #"\\)"#, with: #"\)"#)
+            .replacingOccurrences(of: #"\\["#, with: #"\["#)
+            .replacingOccurrences(of: #"\\]"#, with: #"\]"#)
+            .replacingOccurrences(of: #"\\$"#, with: #"\$"#)
+    }
+
+    private static func transformOutsideCode(_ markdown: String, transform: (String) -> String) -> String {
         guard !markdown.isEmpty else { return markdown }
 
         var output = ""
@@ -52,7 +98,7 @@ enum MathMarkdownNormalizer {
             }
 
             let segment = String(markdown[segmentStart..<cursor])
-            output.append(normalizeEscapedDollarPairs(in: segment))
+            output.append(transform(segment))
         }
 
         return output
@@ -114,9 +160,17 @@ enum MathMarkdownHTMLBuilder {
                 window.MathJax = {
                   tex: {
                     inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
-                    displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']]
+                    displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
+                    processEscapes: true,
+                    processEnvironments: true
                   },
                   svg: { fontCache: 'global' }
+                };
+                window.__yamabikoMathJaxOnError = function() {
+                  if (window.console && window.console.warn) {
+                    window.console.warn('MathJax script failed to load.');
+                  }
+                  if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();
                 };
               </script>
               \(mathJaxScriptTag)
@@ -280,6 +334,37 @@ enum MathMarkdownResourceResolver {
             using: { resource, ext, subdirectory in
                 bundle.url(forResource: resource, withExtension: ext, subdirectory: subdirectory)
             }
+        )
+    }
+}
+
+struct MathJaxLoadPlan {
+    let scriptTag: String
+    let baseURL: URL?
+}
+
+enum MathJaxLoadPlanner {
+    static func plan(
+        mathRenderingEnabled: Bool,
+        localScriptURL: URL?,
+        logger: (String) -> Void = { _ in }
+    ) -> MathJaxLoadPlan {
+        guard mathRenderingEnabled else {
+            return MathJaxLoadPlan(scriptTag: "", baseURL: nil)
+        }
+
+        let onErrorHandler = "window.__yamabikoMathJaxOnError && window.__yamabikoMathJaxOnError();"
+        if let localScriptURL {
+            return MathJaxLoadPlan(
+                scriptTag: "<script src=\"tex-svg.js\" onerror=\"\(onErrorHandler)\"></script>",
+                baseURL: localScriptURL.deletingLastPathComponent()
+            )
+        }
+
+        logger("MathJax local script missing; using CDN fallback.")
+        return MathJaxLoadPlan(
+            scriptTag: "<script src=\"https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js\" onerror=\"\(onErrorHandler)\"></script>",
+            baseURL: nil
         )
     }
 }
@@ -588,14 +673,12 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         )
         let markdownPayload = normalizedMarkdown.jsonStringLiteral
 
-        let mathJaxScriptTag: String
-        if mathRenderingEnabled,
-           let localURL = MathMarkdownResourceResolver.mathJaxScriptURL(in: .main) {
-            mathJaxScriptTag = "<script src=\"\(localURL.absoluteString)\"></script>"
-        } else if mathRenderingEnabled {
-            mathJaxScriptTag = "<script src=\"https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js\"></script>"
-        } else {
-            mathJaxScriptTag = ""
+        let localMathJaxURL = MathMarkdownResourceResolver.mathJaxScriptURL(in: .main)
+        let mathJaxLoadPlan = MathJaxLoadPlanner.plan(
+            mathRenderingEnabled: mathRenderingEnabled,
+            localScriptURL: localMathJaxURL
+        ) { message in
+            DiagnosticsLogger.log(message, level: .warning, category: .chat)
         }
 
         let bodyTextColor = colorScheme == .dark ? "#F2F2F7" : "#1C1C1E"
@@ -611,12 +694,12 @@ private struct MathMarkdownWebView: UIViewRepresentable {
             borderColor: borderColor,
             linkColor: linkColor,
             mathRenderingEnabled: mathRenderingEnabled,
-            mathJaxScriptTag: mathJaxScriptTag
+            mathJaxScriptTag: mathJaxLoadPlan.scriptTag
         )
 
         if context.coordinator.lastHTML != html {
             context.coordinator.lastHTML = html
-            webView.loadHTMLString(html, baseURL: nil)
+            webView.loadHTMLString(html, baseURL: mathJaxLoadPlan.baseURL)
         } else {
             context.coordinator.requestHeightMeasurement(for: webView)
         }

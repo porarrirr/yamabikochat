@@ -174,4 +174,93 @@ final class MathMarkdownViewTests: XCTestCase {
 
         XCTAssertEqual(normalized, #"本文 $sum$"#)
     }
+
+    func testNormalizeEscapedMathIfNeededNormalizesEscapedSequencesWhenMathPresent() {
+        let input = #"1行目\\n\\(a+b\\) と \\$sum_{k=1}^{n}k\\$"#
+        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
+            input,
+            mathRenderingEnabled: true
+        )
+
+        let expected = """
+        1行目
+        \\(a+b\\) と $sum_{k=1}^{n}k$
+        """
+        XCTAssertEqual(normalized, expected)
+    }
+
+    func testNormalizeEscapedMathIfNeededDoesNotNormalizeEscapedSequencesWithoutMath() {
+        let input = #"line1\\nline2"#
+        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
+            input,
+            mathRenderingEnabled: true
+        )
+
+        XCTAssertEqual(normalized, input)
+    }
+
+    func testNormalizeEscapedMathIfNeededSkipsEscapedSequenceNormalizationInCode() {
+        let input = #"""
+```text
+\\n\\(x\\)
+```
+本文 \\(x+y\\)
+"""#
+        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
+            input,
+            mathRenderingEnabled: true
+        )
+
+        let expected = #"""
+```text
+\\n\\(x\\)
+```
+本文 \(x+y\)
+"""#
+        XCTAssertEqual(normalized, expected)
+    }
+
+    func testNormalizeEscapedMathIfNeededIgnoresMathMarkersInsideCodeOnly() {
+        let input = #"""
+```text
+\$sum$
+```
+line1\\nline2
+"""#
+        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
+            input,
+            mathRenderingEnabled: true
+        )
+
+        XCTAssertEqual(normalized, input)
+    }
+
+    func testMathJaxLoadPlannerPrefersLocalScriptWhenAvailable() {
+        let localURL = URL(fileURLWithPath: "/tmp/mathjax/tex-svg.js")
+
+        let plan = MathJaxLoadPlanner.plan(
+            mathRenderingEnabled: true,
+            localScriptURL: localURL
+        )
+
+        XCTAssertTrue(plan.scriptTag.contains("src=\"tex-svg.js\""))
+        XCTAssertEqual(plan.baseURL, localURL.deletingLastPathComponent())
+    }
+
+    func testMathJaxLoadPlannerFallsBackToCDNWhenLocalScriptMissing() {
+        var logs: [String] = []
+
+        let plan = MathJaxLoadPlanner.plan(
+            mathRenderingEnabled: true,
+            localScriptURL: nil,
+            logger: { message in
+                logs.append(message)
+            }
+        )
+
+        XCTAssertTrue(plan.scriptTag.contains("cdn.jsdelivr.net"))
+        XCTAssertNil(plan.baseURL)
+        XCTAssertEqual(logs.count, 1)
+        XCTAssertTrue(logs[0].contains("CDN fallback"))
+    }
 }
