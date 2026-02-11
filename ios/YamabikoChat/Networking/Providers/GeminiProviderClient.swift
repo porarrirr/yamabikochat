@@ -6,6 +6,7 @@ struct GeminiProviderClient: ProviderClient {
     let provider: LLMProvider = .gemini
     private let geminiApiBase = "https://generativelanguage.googleapis.com/v1beta"
     private let geminiCliBase = "https://cloudcode-pa.googleapis.com/v1internal"
+    static let noUsableStreamDataReason = "Gemini stream produced no usable data"
 
     func generate(
         request: ProviderRequest,
@@ -57,6 +58,15 @@ struct GeminiProviderClient: ProviderClient {
                     }
 
                     let httpRequest = HTTPRequest(url: endpoint, headers: headers, body: body)
+                    DiagnosticsLogger.log(
+                        "Gemini stream start",
+                        category: .network,
+                        metadata: [
+                            "provider": resolvedProvider.rawValue,
+                            "model": request.model,
+                            "url": endpoint.absoluteString
+                        ]
+                    )
                     let (lineStream, response) = try await httpClient.stream(httpRequest)
                     guard (200 ... 299).contains(response.statusCode) else {
                         throw ProviderClientError.httpStatus(response.statusCode, "Gemini stream failed: \(response.statusCode)")
@@ -64,10 +74,42 @@ struct GeminiProviderClient: ProviderClient {
 
                     var fullText = ""
                     var fullReasoning = ""
+                    var hasUsableData = false
                     var eventLines: [String] = []
                     var streamFinished = false
+                    var parseErrorCount = 0
+                    var totalLineCount = 0
+                    var invalidPayloadSnippets: [String] = []
+                    let maxSnippets = 6
+                    let snippetLimit = 256
 
-                    func flushEventLines() {
+                    func recordInvalidPayload(_ payload: String) {
+                        parseErrorCount += 1
+                        guard invalidPayloadSnippets.count < maxSnippets else { return }
+                        let compact = payload
+                            .replacingOccurrences(of: "\n", with: "\\n")
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        invalidPayloadSnippets.append(String(compact.prefix(snippetLimit)))
+                    }
+
+                    func failNoUsableData(_ phase: String) throws {
+                        DiagnosticsLogger.log(
+                            "Gemini stream produced no usable data",
+                            category: .network,
+                            metadata: [
+                                "provider": resolvedProvider.rawValue,
+                                "model": request.model,
+                                "phase": phase,
+                                "status": String(response.statusCode),
+                                "line_count": String(totalLineCount),
+                                "parse_error_count": String(parseErrorCount),
+                                "invalid_payloads": invalidPayloadSnippets.joined(separator: " || ")
+                            ]
+                        )
+                        throw ProviderClientError.parseFailure(Self.noUsableStreamDataReason)
+                    }
+
+                    func flushEventLines() throws {
                         guard !eventLines.isEmpty, !streamFinished else { return }
                         let chunk = eventLines
                             .joined(separator: "\n")
@@ -76,6 +118,9 @@ struct GeminiProviderClient: ProviderClient {
                         guard !chunk.isEmpty else { return }
 
                         if chunk == "[DONE]" {
+                            if !hasUsableData && fullText.isEmpty && fullReasoning.isEmpty {
+                                try failNoUsableData("done")
+                            }
                             let final = ProviderResponse(
                                 text: fullText,
                                 reasoningSummary: fullReasoning.trimmedNonEmpty,
@@ -94,26 +139,32 @@ struct GeminiProviderClient: ProviderClient {
                         } else {
                             parsed = parseGeminiStreamChunk(chunk)
                         }
-                        guard let parsed else { return }
+                        guard let parsed else {
+                            recordInvalidPayload(chunk)
+                            return
+                        }
 
                         if !parsed.reasoning.isEmpty {
                             fullReasoning += parsed.reasoning
+                            hasUsableData = true
                             continuation.yield(.reasoningDelta(parsed.reasoning))
                         }
                         if !parsed.text.isEmpty {
                             fullText += parsed.text
+                            hasUsableData = true
                             continuation.yield(.textDelta(parsed.text))
                         }
                     }
 
                     for try await line in lineStream {
                         if streamFinished { return }
+                        totalLineCount += 1
                         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
                         if trimmed.hasPrefix(":") {
                             continue
                         }
                         if trimmed.isEmpty {
-                            flushEventLines()
+                            try flushEventLines()
                             continue
                         }
                         guard trimmed.hasPrefix("data:") else {
@@ -124,8 +175,11 @@ struct GeminiProviderClient: ProviderClient {
                     }
 
                     if streamFinished { return }
-                    flushEventLines()
+                    try flushEventLines()
                     if streamFinished { return }
+                    if !hasUsableData && fullText.isEmpty && fullReasoning.isEmpty {
+                        try failNoUsableData("eof")
+                    }
 
                     let final = ProviderResponse(
                         text: fullText,
@@ -156,13 +210,13 @@ struct GeminiProviderClient: ProviderClient {
     private func resolveCredential(provider: LLMProvider, store: SecureCredentialStore) async throws -> ResolvedCredential {
         switch provider {
         case .gemini:
-            guard let key = try store.credential(for: .gemini), !key.isEmpty else {
+            guard let key = try store.credential(for: .gemini)?.trimmedNonEmpty else {
                 throw ProviderClientError.missingCredential(LLMProvider.gemini.rawValue)
             }
             return ResolvedCredential(token: key, isBearer: false)
         case .geminiAuth:
-            let token = try store.geminiAccessToken() ?? store.credential(for: .geminiAuth)
-            guard let token, !token.isEmpty else {
+            let token = try (store.geminiAccessToken() ?? store.credential(for: .geminiAuth))?.trimmedNonEmpty
+            guard let token else {
                 throw ProviderClientError.missingCredential(LLMProvider.geminiAuth.rawValue)
             }
             return ResolvedCredential(token: token, isBearer: true)
@@ -176,7 +230,7 @@ struct GeminiProviderClient: ProviderClient {
         credentialStore: SecureCredentialStore,
         httpClient: HTTPClientProtocol
     ) async throws -> ProviderResponse {
-        guard let apiKey = try credentialStore.credential(for: .gemini), !apiKey.isEmpty else {
+        guard let apiKey = try credentialStore.credential(for: .gemini)?.trimmedNonEmpty else {
             throw ProviderClientError.missingCredential(LLMProvider.gemini.rawValue)
         }
 
@@ -204,8 +258,8 @@ struct GeminiProviderClient: ProviderClient {
         credentialStore: SecureCredentialStore,
         httpClient: HTTPClientProtocol
     ) async throws -> ProviderResponse {
-        let bearer = try credentialStore.geminiAccessToken() ?? credentialStore.credential(for: .geminiAuth)
-        guard let accessToken = bearer, !accessToken.isEmpty else {
+        let accessToken = try (credentialStore.geminiAccessToken() ?? credentialStore.credential(for: .geminiAuth))?.trimmedNonEmpty
+        guard let accessToken else {
             throw ProviderClientError.missingCredential(LLMProvider.geminiAuth.rawValue)
         }
 
@@ -320,6 +374,9 @@ struct GeminiProviderClient: ProviderClient {
             if !tools.isEmpty {
                 inner["tools"] = tools
             }
+            if let sessionID = request.metadata["geminiSessionId"]?.trimmedNonEmpty {
+                inner["session_id"] = sessionID
+            }
             if !generationConfig.isEmpty {
                 inner["generationConfig"] = generationConfig
             }
@@ -422,19 +479,12 @@ struct GeminiProviderClient: ProviderClient {
     }
 
     private func buildGeminiParts(for message: ProviderRequestMessage) -> [[String: Any]] {
-        var parts: [[String: Any]] = []
-        if !message.content.isEmpty {
-            parts.append(["text": message.content])
-        }
+        var parts: [[String: Any]] = [["text": message.content]]
 
         for attachment in message.attachments {
             if let inline = inlineDataPart(from: attachment) {
                 parts.append(inline)
             }
-        }
-
-        if parts.isEmpty {
-            parts.append(["text": ""])
         }
 
         return parts

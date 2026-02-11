@@ -22,6 +22,46 @@ private final class TestCredentialStore: SecureCredentialStore {
     }
 }
 
+private final class GeminiStreamFallbackHTTPClient: HTTPClientProtocol {
+    private let streamLines: [String]
+    private let nonStreamingBody: String
+    private(set) var streamCallCount: Int = 0
+    private(set) var sendCallCount: Int = 0
+
+    init(streamLines: [String], nonStreamingBody: String) {
+        self.streamLines = streamLines
+        self.nonStreamingBody = nonStreamingBody
+    }
+
+    func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
+        sendCallCount += 1
+        let response = HTTPURLResponse(
+            url: request.url,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        return (nonStreamingBody.data(using: .utf8) ?? Data(), response)
+    }
+
+    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
+        streamCallCount += 1
+        let response = HTTPURLResponse(
+            url: request.url,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        let stream = AsyncThrowingStream<String, Error> { continuation in
+            for line in streamLines {
+                continuation.yield(line)
+            }
+            continuation.finish()
+        }
+        return (stream, response)
+    }
+}
+
 final class ChatRepositorySyncTests: XCTestCase {
     func testSendMessageRenamesDefaultConversationToFirstPrompt() async throws {
         let fixture = try makeFixture()
@@ -139,17 +179,94 @@ final class ChatRepositorySyncTests: XCTestCase {
         XCTAssertEqual(synced?.model, originalConversation?.model)
     }
 
-    private func makeFixture() throws -> (repository: ChatRepository, conversations: ConversationRepository) {
+    func testSendMessageFallsBackToNonStreamingWhenGeminiAuthStreamIsEmpty() async throws {
+        let httpClient = GeminiStreamFallbackHTTPClient(
+            streamLines: [
+                #"data: {"event":"keepalive"}"#,
+                "",
+                "data: [DONE]",
+                ""
+            ],
+            nonStreamingBody: #"{"response":{"candidates":[{"content":{"parts":[{"text":"fallback answer"}]}}]}}"#
+        )
+        let fixture = try makeFixture(httpClient: httpClient) { settings in
+            settings.apiProvider = "GEMINI_AUTH"
+            settings.defaultModel = "gemini-2.5-flash"
+            settings.providerDefaultModelsJSON = #"{"GEMINI_AUTH":"gemini-2.5-flash"}"#
+        }
+        try fixture.credentials.setGeminiAccessToken("gemini-access-token")
+        try fixture.credentials.saveSecret("project-1", key: "gemini_project_id")
+
+        let conversationID = try fixture.repository.createConversation(title: "New Chat")
+        let result = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "hello",
+            attachments: []
+        )
+
+        XCTAssertEqual(result.response.text, "fallback answer")
+        let assistant = try fixture.conversations.fetchLastAssistantMessage(conversationId: conversationID)
+        XCTAssertEqual(assistant?.text, "fallback answer")
+        XCTAssertEqual(httpClient.streamCallCount, 1)
+        XCTAssertEqual(httpClient.sendCallCount, 1)
+    }
+
+    func testRegenerateFallsBackToNonStreamingWhenGeminiAuthStreamIsEmpty() async throws {
+        let httpClient = GeminiStreamFallbackHTTPClient(
+            streamLines: [
+                #"data: {"event":"keepalive"}"#,
+                "",
+                "data: [DONE]",
+                ""
+            ],
+            nonStreamingBody: #"{"response":{"candidates":[{"content":{"parts":[{"text":"fallback answer"}]}}]}}"#
+        )
+        let fixture = try makeFixture(httpClient: httpClient) { settings in
+            settings.apiProvider = "GEMINI_AUTH"
+            settings.defaultModel = "gemini-2.5-flash"
+            settings.providerDefaultModelsJSON = #"{"GEMINI_AUTH":"gemini-2.5-flash"}"#
+        }
+        try fixture.credentials.setGeminiAccessToken("gemini-access-token")
+        try fixture.credentials.saveSecret("project-1", key: "gemini_project_id")
+
+        let conversationID = try fixture.repository.createConversation(title: "New Chat")
+        _ = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "initial",
+            attachments: []
+        )
+
+        let targetMessageID = try await fixture.repository.regenerateLastAssistantVariant(conversationId: conversationID)
+        let full = try fixture.conversations.fetchFullMessage(id: targetMessageID)
+        XCTAssertEqual(full?.variants.last?.text, "fallback answer")
+        XCTAssertEqual(httpClient.streamCallCount, 2)
+        XCTAssertEqual(httpClient.sendCallCount, 2)
+    }
+
+    private func makeFixture(
+        httpClient: HTTPClientProtocol = URLSessionHTTPClient(),
+        configureSettings: ((inout AppSettings) -> Void)? = nil
+    ) throws -> (repository: ChatRepository, conversations: ConversationRepository, credentials: TestCredentialStore) {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)
 
         let settings = SettingsRepository(dbQueue: dbQueue)
         let conversations = ConversationRepository(dbQueue: dbQueue)
         let credentials = TestCredentialStore()
-        let providers = ProviderGateway(settingsRepository: settings, credentialStore: credentials)
+        let providers = ProviderGateway(
+            settingsRepository: settings,
+            credentialStore: credentials,
+            httpClient: httpClient
+        )
         let modelService = OpenRouterModelService(credentialStore: credentials)
         let codexAuth = CodexAuthRepository(credentialStore: credentials)
         let geminiAuth = GeminiAuthRepository(credentialStore: credentials)
+
+        if configureSettings != nil {
+            var current = try settings.load()
+            configureSettings?(&current)
+            try settings.save(current)
+        }
 
         let repository = ChatRepository(
             conversations: conversations,
@@ -160,6 +277,6 @@ final class ChatRepositorySyncTests: XCTestCase {
             codexAuthRepository: codexAuth,
             geminiAuthRepository: geminiAuth
         )
-        return (repository, conversations)
+        return (repository, conversations, credentials)
     }
 }

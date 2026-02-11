@@ -427,28 +427,78 @@ final class ChatRepository {
 
         var fullText = ""
         var reasoningText = ""
-        let stream = try await providers.stream(request: request, provider: provider)
+        do {
+            let stream = try await providers.stream(request: request, provider: provider)
 
-        for try await event in stream {
-            onStreamEvent?(event)
-            switch event {
-            case let .textDelta(delta):
-                fullText += delta
-                try conversations.updateMessageText(messageId: assistantMessageId, text: fullText)
-            case let .reasoningDelta(delta):
-                reasoningText += delta
-                try conversations.saveThinking(messageId: assistantMessageId, stream: reasoningText)
-            case .toolCallDelta:
-                continue
-            case let .completed(response):
-                if fullText.isEmpty {
-                    fullText = response.text
+            for try await event in stream {
+                onStreamEvent?(event)
+                switch event {
+                case let .textDelta(delta):
+                    fullText += delta
                     try conversations.updateMessageText(messageId: assistantMessageId, text: fullText)
+                case let .reasoningDelta(delta):
+                    reasoningText += delta
+                    try conversations.saveThinking(messageId: assistantMessageId, stream: reasoningText)
+                case .toolCallDelta:
+                    continue
+                case let .completed(response):
+                    if fullText.isEmpty {
+                        fullText = response.text
+                        try conversations.updateMessageText(messageId: assistantMessageId, text: fullText)
+                    }
+                    if let reasoning = response.reasoningSummary, !reasoning.isEmpty {
+                        reasoningText = reasoning
+                        try conversations.saveThinking(messageId: assistantMessageId, stream: reasoningText)
+                    }
                 }
-                if let reasoning = response.reasoningSummary, !reasoning.isEmpty {
+            }
+        } catch {
+            guard shouldRetryGeminiWithGenerate(provider: provider, error: error) else {
+                throw error
+            }
+
+            DiagnosticsLogger.log(
+                "Gemini stream empty; retrying non-streaming generate",
+                category: .network,
+                metadata: [
+                    "provider": provider.rawValue,
+                    "model": request.model,
+                    "assistantMessageId": String(assistantMessageId)
+                ],
+                error: error
+            )
+
+            do {
+                let fallback = try await providers.generate(request: request, provider: provider)
+                fullText = fallback.text
+                try conversations.updateMessageText(messageId: assistantMessageId, text: fullText)
+
+                if let reasoning = fallback.reasoningSummary, !reasoning.isEmpty {
                     reasoningText = reasoning
                     try conversations.saveThinking(messageId: assistantMessageId, stream: reasoningText)
                 }
+                onStreamEvent?(.completed(fallback))
+                DiagnosticsLogger.log(
+                    "Gemini non-streaming fallback succeeded",
+                    category: .network,
+                    metadata: [
+                        "provider": provider.rawValue,
+                        "model": request.model,
+                        "assistantMessageId": String(assistantMessageId)
+                    ]
+                )
+            } catch {
+                DiagnosticsLogger.log(
+                    "Gemini non-streaming fallback failed",
+                    category: .network,
+                    metadata: [
+                        "provider": provider.rawValue,
+                        "model": request.model,
+                        "assistantMessageId": String(assistantMessageId)
+                    ],
+                    error: error
+                )
+                throw error
             }
         }
 
@@ -484,28 +534,78 @@ final class ChatRepository {
 
         var fullText = ""
         var reasoningText = ""
-        let stream = try await providers.stream(request: request, provider: provider)
+        do {
+            let stream = try await providers.stream(request: request, provider: provider)
 
-        for try await event in stream {
-            onStreamEvent?(event)
-            switch event {
-            case let .textDelta(delta):
-                fullText += delta
-                try conversations.updateMessageVariantText(variantId: variantId, text: fullText)
-            case let .reasoningDelta(delta):
-                reasoningText += delta
-                try conversations.saveMessageVariantThinking(variantId: variantId, stream: reasoningText)
-            case .toolCallDelta:
-                continue
-            case let .completed(response):
-                if fullText.isEmpty {
-                    fullText = response.text
+            for try await event in stream {
+                onStreamEvent?(event)
+                switch event {
+                case let .textDelta(delta):
+                    fullText += delta
                     try conversations.updateMessageVariantText(variantId: variantId, text: fullText)
+                case let .reasoningDelta(delta):
+                    reasoningText += delta
+                    try conversations.saveMessageVariantThinking(variantId: variantId, stream: reasoningText)
+                case .toolCallDelta:
+                    continue
+                case let .completed(response):
+                    if fullText.isEmpty {
+                        fullText = response.text
+                        try conversations.updateMessageVariantText(variantId: variantId, text: fullText)
+                    }
+                    if let reasoning = response.reasoningSummary, !reasoning.isEmpty {
+                        reasoningText = reasoning
+                        try conversations.saveMessageVariantThinking(variantId: variantId, stream: reasoningText)
+                    }
                 }
-                if let reasoning = response.reasoningSummary, !reasoning.isEmpty {
+            }
+        } catch {
+            guard shouldRetryGeminiWithGenerate(provider: provider, error: error) else {
+                throw error
+            }
+
+            DiagnosticsLogger.log(
+                "Gemini stream empty during regeneration; retrying non-streaming generate",
+                category: .network,
+                metadata: [
+                    "provider": provider.rawValue,
+                    "model": request.model,
+                    "variantId": String(variantId)
+                ],
+                error: error
+            )
+
+            do {
+                let fallback = try await providers.generate(request: request, provider: provider)
+                fullText = fallback.text
+                try conversations.updateMessageVariantText(variantId: variantId, text: fullText)
+
+                if let reasoning = fallback.reasoningSummary, !reasoning.isEmpty {
                     reasoningText = reasoning
                     try conversations.saveMessageVariantThinking(variantId: variantId, stream: reasoningText)
                 }
+                onStreamEvent?(.completed(fallback))
+                DiagnosticsLogger.log(
+                    "Gemini non-streaming fallback succeeded for regeneration",
+                    category: .network,
+                    metadata: [
+                        "provider": provider.rawValue,
+                        "model": request.model,
+                        "variantId": String(variantId)
+                    ]
+                )
+            } catch {
+                DiagnosticsLogger.log(
+                    "Gemini non-streaming fallback failed for regeneration",
+                    category: .network,
+                    metadata: [
+                        "provider": provider.rawValue,
+                        "model": request.model,
+                        "variantId": String(variantId)
+                    ],
+                    error: error
+                )
+                throw error
             }
         }
     }
@@ -843,6 +943,16 @@ final class ChatRepository {
     }
 
     // MARK: - Helpers
+
+    private func shouldRetryGeminiWithGenerate(provider: LLMProvider, error: Error) -> Bool {
+        guard provider == .geminiAuth else { return false }
+        guard case let ProviderClientError.parseFailure(reason) = error else { return false }
+        let normalized = reason.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized == GeminiProviderClient.noUsableStreamDataReason.lowercased() {
+            return true
+        }
+        return normalized.contains("no usable data")
+    }
 
     private func buildSingleTurnRequest(
         model: String,
