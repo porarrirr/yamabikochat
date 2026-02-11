@@ -14,7 +14,8 @@ final class ConversationRepository {
         model: String,
         provider: String,
         systemPrompt: String? = nil,
-        isSecret: Bool = false
+        isSecret: Bool = false,
+        projectId: Int64? = nil
     ) throws -> Int64 {
         try dbQueue.write { db in
             var conversation = Conversation(
@@ -22,11 +23,63 @@ final class ConversationRepository {
                 systemPrompt: systemPrompt,
                 model: model,
                 apiProvider: provider,
-                isSecret: isSecret
+                isSecret: isSecret,
+                projectId: projectId
             )
             try conversation.insert(db)
             return conversation.id ?? 0
         }
+    }
+
+    func createProject(
+        title: String,
+        instructions: String?,
+        iconName: String = "folder.fill",
+        colorHex: String = "#3A7AFE"
+    ) throws -> Int64 {
+        try dbQueue.write { db in
+            var project = ChatProject(
+                title: title,
+                iconName: iconName,
+                colorHex: colorHex,
+                instructions: instructions?.trimmedNonEmpty
+            )
+            try project.insert(db)
+            return project.id ?? 0
+        }
+    }
+
+    func fetchProject(id: Int64) throws -> ChatProject? {
+        try dbQueue.read { db in
+            try ChatProject.fetchOne(db, key: id)
+        }
+    }
+
+    func observeProjects() -> AnyPublisher<[ProjectListEntry], Never> {
+        ValueObservation.tracking { db -> [ProjectListEntry] in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT id, title, iconName, colorHex, instructions, updatedAtMs
+                FROM projects
+                ORDER BY updatedAtMs DESC, createdAtMs DESC
+                """
+            )
+            return rows.compactMap { row in
+                guard let id: Int64 = row["id"] else { return nil }
+                return ProjectListEntry(
+                    id: id,
+                    title: row["title"] ?? "Project",
+                    iconName: row["iconName"] ?? "folder.fill",
+                    colorHex: row["colorHex"] ?? "#3A7AFE",
+                    instructions: row["instructions"],
+                    updatedAtMs: row["updatedAtMs"] ?? 0
+                )
+            }
+        }
+        .publisher(in: dbQueue)
+        .replaceError(with: [])
+        .eraseToAnyPublisher()
     }
 
     func upsertConversation(_ conversation: Conversation) throws -> Int64 {
@@ -65,13 +118,14 @@ final class ConversationRepository {
         }
     }
 
-    func fetchLatestEmptyConversation(title: String) throws -> Conversation? {
+    func fetchLatestEmptyConversation(title: String, projectId: Int64? = nil) throws -> Conversation? {
         try dbQueue.read { db in
             try Conversation
                 .filter(Column("title") == title)
                 .order(Column("updatedAtMs").desc)
                 .fetchAll(db)
                 .first { conversation in
+                    guard conversation.projectId == projectId else { return false }
                     let messageCount = try? Int.fetchOne(
                         db,
                         sql: "SELECT COUNT(*) FROM chat_messages WHERE conversationId = ?",
@@ -87,7 +141,7 @@ final class ConversationRepository {
             let rows = try Row.fetchAll(
                 db,
                 sql: """
-                SELECT c.id, c.title, c.updatedAtMs, c.isSecret,
+                SELECT c.id, c.title, c.updatedAtMs, c.isSecret, c.projectId, p.title AS projectTitle,
                        (
                            SELECT CASE
                                WHEN m.role = 'model' AND m.selectedVariantIndex > 0 THEN COALESCE(
@@ -105,6 +159,7 @@ final class ConversationRepository {
                            LIMIT 1
                        ) AS lastMessagePreview
                 FROM conversations c
+                LEFT JOIN projects p ON p.id = c.projectId
                 ORDER BY c.updatedAtMs DESC
                 """
             )
@@ -116,7 +171,9 @@ final class ConversationRepository {
                     title: row["title"] ?? "New Chat",
                     updatedAtMs: row["updatedAtMs"] ?? 0,
                     lastMessagePreview: row["lastMessagePreview"],
-                    isSecret: row["isSecret"] ?? false
+                    isSecret: row["isSecret"] ?? false,
+                    projectId: row["projectId"],
+                    projectTitle: row["projectTitle"]
                 )
             }
         }
@@ -378,6 +435,23 @@ final class ConversationRepository {
         .eraseToAnyPublisher()
     }
 
+    func assignConversationToProject(conversationId: Int64, projectId: Int64?) throws {
+        try dbQueue.write { db in
+            guard var conversation = try Conversation.fetchOne(db, key: conversationId) else {
+                throw ProviderClientError.parseFailure("Conversation not found")
+            }
+
+            conversation.projectId = projectId
+            conversation.updatedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
+            try conversation.update(db)
+
+            if let projectId, var project = try ChatProject.fetchOne(db, key: projectId) {
+                project.updatedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
+                try project.update(db)
+            }
+        }
+    }
+
     func searchConversations(query: String, limit: Int = 200) throws -> [ConversationListEntry] {
         let like = "%\(query)%"
         return try dbQueue.read { db in
@@ -385,6 +459,7 @@ final class ConversationRepository {
                 db,
                 sql: """
                 SELECT DISTINCT c.id, c.title, c.updatedAtMs, c.isSecret,
+                    c.projectId, p.title AS projectTitle,
                     (
                         SELECT CASE
                             WHEN m2.role = 'model' AND m2.selectedVariantIndex > 0 THEN COALESCE(
@@ -403,6 +478,7 @@ final class ConversationRepository {
                     ) AS lastMessagePreview
                 FROM conversations c
                 LEFT JOIN chat_messages m ON m.conversationId = c.id
+                LEFT JOIN projects p ON p.id = c.projectId
                 WHERE c.title LIKE ? OR m.text LIKE ?
                 ORDER BY c.updatedAtMs DESC
                 LIMIT ?
@@ -417,7 +493,9 @@ final class ConversationRepository {
                     title: row["title"] ?? "New Chat",
                     updatedAtMs: row["updatedAtMs"] ?? 0,
                     lastMessagePreview: row["lastMessagePreview"],
-                    isSecret: row["isSecret"] ?? false
+                    isSecret: row["isSecret"] ?? false,
+                    projectId: row["projectId"],
+                    projectTitle: row["projectTitle"]
                 )
             }
         }
@@ -484,5 +562,12 @@ final class ConversationRepository {
             sql: "UPDATE conversations SET updatedAtMs = ? WHERE id = ?",
             arguments: [now, conversationId]
         )
+    }
+}
+
+private extension String {
+    var trimmedNonEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

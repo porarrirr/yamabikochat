@@ -40,6 +40,10 @@ final class ChatRepository {
         conversations.observeConversationList()
     }
 
+    func observeProjects() -> AnyPublisher<[ProjectListEntry], Never> {
+        conversations.observeProjects()
+    }
+
     func observeMessages(conversationId: Int64) -> AnyPublisher<[ChatMessageSummary], Never> {
         conversations.observeMessages(conversationId: conversationId)
     }
@@ -74,11 +78,11 @@ final class ChatRepository {
     }
 
     func ensureInitialConversation() throws -> Int64 {
-        if let existing = try conversations.fetchLatestEmptyConversation(title: "New Chat"), let id = existing.id {
+        if let existing = try conversations.fetchLatestEmptyConversation(title: "New Chat", projectId: nil), let id = existing.id {
             return id
         }
 
-        let currentSettings = try settings.load()
+        let currentSettings = try settingsForNewConversation()
         return try conversations.createConversation(
             title: "New Chat",
             model: currentSettings.currentModel(),
@@ -87,25 +91,56 @@ final class ChatRepository {
         )
     }
 
-    func createConversation(title: String = "New Chat") throws -> Int64 {
-        let currentSettings = try settings.load()
+    func createConversation(title: String = "New Chat", projectId: Int64? = nil) throws -> Int64 {
+        let currentSettings = try settingsForNewConversation()
+        let resolvedPrompt = try resolveSystemPromptForProject(projectId: projectId, fallbackPrompt: currentSettings.systemPrompt)
         return try conversations.createConversation(
             title: title,
             model: currentSettings.currentModel(),
             provider: currentSettings.apiProvider,
-            systemPrompt: currentSettings.systemPrompt
+            systemPrompt: resolvedPrompt,
+            projectId: projectId
         )
     }
 
-    func createSecretConversation() throws -> Int64 {
-        let currentSettings = try settings.load()
+    func createSecretConversation(projectId: Int64? = nil) throws -> Int64 {
+        let currentSettings = try settingsForNewConversation()
+        let resolvedPrompt = try resolveSystemPromptForProject(projectId: projectId, fallbackPrompt: currentSettings.systemPrompt)
         return try conversations.createConversation(
             title: "Secret Chat",
             model: currentSettings.currentModel(),
             provider: currentSettings.apiProvider,
-            systemPrompt: currentSettings.systemPrompt,
-            isSecret: true
+            systemPrompt: resolvedPrompt,
+            isSecret: true,
+            projectId: projectId
         )
+    }
+
+    func createProject(title: String, instructions: String?) throws -> Int64 {
+        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedTitle.isEmpty else {
+            throw ProviderClientError.parseFailure("プロジェクト名を入力してください。")
+        }
+        return try conversations.createProject(title: normalizedTitle, instructions: instructions)
+    }
+
+    func assignConversationToProject(conversationId: Int64, projectId: Int64?) throws {
+        guard var conversation = try conversations.fetchConversation(id: conversationId) else {
+            throw ProviderClientError.parseFailure("Conversation not found")
+        }
+
+        if let projectId {
+            let project = try conversations.fetchProject(id: projectId)
+            guard let project else {
+                throw ProviderClientError.parseFailure("Project not found")
+            }
+            if let instructions = project.instructions?.trimmingCharacters(in: .whitespacesAndNewlines), !instructions.isEmpty {
+                conversation.systemPrompt = instructions
+                _ = try conversations.upsertConversation(conversation)
+            }
+        }
+
+        try conversations.assignConversationToProject(conversationId: conversationId, projectId: projectId)
     }
 
     func deleteConversation(id: Int64) throws {
@@ -158,7 +193,8 @@ final class ChatRepository {
             model: baseConversation.model,
             provider: baseConversation.apiProvider,
             systemPrompt: baseConversation.systemPrompt,
-            isSecret: baseConversation.isSecret
+            isSecret: baseConversation.isSecret,
+            projectId: baseConversation.projectId
         )
 
         for summary in selected {
@@ -188,6 +224,9 @@ final class ChatRepository {
             return nil
         }
         guard conversation.title == "New Chat" else {
+            return conversation
+        }
+        guard conversation.projectId == nil else {
             return conversation
         }
         guard try conversations.isConversationEmpty(conversationId: conversationId) else {
@@ -1019,6 +1058,28 @@ final class ChatRepository {
             return "[]"
         }
         return text
+    }
+
+    private func settingsForNewConversation() throws -> AppSettings {
+        var currentSettings = try settings.load()
+        guard currentSettings.isDualModeEnabled || currentSettings.isAutoConversationEnabled else {
+            return currentSettings
+        }
+
+        currentSettings.isDualModeEnabled = false
+        currentSettings.isAutoConversationEnabled = false
+        try saveSettings(currentSettings)
+        return currentSettings
+    }
+
+    private func resolveSystemPromptForProject(projectId: Int64?, fallbackPrompt: String?) throws -> String? {
+        guard let projectId else { return fallbackPrompt }
+        let project = try conversations.fetchProject(id: projectId)
+        let projectPrompt = project?.instructions?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let projectPrompt, !projectPrompt.isEmpty {
+            return projectPrompt
+        }
+        return fallbackPrompt
     }
 }
 

@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct ConversationListScreen: View {
@@ -7,6 +8,8 @@ struct ConversationListScreen: View {
     var onSelect: (Int64) -> Void
     var onOpenSettings: () -> Void
     var onClose: (() -> Void)? = nil
+
+    @State private var isCreateProjectPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,7 +21,7 @@ struct ConversationListScreen: View {
                         title: "新しいプロジェクト",
                         systemImage: "plus.square.on.square"
                     ) {
-                        createConversation(secret: false)
+                        isCreateProjectPresented = true
                     }
 
                     drawerActionRow(
@@ -26,6 +29,12 @@ struct ConversationListScreen: View {
                         systemImage: "lock"
                     ) {
                         createConversation(secret: true)
+                    }
+                }
+
+                if !viewModel.projects.isEmpty {
+                    Section {
+                        projectFilterRow
                     }
                 }
 
@@ -62,6 +71,13 @@ struct ConversationListScreen: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .background(Color(uiColor: .systemBackground))
+        .sheet(isPresented: $isCreateProjectPresented) {
+            CreateProjectSheet { title, instructions in
+                guard let projectId = viewModel.createProject(title: title, instructions: instructions) else { return }
+                guard let conversationId = viewModel.createConversation(secret: false, projectId: projectId) else { return }
+                openConversation(id: conversationId)
+            }
+        }
         .overlay(alignment: .bottom) {
             if let error = viewModel.errorMessage {
                 Text(error)
@@ -158,6 +174,64 @@ struct ConversationListScreen: View {
         .background(Color(uiColor: .systemBackground))
     }
 
+    private var projectFilterRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                projectChip(
+                    title: "すべて",
+                    iconName: "tray.full",
+                    colorHex: "#8B8B8B",
+                    selected: viewModel.selectedProjectId == nil
+                ) {
+                    viewModel.selectProject(nil)
+                }
+
+                ForEach(viewModel.projects) { project in
+                    projectChip(
+                        title: project.title,
+                        iconName: project.iconName,
+                        colorHex: project.colorHex,
+                        selected: viewModel.selectedProjectId == project.id
+                    ) {
+                        viewModel.selectProject(project.id)
+                    }
+                }
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 4)
+        }
+        .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+        .listRowSeparator(.hidden)
+    }
+
+    @ViewBuilder
+    private func projectChip(
+        title: String,
+        iconName: String,
+        colorHex: String,
+        selected: Bool,
+        onTap: @escaping () -> Void
+    ) -> some View {
+        Button(action: onTap) {
+            HStack(spacing: 6) {
+                Image(systemName: iconName)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(selected ? .white : Color(hex: colorHex))
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .foregroundStyle(selected ? .white : .primary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                Capsule()
+                    .fill(selected ? Color(hex: colorHex) : Color(uiColor: .secondarySystemBackground))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
     @ViewBuilder
     private func drawerActionRow(
         title: String,
@@ -188,19 +262,27 @@ struct ConversationListScreen: View {
 
     @ViewBuilder
     private func conversationRow(_ entry: ConversationListEntry) -> some View {
-        HStack(spacing: 10) {
-            Text(entry.title)
-                .font(.body)
-                .lineLimit(1)
-                .foregroundStyle(.primary)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 10) {
+                Text(entry.title)
+                    .font(.body)
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
 
-            if entry.isSecret {
-                Image(systemName: "lock.fill")
-                    .foregroundStyle(.secondary)
-                    .font(.system(size: 12))
+                if entry.isSecret {
+                    Image(systemName: "lock.fill")
+                        .foregroundStyle(.secondary)
+                        .font(.system(size: 12))
+                }
+
+                Spacer()
             }
 
-            Spacer()
+            if let projectTitle = entry.projectTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !projectTitle.isEmpty {
+                Text(projectTitle)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 10)
@@ -210,10 +292,37 @@ struct ConversationListScreen: View {
                 .fill(rowBackgroundColor(for: entry.id))
         )
         .onTapGesture {
-            selection = entry.id
-            onSelect(entry.id)
+            openConversation(id: entry.id)
         }
-        .swipeActions {
+        .contextMenu {
+            if !viewModel.projects.isEmpty {
+                ForEach(viewModel.projects) { project in
+                    Button {
+                        viewModel.assignConversation(id: entry.id, to: project.id)
+                    } label: {
+                        if entry.projectId == project.id {
+                            Label(project.title, systemImage: "checkmark")
+                        } else {
+                            Text(project.title)
+                        }
+                    }
+                }
+
+                if entry.projectId != nil {
+                    Button("プロジェクトから外す") {
+                        viewModel.assignConversation(id: entry.id, to: nil)
+                    }
+                }
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button {
+                openConversation(id: entry.id)
+            } label: {
+                Label("開く", systemImage: "arrow.up.forward.app")
+            }
+            .tint(.blue)
+
             Button(role: .destructive) {
                 viewModel.deleteConversation(id: entry.id)
             } label: {
@@ -229,8 +338,75 @@ struct ConversationListScreen: View {
 
     private func createConversation(secret: Bool) {
         if let id = viewModel.createConversation(secret: secret) {
-            selection = id
-            onSelect(id)
+            openConversation(id: id)
         }
+    }
+
+    private func openConversation(id: Int64) {
+        selection = id
+        onSelect(id)
+    }
+}
+
+private struct CreateProjectSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var title = ""
+    @State private var instructions = ""
+
+    var onCreate: (String, String?) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("プロジェクト名") {
+                    TextField("例: iOS移植", text: $title)
+                }
+                Section("プロジェクト指示（任意）") {
+                    TextEditor(text: $instructions)
+                        .frame(minHeight: 120)
+                }
+            }
+            .navigationTitle("新しいプロジェクト")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("作成") {
+                        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let trimmedInstructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+                        onCreate(trimmedTitle, trimmedInstructions.isEmpty ? nil : trimmedInstructions)
+                        dismiss()
+                    }
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+private extension Color {
+    init(hex: String) {
+        let cleaned = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int = UInt64(0)
+        Scanner(string: cleaned).scanHexInt64(&int)
+
+        let r, g, b: UInt64
+        switch cleaned.count {
+        case 6:
+            (r, g, b) = (int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (r, g, b) = (58, 122, 254)
+        }
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue: Double(b) / 255,
+            opacity: 1
+        )
     }
 }

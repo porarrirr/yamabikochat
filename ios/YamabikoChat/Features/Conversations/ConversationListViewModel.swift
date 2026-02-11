@@ -4,7 +4,9 @@ import Combine
 @MainActor
 final class ConversationListViewModel: ObservableObject {
     @Published private(set) var conversations: [ConversationListEntry] = []
+    @Published private(set) var projects: [ProjectListEntry] = []
     @Published var searchQuery: String = ""
+    @Published var selectedProjectId: Int64?
     @Published var errorMessage: String?
 
     private var repository: ChatRepository?
@@ -21,6 +23,17 @@ final class ConversationListViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        repository.observeProjects()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] projects in
+                self?.projects = projects
+                guard let selected = self?.selectedProjectId else { return }
+                if !projects.contains(where: { $0.id == selected }) {
+                    self?.selectedProjectId = nil
+                }
+            }
+            .store(in: &cancellables)
+
         do {
             _ = try repository.ensureInitialConversation()
         } catch {
@@ -28,17 +41,43 @@ final class ConversationListViewModel: ObservableObject {
         }
     }
 
-    func createConversation(secret: Bool = false) -> Int64? {
+    func createConversation(secret: Bool = false, projectId: Int64? = nil) -> Int64? {
         guard let repository else { return nil }
         do {
+            let targetProjectId = projectId ?? selectedProjectId
             if secret {
-                return try repository.createSecretConversation()
+                return try repository.createSecretConversation(projectId: targetProjectId)
             }
-            return try repository.createConversation()
+            return try repository.createConversation(projectId: targetProjectId)
         } catch {
             errorMessage = error.localizedDescription
             return nil
         }
+    }
+
+    func createProject(title: String, instructions: String?) -> Int64? {
+        guard let repository else { return nil }
+        do {
+            let id = try repository.createProject(title: title, instructions: instructions)
+            selectedProjectId = id
+            return id
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func assignConversation(id: Int64, to projectId: Int64?) {
+        guard let repository else { return }
+        do {
+            try repository.assignConversationToProject(conversationId: id, projectId: projectId)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func selectProject(_ id: Int64?) {
+        selectedProjectId = id
     }
 
     func deleteConversation(id: Int64) {
@@ -51,11 +90,19 @@ final class ConversationListViewModel: ObservableObject {
     }
 
     var filteredConversations: [ConversationListEntry] {
+        let base: [ConversationListEntry]
+        if let selectedProjectId {
+            base = conversations.filter { $0.projectId == selectedProjectId }
+        } else {
+            base = conversations
+        }
+
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return conversations }
-        return conversations.filter { entry in
+        guard !query.isEmpty else { return base }
+        return base.filter { entry in
             entry.title.localizedCaseInsensitiveContains(query) ||
-                (entry.lastMessagePreview?.localizedCaseInsensitiveContains(query) ?? false)
+                (entry.lastMessagePreview?.localizedCaseInsensitiveContains(query) ?? false) ||
+                (entry.projectTitle?.localizedCaseInsensitiveContains(query) ?? false)
         }
     }
 }

@@ -217,6 +217,23 @@ enum AppDatabase {
             )
         }
 
+        migrator.registerMigration("v3_projects") { db in
+            try db.create(table: "projects") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("title", .text).notNull()
+                t.column("iconName", .text).notNull().defaults(to: "folder.fill")
+                t.column("colorHex", .text).notNull().defaults(to: "#3A7AFE")
+                t.column("instructions", .text)
+                t.column("createdAtMs", .integer).notNull()
+                t.column("updatedAtMs", .integer).notNull()
+            }
+
+            try db.alter(table: "conversations") { t in
+                t.add(column: "projectId", .integer).references("projects", onDelete: .setNull)
+            }
+            try db.create(index: "idx_conversations_project", on: "conversations", columns: ["projectId", "updatedAtMs"])
+        }
+
         return migrator
     }
 }

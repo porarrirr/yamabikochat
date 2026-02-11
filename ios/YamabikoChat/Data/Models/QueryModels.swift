@@ -6,6 +6,17 @@ struct ConversationListEntry: Identifiable, Equatable {
     var updatedAtMs: Int64
     var lastMessagePreview: String?
     var isSecret: Bool
+    var projectId: Int64?
+    var projectTitle: String?
+}
+
+struct ProjectListEntry: Identifiable, Equatable {
+    var id: Int64
+    var title: String
+    var iconName: String
+    var colorHex: String
+    var instructions: String?
+    var updatedAtMs: Int64
 }
 
 struct ChatMessageSummary: Identifiable, Equatable {
