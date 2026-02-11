@@ -35,4 +35,77 @@ final class MathMarkdownViewTests: XCTestCase {
         XCTAssertFalse(html.contains("tex-svg.js"))
         XCTAssertFalse(html.contains("typesetPromise([root])"))
     }
+
+    func testResolveResourceURLPrefersMathJaxSubdirectory() {
+        let subdirectoryURL = URL(fileURLWithPath: "/tmp/mathjax/markdown-renderer.js")
+        let rootURL = URL(fileURLWithPath: "/tmp/markdown-renderer.js")
+
+        let resolved = MathMarkdownResourceResolver.resolveResourceURL(
+            resource: "markdown-renderer",
+            withExtension: "js",
+            subdirectories: ["mathjax", nil],
+            using: { _, _, subdirectory in
+                if subdirectory == "mathjax" {
+                    return subdirectoryURL
+                }
+                if subdirectory == nil {
+                    return rootURL
+                }
+                return nil
+            }
+        )
+
+        XCTAssertEqual(resolved, subdirectoryURL)
+    }
+
+    func testResolveResourceURLFallsBackToRootWhenSubdirectoryMissing() {
+        let rootURL = URL(fileURLWithPath: "/tmp/markdown-renderer.js")
+
+        let resolved = MathMarkdownResourceResolver.resolveResourceURL(
+            resource: "markdown-renderer",
+            withExtension: "js",
+            subdirectories: ["mathjax", nil],
+            using: { _, _, subdirectory in
+                subdirectory == nil ? rootURL : nil
+            }
+        )
+
+        XCTAssertEqual(resolved, rootURL)
+    }
+
+    func testMarkdownRendererScriptFallsBackAndLogsWhenResourceMissing() {
+        var logs: [String] = []
+
+        let script = MathMarkdownResourceResolver.markdownRendererScript(
+            fallbackScript: "fallback-renderer",
+            lookup: { _, _, _ in nil },
+            scriptLoader: { _ in
+                XCTFail("scriptLoader should not be called when lookup fails")
+                return nil
+            },
+            logger: { message in
+                logs.append(message)
+            }
+        )
+
+        XCTAssertEqual(script, "fallback-renderer")
+        XCTAssertEqual(logs.count, 1)
+        XCTAssertTrue(logs[0].contains("fallback"))
+    }
+
+    func testMarkdownRendererScriptUsesLoadedScriptWhenAvailable() {
+        let resolvedURL = URL(fileURLWithPath: "/tmp/mathjax/markdown-renderer.js")
+        let rendererScript = "window.yamabikoRenderMarkdown = function(){ return '<p>ok</p>'; };"
+
+        let script = MathMarkdownResourceResolver.markdownRendererScript(
+            fallbackScript: "fallback-renderer",
+            lookup: { _, _, _ in resolvedURL },
+            scriptLoader: { _ in rendererScript },
+            logger: { _ in
+                XCTFail("logger should not be called when script is loaded")
+            }
+        )
+
+        XCTAssertEqual(script, rendererScript)
+    }
 }

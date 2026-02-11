@@ -32,7 +32,11 @@ final class AppContainer: ObservableObject {
         openRouterModelService = OpenRouterModelService(credentialStore: credentialStore)
         codexAuthRepository = CodexAuthRepository(credentialStore: credentialStore)
         geminiAuthRepository = GeminiAuthRepository(credentialStore: credentialStore)
-        providerGateway = ProviderGateway(settingsRepository: settingsRepository, credentialStore: credentialStore)
+        providerGateway = ProviderGateway(
+            settingsRepository: settingsRepository,
+            credentialStore: credentialStore,
+            geminiAuthRepository: geminiAuthRepository
+        )
         chatRepository = ChatRepository(
             conversations: conversationRepository,
             settings: settingsRepository,
