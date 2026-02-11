@@ -33,19 +33,29 @@
       return key;
     });
 
-    var output = escapeHtml(input);
-
-    output = output.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(_, label, href) {
+    var inlineLinkTokens = [];
+    input = input.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(_, label, href) {
       var safe = safeHref(href);
-      var textLabel = label || href;
-      if (!safe) return textLabel;
-      return '<a href="' + safe + '">' + textLabel + '</a>';
+      var textLabel = escapeHtml(label || href);
+      var key = "@@INLINE_LINK_" + inlineLinkTokens.length + "@@";
+      if (!safe) {
+        inlineLinkTokens.push(textLabel);
+      } else {
+        inlineLinkTokens.push('<a href="' + safe + '">' + textLabel + "</a>");
+      }
+      return key;
     });
+
+    var output = escapeHtml(input);
 
     output = output.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     output = output.replace(/__([^_]+)__/g, "<strong>$1</strong>");
     output = output.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
     output = output.replace(/_([^_\n]+)_/g, "<em>$1</em>");
+
+    output = output.replace(/@@INLINE_LINK_(\d+)@@/g, function(_, index) {
+      return inlineLinkTokens[Number(index)] || "";
+    });
 
     output = output.replace(/@@INLINE_CODE_(\d+)@@/g, function(_, index) {
       return inlineCodeTokens[Number(index)] || "";

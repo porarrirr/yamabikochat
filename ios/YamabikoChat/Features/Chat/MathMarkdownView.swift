@@ -2,14 +2,137 @@ import SwiftUI
 import WebKit
 import UIKit
 
+enum MathMarkdownHTMLBuilder {
+    static func buildHTML(
+        markdownPayload: String,
+        markdownRendererScript: String,
+        bodyTextColor: String,
+        codeBackgroundColor: String,
+        borderColor: String,
+        linkColor: String,
+        mathRenderingEnabled: Bool,
+        mathJaxScriptTag: String
+    ) -> String {
+        let mathSetupScript: String
+        let mathTypesetScript: String
+        if mathRenderingEnabled {
+            mathSetupScript = """
+              <script>
+                window.MathJax = {
+                  tex: {
+                    inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+                    displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']]
+                  },
+                  svg: { fontCache: 'global' }
+                };
+              </script>
+              \(mathJaxScriptTag)
+            """
+            mathTypesetScript = """
+                  if (window.MathJax && window.MathJax.typesetPromise) {
+                    window.MathJax.typesetPromise([root]).then(finish).catch(finish);
+                  } else {
+                    finish();
+                  }
+            """
+        } else {
+            mathSetupScript = ""
+            mathTypesetScript = "finish();"
+        }
+
+        return """
+        <html>
+        <head>
+          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+          <meta name=\"color-scheme\" content=\"light dark\" />
+          \(mathSetupScript)
+          <script>\(markdownRendererScript)</script>
+          <style>
+            html, body { margin: 0; padding: 0; background: transparent; }
+            body {
+              font-family: -apple-system;
+              font-size: 15px;
+              line-height: 1.35;
+              color: \(bodyTextColor);
+              overflow-wrap: anywhere;
+              word-break: break-word;
+            }
+            #yamabiko-markdown > :first-child { margin-top: 0; }
+            #yamabiko-markdown > :last-child { margin-bottom: 0; }
+            h1, h2, h3, h4, h5, h6 { margin: 0.9em 0 0.4em 0; line-height: 1.2; }
+            p { margin: 0.45em 0; }
+            ul, ol { margin: 0.45em 0; padding-left: 1.35em; }
+            li { margin: 0.2em 0; }
+            blockquote {
+              margin: 0.55em 0;
+              border-left: 3px solid \(borderColor);
+              padding: 0.2em 0 0.2em 0.8em;
+              color: \(bodyTextColor);
+              opacity: 0.9;
+            }
+            pre {
+              margin: 0.6em 0;
+              padding: 0.7em 0.8em;
+              border-radius: 8px;
+              background: \(codeBackgroundColor);
+              border: 1px solid \(borderColor);
+              overflow-x: auto;
+            }
+            code, pre { font-family: Menlo, ui-monospace, monospace; }
+            code {
+              background: \(codeBackgroundColor);
+              border: 1px solid \(borderColor);
+              border-radius: 6px;
+              padding: 0.08em 0.35em;
+              font-size: 0.92em;
+            }
+            pre code {
+              background: transparent;
+              border: none;
+              padding: 0;
+            }
+            hr {
+              border: none;
+              border-top: 1px solid \(borderColor);
+              margin: 0.9em 0;
+            }
+            a { color: \(linkColor); text-decoration: underline; }
+          </style>
+        </head>
+        <body>
+          <div id=\"yamabiko-markdown\"></div>
+          <script>
+            (function() {
+              var source = \(markdownPayload);
+              var root = document.getElementById('yamabiko-markdown');
+              if (!root) return;
+              if (typeof window.yamabikoRenderMarkdown === 'function') {
+                root.innerHTML = window.yamabikoRenderMarkdown(source);
+              } else {
+                root.textContent = source || '';
+              }
+              var finish = function() {
+                if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();
+              };
+        \(mathTypesetScript)
+            })();
+          </script>
+        </body>
+        </html>
+        """
+    }
+}
+
 struct MathMarkdownView: View {
     let markdownText: String
+    var mathRenderingEnabled: Bool = true
     @Environment(\.colorScheme) private var colorScheme
     @State private var contentHeight: CGFloat = 44
 
     var body: some View {
         MathMarkdownWebView(
             markdownText: markdownText,
+            mathRenderingEnabled: mathRenderingEnabled,
             colorScheme: colorScheme,
             measuredHeight: $contentHeight
         )
@@ -19,6 +142,7 @@ struct MathMarkdownView: View {
 
 private struct MathMarkdownWebView: UIViewRepresentable {
     let markdownText: String
+    let mathRenderingEnabled: Bool
     let colorScheme: ColorScheme
     @Binding var measuredHeight: CGFloat
     private static let fallbackMarkdownRendererScript = """
@@ -101,10 +225,13 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         let markdownPayload = markdownText.jsonStringLiteral
 
         let mathJaxScriptTag: String
-        if let localURL = Bundle.main.url(forResource: "tex-svg", withExtension: "js", subdirectory: "mathjax") {
+        if mathRenderingEnabled,
+           let localURL = Bundle.main.url(forResource: "tex-svg", withExtension: "js", subdirectory: "mathjax") {
             mathJaxScriptTag = "<script src=\"\(localURL.absoluteString)\"></script>"
-        } else {
+        } else if mathRenderingEnabled {
             mathJaxScriptTag = "<script src=\"https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js\"></script>"
+        } else {
+            mathJaxScriptTag = ""
         }
 
         let bodyTextColor = colorScheme == .dark ? "#F2F2F7" : "#1C1C1E"
@@ -112,99 +239,16 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         let borderColor = colorScheme == .dark ? "#38383A" : "#E5E5EA"
         let linkColor = colorScheme == .dark ? "#70A7FF" : "#1F64E0"
 
-        let html = """
-        <html>
-        <head>
-          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-          <meta name=\"color-scheme\" content=\"light dark\" />
-          <script>
-            window.MathJax = {
-              tex: {
-                inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
-                displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']]
-              },
-              svg: { fontCache: 'global' }
-            };
-          </script>
-          \(mathJaxScriptTag)
-          <script>\(Self.markdownRendererScript)</script>
-          <style>
-            html, body { margin: 0; padding: 0; background: transparent; }
-            body {
-              font-family: -apple-system;
-              font-size: 15px;
-              line-height: 1.35;
-              color: \(bodyTextColor);
-              overflow-wrap: anywhere;
-              word-break: break-word;
-            }
-            #yamabiko-markdown > :first-child { margin-top: 0; }
-            #yamabiko-markdown > :last-child { margin-bottom: 0; }
-            h1, h2, h3, h4, h5, h6 { margin: 0.9em 0 0.4em 0; line-height: 1.2; }
-            p { margin: 0.45em 0; }
-            ul, ol { margin: 0.45em 0; padding-left: 1.35em; }
-            li { margin: 0.2em 0; }
-            blockquote {
-              margin: 0.55em 0;
-              border-left: 3px solid \(borderColor);
-              padding: 0.2em 0 0.2em 0.8em;
-              color: \(bodyTextColor);
-              opacity: 0.9;
-            }
-            pre {
-              margin: 0.6em 0;
-              padding: 0.7em 0.8em;
-              border-radius: 8px;
-              background: \(codeBackgroundColor);
-              border: 1px solid \(borderColor);
-              overflow-x: auto;
-            }
-            code, pre { font-family: Menlo, ui-monospace, monospace; }
-            code {
-              background: \(codeBackgroundColor);
-              border: 1px solid \(borderColor);
-              border-radius: 6px;
-              padding: 0.08em 0.35em;
-              font-size: 0.92em;
-            }
-            pre code {
-              background: transparent;
-              border: none;
-              padding: 0;
-            }
-            hr {
-              border: none;
-              border-top: 1px solid \(borderColor);
-              margin: 0.9em 0;
-            }
-            a { color: \(linkColor); text-decoration: underline; }
-          </style>
-        </head>
-        <body>
-          <div id=\"yamabiko-markdown\"></div>
-          <script>
-            (function() {
-              var source = \(markdownPayload);
-              var root = document.getElementById('yamabiko-markdown');
-              if (!root) return;
-              if (typeof window.yamabikoRenderMarkdown === 'function') {
-                root.innerHTML = window.yamabikoRenderMarkdown(source);
-              } else {
-                root.textContent = source || '';
-              }
-              var finish = function() {
-                if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();
-              };
-              if (window.MathJax && window.MathJax.typesetPromise) {
-                window.MathJax.typesetPromise([root]).then(finish).catch(finish);
-              } else {
-                finish();
-              }
-            })();
-          </script>
-        </body>
-        </html>
-        """
+        let html = MathMarkdownHTMLBuilder.buildHTML(
+            markdownPayload: markdownPayload,
+            markdownRendererScript: Self.markdownRendererScript,
+            bodyTextColor: bodyTextColor,
+            codeBackgroundColor: codeBackgroundColor,
+            borderColor: borderColor,
+            linkColor: linkColor,
+            mathRenderingEnabled: mathRenderingEnabled,
+            mathJaxScriptTag: mathJaxScriptTag
+        )
 
         if context.coordinator.lastHTML != html {
             context.coordinator.lastHTML = html

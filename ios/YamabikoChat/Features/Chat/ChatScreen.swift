@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
 import UIKit
+import ImageIO
 
 private enum ChatTimelineItem: Identifiable {
     case message(FullChatMessage)
@@ -60,6 +61,7 @@ struct ChatScreen: View {
                                 case let .message(message):
                                     MessageBubble(
                                         message: message,
+                                        mathRenderingEnabled: viewModel.settings.mathRenderingEnabled,
                                         onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
                                         onNextVariant: { viewModel.showNextVariant(messageId: message.id) }
                                     )
@@ -269,31 +271,122 @@ private struct AttachmentPreviewRow: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
                 ForEach(attachments) { item in
-                    HStack(spacing: 6) {
-                        Image(systemName: "paperclip")
-                            .font(.caption2)
-                        Text(item.displayName)
-                            .lineLimit(1)
-                            .font(.caption)
-                        Button {
-                            onRemove(item.id)
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
+                    if item.url.isImageAttachment {
+                        ZStack(alignment: .topTrailing) {
+                            AttachmentThumbnail(url: item.url, sideLength: 82)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(Color.chatBubbleBorder.opacity(0.45), lineWidth: 1)
+                                }
+
+                            Button {
+                                onRemove(item.id)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 18))
+                                    .symbolRenderingMode(.hierarchical)
+                                    .foregroundStyle(.white)
+                                    .shadow(radius: 1.5, y: 0.5)
+                            }
+                            .buttonStyle(.plain)
+                            .offset(x: 4, y: -4)
                         }
-                        .buttonStyle(.plain)
+                    } else {
+                        HStack(spacing: 6) {
+                            Image(systemName: "paperclip")
+                                .font(.caption2)
+                            Text(item.displayName)
+                                .lineLimit(1)
+                                .font(.caption)
+                            Button {
+                                onRemove(item.id)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.chatInputBackground)
+                        .clipShape(Capsule())
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.chatInputBackground)
-                    .clipShape(Capsule())
                 }
             }
         }
     }
 }
 
+private struct AttachmentThumbnail: View {
+    let url: URL
+    let sideLength: CGFloat
+    @State private var image: UIImage?
+    @State private var didAttemptLoad = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if didAttemptLoad {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.chatInputBackground)
+                    Image(systemName: "photo")
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.chatInputBackground)
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+        }
+        .frame(width: sideLength, height: sideLength)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .task(id: url.absoluteString) {
+            guard image == nil else { return }
+            image = ImageThumbnailGenerator.thumbnail(
+                for: url,
+                maxPixelSize: Int(sideLength * UIScreen.main.scale * 1.6)
+            )
+            didAttemptLoad = true
+        }
+    }
+}
+
+private enum ImageThumbnailGenerator {
+    static func thumbnail(for url: URL, maxPixelSize: Int) -> UIImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(maxPixelSize, 48),
+            kCGImageSourceShouldCacheImmediately: true
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return UIImage(cgImage: image)
+    }
+}
+
+private extension URL {
+    var isImageAttachment: Bool {
+        if let type = try? resourceValues(forKeys: [.contentTypeKey]).contentType,
+           type.conforms(to: .image) {
+            return true
+        }
+        let ext = pathExtension.lowercased()
+        return ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif"].contains(ext)
+    }
+}
+
 private struct MessageBubble: View {
     let message: FullChatMessage
+    let mathRenderingEnabled: Bool
     let onPrevVariant: () -> Void
     let onNextVariant: () -> Void
     @State private var isThinkingSheetPresented = false
@@ -375,7 +468,10 @@ private struct MessageBubble: View {
                         }
                     }
 
-                    MathMarkdownView(markdownText: responseText)
+                    MathMarkdownView(
+                        markdownText: responseText,
+                        mathRenderingEnabled: mathRenderingEnabled
+                    )
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(12)
@@ -419,7 +515,10 @@ private struct MessageBubble: View {
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         .sheet(isPresented: $isThinkingSheetPresented) {
             if let thinkingText {
-                ThinkingSheet(thinkingText: thinkingText)
+                ThinkingSheet(
+                    thinkingText: thinkingText,
+                    mathRenderingEnabled: mathRenderingEnabled
+                )
             }
         }
     }
@@ -427,6 +526,7 @@ private struct MessageBubble: View {
 
 private struct ThinkingSheet: View {
     let thinkingText: String
+    let mathRenderingEnabled: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -443,7 +543,10 @@ private struct ThinkingSheet: View {
             Divider()
 
             ScrollView {
-                MathMarkdownView(markdownText: thinkingText)
+                MathMarkdownView(
+                    markdownText: thinkingText,
+                    mathRenderingEnabled: mathRenderingEnabled
+                )
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
