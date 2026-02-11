@@ -1,6 +1,99 @@
 import SwiftUI
 import WebKit
 import UIKit
+import Foundation
+
+enum MathMarkdownNormalizer {
+    static func normalizeEscapedMathIfNeeded(_ markdown: String, mathRenderingEnabled: Bool) -> String {
+        guard mathRenderingEnabled else { return markdown }
+        return normalizeEscapedDollarDelimiters(markdown)
+    }
+
+    static func normalizeEscapedDollarDelimiters(_ markdown: String) -> String {
+        guard !markdown.isEmpty else { return markdown }
+
+        var output = ""
+        var cursor = markdown.startIndex
+
+        while cursor < markdown.endIndex {
+            if markdown[cursor...].hasPrefix("```") {
+                let fenceStart = cursor
+                let searchStart = markdown.index(cursor, offsetBy: 3)
+                if let closingRange = markdown[searchStart...].range(of: "```") {
+                    output.append(contentsOf: markdown[fenceStart..<closingRange.upperBound])
+                    cursor = closingRange.upperBound
+                } else {
+                    output.append(contentsOf: markdown[fenceStart...])
+                    break
+                }
+                continue
+            }
+
+            if markdown[cursor] == "`" {
+                let inlineStart = cursor
+                let searchStart = markdown.index(after: cursor)
+                if let closingTick = markdown[searchStart...].firstIndex(of: "`") {
+                    let inlineEnd = markdown.index(after: closingTick)
+                    output.append(contentsOf: markdown[inlineStart..<inlineEnd])
+                    cursor = inlineEnd
+                } else {
+                    output.append(contentsOf: markdown[inlineStart...])
+                    break
+                }
+                continue
+            }
+
+            let segmentStart = cursor
+            while cursor < markdown.endIndex {
+                if markdown[cursor...].hasPrefix("```") || markdown[cursor] == "`" {
+                    break
+                }
+                cursor = markdown.index(after: cursor)
+            }
+
+            let segment = String(markdown[segmentStart..<cursor])
+            output.append(normalizeEscapedDollarPairs(in: segment))
+        }
+
+        return output
+    }
+
+    private static func normalizeEscapedDollarPairs(in text: String) -> String {
+        var normalized = replaceEscapedMathPairs(
+            in: text,
+            pattern: #"(?<!\\)\\\$([^$\n]+?)\\\$(?![A-Za-z0-9])"#
+        )
+
+        normalized = replaceEscapedMathPairs(
+            in: normalized,
+            pattern: #"(?<!\\)\\\$([^$\n]+?)\$(?![A-Za-z0-9])"#
+        )
+
+        return normalized
+    }
+
+    private static func replaceEscapedMathPairs(in text: String, pattern: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return text
+        }
+
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        let matches = regex.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+
+        var result = text
+        for match in matches.reversed() {
+            guard let fullRange = Range(match.range(at: 0), in: result),
+                  let contentRange = Range(match.range(at: 1), in: result) else {
+                continue
+            }
+            let content = result[contentRange]
+            result.replaceSubrange(fullRange, with: "$\(content)$")
+        }
+
+        return result
+    }
+}
 
 enum MathMarkdownHTMLBuilder {
     static func buildHTML(
@@ -489,7 +582,11 @@ private struct MathMarkdownWebView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.parent = self
 
-        let markdownPayload = markdownText.jsonStringLiteral
+        let normalizedMarkdown = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
+            markdownText,
+            mathRenderingEnabled: mathRenderingEnabled
+        )
+        let markdownPayload = normalizedMarkdown.jsonStringLiteral
 
         let mathJaxScriptTag: String
         if mathRenderingEnabled,

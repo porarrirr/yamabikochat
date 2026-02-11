@@ -108,4 +108,70 @@ final class MathMarkdownViewTests: XCTestCase {
 
         XCTAssertEqual(script, rendererScript)
     }
+
+    func testNormalizeEscapedDollarDelimitersBothSides() {
+        let input = #"数式: \$sum_{k=1}^{n} k\$ を表示"#
+        let normalized = MathMarkdownNormalizer.normalizeEscapedDollarDelimiters(input)
+
+        XCTAssertEqual(normalized, #"数式: $sum_{k=1}^{n} k$ を表示"#)
+    }
+
+    func testNormalizeEscapedDollarDelimitersEscapedOpeningOnly() {
+        let input = #"数式: \$sum_{k=1}^{n} k$ を表示"#
+        let normalized = MathMarkdownNormalizer.normalizeEscapedDollarDelimiters(input)
+
+        XCTAssertEqual(normalized, #"数式: $sum_{k=1}^{n} k$ を表示"#)
+    }
+
+    func testNormalizeEscapedDollarDelimitersPreservesEscapedCurrency() {
+        let input = #"価格は \$5 です"#
+        let normalized = MathMarkdownNormalizer.normalizeEscapedDollarDelimiters(input)
+
+        XCTAssertEqual(normalized, input)
+    }
+
+    func testNormalizeEscapedDollarDelimitersSkipsInlineCode() {
+        let input = #"`x = \$sum$` と本文 \$sum$"#
+        let normalized = MathMarkdownNormalizer.normalizeEscapedDollarDelimiters(input)
+
+        XCTAssertEqual(normalized, #"`x = \$sum$` と本文 $sum$"#)
+    }
+
+    func testNormalizeEscapedDollarDelimitersSkipsFencedCodeBlock() {
+        let input = #"""
+```tex
+\$sum$
+```
+本文 \$sum$
+"""#
+        let normalized = MathMarkdownNormalizer.normalizeEscapedDollarDelimiters(input)
+        let expected = #"""
+```tex
+\$sum$
+```
+本文 $sum$
+"""#
+
+        XCTAssertEqual(normalized, expected)
+    }
+
+    func testNormalizeEscapedMathIfNeededWhenDisabledReturnsOriginal() {
+        let input = #"本文 \$sum$"#
+        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
+            input,
+            mathRenderingEnabled: false
+        )
+
+        XCTAssertEqual(normalized, input)
+    }
+
+    func testNormalizeEscapedMathIfNeededWhenEnabledNormalizes() {
+        let input = #"本文 \$sum$"#
+        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
+            input,
+            mathRenderingEnabled: true
+        )
+
+        XCTAssertEqual(normalized, #"本文 $sum$"#)
+    }
 }

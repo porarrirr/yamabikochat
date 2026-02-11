@@ -421,6 +421,104 @@ final class ProviderClientParityTests: XCTestCase {
         }
     }
 
+    func testGeminiCliStreamParsesTextOnlyPayloadWithoutCandidates() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setGeminiAccessToken("gemini-access-token")
+        try store.saveSecret("project-1", key: "gemini_project_id")
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"response":{"text":"A"}}"#)
+                continuation.yield(#"data: {"text":"B"}"#)
+                continuation.yield("data: [DONE]")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "GEMINI_AUTH"]
+        )
+
+        let client = GeminiProviderClient()
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var events: [ProviderStreamEvent] = []
+        for try await event in stream {
+            events.append(event)
+        }
+
+        XCTAssertTrue(events.contains(.textDelta("A")))
+        XCTAssertTrue(events.contains(.textDelta("B")))
+        if case let .completed(final) = try XCTUnwrap(events.last) {
+            XCTAssertEqual(final.text, "AB")
+            XCTAssertNil(final.reasoningSummary)
+        } else {
+            XCTFail("Expected completed event")
+        }
+    }
+
+    func testGeminiCliStreamFlushesOnDataBoundaryWhenBlankLineMissing() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setGeminiAccessToken("gemini-access-token")
+        try store.saveSecret("project-1", key: "gemini_project_id")
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield("data: {")
+                continuation.yield(#"data: "response":{"candidates":[{"content":{"parts":[{"text":"A"}]}}]}"#)
+                continuation.yield("data: }")
+                continuation.yield(#"data: {"response":{"candidates":[{"content":{"parts":[{"text":"B"}]}}]}}"#)
+                continuation.yield("data: [DONE]")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "GEMINI_AUTH"]
+        )
+
+        let client = GeminiProviderClient()
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var events: [ProviderStreamEvent] = []
+        for try await event in stream {
+            events.append(event)
+        }
+
+        XCTAssertTrue(events.contains(.textDelta("A")))
+        XCTAssertTrue(events.contains(.textDelta("B")))
+        if case let .completed(final) = try XCTUnwrap(events.last) {
+            XCTAssertEqual(final.text, "AB")
+            XCTAssertNil(final.reasoningSummary)
+        } else {
+            XCTFail("Expected completed event")
+        }
+    }
+
     func testGeminiCliNonStreamingReturnsReasoningFromThoughtParts() async throws {
         let store = ProviderTestCredentialStore()
         try store.setGeminiAccessToken("gemini-access-token")
