@@ -7,12 +7,17 @@ struct RootView: View {
     @StateObject private var listViewModel = ConversationListViewModel()
     @StateObject private var settingsViewModel = SettingsViewModel()
     @State private var isSettingsPresented = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
     @State private var dynamicColorEnabled = true
     @State private var themeColor = "BLUE_PURPLE"
     @State private var themeMode = "SYSTEM"
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(
+            columnVisibility: $columnVisibility,
+            preferredCompactColumn: $preferredCompactColumn
+        ) {
             ConversationListScreen(
                 viewModel: listViewModel,
                 selection: $appState.selectedConversationID,
@@ -44,6 +49,9 @@ struct RootView: View {
             listViewModel.bind(repository: container.chatRepository)
             if appState.selectedConversationID == nil {
                 appState.selectedConversationID = listViewModel.conversations.first?.id
+                if appState.selectedConversationID != nil {
+                    preferredCompactColumn = .detail
+                }
             }
             if let settings = try? container.chatRepository.loadSettings() {
                 applyAppearance(settings)
@@ -55,12 +63,16 @@ struct RootView: View {
         .onChange(of: listViewModel.conversations.map(\.id)) { _, ids in
             guard !ids.isEmpty else {
                 appState.selectedConversationID = nil
+                preferredCompactColumn = .sidebar
                 return
             }
             if let selected = appState.selectedConversationID, ids.contains(selected) {
                 return
             }
             appState.selectedConversationID = ids.first
+            if appState.selectedConversationID != nil {
+                preferredCompactColumn = .detail
+            }
         }
         .sheet(isPresented: $isSettingsPresented) {
             SettingsScreen(viewModel: settingsViewModel)
@@ -122,6 +134,7 @@ struct RootView: View {
 
     private func selectConversation(id: Int64, closeHistory: Bool = false) {
         appState.selectedConversationID = id
+        preferredCompactColumn = .detail
         if closeHistory {
             appState.isConversationHistoryPresented = false
         }

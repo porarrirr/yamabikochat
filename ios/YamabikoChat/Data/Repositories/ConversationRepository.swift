@@ -126,12 +126,20 @@ final class ConversationRepository {
                 .fetchAll(db)
                 .first { conversation in
                     guard conversation.projectId == projectId else { return false }
-                    let messageCount = try? Int.fetchOne(
+                    let chatCount = try? Int.fetchOne(
                         db,
                         sql: "SELECT COUNT(*) FROM chat_messages WHERE conversationId = ?",
                         arguments: [conversation.id ?? 0]
                     )
-                    return (messageCount ?? 0) == 0
+                    if (chatCount ?? 0) > 0 {
+                        return false
+                    }
+                    let dualCount = try? Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM dual_chat_messages WHERE conversationId = ?",
+                        arguments: [conversation.id ?? 0]
+                    )
+                    return (dualCount ?? 0) == 0
                 }
         }
     }
@@ -143,19 +151,36 @@ final class ConversationRepository {
                 sql: """
                 SELECT c.id, c.title, c.updatedAtMs, c.isSecret, c.projectId, p.title AS projectTitle,
                        (
-                           SELECT CASE
-                               WHEN m.role = 'model' AND m.selectedVariantIndex > 0 THEN COALESCE(
-                                   (SELECT v.text
-                                    FROM chat_message_variants v
-                                    WHERE v.baseMessageId = m.id AND v.variantIndex = m.selectedVariantIndex
-                                    LIMIT 1),
-                                   m.text
-                               )
-                               ELSE m.text
-                           END
-                           FROM chat_messages m
-                           WHERE m.conversationId = c.id
-                           ORDER BY m.createdAtMs DESC
+                           SELECT merged.preview
+                           FROM (
+                               SELECT
+                                   m.createdAtMs AS ts,
+                                   CASE
+                                       WHEN m.role = 'model' AND m.selectedVariantIndex > 0 THEN COALESCE(
+                                           (SELECT v.text
+                                            FROM chat_message_variants v
+                                            WHERE v.baseMessageId = m.id AND v.variantIndex = m.selectedVariantIndex
+                                            LIMIT 1),
+                                           m.text
+                                       )
+                                       ELSE m.text
+                                   END AS preview
+                               FROM chat_messages m
+                               WHERE m.conversationId = c.id
+
+                               UNION ALL
+
+                               SELECT
+                                   d.createdAtMs AS ts,
+                                   CASE
+                                       WHEN LENGTH(TRIM(d.modelAText)) > 0 THEN d.modelAText
+                                       WHEN LENGTH(TRIM(d.modelBText)) > 0 THEN d.modelBText
+                                       ELSE d.userText
+                                   END AS preview
+                               FROM dual_chat_messages d
+                               WHERE d.conversationId = c.id
+                           ) AS merged
+                           ORDER BY merged.ts DESC
                            LIMIT 1
                        ) AS lastMessagePreview
                 FROM conversations c
@@ -419,6 +444,11 @@ final class ConversationRepository {
         try dbQueue.write { db in
             var mutable = message
             try mutable.insert(db)
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            try db.execute(
+                sql: "UPDATE conversations SET updatedAtMs = ? WHERE id = ?",
+                arguments: [now, mutable.conversationId]
+            )
             return mutable.id ?? 0
         }
     }
@@ -458,32 +488,64 @@ final class ConversationRepository {
             let rows = try Row.fetchAll(
                 db,
                 sql: """
-                SELECT DISTINCT c.id, c.title, c.updatedAtMs, c.isSecret,
+                SELECT c.id, c.title, c.updatedAtMs, c.isSecret,
                     c.projectId, p.title AS projectTitle,
                     (
-                        SELECT CASE
-                            WHEN m2.role = 'model' AND m2.selectedVariantIndex > 0 THEN COALESCE(
-                                (SELECT v.text
-                                 FROM chat_message_variants v
-                                 WHERE v.baseMessageId = m2.id AND v.variantIndex = m2.selectedVariantIndex
-                                 LIMIT 1),
-                                m2.text
-                            )
-                            ELSE m2.text
-                        END
-                        FROM chat_messages m2
-                        WHERE m2.conversationId = c.id
-                        ORDER BY m2.createdAtMs DESC
+                        SELECT merged.preview
+                        FROM (
+                            SELECT
+                                m2.createdAtMs AS ts,
+                                CASE
+                                    WHEN m2.role = 'model' AND m2.selectedVariantIndex > 0 THEN COALESCE(
+                                        (SELECT v.text
+                                         FROM chat_message_variants v
+                                         WHERE v.baseMessageId = m2.id AND v.variantIndex = m2.selectedVariantIndex
+                                         LIMIT 1),
+                                        m2.text
+                                    )
+                                    ELSE m2.text
+                                END AS preview
+                            FROM chat_messages m2
+                            WHERE m2.conversationId = c.id
+
+                            UNION ALL
+
+                            SELECT
+                                d2.createdAtMs AS ts,
+                                CASE
+                                    WHEN LENGTH(TRIM(d2.modelAText)) > 0 THEN d2.modelAText
+                                    WHEN LENGTH(TRIM(d2.modelBText)) > 0 THEN d2.modelBText
+                                    ELSE d2.userText
+                                END AS preview
+                            FROM dual_chat_messages d2
+                            WHERE d2.conversationId = c.id
+                        ) AS merged
+                        ORDER BY merged.ts DESC
                         LIMIT 1
                     ) AS lastMessagePreview
                 FROM conversations c
-                LEFT JOIN chat_messages m ON m.conversationId = c.id
                 LEFT JOIN projects p ON p.id = c.projectId
-                WHERE c.title LIKE ? OR m.text LIKE ?
+                WHERE c.title LIKE ?
+                   OR EXISTS (
+                        SELECT 1
+                        FROM chat_messages m
+                        WHERE m.conversationId = c.id
+                          AND m.text LIKE ?
+                   )
+                   OR EXISTS (
+                        SELECT 1
+                        FROM dual_chat_messages d
+                        WHERE d.conversationId = c.id
+                          AND (
+                            d.userText LIKE ?
+                            OR d.modelAText LIKE ?
+                            OR d.modelBText LIKE ?
+                          )
+                   )
                 ORDER BY c.updatedAtMs DESC
                 LIMIT ?
                 """,
-                arguments: [like, like, limit]
+                arguments: [like, like, like, like, like, limit]
             )
 
             return rows.compactMap { row in
