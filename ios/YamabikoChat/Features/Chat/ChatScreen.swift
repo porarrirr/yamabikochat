@@ -286,9 +286,24 @@ private struct MessageBubble: View {
     let message: FullChatMessage
     let onPrevVariant: () -> Void
     let onNextVariant: () -> Void
+    @State private var isThinkingSheetPresented = false
 
     private var isUser: Bool {
         message.message.role == "user"
+    }
+
+    private var responseText: String {
+        message.displayText
+    }
+
+    private var thinkingText: String? {
+        guard let value = message.displayThinkingStream?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !value.isEmpty
+        else {
+            return nil
+        }
+        return value
     }
 
     private var attachmentNames: [String] {
@@ -313,7 +328,7 @@ private struct MessageBubble: View {
                     }
                 }
 
-                Text(message.displayText)
+                Text(responseText)
                     .textSelection(.enabled)
                     .foregroundStyle(Color.chatUserText)
                     .padding(.horizontal, 14)
@@ -322,23 +337,23 @@ private struct MessageBubble: View {
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .frame(maxWidth: .infinity, alignment: .trailing)
             } else {
-                if let thinking = message.displayThinkingStream, !thinking.isEmpty {
-                    DisclosureGroup {
-                        Text(thinking)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                            .padding(.top, 4)
+                if thinkingText != nil {
+                    Button {
+                        isThinkingSheetPresented = true
                     } label: {
-                        HStack(spacing: 4) {
-                            Text("思考時間")
+                        HStack(spacing: 8) {
+                            Image(systemName: "brain.head.profile")
                                 .font(.caption)
-                            Image(systemName: "chevron.right")
+                            Text("Thinking")
+                                .font(.caption)
+                            Spacer()
+                            Image(systemName: "chevron.up.chevron.down")
                                 .font(.caption2)
                         }
                         .foregroundStyle(.secondary)
+                        .padding(.vertical, 4)
                     }
-                    .tint(.secondary)
+                    .buttonStyle(.plain)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -350,8 +365,8 @@ private struct MessageBubble: View {
                         }
                     }
 
-                    MathMarkdownView(markdownText: message.displayText)
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    MathMarkdownView(markdownText: responseText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(12)
                 .background(Color.chatAssistantBubble)
@@ -392,6 +407,40 @@ private struct MessageBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+        .sheet(isPresented: $isThinkingSheetPresented) {
+            if let thinkingText {
+                ThinkingSheet(thinkingText: thinkingText)
+            }
+        }
+    }
+}
+
+private struct ThinkingSheet: View {
+    let thinkingText: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "brain.head.profile")
+                Text("Thinking")
+                    .font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+
+            Divider()
+
+            ScrollView {
+                MathMarkdownView(markdownText: thinkingText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 

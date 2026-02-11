@@ -133,12 +133,14 @@ struct SettingsScreen: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("APIキー") {
-                SecureField(currentProviderAPIKeyLabel, text: $viewModel.apiKeyDraft)
-                Button("Save API key") {
-                    viewModel.saveAPIKey()
+            if currentProviderKey != "CODEX_AUTH" && currentProviderKey != "GEMINI_AUTH" {
+                Section("APIキー") {
+                    SecureField(currentProviderAPIKeyLabel, text: $viewModel.apiKeyDraft)
+                    Button("Save API key") {
+                        viewModel.saveAPIKey()
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
             }
 
             if currentProviderKey == "OPENAI_COMPAT" {

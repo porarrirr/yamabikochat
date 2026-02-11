@@ -23,7 +23,6 @@ struct RootView: View {
                     isSettingsPresented = true
                 }
             )
-            .navigationTitle("会話")
         } detail: {
             if let conversationID = appState.selectedConversationID {
                 ConversationDetailHost(
@@ -177,14 +176,11 @@ private struct ConversationHistorySheet: View {
                 },
                 onOpenSettings: {
                     isSettingsPresented = true
+                },
+                onClose: {
+                    dismiss()
                 }
             )
-            .navigationTitle("チャット履歴")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("閉じる") { dismiss() }
-                }
-            }
         }
         .sheet(isPresented: $isSettingsPresented) {
             SettingsScreen(viewModel: settingsViewModel)

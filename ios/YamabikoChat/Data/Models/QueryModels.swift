@@ -57,7 +57,7 @@ struct FullChatMessage: Identifiable, Equatable {
     }
 
     var displayText: String {
-        selectedVariant?.text ?? message.text
+        displayContent.text
     }
 
     var displayAttachmentsJSON: String {
@@ -65,6 +65,62 @@ struct FullChatMessage: Identifiable, Equatable {
     }
 
     var displayThinkingStream: String? {
-        selectedVariant?.thinkingStream ?? thinkingStream
+        displayContent.thinking
     }
+
+    private var displayContent: (text: String, thinking: String?) {
+        let sourceText = selectedVariant?.text ?? message.text
+        let persistedThinking = selectedVariant?.thinkingStream ?? thinkingStream
+
+        guard message.role == "model" else {
+            let thinking = persistedThinking?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (text: sourceText, thinking: thinking?.isEmpty == true ? nil : thinking)
+        }
+
+        let split = splitReasoningBlocks(from: sourceText)
+
+        let combinedThinking = [persistedThinking, split.reasoning]
+            .compactMap { value in
+                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return (trimmed?.isEmpty == false) ? trimmed : nil
+            }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let thinking = combinedThinking.isEmpty ? nil : combinedThinking
+        return (text: split.content, thinking: thinking)
+    }
+}
+
+private func splitReasoningBlocks(from input: String) -> (content: String, reasoning: String) {
+    guard !input.isEmpty else {
+        return (content: "", reasoning: "")
+    }
+
+    var working = input
+    var extracted: [String] = []
+
+    let patterns = [
+        "(?is)<think>(.*?)</think>",
+        "(?is)```\\s*thinking\\s*\\R(.*?)```",
+    ]
+
+    for pattern in patterns {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+        let range = NSRange(working.startIndex..., in: working)
+
+        for match in regex.matches(in: working, range: range) {
+            guard let capturedRange = Range(match.range(at: 1), in: working) else { continue }
+            extracted.append(String(working[capturedRange]))
+        }
+
+        working = regex.stringByReplacingMatches(in: working, range: range, withTemplate: "")
+    }
+
+    return (
+        content: working.trimmingCharacters(in: .whitespacesAndNewlines),
+        reasoning: extracted
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    )
 }
