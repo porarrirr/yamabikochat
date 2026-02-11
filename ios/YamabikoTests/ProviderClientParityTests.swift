@@ -191,6 +191,237 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertTrue(captured.url.absoluteString.contains(":generateContent"))
     }
 
+    func testGeminiBuildBodyEmbedsImageAttachmentAsInlineData() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("gemini-key", for: .gemini)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("png")
+        let imageData = Data([0x89, 0x50, 0x4E, 0x47])
+        try imageData.write(to: tempURL)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [
+                ProviderRequestMessage(
+                    role: "user",
+                    content: "describe this image",
+                    attachments: [tempURL.absoluteString]
+                )
+            ],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "GEMINI"]
+        )
+
+        let client = GeminiProviderClient()
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        let bodyData = try XCTUnwrap(captured.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        let contents = try XCTUnwrap(root["contents"] as? [[String: Any]])
+        let first = try XCTUnwrap(contents.first)
+        let parts = try XCTUnwrap(first["parts"] as? [[String: Any]])
+        XCTAssertEqual(parts.first?["text"] as? String, "describe this image")
+
+        let inlineData = try XCTUnwrap(parts.last?["inlineData"] as? [String: Any])
+        XCTAssertEqual(inlineData["mimeType"] as? String, "image/png")
+        XCTAssertEqual(inlineData["data"] as? String, imageData.base64EncodedString())
+    }
+
+    func testGeminiStreamSeparatesThoughtIntoReasoningDelta() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("gemini-key", for: .gemini)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"candidates":[{"content":{"parts":[{"text":"visible "},{"text":"hidden","thought":true}]}}]}"#)
+                continuation.yield("")
+                continuation.yield("data: [DONE]")
+                continuation.yield("")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "GEMINI"]
+        )
+
+        let client = GeminiProviderClient()
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var events: [ProviderStreamEvent] = []
+        for try await event in stream {
+            events.append(event)
+        }
+
+        XCTAssertTrue(events.contains(.textDelta("visible ")))
+        XCTAssertTrue(events.contains(.reasoningDelta("hidden")))
+        if case let .completed(final) = try XCTUnwrap(events.last) {
+            XCTAssertEqual(final.text, "visible ")
+            XCTAssertEqual(final.reasoningSummary, "hidden")
+        } else {
+            XCTFail("Expected completed event")
+        }
+    }
+
+    func testGeminiCliStreamSeparatesThoughtAndWrapperPayload() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setGeminiAccessToken("gemini-access-token")
+        try store.saveSecret("project-1", key: "gemini_project_id")
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"response":{"candidates":[{"content":{"parts":[{"text":"plan","thought":true},{"text":"answer"}]}}]}}"#)
+                continuation.yield("")
+                continuation.yield("data: [DONE]")
+                continuation.yield("")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "GEMINI_AUTH"]
+        )
+
+        let client = GeminiProviderClient()
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var events: [ProviderStreamEvent] = []
+        for try await event in stream {
+            events.append(event)
+        }
+
+        XCTAssertTrue(events.contains(.textDelta("answer")))
+        XCTAssertTrue(events.contains(.reasoningDelta("plan")))
+        if case let .completed(final) = try XCTUnwrap(events.last) {
+            XCTAssertEqual(final.text, "answer")
+            XCTAssertEqual(final.reasoningSummary, "plan")
+        } else {
+            XCTFail("Expected completed event")
+        }
+    }
+
+    func testGeminiCliNonStreamingReturnsReasoningFromThoughtParts() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setGeminiAccessToken("gemini-access-token")
+        try store.saveSecret("project-1", key: "gemini_project_id")
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"response":{"candidates":[{"content":{"parts":[{"text":"plan","thought":true},{"text":"answer"}]}}]}}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "GEMINI_AUTH"]
+        )
+
+        let client = GeminiProviderClient()
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(response.text, "answer")
+        XCTAssertEqual(response.reasoningSummary, "plan")
+    }
+
+    func testGeminiStreamParsesMultilineSSEDataEvent() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("gemini-key", for: .gemini)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield("data: {")
+                continuation.yield("data: \"candidates\":[{\"content\":{\"parts\":[{\"text\":\"A\"}]}}]")
+                continuation.yield("data: }")
+                continuation.yield("")
+                continuation.yield("data: [DONE]")
+                continuation.yield("")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "GEMINI"]
+        )
+
+        let client = GeminiProviderClient()
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var events: [ProviderStreamEvent] = []
+        for try await event in stream {
+            events.append(event)
+        }
+
+        XCTAssertTrue(events.contains(.textDelta("A")))
+        if case let .completed(final) = try XCTUnwrap(events.last) {
+            XCTAssertEqual(final.text, "A")
+            XCTAssertNil(final.reasoningSummary)
+        } else {
+            XCTFail("Expected completed event")
+        }
+    }
+
     func testOpenRouterGenerateIncludesProviderRoutingAndReasoning() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("openrouter-key", for: .openRouter)

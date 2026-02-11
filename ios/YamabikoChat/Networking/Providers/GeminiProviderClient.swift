@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import UniformTypeIdentifiers
 
 struct GeminiProviderClient: ProviderClient {
     let provider: LLMProvider = .gemini
@@ -61,30 +62,77 @@ struct GeminiProviderClient: ProviderClient {
                         throw ProviderClientError.httpStatus(response.statusCode, "Gemini stream failed: \(response.statusCode)")
                     }
 
-                    var full = ""
-                    for try await line in lineStream {
-                        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.hasPrefix("data:") { continue }
-                        let chunk = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                    var fullText = ""
+                    var fullReasoning = ""
+                    var eventLines: [String] = []
+                    var streamFinished = false
+
+                    func flushEventLines() {
+                        guard !eventLines.isEmpty, !streamFinished else { return }
+                        let chunk = eventLines
+                            .joined(separator: "\n")
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        eventLines.removeAll(keepingCapacity: true)
+                        guard !chunk.isEmpty else { return }
+
                         if chunk == "[DONE]" {
-                            let final = ProviderResponse(text: full, reasoningSummary: nil, raw: nil, usage: nil)
+                            let final = ProviderResponse(
+                                text: fullText,
+                                reasoningSummary: fullReasoning.trimmedNonEmpty,
+                                raw: nil,
+                                usage: nil
+                            )
                             continuation.yield(.completed(final))
                             continuation.finish()
+                            streamFinished = true
                             return
                         }
-                        let delta: String?
+
+                        let parsed: ParsedGeminiParts?
                         if resolvedProvider == .geminiAuth {
-                            delta = parseGeminiCliStreamChunk(chunk)
+                            parsed = parseGeminiCliStreamChunk(chunk)
                         } else {
-                            delta = parseGeminiStreamChunk(chunk)
+                            parsed = parseGeminiStreamChunk(chunk)
                         }
-                        if let delta, !delta.isEmpty {
-                            full += delta
-                            continuation.yield(.textDelta(delta))
+                        guard let parsed else { return }
+
+                        if !parsed.reasoning.isEmpty {
+                            fullReasoning += parsed.reasoning
+                            continuation.yield(.reasoningDelta(parsed.reasoning))
+                        }
+                        if !parsed.text.isEmpty {
+                            fullText += parsed.text
+                            continuation.yield(.textDelta(parsed.text))
                         }
                     }
 
-                    let final = ProviderResponse(text: full, reasoningSummary: nil, raw: nil, usage: nil)
+                    for try await line in lineStream {
+                        if streamFinished { return }
+                        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmed.hasPrefix(":") {
+                            continue
+                        }
+                        if trimmed.isEmpty {
+                            flushEventLines()
+                            continue
+                        }
+                        guard trimmed.hasPrefix("data:") else {
+                            continue
+                        }
+                        let payload = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                        eventLines.append(payload)
+                    }
+
+                    if streamFinished { return }
+                    flushEventLines()
+                    if streamFinished { return }
+
+                    let final = ProviderResponse(
+                        text: fullText,
+                        reasoningSummary: fullReasoning.trimmedNonEmpty,
+                        raw: nil,
+                        usage: nil
+                    )
                     continuation.yield(.completed(final))
                     continuation.finish()
                 } catch {
@@ -98,6 +146,11 @@ struct GeminiProviderClient: ProviderClient {
     private struct ResolvedCredential {
         var token: String
         var isBearer: Bool
+    }
+
+    private struct ParsedGeminiParts {
+        var text: String
+        var reasoning: String
     }
 
     private func resolveCredential(provider: LLMProvider, store: SecureCredentialStore) async throws -> ResolvedCredential {
@@ -219,15 +272,9 @@ struct GeminiProviderClient: ProviderClient {
         projectID: String?
     ) throws -> Data {
         let contents = request.messages.map { message -> [String: Any] in
-            var text = message.content
-            if !message.attachments.isEmpty {
-                let attachmentText = message.attachments.map { "- \($0)" }.joined(separator: "\n")
-                text += "\n\nAttachments:\n\(attachmentText)"
-            }
-
-            return [
+            [
                 "role": message.role == "assistant" ? "model" : "user",
-                "parts": [["text": text]]
+                "parts": buildGeminiParts(for: message)
             ]
         }
 
@@ -303,31 +350,117 @@ struct GeminiProviderClient: ProviderClient {
         }
     }
 
-    private func parseGeminiStreamChunk(_ chunk: String) -> String? {
-        guard
-            let data = chunk.data(using: .utf8),
-            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let candidates = root["candidates"] as? [[String: Any]],
-            let first = candidates.first,
-            let content = first["content"] as? [String: Any],
-            let parts = content["parts"] as? [[String: Any]]
-        else {
+    private func resolveAttachmentFileURL(_ rawAttachment: String) -> URL? {
+        if let parsed = URL(string: rawAttachment), parsed.isFileURL {
+            return parsed
+        }
+
+        let directPath = URL(fileURLWithPath: rawAttachment)
+        if FileManager.default.fileExists(atPath: directPath.path) {
+            return directPath
+        }
+
+        if let decoded = rawAttachment.removingPercentEncoding {
+            let decodedPath = URL(fileURLWithPath: decoded)
+            if FileManager.default.fileExists(atPath: decodedPath.path) {
+                return decodedPath
+            }
+        }
+
+        return nil
+    }
+
+    private func resolveAttachmentMimeType(fileURL: URL) -> String {
+        if let values = try? fileURL.resourceValues(forKeys: [.contentTypeKey]),
+           let contentType = values.contentType,
+           let mime = contentType.preferredMIMEType,
+           !mime.isEmpty {
+            return mime
+        }
+
+        let ext = fileURL.pathExtension
+        if let type = UTType(filenameExtension: ext),
+           let mime = type.preferredMIMEType,
+           !mime.isEmpty {
+            return mime
+        }
+
+        return "application/octet-stream"
+    }
+
+    private func inlineDataPart(from rawAttachment: String) -> [String: Any]? {
+        guard let fileURL = resolveAttachmentFileURL(rawAttachment) else {
+            DiagnosticsLogger.log(
+                "Gemini attachment skipped: unreadable file URL",
+                category: .network,
+                metadata: ["attachment": rawAttachment]
+            )
             return nil
+        }
+
+        do {
+            let data = try Data(contentsOf: fileURL)
+            let mime = resolveAttachmentMimeType(fileURL: fileURL)
+            return [
+                "inlineData": [
+                    "mimeType": mime,
+                    "data": data.base64EncodedString()
+                ]
+            ]
+        } catch {
+            DiagnosticsLogger.log(
+                "Gemini attachment skipped: file read failed",
+                category: .network,
+                metadata: [
+                    "attachment": rawAttachment,
+                    "path": fileURL.path
+                ],
+                error: error
+            )
+            return nil
+        }
+    }
+
+    private func buildGeminiParts(for message: ProviderRequestMessage) -> [[String: Any]] {
+        var parts: [[String: Any]] = []
+        if !message.content.isEmpty {
+            parts.append(["text": message.content])
+        }
+
+        for attachment in message.attachments {
+            if let inline = inlineDataPart(from: attachment) {
+                parts.append(inline)
+            }
+        }
+
+        if parts.isEmpty {
+            parts.append(["text": ""])
         }
 
         return parts
-            .compactMap { $0["text"] as? String }
-            .joined(separator: "")
     }
 
-    private func parseGeminiCliStreamChunk(_ chunk: String) -> String? {
-        guard
-            let data = chunk.data(using: .utf8),
-            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            return nil
+    private func parseGeminiParts(_ parts: [[String: Any]], payloadText: String? = nil) -> ParsedGeminiParts {
+        var text = ""
+        var reasoning = ""
+
+        for part in parts {
+            guard let value = part["text"] as? String, !value.isEmpty else { continue }
+            if (part["thought"] as? Bool) == true {
+                reasoning += value
+            } else {
+                text += value
+            }
         }
-        let payload = (root["response"] as? [String: Any]) ?? root
+
+        if let payloadText, !payloadText.isEmpty {
+            text += payloadText
+        }
+
+        return ParsedGeminiParts(text: text, reasoning: reasoning)
+    }
+
+    private func parseGeminiPartsFromPayload(_ payload: [String: Any]) -> ParsedGeminiParts? {
         guard
             let candidates = payload["candidates"] as? [[String: Any]],
             let first = candidates.first,
@@ -336,7 +469,32 @@ struct GeminiProviderClient: ProviderClient {
         else {
             return nil
         }
-        return parts.compactMap { $0["text"] as? String }.joined(separator: "")
+
+        let payloadText = payload["text"] as? String
+        return parseGeminiParts(parts, payloadText: payloadText)
+    }
+
+    private func parseGeminiStreamChunk(_ chunk: String) -> ParsedGeminiParts? {
+        guard
+            let data = chunk.data(using: .utf8),
+            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return nil
+        }
+
+        return parseGeminiPartsFromPayload(root)
+    }
+
+    private func parseGeminiCliStreamChunk(_ chunk: String) -> ParsedGeminiParts? {
+        guard
+            let data = chunk.data(using: .utf8),
+            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return nil
+        }
+
+        let payload = (root["response"] as? [String: Any]) ?? root
+        return parseGeminiPartsFromPayload(payload)
     }
 
     private func parseGeminiCliResponse(data: Data) throws -> ProviderResponse {
@@ -344,8 +502,26 @@ struct GeminiProviderClient: ProviderClient {
             throw ProviderClientError.parseFailure("Gemini Auth response root is invalid")
         }
         let payload = (root["response"] as? [String: Any]) ?? root
-        let payloadData = try JSONSerialization.data(withJSONObject: payload)
-        return try parseResponse(data: payloadData)
+        return try parseGeminiResponsePayload(payload: payload, rawData: data)
+    }
+
+    private func parseGeminiResponsePayload(payload: [String: Any], rawData: Data) throws -> ProviderResponse {
+        guard let parsed = parseGeminiPartsFromPayload(payload) else {
+            throw ProviderClientError.parseFailure("Gemini response missing candidates")
+        }
+
+        let text = parsed.text
+        let reasoning = parsed.reasoning.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty && reasoning.isEmpty {
+            throw ProviderClientError.parseFailure("Gemini response text is empty")
+        }
+
+        return ProviderResponse(
+            text: text,
+            reasoningSummary: reasoning.isEmpty ? nil : reasoning,
+            raw: String(data: rawData, encoding: .utf8),
+            usage: nil
+        )
     }
 
     private func geminiToolObjects(from tools: [ProviderTool]) -> [[String: Any]] {
@@ -385,24 +561,12 @@ struct GeminiProviderClient: ProviderClient {
 
     private func parseResponse(data: Data) throws -> ProviderResponse {
         guard
-            let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let candidates = root["candidates"] as? [[String: Any]],
-            let first = candidates.first,
-            let content = first["content"] as? [String: Any],
-            let parts = content["parts"] as? [[String: Any]]
+            let root = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
-            throw ProviderClientError.parseFailure("Gemini response missing candidates")
+            throw ProviderClientError.parseFailure("Gemini response root is invalid")
         }
 
-        let text = parts
-            .compactMap { $0["text"] as? String }
-            .joined(separator: "\n")
-
-        if text.isEmpty {
-            throw ProviderClientError.parseFailure("Gemini response text is empty")
-        }
-
-        return ProviderResponse(text: text, reasoningSummary: nil, raw: String(data: data, encoding: .utf8), usage: nil)
+        return try parseGeminiResponsePayload(payload: root, rawData: data)
     }
 }
 
