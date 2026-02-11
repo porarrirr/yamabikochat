@@ -82,6 +82,40 @@ final class ConversationRepository {
         .eraseToAnyPublisher()
     }
 
+    func countConversations(projectId: Int64) throws -> Int {
+        try dbQueue.read { db in
+            try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM conversations WHERE projectId = ?",
+                arguments: [projectId]
+            ) ?? 0
+        }
+    }
+
+    func deleteProject(id: Int64) throws {
+        try dbQueue.write { db in
+            let deleted = try ChatProject.deleteOne(db, key: id)
+            guard deleted else {
+                throw ProviderClientError.parseFailure("Project not found")
+            }
+        }
+    }
+
+    func deleteProjectWithConversations(id: Int64) throws {
+        try dbQueue.write { db in
+            let project = try ChatProject.fetchOne(db, key: id)
+            guard project != nil else {
+                throw ProviderClientError.parseFailure("Project not found")
+            }
+
+            try db.execute(
+                sql: "DELETE FROM conversations WHERE projectId = ?",
+                arguments: [id]
+            )
+            _ = try ChatProject.deleteOne(db, key: id)
+        }
+    }
+
     func upsertConversation(_ conversation: Conversation) throws -> Int64 {
         try dbQueue.write { db in
             var updated = conversation

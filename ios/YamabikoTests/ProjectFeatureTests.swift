@@ -68,6 +68,37 @@ final class ProjectFeatureTests: XCTestCase {
         XCTAssertEqual(synced?.systemPrompt, "project prompt")
     }
 
+    func testDeleteProjectKeepsConversationsAndClearsProjectLink() throws {
+        let fixture = try makeFixture()
+        let projectId = try fixture.repository.createProject(title: "削除対象", instructions: "project prompt")
+        let conversationId = try fixture.repository.createConversation(projectId: projectId)
+
+        try fixture.repository.deleteProject(id: projectId, mode: .projectOnly)
+
+        let project = try fixture.conversations.fetchProject(id: projectId)
+        let conversation = try fixture.repository.conversation(id: conversationId)
+        XCTAssertNil(project)
+        XCTAssertNotNil(conversation)
+        XCTAssertNil(conversation?.projectId)
+    }
+
+    func testDeleteProjectWithConversationsRemovesProjectConversationsOnly() throws {
+        let fixture = try makeFixture()
+        let projectId = try fixture.repository.createProject(title: "削除対象", instructions: nil)
+        let projectConversationId = try fixture.repository.createConversation(projectId: projectId)
+        let otherConversationId = try fixture.repository.createConversation()
+
+        try fixture.repository.deleteProject(id: projectId, mode: .withConversations)
+
+        let project = try fixture.conversations.fetchProject(id: projectId)
+        let removedConversation = try fixture.repository.conversation(id: projectConversationId)
+        let otherConversation = try fixture.repository.conversation(id: otherConversationId)
+
+        XCTAssertNil(project)
+        XCTAssertNil(removedConversation)
+        XCTAssertNotNil(otherConversation)
+    }
+
     private func makeFixture() throws -> (repository: ChatRepository, conversations: ConversationRepository) {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)

@@ -7,7 +7,15 @@ struct SendMessageResult {
     var response: ProviderResponse
 }
 
+enum ProjectDeletionMode {
+    case projectOnly
+    case withConversations
+}
+
 final class ChatRepository {
+    private static let defaultConversationTitles: Set<String> = ["New Chat", "Secret Chat"]
+    private static let conversationTitleMaxLength = 50
+
     private let conversations: ConversationRepository
     private let settings: SettingsRepository
     private let providers: ProviderGateway
@@ -124,6 +132,10 @@ final class ChatRepository {
         return try conversations.createProject(title: normalizedTitle, instructions: instructions)
     }
 
+    func projectConversationCount(projectId: Int64) throws -> Int {
+        try conversations.countConversations(projectId: projectId)
+    }
+
     func assignConversationToProject(conversationId: Int64, projectId: Int64?) throws {
         guard var conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
@@ -145,6 +157,15 @@ final class ChatRepository {
 
     func deleteConversation(id: Int64) throws {
         try conversations.deleteConversation(id: id)
+    }
+
+    func deleteProject(id: Int64, mode: ProjectDeletionMode) throws {
+        switch mode {
+        case .projectOnly:
+            try conversations.deleteProject(id: id)
+        case .withConversations:
+            try conversations.deleteProjectWithConversations(id: id)
+        }
     }
 
     func setSecretMode(conversationId: Int64, enabled: Bool) throws {
@@ -280,9 +301,10 @@ final class ChatRepository {
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil
     ) async throws -> SendMessageResult {
         let settings = try self.settings.load()
-        guard let conversation = try conversations.fetchConversation(id: conversationId) else {
+        guard var conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
         }
+        let isFirstMessage = try conversations.isConversationEmpty(conversationId: conversationId)
 
         let userMessageId = try conversations.insertMessage(
             ChatMessage(
@@ -291,6 +313,11 @@ final class ChatRepository {
                 text: text,
                 attachmentsJSON: encodeArray(attachments)
             )
+        )
+        try updateConversationTitleIfNeeded(
+            conversation: &conversation,
+            firstPrompt: text,
+            isFirstMessage: isFirstMessage
         )
 
         let request = try buildProviderRequest(
@@ -529,6 +556,10 @@ final class ChatRepository {
 
     func sendDualMessage(conversationId: Int64, text: String) async throws -> DualChatMessage {
         let settings = try self.settings.load()
+        guard var conversation = try conversations.fetchConversation(id: conversationId) else {
+            throw ProviderClientError.parseFailure("Conversation not found")
+        }
+        let isFirstMessage = try conversations.isConversationEmpty(conversationId: conversationId)
 
         let requestA = buildSingleTurnRequest(
             model: settings.dualModelA,
@@ -563,6 +594,11 @@ final class ChatRepository {
         )
         let insertedId = try conversations.insertDualMessage(dual)
         dual.id = insertedId
+        try updateConversationTitleIfNeeded(
+            conversation: &conversation,
+            firstPrompt: text,
+            isFirstMessage: isFirstMessage
+        )
 
         return dual
     }
@@ -1060,6 +1096,26 @@ final class ChatRepository {
         return text
     }
 
+    private func updateConversationTitleIfNeeded(
+        conversation: inout Conversation,
+        firstPrompt: String,
+        isFirstMessage: Bool
+    ) throws {
+        guard isFirstMessage else { return }
+
+        let normalizedCurrentTitle = conversation.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.defaultConversationTitles.contains(normalizedCurrentTitle) else { return }
+
+        guard let nextTitle = firstPrompt.normalizedConversationTitle(maxLength: Self.conversationTitleMaxLength),
+              nextTitle != normalizedCurrentTitle
+        else {
+            return
+        }
+
+        conversation.title = nextTitle
+        _ = try conversations.upsertConversation(conversation)
+    }
+
     private func settingsForNewConversation() throws -> AppSettings {
         var currentSettings = try settings.load()
         guard currentSettings.isDualModeEnabled || currentSettings.isAutoConversationEnabled else {
@@ -1087,5 +1143,15 @@ private extension String {
     func ifBlank(_ fallback: String) -> String {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? fallback : trimmed
+    }
+
+    func normalizedConversationTitle(maxLength: Int) -> String? {
+        let normalized = components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+
+        guard !normalized.isEmpty else { return nil }
+        guard maxLength > 0, normalized.count > maxLength else { return normalized }
+        return String(normalized.prefix(maxLength))
     }
 }

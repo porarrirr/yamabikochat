@@ -4,10 +4,12 @@ import Combine
 struct AttachmentDraft: Identifiable, Equatable {
     let id: UUID
     var url: URL
+    var displayName: String
 
-    init(url: URL) {
+    init(url: URL, displayName: String? = nil) {
         id = UUID()
         self.url = url
+        self.displayName = displayName ?? url.lastPathComponent
     }
 }
 
@@ -106,8 +108,15 @@ final class ChatViewModel: ObservableObject {
         guard let attachmentRepository else { return }
         switch attachmentRepository.validate(url: url) {
         case .valid:
-            attachments.append(AttachmentDraft(url: url))
-            errorMessage = nil
+            do {
+                let persistedURL = try attachmentRepository.persistAttachment(url: url)
+                attachments.append(
+                    AttachmentDraft(url: persistedURL, displayName: url.lastPathComponent)
+                )
+                errorMessage = nil
+            } catch {
+                errorMessage = "ファイルを読み込めませんでした。"
+            }
         case let .tooLarge(sizeBytes):
             let sizeMB = Double(sizeBytes) / (1024 * 1024)
             errorMessage = String(format: "添付ファイルが%.1fMBで上限10MBを超えています。", sizeMB)
@@ -138,13 +147,14 @@ final class ChatViewModel: ObservableObject {
     }
 
     func sendMessage() {
-        guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        guard let repository, let attachmentRepository else {
+        let trimmedText = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty || !attachments.isEmpty else { return }
+        guard let repository else {
             errorMessage = "チャット初期化中です。少し待ってから再試行してください。"
             return
         }
 
-        let text = inputText
+        let text = trimmedText
         inputText = ""
 
         isSending = true
@@ -156,9 +166,14 @@ final class ChatViewModel: ObservableObject {
         Task {
             defer { isSending = false }
             do {
-                let attachmentPaths = try persistAttachments(attachmentDrafts, repository: attachmentRepository)
+                let attachmentPaths = attachmentDrafts.map { $0.url.absoluteString }
 
                 if settings.isDualModeEnabled {
+                    guard !text.isEmpty else {
+                        errorMessage = "デュアルモードでは本文を入力してください。"
+                        attachments = attachmentDrafts
+                        return
+                    }
                     _ = try await repository.sendDualMessage(conversationId: conversationID, text: text)
                 } else {
                     _ = try await repository.sendMessage(
@@ -173,7 +188,7 @@ final class ChatViewModel: ObservableObject {
                         }
                     )
 
-                    if settings.isAutoConversationEnabled {
+                    if settings.isAutoConversationEnabled, !text.isEmpty {
                         startAutoConversation(initial: text)
                     }
                 }
@@ -187,27 +202,6 @@ final class ChatViewModel: ObservableObject {
                 )
             }
         }
-    }
-
-    private func persistAttachments(_ drafts: [AttachmentDraft], repository: AttachmentRepository) throws -> [String] {
-        var persisted: [String] = []
-        for draft in drafts {
-            switch repository.validate(url: draft.url) {
-            case .valid:
-                let url = try repository.persistAttachment(url: draft.url)
-                persisted.append(url.absoluteString)
-            case let .tooLarge(sizeBytes):
-                let sizeMB = Double(sizeBytes) / (1024 * 1024)
-                throw ProviderClientError.parseFailure(String(format: "添付ファイルが%.1fMBで上限10MBを超えています。", sizeMB))
-            case .unsupportedType:
-                throw ProviderClientError.parseFailure("サポート外のファイル形式です。")
-            case .dangerousFile:
-                throw ProviderClientError.parseFailure("危険なファイル形式は添付できません。")
-            case .unreadable:
-                throw ProviderClientError.parseFailure("添付ファイルを読み込めませんでした。")
-            }
-        }
-        return persisted
     }
 
     var canRegenerateLastAssistant: Bool {

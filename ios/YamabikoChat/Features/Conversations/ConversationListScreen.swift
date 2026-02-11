@@ -2,6 +2,12 @@ import Foundation
 import SwiftUI
 
 struct ConversationListScreen: View {
+    private struct PendingProjectDeletion {
+        let id: Int64
+        let title: String
+        let conversationCount: Int
+    }
+
     @ObservedObject var viewModel: ConversationListViewModel
     @Binding var selection: Int64?
 
@@ -10,6 +16,8 @@ struct ConversationListScreen: View {
     var onClose: (() -> Void)? = nil
 
     @State private var isCreateProjectPresented = false
+    @State private var pendingProjectDeletion: PendingProjectDeletion?
+    @State private var isProjectDeleteOptionsPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -78,12 +86,44 @@ struct ConversationListScreen: View {
                 openConversation(id: conversationId)
             }
         }
+        .confirmationDialog(
+            "プロジェクトを削除",
+            isPresented: $isProjectDeleteOptionsPresented,
+            titleVisibility: .visible
+        ) {
+            Button("プロジェクトのみ削除", role: .destructive) {
+                guard let pending = pendingProjectDeletion else { return }
+                viewModel.deleteProject(id: pending.id, mode: .projectOnly)
+                clearPendingProjectDeletion()
+            }
+
+            Button("会話も削除", role: .destructive) {
+                guard let pending = pendingProjectDeletion else { return }
+                viewModel.deleteProject(id: pending.id, mode: .withConversations)
+                clearPendingProjectDeletion()
+            }
+
+            Button("キャンセル", role: .cancel) {
+                clearPendingProjectDeletion()
+            }
+        } message: {
+            if let pending = pendingProjectDeletion {
+                Text("「\(pending.title)」には \(pending.conversationCount) 件の会話があります。削除方法を選択してください。")
+            } else {
+                Text("削除方法を選択してください。")
+            }
+        }
         .overlay(alignment: .bottom) {
             if let error = viewModel.errorMessage {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
                     .padding(8)
+            }
+        }
+        .onChange(of: isProjectDeleteOptionsPresented) { _, isPresented in
+            if !isPresented {
+                clearPendingProjectDeletion()
             }
         }
     }
@@ -194,6 +234,13 @@ struct ConversationListScreen: View {
                         selected: viewModel.selectedProjectId == project.id
                     ) {
                         viewModel.selectProject(project.id)
+                    }
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            beginProjectDeletion(project)
+                        } label: {
+                            Label("プロジェクトを削除", systemImage: "trash")
+                        }
                     }
                 }
             }
@@ -345,6 +392,19 @@ struct ConversationListScreen: View {
     private func openConversation(id: Int64) {
         selection = id
         onSelect(id)
+    }
+
+    private func beginProjectDeletion(_ project: ProjectListEntry) {
+        pendingProjectDeletion = PendingProjectDeletion(
+            id: project.id,
+            title: project.title,
+            conversationCount: viewModel.projectConversationCount(projectId: project.id)
+        )
+        isProjectDeleteOptionsPresented = true
+    }
+
+    private func clearPendingProjectDeletion() {
+        pendingProjectDeletion = nil
     }
 }
 

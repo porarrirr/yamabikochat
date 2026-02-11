@@ -90,12 +90,15 @@ struct FullChatMessage: Identifiable, Equatable {
 
         let split = splitReasoningBlocks(from: sourceText)
 
-        let combinedThinking = [persistedThinking, split.reasoning]
-            .compactMap { value in
-                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
-                return (trimmed?.isEmpty == false) ? trimmed : nil
+        var thinkingParts: [String] = []
+        for value in [persistedThinking, split.reasoning] {
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let trimmed, !trimmed.isEmpty else { continue }
+            if !thinkingParts.contains(trimmed) {
+                thinkingParts.append(trimmed)
             }
-            .joined(separator: "\n")
+        }
+        let combinedThinking = thinkingParts.joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         let thinking = combinedThinking.isEmpty ? nil : combinedThinking
@@ -111,17 +114,19 @@ private func splitReasoningBlocks(from input: String) -> (content: String, reaso
     var working = input
     var extracted: [String] = []
 
-    let patterns = [
-        "(?is)<think>(.*?)</think>",
-        "(?is)```\\s*thinking\\s*\\R(.*?)```",
+    let patterns: [(pattern: String, captureGroup: Int)] = [
+        ("(?is)<think>(.*?)</think>", 1),
+        ("(?is)<thinking>(.*?)</thinking>", 1),
+        ("(?is)<reasoning>(.*?)</reasoning>", 1),
+        ("(?is)```\\s*(thinking|reasoning|analysis|thoughts)\\s*\\R(.*?)```", 2),
     ]
 
     for pattern in patterns {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+        guard let regex = try? NSRegularExpression(pattern: pattern.pattern) else { continue }
         let range = NSRange(working.startIndex..., in: working)
 
         for match in regex.matches(in: working, range: range) {
-            guard let capturedRange = Range(match.range(at: 1), in: working) else { continue }
+            guard let capturedRange = Range(match.range(at: pattern.captureGroup), in: working) else { continue }
             extracted.append(String(working[capturedRange]))
         }
 

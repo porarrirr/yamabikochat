@@ -29,7 +29,9 @@ private enum ChatTimelineItem: Identifiable {
 struct ChatScreen: View {
     @ObservedObject var viewModel: ChatViewModel
 
+    @State private var showAttachmentOptions = false
     @State private var showFileImporter = false
+    @State private var showPhotoPicker = false
     @State private var photoItems: [PhotosPickerItem] = []
     @FocusState private var isComposerFocused: Bool
 
@@ -130,6 +132,25 @@ struct ChatScreen: View {
                 viewModel.errorMessage = error.localizedDescription
             }
         }
+        .confirmationDialog(
+            "添付を追加",
+            isPresented: $showAttachmentOptions,
+            titleVisibility: .visible
+        ) {
+            Button("写真を追加") {
+                showPhotoPicker = true
+            }
+            Button("ファイルを追加") {
+                showFileImporter = true
+            }
+            Button("キャンセル", role: .cancel) {}
+        }
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $photoItems,
+            maxSelectionCount: 10,
+            matching: .images
+        )
         .onChange(of: photoItems) { _, items in
             guard !items.isEmpty else { return }
             Task {
@@ -166,20 +187,8 @@ struct ChatScreen: View {
 
     private var composerBar: some View {
         HStack(alignment: .bottom, spacing: 10) {
-            Menu {
-                PhotosPicker(
-                    selection: $photoItems,
-                    maxSelectionCount: 10,
-                    matching: .images,
-                    photoLibrary: .shared()
-                ) {
-                    Label("写真を追加", systemImage: "photo")
-                }
-                Button {
-                    showFileImporter = true
-                } label: {
-                    Label("ファイルを追加", systemImage: "doc")
-                }
+            Button {
+                showAttachmentOptions = true
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 16, weight: .semibold))
@@ -192,6 +201,7 @@ struct ChatScreen: View {
                     }
                     .clipShape(Circle())
             }
+            .buttonStyle(.plain)
 
             TextField("質問してみましょう", text: $viewModel.inputText, axis: .vertical)
                 .lineLimit(1 ... 6)
@@ -262,7 +272,7 @@ private struct AttachmentPreviewRow: View {
                     HStack(spacing: 6) {
                         Image(systemName: "paperclip")
                             .font(.caption2)
-                        Text(item.url.lastPathComponent)
+                        Text(item.displayName)
                             .lineLimit(1)
                             .font(.caption)
                         Button {

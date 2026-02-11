@@ -80,10 +80,34 @@ final class ConversationListViewModel: ObservableObject {
         selectedProjectId = id
     }
 
+    func projectConversationCount(projectId: Int64) -> Int {
+        if let repository,
+           let count = try? repository.projectConversationCount(projectId: projectId) {
+            return count
+        }
+        conversations.reduce(into: 0) { count, entry in
+            if entry.projectId == projectId {
+                count += 1
+            }
+        }
+    }
+
     func deleteConversation(id: Int64) {
         guard let repository else { return }
         do {
             try repository.deleteConversation(id: id)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func deleteProject(id: Int64, mode: ProjectDeletionMode) {
+        guard let repository else { return }
+        do {
+            try repository.deleteProject(id: id, mode: mode)
+            if selectedProjectId == id {
+                selectedProjectId = nil
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

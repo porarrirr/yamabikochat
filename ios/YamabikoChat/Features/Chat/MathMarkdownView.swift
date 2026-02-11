@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import UIKit
 
 struct MathMarkdownView: View {
     let markdownText: String
@@ -20,6 +21,24 @@ private struct MathMarkdownWebView: UIViewRepresentable {
     let markdownText: String
     let colorScheme: ColorScheme
     @Binding var measuredHeight: CGFloat
+    private static let fallbackMarkdownRendererScript = """
+    window.yamabikoRenderMarkdown = function(source) {
+      var escaped = String(source || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      return escaped.replace(/\\n/g, "<br/>");
+    };
+    """
+    private static let markdownRendererScript: String = {
+        guard let url = Bundle.main.url(forResource: "markdown-renderer", withExtension: "js", subdirectory: "mathjax"),
+              let script = try? String(contentsOf: url, encoding: .utf8),
+              !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return fallbackMarkdownRendererScript
+        }
+        return script
+    }()
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -79,27 +98,36 @@ private struct MathMarkdownWebView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.parent = self
 
-        let escaped = markdownText
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-            .replacingOccurrences(of: "\n", with: "<br/>")
+        let markdownPayload = markdownText.jsonStringLiteral
 
-        let scriptTag: String
+        let mathJaxScriptTag: String
         if let localURL = Bundle.main.url(forResource: "tex-svg", withExtension: "js", subdirectory: "mathjax") {
-            scriptTag = "<script src=\"\(localURL.absoluteString)\"></script>"
+            mathJaxScriptTag = "<script src=\"\(localURL.absoluteString)\"></script>"
         } else {
-            scriptTag = "<script src=\"https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js\"></script>"
+            mathJaxScriptTag = "<script src=\"https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js\"></script>"
         }
 
         let bodyTextColor = colorScheme == .dark ? "#F2F2F7" : "#1C1C1E"
+        let codeBackgroundColor = colorScheme == .dark ? "#1F1F23" : "#F4F4F8"
+        let borderColor = colorScheme == .dark ? "#38383A" : "#E5E5EA"
+        let linkColor = colorScheme == .dark ? "#70A7FF" : "#1F64E0"
 
         let html = """
         <html>
         <head>
           <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
           <meta name=\"color-scheme\" content=\"light dark\" />
-          \(scriptTag)
+          <script>
+            window.MathJax = {
+              tex: {
+                inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+                displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']]
+              },
+              svg: { fontCache: 'global' }
+            };
+          </script>
+          \(mathJaxScriptTag)
+          <script>\(Self.markdownRendererScript)</script>
           <style>
             html, body { margin: 0; padding: 0; background: transparent; }
             body {
@@ -110,11 +138,70 @@ private struct MathMarkdownWebView: UIViewRepresentable {
               overflow-wrap: anywhere;
               word-break: break-word;
             }
-            code, pre { font-family: Menlo, monospace; }
+            #yamabiko-markdown > :first-child { margin-top: 0; }
+            #yamabiko-markdown > :last-child { margin-bottom: 0; }
+            h1, h2, h3, h4, h5, h6 { margin: 0.9em 0 0.4em 0; line-height: 1.2; }
+            p { margin: 0.45em 0; }
+            ul, ol { margin: 0.45em 0; padding-left: 1.35em; }
+            li { margin: 0.2em 0; }
+            blockquote {
+              margin: 0.55em 0;
+              border-left: 3px solid \(borderColor);
+              padding: 0.2em 0 0.2em 0.8em;
+              color: \(bodyTextColor);
+              opacity: 0.9;
+            }
+            pre {
+              margin: 0.6em 0;
+              padding: 0.7em 0.8em;
+              border-radius: 8px;
+              background: \(codeBackgroundColor);
+              border: 1px solid \(borderColor);
+              overflow-x: auto;
+            }
+            code, pre { font-family: Menlo, ui-monospace, monospace; }
+            code {
+              background: \(codeBackgroundColor);
+              border: 1px solid \(borderColor);
+              border-radius: 6px;
+              padding: 0.08em 0.35em;
+              font-size: 0.92em;
+            }
+            pre code {
+              background: transparent;
+              border: none;
+              padding: 0;
+            }
+            hr {
+              border: none;
+              border-top: 1px solid \(borderColor);
+              margin: 0.9em 0;
+            }
+            a { color: \(linkColor); text-decoration: underline; }
           </style>
         </head>
         <body>
-          \(escaped)
+          <div id=\"yamabiko-markdown\"></div>
+          <script>
+            (function() {
+              var source = \(markdownPayload);
+              var root = document.getElementById('yamabiko-markdown');
+              if (!root) return;
+              if (typeof window.yamabikoRenderMarkdown === 'function') {
+                root.innerHTML = window.yamabikoRenderMarkdown(source);
+              } else {
+                root.textContent = source || '';
+              }
+              var finish = function() {
+                if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();
+              };
+              if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise([root]).then(finish).catch(finish);
+              } else {
+                finish();
+              }
+            })();
+          </script>
         </body>
         </html>
         """
@@ -154,6 +241,24 @@ private struct MathMarkdownWebView: UIViewRepresentable {
             }
         }
 
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            guard navigationAction.navigationType == .linkActivated,
+                  let url = navigationAction.request.url,
+                  let scheme = url.scheme?.lowercased(),
+                  scheme == "http" || scheme == "https"
+            else {
+                decisionHandler(.allow)
+                return
+            }
+
+            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            decisionHandler(.cancel)
+        }
+
         func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.name == Self.heightMessageName else { return }
             if let value = message.body as? NSNumber {
@@ -174,5 +279,16 @@ private struct MathMarkdownWebView: UIViewRepresentable {
                 self.parent.measuredHeight = clamped
             }
         }
+    }
+}
+
+private extension String {
+    var jsonStringLiteral: String {
+        guard let data = try? JSONEncoder().encode(self),
+              let encoded = String(data: data, encoding: .utf8)
+        else {
+            return "\"\""
+        }
+        return encoded.replacingOccurrences(of: "</", with: "<\\/")
     }
 }

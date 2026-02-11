@@ -23,6 +23,56 @@ private final class TestCredentialStore: SecureCredentialStore {
 }
 
 final class ChatRepositorySyncTests: XCTestCase {
+    func testSendMessageRenamesDefaultConversationToFirstPrompt() async throws {
+        let fixture = try makeFixture()
+        let conversationID = try fixture.repository.createConversation(title: "New Chat")
+
+        let firstPrompt = "  First   line\nsecond line " + String(repeating: "x", count: 80)
+        do {
+            _ = try await fixture.repository.sendMessage(
+                conversationId: conversationID,
+                text: firstPrompt,
+                attachments: []
+            )
+            XCTFail("Expected sendMessage to fail without credentials in test fixture.")
+        } catch {}
+
+        let normalized = firstPrompt
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let expected = String(normalized.prefix(50))
+
+        let updated = try fixture.repository.conversation(id: conversationID)
+        XCTAssertEqual(updated?.title, expected)
+    }
+
+    func testSendMessageDoesNotOverwriteConversationTitleAfterFirstPrompt() async throws {
+        let fixture = try makeFixture()
+        let conversationID = try fixture.repository.createConversation(title: "Secret Chat")
+
+        do {
+            _ = try await fixture.repository.sendMessage(
+                conversationId: conversationID,
+                text: "first prompt",
+                attachments: []
+            )
+            XCTFail("Expected sendMessage to fail without credentials in test fixture.")
+        } catch {}
+
+        do {
+            _ = try await fixture.repository.sendMessage(
+                conversationId: conversationID,
+                text: "second prompt should not replace title",
+                attachments: []
+            )
+            XCTFail("Expected sendMessage to fail without credentials in test fixture.")
+        } catch {}
+
+        let updated = try fixture.repository.conversation(id: conversationID)
+        XCTAssertEqual(updated?.title, "first prompt")
+    }
+
     func testUpdateConversationModelAndProviderUpdatesConversation() throws {
         let fixture = try makeFixture()
         let conversationID = try fixture.repository.ensureInitialConversation()
