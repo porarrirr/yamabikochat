@@ -340,6 +340,41 @@ final class AuthRepositoryTests: XCTestCase {
         XCTAssertFalse(repo.isOAuthClientConfigured())
     }
 
+    func testGeminiOAuthManualSaveStoresNormalizedValues() throws {
+        let store = InMemoryCredentialStore()
+        let repo = GeminiAuthRepository(
+            credentialStore: store,
+            oauthConfigProvider: StubGeminiOAuthConfigProvider(
+                config: GeminiOAuthClientConfig(clientID: "", clientSecret: "")
+            )
+        )
+
+        let saved = try repo.saveOAuthClientConfig(
+            clientID: " manual-client-id ",
+            clientSecret: " manual-client-secret "
+        )
+
+        XCTAssertEqual(saved.clientID, "manual-client-id")
+        XCTAssertEqual(saved.clientSecret, "manual-client-secret")
+        XCTAssertTrue(repo.hasImportedOAuthClientConfig())
+        XCTAssertTrue(repo.isOAuthClientConfigured())
+    }
+
+    func testGeminiOAuthManualSaveRejectsPlaceholder() {
+        let store = InMemoryCredentialStore()
+        let repo = GeminiAuthRepository(
+            credentialStore: store,
+            oauthConfigProvider: StubGeminiOAuthConfigProvider(
+                config: GeminiOAuthClientConfig(clientID: "", clientSecret: "")
+            )
+        )
+
+        XCTAssertThrowsError(
+            try repo.saveOAuthClientConfig(clientID: "__set_me__", clientSecret: "secret")
+        )
+        XCTAssertFalse(repo.hasImportedOAuthClientConfig())
+    }
+
     func testGeminiLoginWithBrowserFailsFastWhenOAuthMissing() async {
         let store = InMemoryCredentialStore()
         let repo = GeminiAuthRepository(

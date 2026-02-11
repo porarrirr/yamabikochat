@@ -76,7 +76,7 @@ struct SettingsScreen: View {
             }
             .fileImporter(
                 isPresented: $showGeminiOAuthConfigImporter,
-                allowedContentTypes: [.propertyList, .xml],
+                allowedContentTypes: [.item],
                 allowsMultipleSelection: false
             ) { result in
                 switch result {
@@ -839,6 +839,23 @@ struct SettingsScreen: View {
             )
             .font(.caption2)
             .foregroundStyle(.secondary)
+
+            TextField("OAuth Client ID", text: $viewModel.geminiOAuthClientIDInput)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            SecureField("OAuth Client Secret", text: $viewModel.geminiOAuthClientSecretInput)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+            Button("手動入力を保存") {
+                viewModel.saveGeminiOAuthClientConfigManually()
+            }
+            .buttonStyle(.bordered)
+            .disabled(viewModel.isGeminiAuthActionRunning)
+
+            Text("ファイル選択がうまく動作しない場合は、上の入力欄に手動で貼り付けて保存できます。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
 
             HStack {
                 Button("Sign in") {

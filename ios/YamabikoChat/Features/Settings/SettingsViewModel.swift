@@ -34,6 +34,8 @@ final class SettingsViewModel: ObservableObject {
     @Published var geminiEmailInput: String = ""
     @Published var geminiTierInput: String = ""
     @Published var geminiTierNameInput: String = ""
+    @Published var geminiOAuthClientIDInput: String = ""
+    @Published var geminiOAuthClientSecretInput: String = ""
 
     @Published var statusMessage: String?
     @Published var errorMessage: String?
@@ -573,12 +575,40 @@ final class SettingsViewModel: ObservableObject {
         refreshDiagnosticsLog()
     }
 
+    func saveGeminiOAuthClientConfigManually() {
+        guard let repository = requireRepository(action: "gemini_save_oauth_config_manual") else { return }
+        let result = repository.saveGeminiOAuthClientConfig(
+            clientID: geminiOAuthClientIDInput,
+            clientSecret: geminiOAuthClientSecretInput
+        )
+        switch result {
+        case let .success(saved):
+            geminiOAuthClientIDInput = saved.clientID
+            geminiOAuthClientSecretInput = saved.clientSecret
+            statusMessage = "Gemini OAuth設定を手動入力から保存しました"
+            errorMessage = nil
+            DiagnosticsLogger.log("Gemini oauth config saved from manual input", category: .auth)
+        case let .failure(error):
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log(
+                "Gemini oauth config manual save failed",
+                level: .warning,
+                category: .auth,
+                error: error
+            )
+        }
+        refreshGeminiOAuthClientConfigStatus()
+        refreshDiagnosticsLog()
+    }
+
     func clearImportedGeminiOAuthClientConfig() {
         guard let repository = requireRepository(action: "gemini_clear_imported_oauth_config") else { return }
         let ok = repository.clearImportedGeminiOAuthClientConfig()
         if ok {
             statusMessage = "取り込み済みGemini OAuth設定をクリアしました"
             errorMessage = nil
+            geminiOAuthClientIDInput = ""
+            geminiOAuthClientSecretInput = ""
             DiagnosticsLogger.log("Gemini imported oauth config cleared", category: .auth)
         } else {
             errorMessage = "取り込み済みGemini OAuth設定のクリアに失敗しました"
@@ -626,7 +656,13 @@ final class SettingsViewModel: ObservableObject {
             hasImportedGeminiOAuthClientConfig = false
             return
         }
-        hasImportedGeminiOAuthClientConfig = repository.hasImportedGeminiOAuthClientConfig()
+        if let imported = repository.importedGeminiOAuthClientConfig() {
+            hasImportedGeminiOAuthClientConfig = true
+            geminiOAuthClientIDInput = imported.clientID
+            geminiOAuthClientSecretInput = imported.clientSecret
+            return
+        }
+        hasImportedGeminiOAuthClientConfig = false
     }
 
     static func isGeminiQuotaMissingCredentialError(_ error: Error) -> Bool {

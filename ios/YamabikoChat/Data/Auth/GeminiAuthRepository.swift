@@ -130,6 +130,10 @@ final class GeminiAuthRepository {
         return Self.missingOAuthClientParts(from: imported).isEmpty
     }
 
+    func importedOAuthClientConfig() -> GeminiOAuthClientConfig? {
+        readImportedOAuthClientConfig()
+    }
+
     func importOAuthClientConfig(fileURL: URL) throws -> GeminiOAuthClientConfig {
         let copiedURL = try coordinateAndCopyImportFile(fileURL)
         defer { try? FileManager.default.removeItem(at: copiedURL) }
@@ -152,6 +156,21 @@ final class GeminiAuthRepository {
             )
         }
 
+        try credentialStore.saveSecret(normalized.clientID, key: Constants.importedOAuthClientIDKey)
+        try credentialStore.saveSecret(normalized.clientSecret, key: Constants.importedOAuthClientSecretKey)
+        return normalized
+    }
+
+    func saveOAuthClientConfig(clientID: String, clientSecret: String) throws -> GeminiOAuthClientConfig {
+        let normalized = Self.normalizedOAuthClientConfig(
+            GeminiOAuthClientConfig(clientID: clientID, clientSecret: clientSecret)
+        )
+        let missing = Self.missingOAuthClientParts(from: normalized)
+        if !missing.isEmpty {
+            throw ProviderClientError.parseFailure(
+                "Gemini OAuth \(missing.joined(separator: ", ")) is required."
+            )
+        }
         try credentialStore.saveSecret(normalized.clientID, key: Constants.importedOAuthClientIDKey)
         try credentialStore.saveSecret(normalized.clientSecret, key: Constants.importedOAuthClientSecretKey)
         return normalized
