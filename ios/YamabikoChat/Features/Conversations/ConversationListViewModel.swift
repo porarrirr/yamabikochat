@@ -85,7 +85,7 @@ final class ConversationListViewModel: ObservableObject {
            let count = try? repository.projectConversationCount(projectId: projectId) {
             return count
         }
-        conversations.reduce(into: 0) { count, entry in
+        return conversations.reduce(into: 0) { count, entry in
             if entry.projectId == projectId {
                 count += 1
             }
