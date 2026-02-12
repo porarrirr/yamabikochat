@@ -22,8 +22,101 @@
     return escapeAttr(unescaped);
   }
 
+  function isEscaped(text, index) {
+    var backslashCount = 0;
+    var cursor = index - 1;
+    while (cursor >= 0 && text.charAt(cursor) === "\\") {
+      backslashCount += 1;
+      cursor -= 1;
+    }
+    return backslashCount % 2 === 1;
+  }
+
+  function findClosingDelimiter(text, startIndex, openDelimiter, closeDelimiter) {
+    var cursor = startIndex + openDelimiter.length;
+    while (cursor < text.length) {
+      if (
+        text.slice(cursor, cursor + closeDelimiter.length) === closeDelimiter &&
+        !isEscaped(text, cursor)
+      ) {
+        return cursor;
+      }
+      cursor += 1;
+    }
+    return -1;
+  }
+
+  function protectMathSegments(text) {
+    var source = String(text || "");
+    var tokens = [];
+    var output = "";
+    var i = 0;
+
+    function pushToken(segment) {
+      var key = "@@INLINE_MATH_" + tokens.length + "@@";
+      tokens.push(segment);
+      output += key;
+    }
+
+    while (i < source.length) {
+      if (source.slice(i, i + 2) === "$$" && !isEscaped(source, i)) {
+        var blockClose = findClosingDelimiter(source, i, "$$", "$$");
+        if (blockClose > i + 1) {
+          pushToken(source.slice(i, blockClose + 2));
+          i = blockClose + 2;
+          continue;
+        }
+      }
+
+      if (source.slice(i, i + 2) === "\\[" && !isEscaped(source, i)) {
+        var bracketClose = findClosingDelimiter(source, i, "\\[", "\\]");
+        if (bracketClose !== -1) {
+          pushToken(source.slice(i, bracketClose + 2));
+          i = bracketClose + 2;
+          continue;
+        }
+      }
+
+      if (source.slice(i, i + 2) === "\\(" && !isEscaped(source, i)) {
+        var parenClose = findClosingDelimiter(source, i, "\\(", "\\)");
+        if (parenClose !== -1) {
+          pushToken(source.slice(i, parenClose + 2));
+          i = parenClose + 2;
+          continue;
+        }
+      }
+
+      if (source.charAt(i) === "$" && !isEscaped(source, i) && source.charAt(i + 1) !== "$") {
+        var inlineClose = i + 1;
+        while (inlineClose < source.length) {
+          if (
+            source.charAt(inlineClose) === "$" &&
+            !isEscaped(source, inlineClose) &&
+            source.charAt(inlineClose - 1) !== "$" &&
+            source.charAt(inlineClose + 1) !== "$"
+          ) {
+            break;
+          }
+          inlineClose += 1;
+        }
+
+        if (inlineClose < source.length && inlineClose > i + 1) {
+          pushToken(source.slice(i, inlineClose + 1));
+          i = inlineClose + 1;
+          continue;
+        }
+      }
+
+      output += source.charAt(i);
+      i += 1;
+    }
+
+    return { text: output, tokens: tokens };
+  }
+
   function applyInlineMarkdown(text) {
-    var input = String(text || "");
+    var mathProtected = protectMathSegments(text);
+    var input = mathProtected.text;
     if (!input) return "";
 
     var inlineCodeTokens = [];
@@ -59,6 +152,10 @@
 
     output = output.replace(/@@INLINE_CODE_(\d+)@@/g, function(_, index) {
       return inlineCodeTokens[Number(index)] || "";
+    });
+
+    output = output.replace(/@@INLINE_MATH_(\d+)@@/g, function(_, index) {
+      return escapeHtml(mathProtected.tokens[Number(index)] || "");
     });
 
     return output;

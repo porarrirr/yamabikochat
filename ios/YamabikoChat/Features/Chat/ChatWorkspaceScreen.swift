@@ -77,6 +77,22 @@ struct ChatWorkspaceScreen: View {
         return presetProvider == currentProvider && presetModel == currentModel
     }
 
+    private func isActiveSystemPromptPreset(_ preset: SystemPromptPreset) -> Bool {
+        guard let active = viewModel.activeSystemPromptPresetName?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !active.isEmpty
+        else {
+            return false
+        }
+        return preset.name.caseInsensitiveCompare(active) == .orderedSame
+    }
+
+    private var isCustomSystemPromptActive: Bool {
+        let active = viewModel.activeSystemPromptPresetName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return active?.isEmpty ?? true
+    }
+
     private var topBar: some View {
         HStack(spacing: 10) {
             Button {
@@ -160,12 +176,24 @@ struct ChatWorkspaceScreen: View {
                 }
 
                 Divider()
-                Button("Prompt: Custom") {
+                Button {
                     viewModel.applySystemPromptPreset(name: nil)
+                } label: {
+                    if isCustomSystemPromptActive {
+                        Label("Prompt: Custom", systemImage: "checkmark")
+                    } else {
+                        Text("Prompt: Custom")
+                    }
                 }
                 ForEach(viewModel.availableSystemPromptPresets()) { preset in
-                    Button("Prompt: \(preset.name)") {
+                    Button {
                         viewModel.applySystemPromptPreset(name: preset.name)
+                    } label: {
+                        if isActiveSystemPromptPreset(preset) {
+                            Label("Prompt: \(preset.name)", systemImage: "checkmark")
+                        } else {
+                            Text("Prompt: \(preset.name)")
+                        }
                     }
                 }
             } label: {

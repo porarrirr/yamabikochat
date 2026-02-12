@@ -322,6 +322,25 @@ final class ChatViewModel: ObservableObject {
         settings.systemPromptPresets()
     }
 
+    var systemPromptContextLabel: String {
+        Self.systemPromptContextLabel(
+            activePresetName: activeSystemPromptPresetName,
+            conversationSystemPrompt: conversationSystemPrompt
+        )
+    }
+
+    nonisolated static func systemPromptContextLabel(activePresetName: String?, conversationSystemPrompt: String?) -> String {
+        if let presetName = activePresetName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !presetName.isEmpty {
+            return "Prompt: \(presetName)"
+        }
+        if let prompt = conversationSystemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !prompt.isEmpty {
+            return "Prompt: Custom"
+        }
+        return "Prompt: なし"
+    }
+
     func availableChatPresets() -> [ModelPreset] {
         let globalPresets = settings.buildGlobalProviderPresets()
         return globalPresets.filter { preset in
@@ -446,6 +465,7 @@ final class ChatViewModel: ObservableObject {
             ) {
                 conversationSystemPrompt = conversation.systemPrompt
                 updateActiveChatPresetName()
+                updateActiveSystemPromptPresetName()
             }
         } catch {
             DiagnosticsLogger.log(

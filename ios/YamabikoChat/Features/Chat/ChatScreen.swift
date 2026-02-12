@@ -62,8 +62,15 @@ struct ChatScreen: View {
                                     MessageBubble(
                                         message: message,
                                         mathRenderingEnabled: viewModel.settings.mathRenderingEnabled,
+                                        canRegenerate: viewModel.canRegenerateLastAssistant && message.id == viewModel.fullMessages.last?.id,
                                         onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
-                                        onNextVariant: { viewModel.showNextVariant(messageId: message.id) }
+                                        onNextVariant: { viewModel.showNextVariant(messageId: message.id) },
+                                        onCopy: {
+                                            UIPasteboard.general.string = message.displayText
+                                        },
+                                        onRegenerate: {
+                                            viewModel.regenerateLastAssistantVariant()
+                                        }
                                     )
                                         .id(item.id)
                                 case let .dual(message):
@@ -188,61 +195,70 @@ struct ChatScreen: View {
     }
 
     private var composerBar: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            Button {
-                showAttachmentOptions = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.chatComposerIcon)
-                    .frame(width: 34, height: 34)
-                    .background(Color.chatInputChipBackground)
-                    .overlay {
-                        Circle()
-                            .stroke(Color.chatBubbleBorder.opacity(0.5), lineWidth: 1)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(viewModel.systemPromptContextLabel)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.horizontal, 8)
+
+            HStack(alignment: .bottom, spacing: 10) {
+                Button {
+                    showAttachmentOptions = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.chatComposerIcon)
+                        .frame(width: 34, height: 34)
+                        .background(Color.chatInputChipBackground)
+                        .overlay {
+                            Circle()
+                                .stroke(Color.chatBubbleBorder.opacity(0.5), lineWidth: 1)
+                        }
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+
+                TextField("質問してみましょう", text: $viewModel.inputText, axis: .vertical)
+                    .lineLimit(1 ... 6)
+                    .focused($isComposerFocused)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .foregroundStyle(Color.chatComposerText)
+                    .tint(Color.chatAccent)
+                    .background(Color.chatInputBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+                Button {} label: {
+                    Image(systemName: "mic")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .disabled(true)
+
+                Button {
+                    if canSend {
+                        viewModel.sendMessage()
                     }
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-
-            TextField("質問してみましょう", text: $viewModel.inputText, axis: .vertical)
-                .lineLimit(1 ... 6)
-                .focused($isComposerFocused)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .foregroundStyle(Color.chatComposerText)
-                .tint(Color.chatAccent)
-                .background(Color.chatInputBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-
-            Button {} label: {
-                Image(systemName: "mic")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .disabled(true)
-
-            Button {
-                if canSend {
-                    viewModel.sendMessage()
+                } label: {
+                    if viewModel.isSending {
+                        ProgressView()
+                            .tint(.white)
+                            .controlSize(.small)
+                            .frame(width: 36, height: 36)
+                    } else {
+                        Image(systemName: canSend ? "arrow.up" : "waveform")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                    }
                 }
-            } label: {
-                if viewModel.isSending {
-                    ProgressView()
-                        .tint(.white)
-                        .controlSize(.small)
-                        .frame(width: 36, height: 36)
-                } else {
-                    Image(systemName: canSend ? "arrow.up" : "waveform")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                }
+                .background(canSend ? Color.chatAccent : Color.chatAccent.opacity(0.42))
+                .clipShape(Circle())
+                .disabled(viewModel.isSending || !canSend)
             }
-            .background(canSend ? Color.chatAccent : Color.chatAccent.opacity(0.42))
-            .clipShape(Circle())
-            .disabled(viewModel.isSending || !canSend)
         }
     }
 
@@ -387,8 +403,11 @@ private extension URL {
 private struct MessageBubble: View {
     let message: FullChatMessage
     let mathRenderingEnabled: Bool
+    let canRegenerate: Bool
     let onPrevVariant: () -> Void
     let onNextVariant: () -> Void
+    let onCopy: () -> Void
+    let onRegenerate: () -> Void
     @State private var isThinkingSheetPresented = false
 
     private var isUser: Bool {
@@ -511,6 +530,27 @@ private struct MessageBubble: View {
                     .foregroundStyle(.secondary)
                 }
             }
+
+            HStack(spacing: 14) {
+                Button {
+                    onCopy()
+                } label: {
+                    Label("コピー", systemImage: "doc.on.doc")
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    onRegenerate()
+                } label: {
+                    Label("再生成", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+                .disabled(!canRegenerate)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 4)
+            .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         .sheet(isPresented: $isThinkingSheetPresented) {

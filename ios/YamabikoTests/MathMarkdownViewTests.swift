@@ -36,6 +36,24 @@ final class MathMarkdownViewTests: XCTestCase {
         XCTAssertFalse(html.contains("typesetPromise([root])"))
     }
 
+    func testBuildHTMLIncludesMathOverflowGuards() {
+        let html = MathMarkdownHTMLBuilder.buildHTML(
+            markdownPayload: "\"$$x$$\"",
+            markdownRendererScript: "window.yamabikoRenderMarkdown = function(){ return ''; };",
+            bodyTextColor: "#000000",
+            codeBackgroundColor: "#111111",
+            borderColor: "#222222",
+            linkColor: "#333333",
+            mathRenderingEnabled: true,
+            mathJaxScriptTag: "<script src=\"tex-svg.js\"></script>"
+        )
+
+        XCTAssertTrue(html.contains("mjx-container[display=\"true\"]"))
+        XCTAssertTrue(html.contains("overflow-x: auto;"))
+        XCTAssertTrue(html.contains("mjx-container svg"))
+        XCTAssertTrue(html.contains("max-width: 100%;"))
+    }
+
     func testResolveResourceURLPrefersMathJaxSubdirectory() {
         let subdirectoryURL = URL(fileURLWithPath: "/tmp/mathjax/markdown-renderer.js")
         let rootURL = URL(fileURLWithPath: "/tmp/markdown-renderer.js")
