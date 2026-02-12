@@ -30,7 +30,6 @@ private enum ChatTimelineItem: Identifiable {
 struct ChatScreen: View {
     @ObservedObject var viewModel: ChatViewModel
 
-    @State private var showAttachmentOptions = false
     @State private var showFileImporter = false
     @State private var showPhotoPicker = false
     @State private var photoItems: [PhotosPickerItem] = []
@@ -141,19 +140,6 @@ struct ChatScreen: View {
                 viewModel.errorMessage = error.localizedDescription
             }
         }
-        .confirmationDialog(
-            "添付を追加",
-            isPresented: $showAttachmentOptions,
-            titleVisibility: .visible
-        ) {
-            Button("写真を追加") {
-                showPhotoPicker = true
-            }
-            Button("ファイルを追加") {
-                showFileImporter = true
-            }
-            Button("キャンセル", role: .cancel) {}
-        }
         .photosPicker(
             isPresented: $showPhotoPicker,
             selection: $photoItems,
@@ -204,8 +190,13 @@ struct ChatScreen: View {
                 .padding(.horizontal, 8)
 
             HStack(alignment: .bottom, spacing: 10) {
-                Button {
-                    showAttachmentOptions = true
+                Menu {
+                    Button("写真を追加") {
+                        showPhotoPicker = true
+                    }
+                    Button("ファイルを追加") {
+                        showFileImporter = true
+                    }
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 16, weight: .semibold))
@@ -218,7 +209,7 @@ struct ChatScreen: View {
                         }
                         .clipShape(Circle())
                 }
-                .buttonStyle(.plain)
+                .menuStyle(.button)
 
                 TextField("質問してみましょう", text: $viewModel.inputText, axis: .vertical)
                     .lineLimit(1 ... 6)

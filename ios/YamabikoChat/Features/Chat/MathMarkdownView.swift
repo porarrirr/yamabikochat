@@ -462,7 +462,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         var i = 0;
 
         function pushToken(segment) {
-          var key = "@@INLINE_MATH_" + tokens.length + "@@";
+          var key = "@@YBMATH" + tokens.length + "@@";
           tokens.push(segment);
           output += key;
         }
@@ -530,7 +530,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
 
         var inlineCodeTokens = [];
         input = input.replace(/`([^`]+?)`/g, function(_, code) {
-          var key = "@@INLINE_CODE_" + inlineCodeTokens.length + "@@";
+          var key = "@@YBCODE" + inlineCodeTokens.length + "@@";
           inlineCodeTokens.push("<code>" + escapeHtml(code) + "</code>");
           return key;
         });
@@ -539,7 +539,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         input = input.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(_, label, href) {
           var safe = safeHref(href);
           var textLabel = escapeHtml(label || href);
-          var key = "@@INLINE_LINK_" + inlineLinkTokens.length + "@@";
+          var key = "@@YBLINK" + inlineLinkTokens.length + "@@";
           if (!safe) {
             inlineLinkTokens.push(textLabel);
           } else {
@@ -555,15 +555,15 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         output = output.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
         output = output.replace(/_([^_\n]+)_/g, "<em>$1</em>");
 
-        output = output.replace(/@@INLINE_LINK_(\d+)@@/g, function(_, index) {
+        output = output.replace(/@@YBLINK(\d+)@@/g, function(_, index) {
           return inlineLinkTokens[Number(index)] || "";
         });
 
-        output = output.replace(/@@INLINE_CODE_(\d+)@@/g, function(_, index) {
+        output = output.replace(/@@YBCODE(\d+)@@/g, function(_, index) {
           return inlineCodeTokens[Number(index)] || "";
         });
 
-        output = output.replace(/@@INLINE_MATH_(\d+)@@/g, function(_, index) {
+        output = output.replace(/@@YBMATH(\d+)@@/g, function(_, index) {
           return escapeHtml(mathProtected.tokens[Number(index)] || "");
         });
 

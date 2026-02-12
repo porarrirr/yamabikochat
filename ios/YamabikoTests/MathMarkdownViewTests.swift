@@ -1,4 +1,5 @@
 import XCTest
+import JavaScriptCore
 @testable import YamabikoChat
 
 final class MathMarkdownViewTests: XCTestCase {
@@ -280,5 +281,67 @@ line1\\nline2
         XCTAssertNil(plan.baseURL)
         XCTAssertEqual(logs.count, 1)
         XCTAssertTrue(logs[0].contains("CDN fallback"))
+    }
+
+    func testMarkdownRendererUsesPlaceholderKeysWithoutUnderscores() throws {
+        let script = try loadMarkdownRendererSource()
+
+        XCTAssertTrue(script.contains("@@YBMATH"))
+        XCTAssertTrue(script.contains("@@YBCODE"))
+        XCTAssertTrue(script.contains("@@YBLINK"))
+        XCTAssertFalse(script.contains("@@INLINE_MATH_"))
+        XCTAssertFalse(script.contains("@@INLINE_CODE_"))
+        XCTAssertFalse(script.contains("@@INLINE_LINK_"))
+    }
+
+    func testMarkdownRendererDoesNotLeakMathPlaceholdersAfterEmphasisReplacement() throws {
+        let result = try renderMarkdownWithJavaScript("本文 *強調* と $x_i$")
+
+        XCTAssertFalse(result.contains("@@"))
+        XCTAssertTrue(result.contains("$x_i$"))
+        XCTAssertTrue(result.contains("<em>強調</em>"))
+    }
+
+    private func loadMarkdownRendererSource() throws -> String {
+        let testDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let rendererURL = testDirectory
+            .deletingLastPathComponent()
+            .appendingPathComponent("YamabikoChat")
+            .appendingPathComponent("App")
+            .appendingPathComponent("Resources")
+            .appendingPathComponent("mathjax")
+            .appendingPathComponent("markdown-renderer.js")
+
+        return try String(contentsOf: rendererURL, encoding: .utf8)
+    }
+
+    private func renderMarkdownWithJavaScript(_ input: String) throws -> String {
+        let script = try loadMarkdownRendererSource()
+        guard let context = JSContext() else {
+            XCTFail("Failed to create JSContext")
+            return ""
+        }
+
+        var jsError: String?
+        context.exceptionHandler = { _, exception in
+            jsError = exception?.toString()
+        }
+
+        context.evaluateScript("var window = this;")
+        context.evaluateScript(script)
+        if let jsError {
+            XCTFail("Renderer script evaluation failed: \(jsError)")
+        }
+
+        guard let renderer = context.objectForKeyedSubscript("yamabikoRenderMarkdown") else {
+            XCTFail("Renderer function was not registered")
+            return ""
+        }
+
+        let output = renderer.call(withArguments: [input])?.toString() ?? ""
+        if let jsError {
+            XCTFail("Renderer function failed: \(jsError)")
+        }
+        return output
     }
 }
