@@ -11,7 +11,6 @@ struct ChatWorkspaceScreen: View {
 
     private enum WorkspaceMode {
         case chat
-        case dual
         case auto
     }
 
@@ -22,8 +21,6 @@ struct ChatWorkspaceScreen: View {
             switch currentMode {
             case .chat:
                 ChatScreen(viewModel: viewModel)
-            case .dual:
-                DualChatScreen(viewModel: viewModel)
             case .auto:
                 AutoConversationScreen(viewModel: viewModel)
             }
@@ -49,9 +46,6 @@ struct ChatWorkspaceScreen: View {
     }
 
     private var currentMode: WorkspaceMode {
-        if viewModel.settings.isDualModeEnabled {
-            return .dual
-        }
         if viewModel.settings.isAutoConversationEnabled {
             return .auto
         }

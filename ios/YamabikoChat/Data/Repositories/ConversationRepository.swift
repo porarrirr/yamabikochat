@@ -207,6 +207,9 @@ final class ConversationRepository {
                                SELECT
                                    d.createdAtMs AS ts,
                                    CASE
+                                       WHEN d.role = 'dual_model' AND LENGTH(TRIM(d.modelAText)) > 0 THEN d.modelAText
+                                       WHEN d.role = 'dual_model' AND LENGTH(TRIM(d.modelBText)) > 0 THEN d.modelBText
+                                       WHEN d.role = 'user' AND LENGTH(TRIM(d.userText)) > 0 THEN d.userText
                                        WHEN LENGTH(TRIM(d.modelAText)) > 0 THEN d.modelAText
                                        WHEN LENGTH(TRIM(d.modelBText)) > 0 THEN d.modelBText
                                        ELSE d.userText
@@ -487,11 +490,28 @@ final class ConversationRepository {
         }
     }
 
+    func updateDualMessage(_ message: DualChatMessage) throws {
+        try dbQueue.write { db in
+            var mutable = message
+            try mutable.update(db)
+            try touchConversation(db: db, conversationId: mutable.conversationId)
+        }
+    }
+
+    func fetchDualMessages(conversationId: Int64) throws -> [DualChatMessage] {
+        try dbQueue.read { db in
+            try DualChatMessage
+                .filter(Column("conversationId") == conversationId)
+                .order(Column("createdAtMs").asc, Column("id").asc)
+                .fetchAll(db)
+        }
+    }
+
     func observeDualMessages(conversationId: Int64) -> AnyPublisher<[DualChatMessage], Never> {
         ValueObservation.tracking { db in
             try DualChatMessage
                 .filter(Column("conversationId") == conversationId)
-                .order(Column("createdAtMs").asc)
+                .order(Column("createdAtMs").asc, Column("id").asc)
                 .fetchAll(db)
         }
         .publisher(in: dbQueue)
@@ -547,6 +567,9 @@ final class ConversationRepository {
                             SELECT
                                 d2.createdAtMs AS ts,
                                 CASE
+                                    WHEN d2.role = 'dual_model' AND LENGTH(TRIM(d2.modelAText)) > 0 THEN d2.modelAText
+                                    WHEN d2.role = 'dual_model' AND LENGTH(TRIM(d2.modelBText)) > 0 THEN d2.modelBText
+                                    WHEN d2.role = 'user' AND LENGTH(TRIM(d2.userText)) > 0 THEN d2.userText
                                     WHEN LENGTH(TRIM(d2.modelAText)) > 0 THEN d2.modelAText
                                     WHEN LENGTH(TRIM(d2.modelBText)) > 0 THEN d2.modelBText
                                     ELSE d2.userText

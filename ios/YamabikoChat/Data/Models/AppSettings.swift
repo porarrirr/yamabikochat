@@ -41,6 +41,14 @@ struct SystemPromptPreset: Codable, Equatable, Identifiable {
 struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatable {
     static let databaseTableName = "settings"
 
+    enum ReasoningContext {
+        case `default`
+        case dualA
+        case dualB
+        case autoA
+        case autoB
+    }
+
     var id: Int64
 
     var defaultModel: String
@@ -85,6 +93,34 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var dualSystemPromptB: String?
     var dualSplitLayout: String
     var dualSplitRatio: Double
+    var dualOpenRouterThinkingEnabledA: Bool?
+    var dualOpenRouterThinkingBudgetA: Int?
+    var dualOpenRouterReasoningModeA: String?
+    var dualOpenRouterReasoningEffortA: String?
+    var dualOpenRouterReasoningExcludeA: Bool?
+    var dualOpenRouterThinkingEnabledB: Bool?
+    var dualOpenRouterThinkingBudgetB: Int?
+    var dualOpenRouterReasoningModeB: String?
+    var dualOpenRouterReasoningEffortB: String?
+    var dualOpenRouterReasoningExcludeB: Bool?
+    var dualGoogleSearchEnabledA: Bool?
+    var dualCodeExecutionEnabledA: Bool?
+    var dualURLContextEnabledA: Bool?
+    var dualGoogleMapsEnabledA: Bool?
+    var dualComputerUseEnabledA: Bool?
+    var dualThinkingEnabledA: Bool?
+    var dualThinkingBudgetA: Int?
+    var dualThinkingLevelA: String?
+    var dualCodexReasoningEffortA: String?
+    var dualGoogleSearchEnabledB: Bool?
+    var dualCodeExecutionEnabledB: Bool?
+    var dualURLContextEnabledB: Bool?
+    var dualGoogleMapsEnabledB: Bool?
+    var dualComputerUseEnabledB: Bool?
+    var dualThinkingEnabledB: Bool?
+    var dualThinkingBudgetB: Int?
+    var dualThinkingLevelB: String?
+    var dualCodexReasoningEffortB: String?
 
     var isAutoConversationEnabled: Bool
     var autoModelA: String
@@ -171,6 +207,34 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         dualSystemPromptB = nil
         dualSplitLayout = "VERTICAL"
         dualSplitRatio = 0.5
+        dualOpenRouterThinkingEnabledA = nil
+        dualOpenRouterThinkingBudgetA = nil
+        dualOpenRouterReasoningModeA = nil
+        dualOpenRouterReasoningEffortA = nil
+        dualOpenRouterReasoningExcludeA = nil
+        dualOpenRouterThinkingEnabledB = nil
+        dualOpenRouterThinkingBudgetB = nil
+        dualOpenRouterReasoningModeB = nil
+        dualOpenRouterReasoningEffortB = nil
+        dualOpenRouterReasoningExcludeB = nil
+        dualGoogleSearchEnabledA = nil
+        dualCodeExecutionEnabledA = nil
+        dualURLContextEnabledA = nil
+        dualGoogleMapsEnabledA = nil
+        dualComputerUseEnabledA = nil
+        dualThinkingEnabledA = nil
+        dualThinkingBudgetA = nil
+        dualThinkingLevelA = nil
+        dualCodexReasoningEffortA = nil
+        dualGoogleSearchEnabledB = nil
+        dualCodeExecutionEnabledB = nil
+        dualURLContextEnabledB = nil
+        dualGoogleMapsEnabledB = nil
+        dualComputerUseEnabledB = nil
+        dualThinkingEnabledB = nil
+        dualThinkingBudgetB = nil
+        dualThinkingLevelB = nil
+        dualCodexReasoningEffortB = nil
 
         isAutoConversationEnabled = false
         autoModelA = "gemini-2.5-flash"
@@ -227,7 +291,140 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         if normalized.isDualModeEnabled && normalized.isAutoConversationEnabled {
             normalized.isAutoConversationEnabled = false
         }
+        let layout = normalized.dualSplitLayout
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        normalized.dualSplitLayout = layout == "HORIZONTAL" ? "HORIZONTAL" : "VERTICAL"
+        if normalized.dualSplitRatio.isNaN || !normalized.dualSplitRatio.isFinite {
+            normalized.dualSplitRatio = 0.5
+        } else {
+            normalized.dualSplitRatio = min(max(normalized.dualSplitRatio, 0.1), 0.9)
+        }
+
+        func normalizedReasoningMode(_ value: String?) -> String? {
+            guard let value else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return ["auto", "effort", "budget"].contains(trimmed) ? trimmed : nil
+        }
+
+        func normalizedEffort(_ value: String?) -> String? {
+            guard let value else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return trimmed.isEmpty ? nil : trimmed
+        }
+
+        func normalizedLevel(_ value: String?) -> String? {
+            guard let value else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+
+        normalized.dualOpenRouterReasoningModeA = normalizedReasoningMode(normalized.dualOpenRouterReasoningModeA)
+        normalized.dualOpenRouterReasoningModeB = normalizedReasoningMode(normalized.dualOpenRouterReasoningModeB)
+        normalized.dualOpenRouterReasoningEffortA = normalizedEffort(normalized.dualOpenRouterReasoningEffortA)
+        normalized.dualOpenRouterReasoningEffortB = normalizedEffort(normalized.dualOpenRouterReasoningEffortB)
+        normalized.dualCodexReasoningEffortA = normalizedEffort(normalized.dualCodexReasoningEffortA)
+        normalized.dualCodexReasoningEffortB = normalizedEffort(normalized.dualCodexReasoningEffortB)
+        normalized.dualThinkingLevelA = normalizedLevel(normalized.dualThinkingLevelA)
+        normalized.dualThinkingLevelB = normalizedLevel(normalized.dualThinkingLevelB)
+
+        if let value = normalized.dualOpenRouterThinkingBudgetA {
+            normalized.dualOpenRouterThinkingBudgetA = max(0, value)
+        }
+        if let value = normalized.dualOpenRouterThinkingBudgetB {
+            normalized.dualOpenRouterThinkingBudgetB = max(0, value)
+        }
+        if let value = normalized.dualThinkingBudgetA {
+            normalized.dualThinkingBudgetA = max(0, value)
+        }
+        if let value = normalized.dualThinkingBudgetB {
+            normalized.dualThinkingBudgetB = max(0, value)
+        }
         return normalized
+    }
+
+    func toolOverride(for context: ReasoningContext) -> (
+        googleSearch: Bool?,
+        codeExecution: Bool?,
+        urlContext: Bool?,
+        googleMaps: Bool?,
+        computerUse: Bool?
+    ) {
+        switch context {
+        case .dualA:
+            return (
+                dualGoogleSearchEnabledA,
+                dualCodeExecutionEnabledA,
+                dualURLContextEnabledA,
+                dualGoogleMapsEnabledA,
+                dualComputerUseEnabledA
+            )
+        case .dualB:
+            return (
+                dualGoogleSearchEnabledB,
+                dualCodeExecutionEnabledB,
+                dualURLContextEnabledB,
+                dualGoogleMapsEnabledB,
+                dualComputerUseEnabledB
+            )
+        case .autoA, .autoB, .default:
+            return (nil, nil, nil, nil, nil)
+        }
+    }
+
+    func thinkingOverride(for context: ReasoningContext) -> (
+        enabled: Bool?,
+        budget: Int?,
+        level: String?,
+        codexEffort: String?
+    ) {
+        switch context {
+        case .dualA:
+            return (
+                dualThinkingEnabledA,
+                dualThinkingBudgetA,
+                dualThinkingLevelA,
+                dualCodexReasoningEffortA
+            )
+        case .dualB:
+            return (
+                dualThinkingEnabledB,
+                dualThinkingBudgetB,
+                dualThinkingLevelB,
+                dualCodexReasoningEffortB
+            )
+        case .autoA, .autoB, .default:
+            return (nil, nil, nil, nil)
+        }
+    }
+
+    func openRouterOverride(for context: ReasoningContext) -> (
+        enabled: Bool?,
+        budget: Int?,
+        mode: String?,
+        effort: String?,
+        exclude: Bool?
+    ) {
+        switch context {
+        case .dualA:
+            return (
+                dualOpenRouterThinkingEnabledA,
+                dualOpenRouterThinkingBudgetA,
+                dualOpenRouterReasoningModeA,
+                dualOpenRouterReasoningEffortA,
+                dualOpenRouterReasoningExcludeA
+            )
+        case .dualB:
+            return (
+                dualOpenRouterThinkingEnabledB,
+                dualOpenRouterThinkingBudgetB,
+                dualOpenRouterReasoningModeB,
+                dualOpenRouterReasoningEffortB,
+                dualOpenRouterReasoningExcludeB
+            )
+        case .autoA, .autoB, .default:
+            return (nil, nil, nil, nil, nil)
+        }
     }
 
     func modelForProvider(_ provider: String) -> String {

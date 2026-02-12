@@ -954,6 +954,252 @@ struct SettingsScreen: View {
                     set: { viewModel.settings.dualProviderB = $0.uppercased() }
                 )
             )
+
+            TextField("Dual system prompt A", text: Binding(
+                get: { viewModel.settings.dualSystemPromptA ?? "" },
+                set: { viewModel.settings.dualSystemPromptA = $0.nilIfBlank }
+            ), axis: .vertical)
+            .lineLimit(2 ... 8)
+
+            TextField("Dual system prompt B", text: Binding(
+                get: { viewModel.settings.dualSystemPromptB ?? "" },
+                set: { viewModel.settings.dualSystemPromptB = $0.nilIfBlank }
+            ), axis: .vertical)
+            .lineLimit(2 ... 8)
+
+            Picker("Split layout", selection: Binding(
+                get: {
+                    let normalized = viewModel.settings.dualSplitLayout.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                    return normalized == "HORIZONTAL" ? "HORIZONTAL" : "VERTICAL"
+                },
+                set: { viewModel.settings.dualSplitLayout = $0 }
+            )) {
+                Text("左右").tag("VERTICAL")
+                Text("上下").tag("HORIZONTAL")
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Split ratio: \(Int(viewModel.settings.dualSplitRatio * 100))%")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Slider(
+                    value: Binding(
+                        get: { min(max(viewModel.settings.dualSplitRatio, 0.1), 0.9) },
+                        set: { viewModel.settings.dualSplitRatio = $0 }
+                    ),
+                    in: 0.1 ... 0.9
+                )
+            }
+
+            Divider()
+            Text("Dual A Overrides")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            Toggle("A: Google Search", isOn: Binding(
+                get: { viewModel.settings.dualGoogleSearchEnabledA ?? viewModel.settings.geminiGoogleSearchEnabled },
+                set: { viewModel.settings.dualGoogleSearchEnabledA = $0 }
+            ))
+            Toggle("A: Code Execution", isOn: Binding(
+                get: { viewModel.settings.dualCodeExecutionEnabledA ?? viewModel.settings.geminiCodeExecutionEnabled },
+                set: { viewModel.settings.dualCodeExecutionEnabledA = $0 }
+            ))
+            Toggle("A: URL Context", isOn: Binding(
+                get: { viewModel.settings.dualURLContextEnabledA ?? viewModel.settings.geminiURLContextEnabled },
+                set: { viewModel.settings.dualURLContextEnabledA = $0 }
+            ))
+            Toggle("A: Google Maps", isOn: Binding(
+                get: { viewModel.settings.dualGoogleMapsEnabledA ?? viewModel.settings.geminiGoogleMapsEnabled },
+                set: { viewModel.settings.dualGoogleMapsEnabledA = $0 }
+            ))
+            Toggle("A: Computer Use", isOn: Binding(
+                get: { viewModel.settings.dualComputerUseEnabledA ?? viewModel.settings.geminiComputerUseEnabled },
+                set: { viewModel.settings.dualComputerUseEnabledA = $0 }
+            ))
+            Toggle("A: Thinking enabled", isOn: Binding(
+                get: { viewModel.settings.dualThinkingEnabledA ?? viewModel.settings.geminiThinkingEnabled },
+                set: { viewModel.settings.dualThinkingEnabledA = $0 }
+            ))
+            TextField("A: Thinking budget override", text: Binding(
+                get: { viewModel.settings.dualThinkingBudgetA.map(String.init) ?? "" },
+                set: { value in
+                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmed.isEmpty {
+                        viewModel.settings.dualThinkingBudgetA = nil
+                    } else if let parsed = Int(trimmed) {
+                        viewModel.settings.dualThinkingBudgetA = max(0, parsed)
+                    }
+                }
+            ))
+            .keyboardType(.numberPad)
+            TextField("A: Thinking level override", text: Binding(
+                get: { viewModel.settings.dualThinkingLevelA ?? "" },
+                set: { viewModel.settings.dualThinkingLevelA = $0.nilIfBlank }
+            ))
+            TextField("A: Codex reasoning effort override", text: Binding(
+                get: { viewModel.settings.dualCodexReasoningEffortA ?? "" },
+                set: { viewModel.settings.dualCodexReasoningEffortA = $0.nilIfBlank }
+            ))
+
+            if viewModel.settings.dualProviderA.uppercased() == "OPENROUTER" {
+                Picker("A: OpenRouter reasoning mode", selection: Binding(
+                    get: { viewModel.settings.dualOpenRouterReasoningModeA ?? "inherit" },
+                    set: { viewModel.settings.dualOpenRouterReasoningModeA = ($0 == "inherit") ? nil : $0 }
+                )) {
+                    Text("inherit").tag("inherit")
+                    Text("auto").tag("auto")
+                    Text("effort").tag("effort")
+                    Text("budget").tag("budget")
+                }
+
+                Toggle("A: OpenRouter thinking enabled", isOn: Binding(
+                    get: { viewModel.settings.dualOpenRouterThinkingEnabledA ?? viewModel.settings.openRouterThinkingEnabled },
+                    set: { viewModel.settings.dualOpenRouterThinkingEnabledA = $0 }
+                ))
+                TextField("A: OpenRouter budget override", text: Binding(
+                    get: { viewModel.settings.dualOpenRouterThinkingBudgetA.map(String.init) ?? "" },
+                    set: { value in
+                        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmed.isEmpty {
+                            viewModel.settings.dualOpenRouterThinkingBudgetA = nil
+                        } else if let parsed = Int(trimmed) {
+                            viewModel.settings.dualOpenRouterThinkingBudgetA = max(0, parsed)
+                        }
+                    }
+                ))
+                .keyboardType(.numberPad)
+                TextField("A: OpenRouter effort override", text: Binding(
+                    get: { viewModel.settings.dualOpenRouterReasoningEffortA ?? "" },
+                    set: { viewModel.settings.dualOpenRouterReasoningEffortA = $0.nilIfBlank }
+                ))
+                Toggle("A: Exclude reasoning", isOn: Binding(
+                    get: { viewModel.settings.dualOpenRouterReasoningExcludeA ?? viewModel.settings.openRouterReasoningExclude },
+                    set: { viewModel.settings.dualOpenRouterReasoningExcludeA = $0 }
+                ))
+            }
+
+            Button("A override をリセット") {
+                viewModel.settings.dualOpenRouterThinkingEnabledA = nil
+                viewModel.settings.dualOpenRouterThinkingBudgetA = nil
+                viewModel.settings.dualOpenRouterReasoningModeA = nil
+                viewModel.settings.dualOpenRouterReasoningEffortA = nil
+                viewModel.settings.dualOpenRouterReasoningExcludeA = nil
+                viewModel.settings.dualGoogleSearchEnabledA = nil
+                viewModel.settings.dualCodeExecutionEnabledA = nil
+                viewModel.settings.dualURLContextEnabledA = nil
+                viewModel.settings.dualGoogleMapsEnabledA = nil
+                viewModel.settings.dualComputerUseEnabledA = nil
+                viewModel.settings.dualThinkingEnabledA = nil
+                viewModel.settings.dualThinkingBudgetA = nil
+                viewModel.settings.dualThinkingLevelA = nil
+                viewModel.settings.dualCodexReasoningEffortA = nil
+            }
+            .buttonStyle(.bordered)
+
+            Divider()
+            Text("Dual B Overrides")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            Toggle("B: Google Search", isOn: Binding(
+                get: { viewModel.settings.dualGoogleSearchEnabledB ?? viewModel.settings.geminiGoogleSearchEnabled },
+                set: { viewModel.settings.dualGoogleSearchEnabledB = $0 }
+            ))
+            Toggle("B: Code Execution", isOn: Binding(
+                get: { viewModel.settings.dualCodeExecutionEnabledB ?? viewModel.settings.geminiCodeExecutionEnabled },
+                set: { viewModel.settings.dualCodeExecutionEnabledB = $0 }
+            ))
+            Toggle("B: URL Context", isOn: Binding(
+                get: { viewModel.settings.dualURLContextEnabledB ?? viewModel.settings.geminiURLContextEnabled },
+                set: { viewModel.settings.dualURLContextEnabledB = $0 }
+            ))
+            Toggle("B: Google Maps", isOn: Binding(
+                get: { viewModel.settings.dualGoogleMapsEnabledB ?? viewModel.settings.geminiGoogleMapsEnabled },
+                set: { viewModel.settings.dualGoogleMapsEnabledB = $0 }
+            ))
+            Toggle("B: Computer Use", isOn: Binding(
+                get: { viewModel.settings.dualComputerUseEnabledB ?? viewModel.settings.geminiComputerUseEnabled },
+                set: { viewModel.settings.dualComputerUseEnabledB = $0 }
+            ))
+            Toggle("B: Thinking enabled", isOn: Binding(
+                get: { viewModel.settings.dualThinkingEnabledB ?? viewModel.settings.geminiThinkingEnabled },
+                set: { viewModel.settings.dualThinkingEnabledB = $0 }
+            ))
+            TextField("B: Thinking budget override", text: Binding(
+                get: { viewModel.settings.dualThinkingBudgetB.map(String.init) ?? "" },
+                set: { value in
+                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmed.isEmpty {
+                        viewModel.settings.dualThinkingBudgetB = nil
+                    } else if let parsed = Int(trimmed) {
+                        viewModel.settings.dualThinkingBudgetB = max(0, parsed)
+                    }
+                }
+            ))
+            .keyboardType(.numberPad)
+            TextField("B: Thinking level override", text: Binding(
+                get: { viewModel.settings.dualThinkingLevelB ?? "" },
+                set: { viewModel.settings.dualThinkingLevelB = $0.nilIfBlank }
+            ))
+            TextField("B: Codex reasoning effort override", text: Binding(
+                get: { viewModel.settings.dualCodexReasoningEffortB ?? "" },
+                set: { viewModel.settings.dualCodexReasoningEffortB = $0.nilIfBlank }
+            ))
+
+            if viewModel.settings.dualProviderB.uppercased() == "OPENROUTER" {
+                Picker("B: OpenRouter reasoning mode", selection: Binding(
+                    get: { viewModel.settings.dualOpenRouterReasoningModeB ?? "inherit" },
+                    set: { viewModel.settings.dualOpenRouterReasoningModeB = ($0 == "inherit") ? nil : $0 }
+                )) {
+                    Text("inherit").tag("inherit")
+                    Text("auto").tag("auto")
+                    Text("effort").tag("effort")
+                    Text("budget").tag("budget")
+                }
+
+                Toggle("B: OpenRouter thinking enabled", isOn: Binding(
+                    get: { viewModel.settings.dualOpenRouterThinkingEnabledB ?? viewModel.settings.openRouterThinkingEnabled },
+                    set: { viewModel.settings.dualOpenRouterThinkingEnabledB = $0 }
+                ))
+                TextField("B: OpenRouter budget override", text: Binding(
+                    get: { viewModel.settings.dualOpenRouterThinkingBudgetB.map(String.init) ?? "" },
+                    set: { value in
+                        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmed.isEmpty {
+                            viewModel.settings.dualOpenRouterThinkingBudgetB = nil
+                        } else if let parsed = Int(trimmed) {
+                            viewModel.settings.dualOpenRouterThinkingBudgetB = max(0, parsed)
+                        }
+                    }
+                ))
+                .keyboardType(.numberPad)
+                TextField("B: OpenRouter effort override", text: Binding(
+                    get: { viewModel.settings.dualOpenRouterReasoningEffortB ?? "" },
+                    set: { viewModel.settings.dualOpenRouterReasoningEffortB = $0.nilIfBlank }
+                ))
+                Toggle("B: Exclude reasoning", isOn: Binding(
+                    get: { viewModel.settings.dualOpenRouterReasoningExcludeB ?? viewModel.settings.openRouterReasoningExclude },
+                    set: { viewModel.settings.dualOpenRouterReasoningExcludeB = $0 }
+                ))
+            }
+
+            Button("B override をリセット") {
+                viewModel.settings.dualOpenRouterThinkingEnabledB = nil
+                viewModel.settings.dualOpenRouterThinkingBudgetB = nil
+                viewModel.settings.dualOpenRouterReasoningModeB = nil
+                viewModel.settings.dualOpenRouterReasoningEffortB = nil
+                viewModel.settings.dualOpenRouterReasoningExcludeB = nil
+                viewModel.settings.dualGoogleSearchEnabledB = nil
+                viewModel.settings.dualCodeExecutionEnabledB = nil
+                viewModel.settings.dualURLContextEnabledB = nil
+                viewModel.settings.dualGoogleMapsEnabledB = nil
+                viewModel.settings.dualComputerUseEnabledB = nil
+                viewModel.settings.dualThinkingEnabledB = nil
+                viewModel.settings.dualThinkingBudgetB = nil
+                viewModel.settings.dualThinkingLevelB = nil
+                viewModel.settings.dualCodexReasoningEffortB = nil
+            }
+            .buttonStyle(.bordered)
         }
     }
 

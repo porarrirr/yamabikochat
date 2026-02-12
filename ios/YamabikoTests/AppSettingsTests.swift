@@ -81,4 +81,36 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertTrue(settings.shouldShowGlobalProviderPresetInChat(provider: "gemini"))
         XCTAssertFalse(settings.shouldShowGlobalProviderPresetInChat(provider: "OPENAI"))
     }
+
+    func testNormalizedForPersistenceNormalizesDualLayoutAndRatio() {
+        var settings = AppSettings()
+        settings.dualSplitLayout = "invalid"
+        settings.dualSplitRatio = 3.0
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertEqual(normalized.dualSplitLayout, "VERTICAL")
+        XCTAssertEqual(normalized.dualSplitRatio, 0.9, accuracy: 0.0001)
+    }
+
+    func testNormalizedForPersistenceNormalizesDualOverrideValues() {
+        var settings = AppSettings()
+        settings.dualOpenRouterReasoningModeA = "unexpected"
+        settings.dualOpenRouterReasoningModeB = "EFFORT"
+        settings.dualOpenRouterReasoningEffortA = " "
+        settings.dualCodexReasoningEffortB = " HIGH "
+        settings.dualThinkingLevelA = " "
+        settings.dualThinkingLevelB = " high "
+        settings.dualThinkingBudgetA = -3
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertNil(normalized.dualOpenRouterReasoningModeA)
+        XCTAssertEqual(normalized.dualOpenRouterReasoningModeB, "effort")
+        XCTAssertNil(normalized.dualOpenRouterReasoningEffortA)
+        XCTAssertEqual(normalized.dualCodexReasoningEffortB, "high")
+        XCTAssertNil(normalized.dualThinkingLevelA)
+        XCTAssertEqual(normalized.dualThinkingLevelB, "high")
+        XCTAssertEqual(normalized.dualThinkingBudgetA, 0)
+    }
 }

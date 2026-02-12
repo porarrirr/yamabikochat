@@ -654,19 +654,49 @@ final class ChatRepository {
         )
     }
 
-    func sendDualMessage(conversationId: Int64, text: String) async throws -> DualChatMessage {
+    func sendDualMessage(conversationId: Int64, text: String, attachments: [String] = []) async throws -> DualChatMessage {
         let settings = try self.settings.load()
         guard var conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
         }
         let isFirstMessage = try conversations.isConversationEmpty(conversationId: conversationId)
 
+        let normalizedAttachments = attachments.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let userMessage = DualChatMessage(
+            conversationId: conversationId,
+            role: DualChatMessage.Role.user.rawValue,
+            userText: text,
+            modelAText: "",
+            modelBText: "",
+            modelAName: settings.dualModelA,
+            modelBName: settings.dualModelB,
+            providerA: settings.dualProviderA,
+            providerB: settings.dualProviderB,
+            attachmentsJSON: encodeArray(normalizedAttachments)
+        )
+        _ = try conversations.insertDualMessage(userMessage)
+
+        let previousDualMessages = try conversations.fetchDualMessages(conversationId: conversationId)
+        let historyA = try buildDualHistory(
+            conversationId: conversationId,
+            dualMessages: previousDualMessages,
+            modelSide: .a
+        )
+        let historyB = try buildDualHistory(
+            conversationId: conversationId,
+            dualMessages: previousDualMessages,
+            modelSide: .b
+        )
+
         let requestA = buildSingleTurnRequest(
             model: settings.dualModelA,
             text: text,
             systemPrompt: settings.dualSystemPromptA,
             provider: settings.dualProviderA,
-            settings: settings
+            settings: settings,
+            stream: false,
+            messages: historyA,
+            context: .dualA
         )
 
         let requestB = buildSingleTurnRequest(
@@ -674,33 +704,79 @@ final class ChatRepository {
             text: text,
             systemPrompt: settings.dualSystemPromptB,
             provider: settings.dualProviderB,
-            settings: settings
+            settings: settings,
+            stream: false,
+            messages: historyB,
+            context: .dualB
         )
 
-        async let responseA = providers.generate(request: requestA, provider: LLMProvider(rawOrDefault: settings.dualProviderA))
-        async let responseB = providers.generate(request: requestB, provider: LLMProvider(rawOrDefault: settings.dualProviderB))
-
-        let pair = try await (responseA, responseB)
-
-        var dual = DualChatMessage(
+        let modelCreatedAt = max(
+            Int64(Date().timeIntervalSince1970 * 1000),
+            userMessage.createdAtMs + 1
+        )
+        var modelRow = DualChatMessage(
             conversationId: conversationId,
-            userText: text,
-            modelAText: pair.0.text,
-            modelBText: pair.1.text,
+            role: DualChatMessage.Role.dualModel.rawValue,
+            userText: "",
+            modelAText: "",
+            modelBText: "",
             modelAName: settings.dualModelA,
             modelBName: settings.dualModelB,
             providerA: settings.dualProviderA,
-            providerB: settings.dualProviderB
+            providerB: settings.dualProviderB,
+            createdAtMs: modelCreatedAt
         )
-        let insertedId = try conversations.insertDualMessage(dual)
-        dual.id = insertedId
+        let modelRowId = try conversations.insertDualMessage(modelRow)
+        modelRow.id = modelRowId
+
+        async let outcomeA = generateDualSideResponse(
+            request: requestA,
+            provider: settings.dualProviderA,
+            model: settings.dualModelA
+        )
+        async let outcomeB = generateDualSideResponse(
+            request: requestB,
+            provider: settings.dualProviderB,
+            model: settings.dualModelB
+        )
+        let (resultA, resultB) = await (outcomeA, outcomeB)
+
+        modelRow.modelAText = resultA.text
+        modelRow.modelBText = resultB.text
+        modelRow.modelAThinking = resultA.reasoning
+        modelRow.modelBThinking = resultB.reasoning
+        try conversations.updateDualMessage(modelRow)
+
+        if let errA = resultA.error {
+            DiagnosticsLogger.log(
+                "Dual response A failed",
+                category: .network,
+                metadata: [
+                    "provider": settings.dualProviderA.uppercased(),
+                    "model": settings.dualModelA
+                ],
+                error: errA
+            )
+        }
+        if let errB = resultB.error {
+            DiagnosticsLogger.log(
+                "Dual response B failed",
+                category: .network,
+                metadata: [
+                    "provider": settings.dualProviderB.uppercased(),
+                    "model": settings.dualModelB
+                ],
+                error: errB
+            )
+        }
+
         try updateConversationTitleIfNeeded(
             conversation: &conversation,
             firstPrompt: text,
             isFirstMessage: isFirstMessage
         )
 
-        return dual
+        return modelRow
     }
 
     func runAutoConversation(
@@ -960,44 +1036,65 @@ final class ChatRepository {
         systemPrompt: String?,
         provider: String,
         settings: AppSettings,
-        stream: Bool? = nil
+        stream: Bool? = nil,
+        messages: [ProviderRequestMessage]? = nil,
+        context: AppSettings.ReasoningContext = .default
     ) -> ProviderRequest {
-        var metadata = metadataForProvider(settings: settings, provider: provider, model: model)
+        var metadata = metadataForProvider(
+            settings: settings,
+            provider: provider,
+            model: model,
+            context: context
+        )
         metadata["provider"] = provider
         return ProviderRequest(
             model: model,
-            messages: [ProviderRequestMessage(role: "user", content: text)],
+            messages: messages ?? [ProviderRequestMessage(role: "user", content: text)],
             systemPrompt: systemPrompt,
             stream: stream ?? settings.isStreamingEnabled,
-            tools: toolsForProvider(settings: settings, provider: provider),
-            thinking: thinkingConfigForProvider(settings: settings, provider: provider, model: model),
+            tools: toolsForProvider(settings: settings, provider: provider, context: context),
+            thinking: thinkingConfigForProvider(settings: settings, provider: provider, model: model, context: context),
             provider: providerPreferencesForProvider(settings: settings, provider: provider),
             metadata: metadata
         )
     }
 
-    private func toolsForProvider(settings: AppSettings, provider: String) -> [ProviderTool] {
+    private func toolsForProvider(
+        settings: AppSettings,
+        provider: String,
+        context: AppSettings.ReasoningContext = .default
+    ) -> [ProviderTool] {
+        let overrides = settings.toolOverride(for: context)
         switch provider.uppercased() {
         case "GEMINI", "GEMINI_AUTH":
             var tools: [ProviderTool] = []
-            if settings.geminiGoogleSearchEnabled {
+            if overrides.googleSearch ?? settings.geminiGoogleSearchEnabled {
                 tools.append(ProviderTool(type: "google_search", payload: [:]))
             }
-            if settings.geminiCodeExecutionEnabled {
+            if overrides.codeExecution ?? settings.geminiCodeExecutionEnabled {
                 tools.append(ProviderTool(type: "code_execution", payload: [:]))
             }
-            if settings.geminiURLContextEnabled {
+            if overrides.urlContext ?? settings.geminiURLContextEnabled {
                 tools.append(ProviderTool(type: "url_context", payload: [:]))
             }
-            if settings.geminiGoogleMapsEnabled {
+            if overrides.googleMaps ?? settings.geminiGoogleMapsEnabled {
                 tools.append(ProviderTool(type: "google_maps", payload: [:]))
             }
-            if settings.geminiComputerUseEnabled {
+            if overrides.computerUse ?? settings.geminiComputerUseEnabled {
                 tools.append(ProviderTool(type: "computer_use", payload: [:]))
             }
             let declarations = settings.geminiFunctionDeclarations.trimmingCharacters(in: .whitespacesAndNewlines)
             if !declarations.isEmpty {
                 tools.append(ProviderTool(type: "function_declarations", payload: ["json": declarations]))
+            }
+            return tools
+        case "OPENROUTER":
+            var tools: [ProviderTool] = []
+            if overrides.googleSearch ?? settings.openRouterGoogleSearchEnabled {
+                tools.append(ProviderTool(type: "google_search", payload: [:]))
+            }
+            if overrides.codeExecution ?? settings.openRouterCodeExecutionEnabled {
+                tools.append(ProviderTool(type: "code_execution", payload: [:]))
             }
             return tools
         default:
@@ -1008,7 +1105,8 @@ final class ChatRepository {
     private func metadataForProvider(
         settings: AppSettings,
         provider: String,
-        model: String
+        model: String,
+        context: AppSettings.ReasoningContext = .default
     ) -> [String: String] {
         switch provider.uppercased() {
         case "CODEX_AUTH":
@@ -1041,7 +1139,13 @@ final class ChatRepository {
             }
             return metadata
         case "GEMINI", "GEMINI_AUTH":
-            let level = effectiveGeminiThinkingLevel(settings: settings, model: model) ?? ""
+            let overrides = settings.thinkingOverride(for: context)
+            let level = effectiveGeminiThinkingLevel(
+                settings: settings,
+                model: model,
+                enabledOverride: overrides.enabled,
+                levelOverride: overrides.level
+            ) ?? ""
             return [
                 "geminiResponseMimeType": settings.geminiResponseMimeType,
                 "geminiResponseJSONSchema": settings.geminiResponseJSONSchema,
@@ -1056,13 +1160,18 @@ final class ChatRepository {
     private func thinkingConfigForProvider(
         settings: AppSettings,
         provider: String,
-        model: String
+        model: String,
+        context: AppSettings.ReasoningContext = .default
     ) -> ProviderThinkingConfig? {
+        let overrides = settings.thinkingOverride(for: context)
         switch provider.uppercased() {
         case "OPENROUTER":
-            return buildOpenRouterThinkingConfig(settings: settings)
+            return buildOpenRouterThinkingConfig(settings: settings, context: context)
         case "CODEX_AUTH":
-            let effort = settings.codexReasoningEnabled ? settings.codexReasoningEffort.ifBlank("medium") : "none"
+            let enabled = overrides.enabled ?? settings.codexReasoningEnabled
+            let baseEffort = settings.codexReasoningEffort.ifBlank("medium")
+            let overrideEffort = overrides.codexEffort?.ifBlank(baseEffort)
+            let effort = enabled ? (overrideEffort ?? baseEffort) : "none"
             return ProviderThinkingConfig(
                 enabled: nil,
                 budget: nil,
@@ -1071,6 +1180,8 @@ final class ChatRepository {
                 exclude: nil
             )
         case "GEMINI", "GEMINI_AUTH":
+            let enabled = overrides.enabled ?? settings.geminiThinkingEnabled
+            let budget = overrides.budget ?? settings.geminiThinkingBudget
             if GeminiModelUtils.isThinkingLevelSupported(model: model) {
                 return ProviderThinkingConfig(
                     enabled: nil,
@@ -1082,8 +1193,8 @@ final class ChatRepository {
             }
             guard let budget = GeminiModelUtils.calculateEffectiveThinkingBudget(
                 model: model,
-                userThinkingEnabled: settings.geminiThinkingEnabled,
-                userThinkingBudget: settings.geminiThinkingBudget
+                userThinkingEnabled: enabled,
+                userThinkingBudget: budget
             ) else {
                 return nil
             }
@@ -1099,9 +1210,23 @@ final class ChatRepository {
         }
     }
 
-    private func buildOpenRouterThinkingConfig(settings: AppSettings) -> ProviderThinkingConfig? {
-        let includeThoughts = !settings.openRouterReasoningExclude
-        if !settings.openRouterThinkingEnabled {
+    private func buildOpenRouterThinkingConfig(
+        settings: AppSettings,
+        context: AppSettings.ReasoningContext = .default
+    ) -> ProviderThinkingConfig? {
+        let overrides = settings.openRouterOverride(for: context)
+        let reasoningExclude = overrides.exclude ?? settings.openRouterReasoningExclude
+        let thinkingEnabled = overrides.enabled ?? settings.openRouterThinkingEnabled
+        let reasoningMode = (overrides.mode ?? settings.openRouterReasoningMode)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let reasoningEffort = (overrides.effort ?? settings.openRouterReasoningEffort)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let thinkingBudget = max(0, overrides.budget ?? settings.openRouterThinkingBudget)
+
+        let includeThoughts = !reasoningExclude
+        if !thinkingEnabled {
             return ProviderThinkingConfig(
                 enabled: false,
                 budget: nil,
@@ -1111,17 +1236,17 @@ final class ChatRepository {
             )
         }
 
-        let mode = settings.openRouterReasoningMode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let budget = (mode == "budget" && settings.openRouterThinkingBudget > 0) ? settings.openRouterThinkingBudget : nil
+        let mode = ["auto", "effort", "budget"].contains(reasoningMode) ? reasoningMode : "auto"
+        let budget = (mode == "budget" && thinkingBudget > 0) ? thinkingBudget : nil
         let effort: String?
         if mode == "effort" {
-            let normalized = settings.openRouterReasoningEffort.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let normalized = reasoningEffort
             effort = normalized.isEmpty ? nil : normalized
         } else {
             effort = nil
         }
         let enabled: Bool? = (mode == "auto" || (budget == nil && effort == nil)) ? true : nil
-        let exclude: Bool? = settings.openRouterReasoningExclude ? true : nil
+        let exclude: Bool? = reasoningExclude ? true : nil
 
         if budget == nil, effort == nil, enabled == nil, exclude == nil {
             return nil
@@ -1183,20 +1308,135 @@ final class ChatRepository {
     }
 
     private func effectiveGeminiThinkingLevel(settings: AppSettings, model: String) -> String? {
+        effectiveGeminiThinkingLevel(
+            settings: settings,
+            model: model,
+            enabledOverride: nil,
+            levelOverride: nil
+        )
+    }
+
+    private func effectiveGeminiThinkingLevel(
+        settings: AppSettings,
+        model: String,
+        enabledOverride: Bool?,
+        levelOverride: String?
+    ) -> String? {
         guard GeminiModelUtils.isThinkingLevelSupported(model: model) else { return nil }
 
         let defaultLevel = GeminiModelUtils.getDefaultThinkingLevel(model: model)
+        let levelSource = levelOverride ?? settings.geminiThinkingLevel
         var normalized = GeminiModelUtils.normalizeThinkingLevel(
             model: model,
-            level: settings.geminiThinkingLevel
+            level: levelSource
         ) ?? defaultLevel
 
-        if !GeminiModelUtils.isThinkingAlwaysOn(model: model), !settings.geminiThinkingEnabled {
+        let enabled = enabledOverride ?? settings.geminiThinkingEnabled
+        if !GeminiModelUtils.isThinkingAlwaysOn(model: model), !enabled {
             if let minimal = GeminiModelUtils.getMinimalThinkingLevel(model: model) {
                 normalized = minimal
             }
         }
         return normalized
+    }
+
+    private enum DualHistorySide {
+        case a
+        case b
+    }
+
+    private struct DualSideResult {
+        var text: String
+        var reasoning: String?
+        var error: Error?
+    }
+
+    private func generateDualSideResponse(
+        request: ProviderRequest,
+        provider: String,
+        model: String
+    ) async -> DualSideResult {
+        do {
+            let response = try await providers.generate(
+                request: request,
+                provider: LLMProvider(rawOrDefault: provider)
+            )
+            return DualSideResult(
+                text: response.text,
+                reasoning: response.reasoningSummary,
+                error: nil
+            )
+        } catch {
+            return DualSideResult(
+                text: "エラー: \(error.localizedDescription)",
+                reasoning: nil,
+                error: error
+            )
+        }
+    }
+
+    private func buildDualHistory(
+        conversationId: Int64,
+        dualMessages: [DualChatMessage],
+        modelSide: DualHistorySide
+    ) throws -> [ProviderRequestMessage] {
+        var messages: [ProviderRequestMessage] = try conversations.fetchProviderHistory(conversationId: conversationId).map {
+            ProviderRequestMessage(role: $0.role, content: $0.text, attachments: $0.attachments)
+        }
+
+        let sortedDual = dualMessages.sorted {
+            if $0.createdAtMs == $1.createdAtMs {
+                return ($0.id ?? 0) < ($1.id ?? 0)
+            }
+            return $0.createdAtMs < $1.createdAtMs
+        }
+        for dual in sortedDual {
+            switch dual.parsedRole {
+            case .user:
+                let text = dual.userText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty || !dual.attachments.isEmpty {
+                    messages.append(
+                        ProviderRequestMessage(
+                            role: "user",
+                            content: text,
+                            attachments: dual.attachments
+                        )
+                    )
+                }
+            case .dualModel:
+                let content = modelSide == .a ? dual.modelAText : dual.modelBText
+                let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    messages.append(
+                        ProviderRequestMessage(
+                            role: "assistant",
+                            content: trimmed
+                        )
+                    )
+                }
+            case .legacy:
+                let userText = dual.userText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !userText.isEmpty {
+                    messages.append(
+                        ProviderRequestMessage(
+                            role: "user",
+                            content: userText
+                        )
+                    )
+                }
+                let legacyModelText = (modelSide == .a ? dual.modelAText : dual.modelBText)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !legacyModelText.isEmpty {
+                    messages.append(
+                        ProviderRequestMessage(
+                            role: "assistant",
+                            content: legacyModelText
+                        )
+                    )
+                }
+            }
+        }
+        return messages
     }
 
     private func encodeArray(_ values: [String]) -> String {

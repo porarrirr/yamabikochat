@@ -73,7 +73,11 @@ struct ChatScreen: View {
                                     )
                                         .id(item.id)
                                 case let .dual(message):
-                                    DualMessageCard(message: message)
+                                    DualMessageCard(
+                                        message: message,
+                                        settings: viewModel.settings,
+                                        mathRenderingEnabled: viewModel.settings.mathRenderingEnabled
+                                    )
                                         .id(item.id)
                                 }
                             }
@@ -469,6 +473,9 @@ private struct MessageBubble: View {
                     .buttonStyle(.plain)
                 }
 
+                let svgBlocks = SvgCodeExtractor.extract(from: responseText)
+                let markdownText = SvgCodeExtractor.removeExtractedBlocks(from: responseText, blocks: svgBlocks)
+
                 VStack(alignment: .leading, spacing: 8) {
                     if !attachmentNames.isEmpty {
                         ForEach(attachmentNames, id: \.self) { name in
@@ -478,11 +485,19 @@ private struct MessageBubble: View {
                         }
                     }
 
-                    MathMarkdownView(
-                        markdownText: responseText,
-                        mathRenderingEnabled: mathRenderingEnabled
-                    )
+                    if !svgBlocks.isEmpty {
+                        ForEach(svgBlocks) { block in
+                            SvgPreviewCard(block: block)
+                        }
+                    }
+
+                    if !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        MathMarkdownView(
+                            markdownText: markdownText,
+                            mathRenderingEnabled: mathRenderingEnabled
+                        )
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
                 .padding(12)
                 .background(Color.chatAssistantBubble)
@@ -590,27 +605,208 @@ private struct ThinkingSheet: View {
 
 private struct DualMessageCard: View {
     let message: DualChatMessage
+    let settings: AppSettings
+    let mathRenderingEnabled: Bool
+    @State private var showThinkingA = false
+    @State private var showThinkingB = false
+
+    private var resolvedLayout: String {
+        let normalized = settings.dualSplitLayout.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        return normalized == "HORIZONTAL" ? "HORIZONTAL" : "VERTICAL"
+    }
+
+    private var splitRatio: Double {
+        if settings.dualSplitRatio.isNaN || !settings.dualSplitRatio.isFinite {
+            return 0.5
+        }
+        return min(max(settings.dualSplitRatio, 0.1), 0.9)
+    }
+
+    private var modelAText: String {
+        message.modelAText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var modelBText: String {
+        message.modelBText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var userText: String {
+        message.userText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var attachmentNames: [String] {
+        message.attachments.map { URL(string: $0)?.lastPathComponent ?? $0 }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(message.userText)
-                .font(.body)
-            Divider()
-            Text("A · \(ProviderCatalog.displayName(for: message.providerA)) · \(message.modelAName)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(message.modelAText)
-                .textSelection(.enabled)
-            Divider()
-            Text("B · \(ProviderCatalog.displayName(for: message.providerB)) · \(message.modelBName)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(message.modelBText)
-                .textSelection(.enabled)
+        Group {
+            switch message.parsedRole {
+            case .user:
+                VStack(alignment: .trailing, spacing: 8) {
+                    if !attachmentNames.isEmpty {
+                        VStack(alignment: .trailing, spacing: 4) {
+                            ForEach(attachmentNames, id: \.self) { name in
+                                Label(name, systemImage: "paperclip")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    if !userText.isEmpty {
+                        Text(userText)
+                            .textSelection(.enabled)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(12)
+                .background(Color.chatUserBubble)
+                .foregroundStyle(Color.chatUserText)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            case .dualModel:
+                VStack(alignment: .leading, spacing: 10) {
+                    DualSplitContainer(
+                        layout: resolvedLayout,
+                        splitRatio: splitRatio
+                    ) {
+                        DualResponsePane(
+                            title: "A · \(ProviderCatalog.displayName(for: message.providerA)) · \(message.modelAName)",
+                            content: modelAText.isEmpty ? "（応答待ち）" : modelAText,
+                            thinking: message.modelAThinking,
+                            showThinking: $showThinkingA,
+                            mathRenderingEnabled: mathRenderingEnabled
+                        )
+                    } second: {
+                        DualResponsePane(
+                            title: "B · \(ProviderCatalog.displayName(for: message.providerB)) · \(message.modelBName)",
+                            content: modelBText.isEmpty ? "（応答待ち）" : modelBText,
+                            thinking: message.modelBThinking,
+                            showThinking: $showThinkingB,
+                            mathRenderingEnabled: mathRenderingEnabled
+                        )
+                    }
+                }
+                .padding(12)
+                .background(Color.chatDualCard)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            case .legacy:
+                VStack(alignment: .leading, spacing: 10) {
+                    if !userText.isEmpty {
+                        Text(userText)
+                            .font(.body)
+                    }
+                    Divider()
+                    Text("A · \(ProviderCatalog.displayName(for: message.providerA)) · \(message.modelAName)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(modelAText)
+                        .textSelection(.enabled)
+                    Divider()
+                    Text("B · \(ProviderCatalog.displayName(for: message.providerB)) · \(message.modelBName)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(modelBText)
+                        .textSelection(.enabled)
+                }
+                .padding(12)
+                .background(Color.chatDualCard)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
         }
-        .padding(12)
-        .background(Color.chatDualCard)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+private struct DualSplitContainer<First: View, Second: View>: View {
+    let layout: String
+    let splitRatio: Double
+    let first: () -> First
+    let second: () -> Second
+
+    init(
+        layout: String,
+        splitRatio: Double,
+        @ViewBuilder first: @escaping () -> First,
+        @ViewBuilder second: @escaping () -> Second
+    ) {
+        self.layout = layout
+        self.splitRatio = splitRatio
+        self.first = first
+        self.second = second
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            if layout == "HORIZONTAL" {
+                VStack(spacing: 8) {
+                    first()
+                        .frame(height: proxy.size.height * splitRatio, alignment: .top)
+                    second()
+                        .frame(height: proxy.size.height * (1 - splitRatio), alignment: .top)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    first()
+                        .frame(width: proxy.size.width * splitRatio, alignment: .topLeading)
+                    second()
+                        .frame(width: proxy.size.width * (1 - splitRatio), alignment: .topLeading)
+                }
+            }
+        }
+        .frame(minHeight: 220)
+    }
+}
+
+private struct DualResponsePane: View {
+    let title: String
+    let content: String
+    let thinking: String?
+    @Binding var showThinking: Bool
+    let mathRenderingEnabled: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let thinking = thinking?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !thinking.isEmpty {
+                Button {
+                    showThinking.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "brain.head.profile")
+                            .font(.caption2)
+                        Text(showThinking ? "Thinkingを隠す" : "Thinkingを表示")
+                            .font(.caption2)
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+
+                if showThinking {
+                    MathMarkdownView(
+                        markdownText: thinking,
+                        mathRenderingEnabled: mathRenderingEnabled
+                    )
+                    .padding(8)
+                    .background(Color.chatInputBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+            }
+
+            MathMarkdownView(
+                markdownText: content,
+                mathRenderingEnabled: mathRenderingEnabled
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(10)
+        .background(Color.chatAssistantBubble)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.chatBubbleBorder.opacity(0.4), lineWidth: 1)
+        }
     }
 }
 

@@ -57,6 +57,7 @@ enum AppDatabase {
             try db.create(table: "dual_chat_messages") { t in
                 t.autoIncrementedPrimaryKey("id")
                 t.column("conversationId", .integer).notNull().references("conversations", onDelete: .cascade)
+                t.column("role", .text).notNull().defaults(to: "legacy")
                 t.column("userText", .text).notNull()
                 t.column("modelAText", .text).notNull()
                 t.column("modelBText", .text).notNull()
@@ -64,6 +65,9 @@ enum AppDatabase {
                 t.column("modelBName", .text).notNull()
                 t.column("providerA", .text).notNull()
                 t.column("providerB", .text).notNull()
+                t.column("modelAThinking", .text)
+                t.column("modelBThinking", .text)
+                t.column("attachmentsJSON", .text).notNull().defaults(to: "[]")
                 t.column("createdAtMs", .integer).notNull()
             }
             try db.create(index: "idx_dual_conversation_time", on: "dual_chat_messages", columns: ["conversationId", "createdAtMs"])
@@ -148,6 +152,34 @@ enum AppDatabase {
                 t.column("dualSystemPromptB", .text)
                 t.column("dualSplitLayout", .text).notNull().defaults(to: "VERTICAL")
                 t.column("dualSplitRatio", .double).notNull().defaults(to: 0.5)
+                t.column("dualOpenRouterThinkingEnabledA", .boolean)
+                t.column("dualOpenRouterThinkingBudgetA", .integer)
+                t.column("dualOpenRouterReasoningModeA", .text)
+                t.column("dualOpenRouterReasoningEffortA", .text)
+                t.column("dualOpenRouterReasoningExcludeA", .boolean)
+                t.column("dualOpenRouterThinkingEnabledB", .boolean)
+                t.column("dualOpenRouterThinkingBudgetB", .integer)
+                t.column("dualOpenRouterReasoningModeB", .text)
+                t.column("dualOpenRouterReasoningEffortB", .text)
+                t.column("dualOpenRouterReasoningExcludeB", .boolean)
+                t.column("dualGoogleSearchEnabledA", .boolean)
+                t.column("dualCodeExecutionEnabledA", .boolean)
+                t.column("dualURLContextEnabledA", .boolean)
+                t.column("dualGoogleMapsEnabledA", .boolean)
+                t.column("dualComputerUseEnabledA", .boolean)
+                t.column("dualThinkingEnabledA", .boolean)
+                t.column("dualThinkingBudgetA", .integer)
+                t.column("dualThinkingLevelA", .text)
+                t.column("dualCodexReasoningEffortA", .text)
+                t.column("dualGoogleSearchEnabledB", .boolean)
+                t.column("dualCodeExecutionEnabledB", .boolean)
+                t.column("dualURLContextEnabledB", .boolean)
+                t.column("dualGoogleMapsEnabledB", .boolean)
+                t.column("dualComputerUseEnabledB", .boolean)
+                t.column("dualThinkingEnabledB", .boolean)
+                t.column("dualThinkingBudgetB", .integer)
+                t.column("dualThinkingLevelB", .text)
+                t.column("dualCodexReasoningEffortB", .text)
 
                 t.column("isAutoConversationEnabled", .boolean).notNull().defaults(to: false)
                 t.column("autoModelA", .text).notNull()
@@ -232,6 +264,97 @@ enum AppDatabase {
                 t.add(column: "projectId", .integer).references("projects", onDelete: .setNull)
             }
             try db.create(index: "idx_conversations_project", on: "conversations", columns: ["projectId", "updatedAtMs"])
+        }
+
+        migrator.registerMigration("v4_dual_parity") { db in
+            func existingColumns(in table: String) throws -> Set<String> {
+                let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))")
+                return Set(rows.compactMap { ($0["name"] as String?)?.lowercased() })
+            }
+
+            func ensureDualMessageColumns() throws {
+                var columns = try existingColumns(in: "dual_chat_messages")
+                if !columns.contains("role") {
+                    try db.alter(table: "dual_chat_messages") { t in
+                        t.add(column: "role", .text).notNull().defaults(to: "legacy")
+                    }
+                    columns.insert("role")
+                }
+                if !columns.contains("modelathinking") {
+                    try db.alter(table: "dual_chat_messages") { t in
+                        t.add(column: "modelAThinking", .text)
+                    }
+                    columns.insert("modelathinking")
+                }
+                if !columns.contains("modelbthinking") {
+                    try db.alter(table: "dual_chat_messages") { t in
+                        t.add(column: "modelBThinking", .text)
+                    }
+                    columns.insert("modelbthinking")
+                }
+                if !columns.contains("attachmentsjson") {
+                    try db.alter(table: "dual_chat_messages") { t in
+                        t.add(column: "attachmentsJSON", .text).notNull().defaults(to: "[]")
+                    }
+                }
+            }
+
+            func ensureSettingsColumns() throws {
+                let columns = try existingColumns(in: "settings")
+                let nullableBooleanColumns = [
+                    "dualOpenRouterThinkingEnabledA",
+                    "dualOpenRouterReasoningExcludeA",
+                    "dualOpenRouterThinkingEnabledB",
+                    "dualOpenRouterReasoningExcludeB",
+                    "dualGoogleSearchEnabledA",
+                    "dualCodeExecutionEnabledA",
+                    "dualURLContextEnabledA",
+                    "dualGoogleMapsEnabledA",
+                    "dualComputerUseEnabledA",
+                    "dualThinkingEnabledA",
+                    "dualGoogleSearchEnabledB",
+                    "dualCodeExecutionEnabledB",
+                    "dualURLContextEnabledB",
+                    "dualGoogleMapsEnabledB",
+                    "dualComputerUseEnabledB",
+                    "dualThinkingEnabledB"
+                ]
+                let nullableIntColumns = [
+                    "dualOpenRouterThinkingBudgetA",
+                    "dualOpenRouterThinkingBudgetB",
+                    "dualThinkingBudgetA",
+                    "dualThinkingBudgetB"
+                ]
+                let nullableTextColumns = [
+                    "dualOpenRouterReasoningModeA",
+                    "dualOpenRouterReasoningEffortA",
+                    "dualOpenRouterReasoningModeB",
+                    "dualOpenRouterReasoningEffortB",
+                    "dualThinkingLevelA",
+                    "dualCodexReasoningEffortA",
+                    "dualThinkingLevelB",
+                    "dualCodexReasoningEffortB"
+                ]
+
+                for name in nullableBooleanColumns where !columns.contains(name.lowercased()) {
+                    try db.alter(table: "settings") { t in
+                        t.add(column: name, .boolean)
+                    }
+                }
+                for name in nullableIntColumns where !columns.contains(name.lowercased()) {
+                    try db.alter(table: "settings") { t in
+                        t.add(column: name, .integer)
+                    }
+                }
+                for name in nullableTextColumns where !columns.contains(name.lowercased()) {
+                    try db.alter(table: "settings") { t in
+                        t.add(column: name, .text)
+                    }
+                }
+            }
+
+            try ensureDualMessageColumns()
+            try ensureSettingsColumns()
         }
 
         return migrator

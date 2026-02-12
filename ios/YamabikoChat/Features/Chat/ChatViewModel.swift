@@ -169,12 +169,16 @@ final class ChatViewModel: ObservableObject {
                 let attachmentPaths = attachmentDrafts.map { $0.url.absoluteString }
 
                 if settings.isDualModeEnabled {
-                    guard !text.isEmpty else {
-                        errorMessage = "デュアルモードでは本文を入力してください。"
+                    guard !text.isEmpty || !attachmentPaths.isEmpty else {
+                        errorMessage = "デュアルモードでは本文または添付を入力してください。"
                         attachments = attachmentDrafts
                         return
                     }
-                    _ = try await repository.sendDualMessage(conversationId: conversationID, text: text)
+                    _ = try await repository.sendDualMessage(
+                        conversationId: conversationID,
+                        text: text,
+                        attachments: attachmentPaths
+                    )
                 } else {
                     _ = try await repository.sendMessage(
                         conversationId: conversationID,
