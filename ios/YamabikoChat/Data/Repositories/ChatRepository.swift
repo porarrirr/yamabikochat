@@ -1253,7 +1253,7 @@ final class ChatRepository {
             if hasEndSignal {
                 try appendAutoConversationSystemMessage(
                     autoConversation: autoConversation,
-                    text: "**[SYSTEM]**\n\n🏁 自動会話が終了しました\n\n• 実行ターン数: \(nextTurn)/\(autoConversation.maxTurns > 0 ? String(autoConversation.maxTurns) : \"無制限\")ターン\n• 参加モデル: \(autoConversation.modelA) vs \(autoConversation.modelB)\n• 終了理由: AIモデルが会話終了を宣言"
+                    text: "**[SYSTEM]**\n\n🏁 自動会話が終了しました\n\n• 実行ターン数: \(nextTurn)/\(autoConversation.maxTurns > 0 ? String(autoConversation.maxTurns) : "無制限")ターン\n• 参加モデル: \(autoConversation.modelA) vs \(autoConversation.modelB)\n• 終了理由: AIモデルが会話終了を宣言"
                 )
                 try markAutoConversationEnded(
                     autoConversationId: autoConversationId,
