@@ -1239,14 +1239,29 @@ struct SettingsScreen: View {
                     set: { viewModel.settings.autoProviderB = $0.uppercased() }
                 )
             )
+            TextField("Auto system prompt A", text: Binding(
+                get: { viewModel.settings.autoSystemPromptA },
+                set: { viewModel.settings.autoSystemPromptA = $0 }
+            ), axis: .vertical)
+            .lineLimit(2 ... 6)
+            TextField("Auto system prompt B", text: Binding(
+                get: { viewModel.settings.autoSystemPromptB },
+                set: { viewModel.settings.autoSystemPromptB = $0 }
+            ), axis: .vertical)
+            .lineLimit(2 ... 6)
             Stepper(
-                "Max turns: \(viewModel.settings.autoMaxTurns)",
+                viewModel.settings.autoMaxTurns <= 0
+                    ? "Max turns: Unlimited"
+                    : "Max turns: \(viewModel.settings.autoMaxTurns)",
                 value: Binding(
                     get: { viewModel.settings.autoMaxTurns },
                     set: { viewModel.settings.autoMaxTurns = $0 }
                 ),
-                in: 2 ... 100
+                in: 0 ... 200
             )
+            Text("`0` を指定すると無制限で実行します。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
 
             Text("デュアルモードと自動会話は同時に有効化できません。")
                 .font(.caption2)

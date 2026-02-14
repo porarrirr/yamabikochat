@@ -113,4 +113,51 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(normalized.dualThinkingLevelB, "high")
         XCTAssertEqual(normalized.dualThinkingBudgetA, 0)
     }
+
+    func testNormalizedForPersistenceNormalizesAutoOverrideValues() {
+        var settings = AppSettings()
+        settings.autoOpenRouterReasoningModeA = "unexpected"
+        settings.autoOpenRouterReasoningModeB = "BUDGET"
+        settings.autoOpenRouterReasoningEffortA = " "
+        settings.autoCodexReasoningEffortB = " HIGH "
+        settings.autoThinkingLevelA = " "
+        settings.autoThinkingLevelB = " high "
+        settings.autoThinkingBudgetA = -5
+        settings.autoOpenRouterThinkingBudgetB = -8
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertNil(normalized.autoOpenRouterReasoningModeA)
+        XCTAssertEqual(normalized.autoOpenRouterReasoningModeB, "budget")
+        XCTAssertNil(normalized.autoOpenRouterReasoningEffortA)
+        XCTAssertEqual(normalized.autoCodexReasoningEffortB, "high")
+        XCTAssertNil(normalized.autoThinkingLevelA)
+        XCTAssertEqual(normalized.autoThinkingLevelB, "high")
+        XCTAssertEqual(normalized.autoThinkingBudgetA, 0)
+        XCTAssertEqual(normalized.autoOpenRouterThinkingBudgetB, 0)
+    }
+
+    func testAutoContextOverridesResolveFromAutoFields() {
+        var settings = AppSettings()
+        settings.autoGoogleSearchEnabledA = true
+        settings.autoCodeExecutionEnabledA = false
+        settings.autoThinkingEnabledB = true
+        settings.autoThinkingBudgetB = 42
+        settings.autoThinkingLevelB = "low"
+        settings.autoOpenRouterReasoningModeA = "effort"
+        settings.autoOpenRouterReasoningEffortA = "high"
+
+        let toolOverrideA = settings.toolOverride(for: .autoA)
+        XCTAssertEqual(toolOverrideA.googleSearch, true)
+        XCTAssertEqual(toolOverrideA.codeExecution, false)
+
+        let thinkingOverrideB = settings.thinkingOverride(for: .autoB)
+        XCTAssertEqual(thinkingOverrideB.enabled, true)
+        XCTAssertEqual(thinkingOverrideB.budget, 42)
+        XCTAssertEqual(thinkingOverrideB.level, "low")
+
+        let openRouterOverrideA = settings.openRouterOverride(for: .autoA)
+        XCTAssertEqual(openRouterOverrideA.mode, "effort")
+        XCTAssertEqual(openRouterOverrideA.effort, "high")
+    }
 }

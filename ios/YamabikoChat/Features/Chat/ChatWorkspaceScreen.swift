@@ -164,6 +164,16 @@ struct ChatWorkspaceScreen: View {
                 }
 
                 if viewModel.isAutoConversationRunning {
+                    Button("自動会話を一時停止") {
+                        viewModel.pauseAutoConversation()
+                    }
+                    Button("自動会話を停止") {
+                        viewModel.stopAutoConversation()
+                    }
+                } else if viewModel.isAutoConversationPaused {
+                    Button("自動会話を再開") {
+                        viewModel.resumeAutoConversation()
+                    }
                     Button("自動会話を停止") {
                         viewModel.stopAutoConversation()
                     }

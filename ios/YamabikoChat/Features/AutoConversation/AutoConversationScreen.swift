@@ -9,23 +9,38 @@ struct AutoConversationScreen: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
+            TextField("開始メッセージを入力", text: $viewModel.inputText)
+                .textFieldStyle(.roundedBorder)
+                .disabled(viewModel.isAutoConversationRunning || viewModel.isAutoConversationPaused)
+
             HStack {
                 Button(viewModel.isAutoConversationRunning ? "実行中" : "開始") {
                     if !viewModel.settings.isAutoConversationEnabled {
                         viewModel.toggleAutoConversation()
+                        return
                     }
-                    if !viewModel.inputText.isEmpty {
-                        viewModel.sendMessage()
-                    }
+                    viewModel.startAutoConversationManually()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isAutoConversationRunning)
+                .disabled(viewModel.isAutoConversationRunning || viewModel.isAutoConversationPaused)
+
+                Button("一時停止") {
+                    viewModel.pauseAutoConversation()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!viewModel.isAutoConversationRunning)
+
+                Button("再開") {
+                    viewModel.resumeAutoConversation()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!viewModel.isAutoConversationPaused)
 
                 Button("停止") {
                     viewModel.stopAutoConversation()
                 }
                 .buttonStyle(.bordered)
-                .disabled(!viewModel.isAutoConversationRunning)
+                .disabled(!viewModel.isAutoConversationRunning && !viewModel.isAutoConversationPaused)
             }
 
             if let status = viewModel.autoConversationStatus {

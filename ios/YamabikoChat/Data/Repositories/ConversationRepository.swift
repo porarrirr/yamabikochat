@@ -519,6 +519,90 @@ final class ConversationRepository {
         .eraseToAnyPublisher()
     }
 
+    func createAutoConversation(
+        config: AutoConversationConfig,
+        boundChatConversationId: Int64?
+    ) throws -> Int64 {
+        try dbQueue.write { db in
+            var conversation = AutoConversation(
+                title: config.title,
+                modelA: config.modelA,
+                modelB: config.modelB,
+                providerA: config.providerA,
+                providerB: config.providerB,
+                systemPromptA: config.systemPromptA,
+                systemPromptB: config.systemPromptB,
+                status: .active,
+                maxTurns: config.maxTurns,
+                currentTurn: 0,
+                createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
+                lastActiveAtMs: Int64(Date().timeIntervalSince1970 * 1000),
+                endReason: nil,
+                endSignal: config.endSignal,
+                boundChatConversationId: boundChatConversationId
+            )
+            try conversation.insert(db)
+            return conversation.id ?? 0
+        }
+    }
+
+    func updateAutoConversation(_ conversation: AutoConversation) throws {
+        try dbQueue.write { db in
+            var mutable = conversation
+            mutable.lastActiveAtMs = Int64(Date().timeIntervalSince1970 * 1000)
+            try mutable.update(db)
+        }
+    }
+
+    func fetchAutoConversation(id: Int64) throws -> AutoConversation? {
+        try dbQueue.read { db in
+            try AutoConversation.fetchOne(db, key: id)
+        }
+    }
+
+    func fetchAutoConversationMessages(autoConversationId: Int64) throws -> [AutoConversationMessage] {
+        try dbQueue.read { db in
+            try AutoConversationMessage
+                .filter(Column("autoConversationId") == autoConversationId)
+                .order(Column("turnIndex").asc, Column("createdAtMs").asc, Column("id").asc)
+                .fetchAll(db)
+        }
+    }
+
+    func observeAutoConversationMessages(autoConversationId: Int64) -> AnyPublisher<[AutoConversationMessage], Never> {
+        ValueObservation.tracking { db in
+            try AutoConversationMessage
+                .filter(Column("autoConversationId") == autoConversationId)
+                .order(Column("turnIndex").asc, Column("createdAtMs").asc, Column("id").asc)
+                .fetchAll(db)
+        }
+        .publisher(in: dbQueue)
+        .replaceError(with: [])
+        .eraseToAnyPublisher()
+    }
+
+    func insertAutoConversationMessage(_ message: AutoConversationMessage) throws -> Int64 {
+        try dbQueue.write { db in
+            var mutable = message
+            try mutable.insert(db)
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            try db.execute(
+                sql: "UPDATE auto_conversations SET lastActiveAtMs = ? WHERE id = ?",
+                arguments: [now, message.autoConversationId]
+            )
+            return mutable.id ?? 0
+        }
+    }
+
+    func fetchLastAutoConversationMessage(autoConversationId: Int64) throws -> AutoConversationMessage? {
+        try dbQueue.read { db in
+            try AutoConversationMessage
+                .filter(Column("autoConversationId") == autoConversationId)
+                .order(Column("turnIndex").desc, Column("createdAtMs").desc, Column("id").desc)
+                .fetchOne(db)
+        }
+    }
+
     func assignConversationToProject(conversationId: Int64, projectId: Int64?) throws {
         try dbQueue.write { db in
             guard var conversation = try Conversation.fetchOne(db, key: conversationId) else {

@@ -130,6 +130,34 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var autoSystemPromptA: String
     var autoSystemPromptB: String
     var autoMaxTurns: Int
+    var autoOpenRouterThinkingEnabledA: Bool?
+    var autoOpenRouterThinkingBudgetA: Int?
+    var autoOpenRouterReasoningModeA: String?
+    var autoOpenRouterReasoningEffortA: String?
+    var autoOpenRouterReasoningExcludeA: Bool?
+    var autoOpenRouterThinkingEnabledB: Bool?
+    var autoOpenRouterThinkingBudgetB: Int?
+    var autoOpenRouterReasoningModeB: String?
+    var autoOpenRouterReasoningEffortB: String?
+    var autoOpenRouterReasoningExcludeB: Bool?
+    var autoGoogleSearchEnabledA: Bool?
+    var autoCodeExecutionEnabledA: Bool?
+    var autoURLContextEnabledA: Bool?
+    var autoGoogleMapsEnabledA: Bool?
+    var autoComputerUseEnabledA: Bool?
+    var autoThinkingEnabledA: Bool?
+    var autoThinkingBudgetA: Int?
+    var autoThinkingLevelA: String?
+    var autoCodexReasoningEffortA: String?
+    var autoGoogleSearchEnabledB: Bool?
+    var autoCodeExecutionEnabledB: Bool?
+    var autoURLContextEnabledB: Bool?
+    var autoGoogleMapsEnabledB: Bool?
+    var autoComputerUseEnabledB: Bool?
+    var autoThinkingEnabledB: Bool?
+    var autoThinkingBudgetB: Int?
+    var autoThinkingLevelB: String?
+    var autoCodexReasoningEffortB: String?
 
     var providerDefaultModelsJSON: String
     var preferredProvidersJSON: String
@@ -244,6 +272,34 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         autoSystemPromptA = "あなたは親しみやすい日本語AIアシスタントです。自然で温かみのある会話を心がけてください。"
         autoSystemPromptB = "あなたは論理的で分析的なAIアシスタントです。深く考えながら詳細に回答してください。"
         autoMaxTurns = 20
+        autoOpenRouterThinkingEnabledA = nil
+        autoOpenRouterThinkingBudgetA = nil
+        autoOpenRouterReasoningModeA = nil
+        autoOpenRouterReasoningEffortA = nil
+        autoOpenRouterReasoningExcludeA = nil
+        autoOpenRouterThinkingEnabledB = nil
+        autoOpenRouterThinkingBudgetB = nil
+        autoOpenRouterReasoningModeB = nil
+        autoOpenRouterReasoningEffortB = nil
+        autoOpenRouterReasoningExcludeB = nil
+        autoGoogleSearchEnabledA = nil
+        autoCodeExecutionEnabledA = nil
+        autoURLContextEnabledA = nil
+        autoGoogleMapsEnabledA = nil
+        autoComputerUseEnabledA = nil
+        autoThinkingEnabledA = nil
+        autoThinkingBudgetA = nil
+        autoThinkingLevelA = nil
+        autoCodexReasoningEffortA = nil
+        autoGoogleSearchEnabledB = nil
+        autoCodeExecutionEnabledB = nil
+        autoURLContextEnabledB = nil
+        autoGoogleMapsEnabledB = nil
+        autoComputerUseEnabledB = nil
+        autoThinkingEnabledB = nil
+        autoThinkingBudgetB = nil
+        autoThinkingLevelB = nil
+        autoCodexReasoningEffortB = nil
 
         providerDefaultModelsJSON = "{}"
         preferredProvidersJSON = "[]"
@@ -325,8 +381,16 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         normalized.dualOpenRouterReasoningEffortB = normalizedEffort(normalized.dualOpenRouterReasoningEffortB)
         normalized.dualCodexReasoningEffortA = normalizedEffort(normalized.dualCodexReasoningEffortA)
         normalized.dualCodexReasoningEffortB = normalizedEffort(normalized.dualCodexReasoningEffortB)
+        normalized.autoOpenRouterReasoningModeA = normalizedReasoningMode(normalized.autoOpenRouterReasoningModeA)
+        normalized.autoOpenRouterReasoningModeB = normalizedReasoningMode(normalized.autoOpenRouterReasoningModeB)
+        normalized.autoOpenRouterReasoningEffortA = normalizedEffort(normalized.autoOpenRouterReasoningEffortA)
+        normalized.autoOpenRouterReasoningEffortB = normalizedEffort(normalized.autoOpenRouterReasoningEffortB)
+        normalized.autoCodexReasoningEffortA = normalizedEffort(normalized.autoCodexReasoningEffortA)
+        normalized.autoCodexReasoningEffortB = normalizedEffort(normalized.autoCodexReasoningEffortB)
         normalized.dualThinkingLevelA = normalizedLevel(normalized.dualThinkingLevelA)
         normalized.dualThinkingLevelB = normalizedLevel(normalized.dualThinkingLevelB)
+        normalized.autoThinkingLevelA = normalizedLevel(normalized.autoThinkingLevelA)
+        normalized.autoThinkingLevelB = normalizedLevel(normalized.autoThinkingLevelB)
 
         if let value = normalized.dualOpenRouterThinkingBudgetA {
             normalized.dualOpenRouterThinkingBudgetA = max(0, value)
@@ -334,11 +398,23 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         if let value = normalized.dualOpenRouterThinkingBudgetB {
             normalized.dualOpenRouterThinkingBudgetB = max(0, value)
         }
+        if let value = normalized.autoOpenRouterThinkingBudgetA {
+            normalized.autoOpenRouterThinkingBudgetA = max(0, value)
+        }
+        if let value = normalized.autoOpenRouterThinkingBudgetB {
+            normalized.autoOpenRouterThinkingBudgetB = max(0, value)
+        }
         if let value = normalized.dualThinkingBudgetA {
             normalized.dualThinkingBudgetA = max(0, value)
         }
         if let value = normalized.dualThinkingBudgetB {
             normalized.dualThinkingBudgetB = max(0, value)
+        }
+        if let value = normalized.autoThinkingBudgetA {
+            normalized.autoThinkingBudgetA = max(0, value)
+        }
+        if let value = normalized.autoThinkingBudgetB {
+            normalized.autoThinkingBudgetB = max(0, value)
         }
         return normalized
     }
@@ -367,7 +443,23 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
                 dualGoogleMapsEnabledB,
                 dualComputerUseEnabledB
             )
-        case .autoA, .autoB, .default:
+        case .autoA:
+            return (
+                autoGoogleSearchEnabledA,
+                autoCodeExecutionEnabledA,
+                autoURLContextEnabledA,
+                autoGoogleMapsEnabledA,
+                autoComputerUseEnabledA
+            )
+        case .autoB:
+            return (
+                autoGoogleSearchEnabledB,
+                autoCodeExecutionEnabledB,
+                autoURLContextEnabledB,
+                autoGoogleMapsEnabledB,
+                autoComputerUseEnabledB
+            )
+        case .default:
             return (nil, nil, nil, nil, nil)
         }
     }
@@ -393,7 +485,21 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
                 dualThinkingLevelB,
                 dualCodexReasoningEffortB
             )
-        case .autoA, .autoB, .default:
+        case .autoA:
+            return (
+                autoThinkingEnabledA,
+                autoThinkingBudgetA,
+                autoThinkingLevelA,
+                autoCodexReasoningEffortA
+            )
+        case .autoB:
+            return (
+                autoThinkingEnabledB,
+                autoThinkingBudgetB,
+                autoThinkingLevelB,
+                autoCodexReasoningEffortB
+            )
+        case .default:
             return (nil, nil, nil, nil)
         }
     }
@@ -422,7 +528,23 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
                 dualOpenRouterReasoningEffortB,
                 dualOpenRouterReasoningExcludeB
             )
-        case .autoA, .autoB, .default:
+        case .autoA:
+            return (
+                autoOpenRouterThinkingEnabledA,
+                autoOpenRouterThinkingBudgetA,
+                autoOpenRouterReasoningModeA,
+                autoOpenRouterReasoningEffortA,
+                autoOpenRouterReasoningExcludeA
+            )
+        case .autoB:
+            return (
+                autoOpenRouterThinkingEnabledB,
+                autoOpenRouterThinkingBudgetB,
+                autoOpenRouterReasoningModeB,
+                autoOpenRouterReasoningEffortB,
+                autoOpenRouterReasoningExcludeB
+            )
+        case .default:
             return (nil, nil, nil, nil, nil)
         }
     }

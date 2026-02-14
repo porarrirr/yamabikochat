@@ -357,6 +357,138 @@ enum AppDatabase {
             try ensureSettingsColumns()
         }
 
+        migrator.registerMigration("v5_auto_conversation_parity") { db in
+            func existingColumns(in table: String) throws -> Set<String> {
+                let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))")
+                return Set(rows.compactMap { ($0["name"] as String?)?.lowercased() })
+            }
+
+            func ensureAutoConversationColumns() throws {
+                var columns = try existingColumns(in: "auto_conversations")
+                if !columns.contains("currentturn") {
+                    try db.alter(table: "auto_conversations") { t in
+                        t.add(column: "currentTurn", .integer).notNull().defaults(to: 0)
+                    }
+                    columns.insert("currentturn")
+                }
+                if !columns.contains("lastactiveatms") {
+                    try db.alter(table: "auto_conversations") { t in
+                        t.add(column: "lastActiveAtMs", .integer).notNull().defaults(to: 0)
+                    }
+                    columns.insert("lastactiveatms")
+                }
+                if !columns.contains("endreason") {
+                    try db.alter(table: "auto_conversations") { t in
+                        t.add(column: "endReason", .text)
+                    }
+                    columns.insert("endreason")
+                }
+                if !columns.contains("endsignal") {
+                    try db.alter(table: "auto_conversations") { t in
+                        t.add(column: "endSignal", .text).notNull().defaults(to: "[END]")
+                    }
+                    columns.insert("endsignal")
+                }
+                if !columns.contains("boundchatconversationid") {
+                    try db.alter(table: "auto_conversations") { t in
+                        t.add(column: "boundChatConversationId", .integer)
+                    }
+                    columns.insert("boundchatconversationid")
+                }
+
+                try db.execute(
+                    sql: """
+                    UPDATE auto_conversations
+                    SET lastActiveAtMs = CASE
+                        WHEN lastActiveAtMs <= 0 THEN COALESCE(updatedAtMs, createdAtMs, 0)
+                        ELSE lastActiveAtMs
+                    END
+                    """
+                )
+                if columns.contains("boundconversationid") {
+                    try db.execute(
+                        sql: """
+                        UPDATE auto_conversations
+                        SET boundChatConversationId = COALESCE(boundChatConversationId, boundConversationId)
+                        WHERE boundChatConversationId IS NULL
+                        """
+                    )
+                }
+            }
+
+            func ensureAutoConversationMessageColumns() throws {
+                let columns = try existingColumns(in: "auto_conversation_messages")
+                if !columns.contains("reasoning") {
+                    try db.alter(table: "auto_conversation_messages") { t in
+                        t.add(column: "reasoning", .text)
+                    }
+                }
+                if !columns.contains("isendsignal") {
+                    try db.alter(table: "auto_conversation_messages") { t in
+                        t.add(column: "isEndSignal", .boolean).notNull().defaults(to: false)
+                    }
+                }
+            }
+
+            func ensureSettingsColumns() throws {
+                let columns = try existingColumns(in: "settings")
+                let nullableBooleanColumns = [
+                    "autoOpenRouterThinkingEnabledA",
+                    "autoOpenRouterReasoningExcludeA",
+                    "autoOpenRouterThinkingEnabledB",
+                    "autoOpenRouterReasoningExcludeB",
+                    "autoGoogleSearchEnabledA",
+                    "autoCodeExecutionEnabledA",
+                    "autoURLContextEnabledA",
+                    "autoGoogleMapsEnabledA",
+                    "autoComputerUseEnabledA",
+                    "autoThinkingEnabledA",
+                    "autoGoogleSearchEnabledB",
+                    "autoCodeExecutionEnabledB",
+                    "autoURLContextEnabledB",
+                    "autoGoogleMapsEnabledB",
+                    "autoComputerUseEnabledB",
+                    "autoThinkingEnabledB"
+                ]
+                let nullableIntColumns = [
+                    "autoOpenRouterThinkingBudgetA",
+                    "autoOpenRouterThinkingBudgetB",
+                    "autoThinkingBudgetA",
+                    "autoThinkingBudgetB"
+                ]
+                let nullableTextColumns = [
+                    "autoOpenRouterReasoningModeA",
+                    "autoOpenRouterReasoningEffortA",
+                    "autoOpenRouterReasoningModeB",
+                    "autoOpenRouterReasoningEffortB",
+                    "autoThinkingLevelA",
+                    "autoCodexReasoningEffortA",
+                    "autoThinkingLevelB",
+                    "autoCodexReasoningEffortB"
+                ]
+
+                for name in nullableBooleanColumns where !columns.contains(name.lowercased()) {
+                    try db.alter(table: "settings") { t in
+                        t.add(column: name, .boolean)
+                    }
+                }
+                for name in nullableIntColumns where !columns.contains(name.lowercased()) {
+                    try db.alter(table: "settings") { t in
+                        t.add(column: name, .integer)
+                    }
+                }
+                for name in nullableTextColumns where !columns.contains(name.lowercased()) {
+                    try db.alter(table: "settings") { t in
+                        t.add(column: name, .text)
+                    }
+                }
+            }
+
+            try ensureAutoConversationColumns()
+            try ensureAutoConversationMessageColumns()
+            try ensureSettingsColumns()
+        }
+
         return migrator
     }
 }

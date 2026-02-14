@@ -779,43 +779,118 @@ final class ChatRepository {
         return modelRow
     }
 
+    func prepareAutoConversationSeedMessage(conversationId: Int64, text: String) throws {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        guard var conversation = try conversations.fetchConversation(id: conversationId) else {
+            throw ProviderClientError.parseFailure("Conversation not found")
+        }
+        let isFirstMessage = try conversations.isConversationEmpty(conversationId: conversationId)
+        _ = try conversations.insertMessage(
+            ChatMessage(
+                conversationId: conversationId,
+                role: "user",
+                text: normalized,
+                attachmentsJSON: "[]"
+            )
+        )
+        try updateConversationTitleIfNeeded(
+            conversation: &conversation,
+            firstPrompt: normalized,
+            isFirstMessage: isFirstMessage
+        )
+    }
+
+    @discardableResult
     func runAutoConversation(
         conversationId: Int64,
         initialMessage: String,
         progress: @escaping @Sendable (_ turn: Int, _ speaker: String, _ text: String) -> Void
+    ) async throws -> Int64 {
+        let autoConversationId = try createAutoConversation(
+            conversationId: conversationId,
+            initialMessage: initialMessage
+        )
+        try await resumeAutoConversation(autoConversationId: autoConversationId, progress: progress)
+        return autoConversationId
+    }
+
+    func createAutoConversation(
+        conversationId: Int64,
+        initialMessage: String
+    ) throws -> Int64 {
+        let normalizedInitialMessage = initialMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentSettings = try settings.load()
+        let config = AutoConversationConfig(
+            title: "自動会話: \(String(normalizedInitialMessage.prefix(20)))",
+            modelA: currentSettings.autoModelA,
+            modelB: currentSettings.autoModelB,
+            providerA: currentSettings.autoProviderA,
+            providerB: currentSettings.autoProviderB,
+            systemPromptA: currentSettings.autoSystemPromptA,
+            systemPromptB: currentSettings.autoSystemPromptB,
+            maxTurns: max(0, currentSettings.autoMaxTurns),
+            endSignal: "[END]"
+        )
+
+        let autoConversationId = try conversations.createAutoConversation(
+            config: config,
+            boundChatConversationId: conversationId
+        )
+
+        _ = try conversations.insertAutoConversationMessage(
+            AutoConversationMessage(
+                autoConversationId: autoConversationId,
+                speakerModel: .user,
+                content: normalizedInitialMessage,
+                turnNumber: 0
+            )
+        )
+        return autoConversationId
+    }
+
+    func resumeAutoConversation(
+        autoConversationId: Int64,
+        progress: @escaping @Sendable (_ turn: Int, _ speaker: String, _ text: String) -> Void
     ) async throws {
-        let settings = try self.settings.load()
-
-        var currentPrompt = initialMessage
-        for turn in 0 ..< settings.autoMaxTurns {
-            let useA = turn % 2 == 0
-            let model = useA ? settings.autoModelA : settings.autoModelB
-            let provider = useA ? settings.autoProviderA : settings.autoProviderB
-            let systemPrompt = useA ? settings.autoSystemPromptA : settings.autoSystemPromptB
-
-            let request = buildSingleTurnRequest(
-                model: model,
-                text: currentPrompt,
-                systemPrompt: systemPrompt,
-                provider: provider,
-                settings: settings,
-                stream: false
-            )
-
-            let response = try await providers.generate(request: request, provider: LLMProvider(rawOrDefault: provider))
-            let speaker = useA ? "AI-A" : "AI-B"
-            progress(turn + 1, speaker, response.text)
-
-            _ = try conversations.insertMessage(
-                ChatMessage(
-                    conversationId: conversationId,
-                    role: "model",
-                    text: "**[\(speaker)]**\n\n\(response.text)"
-                )
-            )
-
-            currentPrompt = response.text
+        guard var conversation = try conversations.fetchAutoConversation(id: autoConversationId) else {
+            throw ProviderClientError.parseFailure("Auto conversation not found")
         }
+        guard conversation.status != .ended else { return }
+        if conversation.status == .paused {
+            conversation.status = .active
+            conversation.endReason = nil
+            try conversations.updateAutoConversation(conversation)
+        }
+        guard conversation.status == .active else { return }
+
+        do {
+            try await runAutoConversationLoop(autoConversationId: autoConversationId, progress: progress)
+        } catch is CancellationError {
+            // pause/stop is handled by explicit status updates from caller
+        }
+    }
+
+    func pauseAutoConversation(autoConversationId: Int64) throws {
+        guard var conversation = try conversations.fetchAutoConversation(id: autoConversationId) else { return }
+        guard conversation.status == .active else { return }
+        conversation.status = .paused
+        try conversations.updateAutoConversation(conversation)
+    }
+
+    func stopAutoConversation(
+        autoConversationId: Int64,
+        reason: String = AutoConversationEndReason.userStop
+    ) throws {
+        try markAutoConversationEnded(autoConversationId: autoConversationId, reason: reason)
+    }
+
+    func autoConversation(id: Int64) throws -> AutoConversation? {
+        try conversations.fetchAutoConversation(id: id)
+    }
+
+    func observeAutoConversationMessages(autoConversationId: Int64) -> AnyPublisher<[AutoConversationMessage], Never> {
+        conversations.observeAutoConversationMessages(autoConversationId: autoConversationId)
     }
 
     func searchConversations(query: String) throws -> [ConversationListEntry] {
@@ -1019,6 +1094,263 @@ final class ChatRepository {
     }
 
     // MARK: - Helpers
+
+    private enum AutoSpeaker {
+        case a
+        case b
+
+        var modelLabel: String {
+            switch self {
+            case .a:
+                return "AI-A"
+            case .b:
+                return "AI-B"
+            }
+        }
+
+        var modelCode: AutoConversationSpeakerModel {
+            switch self {
+            case .a:
+                return .a
+            case .b:
+                return .b
+            }
+        }
+
+        var context: AppSettings.ReasoningContext {
+            switch self {
+            case .a:
+                return .autoA
+            case .b:
+                return .autoB
+            }
+        }
+    }
+
+    private static let autoConversationTurnDelayNs: UInt64 = 2_000_000_000
+    private static let autoConversationEndRegexes: [NSRegularExpression] = [
+        try! NSRegularExpression(pattern: "(?:会話|議論|討論|対話)(?:を)?(?:(?:ここ|これ|以上)で)?終(?:了|わ)り(?:に)?(?:いたします|ます|ましょう|とします)", options: [.caseInsensitive]),
+        try! NSRegularExpression(pattern: "これ(?:にて|で)(?:終(?:了|わ)り|終了)とさせていただきます", options: [.caseInsensitive]),
+        try! NSRegularExpression(pattern: "(?:ここ|これ|以上|本件)(?:で|にて)(?:終(?:了|わ)り|終了)(?:とします|です)", options: [.caseInsensitive]),
+        try! NSRegularExpression(pattern: "\\bend of (?:this )?(?:conversation|discussion)\\b", options: [.caseInsensitive]),
+        try! NSRegularExpression(pattern: "\\bthis concludes (?:our )?(?:conversation|discussion)\\b", options: [.caseInsensitive]),
+        try! NSRegularExpression(pattern: "\\blet'?s end (?:the )?(?:conversation|discussion)\\b", options: [.caseInsensitive]),
+        try! NSRegularExpression(pattern: "\\bconversation (?:has )?(?:ended|is over)\\b", options: [.caseInsensitive])
+    ]
+
+    private func runAutoConversationLoop(
+        autoConversationId: Int64,
+        progress: @escaping @Sendable (_ turn: Int, _ speaker: String, _ text: String) -> Void
+    ) async throws {
+        while true {
+            try Task.checkCancellation()
+
+            guard var autoConversation = try conversations.fetchAutoConversation(id: autoConversationId) else {
+                throw ProviderClientError.parseFailure("Auto conversation not found")
+            }
+            guard autoConversation.status == .active else {
+                return
+            }
+
+            let messages = try conversations.fetchAutoConversationMessages(autoConversationId: autoConversationId)
+            let (nextTurn, speaker) = determineAutoConversationNextStep(messages: messages)
+
+            if autoConversation.maxTurns > 0, nextTurn > autoConversation.maxTurns {
+                try appendAutoConversationSystemMessage(
+                    autoConversation: autoConversation,
+                    text: "**[SYSTEM]**\n\n🎯 自動会話が完了しました！\n\n• 実行ターン数: \(max(0, nextTurn - 1))/\(autoConversation.maxTurns)ターン\n• 参加モデル: \(autoConversation.modelA) vs \(autoConversation.modelB)\n• 終了理由: 最大ターン数に達したため"
+                )
+                try markAutoConversationEnded(
+                    autoConversationId: autoConversationId,
+                    reason: AutoConversationEndReason.maxTurns
+                )
+                return
+            }
+
+            let turnModel: String
+            let turnProvider: String
+            let turnPrompt: String
+            switch speaker {
+            case .a:
+                turnModel = autoConversation.modelA
+                turnProvider = autoConversation.providerA
+                turnPrompt = autoConversation.systemPromptA
+            case .b:
+                turnModel = autoConversation.modelB
+                turnProvider = autoConversation.providerB
+                turnPrompt = autoConversation.systemPromptB
+            }
+
+            let history = buildAutoConversationHistory(messages: messages, speaker: speaker)
+            let currentSettings = try settings.load()
+            let request = buildSingleTurnRequest(
+                model: turnModel,
+                text: "",
+                systemPrompt: turnPrompt,
+                provider: turnProvider,
+                settings: currentSettings,
+                stream: false,
+                messages: history,
+                context: speaker.context
+            )
+
+            let response: ProviderResponse
+            do {
+                response = try await providers.generate(
+                    request: request,
+                    provider: LLMProvider(rawOrDefault: turnProvider)
+                )
+            } catch {
+                try markAutoConversationEnded(
+                    autoConversationId: autoConversationId,
+                    reason: AutoConversationEndReason.apiError
+                )
+                throw error
+            }
+
+            let responseText = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let reasoning = response.reasoningSummary?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if responseText.isEmpty, (reasoning ?? "").isEmpty {
+                try markAutoConversationEnded(
+                    autoConversationId: autoConversationId,
+                    reason: AutoConversationEndReason.error
+                )
+                throw ProviderClientError.parseFailure("自動会話で空の応答を受信しました。")
+            }
+
+            let hasEndSignal = containsAutoConversationEndSignal(
+                text: responseText,
+                configuredEndSignal: autoConversation.endSignal
+            )
+            _ = try conversations.insertAutoConversationMessage(
+                AutoConversationMessage(
+                    autoConversationId: autoConversationId,
+                    speakerModel: speaker.modelCode,
+                    content: responseText,
+                    reasoning: reasoning?.isEmpty == true ? nil : reasoning,
+                    turnNumber: nextTurn,
+                    isEndSignal: hasEndSignal
+                )
+            )
+
+            autoConversation.currentTurn = nextTurn
+            autoConversation.status = .active
+            autoConversation.endReason = nil
+            try conversations.updateAutoConversation(autoConversation)
+
+            let display = formatAutoConversationDisplay(content: responseText, reasoning: reasoning)
+            if let chatConversationId = autoConversation.boundChatConversationId {
+                _ = try conversations.insertMessage(
+                    ChatMessage(
+                        conversationId: chatConversationId,
+                        role: "model",
+                        text: "**[\(speaker.modelLabel)]**\n\n\(display)"
+                    )
+                )
+            }
+            progress(nextTurn, speaker.modelLabel, display)
+
+            if hasEndSignal {
+                try appendAutoConversationSystemMessage(
+                    autoConversation: autoConversation,
+                    text: "**[SYSTEM]**\n\n🏁 自動会話が終了しました\n\n• 実行ターン数: \(nextTurn)/\(autoConversation.maxTurns > 0 ? String(autoConversation.maxTurns) : \"無制限\")ターン\n• 参加モデル: \(autoConversation.modelA) vs \(autoConversation.modelB)\n• 終了理由: AIモデルが会話終了を宣言"
+                )
+                try markAutoConversationEnded(
+                    autoConversationId: autoConversationId,
+                    reason: AutoConversationEndReason.endSignal
+                )
+                return
+            }
+
+            try Task.checkCancellation()
+            try await Task.sleep(nanoseconds: Self.autoConversationTurnDelayNs)
+        }
+    }
+
+    private func determineAutoConversationNextStep(messages: [AutoConversationMessage]) -> (turn: Int, speaker: AutoSpeaker) {
+        let ordered = messages.sorted {
+            if $0.turnNumber == $1.turnNumber {
+                return ($0.id ?? 0) < ($1.id ?? 0)
+            }
+            return $0.turnNumber < $1.turnNumber
+        }
+        let lastModelMessage = ordered.last(where: {
+            $0.speakerModel == .a || $0.speakerModel == .b
+        })
+
+        guard let lastModelMessage else {
+            return (1, .a)
+        }
+        let nextSpeaker: AutoSpeaker = (lastModelMessage.speakerModel == .a) ? .b : .a
+        return (lastModelMessage.turnNumber + 1, nextSpeaker)
+    }
+
+    private func buildAutoConversationHistory(
+        messages: [AutoConversationMessage],
+        speaker: AutoSpeaker
+    ) -> [ProviderRequestMessage] {
+        let ordered = messages.sorted {
+            if $0.turnNumber == $1.turnNumber {
+                return ($0.id ?? 0) < ($1.id ?? 0)
+            }
+            return $0.turnNumber < $1.turnNumber
+        }
+        return ordered.compactMap { message in
+            let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !content.isEmpty else { return nil }
+            switch message.speakerModel {
+            case .user:
+                return ProviderRequestMessage(role: "user", content: content)
+            case .a, .b:
+                let role: String
+                switch (speaker, message.speakerModel) {
+                case (.a, .a), (.b, .b):
+                    role = "assistant"
+                default:
+                    role = "user"
+                }
+                return ProviderRequestMessage(role: role, content: content)
+            }
+        }
+    }
+
+    private func containsAutoConversationEndSignal(text: String, configuredEndSignal: String) -> Bool {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return false }
+
+        let endSignal = configuredEndSignal.trimmingCharacters(in: .whitespacesAndNewlines)
+        let targetSignal = endSignal.isEmpty ? "[END]" : endSignal
+        if normalized.range(of: targetSignal, options: [.caseInsensitive, .widthInsensitive]) != nil {
+            return true
+        }
+
+        let range = NSRange(location: 0, length: (normalized as NSString).length)
+        return Self.autoConversationEndRegexes.contains { regex in
+            regex.firstMatch(in: normalized, options: [], range: range) != nil
+        }
+    }
+
+    private func appendAutoConversationSystemMessage(
+        autoConversation: AutoConversation,
+        text: String
+    ) throws {
+        guard let chatConversationId = autoConversation.boundChatConversationId else { return }
+        _ = try conversations.insertMessage(
+            ChatMessage(
+                conversationId: chatConversationId,
+                role: "model",
+                text: text
+            )
+        )
+    }
+
+    private func markAutoConversationEnded(autoConversationId: Int64, reason: String) throws {
+        guard var conversation = try conversations.fetchAutoConversation(id: autoConversationId) else { return }
+        conversation.status = .ended
+        conversation.endReason = reason
+        conversation.boundChatConversationId = nil
+        try conversations.updateAutoConversation(conversation)
+    }
 
     private func shouldRetryGeminiWithGenerate(provider: LLMProvider, error: Error) -> Bool {
         guard provider == .geminiAuth else { return false }
