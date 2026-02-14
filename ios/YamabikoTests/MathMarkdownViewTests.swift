@@ -55,6 +55,40 @@ final class MathMarkdownViewTests: XCTestCase {
         XCTAssertTrue(html.contains("max-width: 100%;"))
     }
 
+    func testBuildHTMLIncludesCodeBlockCopyBridge() {
+        let html = MathMarkdownHTMLBuilder.buildHTML(
+            markdownPayload: "\"```swift\\nprint(1)\\n```\"",
+            markdownRendererScript: "window.yamabikoRenderMarkdown = function(){ return ''; };",
+            bodyTextColor: "#000000",
+            codeBackgroundColor: "#111111",
+            borderColor: "#222222",
+            linkColor: "#333333",
+            mathRenderingEnabled: false,
+            mathJaxScriptTag: ""
+        )
+
+        XCTAssertTrue(html.contains("copyCodeBlock"))
+        XCTAssertTrue(html.contains("yamabiko-copy-button"))
+        XCTAssertTrue(html.contains("コピー済み"))
+    }
+
+    func testBuildHTMLIncludesTableStyles() {
+        let html = MathMarkdownHTMLBuilder.buildHTML(
+            markdownPayload: "\"| A | B |\\n| --- | --- |\\n| 1 | 2 |\"",
+            markdownRendererScript: "window.yamabikoRenderMarkdown = function(){ return ''; };",
+            bodyTextColor: "#000000",
+            codeBackgroundColor: "#111111",
+            borderColor: "#222222",
+            linkColor: "#333333",
+            mathRenderingEnabled: false,
+            mathJaxScriptTag: ""
+        )
+
+        XCTAssertTrue(html.contains(".yamabiko-table-wrap"))
+        XCTAssertTrue(html.contains("table {"))
+        XCTAssertTrue(html.contains("th, td {"))
+    }
+
     func testResolveResourceURLPrefersMathJaxSubdirectory() {
         let subdirectoryURL = URL(fileURLWithPath: "/tmp/mathjax/markdown-renderer.js")
         let rootURL = URL(fileURLWithPath: "/tmp/markdown-renderer.js")
@@ -300,6 +334,91 @@ line1\\nline2
         XCTAssertFalse(result.contains("@@"))
         XCTAssertTrue(result.contains("$x_i$"))
         XCTAssertTrue(result.contains("<em>強調</em>"))
+    }
+
+    func testMarkdownRendererWrapsCodeBlockWithCopyButton() throws {
+        let result = try renderMarkdownWithJavaScript(
+            """
+            ```swift
+            let value = 42
+            ```
+            """
+        )
+
+        XCTAssertTrue(result.contains("yamabiko-code-block"))
+        XCTAssertTrue(result.contains("yamabiko-copy-button"))
+        XCTAssertTrue(result.contains(">コピー<"))
+        XCTAssertTrue(result.contains("let value = 42"))
+        XCTAssertFalse(result.contains("```"))
+    }
+
+    func testMarkdownRendererRendersGfmTable() throws {
+        let result = try renderMarkdownWithJavaScript(
+            """
+            | 項目 | 値 |
+            | --- | --- |
+            | A | 1 |
+            | B | 2 |
+            """
+        )
+
+        XCTAssertTrue(result.contains("yamabiko-table-wrap"))
+        XCTAssertTrue(result.contains("<table>"))
+        XCTAssertTrue(result.contains("<thead>"))
+        XCTAssertTrue(result.contains("<tbody>"))
+        XCTAssertTrue(result.contains("<th>項目</th>"))
+        XCTAssertTrue(result.contains("<td>A</td>"))
+    }
+
+    func testMarkdownRendererAppliesTableAlignment() throws {
+        let result = try renderMarkdownWithJavaScript(
+            """
+            | L | C | R |
+            | :--- | :---: | ---: |
+            | a | b | c |
+            """
+        )
+
+        XCTAssertTrue(result.contains("text-align: left;"))
+        XCTAssertTrue(result.contains("text-align: center;"))
+        XCTAssertTrue(result.contains("text-align: right;"))
+    }
+
+    func testMarkdownRendererPreservesBrInTableCell() throws {
+        let result = try renderMarkdownWithJavaScript(
+            """
+            | 説明 |
+            | --- |
+            | 1行目<br>2行目 |
+            """
+        )
+
+        XCTAssertTrue(result.contains("<td>1行目<br/>2行目</td>"))
+    }
+
+    func testMarkdownRendererEscapesUnsafeHtmlInTableCell() throws {
+        let result = try renderMarkdownWithJavaScript(
+            """
+            | 説明 |
+            | --- |
+            | <script>alert(1)</script> |
+            """
+        )
+
+        XCTAssertTrue(result.contains("&lt;script&gt;alert(1)&lt;/script&gt;"))
+        XCTAssertFalse(result.contains("<script>alert(1)</script>"))
+    }
+
+    func testMarkdownRendererDoesNotParseInvalidTableDelimiter() throws {
+        let result = try renderMarkdownWithJavaScript(
+            """
+            | a | b |
+            | nope | nope |
+            """
+        )
+
+        XCTAssertFalse(result.contains("<table>"))
+        XCTAssertTrue(result.contains("<p>| a | b | | nope | nope |</p>"))
     }
 
     private func loadMarkdownRendererSource() throws -> String {

@@ -1,5 +1,6 @@
 (function(global) {
   "use strict";
+  var copyButtonLabel = "コピー";
 
   function escapeHtml(value) {
     return String(value || "")
@@ -119,6 +120,13 @@
     var input = mathProtected.text;
     if (!input) return "";
 
+    var inlineBreakTokens = [];
+    input = input.replace(/<br\s*\/?>/gi, function() {
+      var key = "@@YBBR" + inlineBreakTokens.length + "@@";
+      inlineBreakTokens.push("<br/>");
+      return key;
+    });
+
     var inlineCodeTokens = [];
     input = input.replace(/`([^`]+?)`/g, function(_, code) {
       var key = "@@YBCODE" + inlineCodeTokens.length + "@@";
@@ -152,6 +160,10 @@
 
     output = output.replace(/@@YBCODE(\d+)@@/g, function(_, index) {
       return inlineCodeTokens[Number(index)] || "";
+    });
+
+    output = output.replace(/@@YBBR(\d+)@@/g, function(_, index) {
+      return inlineBreakTokens[Number(index)] || "";
     });
 
     output = output.replace(/@@YBMATH(\d+)@@/g, function(_, index) {
@@ -208,6 +220,109 @@
     };
   }
 
+  function hasUnescapedPipe(text) {
+    var value = String(text || "");
+    for (var i = 0; i < value.length; i += 1) {
+      if (value.charAt(i) === "|" && !isEscaped(value, i)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function splitTableRow(line) {
+    var text = String(line || "").trim();
+    if (!text) return [];
+    if (text.charAt(0) === "|") text = text.slice(1);
+    if (text.charAt(text.length - 1) === "|") text = text.slice(0, -1);
+
+    var cells = [];
+    var segmentStart = 0;
+    for (var i = 0; i < text.length; i += 1) {
+      if (text.charAt(i) === "|" && !isEscaped(text, i)) {
+        cells.push(text.slice(segmentStart, i));
+        segmentStart = i + 1;
+      }
+    }
+    cells.push(text.slice(segmentStart));
+
+    return cells.map(function(cell) {
+      return cell.replace(/\\\|/g, "|").trim();
+    });
+  }
+
+  function isDelimiterCell(cell) {
+    var value = String(cell || "").trim();
+    return /^:?-{3,}:?$/.test(value);
+  }
+
+  function parseAlignment(cell) {
+    var value = String(cell || "").trim();
+    if (/^:-{3,}:$/.test(value)) return "center";
+    if (/^:-{3,}$/.test(value)) return "left";
+    if (/^-{3,}:$/.test(value)) return "right";
+    return null;
+  }
+
+  function normalizeCells(cells, columnCount) {
+    var normalized = [];
+    for (var i = 0; i < columnCount; i += 1) {
+      normalized.push(String((cells && cells[i]) || "").trim());
+    }
+    return normalized;
+  }
+
+  function renderTableCell(tag, text, alignment) {
+    var style = alignment ? ' style="text-align: ' + alignment + ';"' : "";
+    return "<" + tag + style + ">" + applyInlineMarkdown(text) + "</" + tag + ">";
+  }
+
+  function parseTable(lines, startIndex) {
+    if (startIndex + 1 >= lines.length) return null;
+
+    var headerLine = lines[startIndex];
+    var delimiterLine = lines[startIndex + 1];
+    if (!hasUnescapedPipe(headerLine) || !hasUnescapedPipe(delimiterLine)) return null;
+
+    var headerCells = splitTableRow(headerLine);
+    var delimiterCells = splitTableRow(delimiterLine);
+    if (!headerCells.length || delimiterCells.length < headerCells.length) return null;
+    if (!delimiterCells.slice(0, headerCells.length).every(isDelimiterCell)) return null;
+
+    var columnCount = headerCells.length;
+    var alignments = delimiterCells.slice(0, columnCount).map(parseAlignment);
+    var normalizedHeader = normalizeCells(headerCells, columnCount);
+
+    var rowHtml = normalizedHeader.map(function(cell, index) {
+      return renderTableCell("th", cell, alignments[index]);
+    }).join("");
+
+    var rows = [];
+    var index = startIndex + 2;
+    while (index < lines.length) {
+      var line = lines[index];
+      if (isBlank(line) || !hasUnescapedPipe(line)) break;
+      var cells = splitTableRow(line);
+      if (!cells.length) break;
+      var normalizedCells = normalizeCells(cells, columnCount);
+      rows.push("<tr>" + normalizedCells.map(function(cell, cellIndex) {
+        return renderTableCell("td", cell, alignments[cellIndex]);
+      }).join("") + "</tr>");
+      index += 1;
+    }
+
+    return {
+      html:
+        "<div class=\"yamabiko-table-wrap\">" +
+          "<table>" +
+            "<thead><tr>" + rowHtml + "</tr></thead>" +
+            "<tbody>" + rows.join("") + "</tbody>" +
+          "</table>" +
+        "</div>",
+      nextIndex: index
+    };
+  }
+
   function renderBlocks(input) {
     var source = String(input || "").replace(/\r\n?/g, "\n");
     var codeBlocks = [];
@@ -216,7 +331,12 @@
       var key = "@@CODE_BLOCK_" + codeBlocks.length + "@@";
       var langClass = String(language || "").trim();
       var classAttr = langClass ? ' class="language-' + escapeAttr(langClass) + '"' : "";
-      codeBlocks.push("<pre><code" + classAttr + ">" + escapeHtml(code) + "</code></pre>");
+      codeBlocks.push(
+        "<div class=\"yamabiko-code-block\">" +
+          "<button type=\"button\" class=\"yamabiko-copy-button\">" + copyButtonLabel + "</button>" +
+          "<pre><code" + classAttr + ">" + escapeHtml(code) + "</code></pre>" +
+        "</div>"
+      );
       return key;
     });
 
@@ -271,6 +391,14 @@
         var quote = parseBlockquote(lines, i);
         htmlParts.push(quote.html);
         i = quote.nextIndex;
+        continue;
+      }
+
+      var parsedTable = parseTable(lines, i);
+      if (parsedTable) {
+        flushParagraph();
+        htmlParts.push(parsedTable.html);
+        i = parsedTable.nextIndex;
         continue;
       }
 
