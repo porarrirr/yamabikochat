@@ -92,16 +92,19 @@ jobs:
         id: release_tag
         run: |
           TAG="${{ inputs.release_tag }}"
+          TS_COMPACT="$(date -u +'%Y%m%d-%H%M%S')"
+          TS_LABEL="$(date -u +'%Y-%m-%d %H:%M UTC')"
           if [ -z "$TAG" ]; then
-            TAG="ios-ipa-${{ github.run_number }}"
+            TAG="ios-ipa-${TS_COMPACT}"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "name=iOS IPA ${TS_LABEL}" >> "$GITHUB_OUTPUT"
 
       - name: Publish IPA as Release Asset
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_tag.outputs.tag }}
-          name: iOS IPA ${{ steps.release_tag.outputs.tag }}
+          name: ${{ steps.release_tag.outputs.name }}
           prerelease: true
           files: ${{ runner.temp }}/YamabikoChat-unsigned.ipa

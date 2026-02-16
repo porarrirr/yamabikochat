@@ -83,11 +83,20 @@ jobs:
           path: ${{ runner.temp }}/YamabikoChat-unsigned.ipa
           if-no-files-found: error
 
+      - name: Prepare Release Metadata
+        if: always() && github.ref == 'refs/heads/ios'
+        id: release_meta
+        run: |
+          TS_COMPACT="$(date -u +'%Y%m%d-%H%M%S')"
+          TS_LABEL="$(date -u +'%Y-%m-%d %H:%M UTC')"
+          echo "tag=ios-ipa-${TS_COMPACT}" >> "$GITHUB_OUTPUT"
+          echo "name=iOS IPA ${TS_LABEL}" >> "$GITHUB_OUTPUT"
+
       - name: Publish IPA as Release Asset
         if: always() && github.ref == 'refs/heads/ios'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ios-ipa-${{ github.run_number }}
-          name: iOS IPA ${{ github.run_number }}
+          tag_name: ${{ steps.release_meta.outputs.tag }}
+          name: ${{ steps.release_meta.outputs.name }}
           prerelease: true
           files: ${{ runner.temp }}/YamabikoChat-unsigned.ipa
