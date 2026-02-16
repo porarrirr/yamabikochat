@@ -33,7 +33,10 @@ struct ChatScreen: View {
     @State private var showFileImporter = false
     @State private var showPhotoPicker = false
     @State private var photoItems: [PhotosPickerItem] = []
+    @State private var scrollPositionID: String?
+    @State private var isUserNearBottom = true
     @FocusState private var isComposerFocused: Bool
+    private let bottomAnchorID = "chat-bottom-anchor"
 
     private var timeline: [ChatTimelineItem] {
         (viewModel.fullMessages.map { ChatTimelineItem.message($0) } +
@@ -45,7 +48,7 @@ struct ChatScreen: View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 16) {
                         if timeline.isEmpty {
                             ContentUnavailableView(
                                 "会話がありません",
@@ -82,10 +85,16 @@ struct ChatScreen: View {
                                 }
                             }
                         }
+
+                        Color.clear
+                            .frame(height: 1)
+                            .id(bottomAnchorID)
                     }
+                    .scrollTargetLayout()
                     .padding(.horizontal, 14)
                     .padding(.vertical, 18)
                 }
+                .scrollPosition(id: $scrollPositionID)
                 .background(Color.chatScreenBackground)
                 .scrollDismissesKeyboard(.interactively)
                 .simultaneousGesture(
@@ -93,11 +102,25 @@ struct ChatScreen: View {
                         dismissComposerKeyboard()
                     }
                 )
+                .onAppear {
+                    guard scrollPositionID == nil else { return }
+                    scrollPositionID = bottomAnchorID
+                    isUserNearBottom = true
+                    scrollToBottom(proxy: proxy, animated: false)
+                }
+                .onChange(of: scrollPositionID) { _, newValue in
+                    updateIsUserNearBottom(positionID: newValue)
+                }
                 .onChange(of: timeline.count) { _, _ in
-                    guard let last = timeline.last else { return }
-                    withAnimation {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
+                    scrollToBottomIfNeeded(proxy: proxy)
+                }
+                .onChange(of: isComposerFocused) { _, focused in
+                    guard !focused else { return }
+                    scrollToBottomIfNeeded(proxy: proxy)
+                }
+                .onChange(of: viewModel.isSending) { oldValue, newValue in
+                    guard oldValue, !newValue else { return }
+                    scrollToBottomIfNeeded(proxy: proxy)
                 }
             }
 
@@ -271,6 +294,36 @@ struct ChatScreen: View {
 
     private func dismissComposerKeyboard() {
         isComposerFocused = false
+    }
+
+    private func updateIsUserNearBottom(positionID: String?) {
+        guard let positionID else {
+            isUserNearBottom = timeline.isEmpty
+            return
+        }
+        let lastMessageID = timeline.last?.id
+        isUserNearBottom = positionID == bottomAnchorID || positionID == lastMessageID
+    }
+
+    private func scrollToBottomIfNeeded(proxy: ScrollViewProxy, animated: Bool = true) {
+        guard isUserNearBottom else { return }
+        DispatchQueue.main.async {
+            scrollToBottom(proxy: proxy, animated: animated)
+        }
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+        let scrollAction = {
+            proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+            scrollPositionID = bottomAnchorID
+        }
+        if animated {
+            withAnimation {
+                scrollAction()
+            }
+        } else {
+            scrollAction()
+        }
     }
 }
 
