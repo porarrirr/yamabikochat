@@ -257,6 +257,26 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    func branchConversation(from messageId: Int64) -> Int64? {
+        guard let repository else {
+            errorMessage = "チャット初期化中です。少し待ってから再試行してください。"
+            return nil
+        }
+
+        do {
+            errorMessage = nil
+            return try repository.branchConversation(from: conversationID, messageId: messageId)
+        } catch {
+            errorMessage = "ブランチの作成に失敗しました: \(error.localizedDescription)"
+            DiagnosticsLogger.log(
+                "Branch conversation failed conversation=\(conversationID) message=\(messageId)",
+                category: .chat,
+                error: error
+            )
+            return nil
+        }
+    }
+
     func showPrevVariant(messageId: Int64) {
         shiftVariantSelection(messageId: messageId, delta: -1)
     }

@@ -20,7 +20,16 @@ struct ChatWorkspaceScreen: View {
 
             switch currentMode {
             case .chat:
-                ChatScreen(viewModel: viewModel)
+                ChatScreen(
+                    viewModel: viewModel,
+                    onNavigateToConversation: { newConversationId in
+                        if let onSelectConversation {
+                            onSelectConversation(newConversationId)
+                        } else {
+                            appState.selectedConversationID = newConversationId
+                        }
+                    }
+                )
             case .auto:
                 AutoConversationScreen(viewModel: viewModel)
             }

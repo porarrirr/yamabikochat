@@ -29,6 +29,7 @@ private enum ChatTimelineItem: Identifiable {
 
 struct ChatScreen: View {
     @ObservedObject var viewModel: ChatViewModel
+    var onNavigateToConversation: ((Int64) -> Void)? = nil
 
     @State private var showFileImporter = false
     @State private var showPhotoPicker = false
@@ -69,6 +70,10 @@ struct ChatScreen: View {
                                         onNextVariant: { viewModel.showNextVariant(messageId: message.id) },
                                         onCopy: {
                                             UIPasteboard.general.string = message.displayText
+                                        },
+                                        onBranch: {
+                                            guard let newConversationId = viewModel.branchConversation(from: message.id) else { return }
+                                            onNavigateToConversation?(newConversationId)
                                         },
                                         onRegenerate: {
                                             viewModel.regenerateLastAssistantVariant()
@@ -455,6 +460,7 @@ private struct MessageBubble: View {
     let onPrevVariant: () -> Void
     let onNextVariant: () -> Void
     let onCopy: () -> Void
+    let onBranch: () -> Void
     let onRegenerate: () -> Void
     @State private var isThinkingSheetPresented = false
 
@@ -599,12 +605,36 @@ private struct MessageBubble: View {
                 .buttonStyle(.plain)
 
                 Button {
+                    onBranch()
+                } label: {
+                    Label("ここからブランチ", systemImage: "arrow.triangle.branch")
+                }
+                .buttonStyle(.plain)
+
+                Button {
                     onRegenerate()
                 } label: {
                     Label("再生成", systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.plain)
                 .disabled(!canRegenerate)
+
+                Menu {
+                    Button("コピー") {
+                        onCopy()
+                    }
+                    Button("ここからブランチ") {
+                        onBranch()
+                    }
+                    Button("再生成") {
+                        onRegenerate()
+                    }
+                    .disabled(!canRegenerate)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.caption)
+                }
+                .menuStyle(.button)
             }
             .font(.caption)
             .foregroundStyle(.secondary)

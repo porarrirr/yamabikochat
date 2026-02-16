@@ -15,6 +15,7 @@ enum ProjectDeletionMode {
 final class ChatRepository {
     private static let defaultConversationTitles: Set<String> = ["New Chat", "Secret Chat"]
     private static let conversationTitleMaxLength = 50
+    private static let branchSnippetMaxLength = 32
 
     private let conversations: ConversationRepository
     private let settings: SettingsRepository
@@ -208,7 +209,8 @@ final class ChatRepository {
         }
 
         let selected = summaries.prefix(targetIndex + 1)
-        let title = "Branch: \(baseConversation.title)"
+        let branchSourceText = try conversations.fetchFullMessage(id: messageId)?.displayText
+        let title = buildBranchTitle(baseTitle: baseConversation.title, messageText: branchSourceText)
         let newConversationId = try conversations.createConversation(
             title: title,
             model: baseConversation.model,
@@ -1796,6 +1798,25 @@ final class ChatRepository {
 
         conversation.title = nextTitle
         _ = try conversations.upsertConversation(conversation)
+    }
+
+    private func buildBranchTitle(baseTitle: String, messageText: String?) -> String {
+        let normalizedText = messageText?
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let snippet: String
+        if normalizedText.count > Self.branchSnippetMaxLength {
+            snippet = String(normalizedText.prefix(Self.branchSnippetMaxLength)).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
+        } else {
+            snippet = normalizedText
+        }
+
+        if baseTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || baseTitle == "New Chat" {
+            return snippet.isEmpty ? "ブランチ" : "ブランチ: \(snippet)"
+        }
+        return "ブランチ: \(baseTitle)"
     }
 
     private func settingsForNewConversation() throws -> AppSettings {
