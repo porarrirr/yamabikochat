@@ -65,6 +65,7 @@ final class SettingsViewModel: ObservableObject {
             .sink { [weak self] in
                 self?.settings = $0
                 self?.syncSystemPromptPresetName()
+                self?.loadCurrentProviderAPIKey()
             }
             .store(in: &cancellables)
 
@@ -112,6 +113,7 @@ final class SettingsViewModel: ObservableObject {
 
         do {
             settings = try repository.loadSettings()
+            loadCurrentProviderAPIKey()
             loadSelectedOpenAICompatApiKey()
             syncSystemPromptPresetName()
         } catch {
@@ -158,11 +160,14 @@ final class SettingsViewModel: ObservableObject {
 
     func saveAPIKey() {
         guard let credentialStore else { return }
+        guard let provider = credentialProvider(for: settings.apiProvider) else {
+            errorMessage = "未対応のプロバイダーです: \(settings.apiProvider)"
+            return
+        }
         do {
-            let provider = CredentialProvider(rawValue: settings.apiProvider.uppercased()) ?? .gemini
-            try credentialStore.setCredential(apiKeyDraft.isEmpty ? nil : apiKeyDraft, for: provider)
+            try credentialStore.setCredential(apiKeyDraft.nilIfBlank, for: provider)
             statusMessage = "APIキーを保存しました"
-            apiKeyDraft = ""
+            loadCurrentProviderAPIKey()
         } catch {
             errorMessage = error.localizedDescription
             DiagnosticsLogger.log("API key save failed provider=\(settings.apiProvider)", error: error)
@@ -189,6 +194,7 @@ final class SettingsViewModel: ObservableObject {
         if let data = try? JSONEncoder().encode(providerMap), let json = String(data: data, encoding: .utf8) {
             settings.providerDefaultModelsJSON = json
         }
+        loadCurrentProviderAPIKey()
     }
 
     var openAICompatPresets: [OpenAICompatPreset] {
@@ -648,6 +654,24 @@ final class SettingsViewModel: ObservableObject {
     private func syncSystemPromptPresetName() {
         if let selected = settings.selectedSystemPromptPreset?.nilIfBlank {
             systemPromptPresetNameInput = selected
+        }
+    }
+
+    private func credentialProvider(for provider: String) -> CredentialProvider? {
+        CredentialProvider(rawValue: provider.uppercased())
+    }
+
+    private func loadCurrentProviderAPIKey() {
+        guard let credentialStore else { return }
+        guard let provider = credentialProvider(for: settings.apiProvider) else {
+            apiKeyDraft = ""
+            return
+        }
+        do {
+            apiKeyDraft = try credentialStore.credential(for: provider) ?? ""
+        } catch {
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log("API key load failed provider=\(settings.apiProvider)", error: error)
         }
     }
 
