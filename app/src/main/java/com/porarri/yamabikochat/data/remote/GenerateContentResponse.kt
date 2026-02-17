@@ -1,12 +1,32 @@
 package com.porarri.yamabikochat.data.remote
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
 data class GenerateContentResponse(
     val candidates: List<Candidate>? = null,
     val promptFeedback: PromptFeedback? = null,
-    val text: String? = null
+    val text: String? = null,
+    @SerialName("usageMetadata")
+    val usageMetadata: GeminiUsageMetadata? = null,
+    val tokenUsage: TokenUsageSnapshot? = null
+)
+
+@Serializable
+data class GeminiUsageMetadata(
+    @SerialName("promptTokenCount")
+    val promptTokenCount: Int? = null,
+    @SerialName("candidatesTokenCount")
+    val candidatesTokenCount: Int? = null,
+    @SerialName("totalTokenCount")
+    val totalTokenCount: Int? = null,
+    @SerialName("cachedContentTokenCount")
+    val cachedContentTokenCount: Int? = null,
+    @SerialName("toolUsePromptTokenCount")
+    val toolUsePromptTokenCount: Int? = null,
+    @SerialName("thoughtsTokenCount")
+    val thoughtsTokenCount: Int? = null
 )
 
 @Serializable

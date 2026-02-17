@@ -1,6 +1,9 @@
 import Foundation
 import Combine
 
+private let tokenStatsRangeDays: Int64 = 30
+private let tokenStatsModelLimit = 12
+
 @MainActor
 final class SettingsViewModel: ObservableObject {
     @Published var settings: AppSettings = .init()
@@ -40,6 +43,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var statusMessage: String?
     @Published var errorMessage: String?
     @Published var diagnosticsLogText: String = ""
+    @Published var tokenUsageState: TokenUsageUiState = .init()
 
     private var repository: ChatRepository?
     private var credentialStore: SecureCredentialStore?
@@ -111,6 +115,25 @@ final class SettingsViewModel: ObservableObject {
                 self?.openRouterModelsError = $0
             }
             .store(in: &cancellables)
+
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let sinceMs = nowMs - tokenStatsRangeDays * 24 * 60 * 60 * 1000
+        Publishers.CombineLatest3(
+            repository.observeTokenUsageTotals(sinceEpochMs: sinceMs),
+            repository.observeTokenUsageByModel(sinceEpochMs: sinceMs, limit: tokenStatsModelLimit),
+            repository.observeTokenUsageDaily(sinceEpochMs: sinceMs)
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] totals, byModel, daily in
+            self?.tokenUsageState = TokenUsageUiState(
+                rangeDays: Int(tokenStatsRangeDays),
+                totals: totals,
+                byModel: byModel,
+                daily: daily,
+                lastUpdated: Date()
+            )
+        }
+        .store(in: &cancellables)
 
         do {
             settings = try repository.loadSettings()
@@ -697,6 +720,14 @@ final class SettingsViewModel: ObservableObject {
         }
         return false
     }
+}
+
+struct TokenUsageUiState: Equatable {
+    var rangeDays: Int = Int(tokenStatsRangeDays)
+    var totals: TokenUsageTotals = .init()
+    var byModel: [TokenUsageByModel] = []
+    var daily: [TokenUsageDailyPoint] = []
+    var lastUpdated: Date?
 }
 
 private extension String {

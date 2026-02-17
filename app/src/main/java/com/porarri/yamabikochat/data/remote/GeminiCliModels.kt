@@ -49,5 +49,7 @@ data class GeminiCliGenerateContentResponse(
 @Serializable
 data class GeminiCliResponseBody(
     val candidates: List<Candidate>? = null,
-    val promptFeedback: PromptFeedback? = null
+    val promptFeedback: PromptFeedback? = null,
+    @SerialName("usageMetadata")
+    val usageMetadata: GeminiUsageMetadata? = null
 )

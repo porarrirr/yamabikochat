@@ -16,6 +16,10 @@ import com.porarri.yamabikochat.data.local.FullAutoConversation
 import com.porarri.yamabikochat.data.local.FullChatMessage
 import com.porarri.yamabikochat.data.local.ModelPreset
 import com.porarri.yamabikochat.data.local.Settings
+import com.porarri.yamabikochat.data.local.TokenUsageByModel
+import com.porarri.yamabikochat.data.local.TokenUsageDailyPoint
+import com.porarri.yamabikochat.data.local.TokenUsageRecord
+import com.porarri.yamabikochat.data.local.TokenUsageTotals
 import com.porarri.yamabikochat.utils.CodexSessionIdUtils
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -177,4 +181,16 @@ class DatabaseRepository(private val chatDao: ChatDao) {
         val messages = getAutoConversationMessages(id).first()
         return FullAutoConversation(conversation, messages)
     }
+
+    suspend fun insertTokenUsage(record: TokenUsageRecord) =
+        chatDao.insertTokenUsage(record)
+
+    fun observeTokenUsageTotals(sinceEpochMs: Long): Flow<TokenUsageTotals> =
+        chatDao.observeTokenUsageTotals(sinceEpochMs)
+
+    fun observeTokenUsageByModel(sinceEpochMs: Long, limit: Int): Flow<List<TokenUsageByModel>> =
+        chatDao.observeTokenUsageByModel(sinceEpochMs, limit)
+
+    fun observeTokenUsageDaily(sinceEpochMs: Long): Flow<List<TokenUsageDailyPoint>> =
+        chatDao.observeTokenUsageDaily(sinceEpochMs)
 }

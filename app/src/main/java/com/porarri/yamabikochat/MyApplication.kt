@@ -13,6 +13,7 @@ import com.porarri.yamabikochat.data.local.SettingsManager
 import com.porarri.yamabikochat.data.remote.GeminiCliProvider
 import com.porarri.yamabikochat.data.model.ModelRepository
 import com.porarri.yamabikochat.data.remote.GeminiProvider
+import com.porarri.yamabikochat.data.remote.LiteLlmPricingRepository
 import com.porarri.yamabikochat.data.remote.OpenRouterModelService
 import com.porarri.yamabikochat.data.remote.OpenRouterProvider
 import com.porarri.yamabikochat.data.remote.RetrofitClient
@@ -43,6 +44,7 @@ class MyApplication : Application() {
     private val databaseRepository by lazy { DatabaseRepository(chatDao) }
     private val modelService by lazy { OpenRouterModelService(openRouterApiService) }
     private val modelRepository by lazy { ModelRepository(modelService) }
+    private val pricingRepository by lazy { LiteLlmPricingRepository(RetrofitClient.liteLlmPricingInstance) }
     private val settingsManager by lazy { SettingsManager.getInstance(applicationContext, chatDao) }
     private val codexAuthRepository by lazy { CodexAuthRepository(applicationContext) }
     private val geminiAuthRepository by lazy { GeminiAuthRepository(applicationContext) }
@@ -71,7 +73,8 @@ class MyApplication : Application() {
             fileProcessingRepository = fileRepository,
             modelRepository = modelRepository,
             codexAuthRepository = codexAuthRepository,
-            geminiAuthRepository = geminiAuthRepository
+            geminiAuthRepository = geminiAuthRepository,
+            pricingRepository = pricingRepository
         )
     }
     val viewModelFactory by lazy { ViewModelFactory(repository) }

@@ -24,6 +24,7 @@ final class ChatRepository {
     private let modelService: OpenRouterModelService
     private let codexAuthRepository: CodexAuthRepository
     private let geminiAuthRepository: GeminiAuthRepository
+    private let pricingRepository: any LiteLlmPricingEstimating
 
     init(
         conversations: ConversationRepository,
@@ -32,7 +33,8 @@ final class ChatRepository {
         credentialStore: SecureCredentialStore,
         modelService: OpenRouterModelService,
         codexAuthRepository: CodexAuthRepository,
-        geminiAuthRepository: GeminiAuthRepository
+        geminiAuthRepository: GeminiAuthRepository,
+        pricingRepository: any LiteLlmPricingEstimating = LiteLlmPricingRepository()
     ) {
         self.conversations = conversations
         self.settings = settings
@@ -41,6 +43,7 @@ final class ChatRepository {
         self.modelService = modelService
         self.codexAuthRepository = codexAuthRepository
         self.geminiAuthRepository = geminiAuthRepository
+        self.pricingRepository = pricingRepository
     }
 
     // MARK: - Conversations
@@ -340,6 +343,13 @@ final class ChatRepository {
         }
 
         let response = try await providers.generate(request: request, provider: provider)
+        await recordTokenUsageIfAvailable(
+            provider: conversation.apiProvider,
+            model: conversation.model,
+            usage: response.usage,
+            conversationId: conversationId,
+            requestType: "chat_non_stream"
+        )
 
         let assistantMessageId = try conversations.insertMessage(
             ChatMessage(
@@ -396,6 +406,7 @@ final class ChatRepository {
             try await streamRegeneratedVariant(
                 request: request,
                 provider: provider,
+                conversationId: conversationId,
                 baseMessageId: targetMessageID,
                 onStreamEvent: onStreamEvent
             )
@@ -403,6 +414,13 @@ final class ChatRepository {
         }
 
         let response = try await providers.generate(request: request, provider: provider)
+        await recordTokenUsageIfAvailable(
+            provider: conversation.apiProvider,
+            model: conversation.model,
+            usage: response.usage,
+            conversationId: conversationId,
+            requestType: "regenerate_non_stream"
+        )
         _ = try conversations.insertMessageVariant(
             baseMessageId: targetMessageID,
             text: response.text,
@@ -429,6 +447,7 @@ final class ChatRepository {
 
         var fullText = ""
         var reasoningText = ""
+        var finalUsage: ProviderUsage?
         do {
             let stream = try await providers.stream(request: request, provider: provider)
 
@@ -444,6 +463,7 @@ final class ChatRepository {
                 case .toolCallDelta:
                     continue
                 case let .completed(response):
+                    finalUsage = response.usage ?? finalUsage
                     if fullText.isEmpty {
                         fullText = response.text
                         try conversations.updateMessageText(messageId: assistantMessageId, text: fullText)
@@ -479,6 +499,7 @@ final class ChatRepository {
                     reasoningText = reasoning
                     try conversations.saveThinking(messageId: assistantMessageId, stream: reasoningText)
                 }
+                finalUsage = fallback.usage
                 onStreamEvent?(.completed(fallback))
                 DiagnosticsLogger.log(
                     "Gemini non-streaming fallback succeeded",
@@ -504,11 +525,19 @@ final class ChatRepository {
             }
         }
 
+        await recordTokenUsageIfAvailable(
+            provider: provider.rawValue,
+            model: request.model,
+            usage: finalUsage,
+            conversationId: conversationId,
+            requestType: "chat_stream"
+        )
+
         let response = ProviderResponse(
             text: fullText,
             reasoningSummary: reasoningText.isEmpty ? nil : reasoningText,
             raw: nil,
-            usage: nil
+            usage: finalUsage
         )
 
         return SendMessageResult(
@@ -521,6 +550,7 @@ final class ChatRepository {
     private func streamRegeneratedVariant(
         request: ProviderRequest,
         provider: LLMProvider,
+        conversationId: Int64,
         baseMessageId: Int64,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?
     ) async throws {
@@ -536,6 +566,7 @@ final class ChatRepository {
 
         var fullText = ""
         var reasoningText = ""
+        var finalUsage: ProviderUsage?
         do {
             let stream = try await providers.stream(request: request, provider: provider)
 
@@ -551,6 +582,7 @@ final class ChatRepository {
                 case .toolCallDelta:
                     continue
                 case let .completed(response):
+                    finalUsage = response.usage ?? finalUsage
                     if fullText.isEmpty {
                         fullText = response.text
                         try conversations.updateMessageVariantText(variantId: variantId, text: fullText)
@@ -586,6 +618,7 @@ final class ChatRepository {
                     reasoningText = reasoning
                     try conversations.saveMessageVariantThinking(variantId: variantId, stream: reasoningText)
                 }
+                finalUsage = fallback.usage
                 onStreamEvent?(.completed(fallback))
                 DiagnosticsLogger.log(
                     "Gemini non-streaming fallback succeeded for regeneration",
@@ -610,6 +643,14 @@ final class ChatRepository {
                 throw error
             }
         }
+
+        await recordTokenUsageIfAvailable(
+            provider: provider.rawValue,
+            model: request.model,
+            usage: finalUsage,
+            conversationId: conversationId,
+            requestType: "regenerate_stream"
+        )
     }
 
     private func buildProviderRequest(
@@ -742,6 +783,21 @@ final class ChatRepository {
             model: settings.dualModelB
         )
         let (resultA, resultB) = await (outcomeA, outcomeB)
+
+        await recordTokenUsageIfAvailable(
+            provider: settings.dualProviderA,
+            model: settings.dualModelA,
+            usage: resultA.usage,
+            conversationId: conversationId,
+            requestType: "dual_a"
+        )
+        await recordTokenUsageIfAvailable(
+            provider: settings.dualProviderB,
+            model: settings.dualModelB,
+            usage: resultB.usage,
+            conversationId: conversationId,
+            requestType: "dual_b"
+        )
 
         modelRow.modelAText = resultA.text
         modelRow.modelBText = resultB.text
@@ -893,6 +949,21 @@ final class ChatRepository {
 
     func observeAutoConversationMessages(autoConversationId: Int64) -> AnyPublisher<[AutoConversationMessage], Never> {
         conversations.observeAutoConversationMessages(autoConversationId: autoConversationId)
+    }
+
+    func observeTokenUsageTotals(sinceEpochMs: Int64) -> AnyPublisher<TokenUsageTotals, Never> {
+        conversations.observeTokenUsageTotals(sinceEpochMs: sinceEpochMs)
+    }
+
+    func observeTokenUsageByModel(
+        sinceEpochMs: Int64,
+        limit: Int
+    ) -> AnyPublisher<[TokenUsageByModel], Never> {
+        conversations.observeTokenUsageByModel(sinceEpochMs: sinceEpochMs, limit: limit)
+    }
+
+    func observeTokenUsageDaily(sinceEpochMs: Int64) -> AnyPublisher<[TokenUsageDailyPoint], Never> {
+        conversations.observeTokenUsageDaily(sinceEpochMs: sinceEpochMs)
     }
 
     func searchConversations(query: String) throws -> [ConversationListEntry] {
@@ -1208,6 +1279,13 @@ final class ChatRepository {
                     request: request,
                     provider: LLMProvider(rawOrDefault: turnProvider)
                 )
+                await recordTokenUsageIfAvailable(
+                    provider: turnProvider,
+                    model: turnModel,
+                    usage: response.usage,
+                    conversationId: autoConversation.boundChatConversationId,
+                    requestType: "auto_turn"
+                )
             } catch {
                 try markAutoConversationEnded(
                     autoConversationId: autoConversationId,
@@ -1366,6 +1444,59 @@ final class ChatRepository {
         conversation.endReason = reason
         conversation.boundChatConversationId = nil
         try conversations.updateAutoConversation(conversation)
+    }
+
+    private func recordTokenUsageIfAvailable(
+        provider: String,
+        model: String,
+        usage: ProviderUsage?,
+        conversationId: Int64?,
+        requestType: String
+    ) async {
+        guard let normalized = usage?.normalizedNonEmpty() else { return }
+        let resolvedInput = max(0, normalized.inputTokens ?? 0)
+        let resolvedOutput = max(0, normalized.outputTokens ?? 0)
+        let resolvedTotal = max(
+            max(0, normalized.totalTokens ?? (resolvedInput + resolvedOutput)),
+            resolvedInput + resolvedOutput
+        )
+
+        let costUsd = await pricingRepository.estimateCostUsd(
+            provider: provider,
+            model: model,
+            inputTokens: resolvedInput,
+            outputTokens: resolvedOutput,
+            cachedInputTokens: normalized.cachedInputTokens,
+            reasoningTokens: normalized.reasoningTokens
+        )
+
+        do {
+            try conversations.insertTokenUsage(
+                TokenUsageRecord(
+                    provider: provider.uppercased(),
+                    model: model.trimmingCharacters(in: .whitespacesAndNewlines).ifBlank("unknown"),
+                    requestType: requestType,
+                    conversationId: conversationId,
+                    inputTokens: resolvedInput,
+                    outputTokens: resolvedOutput,
+                    totalTokens: resolvedTotal,
+                    reasoningTokens: normalized.reasoningTokens,
+                    cachedInputTokens: normalized.cachedInputTokens,
+                    costUsd: costUsd
+                )
+            )
+        } catch {
+            DiagnosticsLogger.log(
+                "Token usage record failed",
+                category: .chat,
+                metadata: [
+                    "provider": provider.uppercased(),
+                    "model": model,
+                    "requestType": requestType
+                ],
+                error: error
+            )
+        }
     }
 
     private func shouldRetryGeminiWithGenerate(provider: LLMProvider, error: Error) -> Bool {
@@ -1696,6 +1827,7 @@ final class ChatRepository {
     private struct DualSideResult {
         var text: String
         var reasoning: String?
+        var usage: ProviderUsage?
         var error: Error?
     }
 
@@ -1712,12 +1844,14 @@ final class ChatRepository {
             return DualSideResult(
                 text: response.text,
                 reasoning: response.reasoningSummary,
+                usage: response.usage,
                 error: nil
             )
         } catch {
             return DualSideResult(
                 text: L10n.format("エラー: %@", error.localizedDescription),
                 reasoning: nil,
+                usage: nil,
                 error: error
             )
         }

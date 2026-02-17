@@ -5,6 +5,7 @@ import com.porarri.yamabikochat.data.local.*
 import com.porarri.yamabikochat.data.remote.Content
 import com.porarri.yamabikochat.data.remote.Part
 import com.porarri.yamabikochat.data.remote.GenerateContentResponse
+import com.porarri.yamabikochat.data.remote.extractTokenUsageSnapshot
 import com.porarri.yamabikochat.data.formatAutoConversationDisplay
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -258,6 +259,17 @@ class AutoConversationManager(
                     
                     if (response.isSuccessful) {
                         val responseBody = response.body()
+                        responseBody?.extractTokenUsageSnapshot()?.let { usage ->
+                            runCatching {
+                                repository.recordTokenUsage(
+                                    provider = provider,
+                                    model = model,
+                                    usage = usage,
+                                    conversationId = boundChatConversationId,
+                                    requestType = "auto_conversation"
+                                )
+                            }
+                        }
                         val (responseText, reasoningText) = extractResponseSegments(responseBody)
 
                         if (responseText.isNotBlank() || reasoningText.isNotBlank()) {

@@ -489,6 +489,26 @@ enum AppDatabase {
             try ensureSettingsColumns()
         }
 
+        migrator.registerMigration("v6_token_usage_stats") { db in
+            try db.create(table: "token_usage_records", ifNotExists: true) { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("timestamp", .integer).notNull()
+                t.column("provider", .text).notNull()
+                t.column("model", .text).notNull()
+                t.column("requestType", .text).notNull().defaults(to: "chat")
+                t.column("conversationId", .integer).references("conversations", onDelete: .setNull)
+                t.column("inputTokens", .integer).notNull().defaults(to: 0)
+                t.column("outputTokens", .integer).notNull().defaults(to: 0)
+                t.column("totalTokens", .integer).notNull().defaults(to: 0)
+                t.column("reasoningTokens", .integer)
+                t.column("cachedInputTokens", .integer)
+                t.column("costUsd", .double)
+            }
+            try db.create(index: "idx_token_usage_timestamp", on: "token_usage_records", columns: ["timestamp"], ifNotExists: true)
+            try db.create(index: "idx_token_usage_model_timestamp", on: "token_usage_records", columns: ["model", "timestamp"], ifNotExists: true)
+            try db.create(index: "idx_token_usage_conversation", on: "token_usage_records", columns: ["conversationId"], ifNotExists: true)
+        }
+
         return migrator
     }
 }

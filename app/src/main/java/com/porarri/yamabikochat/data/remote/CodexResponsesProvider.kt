@@ -373,6 +373,7 @@ class CodexResponsesProvider(
         val output = root["output"] as? JsonArray
         val textBuilder = StringBuilder()
         val thinkingBuilder = StringBuilder()
+        val tokenUsage = parseResponsesUsage(root)
 
         output?.forEach { item ->
             val obj = item.jsonObject
@@ -409,7 +410,8 @@ class CodexResponsesProvider(
                     content = ResponseContent(parts = parts, role = "model")
                 )
             ),
-            text = textBuilder.toString()
+            text = textBuilder.toString(),
+            tokenUsage = tokenUsage
         )
     }
 
@@ -508,10 +510,67 @@ class CodexResponsesProvider(
                             content = ResponseContent(parts = parts, role = "model")
                         )
                     ),
-                    text = textBuilder.toString()
+                    text = textBuilder.toString(),
+                    tokenUsage = parseResponsesUsageFromSse(rawFallback.toString())
                 )
             }
         }
+    }
+
+    private fun parseResponsesUsage(root: JsonObject): TokenUsageSnapshot? {
+        val usage = root["usage"]?.jsonObject ?: return null
+        return usageToSnapshot(usage)
+    }
+
+    private fun parseResponsesUsageFromSse(payload: String): TokenUsageSnapshot? {
+        if (payload.isBlank()) return null
+        var usageObj: JsonObject? = null
+        payload.lineSequence().forEach { line ->
+            if (!line.startsWith("data:")) return@forEach
+            val body = line.substringAfter("data:").trim()
+            if (body.isEmpty() || body == "[DONE]") return@forEach
+            runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull()?.let { obj ->
+                val type = obj["type"]?.jsonPrimitive?.contentOrNull
+                if (type == "response.completed") {
+                    val usage = obj["response"]?.jsonObject
+                        ?.get("usage")
+                        ?.jsonObject
+                    if (usage != null) {
+                        usageObj = usage
+                    }
+                }
+            }
+        }
+        return usageObj?.let { usageToSnapshot(it) }
+    }
+
+    private fun usageToSnapshot(usageObj: JsonObject): TokenUsageSnapshot? {
+        val inputTokens = usageObj["input_tokens"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+        val outputTokens = usageObj["output_tokens"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+        val totalTokens = usageObj["total_tokens"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+            ?: (inputTokens + outputTokens)
+        val reasoningTokens = runCatching {
+            usageObj["output_tokens_details"]?.jsonObject
+                ?.get("reasoning_tokens")
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.toIntOrNull()
+        }.getOrNull()
+        val cachedInputTokens = runCatching {
+            usageObj["input_tokens_details"]?.jsonObject
+                ?.get("cached_tokens")
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.toIntOrNull()
+        }.getOrNull()
+        val snapshot = TokenUsageSnapshot(
+            inputTokens = inputTokens,
+            outputTokens = outputTokens,
+            totalTokens = totalTokens,
+            reasoningTokens = reasoningTokens,
+            cachedInputTokens = cachedInputTokens
+        ).normalized()
+        return snapshot.takeUnless { it.isEmpty() }
     }
 
     companion object {

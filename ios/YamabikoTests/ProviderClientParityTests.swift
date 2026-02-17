@@ -710,6 +710,291 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(reasoning["exclude"] as? Bool, true)
     }
 
+    func testOpenRouterGenerateParsesUsageBreakdown() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("openrouter-key", for: .openRouter)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"""
+            {
+              "choices":[{"message":{"content":"ok"}}],
+              "usage":{
+                "prompt_tokens":120,
+                "completion_tokens":30,
+                "total_tokens":150,
+                "completion_tokens_details":{"reasoning_tokens":9},
+                "prompt_tokens_details":{"cached_tokens":48}
+              }
+            }
+            """#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenAICompatibleProviderClient()
+        let request = ProviderRequest(
+            model: "openai/gpt-4o-mini",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENROUTER"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let usage = try XCTUnwrap(response.usage)
+        XCTAssertEqual(usage.inputTokens, 120)
+        XCTAssertEqual(usage.outputTokens, 30)
+        XCTAssertEqual(usage.totalTokens, 150)
+        XCTAssertEqual(usage.reasoningTokens, 9)
+        XCTAssertEqual(usage.cachedInputTokens, 48)
+    }
+
+    func testOpenRouterStreamReturnsFinalUsageFromUsageChunk() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("openrouter-key", for: .openRouter)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"choices":[{"delta":{"content":"A"}}]}"#)
+                continuation.yield(#"data: {"usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120,"completion_tokens_details":{"reasoning_tokens":4},"prompt_tokens_details":{"cached_tokens":16}}}"#)
+                continuation.yield("data: [DONE]")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenAICompatibleProviderClient()
+        let request = ProviderRequest(
+            model: "openai/gpt-4o-mini",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENROUTER"]
+        )
+
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var final: ProviderResponse?
+        for try await event in stream {
+            if case let .completed(response) = event {
+                final = response
+            }
+        }
+
+        let usage = try XCTUnwrap(final?.usage)
+        XCTAssertEqual(usage.inputTokens, 100)
+        XCTAssertEqual(usage.outputTokens, 20)
+        XCTAssertEqual(usage.totalTokens, 120)
+        XCTAssertEqual(usage.reasoningTokens, 4)
+        XCTAssertEqual(usage.cachedInputTokens, 16)
+    }
+
+    func testGeminiGenerateParsesUsageMetadata() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("gemini-key", for: .gemini)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"""
+            {
+              "candidates":[{"content":{"parts":[{"text":"ok"}]}}],
+              "usageMetadata":{
+                "promptTokenCount":50,
+                "candidatesTokenCount":15,
+                "totalTokenCount":72,
+                "cachedContentTokenCount":10,
+                "toolUsePromptTokenCount":5,
+                "thoughtsTokenCount":7
+              }
+            }
+            """#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = GeminiProviderClient()
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "GEMINI"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let usage = try XCTUnwrap(response.usage)
+        XCTAssertEqual(usage.inputTokens, 50)
+        XCTAssertEqual(usage.outputTokens, 15)
+        XCTAssertEqual(usage.totalTokens, 72)
+        XCTAssertEqual(usage.cachedInputTokens, 10)
+        XCTAssertEqual(usage.reasoningTokens, 7)
+    }
+
+    func testGeminiStreamCarriesUsageMetadataFromFinalChunk() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("gemini-key", for: .gemini)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"candidates":[{"content":{"parts":[{"text":"A"}]}}]}"#)
+                continuation.yield("")
+                continuation.yield(#"data: {"usageMetadata":{"promptTokenCount":30,"candidatesTokenCount":7,"totalTokenCount":40,"cachedContentTokenCount":5,"thoughtsTokenCount":2}}"#)
+                continuation.yield("")
+                continuation.yield("data: [DONE]")
+                continuation.yield("")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = GeminiProviderClient()
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "GEMINI"]
+        )
+
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var final: ProviderResponse?
+        for try await event in stream {
+            if case let .completed(response) = event {
+                final = response
+            }
+        }
+
+        XCTAssertEqual(final?.text, "A")
+        let usage = try XCTUnwrap(final?.usage)
+        XCTAssertEqual(usage.inputTokens, 30)
+        XCTAssertEqual(usage.outputTokens, 7)
+        XCTAssertEqual(usage.totalTokens, 40)
+        XCTAssertEqual(usage.cachedInputTokens, 5)
+        XCTAssertEqual(usage.reasoningTokens, 2)
+    }
+
+    func testCodexGenerateParsesResponsesUsage() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCodexAccessToken("codex-access-token")
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"""
+            {
+              "output_text":"ok",
+              "usage":{
+                "input_tokens":77,
+                "output_tokens":19,
+                "total_tokens":96,
+                "input_tokens_details":{"cached_tokens":22},
+                "output_tokens_details":{"reasoning_tokens":8}
+              }
+            }
+            """#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = CodexProviderClient()
+        let request = ProviderRequest(
+            model: "gpt-5-codex",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "CODEX_AUTH"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let usage = try XCTUnwrap(response.usage)
+        XCTAssertEqual(usage.inputTokens, 77)
+        XCTAssertEqual(usage.outputTokens, 19)
+        XCTAssertEqual(usage.totalTokens, 96)
+        XCTAssertEqual(usage.cachedInputTokens, 22)
+        XCTAssertEqual(usage.reasoningTokens, 8)
+    }
+
+    func testCodexStreamCarriesResponseCompletedUsage() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCodexAccessToken("codex-access-token")
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"type":"response.output_text.delta","delta":"A"}"#)
+                continuation.yield(#"data: {"type":"response.completed","response":{"usage":{"input_tokens":21,"output_tokens":9,"total_tokens":30,"input_tokens_details":{"cached_tokens":3},"output_tokens_details":{"reasoning_tokens":4}}}}"#)
+                continuation.yield("data: [DONE]")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = CodexProviderClient()
+        let request = ProviderRequest(
+            model: "gpt-5-codex",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "CODEX_AUTH"]
+        )
+
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var final: ProviderResponse?
+        for try await event in stream {
+            if case let .completed(response) = event {
+                final = response
+            }
+        }
+
+        XCTAssertEqual(final?.text, "A")
+        let usage = try XCTUnwrap(final?.usage)
+        XCTAssertEqual(usage.inputTokens, 21)
+        XCTAssertEqual(usage.outputTokens, 9)
+        XCTAssertEqual(usage.totalTokens, 30)
+        XCTAssertEqual(usage.cachedInputTokens, 3)
+        XCTAssertEqual(usage.reasoningTokens, 4)
+    }
+
     private static func makeHTTPResponse(url: URL, statusCode: Int) -> HTTPURLResponse {
         HTTPURLResponse(
             url: url,

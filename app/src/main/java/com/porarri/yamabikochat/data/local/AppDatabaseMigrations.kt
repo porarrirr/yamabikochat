@@ -5,7 +5,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 object AppDatabaseMigrations {
     private const val LEGACY_TARGET_VERSION = 27
-    private const val LATEST_VERSION = 49
+    private const val LATEST_VERSION = 50
 
     private val legacyRebuildMigrations: List<Migration> = (1 until LEGACY_TARGET_VERSION).map { startVersion ->
         object : Migration(startVersion, LEGACY_TARGET_VERSION) {
@@ -350,6 +350,12 @@ object AppDatabaseMigrations {
         }
     }
 
+    private val migration49To50 = object : Migration(49, 50) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            createTokenUsageRecords(db)
+        }
+    }
+
     val ALL_MIGRATIONS: Array<Migration> =
         (legacyRebuildMigrations + listOf(
             migration27To28,
@@ -373,7 +379,8 @@ object AppDatabaseMigrations {
             migration45To46,
             migration46To47,
             migration47To48,
-            migration48To49
+            migration48To49,
+            migration49To50
         )).toTypedArray()
 
     private fun rebuildSchema(db: SupportSQLiteDatabase) {
@@ -386,6 +393,7 @@ object AppDatabaseMigrations {
         createDualChatMessages(db)
         createAutoConversations(db)
         createAutoConversationMessages(db)
+        createTokenUsageRecords(db)
     }
 
     private fun createConversations(db: SupportSQLiteDatabase) {
@@ -899,6 +907,35 @@ object AppDatabaseMigrations {
         ensureColumn(db, "auto_conversation_messages", Column("reasoning", "TEXT"))
         ensureColumn(db, "auto_conversation_messages", Column("timestamp", "INTEGER", notNull = true, defaultValue = "0"))
         ensureColumn(db, "auto_conversation_messages", Column("isEndSignal", "INTEGER", notNull = true, defaultValue = "0"))
+    }
+
+    private fun createTokenUsageRecords(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `token_usage_records` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `timestamp` INTEGER NOT NULL DEFAULT 0,
+                `provider` TEXT NOT NULL,
+                `model` TEXT NOT NULL,
+                `requestType` TEXT NOT NULL DEFAULT 'chat',
+                `conversationId` INTEGER,
+                `inputTokens` INTEGER NOT NULL DEFAULT 0,
+                `outputTokens` INTEGER NOT NULL DEFAULT 0,
+                `totalTokens` INTEGER NOT NULL DEFAULT 0,
+                `reasoningTokens` INTEGER,
+                `cachedInputTokens` INTEGER,
+                `costUsd` REAL,
+                FOREIGN KEY(`conversationId`) REFERENCES `conversations`(`id`) ON DELETE SET NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_token_usage_records_timestamp` ON `token_usage_records`(`timestamp`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_token_usage_records_model_timestamp` ON `token_usage_records`(`model`, `timestamp`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_token_usage_records_conversationId` ON `token_usage_records`(`conversationId`)")
+        ensureColumn(db, "token_usage_records", Column("requestType", "TEXT", notNull = true, defaultValue = "'chat'"))
+        ensureColumn(db, "token_usage_records", Column("reasoningTokens", "INTEGER"))
+        ensureColumn(db, "token_usage_records", Column("cachedInputTokens", "INTEGER"))
+        ensureColumn(db, "token_usage_records", Column("costUsd", "REAL"))
     }
 
     private fun ensureColumn(db: SupportSQLiteDatabase, table: String, column: Column) {

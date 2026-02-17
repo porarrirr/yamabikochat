@@ -105,10 +105,14 @@ interface ChatDao {
     @Query("DELETE FROM dual_chat_messages WHERE conversationId = :conversationId")
     suspend fun deleteDualMessagesForConversation(conversationId: Long)
 
+    @Query("DELETE FROM token_usage_records WHERE conversationId = :conversationId")
+    suspend fun deleteTokenUsageForConversation(conversationId: Long)
+
     @Transaction
     suspend fun deleteConversationCascade(id: Long) {
         deleteMessagesForConversation(id)
         deleteDualMessagesForConversation(id)
+        deleteTokenUsageForConversation(id)
         deleteConversationById(id)
     }
 
@@ -243,6 +247,56 @@ interface ChatDao {
 
     @Query("SELECT * FROM dual_chat_messages WHERE id = :id")
     suspend fun getDualMessageById(id: Long): DualChatMessage?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTokenUsage(record: TokenUsageRecord)
+
+    @Query(
+        """
+        SELECT
+            COUNT(*) as requestCount,
+            COALESCE(SUM(inputTokens), 0) as inputTokens,
+            COALESCE(SUM(outputTokens), 0) as outputTokens,
+            COALESCE(SUM(totalTokens), 0) as totalTokens,
+            COALESCE(SUM(costUsd), 0.0) as totalCostUsd
+        FROM token_usage_records
+        WHERE timestamp >= :sinceEpochMs
+        """
+    )
+    fun observeTokenUsageTotals(sinceEpochMs: Long): Flow<TokenUsageTotals>
+
+    @Query(
+        """
+        SELECT
+            model as model,
+            COUNT(*) as requestCount,
+            COALESCE(SUM(inputTokens), 0) as inputTokens,
+            COALESCE(SUM(outputTokens), 0) as outputTokens,
+            COALESCE(SUM(totalTokens), 0) as totalTokens,
+            COALESCE(SUM(costUsd), 0.0) as totalCostUsd
+        FROM token_usage_records
+        WHERE timestamp >= :sinceEpochMs
+        GROUP BY model
+        ORDER BY totalTokens DESC, requestCount DESC, model ASC
+        LIMIT :limit
+        """
+    )
+    fun observeTokenUsageByModel(sinceEpochMs: Long, limit: Int): Flow<List<TokenUsageByModel>>
+
+    @Query(
+        """
+        SELECT
+            ((timestamp / 86400000) * 86400000) as dayBucketStartMs,
+            COUNT(*) as requestCount,
+            COALESCE(SUM(totalTokens), 0) as totalTokens,
+            COALESCE(SUM(costUsd), 0.0) as totalCostUsd
+        FROM token_usage_records
+        WHERE timestamp >= :sinceEpochMs
+        GROUP BY dayBucketStartMs
+        ORDER BY dayBucketStartMs ASC
+        """
+    )
+    fun observeTokenUsageDaily(sinceEpochMs: Long): Flow<List<TokenUsageDailyPoint>>
     
     // AutoConversation queries
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -290,6 +344,9 @@ interface ChatDao {
     @Query("DELETE FROM dual_chat_messages WHERE conversationId IN (SELECT id FROM conversations WHERE isSecret = 1)")
     suspend fun deleteDualMessagesForSecretConversations()
 
+    @Query("DELETE FROM token_usage_records WHERE conversationId IN (SELECT id FROM conversations WHERE isSecret = 1)")
+    suspend fun deleteTokenUsageForSecretConversations()
+
     @Query(
         """
         DELETE FROM auto_conversation_messages
@@ -312,6 +369,7 @@ interface ChatDao {
         deleteThinkingForSecretConversations()
         deleteChatMessagesForSecretConversations()
         deleteDualMessagesForSecretConversations()
+        deleteTokenUsageForSecretConversations()
         deleteAutoConversationMessagesForSecretConversations()
         deleteAutoConversationsForSecretConversations()
         deleteSecretConversations()

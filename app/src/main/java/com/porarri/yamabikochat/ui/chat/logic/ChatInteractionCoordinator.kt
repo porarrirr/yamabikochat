@@ -365,6 +365,7 @@ class ChatInteractionCoordinator(
         val modelMessageId = withContext(Dispatchers.IO) { repository.insertDualMessage(modelDualMessage) }
 
         when (val response = dualChatResponder.generateResponses(
+            conversationId = conversationId,
             modelA = settings.dualModelA,
             modelB = settings.dualModelB,
             providerA = settings.dualProviderA,

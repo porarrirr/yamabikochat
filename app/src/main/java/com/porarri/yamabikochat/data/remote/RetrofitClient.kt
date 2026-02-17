@@ -16,6 +16,7 @@ object RetrofitClient {
     private const val OPENROUTER_BASE_URL = "https://openrouter.ai/api/"
     private const val ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
     private const val OPENAI_BASE_URL = "https://api.openai.com/v1/"
+    private const val LITELLM_PRICING_BASE_URL = "https://raw.githubusercontent.com/"
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -60,6 +61,15 @@ object RetrofitClient {
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
         retrofit.create(ZaiApiService::class.java)
+    }
+
+    val liteLlmPricingInstance: LiteLlmPricingApiService by lazy {
+        val retrofit = Retrofit.Builder()
+            .baseUrl(LITELLM_PRICING_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+        retrofit.create(LiteLlmPricingApiService::class.java)
     }
 
     /**

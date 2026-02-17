@@ -15,9 +15,10 @@ import androidx.room.TypeConverters
         ModelPreset::class,
         DualChatMessage::class,
         AutoConversation::class,
-        AutoConversationMessage::class
+        AutoConversationMessage::class,
+        TokenUsageRecord::class
     ],
-    version = 49,
+    version = 50,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

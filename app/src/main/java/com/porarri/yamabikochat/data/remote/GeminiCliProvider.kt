@@ -193,7 +193,8 @@ class GeminiCliProvider(
         return GenerateContentResponse(
             candidates = candidates,
             promptFeedback = response.response.promptFeedback,
-            text = text
+            text = text,
+            usageMetadata = response.response.usageMetadata
         )
     }
 

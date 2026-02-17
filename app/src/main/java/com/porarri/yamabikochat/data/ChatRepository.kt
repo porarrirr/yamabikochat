@@ -23,15 +23,21 @@ import com.porarri.yamabikochat.data.local.FullAutoConversation
 import com.porarri.yamabikochat.data.local.FullChatMessage
 import com.porarri.yamabikochat.data.local.ModelPreset
 import com.porarri.yamabikochat.data.local.Settings
+import com.porarri.yamabikochat.data.local.TokenUsageByModel
+import com.porarri.yamabikochat.data.local.TokenUsageDailyPoint
+import com.porarri.yamabikochat.data.local.TokenUsageRecord
+import com.porarri.yamabikochat.data.local.TokenUsageTotals
 import com.porarri.yamabikochat.data.model.ModelRepository
 import com.porarri.yamabikochat.data.remote.Content
 import com.porarri.yamabikochat.data.remote.GenerateContentRequest
 import com.porarri.yamabikochat.data.remote.GenerateContentResponse
 import com.porarri.yamabikochat.data.remote.InlineData
+import com.porarri.yamabikochat.data.remote.LiteLlmPricingRepository
 import com.porarri.yamabikochat.data.remote.ModelEndpoint
 import com.porarri.yamabikochat.data.remote.Part
 import com.porarri.yamabikochat.data.remote.ProviderDirectory
 import com.porarri.yamabikochat.data.remote.SimpleModel
+import com.porarri.yamabikochat.data.remote.TokenUsageSnapshot
 import com.porarri.yamabikochat.utils.FileValidationUtils
 import com.porarri.yamabikochat.utils.SqlLikeUtils
 import kotlinx.coroutines.flow.Flow
@@ -44,7 +50,8 @@ class ChatRepository(
     private val fileProcessingRepository: FileProcessingRepository,
     private val modelRepository: ModelRepository,
     private val codexAuthRepository: CodexAuthRepository,
-    private val geminiAuthRepository: GeminiAuthRepository
+    private val geminiAuthRepository: GeminiAuthRepository,
+    private val pricingRepository: LiteLlmPricingRepository
 ) {
 
     // region Database delegation
@@ -143,6 +150,47 @@ class ChatRepository(
 
     suspend fun getFullAutoConversation(id: Long): FullAutoConversation? =
         databaseRepository.getFullAutoConversation(id)
+
+    suspend fun recordTokenUsage(
+        provider: String,
+        model: String,
+        usage: TokenUsageSnapshot,
+        conversationId: Long? = null,
+        requestType: String = "chat"
+    ) {
+        val normalized = usage.normalized()
+        if (normalized.isEmpty()) return
+        val costUsd = pricingRepository.estimateCostUsd(
+            provider = provider,
+            model = model,
+            inputTokens = normalized.inputTokens,
+            outputTokens = normalized.outputTokens,
+            reasoningTokens = normalized.reasoningTokens
+        )
+        databaseRepository.insertTokenUsage(
+            TokenUsageRecord(
+                provider = provider.uppercase(),
+                model = model.trim().ifBlank { "unknown" },
+                requestType = requestType,
+                conversationId = conversationId,
+                inputTokens = normalized.inputTokens,
+                outputTokens = normalized.outputTokens,
+                totalTokens = normalized.totalTokens,
+                reasoningTokens = normalized.reasoningTokens,
+                cachedInputTokens = normalized.cachedInputTokens,
+                costUsd = costUsd
+            )
+        )
+    }
+
+    fun observeTokenUsageTotals(sinceEpochMs: Long): Flow<TokenUsageTotals> =
+        databaseRepository.observeTokenUsageTotals(sinceEpochMs)
+
+    fun observeTokenUsageByModel(sinceEpochMs: Long, limit: Int): Flow<List<TokenUsageByModel>> =
+        databaseRepository.observeTokenUsageByModel(sinceEpochMs, limit)
+
+    fun observeTokenUsageDaily(sinceEpochMs: Long): Flow<List<TokenUsageDailyPoint>> =
+        databaseRepository.observeTokenUsageDaily(sinceEpochMs)
     // endregion
 
     // region API delegation

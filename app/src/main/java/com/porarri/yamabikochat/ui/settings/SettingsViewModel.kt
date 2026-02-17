@@ -9,18 +9,25 @@ import com.porarri.yamabikochat.data.auth.GeminiAuthState
 import com.porarri.yamabikochat.data.auth.GeminiQuotaBucket
 import com.porarri.yamabikochat.data.local.ModelPreset
 import com.porarri.yamabikochat.data.local.Settings
+import com.porarri.yamabikochat.data.local.TokenUsageByModel
+import com.porarri.yamabikochat.data.local.TokenUsageDailyPoint
+import com.porarri.yamabikochat.data.local.TokenUsageTotals
 import com.porarri.yamabikochat.data.remote.SimpleModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
 
 private const val OPENROUTER_RECENT_LIMIT = 5
+private const val TOKEN_STATS_RANGE_DAYS = 30L
+private const val TOKEN_STATS_MODEL_LIMIT = 12
 
 class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
 
@@ -59,9 +66,12 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
     val geminiQuotaState: StateFlow<GeminiQuotaUiState> = _geminiQuotaState.asStateFlow()
     private val _codexUsageState = MutableStateFlow(CodexUsageUiState())
     val codexUsageState: StateFlow<CodexUsageUiState> = _codexUsageState.asStateFlow()
+    private val _tokenUsageState = MutableStateFlow(TokenUsageUiState())
+    val tokenUsageState: StateFlow<TokenUsageUiState> = _tokenUsageState.asStateFlow()
 
     init {
         viewModelScope.launch { updateApiKeyStatus() }
+        observeTokenUsageStats()
     }
 
     fun clearSecureStorageError() { _secureStorageError.value = null }
@@ -183,6 +193,28 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
 
     private fun clearCodexUsage() {
         _codexUsageState.value = CodexUsageUiState()
+    }
+
+    private fun observeTokenUsageStats() {
+        val now = System.currentTimeMillis()
+        val since = now - TOKEN_STATS_RANGE_DAYS * 24L * 60L * 60L * 1000L
+        viewModelScope.launch {
+            combine(
+                repository.observeTokenUsageTotals(since),
+                repository.observeTokenUsageByModel(since, TOKEN_STATS_MODEL_LIMIT),
+                repository.observeTokenUsageDaily(since)
+            ) { totals, byModel, daily ->
+                TokenUsageUiState(
+                    rangeDays = TOKEN_STATS_RANGE_DAYS.toInt(),
+                    totals = totals,
+                    byModel = byModel,
+                    daily = daily,
+                    lastUpdated = Instant.now().toString()
+                )
+            }.collect { newState ->
+                _tokenUsageState.value = newState
+            }
+        }
     }
 
     suspend fun revealApiKey(provider: String): String? = withContext(Dispatchers.IO) {
@@ -694,6 +726,14 @@ data class CodexUsageUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val usage: CodexUsageStatus? = null,
+    val lastUpdated: String? = null
+)
+
+data class TokenUsageUiState(
+    val rangeDays: Int = TOKEN_STATS_RANGE_DAYS.toInt(),
+    val totals: TokenUsageTotals = TokenUsageTotals(),
+    val byModel: List<TokenUsageByModel> = emptyList(),
+    val daily: List<TokenUsageDailyPoint> = emptyList(),
     val lastUpdated: String? = null
 )
 

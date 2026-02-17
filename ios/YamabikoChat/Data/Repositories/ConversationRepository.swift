@@ -109,6 +109,13 @@ final class ConversationRepository {
             }
 
             try db.execute(
+                sql: """
+                DELETE FROM token_usage_records
+                WHERE conversationId IN (SELECT id FROM conversations WHERE projectId = ?)
+                """,
+                arguments: [id]
+            )
+            try db.execute(
                 sql: "DELETE FROM conversations WHERE projectId = ?",
                 arguments: [id]
             )
@@ -127,6 +134,10 @@ final class ConversationRepository {
 
     func deleteConversation(id: Int64) throws {
         try dbQueue.write { db in
+            try db.execute(
+                sql: "DELETE FROM token_usage_records WHERE conversationId = ?",
+                arguments: [id]
+            )
             _ = try Conversation.deleteOne(db, key: id)
         }
     }
@@ -575,6 +586,150 @@ final class ConversationRepository {
                 .filter(Column("autoConversationId") == autoConversationId)
                 .order(Column("turnIndex").asc, Column("createdAtMs").asc, Column("id").asc)
                 .fetchAll(db)
+        }
+        .publisher(in: dbQueue)
+        .replaceError(with: [])
+        .eraseToAnyPublisher()
+    }
+
+    func insertTokenUsage(_ record: TokenUsageRecord) throws {
+        try dbQueue.write { db in
+            var mutable = record
+            try mutable.insert(db)
+        }
+    }
+
+    func observeTokenUsageTotals(sinceEpochMs: Int64) -> AnyPublisher<TokenUsageTotals, Never> {
+        ValueObservation.tracking { db -> TokenUsageTotals in
+            let row = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT
+                    COUNT(*) as requestCount,
+                    COALESCE(SUM(inputTokens), 0) as inputTokens,
+                    COALESCE(SUM(outputTokens), 0) as outputTokens,
+                    COALESCE(SUM(cachedInputTokens), 0) as cachedInputTokens,
+                    COALESCE(SUM(reasoningTokens), 0) as reasoningTokens,
+                    COALESCE(SUM(totalTokens), 0) as totalTokens,
+                    COALESCE(SUM(costUsd), 0.0) as totalCostUsd
+                FROM token_usage_records
+                WHERE timestamp >= ?
+                """,
+                arguments: [sinceEpochMs]
+            )
+            return TokenUsageTotals(
+                requestCount: row?["requestCount"] ?? 0,
+                inputTokens: row?["inputTokens"] ?? 0,
+                outputTokens: row?["outputTokens"] ?? 0,
+                cachedInputTokens: row?["cachedInputTokens"] ?? 0,
+                reasoningTokens: row?["reasoningTokens"] ?? 0,
+                totalTokens: row?["totalTokens"] ?? 0,
+                totalCostUsd: row?["totalCostUsd"] ?? 0
+            )
+        }
+        .publisher(in: dbQueue)
+        .replaceError(with: TokenUsageTotals())
+        .eraseToAnyPublisher()
+    }
+
+    func fetchTokenUsageTotals(sinceEpochMs: Int64) throws -> TokenUsageTotals {
+        try dbQueue.read { db in
+            let row = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT
+                    COUNT(*) as requestCount,
+                    COALESCE(SUM(inputTokens), 0) as inputTokens,
+                    COALESCE(SUM(outputTokens), 0) as outputTokens,
+                    COALESCE(SUM(cachedInputTokens), 0) as cachedInputTokens,
+                    COALESCE(SUM(reasoningTokens), 0) as reasoningTokens,
+                    COALESCE(SUM(totalTokens), 0) as totalTokens,
+                    COALESCE(SUM(costUsd), 0.0) as totalCostUsd
+                FROM token_usage_records
+                WHERE timestamp >= ?
+                """,
+                arguments: [sinceEpochMs]
+            )
+            return TokenUsageTotals(
+                requestCount: row?["requestCount"] ?? 0,
+                inputTokens: row?["inputTokens"] ?? 0,
+                outputTokens: row?["outputTokens"] ?? 0,
+                cachedInputTokens: row?["cachedInputTokens"] ?? 0,
+                reasoningTokens: row?["reasoningTokens"] ?? 0,
+                totalTokens: row?["totalTokens"] ?? 0,
+                totalCostUsd: row?["totalCostUsd"] ?? 0
+            )
+        }
+    }
+
+    func observeTokenUsageByModel(
+        sinceEpochMs: Int64,
+        limit: Int
+    ) -> AnyPublisher<[TokenUsageByModel], Never> {
+        ValueObservation.tracking { db -> [TokenUsageByModel] in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT
+                    model as model,
+                    COUNT(*) as requestCount,
+                    COALESCE(SUM(inputTokens), 0) as inputTokens,
+                    COALESCE(SUM(outputTokens), 0) as outputTokens,
+                    COALESCE(SUM(cachedInputTokens), 0) as cachedInputTokens,
+                    COALESCE(SUM(reasoningTokens), 0) as reasoningTokens,
+                    COALESCE(SUM(totalTokens), 0) as totalTokens,
+                    COALESCE(SUM(costUsd), 0.0) as totalCostUsd
+                FROM token_usage_records
+                WHERE timestamp >= ?
+                GROUP BY model
+                ORDER BY totalTokens DESC, requestCount DESC, model ASC
+                LIMIT ?
+                """,
+                arguments: [sinceEpochMs, max(1, limit)]
+            )
+            return rows.map { row in
+                TokenUsageByModel(
+                    model: row["model"] ?? "unknown",
+                    requestCount: row["requestCount"] ?? 0,
+                    inputTokens: row["inputTokens"] ?? 0,
+                    outputTokens: row["outputTokens"] ?? 0,
+                    cachedInputTokens: row["cachedInputTokens"] ?? 0,
+                    reasoningTokens: row["reasoningTokens"] ?? 0,
+                    totalTokens: row["totalTokens"] ?? 0,
+                    totalCostUsd: row["totalCostUsd"] ?? 0
+                )
+            }
+        }
+        .publisher(in: dbQueue)
+        .replaceError(with: [])
+        .eraseToAnyPublisher()
+    }
+
+    func observeTokenUsageDaily(sinceEpochMs: Int64) -> AnyPublisher<[TokenUsageDailyPoint], Never> {
+        ValueObservation.tracking { db -> [TokenUsageDailyPoint] in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT
+                    ((timestamp / 86400000) * 86400000) as dayBucketStartMs,
+                    COUNT(*) as requestCount,
+                    COALESCE(SUM(totalTokens), 0) as totalTokens,
+                    COALESCE(SUM(costUsd), 0.0) as totalCostUsd
+                FROM token_usage_records
+                WHERE timestamp >= ?
+                GROUP BY dayBucketStartMs
+                ORDER BY dayBucketStartMs ASC
+                """,
+                arguments: [sinceEpochMs]
+            )
+            return rows.map { row in
+                TokenUsageDailyPoint(
+                    dayBucketStartMs: row["dayBucketStartMs"] ?? 0,
+                    requestCount: row["requestCount"] ?? 0,
+                    totalTokens: row["totalTokens"] ?? 0,
+                    totalCostUsd: row["totalCostUsd"] ?? 0
+                )
+            }
         }
         .publisher(in: dbQueue)
         .replaceError(with: [])

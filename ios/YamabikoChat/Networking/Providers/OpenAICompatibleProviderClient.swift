@@ -95,24 +95,40 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                     }
 
                     var fullText = ""
+                    var latestUsage: ProviderUsage?
                     for try await line in lineStream {
                         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
                         if trimmed.isEmpty || !trimmed.hasPrefix("data:") { continue }
 
-                        let dataChunk = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
+                        let dataChunk = String(trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces))
+                        if let root = try? JSONSerialization.jsonObject(with: Data(dataChunk.utf8)) as? [String: Any],
+                           let usage = parseUsage(root["usage"] as? [String: Any])?.normalizedNonEmpty() {
+                            latestUsage = usage
+                        }
                         if dataChunk == "[DONE]" {
-                            let final = ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: nil)
+                            let final = ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: latestUsage)
                             continuation.yield(.completed(final))
                             continuation.finish()
                             return
                         }
 
-                        if let event = parseStreamChunk(String(dataChunk), fullText: &fullText) {
+                        if let event = parseStreamChunk(dataChunk, fullText: &fullText) {
+                            if case let .completed(response) = event {
+                                let merged = ProviderResponse(
+                                    text: response.text,
+                                    reasoningSummary: response.reasoningSummary,
+                                    raw: response.raw,
+                                    usage: response.usage ?? latestUsage
+                                )
+                                continuation.yield(.completed(merged))
+                                continuation.finish()
+                                return
+                            }
                             continuation.yield(event)
                         }
                     }
 
-                    let final = ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: nil)
+                    let final = ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: latestUsage)
                     continuation.yield(.completed(final))
                     continuation.finish()
                 } catch {
@@ -330,10 +346,37 @@ struct OpenAICompatibleProviderClient: ProviderClient {
 
     private func parseUsage(_ object: [String: Any]?) -> ProviderUsage? {
         guard let object else { return nil }
+        let inputTokens = intValue(object["prompt_tokens"]) ?? intValue(object["input_tokens"])
+        let outputTokens = intValue(object["completion_tokens"]) ?? intValue(object["output_tokens"])
+        let totalTokens = intValue(object["total_tokens"])
+        let reasoningTokens =
+            intValue(object["reasoning_tokens"]) ??
+            intValue((object["completion_tokens_details"] as? [String: Any])?["reasoning_tokens"]) ??
+            intValue((object["output_tokens_details"] as? [String: Any])?["reasoning_tokens"])
+        let cachedTokens =
+            intValue((object["prompt_tokens_details"] as? [String: Any])?["cached_tokens"]) ??
+            intValue((object["input_tokens_details"] as? [String: Any])?["cached_tokens"])
+
         return ProviderUsage(
-            inputTokens: object["prompt_tokens"] as? Int,
-            outputTokens: object["completion_tokens"] as? Int,
-            reasoningTokens: object["reasoning_tokens"] as? Int
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            totalTokens: totalTokens,
+            reasoningTokens: reasoningTokens,
+            cachedInputTokens: cachedTokens
         )
+        .normalizedNonEmpty()
+    }
+
+    private func intValue(_ raw: Any?) -> Int? {
+        if let value = raw as? Int {
+            return value
+        }
+        if let value = raw as? NSNumber {
+            return value.intValue
+        }
+        if let value = raw as? String {
+            return Int(value)
+        }
+        return nil
     }
 }

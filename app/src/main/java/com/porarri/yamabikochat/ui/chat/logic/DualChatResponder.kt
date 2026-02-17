@@ -2,6 +2,7 @@ package com.porarri.yamabikochat.ui.chat.logic
 
 import com.porarri.yamabikochat.data.ChatRepository
 import com.porarri.yamabikochat.data.remote.GenerateContentRequest
+import com.porarri.yamabikochat.data.remote.extractTokenUsageSnapshot
 import com.porarri.yamabikochat.BuildConfig
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 
@@ -12,6 +13,7 @@ class DualChatResponder(
     private val repository: ChatRepository
 ) {
     suspend fun generateResponses(
+        conversationId: Long,
         modelA: String,
         modelB: String,
         providerA: String,
@@ -28,6 +30,28 @@ class DualChatResponder(
                 requestA,
                 requestB
             )
+            responseA.body()?.extractTokenUsageSnapshot()?.let { usage ->
+                runCatching {
+                    repository.recordTokenUsage(
+                        provider = providerA,
+                        model = modelA,
+                        usage = usage,
+                        conversationId = conversationId,
+                        requestType = "dual"
+                    )
+                }
+            }
+            responseB.body()?.extractTokenUsageSnapshot()?.let { usage ->
+                runCatching {
+                    repository.recordTokenUsage(
+                        provider = providerB,
+                        model = modelB,
+                        usage = usage,
+                        conversationId = conversationId,
+                        requestType = "dual"
+                    )
+                }
+            }
 
             val errorBodyA = if (!responseA.isSuccessful && (BuildConfig.DEBUG || BuildConfig.DIAGNOSTIC)) {
                 responseA.errorBody()?.string()?.take(2048)

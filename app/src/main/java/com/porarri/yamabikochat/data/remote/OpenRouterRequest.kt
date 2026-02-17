@@ -120,26 +120,40 @@ data class ReasoningDetail(
 
 @Serializable
 data class OpenRouterUsage(
-    val prompt_tokens: Int,
-    val completion_tokens: Int,
-    val total_tokens: Int
+    val prompt_tokens: Int? = null,
+    val completion_tokens: Int? = null,
+    val total_tokens: Int? = null,
+    val prompt_tokens_details: OpenRouterPromptTokenDetails? = null,
+    val completion_tokens_details: OpenRouterCompletionTokenDetails? = null,
+    val cost: Double? = null
+)
+
+@Serializable
+data class OpenRouterPromptTokenDetails(
+    val cached_tokens: Int? = null
+)
+
+@Serializable
+data class OpenRouterCompletionTokenDetails(
+    val reasoning_tokens: Int? = null
 )
 
 // Neutral, OpenAI-compatible stream response (used by Z.ai / OpenRouter / OpenAI-compat)
 @Serializable
 data class ChatCompletionStreamResponse(
-    val id: String,
+    val id: String = "",
     @kotlinx.serialization.SerialName("object")
     val objectType: String? = null, // 一部のプロバイダーは省略するため必須にしない
-    val created: Long,
-    val model: String,
-    val choices: List<ChatCompletionStreamChoice>
+    val created: Long = 0L,
+    val model: String = "",
+    val choices: List<ChatCompletionStreamChoice> = emptyList(),
+    val usage: OpenRouterUsage? = null
 )
 
 @Serializable
 data class ChatCompletionStreamChoice(
     val index: Int,
-    val delta: ChatCompletionDelta,
+    val delta: ChatCompletionDelta = ChatCompletionDelta(),
     val finish_reason: String? = null
 )
 

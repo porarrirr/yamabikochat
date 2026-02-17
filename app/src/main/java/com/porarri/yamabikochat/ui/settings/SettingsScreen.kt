@@ -2,9 +2,11 @@ package com.porarri.yamabikochat.ui.settings
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -66,6 +68,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.util.Locale
 
 private enum class SettingsSheet {
     ThemeColor,
@@ -107,6 +110,7 @@ fun SettingsScreen(
     val geminiAuthError by viewModel.geminiAuthError.collectAsState()
     val geminiQuotaState by viewModel.geminiQuotaState.collectAsState()
     val codexUsageState by viewModel.codexUsageState.collectAsState()
+    val tokenUsageState by viewModel.tokenUsageState.collectAsState()
 
     LaunchedEffect(secureStorageError) {
         secureStorageError?.let {
@@ -959,7 +963,10 @@ fun SettingsScreen(
                                         }
                                     }
                                 }
-                            }
+                        }
+                    }
+                        item {
+                            TokenUsageStatsCard(state = tokenUsageState)
                         }
         item {
             Card(
@@ -2251,6 +2258,154 @@ private fun LabeledValueBlock(
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+@Composable
+private fun TokenUsageStatsCard(state: TokenUsageUiState) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = "トークン統計（直近${state.rangeDays}日）",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                UsageStatCell(
+                    label = "Spend",
+                    value = formatUsd(state.totals.totalCostUsd),
+                    modifier = Modifier.weight(1f)
+                )
+                UsageStatCell(
+                    label = "Requests",
+                    value = formatCompactCount(state.totals.requestCount),
+                    modifier = Modifier.weight(1f)
+                )
+                UsageStatCell(
+                    label = "Tokens",
+                    value = formatCompactCount(state.totals.totalTokens),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (state.daily.isNotEmpty()) {
+                TokenUsageMiniBars(state)
+            }
+            if (state.byModel.isNotEmpty()) {
+                Text(
+                    text = "Requests By Model",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                val maxTokens = state.byModel.maxOfOrNull { it.totalTokens }?.coerceAtLeast(1L) ?: 1L
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    state.byModel.take(8).forEach { item ->
+                        val ratio = (item.totalTokens.toFloat() / maxTokens.toFloat()).coerceIn(0f, 1f)
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = item.model,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "${formatCompactCount(item.requestCount)} req • ${formatCompactCount(item.totalTokens)} tok • ${formatUsd(item.totalCostUsd)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(999.dp))
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(ratio)
+                                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(999.dp))
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    text = "まだトークン使用履歴がありません。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UsageStatCell(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun TokenUsageMiniBars(state: TokenUsageUiState) {
+    val points = state.daily.takeLast(24)
+    val maxTokens = points.maxOfOrNull { it.totalTokens }?.coerceAtLeast(1L) ?: 1L
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        points.forEach { point ->
+            val ratio = (point.totalTokens.toFloat() / maxTokens.toFloat()).coerceIn(0.08f, 1f)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(ratio)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+            )
+        }
+    }
+}
+
+private fun formatUsd(value: Double): String = String.format(Locale.US, "$%.5f", value)
+
+private fun formatCompactCount(value: Long): String {
+    val abs = kotlin.math.abs(value.toDouble())
+    return when {
+        abs >= 1_000_000_000 -> String.format(Locale.US, "%.1fB", value / 1_000_000_000.0)
+        abs >= 1_000_000 -> String.format(Locale.US, "%.1fM", value / 1_000_000.0)
+        abs >= 1_000 -> String.format(Locale.US, "%.1fK", value / 1_000.0)
+        else -> value.toString()
     }
 }
 

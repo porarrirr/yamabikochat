@@ -206,7 +206,8 @@ object RequestConverter {
 
         return GenerateContentResponse(
             candidates = candidates,
-            text = openRouterResponse.choices.firstOrNull()?.message?.content
+            text = openRouterResponse.choices.firstOrNull()?.message?.content,
+            tokenUsage = openRouterResponse.usage?.toTokenUsageSnapshot()
         )
     }
 

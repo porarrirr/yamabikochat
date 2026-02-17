@@ -10,6 +10,9 @@ import com.porarri.yamabikochat.data.remote.FunctionResponse
 import com.porarri.yamabikochat.data.remote.GeminiCliGenerateContentResponse
 import com.porarri.yamabikochat.data.remote.Part
 import com.porarri.yamabikochat.data.remote.ResponsePart
+import com.porarri.yamabikochat.data.remote.TokenUsageSnapshot
+import com.porarri.yamabikochat.data.remote.extractTokenUsageSnapshot
+import com.porarri.yamabikochat.data.remote.toTokenUsageSnapshot
 import com.porarri.yamabikochat.BuildConfig
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import kotlinx.coroutines.CoroutineScope
@@ -123,6 +126,7 @@ class ChatResponseStreamer(
                 var currentSummary = ""
                 val currentAttachments = mutableListOf<String>()
                 var hasData = false
+                var usageRecorded = false
                 var parseError: Throwable? = null
                 var parseErrorCount = 0
                 val nonDataLines = mutableListOf<String>()
@@ -132,6 +136,23 @@ class ChatResponseStreamer(
                 try {
                     val eventBuffer = StringBuilder()
 
+                    suspend fun recordUsageOnce(snapshot: TokenUsageSnapshot?, phase: String) {
+                        if (usageRecorded) return
+                        val usage = snapshot?.normalized() ?: return
+                        if (usage.isEmpty()) return
+                        runCatching {
+                            repository.recordTokenUsage(
+                                provider = provider,
+                                model = model,
+                                usage = usage,
+                                conversationId = conversationId,
+                                requestType = phase
+                            )
+                        }.onSuccess {
+                            usageRecorded = true
+                        }
+                    }
+
                     suspend fun flushEvent() {
                         val payload = eventBuffer.toString().trim()
                         eventBuffer.setLength(0)
@@ -140,10 +161,17 @@ class ChatResponseStreamer(
                         }
 
                         try {
-                            val (deltaText, deltaThinking, deltaSummary) = if (
+                            val parsedChunk = if (
                                 provider.uppercase() == "CODEX_AUTH"
                             ) {
-                                parseCodexResponsesDelta(payload, currentText)
+                                val delta = parseCodexResponsesDelta(payload, currentText)
+                                val usage = parseCodexResponsesUsage(payload)
+                                StreamChunkParse(
+                                    deltaText = delta.first,
+                                    deltaThinking = delta.second,
+                                    deltaSummary = delta.third,
+                                    usage = usage
+                                )
                             } else if (
                                 provider.uppercase() == "OPENROUTER" ||
                                 provider.uppercase() == "ZAI" ||
@@ -161,7 +189,11 @@ class ChatResponseStreamer(
 
                                 val textDelta = incrementalDelta(currentText, fullText)
                                 val thinkingDelta = incrementalDelta(currentThinking, fullThinking)
-                                Triple(textDelta, thinkingDelta, "")
+                                StreamChunkParse(
+                                    deltaText = textDelta,
+                                    deltaThinking = thinkingDelta,
+                                    usage = streamResponse.usage?.toTokenUsageSnapshot()
+                                )
                             } else if (provider.uppercase() == "GEMINI_AUTH") {
                                 val chunk = unwrapGeminiCliResponse(payload)
                                 val parts = chunk.candidates?.firstOrNull()?.content?.parts.orEmpty()
@@ -174,7 +206,11 @@ class ChatResponseStreamer(
                                 if (attachmentsAdded && textDelta.isEmpty() && parsed.thinking.isEmpty()) {
                                     hasData = true
                                 }
-                                Triple(textDelta, parsed.thinking, "")
+                                StreamChunkParse(
+                                    deltaText = textDelta,
+                                    deltaThinking = parsed.thinking,
+                                    usage = chunk.extractTokenUsageSnapshot()
+                                )
                             } else {
                                 val chunk = json.decodeFromString<GenerateContentResponse>(payload)
                                 val parts = chunk.candidates?.firstOrNull()?.content?.parts.orEmpty()
@@ -187,8 +223,16 @@ class ChatResponseStreamer(
                                 if (attachmentsAdded && textDelta.isEmpty() && parsed.thinking.isEmpty()) {
                                     hasData = true
                                 }
-                                Triple(textDelta, parsed.thinking, "")
+                                StreamChunkParse(
+                                    deltaText = textDelta,
+                                    deltaThinking = parsed.thinking,
+                                    usage = chunk.extractTokenUsageSnapshot()
+                                )
                             }
+                            val deltaText = parsedChunk.deltaText
+                            val deltaThinking = parsedChunk.deltaThinking
+                            val deltaSummary = parsedChunk.deltaSummary
+                            recordUsageOnce(parsedChunk.usage, "chat_stream")
 
                             currentThinking += deltaThinking
                             if (deltaSummary.isNotEmpty()) {
@@ -395,6 +439,17 @@ class ChatResponseStreamer(
                     var text = ""
                     var thinking = ""
                     val attachments = mutableListOf<String>()
+                    body.extractTokenUsageSnapshot()?.let { usage ->
+                        runCatching {
+                            repository.recordTokenUsage(
+                                provider = provider,
+                                model = model,
+                                usage = usage,
+                                conversationId = conversationId,
+                                requestType = "chat_non_stream"
+                            )
+                        }
+                    }
                     val parsed = parseGeminiParts(body.candidates?.firstOrNull()?.content?.parts.orEmpty())
                     text += parsed.text + body.text.orEmpty()
                     thinking += parsed.thinking
@@ -490,7 +545,8 @@ class ChatResponseStreamer(
         val wrapper = json.decodeFromString<GeminiCliGenerateContentResponse>(payload)
         return GenerateContentResponse(
             candidates = wrapper.response.candidates,
-            promptFeedback = wrapper.response.promptFeedback
+            promptFeedback = wrapper.response.promptFeedback,
+            usageMetadata = wrapper.response.usageMetadata
         )
     }
 
@@ -539,6 +595,40 @@ class ChatResponseStreamer(
         }
     }
 
+    private fun parseCodexResponsesUsage(payload: String): TokenUsageSnapshot? {
+        val element = runCatching { json.parseToJsonElement(payload) }.getOrNull() ?: return null
+        val obj = element.jsonObject
+        if (obj["type"]?.jsonPrimitive?.contentOrNull != "response.completed") return null
+        val usageObj = runCatching {
+            obj["response"]?.jsonObject?.get("usage")?.jsonObject
+        }.getOrNull() ?: return null
+        val inputTokens = usageObj["input_tokens"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+        val outputTokens = usageObj["output_tokens"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+        val totalTokens = usageObj["total_tokens"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: (inputTokens + outputTokens)
+        val reasoningTokens = runCatching {
+            usageObj["output_tokens_details"]?.jsonObject
+                ?.get("reasoning_tokens")
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.toIntOrNull()
+        }.getOrNull()
+        val cachedTokens = runCatching {
+            usageObj["input_tokens_details"]?.jsonObject
+                ?.get("cached_tokens")
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.toIntOrNull()
+        }.getOrNull()
+        val snapshot = TokenUsageSnapshot(
+            inputTokens = inputTokens,
+            outputTokens = outputTokens,
+            totalTokens = totalTokens,
+            reasoningTokens = reasoningTokens,
+            cachedInputTokens = cachedTokens
+        ).normalized()
+        return snapshot.takeUnless { it.isEmpty() }
+    }
+
     private fun extractOutputTextFromItem(item: kotlinx.serialization.json.JsonObject?): String {
         if (item == null) return ""
         val type = item["type"]?.jsonPrimitive?.contentOrNull
@@ -555,4 +645,11 @@ class ChatResponseStreamer(
         }
         return builder.toString()
     }
+
+    private data class StreamChunkParse(
+        val deltaText: String,
+        val deltaThinking: String,
+        val deltaSummary: String = "",
+        val usage: TokenUsageSnapshot? = null
+    )
 }

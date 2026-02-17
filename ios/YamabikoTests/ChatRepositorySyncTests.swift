@@ -62,6 +62,19 @@ private final class GeminiStreamFallbackHTTPClient: HTTPClientProtocol {
     }
 }
 
+private struct NoopPricingRepository: LiteLlmPricingEstimating {
+    func estimateCostUsd(
+        provider: String,
+        model: String,
+        inputTokens: Int,
+        outputTokens: Int,
+        cachedInputTokens: Int?,
+        reasoningTokens: Int?
+    ) async -> Double? {
+        nil
+    }
+}
+
 final class ChatRepositorySyncTests: XCTestCase {
     func testSendMessageRenamesDefaultConversationToFirstPrompt() async throws {
         let fixture = try makeFixture()
@@ -243,6 +256,47 @@ final class ChatRepositorySyncTests: XCTestCase {
         XCTAssertEqual(httpClient.sendCallCount, 2)
     }
 
+    func testSendMessageRecordsTokenUsageFromUsagePayload() async throws {
+        let payload = #"""
+        {
+          "choices":[{"message":{"content":"ok"}}],
+          "usage":{
+            "prompt_tokens":120,
+            "completion_tokens":30,
+            "total_tokens":150,
+            "completion_tokens_details":{"reasoning_tokens":9},
+            "prompt_tokens_details":{"cached_tokens":48}
+          }
+        }
+        """#
+        let httpClient = GeminiStreamFallbackHTTPClient(
+            streamLines: [],
+            nonStreamingBody: payload
+        )
+        let fixture = try makeFixture(httpClient: httpClient) { settings in
+            settings.apiProvider = "OPENROUTER"
+            settings.defaultModel = "openai/gpt-4o-mini"
+            settings.providerDefaultModelsJSON = #"{"OPENROUTER":"openai/gpt-4o-mini"}"#
+            settings.isStreamingEnabled = false
+        }
+        try fixture.credentials.setCredential("openrouter-key", for: .openRouter)
+
+        let conversationID = try fixture.repository.createConversation(title: "New Chat")
+        _ = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "hello",
+            attachments: []
+        )
+
+        let totals = try fixture.conversations.fetchTokenUsageTotals(sinceEpochMs: 0)
+        XCTAssertEqual(totals.requestCount, 1)
+        XCTAssertEqual(totals.inputTokens, 120)
+        XCTAssertEqual(totals.outputTokens, 30)
+        XCTAssertEqual(totals.cachedInputTokens, 48)
+        XCTAssertEqual(totals.reasoningTokens, 9)
+        XCTAssertEqual(totals.totalTokens, 150)
+    }
+
     private func makeFixture(
         httpClient: HTTPClientProtocol = URLSessionHTTPClient(),
         configureSettings: ((inout AppSettings) -> Void)? = nil
@@ -275,7 +329,8 @@ final class ChatRepositorySyncTests: XCTestCase {
             credentialStore: credentials,
             modelService: modelService,
             codexAuthRepository: codexAuth,
-            geminiAuthRepository: geminiAuth
+            geminiAuthRepository: geminiAuth,
+            pricingRepository: NoopPricingRepository()
         )
         return (repository, conversations, credentials)
     }

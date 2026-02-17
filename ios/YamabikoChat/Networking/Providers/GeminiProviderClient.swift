@@ -74,6 +74,7 @@ struct GeminiProviderClient: ProviderClient {
 
                     var fullText = ""
                     var fullReasoning = ""
+                    var latestUsage: ProviderUsage?
                     var hasUsableData = false
                     var eventLines: [String] = []
                     var streamFinished = false
@@ -121,7 +122,7 @@ struct GeminiProviderClient: ProviderClient {
                         throw ProviderClientError.parseFailure(Self.noUsableStreamDataReason)
                     }
 
-                    func parseChunk(_ chunk: String) -> ParsedGeminiParts? {
+                    func parseChunk(_ chunk: String) -> ParsedGeminiChunk? {
                         if resolvedProvider == .geminiAuth {
                             return parseGeminiCliStreamChunk(chunk)
                         }
@@ -172,7 +173,7 @@ struct GeminiProviderClient: ProviderClient {
                                 text: fullText,
                                 reasoningSummary: fullReasoning.trimmedNonEmpty,
                                 raw: nil,
-                                usage: nil
+                                usage: latestUsage
                             )
                             continuation.yield(.completed(final))
                             continuation.finish()
@@ -184,6 +185,9 @@ struct GeminiProviderClient: ProviderClient {
                         guard let parsed else {
                             recordInvalidPayload(chunk)
                             return
+                        }
+                        if let usage = parsed.usage?.normalizedNonEmpty() {
+                            latestUsage = usage
                         }
 
                         if !parsed.reasoning.isEmpty {
@@ -236,7 +240,7 @@ struct GeminiProviderClient: ProviderClient {
                         text: fullText,
                         reasoningSummary: fullReasoning.trimmedNonEmpty,
                         raw: nil,
-                        usage: nil
+                        usage: latestUsage
                     )
                     continuation.yield(.completed(final))
                     continuation.finish()
@@ -256,6 +260,12 @@ struct GeminiProviderClient: ProviderClient {
     private struct ParsedGeminiParts {
         var text: String
         var reasoning: String
+    }
+
+    private struct ParsedGeminiChunk {
+        var text: String
+        var reasoning: String
+        var usage: ProviderUsage?
     }
 
     private func resolveCredential(provider: LLMProvider, store: SecureCredentialStore) async throws -> ResolvedCredential {
@@ -580,15 +590,33 @@ struct GeminiProviderClient: ProviderClient {
         return parsed
     }
 
-    private func parseGeminiStreamChunk(_ chunk: String) -> ParsedGeminiParts? {
+    private func parseGeminiStreamChunk(_ chunk: String) -> ParsedGeminiChunk? {
         guard let root = parseJSONObject(chunk) else { return nil }
-        return parseGeminiPartsFromPayload(root)
+        let parsedParts = parseGeminiPartsFromPayload(root)
+        let usage = parseGeminiUsage(payload: root)
+        if parsedParts == nil, usage == nil {
+            return nil
+        }
+        return ParsedGeminiChunk(
+            text: parsedParts?.text ?? "",
+            reasoning: parsedParts?.reasoning ?? "",
+            usage: usage
+        )
     }
 
-    private func parseGeminiCliStreamChunk(_ chunk: String) -> ParsedGeminiParts? {
+    private func parseGeminiCliStreamChunk(_ chunk: String) -> ParsedGeminiChunk? {
         guard let root = parseJSONObject(chunk) else { return nil }
         let payload = extractGeminiCliPayload(from: root)
-        return parseGeminiPartsFromPayload(payload)
+        let parsedParts = parseGeminiPartsFromPayload(payload)
+        let usage = parseGeminiUsage(payload: payload)
+        if parsedParts == nil, usage == nil {
+            return nil
+        }
+        return ParsedGeminiChunk(
+            text: parsedParts?.text ?? "",
+            reasoning: parsedParts?.reasoning ?? "",
+            usage: usage
+        )
     }
 
     private func parseGeminiCliResponse(data: Data) throws -> ProviderResponse {
@@ -614,7 +642,7 @@ struct GeminiProviderClient: ProviderClient {
             text: text,
             reasoningSummary: reasoning.isEmpty ? nil : reasoning,
             raw: String(data: rawData, encoding: .utf8),
-            usage: nil
+            usage: parseGeminiUsage(payload: payload)
         )
     }
 
@@ -663,6 +691,27 @@ struct GeminiProviderClient: ProviderClient {
         return try parseGeminiResponsePayload(payload: root, rawData: data)
     }
 
+    private func parseGeminiUsage(payload: [String: Any]) -> ProviderUsage? {
+        guard let usage = payload["usageMetadata"] as? [String: Any] else {
+            return nil
+        }
+        let promptTokenCount = intValue(usage["promptTokenCount"]) ?? 0
+        let candidatesTokenCount = intValue(usage["candidatesTokenCount"]) ?? 0
+        let cachedContentTokenCount = intValue(usage["cachedContentTokenCount"])
+        let thoughtsTokenCount = intValue(usage["thoughtsTokenCount"])
+        let toolUsePromptTokenCount = intValue(usage["toolUsePromptTokenCount"]) ?? 0
+        let totalFallback = promptTokenCount + candidatesTokenCount + toolUsePromptTokenCount + max(0, thoughtsTokenCount ?? 0)
+        let totalTokenCount = intValue(usage["totalTokenCount"]) ?? totalFallback
+        return ProviderUsage(
+            inputTokens: promptTokenCount,
+            outputTokens: candidatesTokenCount,
+            totalTokens: totalTokenCount,
+            reasoningTokens: thoughtsTokenCount,
+            cachedInputTokens: cachedContentTokenCount
+        )
+        .normalizedNonEmpty()
+    }
+
     private func parseJSONObject(_ text: String) -> [String: Any]? {
         guard let data = text.data(using: .utf8) else { return nil }
         guard let root = try? JSONSerialization.jsonObject(with: data) else { return nil }
@@ -684,6 +733,19 @@ struct GeminiProviderClient: ProviderClient {
             return response
         }
         return root
+    }
+
+    private func intValue(_ raw: Any?) -> Int? {
+        if let value = raw as? Int {
+            return value
+        }
+        if let value = raw as? NSNumber {
+            return value.intValue
+        }
+        if let value = raw as? String {
+            return Int(value)
+        }
+        return nil
     }
 }
 

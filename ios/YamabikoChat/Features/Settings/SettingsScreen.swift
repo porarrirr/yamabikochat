@@ -259,6 +259,7 @@ struct SettingsScreen: View {
                     .foregroundStyle(.secondary)
             }
 
+            tokenUsageSection
             diagnosticsSection
         }
     }
@@ -1469,6 +1470,116 @@ struct SettingsScreen: View {
         }
     }
 
+    private var tokenUsageSection: some View {
+        let state = viewModel.tokenUsageState
+        return Section("トークン統計（直近\(state.rangeDays)日）") {
+            if state.totals.requestCount <= 0 {
+                Text("まだトークン使用履歴がありません。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                HStack {
+                    usageStatCell(label: "Spend", value: formatUsd(state.totals.totalCostUsd))
+                    usageStatCell(label: "Requests", value: formatCompactCount(state.totals.requestCount))
+                    usageStatCell(label: "Tokens", value: formatCompactCount(state.totals.totalTokens))
+                }
+
+                HStack {
+                    usageStatCell(label: "Input", value: formatCompactCount(state.totals.inputTokens))
+                    usageStatCell(label: "Output", value: formatCompactCount(state.totals.outputTokens))
+                    usageStatCell(label: "Cached", value: formatCompactCount(state.totals.cachedInputTokens))
+                }
+
+                if !state.daily.isEmpty {
+                    tokenUsageMiniBars(points: state.daily)
+                        .frame(height: 48)
+                }
+
+                if !state.byModel.isEmpty {
+                    Text("Requests By Model")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    let maxTokens = max(1, state.byModel.map(\.totalTokens).max() ?? 1)
+                    ForEach(state.byModel.prefix(8)) { item in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(item.model)
+                                    .font(.caption)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(
+                                    "\(formatCompactCount(item.requestCount)) req • " +
+                                    "\(formatCompactCount(item.totalTokens)) tok • " +
+                                    "\(formatUsd(item.totalCostUsd))"
+                                )
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            }
+
+                            GeometryReader { proxy in
+                                let ratio = max(
+                                    0.02,
+                                    min(1.0, Double(item.totalTokens) / Double(maxTokens))
+                                )
+                                ZStack(alignment: .leading) {
+                                    Capsule()
+                                        .fill(Color.secondary.opacity(0.15))
+                                    Capsule()
+                                        .fill(Color.accentColor.opacity(0.8))
+                                        .frame(width: proxy.size.width * ratio)
+                                }
+                            }
+                            .frame(height: 4)
+
+                            Text(
+                                "in \(formatCompactCount(item.inputTokens)) / " +
+                                "out \(formatCompactCount(item.outputTokens)) / " +
+                                "cache \(formatCompactCount(item.cachedInputTokens)) / " +
+                                "reason \(formatCompactCount(item.reasoningTokens))"
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+
+                if let lastUpdated = state.lastUpdated {
+                    Text("更新: \(RelativeDateTimeFormatter().localizedString(for: lastUpdated, relativeTo: Date()))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func usageStatCell(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func tokenUsageMiniBars(points: [TokenUsageDailyPoint]) -> some View {
+        let sampled = Array(points.suffix(24))
+        let maxTokens = max(1, sampled.map(\.totalTokens).max() ?? 1)
+        return HStack(alignment: .bottom, spacing: 2) {
+            ForEach(sampled) { point in
+                let ratio = max(0.08, min(1.0, Double(point.totalTokens) / Double(maxTokens)))
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.7))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48 * ratio)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var currentProviderKey: String {
         viewModel.settings.apiProvider.uppercased()
     }
@@ -1586,6 +1697,24 @@ struct SettingsScreen: View {
             AppearanceOption(key: "ORANGE", titleKey: "オレンジ"),
             AppearanceOption(key: "BLACK", titleKey: "黒")
         ]
+    }
+
+    private func formatUsd(_ value: Double) -> String {
+        String(format: "$%.5f", value)
+    }
+
+    private func formatCompactCount(_ value: Int64) -> String {
+        let absValue = abs(Double(value))
+        if absValue >= 1_000_000_000 {
+            return String(format: "%.1fB", Double(value) / 1_000_000_000)
+        }
+        if absValue >= 1_000_000 {
+            return String(format: "%.1fM", Double(value) / 1_000_000)
+        }
+        if absValue >= 1_000 {
+            return String(format: "%.1fK", Double(value) / 1_000)
+        }
+        return "\(value)"
     }
 }
 

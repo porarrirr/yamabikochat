@@ -94,25 +94,51 @@ struct CodexProviderClient: ProviderClient {
 
                     var full = ""
                     var reasoning = ""
+                    var latestUsage: ProviderUsage?
 
                     for try await line in lineStream {
                         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
                         if trimmed.isEmpty || !trimmed.hasPrefix("data:") { continue }
 
                         let jsonChunk = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                        if let root = try? JSONSerialization.jsonObject(with: Data(jsonChunk.utf8)) as? [String: Any],
+                           let usage = parseResponsesUsage(from: root)?.normalizedNonEmpty() {
+                            latestUsage = usage
+                        }
                         if jsonChunk == "[DONE]" {
-                            let completed = ProviderResponse(text: full, reasoningSummary: reasoning.isEmpty ? nil : reasoning, raw: nil, usage: nil)
+                            let completed = ProviderResponse(
+                                text: full,
+                                reasoningSummary: reasoning.isEmpty ? nil : reasoning,
+                                raw: nil,
+                                usage: latestUsage
+                            )
                             continuation.yield(.completed(completed))
                             continuation.finish()
                             return
                         }
 
                         if let event = parseStreamChunk(jsonChunk, fullText: &full, fullReasoning: &reasoning) {
+                            if case let .completed(response) = event {
+                                let merged = ProviderResponse(
+                                    text: response.text,
+                                    reasoningSummary: response.reasoningSummary,
+                                    raw: response.raw,
+                                    usage: response.usage ?? latestUsage
+                                )
+                                continuation.yield(.completed(merged))
+                                continuation.finish()
+                                return
+                            }
                             continuation.yield(event)
                         }
                     }
 
-                    let completed = ProviderResponse(text: full, reasoningSummary: reasoning.isEmpty ? nil : reasoning, raw: nil, usage: nil)
+                    let completed = ProviderResponse(
+                        text: full,
+                        reasoningSummary: reasoning.isEmpty ? nil : reasoning,
+                        raw: nil,
+                        usage: latestUsage
+                    )
                     continuation.yield(.completed(completed))
                     continuation.finish()
                 } catch {
@@ -159,7 +185,14 @@ struct CodexProviderClient: ProviderClient {
                     return .toolCallDelta(delta)
                 }
             case "response.completed":
-                return .completed(ProviderResponse(text: fullText, reasoningSummary: fullReasoning.isEmpty ? nil : fullReasoning, raw: nil, usage: nil))
+                return .completed(
+                    ProviderResponse(
+                        text: fullText,
+                        reasoningSummary: fullReasoning.isEmpty ? nil : fullReasoning,
+                        raw: nil,
+                        usage: parseResponsesUsage(from: root)
+                    )
+                )
             default:
                 break
             }
@@ -321,7 +354,12 @@ struct CodexProviderClient: ProviderClient {
 
         if let text = root["output_text"] as? String, !text.isEmpty {
             let summary = extractReasoningSummary(from: root, output: root["output"] as? [[String: Any]])
-            return ProviderResponse(text: text, reasoningSummary: summary, raw: String(data: data, encoding: .utf8), usage: nil)
+            return ProviderResponse(
+                text: text,
+                reasoningSummary: summary,
+                raw: String(data: data, encoding: .utf8),
+                usage: parseResponsesUsage(from: root)
+            )
         }
 
         if let output = root["output"] as? [[String: Any]] {
@@ -354,7 +392,7 @@ struct CodexProviderClient: ProviderClient {
                     text: visibleText,
                     reasoningSummary: summary,
                     raw: String(data: data, encoding: .utf8),
-                    usage: nil
+                    usage: parseResponsesUsage(from: root)
                 )
             }
         }
@@ -382,6 +420,45 @@ struct CodexProviderClient: ProviderClient {
             .joined()
             .trimmingCharacters(in: .whitespacesAndNewlines)
             return combined.isEmpty ? nil : combined
+        }
+        return nil
+    }
+
+    private func parseResponsesUsage(from root: [String: Any]) -> ProviderUsage? {
+        let usageObject: [String: Any]?
+        if let usage = root["usage"] as? [String: Any] {
+            usageObject = usage
+        } else if let response = root["response"] as? [String: Any] {
+            usageObject = response["usage"] as? [String: Any]
+        } else {
+            usageObject = nil
+        }
+        guard let usageObject else { return nil }
+
+        let inputTokens = intValue(usageObject["input_tokens"])
+        let outputTokens = intValue(usageObject["output_tokens"])
+        let totalTokens = intValue(usageObject["total_tokens"])
+        let reasoningTokens = intValue((usageObject["output_tokens_details"] as? [String: Any])?["reasoning_tokens"])
+        let cachedInputTokens = intValue((usageObject["input_tokens_details"] as? [String: Any])?["cached_tokens"])
+        return ProviderUsage(
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            totalTokens: totalTokens,
+            reasoningTokens: reasoningTokens,
+            cachedInputTokens: cachedInputTokens
+        )
+        .normalizedNonEmpty()
+    }
+
+    private func intValue(_ raw: Any?) -> Int? {
+        if let value = raw as? Int {
+            return value
+        }
+        if let value = raw as? NSNumber {
+            return value.intValue
+        }
+        if let value = raw as? String {
+            return Int(value)
         }
         return nil
     }
