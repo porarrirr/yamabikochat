@@ -38,7 +38,7 @@ struct SvgPreviewCard: View {
                     isPreviewVisible.toggle()
                 } label: {
                     Label(
-                        isPreviewVisible ? "非表示" : "表示",
+                        isPreviewVisible ? L10n.text("非表示") : L10n.text("表示"),
                         systemImage: isPreviewVisible ? "eye.slash" : "eye"
                     )
                     .font(.caption)
@@ -62,7 +62,7 @@ struct SvgPreviewCard: View {
                         .foregroundStyle(.secondary)
 
                     if let renderError {
-                        Text("プレビュー表示に失敗しました: \(renderError)")
+                        Text(L10n.format("プレビュー表示に失敗しました: %@", renderError))
                             .font(.caption)
                             .foregroundStyle(.red)
                     } else {

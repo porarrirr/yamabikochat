@@ -67,7 +67,7 @@ final class AppSettingsTests: XCTestCase {
         let presets = settings.buildGlobalProviderPresets()
 
         XCTAssertEqual(presets.map(\.apiProvider), ["GEMINI", "OPENROUTER", "OPENAI"])
-        XCTAssertEqual(presets.first?.name, "グローバル: Google Gemini")
+        XCTAssertEqual(presets.first?.name, L10n.format("グローバル: %@", "Google Gemini"))
     }
 
     func testProviderSpecificGlobalPresetVisibilityOverridesDefault() {

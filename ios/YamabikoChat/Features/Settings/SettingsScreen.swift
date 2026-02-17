@@ -12,13 +12,28 @@ struct SettingsScreen: View {
     @State private var showGeminiOAuthConfigImporter = false
 
     enum SettingsTab: String, CaseIterable, Identifiable {
-        case api = "API設定"
-        case systemPrompt = "システムプロンプト"
-        case dual = "デュアル"
-        case auto = "自動会話"
-        case appearance = "外観/診断"
+        case api
+        case systemPrompt
+        case dual
+        case auto
+        case appearance
 
         var id: String { rawValue }
+
+        var titleKey: String {
+            switch self {
+            case .api:
+                return "API設定"
+            case .systemPrompt:
+                return "システムプロンプト"
+            case .dual:
+                return "デュアル"
+            case .auto:
+                return "自動会話"
+            case .appearance:
+                return "外観/診断"
+            }
+        }
     }
 
     var body: some View {
@@ -26,7 +41,7 @@ struct SettingsScreen: View {
             VStack(spacing: 0) {
                 Picker("Settings tab", selection: $selectedTab) {
                     ForEach(SettingsTab.allCases) { tab in
-                        Text(tab.rawValue).tag(tab)
+                        Text(LocalizedStringKey(tab.titleKey)).tag(tab)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -128,7 +143,10 @@ struct SettingsScreen: View {
                         )
                     }
                 ))
-                Text("現在のプロバイダー（\(ProviderCatalog.displayName(for: viewModel.settings.apiProvider))）のグローバル設定をチャットプリセットに追加します。")
+                Text(L10n.format(
+                    "現在のプロバイダー（%@）のグローバル設定をチャットプリセットに追加します。",
+                    ProviderCatalog.displayName(for: viewModel.settings.apiProvider)
+                ))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -836,8 +854,8 @@ struct SettingsScreen: View {
 
             Text(
                 viewModel.hasImportedGeminiOAuthClientConfig
-                    ? "ファイル取り込み済みのOAuth設定を使用中です。"
-                    : "FilesからGeminiAuthInfo.plistを選択すると、アプリ内にOAuth設定を保存します。"
+                    ? L10n.text("ファイル取り込み済みのOAuth設定を使用中です。")
+                    : L10n.text("FilesからGeminiAuthInfo.plistを選択すると、アプリ内にOAuth設定を保存します。")
             )
             .font(.caption2)
             .foregroundStyle(.secondary)
@@ -1251,8 +1269,8 @@ struct SettingsScreen: View {
             .lineLimit(2 ... 6)
             Stepper(
                 viewModel.settings.autoMaxTurns <= 0
-                    ? "Max turns: Unlimited"
-                    : "Max turns: \(viewModel.settings.autoMaxTurns)",
+                    ? L10n.text("Max turns: Unlimited")
+                    : L10n.format("Max turns: %d", viewModel.settings.autoMaxTurns),
                 value: Binding(
                     get: { viewModel.settings.autoMaxTurns },
                     set: { viewModel.settings.autoMaxTurns = $0 }
@@ -1279,7 +1297,7 @@ struct SettingsScreen: View {
 
     private var currentProviderAPIKeyLabel: String {
         let providerLabel = ProviderCatalog.displayName(for: viewModel.settings.apiProvider)
-        return "\(providerLabel) API Key"
+        return L10n.format("%@ API Key", providerLabel)
     }
 
     private var codexSummary: String {
@@ -1392,7 +1410,7 @@ struct SettingsScreen: View {
 
                 Button("コピー") {
                     UIPasteboard.general.string = viewModel.diagnosticsLogText
-                    viewModel.statusMessage = "診断ログをコピーしました"
+                    viewModel.statusMessage = L10n.text("診断ログをコピーしました")
                 }
                 .buttonStyle(.bordered)
                 .disabled(viewModel.diagnosticsLogText.isEmpty)
@@ -1443,7 +1461,7 @@ struct SettingsScreen: View {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("コピー") {
                             UIPasteboard.general.string = viewModel.diagnosticsLogText
-                            viewModel.statusMessage = "診断ログをコピーしました"
+                            viewModel.statusMessage = L10n.text("診断ログをコピーしました")
                         }
                     }
                 }
@@ -1552,28 +1570,29 @@ struct SettingsScreen: View {
 
     private var themeModeOptions: [AppearanceOption] {
         [
-            AppearanceOption(key: "SYSTEM", title: "自動"),
-            AppearanceOption(key: "LIGHT", title: "ライト"),
-            AppearanceOption(key: "DARK", title: "ダーク")
+            AppearanceOption(key: "SYSTEM", titleKey: "自動"),
+            AppearanceOption(key: "LIGHT", titleKey: "ライト"),
+            AppearanceOption(key: "DARK", titleKey: "ダーク")
         ]
     }
 
     private var themeColorOptions: [AppearanceOption] {
         [
-            AppearanceOption(key: "BLUE_PURPLE", title: "青紫"),
-            AppearanceOption(key: "BLUE", title: "青"),
-            AppearanceOption(key: "GREEN", title: "緑"),
-            AppearanceOption(key: "YELLOW", title: "黄"),
-            AppearanceOption(key: "PINK", title: "ピンク"),
-            AppearanceOption(key: "ORANGE", title: "オレンジ"),
-            AppearanceOption(key: "BLACK", title: "黒")
+            AppearanceOption(key: "BLUE_PURPLE", titleKey: "青紫"),
+            AppearanceOption(key: "BLUE", titleKey: "青"),
+            AppearanceOption(key: "GREEN", titleKey: "緑"),
+            AppearanceOption(key: "YELLOW", titleKey: "黄"),
+            AppearanceOption(key: "PINK", titleKey: "ピンク"),
+            AppearanceOption(key: "ORANGE", titleKey: "オレンジ"),
+            AppearanceOption(key: "BLACK", titleKey: "黒")
         ]
     }
 }
 
 private struct AppearanceOption: Identifiable {
     let key: String
-    let title: String
+    let titleKey: String
+    var title: String { L10n.text(titleKey) }
 
     var id: String { key }
 }

@@ -8,7 +8,7 @@ final class ChatViewModelSystemPromptLabelTests: XCTestCase {
             conversationSystemPrompt: "ignored prompt"
         )
 
-        XCTAssertEqual(label, "Prompt: Persona A")
+        XCTAssertEqual(label, L10n.format("Prompt: %@", "Persona A"))
     }
 
     func testSystemPromptContextLabel_usesCustomWhenPromptExistsWithoutPreset() {
@@ -17,7 +17,7 @@ final class ChatViewModelSystemPromptLabelTests: XCTestCase {
             conversationSystemPrompt: "  custom prompt  "
         )
 
-        XCTAssertEqual(label, "Prompt: Custom")
+        XCTAssertEqual(label, L10n.text("Prompt: Custom"))
     }
 
     func testSystemPromptContextLabel_treatsBlankPresetAsCustomWhenPromptExists() {
@@ -26,7 +26,7 @@ final class ChatViewModelSystemPromptLabelTests: XCTestCase {
             conversationSystemPrompt: "custom prompt"
         )
 
-        XCTAssertEqual(label, "Prompt: Custom")
+        XCTAssertEqual(label, L10n.text("Prompt: Custom"))
     }
 
     func testSystemPromptContextLabel_usesNoneWhenPromptIsEmptyAndNoPreset() {
@@ -35,6 +35,6 @@ final class ChatViewModelSystemPromptLabelTests: XCTestCase {
             conversationSystemPrompt: "   "
         )
 
-        XCTAssertEqual(label, "Prompt: なし")
+        XCTAssertEqual(label, L10n.text("Prompt: なし"))
     }
 }

@@ -120,17 +120,17 @@ final class ChatViewModel: ObservableObject {
                 )
                 errorMessage = nil
             } catch {
-                errorMessage = "ファイルを読み込めませんでした。"
+                errorMessage = L10n.text("ファイルを読み込めませんでした。")
             }
         case let .tooLarge(sizeBytes):
             let sizeMB = Double(sizeBytes) / (1024 * 1024)
-            errorMessage = String(format: "添付ファイルが%.1fMBで上限10MBを超えています。", sizeMB)
+            errorMessage = L10n.format("添付ファイルが%.1fMBで上限10MBを超えています。", sizeMB)
         case .unsupportedType:
-            errorMessage = "サポート外のファイル形式です。"
+            errorMessage = L10n.text("サポート外のファイル形式です。")
         case .dangerousFile:
-            errorMessage = "危険なファイル形式は添付できません。"
+            errorMessage = L10n.text("危険なファイル形式は添付できません。")
         case .unreadable:
-            errorMessage = "ファイルを読み込めませんでした。"
+            errorMessage = L10n.text("ファイルを読み込めませんでした。")
         }
         if let errorMessage {
             DiagnosticsLogger.log(
@@ -155,7 +155,7 @@ final class ChatViewModel: ObservableObject {
         let trimmedText = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return }
         guard let repository else {
-            errorMessage = "チャット初期化中です。少し待ってから再試行してください。"
+            errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             return
         }
 
@@ -175,7 +175,7 @@ final class ChatViewModel: ObservableObject {
 
                 if settings.isDualModeEnabled {
                     guard !text.isEmpty || !attachmentPaths.isEmpty else {
-                        errorMessage = "デュアルモードでは本文または添付を入力してください。"
+                        errorMessage = L10n.text("デュアルモードでは本文または添付を入力してください。")
                         attachments = attachmentDrafts
                         return
                     }
@@ -192,7 +192,7 @@ final class ChatViewModel: ObservableObject {
                         onStreamEvent: { [weak self] event in
                             guard case let .reasoningDelta(delta) = event else { return }
                             Task { @MainActor in
-                                self?.autoConversationStatus = delta.isEmpty ? self?.autoConversationStatus : "推論中..."
+                                self?.autoConversationStatus = delta.isEmpty ? self?.autoConversationStatus : L10n.text("推論中...")
                             }
                         }
                     )
@@ -218,17 +218,17 @@ final class ChatViewModel: ObservableObject {
 
     func regenerateLastAssistantVariant() {
         guard let repository else {
-            errorMessage = "チャット初期化中です。少し待ってから再試行してください。"
+            errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             return
         }
         guard !settings.isDualModeEnabled else {
-            errorMessage = "デュアルモードでは再生成できません。"
+            errorMessage = L10n.text("デュアルモードでは再生成できません。")
             return
         }
         guard let lastAssistant = fullMessages.last(where: { $0.message.role == "model" }),
               fullMessages.last?.id == lastAssistant.id
         else {
-            errorMessage = "最後のAIメッセージのみ再生成できます。"
+            errorMessage = L10n.text("最後のAIメッセージのみ再生成できます。")
             return
         }
 
@@ -242,7 +242,7 @@ final class ChatViewModel: ObservableObject {
                     onStreamEvent: { [weak self] event in
                         guard case let .reasoningDelta(delta) = event else { return }
                         Task { @MainActor in
-                            self?.autoConversationStatus = delta.isEmpty ? self?.autoConversationStatus : "推論中..."
+                            self?.autoConversationStatus = delta.isEmpty ? self?.autoConversationStatus : L10n.text("推論中...")
                         }
                     }
                 )
@@ -259,7 +259,7 @@ final class ChatViewModel: ObservableObject {
 
     func branchConversation(from messageId: Int64) -> Int64? {
         guard let repository else {
-            errorMessage = "チャット初期化中です。少し待ってから再試行してください。"
+            errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             return nil
         }
 
@@ -267,7 +267,7 @@ final class ChatViewModel: ObservableObject {
             errorMessage = nil
             return try repository.branchConversation(from: conversationID, messageId: messageId)
         } catch {
-            errorMessage = "ブランチの作成に失敗しました: \(error.localizedDescription)"
+            errorMessage = L10n.format("ブランチの作成に失敗しました: %@", error.localizedDescription)
             DiagnosticsLogger.log(
                 "Branch conversation failed conversation=\(conversationID) message=\(messageId)",
                 category: .chat,
@@ -309,7 +309,7 @@ final class ChatViewModel: ObservableObject {
 
     func toggleDualMode() {
         guard let repository else {
-            errorMessage = "チャット初期化中です。少し待ってから再試行してください。"
+            errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             return
         }
         do {
@@ -327,7 +327,7 @@ final class ChatViewModel: ObservableObject {
 
     func toggleAutoConversation() {
         guard let repository else {
-            errorMessage = "チャット初期化中です。少し待ってから再試行してください。"
+            errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             return
         }
         do {
@@ -360,13 +360,13 @@ final class ChatViewModel: ObservableObject {
     nonisolated static func systemPromptContextLabel(activePresetName: String?, conversationSystemPrompt: String?) -> String {
         if let presetName = activePresetName?.trimmingCharacters(in: .whitespacesAndNewlines),
            !presetName.isEmpty {
-            return "Prompt: \(presetName)"
+            return L10n.format("Prompt: %@", presetName)
         }
         if let prompt = conversationSystemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
            !prompt.isEmpty {
-            return "Prompt: Custom"
+            return L10n.text("Prompt: Custom")
         }
-        return "Prompt: なし"
+        return L10n.text("Prompt: なし")
     }
 
     func availableChatPresets() -> [ModelPreset] {
@@ -378,7 +378,7 @@ final class ChatViewModel: ObservableObject {
 
     func applyChatPreset(_ preset: ModelPreset) {
         guard let repository else {
-            errorMessage = "チャット初期化中です。少し待ってから再試行してください。"
+            errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             return
         }
 
@@ -446,14 +446,14 @@ final class ChatViewModel: ObservableObject {
     func startAutoConversationManually() {
         guard let repository else { return }
         guard settings.isAutoConversationEnabled else {
-            errorMessage = "先に自動会話をONにしてください。"
+            errorMessage = L10n.text("先に自動会話をONにしてください。")
             return
         }
         guard !isAutoConversationRunning else { return }
 
         let initial = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !initial.isEmpty else {
-            errorMessage = "開始メッセージを入力してください。"
+            errorMessage = L10n.text("開始メッセージを入力してください。")
             return
         }
 
@@ -461,7 +461,7 @@ final class ChatViewModel: ObservableObject {
         autoConversationTask?.cancel()
         isAutoConversationRunning = true
         isAutoConversationPaused = false
-        autoConversationStatus = "自動会話を開始しています..."
+        autoConversationStatus = L10n.text("自動会話を開始しています...")
         errorMessage = nil
 
         do {
@@ -481,13 +481,13 @@ final class ChatViewModel: ObservableObject {
                         autoConversationId: autoConversationId
                     ) { [weak self] turn, speaker, _ in
                         Task { @MainActor in
-                            self?.autoConversationStatus = "\(turn)ターン目: \(speaker)"
+                            self?.autoConversationStatus = L10n.format("%dターン目: %@", turn, speaker)
                         }
                     }
                     await MainActor.run {
                         self.isAutoConversationRunning = false
                         self.isAutoConversationPaused = false
-                        self.autoConversationStatus = "自動会話が完了しました"
+                        self.autoConversationStatus = L10n.text("自動会話が完了しました")
                         self.activeAutoConversationID = nil
                     }
                 } catch is CancellationError {
@@ -497,7 +497,7 @@ final class ChatViewModel: ObservableObject {
                         self.isAutoConversationRunning = false
                         self.isAutoConversationPaused = false
                         self.errorMessage = error.localizedDescription
-                        self.autoConversationStatus = "自動会話でエラーが発生しました"
+                        self.autoConversationStatus = L10n.text("自動会話でエラーが発生しました")
                         self.activeAutoConversationID = nil
                     }
                     DiagnosticsLogger.log(
@@ -512,7 +512,7 @@ final class ChatViewModel: ObservableObject {
             isAutoConversationPaused = false
             activeAutoConversationID = nil
             errorMessage = error.localizedDescription
-            autoConversationStatus = "自動会話の初期化に失敗しました"
+            autoConversationStatus = L10n.text("自動会話の初期化に失敗しました")
             DiagnosticsLogger.log(
                 "Auto conversation setup failed conversation=\(conversationID)",
                 category: .chat,
@@ -529,7 +529,7 @@ final class ChatViewModel: ObservableObject {
             try repository.pauseAutoConversation(autoConversationId: autoConversationID)
             isAutoConversationRunning = false
             isAutoConversationPaused = true
-            autoConversationStatus = "自動会話を一時停止しました"
+            autoConversationStatus = L10n.text("自動会話を一時停止しました")
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -541,7 +541,7 @@ final class ChatViewModel: ObservableObject {
 
         isAutoConversationRunning = true
         isAutoConversationPaused = false
-        autoConversationStatus = "自動会話を再開しています..."
+        autoConversationStatus = L10n.text("自動会話を再開しています...")
 
         autoConversationTask = Task {
             do {
@@ -549,13 +549,13 @@ final class ChatViewModel: ObservableObject {
                     autoConversationId: autoConversationID
                 ) { [weak self] turn, speaker, _ in
                     Task { @MainActor in
-                        self?.autoConversationStatus = "\(turn)ターン目: \(speaker)"
+                        self?.autoConversationStatus = L10n.format("%dターン目: %@", turn, speaker)
                     }
                 }
                 await MainActor.run {
                     self.isAutoConversationRunning = false
                     self.isAutoConversationPaused = false
-                    self.autoConversationStatus = "自動会話が完了しました"
+                    self.autoConversationStatus = L10n.text("自動会話が完了しました")
                     self.activeAutoConversationID = nil
                 }
             } catch is CancellationError {
@@ -565,7 +565,7 @@ final class ChatViewModel: ObservableObject {
                     self.isAutoConversationRunning = false
                     self.isAutoConversationPaused = false
                     self.errorMessage = error.localizedDescription
-                    self.autoConversationStatus = "自動会話でエラーが発生しました"
+                    self.autoConversationStatus = L10n.text("自動会話でエラーが発生しました")
                     self.activeAutoConversationID = nil
                 }
                 DiagnosticsLogger.log(
@@ -598,7 +598,7 @@ final class ChatViewModel: ObservableObject {
         }
         isAutoConversationRunning = false
         isAutoConversationPaused = false
-        autoConversationStatus = "自動会話を停止しました"
+        autoConversationStatus = L10n.text("自動会話を停止しました")
         activeAutoConversationID = nil
     }
 

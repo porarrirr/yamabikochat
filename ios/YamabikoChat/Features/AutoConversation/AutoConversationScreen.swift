@@ -14,7 +14,7 @@ struct AutoConversationScreen: View {
                 .disabled(viewModel.isAutoConversationRunning || viewModel.isAutoConversationPaused)
 
             HStack {
-                Button(viewModel.isAutoConversationRunning ? "実行中" : "開始") {
+                Button(viewModel.isAutoConversationRunning ? L10n.text("実行中") : L10n.text("開始")) {
                     if !viewModel.settings.isAutoConversationEnabled {
                         viewModel.toggleAutoConversation()
                         return

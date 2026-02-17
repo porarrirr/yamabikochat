@@ -1,6 +1,6 @@
 (function(global) {
   "use strict";
-  var copyButtonLabel = "コピー";
+  var copyButtonLabel = window.__yamabikoCopyButtonLabel || "Copy";
 
   function escapeHtml(value) {
     return String(value || "")

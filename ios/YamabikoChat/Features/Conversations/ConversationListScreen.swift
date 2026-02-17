@@ -26,14 +26,14 @@ struct ConversationListScreen: View {
             List {
                 Section {
                     drawerActionRow(
-                        title: "新しいプロジェクト",
+                        title: L10n.text("新しいプロジェクト"),
                         systemImage: "plus.square.on.square"
                     ) {
                         isCreateProjectPresented = true
                     }
 
                     drawerActionRow(
-                        title: "秘密チャット",
+                        title: L10n.text("秘密チャット"),
                         systemImage: "lock"
                     ) {
                         createConversation(secret: true)
@@ -108,7 +108,7 @@ struct ConversationListScreen: View {
             }
         } message: {
             if let pending = pendingProjectDeletion {
-                Text("「\(pending.title)」には \(pending.conversationCount) 件の会話があります。削除方法を選択してください。")
+                Text(L10n.format("「%@」には %d 件の会話があります。削除方法を選択してください。", pending.title, pending.conversationCount))
             } else {
                 Text("削除方法を選択してください。")
             }
@@ -218,7 +218,7 @@ struct ConversationListScreen: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 projectChip(
-                    title: "すべて",
+                    title: L10n.text("すべて"),
                     iconName: "tray.full",
                     colorHex: "#8B8B8B",
                     selected: viewModel.selectedProjectId == nil

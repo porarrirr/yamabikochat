@@ -269,8 +269,8 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         autoModelB = "deepseek/deepseek-chat"
         autoProviderA = "GEMINI"
         autoProviderB = "OPENROUTER"
-        autoSystemPromptA = "あなたは親しみやすい日本語AIアシスタントです。自然で温かみのある会話を心がけてください。"
-        autoSystemPromptB = "あなたは論理的で分析的なAIアシスタントです。深く考えながら詳細に回答してください。"
+        autoSystemPromptA = L10n.text("あなたは親しみやすい日本語AIアシスタントです。自然で温かみのある会話を心がけてください。")
+        autoSystemPromptB = L10n.text("あなたは論理的で分析的なAIアシスタントです。深く考えながら詳細に回答してください。")
         autoMaxTurns = 20
         autoOpenRouterThinkingEnabledA = nil
         autoOpenRouterThinkingBudgetA = nil
@@ -664,7 +664,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             }
             return ModelPreset(
                 id: -Int64(index + 1),
-                name: "グローバル: \(ProviderCatalog.displayName(for: provider))",
+                name: L10n.format("グローバル: %@", ProviderCatalog.displayName(for: provider)),
                 model: modelName,
                 apiProvider: provider,
                 systemPrompt: resolvedPrompt,

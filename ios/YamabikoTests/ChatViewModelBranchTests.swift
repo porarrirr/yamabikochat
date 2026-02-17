@@ -62,7 +62,8 @@ final class ChatViewModelBranchTests: XCTestCase {
 
         XCTAssertNil(newConversationId)
         XCTAssertNotNil(viewModel.errorMessage)
-        XCTAssertTrue(viewModel.errorMessage?.contains("ブランチの作成に失敗しました") == true)
+        let localizedPrefix = L10n.text("ブランチの作成に失敗しました: %@").components(separatedBy: "%@").first ?? ""
+        XCTAssertTrue(viewModel.errorMessage?.contains(localizedPrefix) == true)
     }
 
     private func makeFixture() throws -> (

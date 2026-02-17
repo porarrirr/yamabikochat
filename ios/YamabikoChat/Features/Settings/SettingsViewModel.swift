@@ -44,8 +44,9 @@ final class SettingsViewModel: ObservableObject {
     private var repository: ChatRepository?
     private var credentialStore: SecureCredentialStore?
     private var cancellables: Set<AnyCancellable> = []
-    private let geminiOAuthMissingMessage =
-        "Gemini OAuth client ID/secret が未設定です。GeminiAuthInfo.plist/Info.plist か、設定画面のファイル取り込みで GEMINI_OAUTH_CLIENT_ID / GEMINI_OAUTH_CLIENT_SECRET を設定してください。"
+    private var geminiOAuthMissingMessage: String {
+        L10n.text("Gemini OAuth client ID/secret が未設定です。GeminiAuthInfo.plist/Info.plist か、設定画面のファイル取り込みで GEMINI_OAUTH_CLIENT_ID / GEMINI_OAUTH_CLIENT_SECRET を設定してください。")
+    }
 
     var isGeminiOAuthConfigured: Bool {
         if let repository {
@@ -151,7 +152,7 @@ final class SettingsViewModel: ObservableObject {
             }
             settings = normalized
             try repository.saveSettings(normalized)
-            statusMessage = "保存しました"
+            statusMessage = L10n.text("保存しました")
         } catch {
             errorMessage = error.localizedDescription
             DiagnosticsLogger.log("Settings save failed", error: error)
@@ -161,12 +162,12 @@ final class SettingsViewModel: ObservableObject {
     func saveAPIKey() {
         guard let credentialStore else { return }
         guard let provider = credentialProvider(for: settings.apiProvider) else {
-            errorMessage = "未対応のプロバイダーです: \(settings.apiProvider)"
+            errorMessage = L10n.format("未対応のプロバイダーです: %@", settings.apiProvider)
             return
         }
         do {
             try credentialStore.setCredential(apiKeyDraft.nilIfBlank, for: provider)
-            statusMessage = "APIキーを保存しました"
+            statusMessage = L10n.text("APIキーを保存しました")
             loadCurrentProviderAPIKey()
         } catch {
             errorMessage = error.localizedDescription
@@ -207,11 +208,11 @@ final class SettingsViewModel: ObservableObject {
 
     func addOrUpdateOpenAICompatPreset() {
         guard let name = openAICompatPresetNameInput.nilIfBlank else {
-            errorMessage = "プリセット名を入力してください"
+            errorMessage = L10n.text("プリセット名を入力してください")
             return
         }
         guard let base = openAICompatPresetBaseURLInput.nilIfBlank else {
-            errorMessage = "Base URLを入力してください"
+            errorMessage = L10n.text("Base URLを入力してください")
             return
         }
 
@@ -227,9 +228,9 @@ final class SettingsViewModel: ObservableObject {
             if settings.selectedOpenAICompatPreset?.isEmpty != false {
                 settings.selectedOpenAICompatPreset = name
             }
-            statusMessage = "OPENAI_COMPATプリセットを保存しました"
+            statusMessage = L10n.text("OPENAI_COMPATプリセットを保存しました")
         } else {
-            errorMessage = "プリセットの保存に失敗しました"
+            errorMessage = L10n.text("プリセットの保存に失敗しました")
             DiagnosticsLogger.log("OPENAI_COMPAT preset save failed")
         }
     }
@@ -242,7 +243,7 @@ final class SettingsViewModel: ObservableObject {
             if settings.selectedOpenAICompatPreset?.caseInsensitiveCompare(name) == .orderedSame {
                 settings.selectedOpenAICompatPreset = presets.first?.name
             }
-            statusMessage = "OPENAI_COMPATプリセットを削除しました"
+            statusMessage = L10n.text("OPENAI_COMPATプリセットを削除しました")
         } else {
             DiagnosticsLogger.log("OPENAI_COMPAT preset removal encode failed name=\(name)")
         }
@@ -251,15 +252,15 @@ final class SettingsViewModel: ObservableObject {
     func saveSelectedOpenAICompatApiKey() {
         guard let repository else { return }
         guard let preset = settings.selectedOpenAICompatPreset?.nilIfBlank else {
-            errorMessage = "先にOPENAI_COMPATプリセットを選択してください"
+            errorMessage = L10n.text("先にOPENAI_COMPATプリセットを選択してください")
             return
         }
         let ok = repository.saveOpenAiCompatApiKey(name: preset, apiKey: openAICompatApiKeyInput.nilIfBlank)
         if ok {
-            statusMessage = "OPENAI_COMPAT APIキーを保存しました"
+            statusMessage = L10n.text("OPENAI_COMPAT APIキーを保存しました")
             openAICompatApiKeyInput = ""
         } else {
-            errorMessage = "OPENAI_COMPAT APIキー保存に失敗しました"
+            errorMessage = L10n.text("OPENAI_COMPAT APIキー保存に失敗しました")
             DiagnosticsLogger.log("OPENAI_COMPAT API key save failed name=\(preset)")
         }
     }
@@ -309,11 +310,11 @@ final class SettingsViewModel: ObservableObject {
 
     func addOrUpdateSystemPromptPreset() {
         guard let name = systemPromptPresetNameInput.nilIfBlank else {
-            errorMessage = "プリセット名を入力してください"
+            errorMessage = L10n.text("プリセット名を入力してください")
             return
         }
         guard let prompt = settings.systemPrompt?.nilIfBlank else {
-            errorMessage = "システムプロンプトを入力してください"
+            errorMessage = L10n.text("システムプロンプトを入力してください")
             return
         }
 
@@ -327,9 +328,9 @@ final class SettingsViewModel: ObservableObject {
         if let data = try? JSONEncoder().encode(presets), let json = String(data: data, encoding: .utf8) {
             settings.systemPromptPresetsJSON = json
             settings.selectedSystemPromptPreset = name
-            statusMessage = "システムプロンプトプリセットを保存しました"
+            statusMessage = L10n.text("システムプロンプトプリセットを保存しました")
         } else {
-            errorMessage = "システムプロンプトプリセットの保存に失敗しました"
+            errorMessage = L10n.text("システムプロンプトプリセットの保存に失敗しました")
             DiagnosticsLogger.log("System prompt preset save failed")
         }
     }
@@ -343,9 +344,9 @@ final class SettingsViewModel: ObservableObject {
             settings.systemPromptPresetsJSON = json
             settings.selectedSystemPromptPreset = nil
             systemPromptPresetNameInput = ""
-            statusMessage = "システムプロンプトプリセットを削除しました"
+            statusMessage = L10n.text("システムプロンプトプリセットを削除しました")
         } else {
-            errorMessage = "システムプロンプトプリセットの削除に失敗しました"
+            errorMessage = L10n.text("システムプロンプトプリセットの削除に失敗しました")
             DiagnosticsLogger.log("System prompt preset remove failed name=\(selected)")
         }
     }
@@ -357,7 +358,7 @@ final class SettingsViewModel: ObservableObject {
     func clearDiagnosticsLog() {
         DiagnosticsLogger.clear()
         diagnosticsLogText = ""
-        statusMessage = "診断ログをクリアしました"
+        statusMessage = L10n.text("診断ログをクリアしました")
     }
 
     func refreshOpenRouterModels(force: Bool) async {
@@ -368,7 +369,7 @@ final class SettingsViewModel: ObservableObject {
     func loginCodexAuth() async {
         guard let repository = requireRepository(action: "codex_login") else { return }
         isCodexAuthActionRunning = true
-        statusMessage = "Codexログインを開始しました"
+        statusMessage = L10n.text("Codexログインを開始しました")
         errorMessage = nil
         DiagnosticsLogger.log("Codex auth login tapped", category: .auth)
         refreshDiagnosticsLog()
@@ -383,7 +384,7 @@ final class SettingsViewModel: ObservableObject {
             codexAccountIdInput = state.accountId ?? ""
             codexEmailInput = state.email ?? ""
             codexPlanTypeInput = state.planType ?? ""
-            statusMessage = "Codexにログインしました"
+            statusMessage = L10n.text("Codexにログインしました")
             DiagnosticsLogger.log("Codex auth login succeeded accountId=\(state.accountId ?? "-")")
         case let .failure(error):
             errorMessage = error.localizedDescription
@@ -404,7 +405,7 @@ final class SettingsViewModel: ObservableObject {
         case let .success(state):
             codexAuthState = state
             codexUsageStatus = nil
-            statusMessage = "Codexからログアウトしました"
+            statusMessage = L10n.text("Codexからログアウトしました")
             DiagnosticsLogger.log("Codex auth logout succeeded")
         case let .failure(error):
             errorMessage = error.localizedDescription
@@ -440,7 +441,7 @@ final class SettingsViewModel: ObservableObject {
         switch result {
         case let .success(status):
             codexUsageStatus = status
-            statusMessage = "Codex使用量を更新しました"
+            statusMessage = L10n.text("Codex使用量を更新しました")
             DiagnosticsLogger.log("Codex usage refresh succeeded")
         case let .failure(error):
             errorMessage = error.localizedDescription
@@ -462,7 +463,7 @@ final class SettingsViewModel: ObservableObject {
             return
         }
         isGeminiAuthActionRunning = true
-        statusMessage = "Geminiログインを開始しました"
+        statusMessage = L10n.text("Geminiログインを開始しました")
         errorMessage = nil
         DiagnosticsLogger.log("Gemini auth login tapped", category: .auth)
         refreshDiagnosticsLog()
@@ -478,7 +479,7 @@ final class SettingsViewModel: ObservableObject {
             geminiEmailInput = state.email ?? ""
             geminiTierInput = state.userTier ?? ""
             geminiTierNameInput = state.userTierName ?? ""
-            statusMessage = "Geminiにログインしました"
+            statusMessage = L10n.text("Geminiにログインしました")
             DiagnosticsLogger.log("Gemini auth login succeeded project=\(state.projectId ?? "-")")
         case let .failure(error):
             errorMessage = error.localizedDescription
@@ -499,7 +500,7 @@ final class SettingsViewModel: ObservableObject {
         case let .success(state):
             geminiAuthState = state
             geminiUserQuota = nil
-            statusMessage = "Geminiからログアウトしました"
+            statusMessage = L10n.text("Geminiからログアウトしました")
             DiagnosticsLogger.log("Gemini auth logout succeeded")
         case let .failure(error):
             errorMessage = error.localizedDescription
@@ -535,13 +536,13 @@ final class SettingsViewModel: ObservableObject {
         switch result {
         case let .success(quota):
             geminiUserQuota = quota
-            statusMessage = "Geminiクォータを更新しました"
+            statusMessage = L10n.text("Geminiクォータを更新しました")
             DiagnosticsLogger.log("Gemini quota refresh succeeded buckets=\(quota.buckets.count)")
         case let .failure(error):
             if Self.isGeminiQuotaMissingCredentialError(error) {
                 geminiUserQuota = nil
                 errorMessage = nil
-                statusMessage = "Geminiにログインするとクォータを取得できます"
+                statusMessage = L10n.text("Geminiにログインするとクォータを取得できます")
                 DiagnosticsLogger.log(
                     "Gemini quota refresh skipped: missing GEMINI_AUTH credential",
                     level: .info
@@ -557,9 +558,9 @@ final class SettingsViewModel: ObservableObject {
         guard let repository = requireRepository(action: "gemini_save_project_id") else { return }
         let ok = repository.saveGeminiAuthProjectId(geminiProjectIdInput.nilIfBlank)
         if ok {
-            statusMessage = "Gemini Project IDを保存しました"
+            statusMessage = L10n.text("Gemini Project IDを保存しました")
         } else {
-            errorMessage = "Gemini Project IDの保存に失敗しました"
+            errorMessage = L10n.text("Gemini Project IDの保存に失敗しました")
             DiagnosticsLogger.log("Gemini project id save failed")
             refreshDiagnosticsLog()
         }
@@ -570,7 +571,7 @@ final class SettingsViewModel: ObservableObject {
         let result = repository.importGeminiOAuthClientConfig(fileURL: fileURL)
         switch result {
         case .success:
-            statusMessage = "Gemini OAuth設定をファイルから取り込みました"
+            statusMessage = L10n.text("Gemini OAuth設定をファイルから取り込みました")
             errorMessage = nil
             DiagnosticsLogger.log("Gemini oauth config imported from file", category: .auth)
         case let .failure(error):
@@ -591,7 +592,7 @@ final class SettingsViewModel: ObservableObject {
         case let .success(saved):
             geminiOAuthClientIDInput = saved.clientID
             geminiOAuthClientSecretInput = saved.clientSecret
-            statusMessage = "Gemini OAuth設定を手動入力から保存しました"
+            statusMessage = L10n.text("Gemini OAuth設定を手動入力から保存しました")
             errorMessage = nil
             DiagnosticsLogger.log("Gemini oauth config saved from manual input", category: .auth)
         case let .failure(error):
@@ -611,13 +612,13 @@ final class SettingsViewModel: ObservableObject {
         guard let repository = requireRepository(action: "gemini_clear_imported_oauth_config") else { return }
         let ok = repository.clearImportedGeminiOAuthClientConfig()
         if ok {
-            statusMessage = "取り込み済みGemini OAuth設定をクリアしました"
+            statusMessage = L10n.text("取り込み済みGemini OAuth設定をクリアしました")
             errorMessage = nil
             geminiOAuthClientIDInput = ""
             geminiOAuthClientSecretInput = ""
             DiagnosticsLogger.log("Gemini imported oauth config cleared", category: .auth)
         } else {
-            errorMessage = "取り込み済みGemini OAuth設定のクリアに失敗しました"
+            errorMessage = L10n.text("取り込み済みGemini OAuth設定のクリアに失敗しました")
             DiagnosticsLogger.log("Gemini imported oauth config clear failed", level: .warning, category: .auth)
         }
         refreshGeminiOAuthClientConfigStatus()
@@ -626,7 +627,7 @@ final class SettingsViewModel: ObservableObject {
 
     private func requireRepository(action: String) -> ChatRepository? {
         guard let repository else {
-            errorMessage = "設定画面の初期化が完了していません。画面を開き直して再試行してください。"
+            errorMessage = L10n.text("設定画面の初期化が完了していません。画面を開き直して再試行してください。")
             DiagnosticsLogger.log(
                 "Settings action ignored because repository is not bound action=\(action)",
                 level: .warning,

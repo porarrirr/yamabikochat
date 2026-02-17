@@ -50,18 +50,18 @@ enum GeminiModelUtils {
 
     static func getThinkingDescription(model: String) -> String {
         if !isThinkingSupported(model: model) {
-            return "このモデルはthinking機能をサポートしていません"
+            return L10n.text("このモデルはthinking機能をサポートしていません")
         }
         if isThinkingAlwaysOn(model: model) {
-            return "このモデルはthinking機能が常時ONです（Google仕様）"
+            return L10n.text("このモデルはthinking機能が常時ONです（Google仕様）")
         }
         if isGemini3(model: model), model.localizedCaseInsensitiveContains("flash") {
-            return "Gemini 3 Flashはthinkingレベル（minimal〜high）を調整できます"
+            return L10n.text("Gemini 3 Flashはthinkingレベル（minimal〜high）を調整できます")
         }
         if canDisableThinking(model: model) {
-            return "thinking機能のON/OFFとbudget調整が可能です"
+            return L10n.text("thinking機能のON/OFFとbudget調整が可能です")
         }
-        return "thinking機能をサポートしています"
+        return L10n.text("thinking機能をサポートしています")
     }
 
     static func calculateEffectiveThinkingBudget(

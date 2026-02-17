@@ -753,7 +753,7 @@ private struct DualMessageCard: View {
                     ) {
                         DualResponsePane(
                             title: "A · \(ProviderCatalog.displayName(for: message.providerA)) · \(message.modelAName)",
-                            content: modelAText.isEmpty ? "（応答待ち）" : modelAText,
+                            content: modelAText.isEmpty ? L10n.text("（応答待ち）") : modelAText,
                             thinking: message.modelAThinking,
                             showThinking: $showThinkingA,
                             mathRenderingEnabled: mathRenderingEnabled
@@ -761,7 +761,7 @@ private struct DualMessageCard: View {
                     } second: {
                         DualResponsePane(
                             title: "B · \(ProviderCatalog.displayName(for: message.providerB)) · \(message.modelBName)",
-                            content: modelBText.isEmpty ? "（応答待ち）" : modelBText,
+                            content: modelBText.isEmpty ? L10n.text("（応答待ち）") : modelBText,
                             thinking: message.modelBThinking,
                             showThinking: $showThinkingB,
                             mathRenderingEnabled: mathRenderingEnabled
@@ -859,7 +859,7 @@ private struct DualResponsePane: View {
                     HStack(spacing: 6) {
                         Image(systemName: "brain.head.profile")
                             .font(.caption2)
-                        Text(showThinking ? "Thinkingを隠す" : "Thinkingを表示")
+                        Text(showThinking ? L10n.text("Thinkingを隠す") : L10n.text("Thinkingを表示"))
                             .font(.caption2)
                     }
                 }

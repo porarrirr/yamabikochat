@@ -42,7 +42,10 @@ final class ChatRepositoryBranchTests: XCTestCase {
         )
         let branched = try fixture.repository.conversation(id: newConversationId)
 
-        XCTAssertEqual(branched?.title, "ブランチ: 12345678901234567890123456789012...")
+        XCTAssertEqual(
+            branched?.title,
+            L10n.format("ブランチ: %@", "12345678901234567890123456789012...")
+        )
     }
 
     func testBranchConversationUsesBaseTitleForNamedConversation() throws {
@@ -63,7 +66,7 @@ final class ChatRepositoryBranchTests: XCTestCase {
         )
         let branched = try fixture.repository.conversation(id: newConversationId)
 
-        XCTAssertEqual(branched?.title, "ブランチ: 計画A")
+        XCTAssertEqual(branched?.title, L10n.format("ブランチ: %@", "計画A"))
     }
 
     func testBranchConversationCopiesMessagesUpToTargetOnly() throws {

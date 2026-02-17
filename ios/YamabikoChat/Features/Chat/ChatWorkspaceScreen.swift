@@ -63,7 +63,7 @@ struct ChatWorkspaceScreen: View {
 
     private var modelPresetLabel: String {
         let model = viewModel.settings.currentModel().trimmingCharacters(in: .whitespacesAndNewlines)
-        return model.isEmpty ? "Chat" : model
+        return model.isEmpty ? L10n.text("Chat") : model
     }
 
     private var currentProvider: String {
@@ -115,7 +115,7 @@ struct ChatWorkspaceScreen: View {
                     }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("チャット履歴")
+            .accessibilityLabel(Text("チャット履歴"))
 
             Menu {
                 let chatPresets = viewModel.availableChatPresets()
@@ -164,11 +164,11 @@ struct ChatWorkspaceScreen: View {
                 }
                 .disabled(!viewModel.canRegenerateLastAssistant)
 
-                Button(viewModel.settings.isDualModeEnabled ? "デュアルをOFF" : "デュアルをON") {
+                Button(viewModel.settings.isDualModeEnabled ? L10n.text("デュアルをOFF") : L10n.text("デュアルをON")) {
                     viewModel.toggleDualMode()
                 }
 
-                Button(viewModel.settings.isAutoConversationEnabled ? "自動会話をOFF" : "自動会話をON") {
+                Button(viewModel.settings.isAutoConversationEnabled ? L10n.text("自動会話をOFF") : L10n.text("自動会話をON")) {
                     viewModel.toggleAutoConversation()
                 }
 
@@ -193,9 +193,9 @@ struct ChatWorkspaceScreen: View {
                     viewModel.applySystemPromptPreset(name: nil)
                 } label: {
                     if isCustomSystemPromptActive {
-                        Label("Prompt: Custom", systemImage: "checkmark")
+                        Label(L10n.text("Prompt: Custom"), systemImage: "checkmark")
                     } else {
-                        Text("Prompt: Custom")
+                        Text(L10n.text("Prompt: Custom"))
                     }
                 }
                 ForEach(viewModel.availableSystemPromptPresets()) { preset in
@@ -203,9 +203,9 @@ struct ChatWorkspaceScreen: View {
                         viewModel.applySystemPromptPreset(name: preset.name)
                     } label: {
                         if isActiveSystemPromptPreset(preset) {
-                            Label("Prompt: \(preset.name)", systemImage: "checkmark")
+                            Label(L10n.format("Prompt: %@", preset.name), systemImage: "checkmark")
                         } else {
-                            Text("Prompt: \(preset.name)")
+                            Text(L10n.format("Prompt: %@", preset.name))
                         }
                     }
                 }

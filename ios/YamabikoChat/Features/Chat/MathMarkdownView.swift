@@ -150,10 +150,18 @@ enum MathMarkdownHTMLBuilder {
         borderColor: String,
         linkColor: String,
         mathRenderingEnabled: Bool,
-        mathJaxScriptTag: String
+        mathJaxScriptTag: String,
+        copyButtonLabel: String = "コピー",
+        copiedButtonLabel: String = "コピー済み"
     ) -> String {
         let mathSetupScript: String
         let mathTypesetScript: String
+        let copyLabelSetupScript = """
+          <script>
+            window.__yamabikoCopyButtonLabel = \(copyButtonLabel.jsonStringLiteral);
+            window.__yamabikoCopiedButtonLabel = \(copiedButtonLabel.jsonStringLiteral);
+          </script>
+        """
         if mathRenderingEnabled {
             mathSetupScript = """
               <script>
@@ -192,6 +200,7 @@ enum MathMarkdownHTMLBuilder {
         <head>
           <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
           <meta name=\"color-scheme\" content=\"light dark\" />
+          \(copyLabelSetupScript)
           \(mathSetupScript)
           <script>\(markdownRendererScript)</script>
           <style>
@@ -325,8 +334,8 @@ enum MathMarkdownHTMLBuilder {
               } else {
                 root.textContent = source || '';
               }
-              var copyLabel = 'コピー';
-              var copiedLabel = 'コピー済み';
+              var copyLabel = window.__yamabikoCopyButtonLabel || 'Copy';
+              var copiedLabel = window.__yamabikoCopiedButtonLabel || 'Copied';
               function setCopyButtonLabel(button, label) {
                 if (!button) return;
                 button.textContent = label;
@@ -505,7 +514,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
     private static let fallbackMarkdownRendererScript = #"""
     (function(global) {
       "use strict";
-      var copyButtonLabel = "コピー";
+      var copyButtonLabel = window.__yamabikoCopyButtonLabel || "Copy";
     
       function escapeHtml(value) {
         return String(value || "")
@@ -1034,7 +1043,9 @@ private struct MathMarkdownWebView: UIViewRepresentable {
             borderColor: borderColor,
             linkColor: linkColor,
             mathRenderingEnabled: mathRenderingEnabled,
-            mathJaxScriptTag: mathJaxLoadPlan.scriptTag
+            mathJaxScriptTag: mathJaxLoadPlan.scriptTag,
+            copyButtonLabel: L10n.text("コピー"),
+            copiedButtonLabel: L10n.text("コピー済み")
         )
 
         if context.coordinator.lastHTML != html {

@@ -128,7 +128,7 @@ final class ChatRepository {
     func createProject(title: String, instructions: String?) throws -> Int64 {
         let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedTitle.isEmpty else {
-            throw ProviderClientError.parseFailure("プロジェクト名を入力してください。")
+            throw ProviderClientError.parseFailure(L10n.text("プロジェクト名を入力してください。"))
         }
         return try conversations.createProject(title: normalizedTitle, instructions: instructions)
     }
@@ -371,13 +371,13 @@ final class ChatRepository {
 
         let history = try conversations.fetchProviderHistory(conversationId: conversationId)
         guard let targetIndex = history.lastIndex(where: { $0.role == "assistant" }) else {
-            throw ProviderClientError.parseFailure("再生成できるAIメッセージがありません。")
+            throw ProviderClientError.parseFailure(L10n.text("再生成できるAIメッセージがありません。"))
         }
         guard targetIndex == history.count - 1 else {
-            throw ProviderClientError.parseFailure("最後のAIメッセージのみ再生成できます。")
+            throw ProviderClientError.parseFailure(L10n.text("最後のAIメッセージのみ再生成できます。"))
         }
         guard targetIndex > 0, history[targetIndex - 1].role == "user" else {
-            throw ProviderClientError.parseFailure("再生成対象の直前にユーザーメッセージがありません。")
+            throw ProviderClientError.parseFailure(L10n.text("再生成対象の直前にユーザーメッセージがありません。"))
         }
 
         let targetMessageID = history[targetIndex].messageId
@@ -824,7 +824,7 @@ final class ChatRepository {
         let normalizedInitialMessage = initialMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         let currentSettings = try settings.load()
         let config = AutoConversationConfig(
-            title: "自動会話: \(String(normalizedInitialMessage.prefix(20)))",
+            title: L10n.format("自動会話: %@", String(normalizedInitialMessage.prefix(20))),
             modelA: currentSettings.autoModelA,
             modelB: currentSettings.autoModelB,
             providerA: currentSettings.autoProviderA,
@@ -1160,7 +1160,13 @@ final class ChatRepository {
             if autoConversation.maxTurns > 0, nextTurn > autoConversation.maxTurns {
                 try appendAutoConversationSystemMessage(
                     autoConversation: autoConversation,
-                    text: "**[SYSTEM]**\n\n🎯 自動会話が完了しました！\n\n• 実行ターン数: \(max(0, nextTurn - 1))/\(autoConversation.maxTurns)ターン\n• 参加モデル: \(autoConversation.modelA) vs \(autoConversation.modelB)\n• 終了理由: 最大ターン数に達したため"
+                    text: L10n.format(
+                        "**[SYSTEM]**\n\n🎯 自動会話が完了しました！\n\n• 実行ターン数: %d/%dターン\n• 参加モデル: %@ vs %@\n• 終了理由: 最大ターン数に達したため",
+                        max(0, nextTurn - 1),
+                        autoConversation.maxTurns,
+                        autoConversation.modelA,
+                        autoConversation.modelB
+                    )
                 )
                 try markAutoConversationEnded(
                     autoConversationId: autoConversationId,
@@ -1217,7 +1223,7 @@ final class ChatRepository {
                     autoConversationId: autoConversationId,
                     reason: AutoConversationEndReason.error
                 )
-                throw ProviderClientError.parseFailure("自動会話で空の応答を受信しました。")
+                throw ProviderClientError.parseFailure(L10n.text("自動会話で空の応答を受信しました。"))
             }
 
             let hasEndSignal = containsAutoConversationEndSignal(
@@ -1255,7 +1261,15 @@ final class ChatRepository {
             if hasEndSignal {
                 try appendAutoConversationSystemMessage(
                     autoConversation: autoConversation,
-                    text: "**[SYSTEM]**\n\n🏁 自動会話が終了しました\n\n• 実行ターン数: \(nextTurn)/\(autoConversation.maxTurns > 0 ? String(autoConversation.maxTurns) : "無制限")ターン\n• 参加モデル: \(autoConversation.modelA) vs \(autoConversation.modelB)\n• 終了理由: AIモデルが会話終了を宣言"
+                    text: L10n.format(
+                        "**[SYSTEM]**\n\n🏁 自動会話が終了しました\n\n• 実行ターン数: %d/%@ターン\n• 参加モデル: %@ vs %@\n• 終了理由: AIモデルが会話終了を宣言",
+                        nextTurn,
+                        autoConversation.maxTurns > 0
+                            ? String(autoConversation.maxTurns)
+                            : L10n.text("無制限"),
+                        autoConversation.modelA,
+                        autoConversation.modelB
+                    )
                 )
                 try markAutoConversationEnded(
                     autoConversationId: autoConversationId,
@@ -1702,7 +1716,7 @@ final class ChatRepository {
             )
         } catch {
             return DualSideResult(
-                text: "エラー: \(error.localizedDescription)",
+                text: L10n.format("エラー: %@", error.localizedDescription),
                 reasoning: nil,
                 error: error
             )
@@ -1814,9 +1828,11 @@ final class ChatRepository {
         }
 
         if baseTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || baseTitle == "New Chat" {
-            return snippet.isEmpty ? "ブランチ" : "ブランチ: \(snippet)"
+            return snippet.isEmpty
+                ? L10n.text("ブランチ")
+                : L10n.format("ブランチ: %@", snippet)
         }
-        return "ブランチ: \(baseTitle)"
+        return L10n.format("ブランチ: %@", baseTitle)
     }
 
     private func settingsForNewConversation() throws -> AppSettings {

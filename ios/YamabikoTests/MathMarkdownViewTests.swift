@@ -347,7 +347,7 @@ line1\\nline2
 
         XCTAssertTrue(result.contains("yamabiko-code-block"))
         XCTAssertTrue(result.contains("yamabiko-copy-button"))
-        XCTAssertTrue(result.contains(">コピー<"))
+        XCTAssertTrue(result.contains(">Copy<"))
         XCTAssertTrue(result.contains("let value = 42"))
         XCTAssertFalse(result.contains("```"))
     }
