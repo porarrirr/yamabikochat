@@ -70,6 +70,9 @@ final class GeminiAuthRepository {
         static let userInfoURL = "https://www.googleapis.com/oauth2/v2/userinfo"
         static let codeAssistEndpoint = "https://cloudcode-pa.googleapis.com"
         static let codeAssistVersion = "v1internal"
+        static let codeAssistUserAgent = "google-api-nodejs-client/9.15.1"
+        static let codeAssistApiClient = "gl-node/22.17.0"
+        static let codeAssistClientMetadata = "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI"
         static let defaultPort: UInt16 = 1456
         static let refreshBufferSeconds: TimeInterval = 60
         static let refreshFallbackSeconds: TimeInterval = 45 * 60
@@ -513,10 +516,7 @@ final class GeminiAuthRepository {
             let request = HTTPRequest(
                 url: URL(string: "\(Constants.codeAssistEndpoint)/\(Constants.codeAssistVersion):retrieveUserQuota")!,
                 method: "POST",
-                headers: [
-                    "Authorization": "Bearer \(bearer.token)",
-                    "Content-Type": "application/json"
-                ],
+                headers: codeAssistHeaders(accessToken: bearer.token),
                 body: body
             )
 
@@ -776,10 +776,7 @@ final class GeminiAuthRepository {
         let request = HTTPRequest(
             url: URL(string: "\(Constants.codeAssistEndpoint)/\(Constants.codeAssistVersion)\(path)")!,
             method: "POST",
-            headers: [
-                "Authorization": "Bearer \(accessToken)",
-                "Content-Type": "application/json"
-            ],
+            headers: codeAssistHeaders(accessToken: accessToken),
             body: data
         )
         let (responseData, response) = try await httpClient.send(request)
@@ -796,10 +793,7 @@ final class GeminiAuthRepository {
         let request = HTTPRequest(
             url: URL(string: "\(Constants.codeAssistEndpoint)/\(Constants.codeAssistVersion)/\(name)")!,
             method: "GET",
-            headers: [
-                "Authorization": "Bearer \(accessToken)",
-                "Content-Type": "application/json"
-            ]
+            headers: codeAssistHeaders(accessToken: accessToken)
         )
         let (data, response) = try await httpClient.send(request)
         guard (200 ... 299).contains(response.statusCode) else {
@@ -910,6 +904,16 @@ final class GeminiAuthRepository {
     private static func formURLEncode(_ value: String) -> String {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
         return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+    }
+
+    private func codeAssistHeaders(accessToken: String) -> [String: String] {
+        [
+            "Authorization": "Bearer \(accessToken)",
+            "Content-Type": "application/json",
+            "User-Agent": Constants.codeAssistUserAgent,
+            "X-Goog-Api-Client": Constants.codeAssistApiClient,
+            "Client-Metadata": Constants.codeAssistClientMetadata
+        ]
     }
 
     private static func missingOAuthClientParts(from config: GeminiOAuthClientConfig) -> [String] {

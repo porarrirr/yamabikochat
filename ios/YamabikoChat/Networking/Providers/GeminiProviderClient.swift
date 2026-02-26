@@ -1,11 +1,17 @@
 import Foundation
-import UIKit
 import UniformTypeIdentifiers
 
 struct GeminiProviderClient: ProviderClient {
     let provider: LLMProvider = .gemini
     private let geminiApiBase = "https://generativelanguage.googleapis.com/v1beta"
     private let geminiCliBase = "https://cloudcode-pa.googleapis.com/v1internal"
+    private static let geminiCliUserAgent = "google-api-nodejs-client/9.15.1"
+    private static let geminiCliApiClient = "gl-node/22.17.0"
+    private static let geminiCliClientMetadata = "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI"
+    private static let geminiCliProcessSessionID = UUID().uuidString
+    private static let geminiCliModelFallbacks = [
+        "gemini-2.5-flash-image": "gemini-2.5-flash"
+    ]
     static let noUsableStreamDataReason = "Gemini stream produced no usable data"
 
     func generate(
@@ -53,11 +59,15 @@ struct GeminiProviderClient: ProviderClient {
                         headers["Authorization"] = "Bearer \(credential.token)"
                     }
                     if resolvedProvider == .geminiAuth {
-                        headers["Accept"] = "text/event-stream"
-                        headers["User-Agent"] = buildGeminiCliUserAgent(model: request.model)
+                        let requestID = body.requestIdentifier ?? UUID().uuidString
+                        applyGeminiCliHeaders(
+                            to: &headers,
+                            requestIdentifier: requestID,
+                            streaming: true
+                        )
                     }
 
-                    let httpRequest = HTTPRequest(url: endpoint, headers: headers, body: body)
+                    let httpRequest = HTTPRequest(url: endpoint, headers: headers, body: body.data)
                     DiagnosticsLogger.log(
                         "Gemini stream start",
                         category: .network,
@@ -303,7 +313,7 @@ struct GeminiProviderClient: ProviderClient {
         let httpRequest = HTTPRequest(
             url: url,
             headers: ["Content-Type": "application/json"],
-            body: payload
+            body: payload.data
         )
 
         let (data, response) = try await httpClient.send(httpRequest)
@@ -330,14 +340,19 @@ struct GeminiProviderClient: ProviderClient {
         }
 
         let payload = try buildGeminiBody(request: request, provider: .geminiAuth, projectID: projectID)
+        var headers = [
+            "Authorization": "Bearer \(accessToken)",
+            "Content-Type": "application/json"
+        ]
+        applyGeminiCliHeaders(
+            to: &headers,
+            requestIdentifier: payload.requestIdentifier ?? UUID().uuidString,
+            streaming: false
+        )
         let httpRequest = HTTPRequest(
             url: endpoint,
-            headers: [
-                "Authorization": "Bearer \(accessToken)",
-                "Content-Type": "application/json",
-                "User-Agent": buildGeminiCliUserAgent(model: request.model)
-            ],
-            body: payload
+            headers: headers,
+            body: payload.data
         )
 
         let (data, response) = try await httpClient.send(httpRequest)
@@ -381,11 +396,16 @@ struct GeminiProviderClient: ProviderClient {
         }
     }
 
+    private struct GeminiBodyBuildResult {
+        var data: Data
+        var requestIdentifier: String?
+    }
+
     private func buildGeminiBody(
         request: ProviderRequest,
         provider: LLMProvider,
         projectID: String?
-    ) throws -> Data {
+    ) throws -> GeminiBodyBuildResult {
         let contents = request.messages.map { message -> [String: Any] in
             [
                 "role": message.role == "assistant" ? "model" : "user",
@@ -423,8 +443,11 @@ struct GeminiProviderClient: ProviderClient {
 
         switch provider {
         case .geminiAuth:
+            let sessionID = resolveGeminiCliSessionID(from: request.metadata)
+            let userPromptID = resolveGeminiCliRequestIdentifier(from: request.metadata)
             var inner: [String: Any] = [
-                "contents": contents
+                "contents": contents,
+                "session_id": sessionID
             ]
             if let systemPrompt = request.systemPrompt, !systemPrompt.isEmpty {
                 inner["systemInstruction"] = [
@@ -435,22 +458,22 @@ struct GeminiProviderClient: ProviderClient {
             if !tools.isEmpty {
                 inner["tools"] = tools
             }
-            if let sessionID = request.metadata["geminiSessionId"]?.trimmedNonEmpty {
-                inner["session_id"] = sessionID
-            }
             if !generationConfig.isEmpty {
                 inner["generationConfig"] = generationConfig
             }
 
             var root: [String: Any] = [
-                "model": request.model,
-                "user_prompt_id": UUID().uuidString,
+                "model": normalizedGeminiCliModel(request.model),
+                "user_prompt_id": userPromptID,
                 "request": inner
             ]
             if let projectID = projectID?.trimmedNonEmpty {
                 root["project"] = projectID
             }
-            return try JSONSerialization.data(withJSONObject: root)
+            return GeminiBodyBuildResult(
+                data: try JSONSerialization.data(withJSONObject: root),
+                requestIdentifier: userPromptID
+            )
         default:
             var root: [String: Any] = [
                 "contents": contents
@@ -464,7 +487,10 @@ struct GeminiProviderClient: ProviderClient {
             if !generationConfig.isEmpty {
                 root["generationConfig"] = generationConfig
             }
-            return try JSONSerialization.data(withJSONObject: root)
+            return GeminiBodyBuildResult(
+                data: try JSONSerialization.data(withJSONObject: root),
+                requestIdentifier: nil
+            )
         }
     }
 
@@ -674,11 +700,58 @@ struct GeminiProviderClient: ProviderClient {
         return mapped
     }
 
-    private func buildGeminiCliUserAgent(model: String) -> String {
-        let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
-        let osVersion = UIDevice.current.systemVersion
-        let arch = CodexUserAgentPresetCatalog.currentArchitecture()
-        return "GeminiCLI/\(appVersion)/\(model) (Android \(osVersion); \(arch))"
+    private func applyGeminiCliHeaders(
+        to headers: inout [String: String],
+        requestIdentifier: String,
+        streaming: Bool
+    ) {
+        headers["User-Agent"] = Self.geminiCliUserAgent
+        headers["X-Goog-Api-Client"] = Self.geminiCliApiClient
+        headers["Client-Metadata"] = Self.geminiCliClientMetadata
+        headers["x-activity-request-id"] = requestIdentifier
+        if streaming {
+            headers["Accept"] = "text/event-stream"
+        }
+        headers.removeValue(forKey: "x-api-key")
+        headers.removeValue(forKey: "X-Api-Key")
+    }
+
+    private func resolveGeminiCliSessionID(from metadata: [String: String]) -> String {
+        let aliases = [
+            "geminiSessionId",
+            "session_id",
+            "sessionId"
+        ]
+        for key in aliases {
+            if let value = metadata[key]?.trimmedNonEmpty {
+                return value
+            }
+        }
+        return Self.geminiCliProcessSessionID
+    }
+
+    private func resolveGeminiCliRequestIdentifier(from metadata: [String: String]) -> String {
+        let aliases = [
+            "geminiUserPromptId",
+            "geminiPromptId",
+            "geminiRequestId",
+            "user_prompt_id",
+            "userPromptId",
+            "prompt_id",
+            "promptId",
+            "request_id",
+            "requestId"
+        ]
+        for key in aliases {
+            if let value = metadata[key]?.trimmedNonEmpty {
+                return value
+            }
+        }
+        return UUID().uuidString
+    }
+
+    private func normalizedGeminiCliModel(_ model: String) -> String {
+        Self.geminiCliModelFallbacks[model] ?? model
     }
 
     private func parseResponse(data: Data) throws -> ProviderResponse {

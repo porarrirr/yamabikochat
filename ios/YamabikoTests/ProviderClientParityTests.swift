@@ -23,11 +23,13 @@ private final class ProviderTestCredentialStore: SecureCredentialStore {
 
 private final class CapturingHTTPClient: HTTPClientProtocol {
     var lastRequest: HTTPRequest?
+    var requests: [HTTPRequest] = []
     var sendResponder: ((HTTPRequest) throws -> (Data, HTTPURLResponse))?
     var streamResponder: ((HTTPRequest) throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse))?
 
     func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
         lastRequest = request
+        requests.append(request)
         guard let sendResponder else {
             throw ProviderClientError.invalidResponse
         }
@@ -36,6 +38,7 @@ private final class CapturingHTTPClient: HTTPClientProtocol {
 
     func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
         lastRequest = request
+        requests.append(request)
         guard let streamResponder else {
             throw ProviderClientError.invalidResponse
         }
@@ -155,7 +158,7 @@ final class ProviderClientParityTests: XCTestCase {
         }
     }
 
-    func testGeminiCliUserAgentUsesAndroidShape() async throws {
+    func testGeminiCliHeadersMatchOpencodeAndRequestIDMatchesBody() async throws {
         let store = ProviderTestCredentialStore()
         try store.setGeminiAccessToken("gemini-access-token")
         try store.saveSecret("project-1", key: "gemini_project_id")
@@ -185,10 +188,17 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(response.text, "ok")
 
         let captured = try XCTUnwrap(httpClient.lastRequest)
-        let userAgent = captured.headers["User-Agent"] ?? ""
-        XCTAssertTrue(userAgent.hasPrefix("GeminiCLI/"))
-        XCTAssertTrue(userAgent.contains("(Android "))
+        XCTAssertEqual(captured.headers["User-Agent"], "google-api-nodejs-client/9.15.1")
+        XCTAssertEqual(captured.headers["X-Goog-Api-Client"], "gl-node/22.17.0")
+        XCTAssertEqual(
+            captured.headers["Client-Metadata"],
+            "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI"
+        )
         XCTAssertTrue(captured.url.absoluteString.contains(":generateContent"))
+        let requestID = try XCTUnwrap(captured.headers["x-activity-request-id"])
+        let bodyData = try XCTUnwrap(captured.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertEqual(root["user_prompt_id"] as? String, requestID)
     }
 
     func testGeminiBuildBodyEmbedsImageAttachmentAsInlineData() async throws {
@@ -326,6 +336,55 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(inner["session_id"] as? String, "session-123")
     }
 
+    func testGeminiAuthBodyUsesStableSessionIDWhenMetadataMissing() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setGeminiAccessToken("gemini-access-token")
+        try store.saveSecret("project-1", key: "gemini_project_id")
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"response":{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: [
+                "provider": "GEMINI_AUTH"
+            ]
+        )
+
+        let client = GeminiProviderClient()
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(httpClient.requests.count, 2)
+        let firstBody = try XCTUnwrap(httpClient.requests[0].body)
+        let secondBody = try XCTUnwrap(httpClient.requests[1].body)
+        let firstRoot = try XCTUnwrap(try JSONSerialization.jsonObject(with: firstBody) as? [String: Any])
+        let secondRoot = try XCTUnwrap(try JSONSerialization.jsonObject(with: secondBody) as? [String: Any])
+        let firstInner = try XCTUnwrap(firstRoot["request"] as? [String: Any])
+        let secondInner = try XCTUnwrap(secondRoot["request"] as? [String: Any])
+        let firstSessionID = try XCTUnwrap(firstInner["session_id"] as? String)
+        let secondSessionID = try XCTUnwrap(secondInner["session_id"] as? String)
+        XCTAssertFalse(firstSessionID.isEmpty)
+        XCTAssertEqual(firstSessionID, secondSessionID)
+    }
+
     func testGeminiStreamSeparatesThoughtIntoReasoningDelta() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("gemini-key", for: .gemini)
@@ -412,6 +471,19 @@ final class ProviderClientParityTests: XCTestCase {
         for try await event in stream {
             events.append(event)
         }
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(captured.headers["Accept"], "text/event-stream")
+        XCTAssertEqual(captured.headers["User-Agent"], "google-api-nodejs-client/9.15.1")
+        XCTAssertEqual(captured.headers["X-Goog-Api-Client"], "gl-node/22.17.0")
+        XCTAssertEqual(
+            captured.headers["Client-Metadata"],
+            "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI"
+        )
+        let requestID = try XCTUnwrap(captured.headers["x-activity-request-id"])
+        let bodyData = try XCTUnwrap(captured.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertEqual(root["user_prompt_id"] as? String, requestID)
 
         XCTAssertTrue(events.contains(.textDelta("answer")))
         XCTAssertTrue(events.contains(.reasoningDelta("plan")))
