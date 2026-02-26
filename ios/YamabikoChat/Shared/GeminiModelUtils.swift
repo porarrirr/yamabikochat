@@ -2,7 +2,7 @@ import Foundation
 
 enum GeminiModelUtils {
     private static let gemini25Pattern = #"(?i)gemini[-_/]2\.5(?:[-_/]|$)"#
-    private static let gemini3Pattern = #"(?i)gemini[-_/]3(?:[-_/]|$)"#
+    private static let gemini3Pattern = #"(?i)gemini[-_/]3(?:[._/-]|$)"#
 
     static func isThinkingLevelSupported(model: String) -> Bool {
         isGemini3(model: model)

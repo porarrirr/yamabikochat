@@ -289,6 +289,7 @@ final class ProviderClientParityTests: XCTestCase {
         let store = ProviderTestCredentialStore()
         try store.setGeminiAccessToken("  gemini-access-token  ")
         try store.saveSecret("project-1", key: "gemini_project_id")
+        let model = "gemini-3.1-pro-preview"
 
         let httpClient = CapturingHTTPClient()
         httpClient.sendResponder = { request in
@@ -297,7 +298,7 @@ final class ProviderClientParityTests: XCTestCase {
         }
 
         let request = ProviderRequest(
-            model: "gemini-2.5-flash",
+            model: model,
             messages: [ProviderRequestMessage(role: "user", content: "hello")],
             stream: false,
             tools: [],
@@ -320,6 +321,7 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(captured.headers["Authorization"], "Bearer gemini-access-token")
         let bodyData = try XCTUnwrap(captured.body)
         let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertEqual(root["model"] as? String, model)
         let inner = try XCTUnwrap(root["request"] as? [String: Any])
         XCTAssertEqual(inner["session_id"] as? String, "session-123")
     }
