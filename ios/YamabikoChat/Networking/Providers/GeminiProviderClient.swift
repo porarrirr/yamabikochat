@@ -13,6 +13,14 @@ struct GeminiProviderClient: ProviderClient {
         "gemini-2.5-flash-image": "gemini-2.5-flash"
     ]
     static let noUsableStreamDataReason = "Gemini stream produced no usable data"
+    private static let geminiCliStreamMaxAttempts = 3
+    private static let geminiCliRetryInitialDelayMs = 5_000
+    private static let geminiCliRetryMaxDelayMs = 30_000
+    private static let geminiCliQuotaDomains: Set<String> = [
+        "cloudcode-pa.googleapis.com",
+        "staging-cloudcode-pa.googleapis.com",
+        "autopush-cloudcode-pa.googleapis.com"
+    ]
 
     func generate(
         request: ProviderRequest,
@@ -77,182 +85,58 @@ struct GeminiProviderClient: ProviderClient {
                             "url": endpoint.absoluteString
                         ]
                     )
-                    let (lineStream, response) = try await httpClient.stream(httpRequest)
-                    guard (200 ... 299).contains(response.statusCode) else {
-                        throw ProviderClientError.httpStatus(response.statusCode, "Gemini stream failed: \(response.statusCode)")
-                    }
+                    let maxAttempts = resolvedProvider == .geminiAuth ? Self.geminiCliStreamMaxAttempts : 1
+                    var attempt = 1
 
-                    var fullText = ""
-                    var fullReasoning = ""
-                    var latestUsage: ProviderUsage?
-                    var hasUsableData = false
-                    var eventLines: [String] = []
-                    var streamFinished = false
-                    var parseErrorCount = 0
-                    var totalLineCount = 0
-                    var flushCount = 0
-                    var singleLineFlushCount = 0
-                    var boundaryFlushCount = 0
-                    var blankLineFlushCount = 0
-                    var eofFlushCount = 0
-                    var flushTrace: [String] = []
-                    var invalidPayloadSnippets: [String] = []
-                    let maxSnippets = 6
-                    let snippetLimit = 256
-
-                    func recordInvalidPayload(_ payload: String) {
-                        parseErrorCount += 1
-                        guard invalidPayloadSnippets.count < maxSnippets else { return }
-                        let compact = payload
-                            .replacingOccurrences(of: "\n", with: "\\n")
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
-                        invalidPayloadSnippets.append(String(compact.prefix(snippetLimit)))
-                    }
-
-                    func failNoUsableData(_ phase: String) throws {
-                        DiagnosticsLogger.log(
-                            "Gemini stream produced no usable data",
-                            category: .network,
-                            metadata: [
-                                "provider": resolvedProvider.rawValue,
-                                "model": request.model,
-                                "phase": phase,
-                                "status": String(response.statusCode),
-                                "line_count": String(totalLineCount),
-                                "flush_count": String(flushCount),
-                                "flush_singleline_count": String(singleLineFlushCount),
-                                "flush_boundary_count": String(boundaryFlushCount),
-                                "flush_blankline_count": String(blankLineFlushCount),
-                                "flush_eof_count": String(eofFlushCount),
-                                "flush_trace": flushTrace.joined(separator: " | "),
-                                "parse_error_count": String(parseErrorCount),
-                                "invalid_payloads": invalidPayloadSnippets.joined(separator: " || ")
-                            ]
-                        )
-                        throw ProviderClientError.parseFailure(Self.noUsableStreamDataReason)
-                    }
-
-                    func parseChunk(_ chunk: String) -> ParsedGeminiChunk? {
-                        if resolvedProvider == .geminiAuth {
-                            return parseGeminiCliStreamChunk(chunk)
-                        }
-                        return parseGeminiStreamChunk(chunk)
-                    }
-
-                    func bufferedChunk() -> String {
-                        eventLines
-                            .joined(separator: "\n")
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
-                    }
-
-                    func canFlushBufferedEvent() -> Bool {
-                        let chunk = bufferedChunk()
-                        guard !chunk.isEmpty else { return false }
-                        if chunk == "[DONE]" { return true }
-                        return parseChunk(chunk) != nil
-                    }
-
-                    func flushEventLines(trigger: String) throws {
-                        guard !eventLines.isEmpty, !streamFinished else { return }
-                        let chunk = bufferedChunk()
-                        eventLines.removeAll(keepingCapacity: true)
-                        guard !chunk.isEmpty else { return }
-                        flushCount += 1
-                        let shape = chunk == "[DONE]" ? "done" : (chunk.contains("\n") ? "multiline" : "singleline")
-                        if flushTrace.count < 10 {
-                            flushTrace.append("\(trigger):\(shape)")
-                        }
-                        switch trigger {
-                        case "singleline":
-                            singleLineFlushCount += 1
-                        case "next_data":
-                            boundaryFlushCount += 1
-                        case "blank_line":
-                            blankLineFlushCount += 1
-                        case "eof":
-                            eofFlushCount += 1
-                        default:
-                            break
-                        }
-
-                        if chunk == "[DONE]" {
-                            if !hasUsableData && fullText.isEmpty && fullReasoning.isEmpty {
-                                try failNoUsableData("done")
-                            }
-                            let final = ProviderResponse(
-                                text: fullText,
-                                reasoningSummary: fullReasoning.trimmedNonEmpty,
-                                raw: nil,
-                                usage: latestUsage
+                    while !Task.isCancelled {
+                        let (lineStream, response) = try await httpClient.stream(httpRequest)
+                        guard !(200 ... 299).contains(response.statusCode) else {
+                            try await consumeStreamEvents(
+                                lineStream: lineStream,
+                                response: response,
+                                provider: resolvedProvider,
+                                model: request.model,
+                                continuation: continuation
                             )
-                            continuation.yield(.completed(final))
-                            continuation.finish()
-                            streamFinished = true
                             return
                         }
 
-                        let parsed = parseChunk(chunk)
-                        guard let parsed else {
-                            recordInvalidPayload(chunk)
-                            return
-                        }
-                        if let usage = parsed.usage?.normalizedNonEmpty() {
-                            latestUsage = usage
-                        }
-
-                        if !parsed.reasoning.isEmpty {
-                            fullReasoning += parsed.reasoning
-                            hasUsableData = true
-                            continuation.yield(.reasoningDelta(parsed.reasoning))
-                        }
-                        if !parsed.text.isEmpty {
-                            fullText += parsed.text
-                            hasUsableData = true
-                            continuation.yield(.textDelta(parsed.text))
-                        }
-                    }
-
-                    for try await line in lineStream {
-                        if streamFinished { return }
-                        totalLineCount += 1
-                        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if trimmed.hasPrefix(":") {
-                            continue
-                        }
-                        if trimmed.isEmpty {
-                            try flushEventLines(trigger: "blank_line")
-                            continue
-                        }
-                        guard trimmed.hasPrefix("data:") else {
+                        let parsedError = await parseGeminiStreamErrorBody(lineStream: lineStream)
+                        if let delayMs = retryDelayForGeminiStreamFailure(
+                            statusCode: response.statusCode,
+                            response: response,
+                            provider: resolvedProvider,
+                            attempt: attempt,
+                            maxAttempts: maxAttempts,
+                            parsedError: parsedError
+                        ) {
+                            DiagnosticsLogger.log(
+                                "Gemini stream retry scheduled",
+                                category: .network,
+                                metadata: [
+                                    "provider": resolvedProvider.rawValue,
+                                    "model": request.model,
+                                    "status": String(response.statusCode),
+                                    "attempt": String(attempt),
+                                    "max_attempts": String(maxAttempts),
+                                    "retry_delay_ms": String(delayMs)
+                                ]
+                            )
+                            try await Task.sleep(nanoseconds: UInt64(delayMs) * 1_000_000)
+                            attempt += 1
                             continue
                         }
 
-                        if canFlushBufferedEvent() {
-                            try flushEventLines(trigger: "next_data")
-                        }
-
-                        let payload = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
-                        eventLines.append(payload)
-
-                        if eventLines.count == 1, canFlushBufferedEvent() {
-                            try flushEventLines(trigger: "singleline")
-                        }
+                        throw ProviderClientError.httpStatus(
+                            response.statusCode,
+                            buildGeminiStreamFailureMessage(
+                                statusCode: response.statusCode,
+                                provider: resolvedProvider,
+                                parsedError: parsedError
+                            )
+                        )
                     }
 
-                    if streamFinished { return }
-                    try flushEventLines(trigger: "eof")
-                    if streamFinished { return }
-                    if !hasUsableData && fullText.isEmpty && fullReasoning.isEmpty {
-                        try failNoUsableData("eof")
-                    }
-
-                    let final = ProviderResponse(
-                        text: fullText,
-                        reasoningSummary: fullReasoning.trimmedNonEmpty,
-                        raw: nil,
-                        usage: latestUsage
-                    )
-                    continuation.yield(.completed(final))
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
@@ -276,6 +160,496 @@ struct GeminiProviderClient: ProviderClient {
         var text: String
         var reasoning: String
         var usage: ProviderUsage?
+    }
+
+    private struct ParsedGeminiError {
+        var rawBody: String?
+        var message: String?
+        var details: [[String: Any]]
+    }
+
+    private struct GeminiQuotaDecision {
+        var terminal: Bool
+        var retryDelayMs: Int?
+    }
+
+    private func consumeStreamEvents(
+        lineStream: AsyncThrowingStream<String, Error>,
+        response: HTTPURLResponse,
+        provider: LLMProvider,
+        model: String,
+        continuation: AsyncThrowingStream<ProviderStreamEvent, Error>.Continuation
+    ) async throws {
+        var fullText = ""
+        var fullReasoning = ""
+        var latestUsage: ProviderUsage?
+        var hasUsableData = false
+        var eventLines: [String] = []
+        var streamFinished = false
+        var parseErrorCount = 0
+        var totalLineCount = 0
+        var flushCount = 0
+        var singleLineFlushCount = 0
+        var boundaryFlushCount = 0
+        var blankLineFlushCount = 0
+        var eofFlushCount = 0
+        var flushTrace: [String] = []
+        var invalidPayloadSnippets: [String] = []
+        let maxSnippets = 6
+        let snippetLimit = 256
+
+        func recordInvalidPayload(_ payload: String) {
+            parseErrorCount += 1
+            guard invalidPayloadSnippets.count < maxSnippets else { return }
+            let compact = payload
+                .replacingOccurrences(of: "\n", with: "\\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            invalidPayloadSnippets.append(String(compact.prefix(snippetLimit)))
+        }
+
+        func failNoUsableData(_ phase: String) throws {
+            DiagnosticsLogger.log(
+                "Gemini stream produced no usable data",
+                category: .network,
+                metadata: [
+                    "provider": provider.rawValue,
+                    "model": model,
+                    "phase": phase,
+                    "status": String(response.statusCode),
+                    "line_count": String(totalLineCount),
+                    "flush_count": String(flushCount),
+                    "flush_singleline_count": String(singleLineFlushCount),
+                    "flush_boundary_count": String(boundaryFlushCount),
+                    "flush_blankline_count": String(blankLineFlushCount),
+                    "flush_eof_count": String(eofFlushCount),
+                    "flush_trace": flushTrace.joined(separator: " | "),
+                    "parse_error_count": String(parseErrorCount),
+                    "invalid_payloads": invalidPayloadSnippets.joined(separator: " || ")
+                ]
+            )
+            throw ProviderClientError.parseFailure(Self.noUsableStreamDataReason)
+        }
+
+        func parseChunk(_ chunk: String) -> ParsedGeminiChunk? {
+            if provider == .geminiAuth {
+                return parseGeminiCliStreamChunk(chunk)
+            }
+            return parseGeminiStreamChunk(chunk)
+        }
+
+        func bufferedChunk() -> String {
+            eventLines
+                .joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        func canFlushBufferedEvent() -> Bool {
+            let chunk = bufferedChunk()
+            guard !chunk.isEmpty else { return false }
+            if chunk == "[DONE]" { return true }
+            return parseChunk(chunk) != nil
+        }
+
+        func flushEventLines(trigger: String) throws {
+            guard !eventLines.isEmpty, !streamFinished else { return }
+            let chunk = bufferedChunk()
+            eventLines.removeAll(keepingCapacity: true)
+            guard !chunk.isEmpty else { return }
+            flushCount += 1
+            let shape = chunk == "[DONE]" ? "done" : (chunk.contains("\n") ? "multiline" : "singleline")
+            if flushTrace.count < 10 {
+                flushTrace.append("\(trigger):\(shape)")
+            }
+            switch trigger {
+            case "singleline":
+                singleLineFlushCount += 1
+            case "next_data":
+                boundaryFlushCount += 1
+            case "blank_line":
+                blankLineFlushCount += 1
+            case "eof":
+                eofFlushCount += 1
+            default:
+                break
+            }
+
+            if chunk == "[DONE]" {
+                if !hasUsableData && fullText.isEmpty && fullReasoning.isEmpty {
+                    try failNoUsableData("done")
+                }
+                let final = ProviderResponse(
+                    text: fullText,
+                    reasoningSummary: fullReasoning.trimmedNonEmpty,
+                    raw: nil,
+                    usage: latestUsage
+                )
+                continuation.yield(.completed(final))
+                continuation.finish()
+                streamFinished = true
+                return
+            }
+
+            let parsed = parseChunk(chunk)
+            guard let parsed else {
+                recordInvalidPayload(chunk)
+                return
+            }
+            if let usage = parsed.usage?.normalizedNonEmpty() {
+                latestUsage = usage
+            }
+
+            if !parsed.reasoning.isEmpty {
+                fullReasoning += parsed.reasoning
+                hasUsableData = true
+                continuation.yield(.reasoningDelta(parsed.reasoning))
+            }
+            if !parsed.text.isEmpty {
+                fullText += parsed.text
+                hasUsableData = true
+                continuation.yield(.textDelta(parsed.text))
+            }
+        }
+
+        for try await line in lineStream {
+            if streamFinished { return }
+            totalLineCount += 1
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix(":") {
+                continue
+            }
+            if trimmed.isEmpty {
+                try flushEventLines(trigger: "blank_line")
+                continue
+            }
+            guard trimmed.hasPrefix("data:") else {
+                continue
+            }
+
+            if canFlushBufferedEvent() {
+                try flushEventLines(trigger: "next_data")
+            }
+
+            let payload = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+            eventLines.append(payload)
+
+            if eventLines.count == 1, canFlushBufferedEvent() {
+                try flushEventLines(trigger: "singleline")
+            }
+        }
+
+        if streamFinished { return }
+        try flushEventLines(trigger: "eof")
+        if streamFinished { return }
+        if !hasUsableData && fullText.isEmpty && fullReasoning.isEmpty {
+            try failNoUsableData("eof")
+        }
+
+        let final = ProviderResponse(
+            text: fullText,
+            reasoningSummary: fullReasoning.trimmedNonEmpty,
+            raw: nil,
+            usage: latestUsage
+        )
+        continuation.yield(.completed(final))
+        continuation.finish()
+    }
+
+    private func retryDelayForGeminiStreamFailure(
+        statusCode: Int,
+        response: HTTPURLResponse,
+        provider: LLMProvider,
+        attempt: Int,
+        maxAttempts: Int,
+        parsedError: ParsedGeminiError
+    ) -> Int? {
+        guard provider == .geminiAuth else { return nil }
+        guard attempt < maxAttempts else { return nil }
+        guard statusCode == 429 || (500 ... 599).contains(statusCode) else { return nil }
+
+        var quotaDelayMs: Int?
+        if statusCode == 429 {
+            let decision = classifyGeminiQuotaDecision(
+                details: parsedError.details,
+                message: parsedError.message
+            )
+            if decision?.terminal == true {
+                return nil
+            }
+            quotaDelayMs = decision?.retryDelayMs
+        }
+
+        let delayMs = resolveGeminiRetryDelayMs(
+            response: response,
+            details: parsedError.details,
+            message: parsedError.message,
+            quotaDelayMs: quotaDelayMs,
+            attempt: attempt
+        )
+        return delayMs > 0 ? delayMs : nil
+    }
+
+    private func buildGeminiStreamFailureMessage(
+        statusCode: Int,
+        provider: LLMProvider,
+        parsedError: ParsedGeminiError
+    ) -> String {
+        if statusCode == 429, provider == .geminiAuth {
+            let decision = classifyGeminiQuotaDecision(
+                details: parsedError.details,
+                message: parsedError.message
+            )
+            if decision?.terminal == true {
+                return "Quota exhausted for this account. Please wait for your quota to reset or upgrade your plan."
+            }
+            if decision != nil {
+                return "Rate limit exceeded. Please retry shortly."
+            }
+        }
+        if let message = parsedError.message?.trimmedNonEmpty {
+            return message
+        }
+        if let body = parsedError.rawBody?.trimmedNonEmpty {
+            return body
+        }
+        return "Gemini stream failed: \(statusCode)"
+    }
+
+    private func resolveGeminiRetryDelayMs(
+        response: HTTPURLResponse,
+        details: [[String: Any]],
+        message: String?,
+        quotaDelayMs: Int?,
+        attempt: Int
+    ) -> Int {
+        if let retryAfterMs = parseRetryAfterMsHeader(response.value(forHTTPHeaderField: "retry-after-ms")) {
+            return clampGeminiRetryDelayMs(retryAfterMs)
+        }
+        if let retryAfter = parseRetryAfterHeader(response.value(forHTTPHeaderField: "retry-after")) {
+            return clampGeminiRetryDelayMs(retryAfter)
+        }
+        if let quotaDelayMs {
+            return clampGeminiRetryDelayMs(quotaDelayMs)
+        }
+        if let detailDelay = extractRetryDelayFromGeminiDetails(details: details, message: message) {
+            return clampGeminiRetryDelayMs(detailDelay)
+        }
+        return exponentialGeminiRetryDelayMs(forAttempt: attempt)
+    }
+
+    private func parseRetryAfterMsHeader(_ value: String?) -> Int? {
+        guard let value = value?.trimmedNonEmpty else { return nil }
+        guard let parsed = Double(value), parsed > 0 else { return nil }
+        return Int(parsed.rounded())
+    }
+
+    private func parseRetryAfterHeader(_ value: String?) -> Int? {
+        guard let value = value?.trimmedNonEmpty else { return nil }
+        if let seconds = Double(value), seconds >= 0 {
+            return Int((seconds * 1_000).rounded())
+        }
+        let parsedDate = DateFormatter.rfc1123.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+        guard let parsedDate else { return nil }
+        let milliseconds = Int((parsedDate.timeIntervalSinceNow * 1_000).rounded())
+        return max(0, milliseconds)
+    }
+
+    private func clampGeminiRetryDelayMs(_ delayMs: Int) -> Int {
+        min(max(0, delayMs), Self.geminiCliRetryMaxDelayMs)
+    }
+
+    private func exponentialGeminiRetryDelayMs(forAttempt attempt: Int) -> Int {
+        let exponent = max(0, attempt - 1)
+        let factor = Int(pow(2.0, Double(exponent)))
+        return min(Self.geminiCliRetryInitialDelayMs * factor, Self.geminiCliRetryMaxDelayMs)
+    }
+
+    private func parseGeminiStreamErrorBody(lineStream: AsyncThrowingStream<String, Error>) async -> ParsedGeminiError {
+        let maxCollectedCharacters = 64 * 1024
+        var regularLines: [String] = []
+        var dataLines: [String] = []
+        var consumedCharacters = 0
+
+        do {
+            for try await line in lineStream {
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.hasPrefix("data:") {
+                    let payload = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                    if !payload.isEmpty {
+                        dataLines.append(payload)
+                        consumedCharacters += payload.count
+                    }
+                } else if !trimmed.isEmpty {
+                    regularLines.append(trimmed)
+                    consumedCharacters += trimmed.count
+                }
+                if consumedCharacters >= maxCollectedCharacters {
+                    break
+                }
+            }
+        } catch {
+            // Best effort: parse what we already collected.
+        }
+
+        let candidates = [
+            dataLines.joined(separator: "\n").trimmedNonEmpty,
+            regularLines.joined(separator: "\n").trimmedNonEmpty
+        ]
+            .compactMap { $0 }
+
+        for candidate in candidates {
+            if let parsed = parseGeminiErrorBody(candidate) {
+                return parsed
+            }
+        }
+
+        return ParsedGeminiError(
+            rawBody: candidates.first,
+            message: nil,
+            details: []
+        )
+    }
+
+    private func parseGeminiErrorBody(_ rawBody: String) -> ParsedGeminiError? {
+        guard let root = parseJSONObject(rawBody) else { return nil }
+        let errorObject = (root["error"] as? [String: Any]) ?? root
+        let details = (errorObject["details"] as? [Any] ?? [])
+            .compactMap { $0 as? [String: Any] }
+        return ParsedGeminiError(
+            rawBody: rawBody,
+            message: (errorObject["message"] as? String)?.trimmedNonEmpty,
+            details: details
+        )
+    }
+
+    private func classifyGeminiQuotaDecision(
+        details: [[String: Any]],
+        message: String?
+    ) -> GeminiQuotaDecision? {
+        let retryDelayMs = extractRetryDelayFromGeminiDetails(details: details, message: message)
+
+        let errorInfo = details.first {
+            ($0["@type"] as? String) == "type.googleapis.com/google.rpc.ErrorInfo"
+        }
+        if let domain = errorInfo?["domain"] as? String,
+           !domain.isEmpty,
+           !Self.geminiCliQuotaDomains.contains(domain) {
+            return nil
+        }
+
+        if let reason = errorInfo?["reason"] as? String {
+            if reason == "QUOTA_EXHAUSTED" {
+                return GeminiQuotaDecision(terminal: true, retryDelayMs: retryDelayMs)
+            }
+            if reason == "RATE_LIMIT_EXCEEDED" {
+                return GeminiQuotaDecision(terminal: false, retryDelayMs: retryDelayMs ?? 10_000)
+            }
+        }
+
+        if let quotaFailure = details.first(where: { ($0["@type"] as? String) == "type.googleapis.com/google.rpc.QuotaFailure" }),
+           let violations = quotaFailure["violations"] as? [Any], !violations.isEmpty {
+            let violationText = violations
+                .compactMap { $0 as? [String: Any] }
+                .flatMap { [($0["quotaId"] as? String) ?? "", ($0["description"] as? String) ?? ""] }
+                .joined(separator: " ")
+                .lowercased()
+
+            if violationText.contains("perday") || violationText.contains("daily") || violationText.contains("per day") {
+                return GeminiQuotaDecision(terminal: true, retryDelayMs: retryDelayMs)
+            }
+            if violationText.contains("perminute") || violationText.contains("per minute") {
+                return GeminiQuotaDecision(terminal: false, retryDelayMs: retryDelayMs ?? 60_000)
+            }
+            return GeminiQuotaDecision(terminal: false, retryDelayMs: retryDelayMs)
+        }
+
+        if let metadata = errorInfo?["metadata"] as? [String: Any],
+           let quotaLimit = (metadata["quota_limit"] as? String)?.lowercased(),
+           quotaLimit.contains("perminute") || quotaLimit.contains("per minute") {
+            return GeminiQuotaDecision(terminal: false, retryDelayMs: retryDelayMs ?? 60_000)
+        }
+
+        return GeminiQuotaDecision(terminal: false, retryDelayMs: retryDelayMs)
+    }
+
+    private func extractRetryDelayFromGeminiDetails(
+        details: [[String: Any]],
+        message: String?
+    ) -> Int? {
+        if let retryInfo = details.first(where: { ($0["@type"] as? String) == "type.googleapis.com/google.rpc.RetryInfo" }),
+           let retryDelay = retryInfo["retryDelay"],
+           let parsed = parseRetryDelayValue(retryDelay) {
+            return parsed
+        }
+        return parseRetryDelayFromMessage(message)
+    }
+
+    private func parseRetryDelayValue(_ value: Any) -> Int? {
+        if let value = value as? String {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            if trimmed.hasSuffix("ms") {
+                let numberPart = String(trimmed.dropLast(2))
+                guard let milliseconds = Double(numberPart), milliseconds > 0 else { return nil }
+                return Int(milliseconds.rounded())
+            }
+            if trimmed.hasSuffix("s") {
+                let numberPart = String(trimmed.dropLast())
+                guard let seconds = Double(numberPart), seconds > 0 else { return nil }
+                return Int((seconds * 1_000).rounded())
+            }
+            return nil
+        }
+
+        if let value = value as? [String: Any] {
+            let seconds = doubleValue(value["seconds"]) ?? 0
+            let nanos = doubleValue(value["nanos"]) ?? 0
+            guard seconds.isFinite, nanos.isFinite else { return nil }
+            let totalMs = Int((seconds * 1_000 + nanos / 1_000_000).rounded())
+            return totalMs > 0 ? totalMs : nil
+        }
+
+        return nil
+    }
+
+    private func parseRetryDelayFromMessage(_ message: String?) -> Int? {
+        guard let message = message?.trimmedNonEmpty else { return nil }
+        if let delay = firstRegexCapture(
+            in: message,
+            pattern: #"Please retry in ([0-9.]+(?:ms|s))"#
+        ), let parsed = parseRetryDelayValue(delay) {
+            return parsed
+        }
+        if let delay = firstRegexCapture(
+            in: message,
+            pattern: #"after\s+([0-9.]+(?:ms|s))"#
+        ), let parsed = parseRetryDelayValue(delay) {
+            return parsed
+        }
+        return nil
+    }
+
+    private func firstRegexCapture(in text: String, pattern: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return nil
+        }
+        let range = NSRange(text.startIndex ..< text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, options: [], range: range) else {
+            return nil
+        }
+        guard match.numberOfRanges > 1 else { return nil }
+        let captureRange = match.range(at: 1)
+        guard let capture = Range(captureRange, in: text) else { return nil }
+        return String(text[capture])
+    }
+
+    private func doubleValue(_ value: Any?) -> Double? {
+        if let value = value as? NSNumber {
+            return value.doubleValue
+        }
+        if let value = value as? String {
+            return Double(value)
+        }
+        return nil
     }
 
     private func resolveCredential(provider: LLMProvider, store: SecureCredentialStore) async throws -> ResolvedCredential {
@@ -826,6 +1200,16 @@ struct GeminiProviderClient: ProviderClient {
         }
         return nil
     }
+}
+
+private extension DateFormatter {
+    static let rfc1123: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss z"
+        return formatter
+    }()
 }
 
 private extension String {

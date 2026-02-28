@@ -721,6 +721,116 @@ final class ProviderClientParityTests: XCTestCase {
         }
     }
 
+    func testGeminiCliStreamRetriesRateLimit429AndSucceeds() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setGeminiAccessToken("gemini-access-token")
+        try store.saveSecret("project-1", key: "gemini_project_id")
+
+        let httpClient = CapturingHTTPClient()
+        var attempts = 0
+        httpClient.streamResponder = { request in
+            attempts += 1
+            if attempts == 1 {
+                let stream = AsyncThrowingStream<String, Error> { continuation in
+                    continuation.yield(#"data: {"error":{"message":"rate limit","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"RATE_LIMIT_EXCEEDED","domain":"cloudcode-pa.googleapis.com"}]}}"#)
+                    continuation.yield("")
+                    continuation.finish()
+                }
+                return (
+                    stream,
+                    Self.makeHTTPResponse(
+                        url: request.url,
+                        statusCode: 429,
+                        headers: ["retry-after-ms": "1"]
+                    )
+                )
+            }
+
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"response":{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}}"#)
+                continuation.yield("")
+                continuation.yield("data: [DONE]")
+                continuation.yield("")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let request = ProviderRequest(
+            model: "gemini-3.1-pro-preview",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "GEMINI_AUTH"]
+        )
+
+        let client = GeminiProviderClient()
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var final: ProviderResponse?
+        for try await event in stream {
+            if case let .completed(response) = event {
+                final = response
+            }
+        }
+
+        XCTAssertEqual(attempts, 2)
+        XCTAssertEqual(final?.text, "ok")
+    }
+
+    func testGeminiCliStreamDoesNotRetryTerminalQuota429() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setGeminiAccessToken("gemini-access-token")
+        try store.saveSecret("project-1", key: "gemini_project_id")
+
+        let httpClient = CapturingHTTPClient()
+        var attempts = 0
+        httpClient.streamResponder = { request in
+            attempts += 1
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"error":{"message":"quota exhausted","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"QUOTA_EXHAUSTED","domain":"cloudcode-pa.googleapis.com"}]}}"#)
+                continuation.yield("")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 429))
+        }
+
+        let request = ProviderRequest(
+            model: "gemini-3.1-pro-preview",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "GEMINI_AUTH"]
+        )
+
+        let client = GeminiProviderClient()
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        do {
+            for try await _ in stream {}
+            XCTFail("Expected stream failure for terminal quota error")
+        } catch let ProviderClientError.httpStatus(status, body) {
+            XCTAssertEqual(status, 429)
+            XCTAssertTrue(body.contains("Quota exhausted for this account"))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertEqual(attempts, 1)
+    }
+
     func testOpenRouterGenerateIncludesProviderRoutingAndReasoning() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("openrouter-key", for: .openRouter)
@@ -1072,12 +1182,16 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(usage.reasoningTokens, 4)
     }
 
-    private static func makeHTTPResponse(url: URL, statusCode: Int) -> HTTPURLResponse {
+    private static func makeHTTPResponse(
+        url: URL,
+        statusCode: Int,
+        headers: [String: String]? = nil
+    ) -> HTTPURLResponse {
         HTTPURLResponse(
             url: url,
             statusCode: statusCode,
             httpVersion: nil,
-            headerFields: nil
+            headerFields: headers
         )!
     }
 
