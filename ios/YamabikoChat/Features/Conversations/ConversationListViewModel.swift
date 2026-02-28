@@ -93,8 +93,7 @@ final class ConversationListViewModel: ObservableObject {
         }
 
         guard let repository else { return }
-        if let resolved = try? repository.conversation(id: conversationId),
-           let conversation = resolved,
+        if let conversation = try? repository.conversation(id: conversationId),
            conversation.projectId == nil {
             selectedProjectId = nil
         }

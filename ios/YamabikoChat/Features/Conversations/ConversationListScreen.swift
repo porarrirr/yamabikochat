@@ -283,7 +283,7 @@ struct ConversationListScreen: View {
             } label: {
                 Image(systemName: "trash")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(viewModel.selectedConversationIds.isEmpty ? .secondary : .red)
+                    .foregroundStyle(viewModel.selectedConversationIds.isEmpty ? Color.secondary : Color.red)
             }
             .buttonStyle(.plain)
             .disabled(viewModel.selectedConversationIds.isEmpty)
