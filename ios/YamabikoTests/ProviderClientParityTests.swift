@@ -196,6 +196,7 @@ final class ProviderClientParityTests: XCTestCase {
         )
         XCTAssertTrue(captured.url.absoluteString.contains(":generateContent"))
         let requestID = try XCTUnwrap(captured.headers["x-activity-request-id"])
+        assertLowercaseUUIDv4(requestID)
         let bodyData = try XCTUnwrap(captured.body)
         let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
         XCTAssertEqual(root["user_prompt_id"] as? String, requestID)
@@ -382,6 +383,7 @@ final class ProviderClientParityTests: XCTestCase {
         let firstSessionID = try XCTUnwrap(firstInner["session_id"] as? String)
         let secondSessionID = try XCTUnwrap(secondInner["session_id"] as? String)
         XCTAssertFalse(firstSessionID.isEmpty)
+        assertLowercaseUUIDv4(firstSessionID)
         XCTAssertEqual(firstSessionID, secondSessionID)
     }
 
@@ -481,6 +483,7 @@ final class ProviderClientParityTests: XCTestCase {
             "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI"
         )
         let requestID = try XCTUnwrap(captured.headers["x-activity-request-id"])
+        assertLowercaseUUIDv4(requestID)
         let bodyData = try XCTUnwrap(captured.body)
         let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
         XCTAssertEqual(root["user_prompt_id"] as? String, requestID)
@@ -1076,5 +1079,19 @@ final class ProviderClientParityTests: XCTestCase {
             httpVersion: nil,
             headerFields: nil
         )!
+    }
+
+    private func assertLowercaseUUIDv4(
+        _ value: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let pattern = #"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"#
+        XCTAssertNotNil(
+            value.range(of: pattern, options: .regularExpression),
+            "Expected lowercase UUID v4 but got \(value)",
+            file: file,
+            line: line
+        )
     }
 }

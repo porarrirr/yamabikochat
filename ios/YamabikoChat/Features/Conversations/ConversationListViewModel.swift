@@ -8,6 +8,8 @@ final class ConversationListViewModel: ObservableObject {
     @Published var searchQuery: String = ""
     @Published var selectedProjectId: Int64?
     @Published var errorMessage: String?
+    @Published var isSelectionMode: Bool = false
+    @Published var selectedConversationIds: Set<Int64> = []
 
     private var repository: ChatRepository?
     private var cancellables: Set<AnyCancellable> = []
@@ -80,6 +82,24 @@ final class ConversationListViewModel: ObservableObject {
         selectedProjectId = id
     }
 
+    func resetProjectFilterForNonProjectConversation(conversationId: Int64) {
+        guard selectedProjectId != nil else { return }
+
+        if let entry = conversations.first(where: { $0.id == conversationId }) {
+            if entry.projectId == nil {
+                selectedProjectId = nil
+            }
+            return
+        }
+
+        guard let repository else { return }
+        if let resolved = try? repository.conversation(id: conversationId),
+           let conversation = resolved,
+           conversation.projectId == nil {
+            selectedProjectId = nil
+        }
+    }
+
     func projectConversationCount(projectId: Int64) -> Int {
         if let repository,
            let count = try? repository.projectConversationCount(projectId: projectId) {
@@ -128,5 +148,50 @@ final class ConversationListViewModel: ObservableObject {
                 (entry.lastMessagePreview?.localizedCaseInsensitiveContains(query) ?? false) ||
                 (entry.projectTitle?.localizedCaseInsensitiveContains(query) ?? false)
         }
+    }
+
+    // MARK: - Selection Mode
+
+    var isAllSelected: Bool {
+        let filtered = filteredConversations
+        return !filtered.isEmpty && filtered.allSatisfy { selectedConversationIds.contains($0.id) }
+    }
+
+    func toggleSelectionMode() {
+        isSelectionMode.toggle()
+        if !isSelectionMode {
+            selectedConversationIds.removeAll()
+        }
+    }
+
+    func exitSelectionMode() {
+        isSelectionMode = false
+        selectedConversationIds.removeAll()
+    }
+
+    func toggleSelection(id: Int64) {
+        if selectedConversationIds.contains(id) {
+            selectedConversationIds.remove(id)
+        } else {
+            selectedConversationIds.insert(id)
+        }
+    }
+
+    func selectAll() {
+        selectedConversationIds = Set(filteredConversations.map(\.id))
+    }
+
+    func deselectAll() {
+        selectedConversationIds.removeAll()
+    }
+
+    func deleteSelectedConversations() {
+        guard let repository, !selectedConversationIds.isEmpty else { return }
+        do {
+            try repository.deleteConversations(ids: selectedConversationIds)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        exitSelectionMode()
     }
 }

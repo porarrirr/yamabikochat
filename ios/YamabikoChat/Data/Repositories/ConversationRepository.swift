@@ -142,6 +142,19 @@ final class ConversationRepository {
         }
     }
 
+    func deleteConversations(ids: Set<Int64>) throws {
+        guard !ids.isEmpty else { return }
+        try dbQueue.write { db in
+            let idArray = Array(ids)
+            try TokenUsageRecord
+                .filter(idArray.contains(Column("conversationId")))
+                .deleteAll(db)
+            try Conversation
+                .filter(idArray.contains(Column("id")))
+                .deleteAll(db)
+        }
+    }
+
     func fetchConversation(id: Int64) throws -> Conversation? {
         try dbQueue.read { db in
             try Conversation.fetchOne(db, key: id)

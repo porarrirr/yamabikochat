@@ -163,6 +163,10 @@ final class ChatRepository {
         try conversations.deleteConversation(id: id)
     }
 
+    func deleteConversations(ids: Set<Int64>) throws {
+        try conversations.deleteConversations(ids: ids)
+    }
+
     func deleteProject(id: Int64, mode: ProjectDeletionMode) throws {
         switch mode {
         case .projectOnly:

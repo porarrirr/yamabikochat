@@ -8,7 +8,7 @@ struct GeminiProviderClient: ProviderClient {
     private static let geminiCliUserAgent = "google-api-nodejs-client/9.15.1"
     private static let geminiCliApiClient = "gl-node/22.17.0"
     private static let geminiCliClientMetadata = "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI"
-    private static let geminiCliProcessSessionID = UUID().uuidString
+    private static let geminiCliProcessSessionID = geminiCliUUID()
     private static let geminiCliModelFallbacks = [
         "gemini-2.5-flash-image": "gemini-2.5-flash"
     ]
@@ -59,7 +59,7 @@ struct GeminiProviderClient: ProviderClient {
                         headers["Authorization"] = "Bearer \(credential.token)"
                     }
                     if resolvedProvider == .geminiAuth {
-                        let requestID = body.requestIdentifier ?? UUID().uuidString
+                        let requestID = body.requestIdentifier ?? Self.geminiCliUUID()
                         applyGeminiCliHeaders(
                             to: &headers,
                             requestIdentifier: requestID,
@@ -346,7 +346,7 @@ struct GeminiProviderClient: ProviderClient {
         ]
         applyGeminiCliHeaders(
             to: &headers,
-            requestIdentifier: payload.requestIdentifier ?? UUID().uuidString,
+            requestIdentifier: payload.requestIdentifier ?? Self.geminiCliUUID(),
             streaming: false
         )
         let httpRequest = HTTPRequest(
@@ -712,8 +712,10 @@ struct GeminiProviderClient: ProviderClient {
         if streaming {
             headers["Accept"] = "text/event-stream"
         }
-        headers.removeValue(forKey: "x-api-key")
-        headers.removeValue(forKey: "X-Api-Key")
+        let apiKeyHeaderKeys = headers.keys.filter { $0.caseInsensitiveCompare("x-api-key") == .orderedSame }
+        for key in apiKeyHeaderKeys {
+            headers.removeValue(forKey: key)
+        }
     }
 
     private func resolveGeminiCliSessionID(from metadata: [String: String]) -> String {
@@ -747,11 +749,15 @@ struct GeminiProviderClient: ProviderClient {
                 return value
             }
         }
-        return UUID().uuidString
+        return Self.geminiCliUUID()
     }
 
     private func normalizedGeminiCliModel(_ model: String) -> String {
         Self.geminiCliModelFallbacks[model] ?? model
+    }
+
+    private static func geminiCliUUID() -> String {
+        UUID().uuidString.lowercased()
     }
 
     private func parseResponse(data: Data) throws -> ProviderResponse {

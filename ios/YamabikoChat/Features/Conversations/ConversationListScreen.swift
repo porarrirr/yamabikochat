@@ -18,25 +18,28 @@ struct ConversationListScreen: View {
     @State private var isCreateProjectPresented = false
     @State private var pendingProjectDeletion: PendingProjectDeletion?
     @State private var isProjectDeleteOptionsPresented = false
+    @State private var isDeleteConfirmationPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
             topHeader
 
             List {
-                Section {
-                    drawerActionRow(
-                        title: L10n.text("新しいプロジェクト"),
-                        systemImage: "plus.square.on.square"
-                    ) {
-                        isCreateProjectPresented = true
-                    }
+                if !viewModel.isSelectionMode {
+                    Section {
+                        drawerActionRow(
+                            title: L10n.text("新しいプロジェクト"),
+                            systemImage: "plus.square.on.square"
+                        ) {
+                            isCreateProjectPresented = true
+                        }
 
-                    drawerActionRow(
-                        title: L10n.text("秘密チャット"),
-                        systemImage: "lock"
-                    ) {
-                        createConversation(secret: true)
+                        drawerActionRow(
+                            title: L10n.text("秘密チャット"),
+                            systemImage: "lock"
+                        ) {
+                            createConversation(secret: true)
+                        }
                     }
                 }
 
@@ -75,7 +78,11 @@ struct ConversationListScreen: View {
 
             Divider()
 
-            settingsFooter
+            if viewModel.isSelectionMode {
+                selectionActionBar
+            } else {
+                settingsFooter
+            }
         }
         .toolbar(.hidden, for: .navigationBar)
         .background(Color(uiColor: .systemBackground))
@@ -126,6 +133,20 @@ struct ConversationListScreen: View {
                 clearPendingProjectDeletion()
             }
         }
+        .alert(
+            L10n.format("%d 件の会話を削除しますか？", viewModel.selectedConversationIds.count),
+            isPresented: $isDeleteConfirmationPresented
+        ) {
+            Button("削除", role: .destructive) {
+                if let current = selection, viewModel.selectedConversationIds.contains(current) {
+                    selection = nil
+                }
+                viewModel.deleteSelectedConversations()
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text(L10n.format("選択した %d 件の会話を完全に削除します。この操作は取り消せません。", viewModel.selectedConversationIds.count))
+        }
     }
 
     private var topHeader: some View {
@@ -153,15 +174,36 @@ struct ConversationListScreen: View {
             .background(Color(uiColor: .secondarySystemBackground))
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
-            Button {
-                createConversation(secret: false)
-            } label: {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .frame(width: 36, height: 36)
+            if viewModel.isSelectionMode {
+                Button {
+                    viewModel.exitSelectionMode()
+                } label: {
+                    Text("キャンセル")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.primary)
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button {
+                    viewModel.toggleSelectionMode()
+                } label: {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    createConversation(secret: false)
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             if let onClose {
                 Button {
@@ -211,6 +253,43 @@ struct ConversationListScreen: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .background(Color(uiColor: .systemBackground))
+    }
+
+    private var selectionActionBar: some View {
+        HStack {
+            Button {
+                if viewModel.isAllSelected {
+                    viewModel.deselectAll()
+                } else {
+                    viewModel.selectAll()
+                }
+            } label: {
+                Text(viewModel.isAllSelected ? "全解除" : "すべて選択")
+                    .font(.system(size: 14, weight: .medium))
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            Text(L10n.format("%d 件選択中", viewModel.selectedConversationIds.count))
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Button {
+                isDeleteConfirmationPresented = true
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(viewModel.selectedConversationIds.isEmpty ? .secondary : .red)
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.selectedConversationIds.isEmpty)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .background(Color(uiColor: .systemBackground))
     }
 
@@ -309,26 +388,34 @@ struct ConversationListScreen: View {
 
     @ViewBuilder
     private func conversationRow(_ entry: ConversationListEntry) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 10) {
-                Text(entry.title)
-                    .font(.body)
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
-
-                if entry.isSecret {
-                    Image(systemName: "lock.fill")
-                        .foregroundStyle(.secondary)
-                        .font(.system(size: 12))
-                }
-
-                Spacer()
+        HStack(spacing: 8) {
+            if viewModel.isSelectionMode {
+                Image(systemName: viewModel.selectedConversationIds.contains(entry.id) ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22))
+                    .foregroundStyle(viewModel.selectedConversationIds.contains(entry.id) ? Color.accentColor : .secondary)
             }
 
-            if let projectTitle = entry.projectTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !projectTitle.isEmpty {
-                Text(projectTitle)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 10) {
+                    Text(entry.title)
+                        .font(.body)
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+
+                    if entry.isSecret {
+                        Image(systemName: "lock.fill")
+                            .foregroundStyle(.secondary)
+                            .font(.system(size: 12))
+                    }
+
+                    Spacer()
+                }
+
+                if let projectTitle = entry.projectTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !projectTitle.isEmpty {
+                    Text(projectTitle)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(.horizontal, 10)
@@ -339,9 +426,20 @@ struct ConversationListScreen: View {
                 .fill(rowBackgroundColor(for: entry.id))
         )
         .onTapGesture {
-            openConversation(id: entry.id)
+            if viewModel.isSelectionMode {
+                viewModel.toggleSelection(id: entry.id)
+            } else {
+                openConversation(id: entry.id)
+            }
         }
-        .contextMenu {
+        .contextMenu(viewModel.isSelectionMode ? nil : ContextMenu {
+            Button {
+                viewModel.isSelectionMode = true
+                viewModel.selectedConversationIds.insert(entry.id)
+            } label: {
+                Label("選択", systemImage: "checkmark.circle")
+            }
+
             if !viewModel.projects.isEmpty {
                 ForEach(viewModel.projects) { project in
                     Button {
@@ -361,19 +459,21 @@ struct ConversationListScreen: View {
                     }
                 }
             }
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button {
-                openConversation(id: entry.id)
-            } label: {
-                Label("開く", systemImage: "arrow.up.forward.app")
-            }
-            .tint(.blue)
+        })
+        .swipeActions(edge: .trailing, allowsFullSwipe: !viewModel.isSelectionMode) {
+            if !viewModel.isSelectionMode {
+                Button {
+                    openConversation(id: entry.id)
+                } label: {
+                    Label("開く", systemImage: "arrow.up.forward.app")
+                }
+                .tint(.blue)
 
-            Button(role: .destructive) {
-                viewModel.deleteConversation(id: entry.id)
-            } label: {
-                Label("削除", systemImage: "trash")
+                Button(role: .destructive) {
+                    viewModel.deleteConversation(id: entry.id)
+                } label: {
+                    Label("削除", systemImage: "trash")
+                }
             }
         }
     }

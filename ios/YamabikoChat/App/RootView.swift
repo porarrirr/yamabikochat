@@ -133,6 +133,7 @@ struct RootView: View {
     }
 
     private func selectConversation(id: Int64, closeHistory: Bool = false) {
+        listViewModel.resetProjectFilterForNonProjectConversation(conversationId: id)
         appState.selectedConversationID = id
         preferredCompactColumn = .detail
         if closeHistory {
