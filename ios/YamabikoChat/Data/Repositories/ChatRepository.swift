@@ -441,6 +441,10 @@ final class ChatRepository {
         provider: LLMProvider,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?
     ) async throws -> SendMessageResult {
+        let bgGuard = BackgroundTaskGuard()
+        bgGuard.begin(name: "YamabikoChatStreaming")
+        defer { bgGuard.end() }
+
         let assistantMessageId = try conversations.insertMessage(
             ChatMessage(
                 conversationId: conversationId,
@@ -702,6 +706,10 @@ final class ChatRepository {
     }
 
     func sendDualMessage(conversationId: Int64, text: String, attachments: [String] = []) async throws -> DualChatMessage {
+        let bgGuard = BackgroundTaskGuard()
+        bgGuard.begin(name: "YamabikoChatDualStreaming")
+        defer { bgGuard.end() }
+
         let settings = try self.settings.load()
         guard var conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
@@ -915,6 +923,10 @@ final class ChatRepository {
         autoConversationId: Int64,
         progress: @escaping @Sendable (_ turn: Int, _ speaker: String, _ text: String) -> Void
     ) async throws {
+        let bgGuard = BackgroundTaskGuard()
+        bgGuard.begin(name: "YamabikoChatAutoConversation")
+        defer { bgGuard.end() }
+
         guard var conversation = try conversations.fetchAutoConversation(id: autoConversationId) else {
             throw ProviderClientError.parseFailure("Auto conversation not found")
         }
