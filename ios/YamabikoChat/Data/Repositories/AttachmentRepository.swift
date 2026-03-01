@@ -18,6 +18,12 @@ final class AttachmentRepository {
 
     func validate(url: URL) -> AttachmentValidationResult {
         guard url.isFileURL else { return .unreadable }
+        let secured = url.startAccessingSecurityScopedResource()
+        defer {
+            if secured {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
 
         do {
             let values = try url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey])
@@ -55,8 +61,54 @@ final class AttachmentRepository {
         if fileManager.fileExists(atPath: destination.path) {
             try fileManager.removeItem(at: destination)
         }
-        try fileManager.copyItem(at: url, to: destination)
+        let stagedURL = try coordinateAndCopyToTemporary(url: url)
+        defer { try? fileManager.removeItem(at: stagedURL) }
+
+        do {
+            try fileManager.moveItem(at: stagedURL, to: destination)
+        } catch {
+            try fileManager.copyItem(at: stagedURL, to: destination)
+        }
         return destination
+    }
+
+    private func coordinateAndCopyToTemporary(url: URL) throws -> URL {
+        let secured = url.startAccessingSecurityScopedResource()
+        defer {
+            if secured {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let ext = url.pathExtension.isEmpty ? "tmp" : url.pathExtension
+        let temporaryURL = fileManager.temporaryDirectory
+            .appendingPathComponent("yamabiko-attachment-\(UUID().uuidString)")
+            .appendingPathExtension(ext)
+
+        var coordinationError: NSError?
+        var copyError: Error?
+        let coordinator = NSFileCoordinator()
+        coordinator.coordinate(readingItemAt: url, options: [.withoutChanges], error: &coordinationError) { coordinatedURL in
+            do {
+                if self.fileManager.fileExists(atPath: temporaryURL.path) {
+                    try self.fileManager.removeItem(at: temporaryURL)
+                }
+                try self.fileManager.copyItem(at: coordinatedURL, to: temporaryURL)
+            } catch {
+                copyError = error
+            }
+        }
+
+        if let coordinationError {
+            throw coordinationError
+        }
+        if let copyError {
+            throw copyError
+        }
+        guard fileManager.fileExists(atPath: temporaryURL.path) else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        return temporaryURL
     }
 
     private func isSupported(type: UTType) -> Bool {

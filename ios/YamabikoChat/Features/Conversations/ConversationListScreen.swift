@@ -226,27 +226,11 @@ struct ConversationListScreen: View {
         Button {
             onOpenSettings()
         } label: {
-            HStack(spacing: 12) {
-                Circle()
-                    .fill(Color.orange)
-                    .frame(width: 30, height: 30)
-                    .overlay {
-                        Text("GR")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.white)
-                    }
-
-                Text("Gro")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                Spacer()
-
+            HStack {
                 Image(systemName: "gearshape")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.secondary)
+                Spacer()
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)

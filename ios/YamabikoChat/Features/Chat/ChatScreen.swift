@@ -160,12 +160,6 @@ struct ChatScreen: View {
             switch result {
             case let .success(urls):
                 for url in urls {
-                    let secured = url.startAccessingSecurityScopedResource()
-                    defer {
-                        if secured {
-                            url.stopAccessingSecurityScopedResource()
-                        }
-                    }
                     viewModel.addAttachment(url: url)
                 }
             case let .failure(error):

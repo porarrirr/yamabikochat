@@ -141,7 +141,15 @@ final class ChatViewModel: ObservableObject {
     }
 
     func addAttachment(url: URL) {
-        guard let attachmentRepository else { return }
+        guard let attachmentRepository else {
+            errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
+            DiagnosticsLogger.log(
+                "Attachment repository not bound conversation=\(conversationID)",
+                level: .warning,
+                category: .chat
+            )
+            return
+        }
         switch attachmentRepository.validate(url: url) {
         case .valid:
             do {
@@ -152,6 +160,12 @@ final class ChatViewModel: ObservableObject {
                 errorMessage = nil
             } catch {
                 errorMessage = L10n.text("ファイルを読み込めませんでした。")
+                DiagnosticsLogger.log(
+                    "Persist attachment failed conversation=\(conversationID) file=\(url.lastPathComponent)",
+                    category: .chat,
+                    error: error
+                )
+                return
             }
         case let .tooLarge(sizeBytes):
             let sizeMB = Double(sizeBytes) / (1024 * 1024)
