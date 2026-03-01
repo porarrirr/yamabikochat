@@ -253,13 +253,16 @@ struct ChatScreen: View {
                     .background(Color.chatInputBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
-                Button {} label: {
-                    Image(systemName: "mic")
+                Button {
+                    viewModel.toggleSpeechRecognition()
+                } label: {
+                    Image(systemName: viewModel.isSpeechRecording ? "mic.fill" : "mic")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(viewModel.isSpeechRecording ? Color.red : .secondary)
+                        .symbolEffect(.pulse, isActive: viewModel.isSpeechRecording)
                 }
                 .buttonStyle(.plain)
-                .disabled(true)
+                .disabled(viewModel.isSending)
 
                 Button {
                     if canSend {
@@ -604,25 +607,7 @@ private struct MessageBubble: View {
                 }
                 .buttonStyle(.plain)
 
-                Button {
-                    onBranch()
-                } label: {
-                    Label("ここからブランチ", systemImage: "arrow.triangle.branch")
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    onRegenerate()
-                } label: {
-                    Label("再生成", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(.plain)
-                .disabled(!canRegenerate)
-
                 Menu {
-                    Button("コピー") {
-                        onCopy()
-                    }
                     Button("ここからブランチ") {
                         onBranch()
                     }

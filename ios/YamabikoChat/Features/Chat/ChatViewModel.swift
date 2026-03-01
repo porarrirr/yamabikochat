@@ -27,8 +27,11 @@ final class ChatViewModel: ObservableObject {
     @Published var autoConversationStatus: String?
     @Published var errorMessage: String?
     @Published var attachments: [AttachmentDraft] = []
+    @Published private(set) var isSpeechRecording: Bool = false
     @Published private(set) var activeChatPresetName: String?
     @Published private(set) var activeSystemPromptPresetName: String?
+
+    let speechService = SpeechRecognitionService()
 
     private let conversationID: Int64
     private var repository: ChatRepository?
@@ -38,9 +41,37 @@ final class ChatViewModel: ObservableObject {
     private var activeAutoConversationID: Int64?
     private var conversationSystemPrompt: String?
     private var lastSettingsSnapshot: AppSettings?
+    private var inputTextBeforeSpeech: String = ""
 
     init(conversationID: Int64) {
         self.conversationID = conversationID
+        speechService.onTranscription = { [weak self] text in
+            guard let self else { return }
+            if self.inputTextBeforeSpeech.isEmpty {
+                self.inputText = text
+            } else {
+                self.inputText = self.inputTextBeforeSpeech + " " + text
+            }
+        }
+        speechService.$error
+            .compactMap { $0 }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] speechError in
+                self?.errorMessage = speechError.localizedDescription
+                DiagnosticsLogger.log(
+                    "Speech recognition error",
+                    category: .app,
+                    error: speechError
+                )
+            }
+            .store(in: &cancellables)
+
+        speechService.$isRecording
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isRecording in
+                self?.isSpeechRecording = isRecording
+            }
+            .store(in: &cancellables)
     }
 
     deinit {
@@ -151,7 +182,18 @@ final class ChatViewModel: ObservableObject {
         errorMessage = nil
     }
 
+    func toggleSpeechRecognition() {
+        if isSpeechRecording {
+            speechService.stopRecording()
+        } else {
+            inputTextBeforeSpeech = inputText
+            speechService.startRecording()
+        }
+    }
+
     func sendMessage() {
+        // Stop immediately to prevent late-start recording after send.
+        speechService.stopRecording()
         let trimmedText = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return }
         guard let repository else {
