@@ -1151,7 +1151,8 @@ struct GeminiProviderClient: ProviderClient {
         let promptTokenCount = intValue(usage["promptTokenCount"]) ?? 0
         let candidatesTokenCount = intValue(usage["candidatesTokenCount"]) ?? 0
         let cachedContentTokenCount = intValue(usage["cachedContentTokenCount"])
-        let thoughtsTokenCount = intValue(usage["thoughtsTokenCount"])
+        let thoughtsTokenCount = intValue(usage["thoughtsTokenCount"]) ?? intValue(usage["reasoningTokenCount"])
+        let cacheCreationTokenCount = intValue(usage["cacheCreationInputTokenCount"]) ?? intValue(usage["cache_creation_input_token_count"])
         let toolUsePromptTokenCount = intValue(usage["toolUsePromptTokenCount"]) ?? 0
         let totalFallback = promptTokenCount + candidatesTokenCount + toolUsePromptTokenCount + max(0, thoughtsTokenCount ?? 0)
         let totalTokenCount = intValue(usage["totalTokenCount"]) ?? totalFallback
@@ -1160,7 +1161,8 @@ struct GeminiProviderClient: ProviderClient {
             outputTokens: candidatesTokenCount,
             totalTokens: totalTokenCount,
             reasoningTokens: thoughtsTokenCount,
-            cachedInputTokens: cachedContentTokenCount
+            cachedInputTokens: cachedContentTokenCount,
+            cacheCreationInputTokens: cacheCreationTokenCount
         )
         .normalizedNonEmpty()
     }

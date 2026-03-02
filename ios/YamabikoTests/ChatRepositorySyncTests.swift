@@ -69,6 +69,7 @@ private struct NoopPricingRepository: LiteLlmPricingEstimating {
         inputTokens: Int,
         outputTokens: Int,
         cachedInputTokens: Int?,
+        cacheCreationInputTokens: Int?,
         reasoningTokens: Int?
     ) async -> Double? {
         nil

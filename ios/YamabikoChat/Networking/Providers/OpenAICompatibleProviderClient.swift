@@ -101,15 +101,19 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                         if trimmed.isEmpty || !trimmed.hasPrefix("data:") { continue }
 
                         let dataChunk = String(trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces))
-                        if let root = try? JSONSerialization.jsonObject(with: Data(dataChunk.utf8)) as? [String: Any],
-                           let usage = parseUsage(root["usage"] as? [String: Any])?.normalizedNonEmpty() {
-                            latestUsage = usage
-                        }
                         if dataChunk == "[DONE]" {
                             let final = ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: latestUsage)
                             continuation.yield(.completed(final))
                             continuation.finish()
                             return
+                        }
+
+                        if let root = try? JSONSerialization.jsonObject(with: Data(dataChunk.utf8)) as? [String: Any] {
+                            if let usage = parseUsage(root["usage"] as? [String: Any])?.normalizedNonEmpty() {
+                                latestUsage = usage
+                            } else if let usage = parseUsage(root)?.normalizedNonEmpty() {
+                                latestUsage = usage
+                            }
                         }
 
                         if let event = parseStreamChunk(dataChunk, fullText: &fullText) {
@@ -218,7 +222,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             }
 
             if let finish = first["finish_reason"] as? String, !finish.isEmpty, finish != "null" {
-                return .completed(ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: nil))
+                return nil
             }
         }
 
@@ -346,23 +350,44 @@ struct OpenAICompatibleProviderClient: ProviderClient {
 
     private func parseUsage(_ object: [String: Any]?) -> ProviderUsage? {
         guard let object else { return nil }
+        let completionDetails = object["completion_tokens_details"] as? [String: Any]
+        let outputDetails = object["output_tokens_details"] as? [String: Any]
+        let promptDetails = object["prompt_tokens_details"] as? [String: Any]
+        let inputDetails = object["input_tokens_details"] as? [String: Any]
         let inputTokens = intValue(object["prompt_tokens"]) ?? intValue(object["input_tokens"])
         let outputTokens = intValue(object["completion_tokens"]) ?? intValue(object["output_tokens"])
         let totalTokens = intValue(object["total_tokens"])
         let reasoningTokens =
             intValue(object["reasoning_tokens"]) ??
-            intValue((object["completion_tokens_details"] as? [String: Any])?["reasoning_tokens"]) ??
-            intValue((object["output_tokens_details"] as? [String: Any])?["reasoning_tokens"])
+            intValue(object["reasoningTokens"]) ??
+            intValue(completionDetails?["reasoning_tokens"]) ??
+            intValue(completionDetails?["reasoningTokens"]) ??
+            intValue(outputDetails?["reasoning_tokens"]) ??
+            intValue(outputDetails?["reasoningTokens"])
         let cachedTokens =
-            intValue((object["prompt_tokens_details"] as? [String: Any])?["cached_tokens"]) ??
-            intValue((object["input_tokens_details"] as? [String: Any])?["cached_tokens"])
+            intValue(promptDetails?["cached_tokens"]) ??
+            intValue(promptDetails?["cachedTokens"]) ??
+            intValue(inputDetails?["cached_tokens"]) ??
+            intValue(inputDetails?["cachedTokens"]) ??
+            intValue(object["cache_read_input_tokens"]) ??
+            intValue(object["cacheReadInputTokens"]) ??
+            intValue(object["cached_input_tokens"]) ??
+            intValue(object["cachedInputTokens"])
+        let cacheCreationTokens =
+            intValue(promptDetails?["cache_creation_tokens"]) ??
+            intValue(promptDetails?["cacheCreationTokens"]) ??
+            intValue(inputDetails?["cache_creation_tokens"]) ??
+            intValue(inputDetails?["cacheCreationTokens"]) ??
+            intValue(object["cache_creation_input_tokens"]) ??
+            intValue(object["cacheCreationInputTokens"])
 
         return ProviderUsage(
             inputTokens: inputTokens,
             outputTokens: outputTokens,
             totalTokens: totalTokens,
             reasoningTokens: reasoningTokens,
-            cachedInputTokens: cachedTokens
+            cachedInputTokens: cachedTokens,
+            cacheCreationInputTokens: cacheCreationTokens
         )
         .normalizedNonEmpty()
     }

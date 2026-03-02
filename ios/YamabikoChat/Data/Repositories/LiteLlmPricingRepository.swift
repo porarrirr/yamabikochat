@@ -7,6 +7,7 @@ protocol LiteLlmPricingEstimating: Sendable {
         inputTokens: Int,
         outputTokens: Int,
         cachedInputTokens: Int?,
+        cacheCreationInputTokens: Int?,
         reasoningTokens: Int?
     ) async -> Double?
 }
@@ -26,22 +27,30 @@ actor LiteLlmPricingRepository: LiteLlmPricingEstimating {
         inputTokens: Int,
         outputTokens: Int,
         cachedInputTokens: Int?,
+        cacheCreationInputTokens: Int?,
         reasoningTokens: Int?
     ) async -> Double? {
         guard let price = await resolvePrice(provider: provider, model: model) else { return nil }
+        let providerKey = provider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let normalizedInputTokens = max(0, inputTokens)
         let normalizedCachedInputTokens = max(0, min(normalizedInputTokens, cachedInputTokens ?? 0))
+        let normalizedCacheCreationInputTokens = max(0, cacheCreationInputTokens ?? 0)
         let normalizedNonCachedInputTokens = max(0, normalizedInputTokens - normalizedCachedInputTokens)
         let inputRate = price.inputCostPerToken ?? 0
         let cachedInputRate = price.cacheReadInputCostPerToken ?? inputRate
+        let cacheCreationInputRate = price.cacheCreationInputCostPerToken ?? inputRate
         let outputRate = price.outputCostPerToken ?? price.inputCostPerToken ?? 0
         let reasoningCount = max(0, reasoningTokens ?? 0)
-        let nonReasoningOutput = max(0, outputTokens - reasoningCount)
+        let reasoningIncludedInOutput = providerKey != "GEMINI" && providerKey != "GEMINI_AUTH"
+        let nonReasoningOutput = reasoningIncludedInOutput
+            ? max(0, outputTokens - reasoningCount)
+            : max(0, outputTokens)
         let reasoningRate = price.outputCostPerReasoningToken ?? outputRate
 
         let inputCost =
             inputRate * Double(normalizedNonCachedInputTokens) +
-            cachedInputRate * Double(normalizedCachedInputTokens)
+            cachedInputRate * Double(normalizedCachedInputTokens) +
+            cacheCreationInputRate * Double(normalizedCacheCreationInputTokens)
         let outputCost = outputRate * Double(nonReasoningOutput) + reasoningRate * Double(reasoningCount)
         let total = inputCost + outputCost
         guard total.isFinite, total >= 0 else { return nil }

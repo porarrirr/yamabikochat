@@ -911,7 +911,8 @@ final class ProviderClientParityTests: XCTestCase {
                 "completion_tokens":30,
                 "total_tokens":150,
                 "completion_tokens_details":{"reasoning_tokens":9},
-                "prompt_tokens_details":{"cached_tokens":48}
+                "prompt_tokens_details":{"cached_tokens":48},
+                "input_tokens_details":{"cache_creation_tokens":12}
               }
             }
             """#.data(using: .utf8)!
@@ -941,6 +942,7 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(usage.totalTokens, 150)
         XCTAssertEqual(usage.reasoningTokens, 9)
         XCTAssertEqual(usage.cachedInputTokens, 48)
+        XCTAssertEqual(usage.cacheCreationInputTokens, 12)
     }
 
     func testOpenRouterStreamReturnsFinalUsageFromUsageChunk() async throws {
@@ -951,6 +953,7 @@ final class ProviderClientParityTests: XCTestCase {
         httpClient.streamResponder = { request in
             let stream = AsyncThrowingStream<String, Error> { continuation in
                 continuation.yield(#"data: {"choices":[{"delta":{"content":"A"}}]}"#)
+                continuation.yield(#"data: {"choices":[{"delta":{},"finish_reason":"stop"}]}"#)
                 continuation.yield(#"data: {"usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120,"completion_tokens_details":{"reasoning_tokens":4},"prompt_tokens_details":{"cached_tokens":16}}}"#)
                 continuation.yield("data: [DONE]")
                 continuation.finish()

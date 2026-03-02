@@ -435,17 +435,43 @@ struct CodexProviderClient: ProviderClient {
         }
         guard let usageObject else { return nil }
 
-        let inputTokens = intValue(usageObject["input_tokens"])
-        let outputTokens = intValue(usageObject["output_tokens"])
+        let outputDetails = usageObject["output_tokens_details"] as? [String: Any]
+        let completionDetails = usageObject["completion_tokens_details"] as? [String: Any]
+        let inputDetails = usageObject["input_tokens_details"] as? [String: Any]
+        let promptDetails = usageObject["prompt_tokens_details"] as? [String: Any]
+        let inputTokens = intValue(usageObject["input_tokens"]) ?? intValue(usageObject["prompt_tokens"])
+        let outputTokens = intValue(usageObject["output_tokens"]) ?? intValue(usageObject["completion_tokens"])
         let totalTokens = intValue(usageObject["total_tokens"])
-        let reasoningTokens = intValue((usageObject["output_tokens_details"] as? [String: Any])?["reasoning_tokens"])
-        let cachedInputTokens = intValue((usageObject["input_tokens_details"] as? [String: Any])?["cached_tokens"])
+        let reasoningTokens =
+            intValue(usageObject["reasoning_tokens"]) ??
+            intValue(usageObject["reasoningTokens"]) ??
+            intValue(outputDetails?["reasoning_tokens"]) ??
+            intValue(outputDetails?["reasoningTokens"]) ??
+            intValue(completionDetails?["reasoning_tokens"]) ??
+            intValue(completionDetails?["reasoningTokens"])
+        let cachedInputTokens =
+            intValue(inputDetails?["cached_tokens"]) ??
+            intValue(inputDetails?["cachedTokens"]) ??
+            intValue(promptDetails?["cached_tokens"]) ??
+            intValue(promptDetails?["cachedTokens"]) ??
+            intValue(usageObject["cache_read_input_tokens"]) ??
+            intValue(usageObject["cacheReadInputTokens"]) ??
+            intValue(usageObject["cached_input_tokens"]) ??
+            intValue(usageObject["cachedInputTokens"])
+        let cacheCreationInputTokens =
+            intValue(inputDetails?["cache_creation_tokens"]) ??
+            intValue(inputDetails?["cacheCreationTokens"]) ??
+            intValue(promptDetails?["cache_creation_tokens"]) ??
+            intValue(promptDetails?["cacheCreationTokens"]) ??
+            intValue(usageObject["cache_creation_input_tokens"]) ??
+            intValue(usageObject["cacheCreationInputTokens"])
         return ProviderUsage(
             inputTokens: inputTokens,
             outputTokens: outputTokens,
             totalTokens: totalTokens,
             reasoningTokens: reasoningTokens,
-            cachedInputTokens: cachedInputTokens
+            cachedInputTokens: cachedInputTokens,
+            cacheCreationInputTokens: cacheCreationInputTokens
         )
         .normalizedNonEmpty()
     }

@@ -6,6 +6,7 @@ struct ProviderUsage: Codable, Sendable, Equatable {
     var totalTokens: Int? = nil
     var reasoningTokens: Int? = nil
     var cachedInputTokens: Int? = nil
+    var cacheCreationInputTokens: Int? = nil
 
     var isEmpty: Bool {
         let input = max(0, inputTokens ?? 0)
@@ -24,7 +25,8 @@ struct ProviderUsage: Codable, Sendable, Equatable {
             outputTokens: output,
             totalTokens: total,
             reasoningTokens: reasoningTokens.map { max(0, $0) },
-            cachedInputTokens: cachedInputTokens.map { max(0, $0) }
+            cachedInputTokens: cachedInputTokens.map { max(0, $0) },
+            cacheCreationInputTokens: cacheCreationInputTokens.map { max(0, $0) }
         )
     }
 
