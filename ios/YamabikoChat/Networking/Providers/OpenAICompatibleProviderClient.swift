@@ -354,32 +354,29 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         let outputDetails = object["output_tokens_details"] as? [String: Any]
         let promptDetails = object["prompt_tokens_details"] as? [String: Any]
         let inputDetails = object["input_tokens_details"] as? [String: Any]
-        let inputTokens = intValue(object["prompt_tokens"]) ?? intValue(object["input_tokens"])
-        let outputTokens = intValue(object["completion_tokens"]) ?? intValue(object["output_tokens"])
-        let totalTokens = intValue(object["total_tokens"])
+        let inputTokens = intValue(in: object, keys: ["prompt_tokens", "input_tokens", "promptTokens", "inputTokens"])
+        let outputTokens = intValue(in: object, keys: ["completion_tokens", "output_tokens", "completionTokens", "outputTokens"])
+        let totalTokens = intValue(in: object, keys: ["total_tokens", "totalTokens"])
         let reasoningTokens =
-            intValue(object["reasoning_tokens"]) ??
-            intValue(object["reasoningTokens"]) ??
-            intValue(completionDetails?["reasoning_tokens"]) ??
-            intValue(completionDetails?["reasoningTokens"]) ??
-            intValue(outputDetails?["reasoning_tokens"]) ??
-            intValue(outputDetails?["reasoningTokens"])
+            intValue(in: object, keys: ["reasoning_tokens", "reasoningTokens", "reasoning_token_count", "reasoningTokenCount"]) ??
+            intValue(in: completionDetails, keys: ["reasoning_tokens", "reasoningTokens", "reasoning", "reasoning_token_count"]) ??
+            intValue(in: outputDetails, keys: ["reasoning_tokens", "reasoningTokens", "reasoning", "reasoning_token_count"])
         let cachedTokens =
-            intValue(promptDetails?["cached_tokens"]) ??
-            intValue(promptDetails?["cachedTokens"]) ??
-            intValue(inputDetails?["cached_tokens"]) ??
-            intValue(inputDetails?["cachedTokens"]) ??
-            intValue(object["cache_read_input_tokens"]) ??
-            intValue(object["cacheReadInputTokens"]) ??
-            intValue(object["cached_input_tokens"]) ??
-            intValue(object["cachedInputTokens"])
+            intValue(in: promptDetails, keys: ["cached_tokens", "cachedTokens", "cached_input_tokens", "cachedInputTokens"]) ??
+            intValue(in: inputDetails, keys: ["cached_tokens", "cachedTokens", "cached_input_tokens", "cachedInputTokens"]) ??
+            intValue(
+                in: object,
+                keys: [
+                    "cache_read_input_tokens",
+                    "cacheReadInputTokens",
+                    "cached_input_tokens",
+                    "cachedInputTokens"
+                ]
+            )
         let cacheCreationTokens =
-            intValue(promptDetails?["cache_creation_tokens"]) ??
-            intValue(promptDetails?["cacheCreationTokens"]) ??
-            intValue(inputDetails?["cache_creation_tokens"]) ??
-            intValue(inputDetails?["cacheCreationTokens"]) ??
-            intValue(object["cache_creation_input_tokens"]) ??
-            intValue(object["cacheCreationInputTokens"])
+            intValue(in: promptDetails, keys: ["cache_creation_tokens", "cacheCreationTokens", "cache_creation_input_tokens"]) ??
+            intValue(in: inputDetails, keys: ["cache_creation_tokens", "cacheCreationTokens", "cache_creation_input_tokens"]) ??
+            intValue(in: object, keys: ["cache_creation_input_tokens", "cacheCreationInputTokens", "cache_creation_input_token_count"])
 
         return ProviderUsage(
             inputTokens: inputTokens,
@@ -390,6 +387,16 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             cacheCreationInputTokens: cacheCreationTokens
         )
         .normalizedNonEmpty()
+    }
+
+    private func intValue(in object: [String: Any]?, keys: [String]) -> Int? {
+        guard let object else { return nil }
+        for key in keys {
+            if let value = intValue(object[key]) {
+                return value
+            }
+        }
+        return nil
     }
 
     private func intValue(_ raw: Any?) -> Int? {

@@ -439,32 +439,29 @@ struct CodexProviderClient: ProviderClient {
         let completionDetails = usageObject["completion_tokens_details"] as? [String: Any]
         let inputDetails = usageObject["input_tokens_details"] as? [String: Any]
         let promptDetails = usageObject["prompt_tokens_details"] as? [String: Any]
-        let inputTokens = intValue(usageObject["input_tokens"]) ?? intValue(usageObject["prompt_tokens"])
-        let outputTokens = intValue(usageObject["output_tokens"]) ?? intValue(usageObject["completion_tokens"])
-        let totalTokens = intValue(usageObject["total_tokens"])
+        let inputTokens = intValue(in: usageObject, keys: ["input_tokens", "prompt_tokens", "inputTokens", "promptTokens"])
+        let outputTokens = intValue(in: usageObject, keys: ["output_tokens", "completion_tokens", "outputTokens", "completionTokens"])
+        let totalTokens = intValue(in: usageObject, keys: ["total_tokens", "totalTokens"])
         let reasoningTokens =
-            intValue(usageObject["reasoning_tokens"]) ??
-            intValue(usageObject["reasoningTokens"]) ??
-            intValue(outputDetails?["reasoning_tokens"]) ??
-            intValue(outputDetails?["reasoningTokens"]) ??
-            intValue(completionDetails?["reasoning_tokens"]) ??
-            intValue(completionDetails?["reasoningTokens"])
+            intValue(in: usageObject, keys: ["reasoning_tokens", "reasoningTokens", "reasoning_token_count", "reasoningTokenCount"]) ??
+            intValue(in: outputDetails, keys: ["reasoning_tokens", "reasoningTokens", "reasoning", "reasoning_token_count"]) ??
+            intValue(in: completionDetails, keys: ["reasoning_tokens", "reasoningTokens", "reasoning", "reasoning_token_count"])
         let cachedInputTokens =
-            intValue(inputDetails?["cached_tokens"]) ??
-            intValue(inputDetails?["cachedTokens"]) ??
-            intValue(promptDetails?["cached_tokens"]) ??
-            intValue(promptDetails?["cachedTokens"]) ??
-            intValue(usageObject["cache_read_input_tokens"]) ??
-            intValue(usageObject["cacheReadInputTokens"]) ??
-            intValue(usageObject["cached_input_tokens"]) ??
-            intValue(usageObject["cachedInputTokens"])
+            intValue(in: inputDetails, keys: ["cached_tokens", "cachedTokens", "cached_input_tokens", "cachedInputTokens"]) ??
+            intValue(in: promptDetails, keys: ["cached_tokens", "cachedTokens", "cached_input_tokens", "cachedInputTokens"]) ??
+            intValue(
+                in: usageObject,
+                keys: [
+                    "cache_read_input_tokens",
+                    "cacheReadInputTokens",
+                    "cached_input_tokens",
+                    "cachedInputTokens"
+                ]
+            )
         let cacheCreationInputTokens =
-            intValue(inputDetails?["cache_creation_tokens"]) ??
-            intValue(inputDetails?["cacheCreationTokens"]) ??
-            intValue(promptDetails?["cache_creation_tokens"]) ??
-            intValue(promptDetails?["cacheCreationTokens"]) ??
-            intValue(usageObject["cache_creation_input_tokens"]) ??
-            intValue(usageObject["cacheCreationInputTokens"])
+            intValue(in: inputDetails, keys: ["cache_creation_tokens", "cacheCreationTokens", "cache_creation_input_tokens"]) ??
+            intValue(in: promptDetails, keys: ["cache_creation_tokens", "cacheCreationTokens", "cache_creation_input_tokens"]) ??
+            intValue(in: usageObject, keys: ["cache_creation_input_tokens", "cacheCreationInputTokens", "cache_creation_input_token_count"])
         return ProviderUsage(
             inputTokens: inputTokens,
             outputTokens: outputTokens,
@@ -474,6 +471,16 @@ struct CodexProviderClient: ProviderClient {
             cacheCreationInputTokens: cacheCreationInputTokens
         )
         .normalizedNonEmpty()
+    }
+
+    private func intValue(in object: [String: Any]?, keys: [String]) -> Int? {
+        guard let object else { return nil }
+        for key in keys {
+            if let value = intValue(object[key]) {
+                return value
+            }
+        }
+        return nil
     }
 
     private func intValue(_ raw: Any?) -> Int? {

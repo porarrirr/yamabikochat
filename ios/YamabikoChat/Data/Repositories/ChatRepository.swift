@@ -1499,6 +1499,7 @@ final class ChatRepository {
                     totalTokens: resolvedTotal,
                     reasoningTokens: normalized.reasoningTokens,
                     cachedInputTokens: normalized.cachedInputTokens,
+                    cacheCreationInputTokens: normalized.cacheCreationInputTokens,
                     costUsd: costUsd
                 )
             )

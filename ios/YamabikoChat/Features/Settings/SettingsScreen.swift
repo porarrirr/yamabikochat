@@ -1490,6 +1490,11 @@ struct SettingsScreen: View {
                     usageStatCell(label: "Cached", value: formatCompactCount(state.totals.cachedInputTokens))
                 }
 
+                HStack {
+                    usageStatCell(label: "Cache Create", value: formatCompactCount(state.totals.cacheCreationInputTokens))
+                    usageStatCell(label: "Reasoning", value: formatCompactCount(state.totals.reasoningTokens))
+                }
+
                 if !state.daily.isEmpty {
                     tokenUsageMiniBars(points: state.daily)
                         .frame(height: 48)
@@ -1536,6 +1541,7 @@ struct SettingsScreen: View {
                                 "in \(formatCompactCount(item.inputTokens)) / " +
                                 "out \(formatCompactCount(item.outputTokens)) / " +
                                 "cache \(formatCompactCount(item.cachedInputTokens)) / " +
+                                "cache+ \(formatCompactCount(item.cacheCreationInputTokens)) / " +
                                 "reason \(formatCompactCount(item.reasoningTokens))"
                             )
                             .font(.caption2)

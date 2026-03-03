@@ -622,6 +622,7 @@ final class ConversationRepository {
                     COALESCE(SUM(inputTokens), 0) as inputTokens,
                     COALESCE(SUM(outputTokens), 0) as outputTokens,
                     COALESCE(SUM(cachedInputTokens), 0) as cachedInputTokens,
+                    COALESCE(SUM(cacheCreationInputTokens), 0) as cacheCreationInputTokens,
                     COALESCE(SUM(reasoningTokens), 0) as reasoningTokens,
                     COALESCE(SUM(totalTokens), 0) as totalTokens,
                     COALESCE(SUM(costUsd), 0.0) as totalCostUsd
@@ -635,6 +636,7 @@ final class ConversationRepository {
                 inputTokens: row?["inputTokens"] ?? 0,
                 outputTokens: row?["outputTokens"] ?? 0,
                 cachedInputTokens: row?["cachedInputTokens"] ?? 0,
+                cacheCreationInputTokens: row?["cacheCreationInputTokens"] ?? 0,
                 reasoningTokens: row?["reasoningTokens"] ?? 0,
                 totalTokens: row?["totalTokens"] ?? 0,
                 totalCostUsd: row?["totalCostUsd"] ?? 0
@@ -655,6 +657,7 @@ final class ConversationRepository {
                     COALESCE(SUM(inputTokens), 0) as inputTokens,
                     COALESCE(SUM(outputTokens), 0) as outputTokens,
                     COALESCE(SUM(cachedInputTokens), 0) as cachedInputTokens,
+                    COALESCE(SUM(cacheCreationInputTokens), 0) as cacheCreationInputTokens,
                     COALESCE(SUM(reasoningTokens), 0) as reasoningTokens,
                     COALESCE(SUM(totalTokens), 0) as totalTokens,
                     COALESCE(SUM(costUsd), 0.0) as totalCostUsd
@@ -668,6 +671,7 @@ final class ConversationRepository {
                 inputTokens: row?["inputTokens"] ?? 0,
                 outputTokens: row?["outputTokens"] ?? 0,
                 cachedInputTokens: row?["cachedInputTokens"] ?? 0,
+                cacheCreationInputTokens: row?["cacheCreationInputTokens"] ?? 0,
                 reasoningTokens: row?["reasoningTokens"] ?? 0,
                 totalTokens: row?["totalTokens"] ?? 0,
                 totalCostUsd: row?["totalCostUsd"] ?? 0
@@ -689,6 +693,7 @@ final class ConversationRepository {
                     COALESCE(SUM(inputTokens), 0) as inputTokens,
                     COALESCE(SUM(outputTokens), 0) as outputTokens,
                     COALESCE(SUM(cachedInputTokens), 0) as cachedInputTokens,
+                    COALESCE(SUM(cacheCreationInputTokens), 0) as cacheCreationInputTokens,
                     COALESCE(SUM(reasoningTokens), 0) as reasoningTokens,
                     COALESCE(SUM(totalTokens), 0) as totalTokens,
                     COALESCE(SUM(costUsd), 0.0) as totalCostUsd
@@ -707,6 +712,7 @@ final class ConversationRepository {
                     inputTokens: row["inputTokens"] ?? 0,
                     outputTokens: row["outputTokens"] ?? 0,
                     cachedInputTokens: row["cachedInputTokens"] ?? 0,
+                    cacheCreationInputTokens: row["cacheCreationInputTokens"] ?? 0,
                     reasoningTokens: row["reasoningTokens"] ?? 0,
                     totalTokens: row["totalTokens"] ?? 0,
                     totalCostUsd: row["totalCostUsd"] ?? 0

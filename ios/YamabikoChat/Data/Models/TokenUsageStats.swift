@@ -5,6 +5,7 @@ struct TokenUsageTotals: Equatable {
     var inputTokens: Int64 = 0
     var outputTokens: Int64 = 0
     var cachedInputTokens: Int64 = 0
+    var cacheCreationInputTokens: Int64 = 0
     var reasoningTokens: Int64 = 0
     var totalTokens: Int64 = 0
     var totalCostUsd: Double = 0
@@ -18,6 +19,7 @@ struct TokenUsageByModel: Identifiable, Equatable {
     var inputTokens: Int64
     var outputTokens: Int64
     var cachedInputTokens: Int64
+    var cacheCreationInputTokens: Int64
     var reasoningTokens: Int64
     var totalTokens: Int64
     var totalCostUsd: Double

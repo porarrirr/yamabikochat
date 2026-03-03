@@ -502,11 +502,22 @@ enum AppDatabase {
                 t.column("totalTokens", .integer).notNull().defaults(to: 0)
                 t.column("reasoningTokens", .integer)
                 t.column("cachedInputTokens", .integer)
+                t.column("cacheCreationInputTokens", .integer)
                 t.column("costUsd", .double)
             }
             try db.create(index: "idx_token_usage_timestamp", on: "token_usage_records", columns: ["timestamp"], ifNotExists: true)
             try db.create(index: "idx_token_usage_model_timestamp", on: "token_usage_records", columns: ["model", "timestamp"], ifNotExists: true)
             try db.create(index: "idx_token_usage_conversation", on: "token_usage_records", columns: ["conversationId"], ifNotExists: true)
+        }
+
+        migrator.registerMigration("v7_token_usage_cache_creation") { db in
+            let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(token_usage_records)")
+            let columns = Set(rows.compactMap { ($0["name"] as String?)?.lowercased() })
+            if !columns.contains("cachecreationinputtokens") {
+                try db.alter(table: "token_usage_records") { t in
+                    t.add(column: "cacheCreationInputTokens", .integer)
+                }
+            }
         }
 
         return migrator

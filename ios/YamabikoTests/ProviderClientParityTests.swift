@@ -993,6 +993,53 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(usage.cachedInputTokens, 16)
     }
 
+    func testOpenRouterGenerateParsesUsageWithMixedCaseKeys() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("openrouter-key", for: .openRouter)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"""
+            {
+              "choices":[{"message":{"content":"ok"}}],
+              "usage":{
+                "inputTokens":140,
+                "outputTokens":60,
+                "totalTokens":200,
+                "output_tokens_details":{"reasoning":21},
+                "input_tokens_details":{"cachedInputTokens":35,"cache_creation_input_tokens":8}
+              }
+            }
+            """#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenAICompatibleProviderClient()
+        let request = ProviderRequest(
+            model: "openai/gpt-4o-mini",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENROUTER"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let usage = try XCTUnwrap(response.usage)
+        XCTAssertEqual(usage.inputTokens, 140)
+        XCTAssertEqual(usage.outputTokens, 60)
+        XCTAssertEqual(usage.totalTokens, 200)
+        XCTAssertEqual(usage.reasoningTokens, 21)
+        XCTAssertEqual(usage.cachedInputTokens, 35)
+        XCTAssertEqual(usage.cacheCreationInputTokens, 8)
+    }
+
     func testGeminiGenerateParsesUsageMetadata() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("gemini-key", for: .gemini)
@@ -1091,6 +1138,55 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(usage.reasoningTokens, 2)
     }
 
+    func testGeminiGenerateParsesSnakeCaseUsageMetadata() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("gemini-key", for: .gemini)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"""
+            {
+              "candidates":[{"content":{"parts":[{"text":"ok"}]}}],
+              "usageMetadata":{
+                "prompt_token_count":32,
+                "candidates_token_count":11,
+                "total_token_count":52,
+                "cached_content_token_count":9,
+                "tool_use_prompt_token_count":2,
+                "reasoning_token_count":8,
+                "cache_creation_input_token_count":4
+              }
+            }
+            """#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = GeminiProviderClient()
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "GEMINI"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let usage = try XCTUnwrap(response.usage)
+        XCTAssertEqual(usage.inputTokens, 32)
+        XCTAssertEqual(usage.outputTokens, 11)
+        XCTAssertEqual(usage.totalTokens, 52)
+        XCTAssertEqual(usage.cachedInputTokens, 9)
+        XCTAssertEqual(usage.reasoningTokens, 8)
+        XCTAssertEqual(usage.cacheCreationInputTokens, 4)
+    }
+
     func testCodexGenerateParsesResponsesUsage() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCodexAccessToken("codex-access-token")
@@ -1183,6 +1279,53 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(usage.totalTokens, 30)
         XCTAssertEqual(usage.cachedInputTokens, 3)
         XCTAssertEqual(usage.reasoningTokens, 4)
+    }
+
+    func testCodexGenerateParsesUsageWithMixedCaseKeys() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCodexAccessToken("codex-access-token")
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"""
+            {
+              "output_text":"ok",
+              "usage":{
+                "inputTokens":90,
+                "outputTokens":40,
+                "totalTokens":130,
+                "completion_tokens_details":{"reasoning":14},
+                "prompt_tokens_details":{"cached_input_tokens":20,"cache_creation_tokens":6}
+              }
+            }
+            """#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = CodexProviderClient()
+        let request = ProviderRequest(
+            model: "gpt-5-codex",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "CODEX_AUTH"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let usage = try XCTUnwrap(response.usage)
+        XCTAssertEqual(usage.inputTokens, 90)
+        XCTAssertEqual(usage.outputTokens, 40)
+        XCTAssertEqual(usage.totalTokens, 130)
+        XCTAssertEqual(usage.reasoningTokens, 14)
+        XCTAssertEqual(usage.cachedInputTokens, 20)
+        XCTAssertEqual(usage.cacheCreationInputTokens, 6)
     }
 
     private static func makeHTTPResponse(

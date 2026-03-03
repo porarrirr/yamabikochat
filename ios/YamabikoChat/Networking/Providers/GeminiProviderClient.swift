@@ -1145,17 +1145,26 @@ struct GeminiProviderClient: ProviderClient {
     }
 
     private func parseGeminiUsage(payload: [String: Any]) -> ProviderUsage? {
-        guard let usage = payload["usageMetadata"] as? [String: Any] else {
+        guard
+            let usage = (payload["usageMetadata"] as? [String: Any]) ??
+                (payload["usage_metadata"] as? [String: Any])
+        else {
             return nil
         }
-        let promptTokenCount = intValue(usage["promptTokenCount"]) ?? 0
-        let candidatesTokenCount = intValue(usage["candidatesTokenCount"]) ?? 0
-        let cachedContentTokenCount = intValue(usage["cachedContentTokenCount"])
-        let thoughtsTokenCount = intValue(usage["thoughtsTokenCount"]) ?? intValue(usage["reasoningTokenCount"])
-        let cacheCreationTokenCount = intValue(usage["cacheCreationInputTokenCount"]) ?? intValue(usage["cache_creation_input_token_count"])
-        let toolUsePromptTokenCount = intValue(usage["toolUsePromptTokenCount"]) ?? 0
+        let promptTokenCount = intValue(in: usage, keys: ["promptTokenCount", "prompt_token_count"]) ?? 0
+        let candidatesTokenCount = intValue(in: usage, keys: ["candidatesTokenCount", "candidates_token_count"]) ?? 0
+        let cachedContentTokenCount = intValue(in: usage, keys: ["cachedContentTokenCount", "cached_content_token_count"])
+        let thoughtsTokenCount = intValue(
+            in: usage,
+            keys: ["thoughtsTokenCount", "thoughts_token_count", "reasoningTokenCount", "reasoning_token_count"]
+        )
+        let cacheCreationTokenCount = intValue(
+            in: usage,
+            keys: ["cacheCreationInputTokenCount", "cache_creation_input_token_count"]
+        )
+        let toolUsePromptTokenCount = intValue(in: usage, keys: ["toolUsePromptTokenCount", "tool_use_prompt_token_count"]) ?? 0
         let totalFallback = promptTokenCount + candidatesTokenCount + toolUsePromptTokenCount + max(0, thoughtsTokenCount ?? 0)
-        let totalTokenCount = intValue(usage["totalTokenCount"]) ?? totalFallback
+        let totalTokenCount = intValue(in: usage, keys: ["totalTokenCount", "total_token_count"]) ?? totalFallback
         return ProviderUsage(
             inputTokens: promptTokenCount,
             outputTokens: candidatesTokenCount,
@@ -1165,6 +1174,16 @@ struct GeminiProviderClient: ProviderClient {
             cacheCreationInputTokens: cacheCreationTokenCount
         )
         .normalizedNonEmpty()
+    }
+
+    private func intValue(in object: [String: Any]?, keys: [String]) -> Int? {
+        guard let object else { return nil }
+        for key in keys {
+            if let value = intValue(object[key]) {
+                return value
+            }
+        }
+        return nil
     }
 
     private func parseJSONObject(_ text: String) -> [String: Any]? {
