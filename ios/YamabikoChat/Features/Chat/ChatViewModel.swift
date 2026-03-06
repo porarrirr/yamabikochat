@@ -30,6 +30,7 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var isSpeechRecording: Bool = false
     @Published private(set) var activeChatPresetName: String?
     @Published private(set) var activeSystemPromptPresetName: String?
+    @Published private(set) var contextUsageLabel: String?
 
     let speechService = SpeechRecognitionService()
 
@@ -42,6 +43,10 @@ final class ChatViewModel: ObservableObject {
     private var conversationSystemPrompt: String?
     private var lastSettingsSnapshot: AppSettings?
     private var inputTextBeforeSpeech: String = ""
+    private var latestTokenUsageRecord: TokenUsageRecord?
+    private var resolvedContextLimit: Int?
+    private var activeConversationProvider: String = ""
+    private var activeConversationModel: String = ""
 
     init(conversationID: Int64) {
         self.conversationID = conversationID
@@ -104,6 +109,14 @@ final class ChatViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        repository.observeLatestTokenUsage(conversationId: conversationID)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] record in
+                self?.latestTokenUsageRecord = record
+                self?.rebuildContextUsageLabel()
+            }
+            .store(in: &cancellables)
+
         repository.settingsPublisher()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
@@ -123,8 +136,13 @@ final class ChatViewModel: ObservableObject {
         do {
             if let conversation = try repository.conversation(id: conversationID) {
                 conversationSystemPrompt = conversation.systemPrompt
+                activeConversationProvider = conversation.apiProvider
+                activeConversationModel = conversation.model
                 updateActiveChatPresetName()
                 updateActiveSystemPromptPresetName()
+                Task { [weak self] in
+                    await self?.refreshContextLimit()
+                }
             }
         } catch {
             DiagnosticsLogger.log(
@@ -445,6 +463,8 @@ final class ChatViewModel: ObservableObject {
                 model: preset.model,
                 provider: provider
             )
+            activeConversationProvider = provider
+            activeConversationModel = preset.model
 
             var updated = settings
             updated.apiProvider = provider
@@ -459,6 +479,9 @@ final class ChatViewModel: ObservableObject {
             try repository.saveSettings(updated)
             settings = updated
             updateActiveChatPresetName()
+            Task { [weak self] in
+                await self?.refreshContextLimit()
+            }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -667,8 +690,13 @@ final class ChatViewModel: ObservableObject {
                 previousSettings: previousSettings
             ) {
                 conversationSystemPrompt = conversation.systemPrompt
+                activeConversationProvider = conversation.apiProvider
+                activeConversationModel = conversation.model
                 updateActiveChatPresetName()
                 updateActiveSystemPromptPresetName()
+                Task { [weak self] in
+                    await self?.refreshContextLimit()
+                }
             }
         } catch {
             DiagnosticsLogger.log(
@@ -707,6 +735,51 @@ final class ChatViewModel: ObservableObject {
                     $0.model.trimmingCharacters(in: .whitespacesAndNewlines) == currentModel
             }?
             .name
+    }
+
+    private func refreshContextLimit() async {
+        guard let repository else { return }
+        let limit = await repository.resolveContextLimit(
+            provider: activeConversationProvider,
+            model: activeConversationModel
+        )
+        resolvedContextLimit = limit
+        rebuildContextUsageLabel()
+    }
+
+    private func rebuildContextUsageLabel() {
+        guard let record = latestTokenUsageRecord else {
+            contextUsageLabel = nil
+            return
+        }
+
+        let used = max(
+            0,
+            max(
+                record.totalTokens,
+                record.inputTokens +
+                    record.outputTokens +
+                    max(0, record.reasoningTokens ?? 0) +
+                    max(0, record.cachedInputTokens ?? 0) +
+                    max(0, record.cacheCreationInputTokens ?? 0)
+            )
+        )
+        guard used > 0 else {
+            contextUsageLabel = nil
+            return
+        }
+
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        let usedText = formatter.string(from: NSNumber(value: used)) ?? "\(used)"
+
+        if let limit = resolvedContextLimit, limit > 0 {
+            let limitText = formatter.string(from: NSNumber(value: limit)) ?? "\(limit)"
+            let usage = Int((Double(used) / Double(limit) * 100.0).rounded())
+            contextUsageLabel = "\(usage)%  \(usedText)/\(limitText)"
+        } else {
+            contextUsageLabel = "\(usedText)/-"
+        }
     }
 }
 

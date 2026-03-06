@@ -647,6 +647,18 @@ final class ConversationRepository {
         .eraseToAnyPublisher()
     }
 
+    func observeLatestTokenUsage(conversationId: Int64) -> AnyPublisher<TokenUsageRecord?, Never> {
+        ValueObservation.tracking { db -> TokenUsageRecord? in
+            try TokenUsageRecord
+                .filter(Column("conversationId") == conversationId)
+                .order(Column("timestamp").desc, Column("id").desc)
+                .fetchOne(db)
+        }
+        .publisher(in: dbQueue)
+        .replaceError(with: nil)
+        .eraseToAnyPublisher()
+    }
+
     func fetchTokenUsageTotals(sinceEpochMs: Int64) throws -> TokenUsageTotals {
         try dbQueue.read { db in
             let row = try Row.fetchOne(

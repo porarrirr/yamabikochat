@@ -215,6 +215,15 @@ struct ChatScreen: View {
                 .truncationMode(.tail)
                 .padding(.horizontal, 8)
 
+            if let contextUsage = viewModel.contextUsageLabel {
+                Text(contextUsage)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, 8)
+            }
+
             HStack(alignment: .bottom, spacing: 10) {
                 Menu {
                     Button("写真を追加") {
