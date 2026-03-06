@@ -252,6 +252,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         switch provider {
         case .openRouter:
             return .openRouter
+        case .alibabaCodingPlan:
+            return .alibabaCodingPlan
         case .openAI:
             return .openAI
         case .openAICompat:
@@ -272,6 +274,12 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         case .openRouter:
             guard let url = URL(string: "https://openrouter.ai/api/v1/chat/completions") else {
                 throw ProviderClientError.invalidBaseURL("https://openrouter.ai/api/v1/chat/completions")
+            }
+            return url
+        case .alibabaCodingPlan:
+            let baseURL = AppConstants.defaultAlibabaCodingPlanBaseURL.absoluteString
+            guard let url = URL(string: baseURL)?.appendingPathComponent("chat/completions") else {
+                throw ProviderClientError.invalidBaseURL(baseURL)
             }
             return url
         case .openAI:

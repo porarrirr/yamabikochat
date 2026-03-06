@@ -17,7 +17,7 @@ struct ProviderRegistry {
             return gemini
         case .codexAuth:
             return codex
-        case .openRouter, .openAI, .openAICompat, .miniMax, .zai:
+        case .openRouter, .alibabaCodingPlan, .openAI, .openAICompat, .miniMax, .zai:
             return openAICompatible
         }
     }

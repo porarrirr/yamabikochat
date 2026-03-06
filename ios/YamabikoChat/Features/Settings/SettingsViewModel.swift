@@ -666,6 +666,8 @@ final class SettingsViewModel: ObservableObject {
         switch provider.uppercased() {
         case "GEMINI", "GEMINI_AUTH":
             return "gemini-2.5-flash"
+        case "ALIBABA_CODING_PLAN":
+            return AlibabaCodingPlanModelCatalog.defaultModel
         case "MINIMAX":
             return "MiniMax-M2.1"
         case "CODEX_AUTH":

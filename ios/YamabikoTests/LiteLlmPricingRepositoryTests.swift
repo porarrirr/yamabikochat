@@ -94,4 +94,29 @@ final class LiteLlmPricingRepositoryTests: XCTestCase {
 
         XCTAssertEqual(result ?? -1, 0.00028, accuracy: 0.0000000001)
     }
+
+    func testEstimateCostResolvesAlibabaCodingPlanLikeOtherOpenAICompatibleProviders() async {
+        let repository = makeRepository(
+            withCatalogJSON: #"""
+            {
+              "qwen/qwen3.5-plus": {
+                "input_cost_per_token": 0.000001,
+                "output_cost_per_token": 0.000002
+              }
+            }
+            """#
+        )
+
+        let result = await repository.estimateCostUsd(
+            provider: "ALIBABA_CODING_PLAN",
+            model: "qwen3.5-plus",
+            inputTokens: 100,
+            outputTokens: 50,
+            cachedInputTokens: nil,
+            cacheCreationInputTokens: nil,
+            reasoningTokens: nil
+        )
+
+        XCTAssertEqual(result ?? -1, 0.0002, accuracy: 0.0000000001)
+    }
 }

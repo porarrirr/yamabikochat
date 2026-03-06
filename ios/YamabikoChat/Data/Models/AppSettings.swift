@@ -639,6 +639,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             "GEMINI",
             "GEMINI_AUTH",
             "OPENROUTER",
+            "ALIBABA_CODING_PLAN",
             "ZAI",
             "MINIMAX",
             "OPENAI",

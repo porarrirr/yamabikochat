@@ -17,6 +17,7 @@ enum ProviderCatalog {
         ProviderDisplay(key: "GEMINI", title: "Google Gemini"),
         ProviderDisplay(key: "GEMINI_AUTH", title: "Gemini Auth (CLI)"),
         ProviderDisplay(key: "OPENROUTER", title: "OpenRouter"),
+        ProviderDisplay(key: "ALIBABA_CODING_PLAN", title: "Alibaba Coding Plan"),
         ProviderDisplay(key: "ZAI", title: "Z.ai"),
         ProviderDisplay(key: "MINIMAX", title: "MiniMax"),
         ProviderDisplay(key: "OPENAI", title: "OpenAI"),

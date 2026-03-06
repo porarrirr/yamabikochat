@@ -5,6 +5,7 @@ enum CredentialProvider: String, CaseIterable {
     case gemini = "GEMINI"
     case geminiAuth = "GEMINI_AUTH"
     case openRouter = "OPENROUTER"
+    case alibabaCodingPlan = "ALIBABA_CODING_PLAN"
     case openAI = "OPENAI"
     case openAICompat = "OPENAI_COMPAT"
     case miniMax = "MINIMAX"

@@ -62,11 +62,11 @@ final class AppSettingsTests: XCTestCase {
 
     func testBuildGlobalProviderPresetsUsesProviderMapOrder() {
         var settings = AppSettings()
-        settings.providerDefaultModelsJSON = #"{"OPENAI":"gpt-4o-mini","GEMINI":"gemini-2.5-flash","OPENROUTER":"deepseek/deepseek-chat"}"#
+        settings.providerDefaultModelsJSON = #"{"OPENAI":"gpt-4o-mini","GEMINI":"gemini-2.5-flash","OPENROUTER":"deepseek/deepseek-chat","ALIBABA_CODING_PLAN":"qwen3.5-plus"}"#
 
         let presets = settings.buildGlobalProviderPresets()
 
-        XCTAssertEqual(presets.map(\.apiProvider), ["GEMINI", "OPENROUTER", "OPENAI"])
+        XCTAssertEqual(presets.map(\.apiProvider), ["GEMINI", "OPENROUTER", "ALIBABA_CODING_PLAN", "OPENAI"])
         XCTAssertEqual(presets.first?.name, L10n.format("グローバル: %@", "Google Gemini"))
     }
 

@@ -170,6 +170,9 @@ struct SettingsScreen: View {
             if currentProviderKey == "OPENAI" {
                 openAIEndpointSection
             }
+            if currentProviderKey == "ALIBABA_CODING_PLAN" {
+                alibabaCodingPlanSection
+            }
             if currentProviderKey == "MINIMAX" {
                 miniMaxEndpointSection
             }
@@ -563,6 +566,18 @@ struct SettingsScreen: View {
                 get: { viewModel.settings.miniMaxBaseURL },
                 set: { viewModel.settings.miniMaxBaseURL = $0 }
             ))
+        }
+    }
+
+    private var alibabaCodingPlanSection: some View {
+        Section("Alibaba Coding Plan") {
+            Text("Base URL: \(AppConstants.defaultAlibabaCodingPlanBaseURL.absoluteString)")
+                .font(.caption)
+                .textSelection(.enabled)
+
+            Text("Coding Plan 専用キーは `sk-sp-` で始まります。固定 URL を使います。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -1392,6 +1407,20 @@ struct SettingsScreen: View {
                     get: { viewModel.settings.defaultModel },
                     set: { viewModel.setDefaultModel($0) }
                 ))
+            } else if isAlibabaCodingPlanProvider {
+                Picker("Alibaba Model", selection: Binding(
+                    get: { viewModel.settings.defaultModel },
+                    set: { viewModel.setDefaultModel($0) }
+                )) {
+                    ForEach(alibabaCodingPlanModelOptions, id: \.self) { model in
+                        Text(model).tag(model)
+                    }
+                }
+
+                TextField("Model", text: Binding(
+                    get: { viewModel.settings.defaultModel },
+                    set: { viewModel.setDefaultModel($0) }
+                ))
             } else {
                 TextField("Default model", text: Binding(
                     get: { viewModel.settings.defaultModel },
@@ -1598,8 +1627,24 @@ struct SettingsScreen: View {
         currentProviderKey == "CODEX_AUTH"
     }
 
+    private var isAlibabaCodingPlanProvider: Bool {
+        currentProviderKey == "ALIBABA_CODING_PLAN"
+    }
+
     private var geminiModelOptions: [String] {
         var list = [viewModel.settings.defaultModel] + GeminiModelCatalog.suggestedModels
+        var seen: Set<String> = []
+        list = list.filter {
+            let normalized = $0.lowercased()
+            guard !normalized.isEmpty, !seen.contains(normalized) else { return false }
+            seen.insert(normalized)
+            return true
+        }
+        return list
+    }
+
+    private var alibabaCodingPlanModelOptions: [String] {
+        var list = [viewModel.settings.defaultModel] + AlibabaCodingPlanModelCatalog.supportedModels
         var seen: Set<String> = []
         list = list.filter {
             let normalized = $0.lowercased()

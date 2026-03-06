@@ -79,6 +79,37 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.apiKeyDraft, "openai-key")
     }
 
+    @MainActor
+    func testBindLoadsAlibabaApiKeyFromCredentialStore() throws {
+        let fixture = try makeFixture()
+        var settings = try fixture.repository.loadSettings()
+        settings.apiProvider = "ALIBABA_CODING_PLAN"
+        try fixture.repository.saveSettings(settings)
+        try fixture.credentials.setCredential("alibaba-key", for: .alibabaCodingPlan)
+
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+
+        XCTAssertEqual(viewModel.apiKeyDraft, "alibaba-key")
+    }
+
+    @MainActor
+    func testSetProviderReloadsAlibabaApiKeyDraftForSelectedProvider() throws {
+        let fixture = try makeFixture()
+        var settings = try fixture.repository.loadSettings()
+        settings.apiProvider = "OPENAI"
+        try fixture.repository.saveSettings(settings)
+        try fixture.credentials.setCredential("openai-key", for: .openAI)
+        try fixture.credentials.setCredential("alibaba-key", for: .alibabaCodingPlan)
+
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.setProvider("ALIBABA_CODING_PLAN")
+
+        XCTAssertEqual(viewModel.apiKeyDraft, "alibaba-key")
+        XCTAssertEqual(viewModel.settings.defaultModel, AlibabaCodingPlanModelCatalog.defaultModel)
+    }
+
     private func makeFixture() throws -> (repository: ChatRepository, credentials: SettingsViewModelCredentialStore) {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)

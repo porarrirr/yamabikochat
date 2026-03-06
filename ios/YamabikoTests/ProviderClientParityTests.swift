@@ -897,6 +897,87 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(reasoning["exclude"] as? Bool, true)
     }
 
+    func testAlibabaCodingPlanGenerateUsesDedicatedBaseURLAndCredential() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("alibaba-key", for: .alibabaCodingPlan)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenAICompatibleProviderClient()
+        let request = ProviderRequest(
+            model: "qwen3.5-plus",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "ALIBABA_CODING_PLAN"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(response.text, "ok")
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(
+            captured.url.absoluteString,
+            "https://coding-intl.dashscope.aliyuncs.com/v1/chat/completions"
+        )
+        XCTAssertEqual(captured.headers["Authorization"], "Bearer alibaba-key")
+        XCTAssertNil(captured.headers["HTTP-Referer"])
+        XCTAssertNil(captured.headers["X-Title"])
+    }
+
+    func testAlibabaCodingPlanStreamParsesOpenAIStyleChunks() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("alibaba-key", for: .alibabaCodingPlan)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"choices":[{"delta":{"content":"Ali"}}]}"#)
+                continuation.yield(#"data: {"choices":[{"delta":{"content":"baba"}}]}"#)
+                continuation.yield("data: [DONE]")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenAICompatibleProviderClient()
+        let request = ProviderRequest(
+            model: "qwen3.5-plus",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "ALIBABA_CODING_PLAN"]
+        )
+
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var final: ProviderResponse?
+        for try await event in stream {
+            if case let .completed(response) = event {
+                final = response
+            }
+        }
+
+        XCTAssertEqual(final?.text, "Alibaba")
+    }
+
     func testOpenRouterGenerateParsesUsageBreakdown() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("openrouter-key", for: .openRouter)
