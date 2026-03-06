@@ -575,7 +575,7 @@ struct SettingsScreen: View {
                 .font(.caption)
                 .textSelection(.enabled)
 
-            Text("Coding Plan 専用キーは `sk-sp-` で始まります。固定 URL を使います。")
+            Text("Coding Plan 専用キーは `sk-sp-` で始まります。iOS版は Anthropic 互換の `/v1/messages` を固定 URL で使います。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }

@@ -252,10 +252,10 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         switch provider {
         case .openRouter:
             return .openRouter
-        case .alibabaCodingPlan:
-            return .alibabaCodingPlan
         case .openAI:
             return .openAI
+        case .alibabaCodingPlan:
+            return .alibabaCodingPlan
         case .openAICompat:
             return .openAICompat
         case .miniMax:
@@ -277,11 +277,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             }
             return url
         case .alibabaCodingPlan:
-            let baseURL = AppConstants.defaultAlibabaCodingPlanBaseURL.absoluteString
-            guard let url = URL(string: baseURL)?.appendingPathComponent("chat/completions") else {
-                throw ProviderClientError.invalidBaseURL(baseURL)
-            }
-            return url
+            throw ProviderClientError.invalidBaseURL("Provider not supported by OpenAI compatible client")
         case .openAI:
             let baseURL = settings.resolvedOpenAIBaseURL()
             guard let url = URL(string: baseURL)?.appendingPathComponent("chat/completions") else {

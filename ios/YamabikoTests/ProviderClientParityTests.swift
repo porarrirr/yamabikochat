@@ -903,14 +903,25 @@ final class ProviderClientParityTests: XCTestCase {
 
         let httpClient = CapturingHTTPClient()
         httpClient.sendResponder = { request in
-            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            let data = #"""
+            {
+              "content":[{"type":"text","text":"ok"}],
+              "usage":{
+                "input_tokens":12,
+                "output_tokens":7,
+                "cache_creation_input_tokens":4,
+                "cache_read_input_tokens":2
+              }
+            }
+            """#.data(using: .utf8)!
             return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
         }
 
-        let client = OpenAICompatibleProviderClient()
+        let client = AnthropicCompatibleProviderClient()
         let request = ProviderRequest(
             model: "qwen3.5-plus",
             messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            systemPrompt: "be helpful",
             stream: false,
             tools: [],
             thinking: nil,
@@ -929,29 +940,54 @@ final class ProviderClientParityTests: XCTestCase {
         let captured = try XCTUnwrap(httpClient.lastRequest)
         XCTAssertEqual(
             captured.url.absoluteString,
-            "https://coding-intl.dashscope.aliyuncs.com/v1/chat/completions"
+            "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/v1/messages"
         )
-        XCTAssertEqual(captured.headers["Authorization"], "Bearer alibaba-key")
-        XCTAssertNil(captured.headers["HTTP-Referer"])
-        XCTAssertNil(captured.headers["X-Title"])
+        XCTAssertEqual(captured.headers["x-api-key"], "alibaba-key")
+        XCTAssertEqual(captured.headers["anthropic-version"], "2023-06-01")
+        XCTAssertNil(captured.headers["Authorization"])
+
+        let bodyData = try XCTUnwrap(captured.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertEqual(root["model"] as? String, "qwen3.5-plus")
+        XCTAssertEqual(root["system"] as? String, "be helpful")
+        XCTAssertEqual(root["max_tokens"] as? Int, 4096)
+        let messages = try XCTUnwrap(root["messages"] as? [[String: Any]])
+        let first = try XCTUnwrap(messages.first)
+        XCTAssertEqual(first["role"] as? String, "user")
+        let content = try XCTUnwrap(first["content"] as? [[String: Any]])
+        XCTAssertEqual(content.first?["type"] as? String, "text")
+        XCTAssertEqual(content.first?["text"] as? String, "hello")
+
+        let usage = try XCTUnwrap(response.usage)
+        XCTAssertEqual(usage.inputTokens, 12)
+        XCTAssertEqual(usage.outputTokens, 7)
+        XCTAssertEqual(usage.totalTokens, 19)
+        XCTAssertEqual(usage.cachedInputTokens, 2)
+        XCTAssertEqual(usage.cacheCreationInputTokens, 4)
     }
 
-    func testAlibabaCodingPlanStreamParsesOpenAIStyleChunks() async throws {
+    func testAlibabaCodingPlanStreamParsesAnthropicStyleChunks() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("alibaba-key", for: .alibabaCodingPlan)
 
         let httpClient = CapturingHTTPClient()
         httpClient.streamResponder = { request in
             let stream = AsyncThrowingStream<String, Error> { continuation in
-                continuation.yield(#"data: {"choices":[{"delta":{"content":"Ali"}}]}"#)
-                continuation.yield(#"data: {"choices":[{"delta":{"content":"baba"}}]}"#)
-                continuation.yield("data: [DONE]")
+                continuation.yield("event: message_start")
+                continuation.yield(#"data: {"type":"message_start","message":{"usage":{"input_tokens":21,"cache_creation_input_tokens":6,"cache_read_input_tokens":3}}}"#)
+                continuation.yield("event: content_block_delta")
+                continuation.yield(#"data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Plan "}}"#)
+                continuation.yield("event: content_block_delta")
+                continuation.yield(#"data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Ali"}}"#)
+                continuation.yield(#"data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"baba"}}"#)
+                continuation.yield(#"data: {"type":"message_delta","usage":{"output_tokens":8}}"#)
+                continuation.yield(#"data: {"type":"message_stop"}"#)
                 continuation.finish()
             }
             return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
         }
 
-        let client = OpenAICompatibleProviderClient()
+        let client = AnthropicCompatibleProviderClient()
         let request = ProviderRequest(
             model: "qwen3.5-plus",
             messages: [ProviderRequestMessage(role: "user", content: "hello")],
@@ -968,14 +1004,29 @@ final class ProviderClientParityTests: XCTestCase {
             httpClient: httpClient
         )
 
+        var events: [ProviderStreamEvent] = []
         var final: ProviderResponse?
         for try await event in stream {
+            events.append(event)
             if case let .completed(response) = event {
                 final = response
             }
         }
 
+        XCTAssertEqual(events[0], .reasoningDelta("Plan "))
+        XCTAssertEqual(events[1], .textDelta("Ali"))
+        XCTAssertEqual(events[2], .textDelta("baba"))
         XCTAssertEqual(final?.text, "Alibaba")
+        XCTAssertEqual(final?.reasoningSummary, "Plan ")
+        let usage = try XCTUnwrap(final?.usage)
+        XCTAssertEqual(usage.inputTokens, 21)
+        XCTAssertEqual(usage.outputTokens, 8)
+        XCTAssertEqual(usage.totalTokens, 29)
+        XCTAssertEqual(usage.cachedInputTokens, 3)
+        XCTAssertEqual(usage.cacheCreationInputTokens, 6)
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(captured.headers["Accept"], "text/event-stream")
     }
 
     func testOpenRouterGenerateParsesUsageBreakdown() async throws {

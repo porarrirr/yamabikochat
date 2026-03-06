@@ -2,11 +2,13 @@ import Foundation
 
 struct ProviderRegistry {
     private let openAICompatible: OpenAICompatibleProviderClient
+    private let anthropicCompatible: AnthropicCompatibleProviderClient
     private let gemini: GeminiProviderClient
     private let codex: CodexProviderClient
 
     init() {
         openAICompatible = OpenAICompatibleProviderClient()
+        anthropicCompatible = AnthropicCompatibleProviderClient()
         gemini = GeminiProviderClient()
         codex = CodexProviderClient()
     }
@@ -17,7 +19,9 @@ struct ProviderRegistry {
             return gemini
         case .codexAuth:
             return codex
-        case .openRouter, .alibabaCodingPlan, .openAI, .openAICompat, .miniMax, .zai:
+        case .alibabaCodingPlan:
+            return anthropicCompatible
+        case .openRouter, .openAI, .openAICompat, .miniMax, .zai:
             return openAICompatible
         }
     }
