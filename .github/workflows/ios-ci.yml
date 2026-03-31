@@ -48,6 +48,17 @@ jobs:
             ASSETCATALOG_COMPILER_APPICON_NAME= \
             build
 
+      - name: Test
+        run: |
+          cd ios
+          xcodebuild \
+            -project YamabikoChat.xcodeproj \
+            -scheme YamabikoChat \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            CODE_SIGNING_ALLOWED=NO \
+            ASSETCATALOG_COMPILER_APPICON_NAME= \
+            test
+
       - name: Build Unsigned IPA
         run: |
           cd ios
@@ -83,20 +94,3 @@ jobs:
           path: ${{ runner.temp }}/YamabikoChat-unsigned.ipa
           if-no-files-found: error
 
-      - name: Prepare Release Metadata
-        if: always() && github.ref == 'refs/heads/ios'
-        id: release_meta
-        run: |
-          TS_COMPACT="$(date -u +'%Y%m%d-%H%M%S')"
-          TS_LABEL="$(date -u +'%Y-%m-%d %H:%M UTC')"
-          echo "tag=ios-ipa-${TS_COMPACT}" >> "$GITHUB_OUTPUT"
-          echo "name=iOS IPA ${TS_LABEL}" >> "$GITHUB_OUTPUT"
-
-      - name: Publish IPA as Release Asset
-        if: always() && github.ref == 'refs/heads/ios'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.release_meta.outputs.tag }}
-          name: ${{ steps.release_meta.outputs.name }}
-          prerelease: true
-          files: ${{ runner.temp }}/YamabikoChat-unsigned.ipa

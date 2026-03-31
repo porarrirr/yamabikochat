@@ -40,6 +40,6 @@ open YamabikoChat.xcodeproj
 Build and signing should be completed on macOS.
 
 ## CI
-- `ios-ipa.yml`: unsigned IPA build workflow (`workflow_dispatch` and iOS-related pushes; artifact upload, optional release asset on manual run)
-- `ios-ci.yml`: macOS build/test (`xcodegen` + `xcodebuild`)
+- repo root `.github/workflows/ios-ipa.yml`: unsigned IPA build workflow (`workflow_dispatch` and iOS-related pushes; uploads artifact and publishes/updates a prerelease asset)
+- repo root `.github/workflows/ios-ci.yml`: macOS build/test (`xcodegen` + `xcodebuild`)
 - `ios-testflight.yml`: manual TestFlight upload workflow (requires signing/App Store Connect secrets)

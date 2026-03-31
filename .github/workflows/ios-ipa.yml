@@ -3,13 +3,8 @@ name: iOS IPA
 on:
   workflow_dispatch:
     inputs:
-      publish_release:
-        description: "Upload IPA as a GitHub release asset"
-        required: false
-        default: false
-        type: boolean
       release_tag:
-        description: "Release tag (used only when publish_release=true)"
+        description: "Release tag override"
         required: false
         default: ""
         type: string
@@ -79,7 +74,6 @@ jobs:
           test -f "$IPA_PATH"
 
       - name: Upload Unsigned IPA Artifact
-        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.publish_release }}
         uses: actions/upload-artifact@v4
         with:
           name: YamabikoChat-unsigned-ipa-${{ github.run_number }}
@@ -88,23 +82,34 @@ jobs:
           retention-days: 14
 
       - name: Resolve Release Tag
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
         id: release_tag
+        env:
+          TAG_INPUT: ${{ inputs.release_tag }}
         run: |
-          TAG="${{ inputs.release_tag }}"
+          TAG="$TAG_INPUT"
           TS_COMPACT="$(date -u +'%Y%m%d-%H%M%S')"
           TS_LABEL="$(date -u +'%Y-%m-%d %H:%M UTC')"
           if [ -z "$TAG" ]; then
-            TAG="ios-ipa-${TS_COMPACT}"
+            TAG="ios-ipa-latest"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "name=iOS IPA ${TS_LABEL}" >> "$GITHUB_OUTPUT"
+          {
+            echo "body<<EOF"
+            echo "Unsigned IPA built from \`${GITHUB_REF_NAME}\`."
+            echo ""
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Run: \`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\`"
+            echo "- Built at: ${TS_LABEL}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Publish IPA as Release Asset
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_tag.outputs.tag }}
           name: ${{ steps.release_tag.outputs.name }}
           prerelease: true
+          body: ${{ steps.release_tag.outputs.body }}
+          overwrite_files: true
           files: ${{ runner.temp }}/YamabikoChat-unsigned.ipa
