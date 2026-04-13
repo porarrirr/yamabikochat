@@ -960,7 +960,7 @@ final class GeminiAuthRepository {
 
     private func codeAssistHeaders(accessToken: String) -> [String: String] {
         let compatibility = GeminiCliCompatibility.resolved(using: credentialStore)
-        [
+        return [
             "Authorization": "Bearer \(accessToken)",
             "Content-Type": "application/json",
             "User-Agent": compatibility.buildUserAgent(model: nil),
