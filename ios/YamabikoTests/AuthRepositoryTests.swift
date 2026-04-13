@@ -46,6 +46,67 @@ private struct StubHTTPClient: HTTPClientProtocol {
     }
 }
 
+private final class CapturingAuthHTTPClient: HTTPClientProtocol {
+    var lastRequest: HTTPRequest?
+    var responseData: Data
+    var statusCode: Int
+
+    init(responseData: Data, statusCode: Int) {
+        self.responseData = responseData
+        self.statusCode = statusCode
+    }
+
+    func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
+        lastRequest = request
+        let response = HTTPURLResponse(
+            url: request.url,
+            statusCode: statusCode,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        return (responseData, response)
+    }
+
+    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
+        lastRequest = request
+        let response = HTTPURLResponse(
+            url: request.url,
+            statusCode: statusCode,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        return (AsyncThrowingStream { continuation in continuation.finish() }, response)
+    }
+}
+
+private final class GeminiCompatibilitySyncHTTPClient: HTTPClientProtocol {
+    var responses: [String: (Data, Int)] = [:]
+    private(set) var requestedURLs: [String] = []
+
+    func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
+        let url = request.url.absoluteString
+        requestedURLs.append(url)
+        let entry = responses[url] ?? (Data(), 404)
+        let response = HTTPURLResponse(
+            url: request.url,
+            statusCode: entry.1,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        return (entry.0, response)
+    }
+
+    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
+        let response = HTTPURLResponse(
+            url: request.url,
+            statusCode: 404,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        return (AsyncThrowingStream { continuation in continuation.finish() }, response)
+    }
+}
+
 private struct StubGeminiOAuthConfigProvider: GeminiOAuthConfigProviding {
     let config: GeminiOAuthClientConfig
 
@@ -203,6 +264,61 @@ final class AuthRepositoryTests: XCTestCase {
         case let .failure(error):
             XCTFail("Unexpected error: \(error)")
         }
+    }
+
+    func testGeminiQuotaUsesOpencodeCompatibleHeaders() async {
+        let store = InMemoryCredentialStore()
+        try? store.setGeminiAccessToken("token")
+        try? store.saveSecret("my-project", key: "gemini_project_id")
+
+        let payload = """
+        {
+          "buckets": []
+        }
+        """.data(using: .utf8)!
+
+        let httpClient = CapturingAuthHTTPClient(responseData: payload, statusCode: 200)
+        let repo = GeminiAuthRepository(
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let result = await repo.retrieveUserQuota()
+        switch result {
+        case .success:
+            break
+        case let .failure(error):
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        guard let request = httpClient.lastRequest else {
+            XCTFail("Expected quota request to be captured")
+            return
+        }
+        XCTAssertEqual(request.headers["Authorization"], "Bearer token")
+        XCTAssertEqual(request.headers["Content-Type"], "application/json")
+        XCTAssertEqual(
+            request.headers["User-Agent"],
+            GeminiCliCompatibility.buildUserAgent(model: nil)
+        )
+        XCTAssertNil(request.headers["X-Goog-Api-Client"])
+        XCTAssertNil(request.headers["Client-Metadata"])
+        let activityRequestID = request.headers["x-activity-request-id"] ?? ""
+        XCTAssertFalse(activityRequestID.isEmpty)
+        XCTAssertFalse(activityRequestID.contains("-"))
+    }
+
+    func testGeminiCodeAssistProjectIDNormalizationSupportsStringAndObject() {
+        XCTAssertEqual(
+            GeminiAuthRepository.normalizeCodeAssistProjectID("project-1"),
+            "project-1"
+        )
+        XCTAssertEqual(
+            GeminiAuthRepository.normalizeCodeAssistProjectID(["id": "project-2"]),
+            "project-2"
+        )
+        XCTAssertNil(GeminiAuthRepository.normalizeCodeAssistProjectID(["name": "missing-id"]))
+        XCTAssertNil(GeminiAuthRepository.normalizeCodeAssistProjectID("   "))
     }
 
     func testGeminiOAuthConfigValidationRejectsPlaceholder() {
@@ -401,6 +517,138 @@ final class AuthRepositoryTests: XCTestCase {
                 return
             }
             XCTAssertEqual(provider, "GEMINI_OAUTH_CLIENT")
+        }
+    }
+
+    func testGeminiCliCompatibilitySyncStoresFetchedRemoteValues() async throws {
+        let store = InMemoryCredentialStore()
+        let httpClient = GeminiCompatibilitySyncHTTPClient()
+        seedUpstreamCompatibilityResponses(into: httpClient)
+        let repo = GeminiAuthRepository(credentialStore: store, httpClient: httpClient)
+
+        let result = await repo.syncGeminiCliCompatibilityFromUpstream()
+        let compatibility = try result.get()
+
+        XCTAssertEqual(compatibility.version, "9.9.9-test")
+        XCTAssertEqual(compatibility.defaultModel, "gemini-3-flash-preview")
+        XCTAssertEqual(compatibility.metadata.ideType, "IDE_TEST")
+        XCTAssertEqual(compatibility.metadata.platform, "PLATFORM_TEST")
+        XCTAssertEqual(compatibility.metadata.pluginType, "GEMINI_TEST")
+        XCTAssertEqual(compatibility.codeAssistEndpoint, "https://example.invalid/code-assist")
+        XCTAssertEqual(compatibility.codeAssistVersion, "v9internal")
+        XCTAssertEqual(compatibility.requestFormat.systemInstructionFieldName, "systemInstruction")
+        XCTAssertEqual(
+            compatibility.oauthClient,
+            GeminiOAuthClientConfig(
+                clientID: "test-client-id.apps.googleusercontent.com",
+                clientSecret: "test-client-secret"
+            )
+        )
+
+        let resolved = repo.currentGeminiCliCompatibility()
+        XCTAssertEqual(resolved.source, .remote)
+        XCTAssertEqual(resolved.remote.version, "9.9.9-test")
+        XCTAssertNotNil(resolved.lastSyncISO8601)
+        XCTAssertEqual(
+            repo.importedOAuthClientConfig(),
+            GeminiOAuthClientConfig(
+                clientID: "test-client-id.apps.googleusercontent.com",
+                clientSecret: "test-client-secret"
+            )
+        )
+        XCTAssertTrue(repo.hasImportedOAuthClientConfig())
+        XCTAssertTrue(repo.isOAuthClientConfigured())
+        XCTAssertEqual(httpClient.requestedURLs.count, GeminiCliCompatibilityStore.upstreamRawFileURLs.count)
+    }
+
+    func testGeminiCliCompatibilitySyncPreservesExistingRemoteValueOnParseFailure() async throws {
+        let store = InMemoryCredentialStore()
+        let existing = GeminiCliRemoteCompatibility(
+            version: "1.2.3-existing",
+            defaultModel: "gemini-existing",
+            metadata: GeminiCliMetadata(
+                ideType: "IDE_EXISTING",
+                platform: "PLATFORM_EXISTING",
+                pluginType: "GEMINI_EXISTING"
+            ),
+            codeAssistEndpoint: "https://existing.invalid",
+            codeAssistVersion: "v1internal",
+            requestFormat: GeminiCliCompatibilityStore.builtIn.requestFormat,
+            oauthClient: nil
+        )
+        try GeminiCliCompatibilityStore.saveRemote(
+            existing,
+            syncedAtISO8601: "2026-03-31T00:00:00Z",
+            using: store
+        )
+
+        let httpClient = GeminiCompatibilitySyncHTTPClient()
+        seedUpstreamCompatibilityResponses(into: httpClient)
+        httpClient.responses[GeminiCliCompatibilityStore.upstreamRawFileURLs["gemini-cli-version.ts"]!.absoluteString] = (Data("invalid".utf8), 200)
+
+        let repo = GeminiAuthRepository(credentialStore: store, httpClient: httpClient)
+        _ = try repo.saveOAuthClientConfig(
+            clientID: "existing-client-id.apps.googleusercontent.com",
+            clientSecret: "existing-client-secret"
+        )
+        let result = await repo.syncGeminiCliCompatibilityFromUpstream()
+
+        switch result {
+        case .success:
+            XCTFail("Expected sync failure for invalid upstream payload")
+        case .failure:
+            break
+        }
+
+        let resolved = repo.currentGeminiCliCompatibility()
+        XCTAssertEqual(resolved.source, .remote)
+        XCTAssertEqual(resolved.remote.version, "1.2.3-existing")
+        XCTAssertEqual(resolved.remote.defaultModel, "gemini-existing")
+        XCTAssertEqual(resolved.lastSyncISO8601, "2026-03-31T00:00:00Z")
+        XCTAssertEqual(
+            repo.importedOAuthClientConfig(),
+            GeminiOAuthClientConfig(
+                clientID: "existing-client-id.apps.googleusercontent.com",
+                clientSecret: "existing-client-secret"
+            )
+        )
+    }
+
+    private func seedUpstreamCompatibilityResponses(into httpClient: GeminiCompatibilitySyncHTTPClient) {
+        let sources: [String: String] = [
+            "gemini-cli-version.ts": #"export const GEMINI_CLI_VERSION = "9.9.9-test""#,
+            "user-agent.ts": #"const GEMINI_CLI_DEFAULT_MODEL = "gemini-3-flash-preview""#,
+            "project-types.ts": #"""
+            export const CODE_ASSIST_METADATA = {
+              ideType: "IDE_TEST",
+              platform: "PLATFORM_TEST",
+              pluginType: "GEMINI_TEST",
+            } as const;
+            """#,
+            "request-prepare.ts": #"""
+            const STREAM_ACTION = "streamGenerateContent";
+            const transformedUrl = `${GEMINI_CODE_ASSIST_ENDPOINT}/v9internal:${rawAction}${
+              streaming ? "?alt=sse" : ""
+            }`;
+            requestPayload.systemInstruction = requestPayload.system_instruction;
+            const wrappedBody = {
+              project: projectId,
+              model: effectiveModel,
+              user_prompt_id: userPromptId,
+              request: requestPayload,
+            };
+            """#,
+            "constants.ts": #"""
+            export const GEMINI_CLIENT_ID = "test-client-id.apps.googleusercontent.com";
+            export const GEMINI_CLIENT_SECRET = "test-client-secret";
+            export const GEMINI_CODE_ASSIST_ENDPOINT = "https://example.invalid/code-assist";
+            """#
+        ]
+
+        for (name, url) in GeminiCliCompatibilityStore.upstreamRawFileURLs {
+            if let source = sources[name] {
+                httpClient.responses[url.absoluteString] = (Data(source.utf8), 200)
+            }
         }
     }
 }

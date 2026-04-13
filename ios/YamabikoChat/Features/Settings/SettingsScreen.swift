@@ -575,9 +575,52 @@ struct SettingsScreen: View {
                 .font(.caption)
                 .textSelection(.enabled)
 
-            Text("Coding Plan 専用キーは `sk-sp-` で始まります。iOS版は Anthropic 互換の `/v1/messages` を固定 URL で使います。")
+            Text("Coding Plan 専用キーは `sk-sp-` で始まります。iOS版は Anthropic 互換の `/v1/messages` を固定 URL で使います。MCP は remote HTTPS server のみ対応し、Claude Code の `npx`/stdio MCP は iOS アプリ内では利用できません。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+
+            Toggle("Remote MCP を有効化", isOn: Binding(
+                get: { viewModel.settings.alibabaMCPEnabled },
+                set: { viewModel.settings.alibabaMCPEnabled = $0 }
+            ))
+
+            if viewModel.settings.alibabaMCPEnabled {
+                TextField("MCP Server URL (https://...)", text: Binding(
+                    get: { viewModel.settings.alibabaMCPServerURL },
+                    set: { viewModel.setAlibabaMCPServerURL($0) }
+                ))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                TextField("MCP Server Name", text: Binding(
+                    get: { viewModel.settings.alibabaMCPServerName },
+                    set: { viewModel.settings.alibabaMCPServerName = $0 }
+                ))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                SecureField("Authorization Token (optional)", text: $viewModel.alibabaMCPAuthorizationTokenInput)
+
+                TextField("Allowed tools (comma-separated, optional)", text: Binding(
+                    get: { viewModel.settings.alibabaMCPAllowedToolsCSV },
+                    set: { viewModel.settings.alibabaMCPAllowedToolsCSV = $0 }
+                ), axis: .vertical)
+                .lineLimit(2 ... 4)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                Button("Firecrawl テンプレートを設定") {
+                    viewModel.settings.alibabaMCPServerName = AppConstants.alibabaMCPDefaultServerName
+                    if viewModel.settings.alibabaMCPServerURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        viewModel.setAlibabaMCPServerURL(AppConstants.firecrawlRemoteMCPURLTemplate)
+                    }
+                }
+                .buttonStyle(.bordered)
+
+                Text("例: Firecrawl の hosted MCP は `\(AppConstants.firecrawlRemoteMCPURLTemplate)` 形式です。ツール名を空欄にするとサーバーが公開する全ツールを許可し、指定するとそのツールだけ有効化します。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -845,6 +888,24 @@ struct SettingsScreen: View {
         Section("Gemini Auth (CLI)") {
             Text(geminiSummary)
                 .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text("Source: \(GeminiCliCompatibilityStore.remoteRepositoryURL)")
+                .font(.caption2)
+                .textSelection(.enabled)
+            Text("Wire format source: \(viewModel.geminiCliCompatibility.source == .remote ? "synced" : "built-in")")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text("Gemini CLI version: \(viewModel.geminiCliCompatibility.remote.version)")
+                .font(.caption2)
+            if let lastSync = viewModel.geminiCliCompatibility.lastSyncISO8601, !lastSync.isEmpty {
+                Text("Last sync: \(lastSync)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            Text("Refresh で GitHub upstream の wire format と OAuth Client ID / Client Secret も同期します。")
+                .font(.caption2)
                 .foregroundStyle(.secondary)
 
             if !viewModel.isGeminiOAuthConfigured {

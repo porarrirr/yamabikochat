@@ -3,7 +3,7 @@ import Combine
 import Security
 import UIKit
 
-struct GeminiOAuthClientConfig: Equatable, Sendable {
+struct GeminiOAuthClientConfig: Codable, Equatable, Sendable {
     var clientID: String
     var clientSecret: String
 }
@@ -70,9 +70,6 @@ final class GeminiAuthRepository {
         static let userInfoURL = "https://www.googleapis.com/oauth2/v2/userinfo"
         static let codeAssistEndpoint = "https://cloudcode-pa.googleapis.com"
         static let codeAssistVersion = "v1internal"
-        static let codeAssistUserAgent = "google-api-nodejs-client/9.15.1"
-        static let codeAssistApiClient = "gl-node/22.17.0"
-        static let codeAssistClientMetadata = "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI"
         static let defaultPort: UInt16 = 1456
         static let refreshBufferSeconds: TimeInterval = 60
         static let refreshFallbackSeconds: TimeInterval = 45 * 60
@@ -224,6 +221,57 @@ final class GeminiAuthRepository {
 
     func currentState() -> GeminiAuthState {
         subject.value
+    }
+
+    func currentGeminiCliCompatibility() -> GeminiCliResolvedCompatibility {
+        GeminiCliCompatibility.resolved(using: credentialStore)
+    }
+
+    func syncGeminiCliCompatibilityFromUpstream() async -> Result<GeminiCliRemoteCompatibility, Error> {
+        do {
+            var files: [String: String] = [:]
+            for (name, url) in GeminiCliCompatibilityStore.upstreamRawFileURLs {
+                let request = HTTPRequest(url: url, method: "GET")
+                let (data, response) = try await httpClient.send(request)
+                guard (200 ... 299).contains(response.statusCode) else {
+                    throw ProviderClientError.httpStatus(
+                        response.statusCode,
+                        "Failed to fetch \(name) from \(url.absoluteString)"
+                    )
+                }
+                guard let body = String(data: data, encoding: .utf8), !body.isEmpty else {
+                    throw ProviderClientError.parseFailure("Fetched upstream Gemini CLI source was empty: \(name)")
+                }
+                files[name] = body
+            }
+
+            let compatibility = try GeminiCliCompatibilityStore.parseUpstreamFiles(files)
+            guard let oauthClient = compatibility.oauthClient else {
+                throw ProviderClientError.parseFailure("Fetched upstream Gemini OAuth client configuration is incomplete.")
+            }
+            _ = try saveOAuthClientConfig(
+                clientID: oauthClient.clientID,
+                clientSecret: oauthClient.clientSecret
+            )
+            try GeminiCliCompatibilityStore.saveRemote(
+                compatibility,
+                syncedAtISO8601: Self.nowISO8601(),
+                using: credentialStore
+            )
+            DiagnosticsLogger.log(
+                "Gemini CLI compatibility synced from upstream version=\(compatibility.version) oauth_config=synced",
+                category: .auth
+            )
+            return .success(compatibility)
+        } catch {
+            DiagnosticsLogger.log(
+                "Gemini CLI compatibility sync failed",
+                level: .warning,
+                category: .auth,
+                error: error
+            )
+            return .failure(error)
+        }
     }
 
     func login(
@@ -513,8 +561,9 @@ final class GeminiAuthRepository {
 
             let payload: [String: Any] = ["project": projectID]
             let body = try JSONSerialization.data(withJSONObject: payload)
+            let compatibility = GeminiCliCompatibility.resolved(using: credentialStore)
             let request = HTTPRequest(
-                url: URL(string: "\(Constants.codeAssistEndpoint)/\(Constants.codeAssistVersion):retrieveUserQuota")!,
+                url: URL(string: "\(compatibility.remote.codeAssistEndpoint)/\(compatibility.remote.codeAssistVersion):retrieveUserQuota")!,
                 method: "POST",
                 headers: codeAssistHeaders(accessToken: bearer.token),
                 body: body
@@ -564,7 +613,8 @@ final class GeminiAuthRepository {
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "access_type", value: "offline"),
             URLQueryItem(name: "scope", value: scopes.joined(separator: " ")),
-            URLQueryItem(name: "state", value: state)
+            URLQueryItem(name: "state", value: state),
+            URLQueryItem(name: "prompt", value: "consent")
         ]
         guard let url = components?.url else {
             throw ProviderClientError.invalidBaseURL(Constants.authURL)
@@ -688,10 +738,11 @@ final class GeminiAuthRepository {
     }
 
     private func resolveUserData(accessToken: String, projectOverride: String?) async throws -> (projectId: String, userTier: String, userTierName: String?) {
+        let compatibility = GeminiCliCompatibility.resolved(using: credentialStore)
         let metadata: [String: Any?] = [
-            "ideType": "IDE_UNSPECIFIED",
-            "platform": "PLATFORM_UNSPECIFIED",
-            "pluginType": "GEMINI",
+            "ideType": compatibility.metadata["ideType"],
+            "platform": compatibility.metadata["platform"],
+            "pluginType": compatibility.metadata["pluginType"],
             "duetProject": projectOverride
         ]
         var loadRequest: [String: Any] = [
@@ -708,7 +759,7 @@ final class GeminiAuthRepository {
 
         let currentTier = (loadResponse["currentTier"] as? [String: Any])
         if let currentTier {
-            let projectID = (loadResponse["cloudaicompanionProject"] as? String) ?? projectOverride
+            let projectID = Self.normalizeCodeAssistProjectID(loadResponse["cloudaicompanionProject"]) ?? projectOverride?.nilIfBlank
             guard let projectID, !projectID.isEmpty else {
                 throw ProviderClientError.parseFailure("Google Workspace account requires a Cloud project ID.")
             }
@@ -747,8 +798,7 @@ final class GeminiAuthRepository {
         }
 
         let response = finalOperation["response"] as? [String: Any]
-        let projectBlock = response?["cloudaicompanionProject"] as? [String: Any]
-        let projectID = (projectBlock?["id"] as? String) ?? projectForOnboard
+        let projectID = Self.normalizeCodeAssistProjectID(response?["cloudaicompanionProject"]) ?? projectForOnboard?.nilIfBlank
         guard let projectID, !projectID.isEmpty else {
             throw ProviderClientError.parseFailure("Failed to obtain Cloud project ID for Gemini Auth.")
         }
@@ -773,8 +823,9 @@ final class GeminiAuthRepository {
 
     private func postCodeAssist(path: String, accessToken: String, payload: [String: Any]) async throws -> [String: Any] {
         let data = try JSONSerialization.data(withJSONObject: payload)
+        let compatibility = GeminiCliCompatibility.resolved(using: credentialStore)
         let request = HTTPRequest(
-            url: URL(string: "\(Constants.codeAssistEndpoint)/\(Constants.codeAssistVersion)\(path)")!,
+            url: URL(string: "\(compatibility.remote.codeAssistEndpoint)/\(compatibility.remote.codeAssistVersion)\(path)")!,
             method: "POST",
             headers: codeAssistHeaders(accessToken: accessToken),
             body: data
@@ -790,8 +841,9 @@ final class GeminiAuthRepository {
     }
 
     private func getCodeAssistOperation(accessToken: String, name: String) async throws -> [String: Any] {
+        let compatibility = GeminiCliCompatibility.resolved(using: credentialStore)
         let request = HTTPRequest(
-            url: URL(string: "\(Constants.codeAssistEndpoint)/\(Constants.codeAssistVersion)/\(name)")!,
+            url: URL(string: "\(compatibility.remote.codeAssistEndpoint)/\(compatibility.remote.codeAssistVersion)/\(name)")!,
             method: "GET",
             headers: codeAssistHeaders(accessToken: accessToken)
         )
@@ -907,13 +959,23 @@ final class GeminiAuthRepository {
     }
 
     private func codeAssistHeaders(accessToken: String) -> [String: String] {
+        let compatibility = GeminiCliCompatibility.resolved(using: credentialStore)
         [
             "Authorization": "Bearer \(accessToken)",
             "Content-Type": "application/json",
-            "User-Agent": Constants.codeAssistUserAgent,
-            "X-Goog-Api-Client": Constants.codeAssistApiClient,
-            "Client-Metadata": Constants.codeAssistClientMetadata
+            "User-Agent": compatibility.buildUserAgent(model: nil),
+            "x-activity-request-id": GeminiCliCompatibility.makeActivityRequestID()
         ]
+    }
+
+    static func normalizeCodeAssistProjectID(_ value: Any?) -> String? {
+        if let text = (value as? String)?.nilIfBlank {
+            return text
+        }
+        if let object = value as? [String: Any] {
+            return (object["id"] as? String)?.nilIfBlank
+        }
+        return nil
     }
 
     private static func missingOAuthClientParts(from config: GeminiOAuthClientConfig) -> [String] {

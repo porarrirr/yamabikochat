@@ -17,6 +17,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var openAICompatPresetBaseURLInput: String = ""
     @Published var openAICompatApiKeyInput: String = ""
     @Published var systemPromptPresetNameInput: String = ""
+    @Published var alibabaMCPAuthorizationTokenInput: String = ""
 
     @Published var codexAuthState: CodexAuthState = .init()
     @Published var geminiAuthState: GeminiAuthState = .init()
@@ -39,6 +40,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var geminiTierNameInput: String = ""
     @Published var geminiOAuthClientIDInput: String = ""
     @Published var geminiOAuthClientSecretInput: String = ""
+    @Published var geminiCliCompatibility: GeminiCliResolvedCompatibility = GeminiCliCompatibility.resolved()
 
     @Published var statusMessage: String?
     @Published var errorMessage: String?
@@ -64,6 +66,7 @@ final class SettingsViewModel: ObservableObject {
         self.repository = repository
         self.credentialStore = credentialStore
         refreshGeminiOAuthClientConfigStatus()
+        refreshGeminiCliCompatibilityStatus()
 
         repository.settingsPublisher()
             .receive(on: DispatchQueue.main)
@@ -71,6 +74,7 @@ final class SettingsViewModel: ObservableObject {
                 self?.settings = $0
                 self?.syncSystemPromptPresetName()
                 self?.loadCurrentProviderAPIKey()
+                self?.loadAlibabaMCPAuthorizationToken()
             }
             .store(in: &cancellables)
 
@@ -139,6 +143,7 @@ final class SettingsViewModel: ObservableObject {
             settings = try repository.loadSettings()
             loadCurrentProviderAPIKey()
             loadSelectedOpenAICompatApiKey()
+            loadAlibabaMCPAuthorizationToken()
             syncSystemPromptPresetName()
         } catch {
             errorMessage = error.localizedDescription
@@ -150,6 +155,7 @@ final class SettingsViewModel: ObservableObject {
             await refreshCodexAuth(force: false)
             await refreshGeminiAuth(force: false)
             refreshGeminiOAuthClientConfigStatus()
+            refreshGeminiCliCompatibilityStatus()
             refreshDiagnosticsLog()
         }
     }
@@ -168,18 +174,56 @@ final class SettingsViewModel: ObservableObject {
     func saveSettings() {
         guard let repository else { return }
         do {
+            let previousPersistedSettings = try repository.loadSettings()
+            let previousMCPToken = try credentialStore.flatMap {
+                try $0.readSecret(key: AppConstants.alibabaMCPAuthorizationTokenKey)
+            }
             var normalized = settings.normalizedForPersistence()
+            if normalized.alibabaMCPEnabled && normalized.resolvedAlibabaMCPServerURL() == nil {
+                errorMessage = L10n.text("Remote MCP URL に有効な https:// URL を入力してください。")
+                statusMessage = nil
+                DiagnosticsLogger.log(
+                    "Alibaba MCP settings validation failed because URL is invalid",
+                    level: .warning,
+                    category: .settings
+                )
+                return
+            }
             if let selected = normalized.selectedSystemPromptPreset,
                !normalized.systemPromptPresets().contains(where: { $0.name.caseInsensitiveCompare(selected) == .orderedSame }) {
                 normalized.selectedSystemPromptPreset = nil
             }
-            settings = normalized
             try repository.saveSettings(normalized)
+            do {
+                try credentialStore?.saveSecret(
+                    alibabaMCPAuthorizationTokenInput.nilIfBlank,
+                    key: AppConstants.alibabaMCPAuthorizationTokenKey
+                )
+            } catch {
+                try? repository.saveSettings(previousPersistedSettings)
+                try? credentialStore?.saveSecret(
+                    previousMCPToken,
+                    key: AppConstants.alibabaMCPAuthorizationTokenKey
+                )
+                throw error
+            }
+            settings = normalized
             statusMessage = L10n.text("保存しました")
+            errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
+            statusMessage = nil
             DiagnosticsLogger.log("Settings save failed", error: error)
         }
+    }
+
+    func setAlibabaMCPServerURL(_ value: String) {
+        let previousIdentity = normalizedAlibabaMCPServerURLIdentity(settings.alibabaMCPServerURL)
+        settings.alibabaMCPServerURL = value
+        let nextIdentity = normalizedAlibabaMCPServerURLIdentity(value)
+        guard previousIdentity != nextIdentity else { return }
+        alibabaMCPAuthorizationTokenInput = ""
+        statusMessage = nil
     }
 
     func saveAPIKey() {
@@ -534,14 +578,39 @@ final class SettingsViewModel: ObservableObject {
     func refreshGeminiAuth(force: Bool) async {
         guard let repository = requireRepository(action: "gemini_refresh") else { return }
         isGeminiAuthActionRunning = true
+        var syncSucceeded = false
         defer {
             isGeminiAuthActionRunning = false
+            refreshGeminiOAuthClientConfigStatus()
+            refreshGeminiCliCompatibilityStatus()
             refreshDiagnosticsLog()
+        }
+        if force {
+            let syncResult = await repository.syncGeminiCliCompatibilityFromUpstream()
+            switch syncResult {
+            case let .success(compatibility):
+                syncSucceeded = true
+                DiagnosticsLogger.log(
+                    "Gemini CLI compatibility refresh succeeded version=\(compatibility.version)",
+                    category: .auth
+                )
+            case let .failure(error):
+                errorMessage = error.localizedDescription
+                DiagnosticsLogger.log(
+                    "Gemini CLI compatibility refresh failed before auth refresh",
+                    level: .warning,
+                    category: .auth,
+                    error: error
+                )
+            }
         }
         let result = await repository.refreshGeminiAuth(force: force)
         switch result {
         case let .success(state):
             geminiAuthState = state
+            if force, syncSucceeded {
+                statusMessage = L10n.text("Gemini互換情報、OAuth設定、認証を更新しました")
+            }
         case let .failure(error):
             errorMessage = error.localizedDescription
             DiagnosticsLogger.log("Gemini auth refresh failed", error: error)
@@ -701,6 +770,37 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    private func loadAlibabaMCPAuthorizationToken() {
+        guard let credentialStore else {
+            alibabaMCPAuthorizationTokenInput = ""
+            return
+        }
+        do {
+            alibabaMCPAuthorizationTokenInput = try credentialStore.readSecret(
+                key: AppConstants.alibabaMCPAuthorizationTokenKey
+            ) ?? ""
+        } catch {
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log("Alibaba MCP authorization token load failed", error: error)
+        }
+    }
+
+    private func normalizedAlibabaMCPServerURLIdentity(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let components = URLComponents(string: trimmed),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "https",
+              let host = components.host?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !host.isEmpty,
+              components.user == nil,
+              components.password == nil
+        else {
+            return nil
+        }
+        return components.url?.absoluteString
+    }
+
     private func refreshGeminiOAuthClientConfigStatus() {
         guard let repository else {
             hasImportedGeminiOAuthClientConfig = false
@@ -713,6 +813,14 @@ final class SettingsViewModel: ObservableObject {
             return
         }
         hasImportedGeminiOAuthClientConfig = false
+    }
+
+    private func refreshGeminiCliCompatibilityStatus() {
+        guard let repository else {
+            geminiCliCompatibility = GeminiCliCompatibility.resolved()
+            return
+        }
+        geminiCliCompatibility = repository.currentGeminiCliCompatibility()
     }
 
     static func isGeminiQuotaMissingCredentialError(_ error: Error) -> Bool {

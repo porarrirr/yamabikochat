@@ -188,18 +188,68 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(response.text, "ok")
 
         let captured = try XCTUnwrap(httpClient.lastRequest)
-        XCTAssertEqual(captured.headers["User-Agent"], "google-api-nodejs-client/9.15.1")
-        XCTAssertEqual(captured.headers["X-Goog-Api-Client"], "gl-node/22.17.0")
-        XCTAssertEqual(
-            captured.headers["Client-Metadata"],
-            "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI"
-        )
+        XCTAssertEqual(captured.headers["User-Agent"], GeminiCliCompatibility.buildUserAgent(model: "gemini-2.5-flash"))
+        XCTAssertNil(captured.headers["X-Goog-Api-Client"])
+        XCTAssertNil(captured.headers["Client-Metadata"])
         XCTAssertTrue(captured.url.absoluteString.contains(":generateContent"))
         let requestID = try XCTUnwrap(captured.headers["x-activity-request-id"])
-        assertLowercaseUUIDv4(requestID)
+        assertGeminiCliActivityRequestID(requestID)
         let bodyData = try XCTUnwrap(captured.body)
         let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
-        XCTAssertEqual(root["user_prompt_id"] as? String, requestID)
+        XCTAssertNotEqual(root["user_prompt_id"] as? String, requestID)
+    }
+
+    func testGeminiCliHeadersUseSavedRemoteCompatibility() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setGeminiAccessToken("gemini-access-token")
+        try store.saveSecret("project-1", key: "gemini_project_id")
+        try GeminiCliCompatibilityStore.saveRemote(
+            GeminiCliRemoteCompatibility(
+                version: "7.7.7-remote",
+                defaultModel: "gemini-remote-default",
+                metadata: GeminiCliMetadata(
+                    ideType: "IDE_REMOTE",
+                    platform: "PLATFORM_REMOTE",
+                    pluginType: "GEMINI_REMOTE"
+                ),
+                codeAssistEndpoint: "https://remote.invalid",
+                codeAssistVersion: "v7internal",
+                requestFormat: GeminiCliCompatibilityStore.builtIn.requestFormat,
+                oauthClient: nil
+            ),
+            syncedAtISO8601: "2026-03-31T00:00:00Z",
+            using: store
+        )
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"response":{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = GeminiProviderClient()
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "GEMINI_AUTH"]
+        )
+
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(captured.url.absoluteString, "https://remote.invalid/v7internal:generateContent")
+        XCTAssertEqual(
+            captured.headers["User-Agent"],
+            GeminiCliCompatibility.resolved(using: store).buildUserAgent(model: "gemini-2.5-flash")
+        )
     }
 
     func testGeminiBuildBodyEmbedsImageAttachmentAsInlineData() async throws {
@@ -387,6 +437,45 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(firstSessionID, secondSessionID)
     }
 
+    func testGeminiAuthGenerateFailsFastWhenProjectMissing() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setGeminiAccessToken("gemini-access-token")
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { _ in
+            XCTFail("Gemini Auth request should not be sent without a project ID")
+            let data = Data()
+            return (data, Self.makeHTTPResponse(url: URL(string: "https://example.invalid")!, statusCode: 500))
+        }
+
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "GEMINI_AUTH"]
+        )
+
+        let client = GeminiProviderClient()
+
+        do {
+            _ = try await client.generate(
+                request: request,
+                settings: AppSettings(),
+                credentialStore: store,
+                httpClient: httpClient
+            )
+            XCTFail("Expected Gemini Auth generate to fail without a project ID")
+        } catch let ProviderClientError.parseFailure(reason) {
+            XCTAssertEqual(reason, "Project ID is required")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertNil(httpClient.lastRequest)
+    }
+
     func testGeminiStreamSeparatesThoughtIntoReasoningDelta() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("gemini-key", for: .gemini)
@@ -476,17 +565,14 @@ final class ProviderClientParityTests: XCTestCase {
 
         let captured = try XCTUnwrap(httpClient.lastRequest)
         XCTAssertEqual(captured.headers["Accept"], "text/event-stream")
-        XCTAssertEqual(captured.headers["User-Agent"], "google-api-nodejs-client/9.15.1")
-        XCTAssertEqual(captured.headers["X-Goog-Api-Client"], "gl-node/22.17.0")
-        XCTAssertEqual(
-            captured.headers["Client-Metadata"],
-            "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI"
-        )
+        XCTAssertEqual(captured.headers["User-Agent"], GeminiCliCompatibility.buildUserAgent(model: "gemini-2.5-flash"))
+        XCTAssertNil(captured.headers["X-Goog-Api-Client"])
+        XCTAssertNil(captured.headers["Client-Metadata"])
         let requestID = try XCTUnwrap(captured.headers["x-activity-request-id"])
-        assertLowercaseUUIDv4(requestID)
+        assertGeminiCliActivityRequestID(requestID)
         let bodyData = try XCTUnwrap(captured.body)
         let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
-        XCTAssertEqual(root["user_prompt_id"] as? String, requestID)
+        XCTAssertNotEqual(root["user_prompt_id"] as? String, requestID)
 
         XCTAssertTrue(events.contains(.textDelta("answer")))
         XCTAssertTrue(events.contains(.reasoningDelta("plan")))
@@ -964,6 +1050,72 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(usage.totalTokens, 19)
         XCTAssertEqual(usage.cachedInputTokens, 2)
         XCTAssertEqual(usage.cacheCreationInputTokens, 4)
+    }
+
+    func testAlibabaCodingPlanGenerateIncludesRemoteMCPConnectorPayload() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("alibaba-key", for: .alibabaCodingPlan)
+        try store.saveSecret("mcp-token", key: AppConstants.alibabaMCPAuthorizationTokenKey)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"""
+            {
+              "content":[{"type":"text","text":"ok"}]
+            }
+            """#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = AnthropicCompatibleProviderClient()
+        let request = ProviderRequest(
+            model: "qwen3.5-plus",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [
+                ProviderTool(
+                    type: "mcp_toolset",
+                    payload: [
+                        "server_url": "https://mcp.firecrawl.dev/fc-key/v2/mcp",
+                        "server_name": "firecrawl",
+                        "allowed_tools": "search, extract"
+                    ]
+                )
+            ],
+            thinking: nil,
+            metadata: ["provider": "ALIBABA_CODING_PLAN"]
+        )
+
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(captured.headers["anthropic-beta"], "mcp-client-2025-11-20")
+
+        let bodyData = try XCTUnwrap(captured.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        let mcpServers = try XCTUnwrap(root["mcp_servers"] as? [[String: Any]])
+        XCTAssertEqual(mcpServers.count, 1)
+        XCTAssertEqual(mcpServers.first?["type"] as? String, "url")
+        XCTAssertEqual(mcpServers.first?["url"] as? String, "https://mcp.firecrawl.dev/fc-key/v2/mcp")
+        XCTAssertEqual(mcpServers.first?["name"] as? String, "firecrawl")
+        XCTAssertEqual(mcpServers.first?["authorization_token"] as? String, "mcp-token")
+
+        let tools = try XCTUnwrap(root["tools"] as? [[String: Any]])
+        XCTAssertEqual(tools.count, 1)
+        XCTAssertEqual(tools.first?["type"] as? String, "mcp_toolset")
+        XCTAssertEqual(tools.first?["mcp_server_name"] as? String, "firecrawl")
+        let defaultConfig = try XCTUnwrap(tools.first?["default_config"] as? [String: Any])
+        XCTAssertEqual(defaultConfig["enabled"] as? Bool, false)
+        let configs = try XCTUnwrap(tools.first?["configs"] as? [String: Any])
+        let searchConfig = try XCTUnwrap(configs["search"] as? [String: Any])
+        let extractConfig = try XCTUnwrap(configs["extract"] as? [String: Any])
+        XCTAssertEqual(searchConfig["enabled"] as? Bool, true)
+        XCTAssertEqual(extractConfig["enabled"] as? Bool, true)
     }
 
     func testAlibabaCodingPlanStreamParsesAnthropicStyleChunks() async throws {
@@ -1482,6 +1634,22 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertNotNil(
             value.range(of: pattern, options: .regularExpression),
             "Expected lowercase UUID v4 but got \(value)",
+            file: file,
+            line: line
+        )
+    }
+
+    private func assertGeminiCliActivityRequestID(
+        _ value: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let pattern = #"^[0-9a-z]+$"#
+        XCTAssertFalse(value.isEmpty, "Expected non-empty activity request id", file: file, line: line)
+        XCTAssertFalse(value.contains("-"), "Expected short Gemini CLI activity id but got \(value)", file: file, line: line)
+        XCTAssertNotNil(
+            value.range(of: pattern, options: .regularExpression),
+            "Expected base36 Gemini CLI activity id but got \(value)",
             file: file,
             line: line
         )
