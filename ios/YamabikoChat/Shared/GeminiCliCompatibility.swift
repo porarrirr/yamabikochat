@@ -104,8 +104,7 @@ enum GeminiCliCompatibilityStore {
     }
 
     static func loadRemote(using credentialStore: SecureCredentialStore) -> GeminiCliResolvedCompatibility? {
-        guard let rawValue = try? credentialStore.readSecret(key: remoteCompatibilityKey),
-              let raw = rawValue,
+        guard let raw = try? credentialStore.readSecret(key: remoteCompatibilityKey),
               let rawData = raw.data(using: .utf8),
               let remote = try? JSONDecoder().decode(GeminiCliRemoteCompatibility.self, from: rawData)
         else {

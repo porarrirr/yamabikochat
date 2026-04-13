@@ -172,6 +172,10 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var miniMaxBaseURL: String
     var openAICompatPresetsJSON: String
     var selectedOpenAICompatPreset: String?
+    var alibabaMCPEnabled: Bool
+    var alibabaMCPServerURL: String
+    var alibabaMCPServerName: String
+    var alibabaMCPAllowedToolsCSV: String
 
     var codexUserAgentPreset: String
     var codexReasoningEnabled: Bool
@@ -314,6 +318,10 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         miniMaxBaseURL = "https://api.minimax.io/v1/"
         openAICompatPresetsJSON = "[]"
         selectedOpenAICompatPreset = nil
+        alibabaMCPEnabled = false
+        alibabaMCPServerURL = ""
+        alibabaMCPServerName = AppConstants.alibabaMCPDefaultServerName
+        alibabaMCPAllowedToolsCSV = ""
 
         codexUserAgentPreset = "ANDROID"
         codexReasoningEnabled = true
@@ -391,6 +399,21 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         normalized.dualThinkingLevelB = normalizedLevel(normalized.dualThinkingLevelB)
         normalized.autoThinkingLevelA = normalizedLevel(normalized.autoThinkingLevelA)
         normalized.autoThinkingLevelB = normalizedLevel(normalized.autoThinkingLevelB)
+        normalized.alibabaMCPServerURL = normalized.alibabaMCPServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        normalized.alibabaMCPServerName = normalized.alibabaMCPServerName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .ifBlank(AppConstants.alibabaMCPDefaultServerName)
+        normalized.alibabaMCPAllowedToolsCSV = normalized.alibabaMCPAllowedToolsCSV
+            .split(whereSeparator: \.isNewline)
+            .flatMap { $0.split(separator: ",") }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .reduce(into: [String]()) { result, value in
+                if !result.contains(where: { $0.caseInsensitiveCompare(value) == .orderedSame }) {
+                    result.append(value)
+                }
+            }
+            .joined(separator: ", ")
 
         if let value = normalized.dualOpenRouterThinkingBudgetA {
             normalized.dualOpenRouterThinkingBudgetA = max(0, value)
@@ -716,12 +739,46 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         )
     }
 
+    func resolvedAlibabaMCPServerURL() -> String? {
+        Self.resolveRemoteMCPURL(alibabaMCPServerURL)
+    }
+
+    func resolvedAlibabaMCPServerName() -> String {
+        alibabaMCPServerName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .ifBlank(AppConstants.alibabaMCPDefaultServerName)
+    }
+
+    func alibabaMCPAllowedToolsList() -> [String] {
+        alibabaMCPAllowedToolsCSV
+            .split(whereSeparator: \.isNewline)
+            .flatMap { $0.split(separator: ",") }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
     private static func resolveBaseURL(_ value: String, fallback: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, URL(string: trimmed) != nil else {
             return fallback
         }
         return trimmed
+    }
+
+    private static func resolveRemoteMCPURL(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let components = URLComponents(string: trimmed),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "https",
+              let host = components.host?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !host.isEmpty,
+              components.user == nil,
+              components.password == nil
+        else {
+            return nil
+        }
+        return components.url?.absoluteString
     }
 
     private static func parseStringArray(_ raw: String) -> [String] {
@@ -790,5 +847,12 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             }
         }
         return result
+    }
+}
+
+private extension String {
+    func ifBlank(_ fallback: String) -> String {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : trimmed
     }
 }

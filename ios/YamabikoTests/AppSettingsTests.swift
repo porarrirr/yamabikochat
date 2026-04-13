@@ -137,6 +137,28 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(normalized.autoOpenRouterThinkingBudgetB, 0)
     }
 
+    func testNormalizedForPersistenceNormalizesAlibabaRemoteMCPSettings() {
+        var settings = AppSettings()
+        settings.alibabaMCPServerURL = " https://mcp.firecrawl.dev/fc-key/v2/mcp "
+        settings.alibabaMCPServerName = " "
+        settings.alibabaMCPAllowedToolsCSV = "search,\n extract , SEARCH "
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertEqual(normalized.resolvedAlibabaMCPServerURL(), "https://mcp.firecrawl.dev/fc-key/v2/mcp")
+        XCTAssertEqual(normalized.resolvedAlibabaMCPServerName(), AppConstants.alibabaMCPDefaultServerName)
+        XCTAssertEqual(normalized.alibabaMCPAllowedToolsList(), ["search", "extract"])
+    }
+
+    func testResolvedAlibabaMCPServerURLRejectsHostlessAndCredentialedURLs() {
+        var settings = AppSettings()
+        settings.alibabaMCPServerURL = "https://"
+        XCTAssertNil(settings.resolvedAlibabaMCPServerURL())
+
+        settings.alibabaMCPServerURL = "https://user:pass@example.com/mcp"
+        XCTAssertNil(settings.resolvedAlibabaMCPServerURL())
+    }
+
     func testAutoContextOverridesResolveFromAutoFields() {
         var settings = AppSettings()
         settings.autoGoogleSearchEnabledA = true

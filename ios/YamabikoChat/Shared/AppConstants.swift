@@ -4,6 +4,9 @@ enum AppConstants {
     static let appGroupIdentifier = "group.com.porarri.yamabikochat"
     static let sharePayloadDefaultsKey = "share_payload"
     static let sharePayloadDidChangeNotification = Notification.Name("YamabikoSharePayloadDidChange")
+    static let alibabaMCPAuthorizationTokenKey = "alibaba_mcp_authorization_token"
+    static let alibabaMCPDefaultServerName = "firecrawl"
+    static let firecrawlRemoteMCPURLTemplate = "https://mcp.firecrawl.dev/fc-YOUR_API_KEY/v2/mcp"
 
     static let maxAttachmentSizeBytes: Int = 10 * 1024 * 1024
 

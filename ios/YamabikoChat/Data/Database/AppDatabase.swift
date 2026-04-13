@@ -203,6 +203,10 @@ enum AppDatabase {
                 t.column("miniMaxBaseURL", .text).notNull()
                 t.column("openAICompatPresetsJSON", .text).notNull().defaults(to: "[]")
                 t.column("selectedOpenAICompatPreset", .text)
+                t.column("alibabaMCPEnabled", .boolean).notNull().defaults(to: false)
+                t.column("alibabaMCPServerURL", .text).notNull().defaults(to: "")
+                t.column("alibabaMCPServerName", .text).notNull().defaults(to: "firecrawl")
+                t.column("alibabaMCPAllowedToolsCSV", .text).notNull().defaults(to: "")
 
                 t.column("codexUserAgentPreset", .text).notNull().defaults(to: "ANDROID")
                 t.column("codexReasoningEnabled", .boolean).notNull().defaults(to: true)
@@ -516,6 +520,25 @@ enum AppDatabase {
             if !columns.contains("cachecreationinputtokens") {
                 try db.alter(table: "token_usage_records") { t in
                     t.add(column: "cacheCreationInputTokens", .integer)
+                }
+            }
+        }
+
+        migrator.registerMigration("v8_alibaba_remote_mcp") { db in
+            let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(settings)")
+            let columns = Set(rows.compactMap { ($0["name"] as String?)?.lowercased() })
+            try db.alter(table: "settings") { t in
+                if !columns.contains("alibabamcpenabled") {
+                    t.add(column: "alibabaMCPEnabled", .boolean).notNull().defaults(to: false)
+                }
+                if !columns.contains("alibabamcpserverurl") {
+                    t.add(column: "alibabaMCPServerURL", .text).notNull().defaults(to: "")
+                }
+                if !columns.contains("alibabamcpservername") {
+                    t.add(column: "alibabaMCPServerName", .text).notNull().defaults(to: "firecrawl")
+                }
+                if !columns.contains("alibabamcpallowedtoolscsv") {
+                    t.add(column: "alibabaMCPAllowedToolsCSV", .text).notNull().defaults(to: "")
                 }
             }
         }
