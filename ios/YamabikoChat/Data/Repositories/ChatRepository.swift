@@ -1064,6 +1064,14 @@ final class ChatRepository {
         geminiAuthRepository.importedOAuthClientConfig()
     }
 
+    func currentGeminiCliCompatibility() -> GeminiCliResolvedCompatibility {
+        geminiAuthRepository.currentGeminiCliCompatibility()
+    }
+
+    func syncGeminiCliCompatibilityFromUpstream() async -> Result<GeminiCliRemoteCompatibility, Error> {
+        await geminiAuthRepository.syncGeminiCliCompatibilityFromUpstream()
+    }
+
     func importGeminiOAuthClientConfig(fileURL: URL) -> Result<GeminiOAuthClientConfig, Error> {
         do {
             return .success(try geminiAuthRepository.importOAuthClientConfig(fileURL: fileURL))
@@ -1633,6 +1641,27 @@ final class ChatRepository {
                 tools.append(ProviderTool(type: "code_execution", payload: [:]))
             }
             return tools
+        case "ALIBABA_CODING_PLAN":
+            guard settings.alibabaMCPEnabled else {
+                return []
+            }
+            guard let serverURL = settings.resolvedAlibabaMCPServerURL() else {
+                DiagnosticsLogger.log(
+                    "Alibaba MCP enabled but server URL is invalid; skipping MCP toolset",
+                    level: .warning,
+                    category: .settings
+                )
+                return []
+            }
+            var payload: [String: String] = [
+                "server_url": serverURL,
+                "server_name": settings.resolvedAlibabaMCPServerName()
+            ]
+            let allowedTools = settings.alibabaMCPAllowedToolsList()
+            if !allowedTools.isEmpty {
+                payload["allowed_tools"] = allowedTools.joined(separator: ",")
+            }
+            return [ProviderTool(type: "mcp_toolset", payload: payload)]
         default:
             return []
         }
