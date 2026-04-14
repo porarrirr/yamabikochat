@@ -100,10 +100,10 @@ final class QwenAuthRepository {
         do {
             let payload = QwenAuthJSON(
                 accessToken: accessToken.nilIfBlank,
-                refreshToken: refreshToken.nilIfBlank,
-                tokenType: tokenType.nilIfBlank ?? "Bearer",
-                scope: scope.nilIfBlank,
-                resourceURL: resourceURL.nilIfBlank,
+                refreshToken: refreshToken?.nilIfBlank,
+                tokenType: tokenType?.nilIfBlank ?? "Bearer",
+                scope: scope?.nilIfBlank,
+                resourceURL: resourceURL?.nilIfBlank,
                 expiryDate: expiryDate,
                 lastRefresh: Self.nowISO8601()
             )
@@ -223,7 +223,6 @@ final class QwenAuthRepository {
 
     func hasAuthToken() -> Bool {
         if let token = try? credentialStore.credential(for: .qwenCode),
-           let token,
            !token.isEmpty {
             return true
         }
@@ -365,8 +364,7 @@ final class QwenAuthRepository {
 
     private func readAuthJSON() -> QwenAuthJSON? {
         guard let raw = try? credentialStore.readSecret(key: Constants.storageKey),
-              let value = raw,
-              let data = value.data(using: .utf8)
+              let data = raw.data(using: .utf8)
         else {
             return nil
         }
@@ -381,8 +379,7 @@ final class QwenAuthRepository {
     private static func readState(credentialStore: SecureCredentialStore) -> QwenAuthState {
         let storedJSON: QwenAuthJSON? = {
             guard let raw = try? credentialStore.readSecret(key: Constants.storageKey),
-                  let value = raw,
-                  let data = value.data(using: .utf8)
+                  let data = raw.data(using: .utf8)
             else {
                 return nil
             }
