@@ -50,6 +50,33 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testGeminiQuotaDisplayRowsUseRemainingFractionWhenAmountMissing() {
+        let viewModel = SettingsViewModel()
+        viewModel.geminiUserQuota = GeminiUserQuota(
+            buckets: [
+                GeminiQuotaBucket(
+                    modelId: "gemini-3-pro-preview",
+                    tokenType: "REQUESTS",
+                    remainingAmount: nil,
+                    remainingFraction: 0.75,
+                    resetTime: "2026-02-10T00:00:00Z"
+                )
+            ]
+        )
+
+        XCTAssertEqual(
+            viewModel.geminiQuotaDisplayRows,
+            [
+                GeminiQuotaDisplayRow(
+                    modelId: "gemini-3-pro-preview",
+                    detail: "25% used",
+                    resetTime: "2026-02-10T00:00:00Z"
+                )
+            ]
+        )
+    }
+
+    @MainActor
     func testBindLoadsCurrentProviderApiKeyFromCredentialStore() throws {
         let fixture = try makeFixture()
         var settings = try fixture.repository.loadSettings()
@@ -108,6 +135,23 @@ final class SettingsViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.apiKeyDraft, "alibaba-key")
         XCTAssertEqual(viewModel.settings.defaultModel, AlibabaCodingPlanModelCatalog.defaultModel)
+    }
+
+    @MainActor
+    func testSetProviderReloadsQwenCredentialAndDefaultModel() throws {
+        let fixture = try makeFixture()
+        var settings = try fixture.repository.loadSettings()
+        settings.apiProvider = "OPENAI"
+        try fixture.repository.saveSettings(settings)
+        try fixture.credentials.setCredential("openai-key", for: .openAI)
+        try fixture.credentials.setCredential("qwen-token", for: .qwenCode)
+
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.setProvider("QWEN_CODE")
+
+        XCTAssertEqual(viewModel.apiKeyDraft, "qwen-token")
+        XCTAssertEqual(viewModel.settings.defaultModel, QwenModelCatalog.defaultModel)
     }
 
     @MainActor

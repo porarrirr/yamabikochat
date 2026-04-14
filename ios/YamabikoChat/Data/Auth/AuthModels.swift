@@ -157,4 +157,122 @@ struct GeminiQuotaBucket: Equatable, Sendable, Identifiable {
 
 struct GeminiUserQuota: Equatable, Sendable {
     var buckets: [GeminiQuotaBucket]
+
+    func displayRows(limit: Int? = nil) -> [GeminiQuotaDisplayRow] {
+        var grouped: [String: GeminiQuotaDisplayRow] = [:]
+        var order: [String] = []
+
+        for bucket in buckets {
+            guard let modelID = bucket.modelId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !modelID.isEmpty
+            else {
+                continue
+            }
+
+            let candidate = GeminiQuotaDisplayRow(
+                modelId: modelID,
+                detail: Self.detailText(for: bucket),
+                resetTime: bucket.resetTime,
+                remainingFraction: bucket.remainingFraction
+            )
+
+            if grouped[modelID] == nil {
+                grouped[modelID] = candidate
+                order.append(modelID)
+                continue
+            }
+
+            if candidate.isPreferred(over: grouped[modelID]!) {
+                grouped[modelID] = candidate
+            }
+        }
+
+        let rows = order.compactMap { grouped[$0] }
+        guard let limit else { return rows }
+        return Array(rows.prefix(limit))
+    }
+
+    private static func detailText(for bucket: GeminiQuotaBucket) -> String {
+        let remainingAmount = normalizedRemainingAmount(bucket.remainingAmount)
+        if let remainingFraction = bucket.remainingFraction {
+            let usedPercentage = max(0, min(100, (1 - remainingFraction) * 100))
+            let usedText = "\(Int(usedPercentage.rounded()))% used"
+            if let remainingAmount {
+                return "\(usedText) (\(remainingAmount) remaining)"
+            }
+            return usedText
+        }
+        return remainingAmount ?? "-"
+    }
+
+    private static func normalizedRemainingAmount(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty
+        else {
+            return nil
+        }
+        return value
+    }
+}
+
+struct GeminiQuotaDisplayRow: Equatable, Sendable, Identifiable {
+    var id: String { modelId }
+    var modelId: String
+    var detail: String
+    var resetTime: String?
+
+    fileprivate var remainingFraction: Double?
+
+    init(
+        modelId: String,
+        detail: String,
+        resetTime: String?,
+        remainingFraction: Double? = nil
+    ) {
+        self.modelId = modelId
+        self.detail = detail
+        self.resetTime = resetTime
+        self.remainingFraction = remainingFraction
+    }
+
+    fileprivate func isPreferred(over other: GeminiQuotaDisplayRow) -> Bool {
+        switch (remainingFraction, other.remainingFraction) {
+        case let (lhs?, rhs?):
+            return lhs < rhs
+        case (.some, .none):
+            return true
+        case (.none, .some):
+            return false
+        case (.none, .none):
+            return detail != "-" && other.detail == "-"
+        }
+    }
+}
+
+struct QwenAuthJSON: Codable, Equatable, Sendable {
+    var accessToken: String?
+    var refreshToken: String?
+    var tokenType: String?
+    var scope: String?
+    var resourceURL: String?
+    var expiryDate: Int64?
+    var lastRefresh: String?
+
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+        case refreshToken = "refresh_token"
+        case tokenType = "token_type"
+        case scope
+        case resourceURL = "resource_url"
+        case expiryDate = "expiry_date"
+        case lastRefresh = "last_refresh"
+    }
+}
+
+struct QwenAuthState: Equatable, Sendable {
+    var isLoggedIn: Bool = false
+    var resourceURL: String? = nil
+    var baseURL: String? = nil
+    var expiresAtEpochMs: Int64? = nil
+    var lastRefreshISO8601: String? = nil
 }

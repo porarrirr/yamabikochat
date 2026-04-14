@@ -661,6 +661,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         let preferredOrder = [
             "GEMINI",
             "GEMINI_AUTH",
+            "QWEN_CODE",
             "OPENROUTER",
             "ALIBABA_CODING_PLAN",
             "ZAI",

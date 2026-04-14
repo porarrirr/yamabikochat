@@ -266,6 +266,41 @@ final class AuthRepositoryTests: XCTestCase {
         }
     }
 
+    func testGeminiQuotaParseSupportsFractionOnlyBuckets() async {
+        let store = InMemoryCredentialStore()
+        try? store.setGeminiAccessToken("token")
+        try? store.saveSecret("my-project", key: "gemini_project_id")
+
+        let payload = """
+        {
+          "buckets": [
+            {
+              "remainingFraction": 0.75,
+              "resetTime": "2026-02-10T00:00:00Z",
+              "tokenType": "REQUESTS",
+              "modelId": "gemini-3-pro-preview"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let repo = GeminiAuthRepository(
+            credentialStore: store,
+            httpClient: StubHTTPClient(data: payload, statusCode: 200)
+        )
+
+        let result = await repo.retrieveUserQuota()
+        switch result {
+        case let .success(quota):
+            XCTAssertEqual(quota.buckets.count, 1)
+            XCTAssertEqual(quota.buckets.first?.modelId, "gemini-3-pro-preview")
+            XCTAssertNil(quota.buckets.first?.remainingAmount)
+            XCTAssertEqual(quota.buckets.first?.remainingFraction, 0.75)
+        case let .failure(error):
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testGeminiQuotaUsesOpencodeCompatibleHeaders() async {
         let store = InMemoryCredentialStore()
         try? store.setGeminiAccessToken("token")
@@ -454,6 +489,70 @@ final class AuthRepositoryTests: XCTestCase {
         try repo.clearImportedOAuthClientConfig()
         XCTAssertFalse(repo.hasImportedOAuthClientConfig())
         XCTAssertFalse(repo.isOAuthClientConfigured())
+    }
+
+    func testQwenLoginPersistsResourceURLAndNormalizedBaseURL() async {
+        let store = InMemoryCredentialStore()
+        let repo = QwenAuthRepository(credentialStore: store)
+
+        let result = await repo.login(
+            accessToken: "qwen-access-token",
+            refreshToken: "qwen-refresh-token",
+            expiryDate: 1_730_000_000_000,
+            resourceURL: "portal.qwen.ai/inference"
+        )
+
+        switch result {
+        case let .success(state):
+            XCTAssertTrue(state.isLoggedIn)
+            XCTAssertEqual(state.resourceURL, "portal.qwen.ai/inference")
+            XCTAssertEqual(state.baseURL, "https://portal.qwen.ai/inference/v1")
+            XCTAssertEqual((try? store.credential(for: .qwenCode)) ?? nil, "qwen-access-token")
+            XCTAssertEqual((try? store.qwenResourceURL()) ?? nil, "portal.qwen.ai/inference")
+        case let .failure(error):
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testQwenRefreshUpdatesStoredCredentialAndResourceURL() async {
+        let store = InMemoryCredentialStore()
+        let seedRepo = QwenAuthRepository(credentialStore: store)
+        _ = await seedRepo.login(
+            accessToken: "expired-token",
+            refreshToken: "refresh-token",
+            expiryDate: 1,
+            resourceURL: "old.qwen.ai/runtime"
+        )
+
+        let payload = """
+        {
+          "access_token": "fresh-token",
+          "refresh_token": "fresh-refresh-token",
+          "expires_in": 3600,
+          "token_type": "Bearer",
+          "resource_url": "new.qwen.ai/runtime"
+        }
+        """.data(using: .utf8)!
+        let httpClient = CapturingAuthHTTPClient(responseData: payload, statusCode: 200)
+        let repo = QwenAuthRepository(
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let result = await repo.refreshIfNeeded(force: true)
+
+        switch result {
+        case let .success(state):
+            XCTAssertTrue(state.isLoggedIn)
+            XCTAssertEqual(state.baseURL, "https://new.qwen.ai/runtime/v1")
+            XCTAssertEqual((try? store.credential(for: .qwenCode)) ?? nil, "fresh-token")
+            XCTAssertEqual((try? store.qwenResourceURL()) ?? nil, "new.qwen.ai/runtime")
+            let body = String(data: httpClient.lastRequest?.body ?? Data(), encoding: .utf8) ?? ""
+            XCTAssertTrue(body.contains("grant_type=refresh_token"))
+            XCTAssertTrue(body.contains("refresh_token=refresh-token"))
+        case let .failure(error):
+            XCTFail("Unexpected error: \(error)")
+        }
     }
 
     func testGeminiOAuthManualSaveStoresNormalizedValues() throws {

@@ -48,7 +48,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             settings: settings,
             credentialStore: credentialStore
         )
-        let endpoint = try endpointURL(for: resolvedProvider, settings: settings)
+        let endpoint = try endpointURL(for: resolvedProvider, settings: settings, credentialStore: credentialStore)
         let payload = try buildPayload(for: request, stream: false, provider: resolvedProvider)
 
         let httpRequest = HTTPRequest(
@@ -80,7 +80,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                         settings: settings,
                         credentialStore: credentialStore
                     )
-                    let endpoint = try endpointURL(for: resolvedProvider, settings: settings)
+                    let endpoint = try endpointURL(for: resolvedProvider, settings: settings, credentialStore: credentialStore)
                     let payload = try buildPayload(for: request, stream: true, provider: resolvedProvider)
 
                     let httpRequest = HTTPRequest(
@@ -213,6 +213,10 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                     return .reasoningDelta(reasoning)
                 }
 
+                if let reasoningContent = delta["reasoning_content"] as? String, !reasoningContent.isEmpty {
+                    return .reasoningDelta(reasoningContent)
+                }
+
                 if let toolCalls = delta["tool_calls"] as? [[String: Any]],
                    let data = try? JSONSerialization.data(withJSONObject: toolCalls),
                    let raw = String(data: data, encoding: .utf8),
@@ -252,6 +256,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         switch provider {
         case .openRouter:
             return .openRouter
+        case .qwenCode:
+            return .qwenCode
         case .openAI:
             return .openAI
         case .alibabaCodingPlan:
@@ -269,11 +275,21 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         }
     }
 
-    private func endpointURL(for provider: LLMProvider, settings: AppSettings) throws -> URL {
+    private func endpointURL(
+        for provider: LLMProvider,
+        settings: AppSettings,
+        credentialStore: SecureCredentialStore
+    ) throws -> URL {
         switch provider {
         case .openRouter:
             guard let url = URL(string: "https://openrouter.ai/api/v1/chat/completions") else {
                 throw ProviderClientError.invalidBaseURL("https://openrouter.ai/api/v1/chat/completions")
+            }
+            return url
+        case .qwenCode:
+            let baseURL = QwenAuthRepository.normalizedBaseURL(resourceURL: try credentialStore.qwenResourceURL())
+            guard let url = URL(string: baseURL)?.appendingPathComponent("chat/completions") else {
+                throw ProviderClientError.invalidBaseURL(baseURL)
             }
             return url
         case .alibabaCodingPlan:
@@ -342,11 +358,17 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
             let choices = root["choices"] as? [[String: Any]],
             let first = choices.first,
-            let message = first["message"] as? [String: Any],
-            let content = message["content"] as? String
+            let message = first["message"] as? [String: Any]
         {
+            let content = (message["content"] as? String) ?? ""
+            let reasoningSummary = (message["reasoning_content"] as? String)?.trimmedNonEmpty
             let usage = parseUsage(root["usage"] as? [String: Any])
-            return ProviderResponse(text: content, reasoningSummary: nil, raw: String(data: data, encoding: .utf8), usage: usage)
+            return ProviderResponse(
+                text: content,
+                reasoningSummary: reasoningSummary,
+                raw: String(data: data, encoding: .utf8),
+                usage: usage
+            )
         }
 
         throw ProviderClientError.parseFailure("OpenAI-style response does not contain choices[0].message.content")
@@ -414,5 +436,12 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             return Int(value)
         }
         return nil
+    }
+}
+
+private extension String {
+    var trimmedNonEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

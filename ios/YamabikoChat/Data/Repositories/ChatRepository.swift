@@ -24,9 +24,10 @@ final class ChatRepository {
     private let modelService: OpenRouterModelService
     private let codexAuthRepository: CodexAuthRepository
     private let geminiAuthRepository: GeminiAuthRepository
+    private let qwenAuthRepository: QwenAuthRepository
     private let pricingRepository: any LiteLlmPricingEstimating
 
-    init(
+    convenience init(
         conversations: ConversationRepository,
         settings: SettingsRepository,
         providers: ProviderGateway,
@@ -36,6 +37,30 @@ final class ChatRepository {
         geminiAuthRepository: GeminiAuthRepository,
         pricingRepository: any LiteLlmPricingEstimating = LiteLlmPricingRepository()
     ) {
+        self.init(
+            conversations: conversations,
+            settings: settings,
+            providers: providers,
+            credentialStore: credentialStore,
+            modelService: modelService,
+            codexAuthRepository: codexAuthRepository,
+            geminiAuthRepository: geminiAuthRepository,
+            qwenAuthRepository: QwenAuthRepository(credentialStore: credentialStore),
+            pricingRepository: pricingRepository
+        )
+    }
+
+    init(
+        conversations: ConversationRepository,
+        settings: SettingsRepository,
+        providers: ProviderGateway,
+        credentialStore: SecureCredentialStore,
+        modelService: OpenRouterModelService,
+        codexAuthRepository: CodexAuthRepository,
+        geminiAuthRepository: GeminiAuthRepository,
+        qwenAuthRepository: QwenAuthRepository,
+        pricingRepository: any LiteLlmPricingEstimating = LiteLlmPricingRepository()
+    ) {
         self.conversations = conversations
         self.settings = settings
         self.providers = providers
@@ -43,6 +68,7 @@ final class ChatRepository {
         self.modelService = modelService
         self.codexAuthRepository = codexAuthRepository
         self.geminiAuthRepository = geminiAuthRepository
+        self.qwenAuthRepository = qwenAuthRepository
         self.pricingRepository = pricingRepository
     }
 
@@ -1000,6 +1026,10 @@ final class ChatRepository {
         geminiAuthRepository.state
     }
 
+    func qwenAuthStatePublisher() -> AnyPublisher<QwenAuthState, Never> {
+        qwenAuthRepository.state
+    }
+
     func loginCodexAuth(
         apiKey: String?,
         accessToken: String?,
@@ -1116,6 +1146,18 @@ final class ChatRepository {
 
     func saveGeminiAuthProjectId(_ projectId: String?) -> Bool {
         geminiAuthRepository.saveProjectId(projectId)
+    }
+
+    func loginQwenCodeWithBrowser() async -> Result<QwenAuthState, Error> {
+        await qwenAuthRepository.loginWithBrowser()
+    }
+
+    func logoutQwenCode() async -> Result<QwenAuthState, Error> {
+        await qwenAuthRepository.logout()
+    }
+
+    func refreshQwenCode(force: Bool = false) async -> Result<QwenAuthState, Error> {
+        await qwenAuthRepository.refreshIfNeeded(force: force)
     }
 
     func saveOpenAiCompatApiKey(name: String, apiKey: String?) -> Bool {

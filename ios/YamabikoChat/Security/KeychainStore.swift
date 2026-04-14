@@ -4,6 +4,7 @@ import Security
 enum CredentialProvider: String, CaseIterable {
     case gemini = "GEMINI"
     case geminiAuth = "GEMINI_AUTH"
+    case qwenCode = "QWEN_CODE"
     case openRouter = "OPENROUTER"
     case alibabaCodingPlan = "ALIBABA_CODING_PLAN"
     case openAI = "OPENAI"
@@ -122,6 +123,14 @@ extension SecureCredentialStore {
 
     func setGeminiAccessToken(_ value: String?) throws {
         try saveSecret(value, key: "gemini_access_token")
+    }
+
+    func qwenResourceURL() throws -> String? {
+        try readSecret(key: "qwen_resource_url")
+    }
+
+    func setQwenResourceURL(_ value: String?) throws {
+        try saveSecret(value, key: "qwen_resource_url")
     }
 
     func setOpenAICompatAPIKey(name: String, value: String?) throws {

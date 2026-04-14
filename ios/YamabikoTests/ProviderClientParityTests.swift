@@ -983,6 +983,41 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(reasoning["exclude"] as? Bool, true)
     }
 
+    func testQwenGenerateUsesNormalizedResourceURLAndParsesReasoningContent() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("qwen-access-token", for: .qwenCode)
+        try store.setQwenResourceURL("gateway.qwen.ai/runtime")
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok","reasoning_content":"plan first"}}]}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenAICompatibleProviderClient()
+        let request = ProviderRequest(
+            model: "coder-model",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "QWEN_CODE"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(response.text, "ok")
+        XCTAssertEqual(response.reasoningSummary, "plan first")
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(captured.url.absoluteString, "https://gateway.qwen.ai/runtime/v1/chat/completions")
+        XCTAssertEqual(captured.headers["Authorization"], "Bearer qwen-access-token")
+    }
+
     func testAlibabaCodingPlanGenerateUsesDedicatedBaseURLAndCredential() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("alibaba-key", for: .alibabaCodingPlan)

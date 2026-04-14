@@ -13,6 +13,7 @@ final class AppContainer: ObservableObject {
     let openRouterModelService: OpenRouterModelService
     let codexAuthRepository: CodexAuthRepository
     let geminiAuthRepository: GeminiAuthRepository
+    let qwenAuthRepository: QwenAuthRepository
     let providerGateway: ProviderGateway
     let chatRepository: ChatRepository
     let sharePayloadStore: SharePayloadStore
@@ -32,10 +33,12 @@ final class AppContainer: ObservableObject {
         openRouterModelService = OpenRouterModelService(credentialStore: credentialStore)
         codexAuthRepository = CodexAuthRepository(credentialStore: credentialStore)
         geminiAuthRepository = GeminiAuthRepository(credentialStore: credentialStore)
+        qwenAuthRepository = QwenAuthRepository(credentialStore: credentialStore)
         providerGateway = ProviderGateway(
             settingsRepository: settingsRepository,
             credentialStore: credentialStore,
-            geminiAuthRepository: geminiAuthRepository
+            geminiAuthRepository: geminiAuthRepository,
+            qwenAuthRepository: qwenAuthRepository
         )
         chatRepository = ChatRepository(
             conversations: conversationRepository,
@@ -44,7 +47,8 @@ final class AppContainer: ObservableObject {
             credentialStore: credentialStore,
             modelService: openRouterModelService,
             codexAuthRepository: codexAuthRepository,
-            geminiAuthRepository: geminiAuthRepository
+            geminiAuthRepository: geminiAuthRepository,
+            qwenAuthRepository: qwenAuthRepository
         )
         sharePayloadStore = SharePayloadStore()
     }

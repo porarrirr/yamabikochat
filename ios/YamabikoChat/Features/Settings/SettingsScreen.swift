@@ -151,7 +151,7 @@ struct SettingsScreen: View {
                     .foregroundStyle(.secondary)
             }
 
-            if currentProviderKey != "CODEX_AUTH" && currentProviderKey != "GEMINI_AUTH" {
+            if currentProviderKey != "CODEX_AUTH" && currentProviderKey != "GEMINI_AUTH" && currentProviderKey != "QWEN_CODE" {
                 Section("APIキー") {
                     SecureField(currentProviderAPIKeyLabel, text: $viewModel.apiKeyDraft)
                     Button("Save API key") {
@@ -183,6 +183,9 @@ struct SettingsScreen: View {
             }
             if currentProviderKey == "GEMINI_AUTH" {
                 geminiAuthSection
+            }
+            if currentProviderKey == "QWEN_CODE" {
+                qwenAuthSection
             }
         }
     }
@@ -1004,11 +1007,64 @@ struct SettingsScreen: View {
             .buttonStyle(.bordered)
             .disabled(viewModel.isGeminiAuthActionRunning)
 
-            if let quota = viewModel.geminiUserQuota {
-                ForEach(quota.buckets.prefix(5)) { bucket in
-                    Text("\(bucket.modelId ?? "-") : \(bucket.remainingAmount ?? "-")")
+            if viewModel.geminiUserQuota != nil {
+                ForEach(viewModel.geminiQuotaDisplayRows) { row in
+                    Text("\(row.modelId) : \(row.detail)")
                         .font(.caption2)
                 }
+            }
+        }
+    }
+
+    private var qwenAuthSection: some View {
+        Section("Qwen Code OAuth") {
+            Text(qwenSummary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text("qwen.ai の Device Flow を使ってブラウザ認証し、Qwen Code CLI 互換の OAuth トークンで `/chat/completions` を呼び出します。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Button("Sign in") {
+                    Task { await viewModel.loginQwenCode() }
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button("Refresh") {
+                    Task { await viewModel.refreshQwenCode(force: true) }
+                }
+                .buttonStyle(.bordered)
+
+                Button("Sign out") {
+                    Task { await viewModel.logoutQwenCode() }
+                }
+                .buttonStyle(.bordered)
+            }
+            .disabled(viewModel.isQwenAuthActionRunning)
+
+            if viewModel.isQwenAuthActionRunning {
+                ProgressView("Qwen Code認証処理中...")
+                    .font(.caption2)
+            }
+
+            if let resourceURL = viewModel.qwenAuthState.resourceURL, !resourceURL.isEmpty {
+                Text("resource_url: \(resourceURL)")
+                    .font(.caption2)
+                    .textSelection(.enabled)
+            }
+            if let baseURL = viewModel.qwenAuthState.baseURL, !baseURL.isEmpty {
+                Text("Base URL: \(baseURL)")
+                    .font(.caption2)
+                    .textSelection(.enabled)
+            }
+            if let expiresAtEpochMs = viewModel.qwenAuthState.expiresAtEpochMs {
+                Text(
+                    "Expires: \(Date(timeIntervalSince1970: TimeInterval(expiresAtEpochMs) / 1000).formatted(date: .abbreviated, time: .shortened))"
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
             }
         }
     }
@@ -1385,6 +1441,10 @@ struct SettingsScreen: View {
         "loggedIn=\(viewModel.geminiAuthState.isLoggedIn ? "yes" : "no"), project=\(viewModel.geminiAuthState.projectId ?? "-")"
     }
 
+    private var qwenSummary: String {
+        "loggedIn=\(viewModel.qwenAuthState.isLoggedIn ? "yes" : "no"), baseURL=\(viewModel.qwenAuthState.baseURL ?? "-")"
+    }
+
     private var systemPromptPresetSection: some View {
         Section("System Prompt Preset") {
             Picker("選択中のプリセット", selection: Binding(
@@ -1474,6 +1534,20 @@ struct SettingsScreen: View {
                     set: { viewModel.setDefaultModel($0) }
                 )) {
                     ForEach(alibabaCodingPlanModelOptions, id: \.self) { model in
+                        Text(model).tag(model)
+                    }
+                }
+
+                TextField("Model", text: Binding(
+                    get: { viewModel.settings.defaultModel },
+                    set: { viewModel.setDefaultModel($0) }
+                ))
+            } else if isQwenProvider {
+                Picker("Qwen Model", selection: Binding(
+                    get: { viewModel.settings.defaultModel },
+                    set: { viewModel.setDefaultModel($0) }
+                )) {
+                    ForEach(qwenModelOptions, id: \.self) { model in
                         Text(model).tag(model)
                     }
                 }
@@ -1684,6 +1758,10 @@ struct SettingsScreen: View {
         currentProviderKey == "GEMINI" || currentProviderKey == "GEMINI_AUTH"
     }
 
+    private var isQwenProvider: Bool {
+        currentProviderKey == "QWEN_CODE"
+    }
+
     private var isCodexProvider: Bool {
         currentProviderKey == "CODEX_AUTH"
     }
@@ -1706,6 +1784,18 @@ struct SettingsScreen: View {
 
     private var alibabaCodingPlanModelOptions: [String] {
         var list = [viewModel.settings.defaultModel] + AlibabaCodingPlanModelCatalog.supportedModels
+        var seen: Set<String> = []
+        list = list.filter {
+            let normalized = $0.lowercased()
+            guard !normalized.isEmpty, !seen.contains(normalized) else { return false }
+            seen.insert(normalized)
+            return true
+        }
+        return list
+    }
+
+    private var qwenModelOptions: [String] {
+        var list = [viewModel.settings.defaultModel] + QwenModelCatalog.supportedModels
         var seen: Set<String> = []
         list = list.filter {
             let normalized = $0.lowercased()

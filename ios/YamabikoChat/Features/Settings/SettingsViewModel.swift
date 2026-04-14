@@ -21,10 +21,12 @@ final class SettingsViewModel: ObservableObject {
 
     @Published var codexAuthState: CodexAuthState = .init()
     @Published var geminiAuthState: GeminiAuthState = .init()
+    @Published var qwenAuthState: QwenAuthState = .init()
     @Published var codexUsageStatus: CodexUsageStatus?
     @Published var geminiUserQuota: GeminiUserQuota?
     @Published var isCodexAuthActionRunning: Bool = false
     @Published var isGeminiAuthActionRunning: Bool = false
+    @Published var isQwenAuthActionRunning: Bool = false
     @Published var hasImportedGeminiOAuthClientConfig: Bool = false
 
     @Published var codexApiKeyInput: String = ""
@@ -59,6 +61,10 @@ final class SettingsViewModel: ObservableObject {
             return repository.isGeminiOAuthClientConfigured()
         }
         return GeminiAuthRepository.isDefaultOAuthClientConfigured()
+    }
+
+    var geminiQuotaDisplayRows: [GeminiQuotaDisplayRow] {
+        geminiUserQuota?.displayRows(limit: 5) ?? []
     }
 
     func bind(repository: ChatRepository, credentialStore: SecureCredentialStore) {
@@ -96,6 +102,13 @@ final class SettingsViewModel: ObservableObject {
                 self?.geminiEmailInput = $0.email ?? ""
                 self?.geminiTierInput = $0.userTier ?? ""
                 self?.geminiTierNameInput = $0.userTierName ?? ""
+            }
+            .store(in: &cancellables)
+
+        repository.qwenAuthStatePublisher()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.qwenAuthState = $0
             }
             .store(in: &cancellables)
 
@@ -154,6 +167,7 @@ final class SettingsViewModel: ObservableObject {
             await refreshOpenRouterModels(force: false)
             await refreshCodexAuth(force: false)
             await refreshGeminiAuth(force: false)
+            await refreshQwenCode(force: false)
             refreshGeminiOAuthClientConfigStatus()
             refreshGeminiCliCompatibilityStatus()
             refreshDiagnosticsLog()
@@ -737,6 +751,8 @@ final class SettingsViewModel: ObservableObject {
             return "gemini-2.5-flash"
         case "ALIBABA_CODING_PLAN":
             return AlibabaCodingPlanModelCatalog.defaultModel
+        case "QWEN_CODE":
+            return QwenModelCatalog.defaultModel
         case "MINIMAX":
             return "MiniMax-M2.1"
         case "CODEX_AUTH":
@@ -829,6 +845,69 @@ final class SettingsViewModel: ObservableObject {
             return provider.uppercased() == "GEMINI_AUTH"
         }
         return false
+    }
+
+    func loginQwenCode() async {
+        guard let repository = requireRepository(action: "qwen_login") else { return }
+        isQwenAuthActionRunning = true
+        statusMessage = L10n.text("Qwen Codeログインを開始しました")
+        errorMessage = nil
+        DiagnosticsLogger.log("Qwen auth login tapped", category: .auth)
+        refreshDiagnosticsLog()
+        defer {
+            isQwenAuthActionRunning = false
+            refreshDiagnosticsLog()
+        }
+        let result = await repository.loginQwenCodeWithBrowser()
+        switch result {
+        case let .success(state):
+            qwenAuthState = state
+            statusMessage = L10n.text("Qwen Codeにログインしました")
+            DiagnosticsLogger.log("Qwen auth login succeeded", category: .auth)
+        case let .failure(error):
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log("Qwen auth login failed", category: .auth, error: error)
+        }
+    }
+
+    func logoutQwenCode() async {
+        guard let repository = requireRepository(action: "qwen_logout") else { return }
+        isQwenAuthActionRunning = true
+        errorMessage = nil
+        defer {
+            isQwenAuthActionRunning = false
+            refreshDiagnosticsLog()
+        }
+        let result = await repository.logoutQwenCode()
+        switch result {
+        case let .success(state):
+            qwenAuthState = state
+            statusMessage = L10n.text("Qwen Codeからログアウトしました")
+            DiagnosticsLogger.log("Qwen auth logout succeeded", category: .auth)
+        case let .failure(error):
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log("Qwen auth logout failed", category: .auth, error: error)
+        }
+    }
+
+    func refreshQwenCode(force: Bool) async {
+        guard let repository = requireRepository(action: "qwen_refresh") else { return }
+        isQwenAuthActionRunning = true
+        defer {
+            isQwenAuthActionRunning = false
+            refreshDiagnosticsLog()
+        }
+        let result = await repository.refreshQwenCode(force: force)
+        switch result {
+        case let .success(state):
+            qwenAuthState = state
+            if force {
+                statusMessage = L10n.text("Qwen Code認証を更新しました")
+            }
+        case let .failure(error):
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log("Qwen auth refresh failed", category: .auth, error: error)
+        }
     }
 }
 

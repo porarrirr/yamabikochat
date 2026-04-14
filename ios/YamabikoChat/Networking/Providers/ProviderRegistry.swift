@@ -21,7 +21,7 @@ struct ProviderRegistry {
             return codex
         case .alibabaCodingPlan:
             return anthropicCompatible
-        case .openRouter, .openAI, .openAICompat, .miniMax, .zai:
+        case .qwenCode, .openRouter, .openAI, .openAICompat, .miniMax, .zai:
             return openAICompatible
         }
     }

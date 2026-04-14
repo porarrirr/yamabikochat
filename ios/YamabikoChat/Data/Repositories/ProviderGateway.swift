@@ -4,6 +4,7 @@ final class ProviderGateway {
     private let settingsRepository: SettingsRepository
     private let credentialStore: SecureCredentialStore
     private let geminiAuthRepository: GeminiAuthRepository?
+    private let qwenAuthRepository: QwenAuthRepository?
     private let registry: ProviderRegistry
     private let httpClient: HTTPClientProtocol
 
@@ -11,12 +12,14 @@ final class ProviderGateway {
         settingsRepository: SettingsRepository,
         credentialStore: SecureCredentialStore,
         geminiAuthRepository: GeminiAuthRepository? = nil,
+        qwenAuthRepository: QwenAuthRepository? = nil,
         registry: ProviderRegistry = .init(),
         httpClient: HTTPClientProtocol = URLSessionHTTPClient()
     ) {
         self.settingsRepository = settingsRepository
         self.credentialStore = credentialStore
         self.geminiAuthRepository = geminiAuthRepository
+        self.qwenAuthRepository = qwenAuthRepository
         self.registry = registry
         self.httpClient = httpClient
     }
@@ -32,6 +35,7 @@ final class ProviderGateway {
         request.metadata["provider"] = provider.rawValue
 
         await prepareGeminiAuthIfNeeded(provider: provider, model: request.model)
+        await prepareQwenAuthIfNeeded(provider: provider, model: request.model)
 
         func performGenerate() async throws -> ProviderResponse {
             try await client.generate(
@@ -52,6 +56,23 @@ final class ProviderGateway {
                 } catch {
                     DiagnosticsLogger.log(
                         "Provider generate retry failed after Gemini auth refresh",
+                        category: .network,
+                        metadata: [
+                            "provider": provider.rawValue,
+                            "model": request.model
+                        ],
+                        error: error
+                    )
+                    throw error
+                }
+            }
+            if shouldRetryQwenAuth401(provider: provider, error: error),
+               await forceRefreshQwenAuth(model: request.model) {
+                do {
+                    return try await performGenerate()
+                } catch {
+                    DiagnosticsLogger.log(
+                        "Provider generate retry failed after Qwen auth refresh",
                         category: .network,
                         metadata: [
                             "provider": provider.rawValue,
@@ -86,6 +107,7 @@ final class ProviderGateway {
         request.metadata["provider"] = provider.rawValue
 
         await prepareGeminiAuthIfNeeded(provider: provider, model: request.model)
+        await prepareQwenAuthIfNeeded(provider: provider, model: request.model)
 
         return AsyncThrowingStream { continuation in
             let task = Task {
@@ -111,6 +133,20 @@ final class ProviderGateway {
                             didRetryAfterRefresh = true
                             DiagnosticsLogger.log(
                                 "Provider stream retrying after Gemini auth refresh",
+                                category: .network,
+                                metadata: [
+                                    "provider": provider.rawValue,
+                                    "model": request.model
+                                ]
+                            )
+                            continue
+                        }
+                        if !didRetryAfterRefresh,
+                           shouldRetryQwenAuth401(provider: provider, error: error),
+                           await forceRefreshQwenAuth(model: request.model) {
+                            didRetryAfterRefresh = true
+                            DiagnosticsLogger.log(
+                                "Provider stream retrying after Qwen auth refresh",
                                 category: .network,
                                 metadata: [
                                     "provider": provider.rawValue,
@@ -157,6 +193,23 @@ final class ProviderGateway {
         }
     }
 
+    private func prepareQwenAuthIfNeeded(provider: LLMProvider, model: String) async {
+        guard provider == .qwenCode, let qwenAuthRepository else { return }
+        let result = await qwenAuthRepository.refreshIfNeeded(force: false)
+        if case let .failure(error) = result {
+            DiagnosticsLogger.log(
+                "Qwen auth preflight refresh failed; continuing with current token",
+                level: .warning,
+                category: .network,
+                metadata: [
+                    "provider": provider.rawValue,
+                    "model": model
+                ],
+                error: error
+            )
+        }
+    }
+
     private func forceRefreshGeminiAuth(model: String) async -> Bool {
         guard let geminiAuthRepository else { return false }
         let result = await geminiAuthRepository.refreshIfNeeded(force: true)
@@ -186,8 +239,43 @@ final class ProviderGateway {
         }
     }
 
+    private func forceRefreshQwenAuth(model: String) async -> Bool {
+        guard let qwenAuthRepository else { return false }
+        let result = await qwenAuthRepository.refreshIfNeeded(force: true)
+        switch result {
+        case .success:
+            DiagnosticsLogger.log(
+                "Qwen auth force refresh succeeded",
+                category: .network,
+                metadata: [
+                    "provider": LLMProvider.qwenCode.rawValue,
+                    "model": model
+                ]
+            )
+            return true
+        case let .failure(error):
+            DiagnosticsLogger.log(
+                "Qwen auth force refresh failed",
+                level: .warning,
+                category: .network,
+                metadata: [
+                    "provider": LLMProvider.qwenCode.rawValue,
+                    "model": model
+                ],
+                error: error
+            )
+            return false
+        }
+    }
+
     private func shouldRetryGeminiAuth401(provider: LLMProvider, error: Error) -> Bool {
         guard provider == .geminiAuth else { return false }
+        guard case let ProviderClientError.httpStatus(status, _) = error else { return false }
+        return status == 401
+    }
+
+    private func shouldRetryQwenAuth401(provider: LLMProvider, error: Error) -> Bool {
+        guard provider == .qwenCode else { return false }
         guard case let ProviderClientError.httpStatus(status, _) = error else { return false }
         return status == 401
     }

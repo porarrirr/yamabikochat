@@ -70,6 +70,16 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(presets.first?.name, L10n.format("グローバル: %@", "Google Gemini"))
     }
 
+    func testBuildGlobalProviderPresetsPlacesQwenBeforeOpenRouter() {
+        var settings = AppSettings()
+        settings.providerDefaultModelsJSON = #"{"OPENROUTER":"deepseek/deepseek-chat","QWEN_CODE":"coder-model","GEMINI_AUTH":"gemini-2.5-flash"}"#
+
+        let presets = settings.buildGlobalProviderPresets()
+
+        XCTAssertEqual(presets.map(\.apiProvider), ["GEMINI_AUTH", "QWEN_CODE", "OPENROUTER"])
+        XCTAssertEqual(presets[1].model, "coder-model")
+    }
+
     func testProviderSpecificGlobalPresetVisibilityOverridesDefault() {
         var settings = AppSettings()
         settings.showGlobalProviderPresetsInChat = false

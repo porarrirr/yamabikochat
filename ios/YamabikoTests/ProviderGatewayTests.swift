@@ -140,6 +140,84 @@ private final class GeminiStreamRetryHTTPClient: HTTPClientProtocol {
     }
 }
 
+private final class QwenRefreshHTTPClient: HTTPClientProtocol {
+    private(set) var refreshCallCount: Int = 0
+    private let refreshedToken: String
+    private let refreshedResourceURL: String
+
+    init(refreshedToken: String, refreshedResourceURL: String) {
+        self.refreshedToken = refreshedToken
+        self.refreshedResourceURL = refreshedResourceURL
+    }
+
+    func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
+        if request.url.absoluteString == "https://chat.qwen.ai/api/v1/oauth2/token" {
+            refreshCallCount += 1
+            let body = """
+            {
+              "access_token": "\(refreshedToken)",
+              "refresh_token": "qwen-refresh-token-2",
+              "expires_in": 3600,
+              "token_type": "Bearer",
+              "resource_url": "\(refreshedResourceURL)"
+            }
+            """
+            return (Data(body.utf8), Self.makeResponse(url: request.url, statusCode: 200))
+        }
+        return (Data("{}".utf8), Self.makeResponse(url: request.url, statusCode: 404))
+    }
+
+    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
+        let stream = AsyncThrowingStream<String, Error> { continuation in
+            continuation.finish()
+        }
+        return (stream, Self.makeResponse(url: request.url, statusCode: 404))
+    }
+
+    private static func makeResponse(url: URL, statusCode: Int) -> HTTPURLResponse {
+        HTTPURLResponse(
+            url: url,
+            statusCode: statusCode,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+    }
+}
+
+private final class QwenGenerateRetryHTTPClient: HTTPClientProtocol {
+    private(set) var authorizationHeaders: [String] = []
+    private(set) var requestedURLs: [String] = []
+
+    func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
+        requestedURLs.append(request.url.absoluteString)
+        let authHeader = request.headers["Authorization"] ?? ""
+        authorizationHeaders.append(authHeader)
+
+        if authorizationHeaders.count == 1 {
+            return (Data("{}".utf8), Self.makeResponse(url: request.url, statusCode: 401))
+        }
+
+        let body = #"{"choices":[{"message":{"content":"qwen recovered","reasoning_content":"plan"}}]}"#
+        return (Data(body.utf8), Self.makeResponse(url: request.url, statusCode: 200))
+    }
+
+    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
+        let stream = AsyncThrowingStream<String, Error> { continuation in
+            continuation.finish()
+        }
+        return (stream, Self.makeResponse(url: request.url, statusCode: 500))
+    }
+
+    private static func makeResponse(url: URL, statusCode: Int) -> HTTPURLResponse {
+        HTTPURLResponse(
+            url: url,
+            statusCode: statusCode,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+    }
+}
+
 final class ProviderGatewayTests: XCTestCase {
     func testGenerateRetriesGeminiAuthAfter401() async throws {
         let store = GatewayTestCredentialStore()
@@ -227,9 +305,53 @@ final class ProviderGatewayTests: XCTestCase {
         }
     }
 
+    func testGenerateRetriesQwenCodeAfter401() async throws {
+        let store = GatewayTestCredentialStore()
+        try seedQwenAuthCredentials(
+            store: store,
+            accessToken: "expired-qwen-token",
+            refreshToken: "refresh-qwen-token",
+            resourceURL: "initial.qwen.ai/runtime"
+        )
+
+        let refreshHTTP = QwenRefreshHTTPClient(
+            refreshedToken: "refreshed-qwen-token",
+            refreshedResourceURL: "new.qwen.ai/runtime"
+        )
+        let qwenAuthRepository = QwenAuthRepository(
+            credentialStore: store,
+            httpClient: refreshHTTP
+        )
+        let providerHTTP = QwenGenerateRetryHTTPClient()
+        let gateway = try makeGateway(
+            store: store,
+            qwenAuthRepository: qwenAuthRepository,
+            providerHTTPClient: providerHTTP
+        )
+
+        let response = try await gateway.generate(
+            request: ProviderRequest(
+                model: "coder-model",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")],
+                stream: false
+            ),
+            provider: .qwenCode
+        )
+
+        XCTAssertEqual(response.text, "qwen recovered")
+        XCTAssertEqual(response.reasoningSummary, "plan")
+        XCTAssertEqual(providerHTTP.authorizationHeaders, ["Bearer expired-qwen-token", "Bearer refreshed-qwen-token"])
+        XCTAssertEqual(providerHTTP.requestedURLs, [
+            "https://initial.qwen.ai/runtime/v1/chat/completions",
+            "https://new.qwen.ai/runtime/v1/chat/completions"
+        ])
+        XCTAssertEqual(refreshHTTP.refreshCallCount, 1)
+    }
+
     private func makeGateway(
         store: GatewayTestCredentialStore,
-        geminiAuthRepository: GeminiAuthRepository,
+        geminiAuthRepository: GeminiAuthRepository? = nil,
+        qwenAuthRepository: QwenAuthRepository? = nil,
         providerHTTPClient: HTTPClientProtocol
     ) throws -> ProviderGateway {
         let dbQueue = try DatabaseQueue()
@@ -237,15 +359,22 @@ final class ProviderGatewayTests: XCTestCase {
         let settingsRepository = SettingsRepository(dbQueue: dbQueue)
 
         var settings = try settingsRepository.load()
-        settings.apiProvider = "GEMINI_AUTH"
-        settings.defaultModel = "gemini-2.5-flash"
-        settings.providerDefaultModelsJSON = #"{"GEMINI_AUTH":"gemini-2.5-flash"}"#
+        if qwenAuthRepository != nil {
+            settings.apiProvider = "QWEN_CODE"
+            settings.defaultModel = "coder-model"
+            settings.providerDefaultModelsJSON = #"{"QWEN_CODE":"coder-model"}"#
+        } else {
+            settings.apiProvider = "GEMINI_AUTH"
+            settings.defaultModel = "gemini-2.5-flash"
+            settings.providerDefaultModelsJSON = #"{"GEMINI_AUTH":"gemini-2.5-flash"}"#
+        }
         try settingsRepository.save(settings)
 
         return ProviderGateway(
             settingsRepository: settingsRepository,
             credentialStore: store,
             geminiAuthRepository: geminiAuthRepository,
+            qwenAuthRepository: qwenAuthRepository,
             httpClient: providerHTTPClient
         )
     }
@@ -277,5 +406,26 @@ final class ProviderGatewayTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(auth)
         try store.saveSecret(String(decoding: data, as: UTF8.self), key: "gemini_auth_json_v2")
+    }
+
+    private func seedQwenAuthCredentials(
+        store: GatewayTestCredentialStore,
+        accessToken: String,
+        refreshToken: String,
+        resourceURL: String
+    ) throws {
+        try store.setCredential(accessToken, for: .qwenCode)
+        try store.setQwenResourceURL(resourceURL)
+        let auth = QwenAuthJSON(
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+            tokenType: "Bearer",
+            scope: "openid profile email model.completion",
+            resourceURL: resourceURL,
+            expiryDate: Int64(Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000),
+            lastRefresh: ISO8601DateFormatter().string(from: Date())
+        )
+        let data = try JSONEncoder().encode(auth)
+        try store.saveSecret(String(decoding: data, as: UTF8.self), key: "qwen_auth_json_v1")
     }
 }
