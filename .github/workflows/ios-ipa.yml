@@ -1,0 +1,115 @@
+name: iOS IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag override"
+        required: false
+        default: ""
+        type: string
+  push:
+    branches: [ main, master, ios ]
+    paths:
+      - "pryamabiko/ios/**"
+      - ".github/workflows/ios-ipa.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-ipa-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build_ipa:
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: pryamabiko/ios
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Project
+        run: xcodegen generate
+
+      - name: Build Unsigned App
+        run: |
+          xcodebuild \
+            -project YamabikoChat.xcodeproj \
+            -scheme YamabikoChat \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/ios-dd" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            PROVISIONING_PROFILE_SPECIFIER= \
+            PROVISIONING_PROFILE= \
+            ASSETCATALOG_COMPILER_APPICON_NAME= \
+            build
+
+      - name: Package Unsigned IPA
+        working-directory: pryamabiko
+        run: |
+          APP_PATH="$RUNNER_TEMP/ios-dd/Build/Products/Release-iphoneos/YamabikoChat.app"
+          IPA_DIR="$RUNNER_TEMP/ipa"
+          IPA_PATH="$RUNNER_TEMP/YamabikoChat-unsigned.ipa"
+
+          test -d "$APP_PATH"
+          mkdir -p "$IPA_DIR/Payload"
+          cp -R "$APP_PATH" "$IPA_DIR/Payload/"
+          cd "$IPA_DIR"
+          /usr/bin/zip -qry "$IPA_PATH" Payload
+          test -f "$IPA_PATH"
+
+      - name: Upload Unsigned IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YamabikoChat-unsigned-ipa-${{ github.run_number }}
+          path: ${{ runner.temp }}/YamabikoChat-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Resolve Release Tag
+        id: release_tag
+        env:
+          TAG_INPUT: ${{ inputs.release_tag }}
+        run: |
+          TAG="$TAG_INPUT"
+          TS_LABEL="$(date -u +'%Y-%m-%d %H:%M UTC')"
+          if [ -z "$TAG" ]; then
+            TAG="ios-ipa-latest"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "name=iOS IPA ${TS_LABEL}" >> "$GITHUB_OUTPUT"
+          {
+            echo "body<<EOF"
+            echo "Unsigned IPA built from \`${GITHUB_REF_NAME}\`."
+            echo ""
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Run: \`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\`"
+            echo "- Built at: ${TS_LABEL}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish IPA as Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          name: ${{ steps.release_tag.outputs.name }}
+          prerelease: true
+          body: ${{ steps.release_tag.outputs.body }}
+          overwrite_files: true
+          files: ${{ runner.temp }}/YamabikoChat-unsigned.ipa
