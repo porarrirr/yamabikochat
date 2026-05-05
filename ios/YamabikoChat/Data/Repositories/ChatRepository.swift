@@ -714,6 +714,7 @@ final class ChatRepository {
             metadata["codexSessionId"] = sessionId
         }
         metadata["provider"] = conversation.apiProvider
+        metadata["promptCacheKey"] = "conversation-\(conversationId)"
 
         return ProviderRequest(
             model: conversation.model,
@@ -777,7 +778,8 @@ final class ChatRepository {
             settings: settings,
             stream: false,
             messages: historyA,
-            context: .dualA
+            context: .dualA,
+            promptCacheKey: "conversation-\(conversationId)-dual-a"
         )
 
         let requestB = buildSingleTurnRequest(
@@ -788,7 +790,8 @@ final class ChatRepository {
             settings: settings,
             stream: false,
             messages: historyB,
-            context: .dualB
+            context: .dualB,
+            promptCacheKey: "conversation-\(conversationId)-dual-b"
         )
 
         let modelCreatedAt = max(
@@ -1375,7 +1378,8 @@ final class ChatRepository {
                 settings: currentSettings,
                 stream: false,
                 messages: history,
-                context: speaker.context
+                context: speaker.context,
+                promptCacheKey: "auto-conversation-\(autoConversationId)-\(speaker.modelCode)"
             )
 
             let response: ProviderResponse
@@ -1624,7 +1628,8 @@ final class ChatRepository {
         settings: AppSettings,
         stream: Bool? = nil,
         messages: [ProviderRequestMessage]? = nil,
-        context: AppSettings.ReasoningContext = .default
+        context: AppSettings.ReasoningContext = .default,
+        promptCacheKey: String? = nil
     ) -> ProviderRequest {
         var metadata = metadataForProvider(
             settings: settings,
@@ -1633,6 +1638,9 @@ final class ChatRepository {
             context: context
         )
         metadata["provider"] = provider
+        if let promptCacheKey = promptCacheKey?.trimmingCharacters(in: .whitespacesAndNewlines), !promptCacheKey.isEmpty {
+            metadata["promptCacheKey"] = promptCacheKey
+        }
         return ProviderRequest(
             model: model,
             messages: messages ?? [ProviderRequestMessage(role: "user", content: text)],

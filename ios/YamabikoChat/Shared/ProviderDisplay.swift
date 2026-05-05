@@ -18,6 +18,7 @@ enum ProviderCatalog {
         ProviderDisplay(key: "GEMINI_AUTH", title: "Gemini Auth (CLI)"),
         ProviderDisplay(key: "QWEN_CODE", title: "Qwen Code"),
         ProviderDisplay(key: "OPENROUTER", title: "OpenRouter"),
+        ProviderDisplay(key: "OPENCODE_GO", title: "OpenCode Go"),
         ProviderDisplay(key: "ALIBABA_CODING_PLAN", title: "Alibaba Coding Plan"),
         ProviderDisplay(key: "ZAI", title: "Z.ai"),
         ProviderDisplay(key: "MINIMAX", title: "MiniMax"),

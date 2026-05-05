@@ -28,7 +28,11 @@ data class OpenRouterRequest(
     override val reasoning: OpenRouterReasoning? = null,
     @SerialName("reasoning_split")
     val reasoningSplit: Boolean? = null,
-    val thinking: ZaiThinking? = null
+    val thinking: ZaiThinking? = null,
+    @SerialName("cache_control")
+    val cacheControl: PromptCacheControl? = null,
+    @SerialName("prompt_cache_key")
+    val promptCacheKey: String? = null
 ) : OpenRouterPayload
 
 @Serializable
@@ -44,8 +48,17 @@ data class OpenRouterMultiModalRequest(
     override val reasoning: OpenRouterReasoning? = null,
     @SerialName("reasoning_split")
     val reasoningSplit: Boolean? = null,
-    val thinking: ZaiThinking? = null
+    val thinking: ZaiThinking? = null,
+    @SerialName("cache_control")
+    val cacheControl: PromptCacheControl? = null,
+    @SerialName("prompt_cache_key")
+    val promptCacheKey: String? = null
 ) : OpenRouterPayload
+
+@Serializable
+data class PromptCacheControl(
+    val type: String = "ephemeral"
+)
 
 @Serializable
 data class OpenRouterMessage(

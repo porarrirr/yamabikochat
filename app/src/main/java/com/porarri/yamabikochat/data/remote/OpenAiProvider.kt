@@ -53,8 +53,10 @@ class OpenAiProvider(
                         model = normalizeOpenAiModel(payload.model),
                         provider = null,
                         reasoning = null,
+                        cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
-                        max_tokens = budget ?: payload.max_tokens
+                        max_tokens = budget ?: payload.max_tokens,
+                        promptCacheKey = promptCacheKeyForOfficialOpenAi(request, baseUrl)
                     )
                 )
                 is OpenRouterMultiModalRequest -> service.createChatCompletionMultiModal(
@@ -63,8 +65,10 @@ class OpenAiProvider(
                         model = normalizeOpenAiModel(payload.model),
                         provider = null,
                         reasoning = null,
+                        cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
-                        max_tokens = budget ?: payload.max_tokens
+                        max_tokens = budget ?: payload.max_tokens,
+                        promptCacheKey = promptCacheKeyForOfficialOpenAi(request, baseUrl)
                     )
                 )
                 else -> throw IllegalArgumentException("Unsupported request type")
@@ -107,8 +111,10 @@ class OpenAiProvider(
                         stream = true,
                         provider = null,
                         reasoning = null,
+                        cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
-                        max_tokens = budget ?: payload.max_tokens
+                        max_tokens = budget ?: payload.max_tokens,
+                        promptCacheKey = promptCacheKeyForOfficialOpenAi(request, baseUrl)
                     )
                 )
                 is OpenRouterMultiModalRequest -> service.createChatCompletionMultiModalStream(
@@ -118,8 +124,10 @@ class OpenAiProvider(
                         stream = true,
                         provider = null,
                         reasoning = null,
+                        cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
-                        max_tokens = budget ?: payload.max_tokens
+                        max_tokens = budget ?: payload.max_tokens,
+                        promptCacheKey = promptCacheKeyForOfficialOpenAi(request, baseUrl)
                     )
                 )
                 else -> throw IllegalArgumentException("Unsupported request type")
@@ -133,5 +141,18 @@ class OpenAiProvider(
     private fun normalizeOpenAiModel(model: String): String {
         val trimmed = model.trim()
         return trimmed.removePrefix("openai/")
+    }
+
+    private fun promptCacheKeyForOfficialOpenAi(
+        request: GenerateContentRequest,
+        baseUrl: String
+    ): String? {
+        if (!isOfficialOpenAiBaseUrl(baseUrl)) return null
+        return request.promptCacheKey?.trim()?.takeIf { it.isNotBlank() }
+    }
+
+    private fun isOfficialOpenAiBaseUrl(baseUrl: String): Boolean {
+        val normalized = baseUrl.trim().lowercase().trimEnd('/')
+        return normalized == "https://api.openai.com/v1"
     }
 }

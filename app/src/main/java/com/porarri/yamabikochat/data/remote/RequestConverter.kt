@@ -75,6 +75,11 @@ object RequestConverter {
                 )
             }
         }
+        val cacheControl = if (shouldEnableOpenRouterPromptCache(openRouterModel)) {
+            PromptCacheControl()
+        } else {
+            null
+        }
 
         return if (hasMultiModal) {
             // マルチモーダルリクエスト
@@ -109,7 +114,8 @@ object RequestConverter {
                 max_tokens = geminiRequest.generationConfig?.maxOutputTokens,
                 stop = geminiRequest.generationConfig?.stopSequences,
                 provider = providerPreferences,
-                reasoning = reasoningConfig
+                reasoning = reasoningConfig,
+                cacheControl = cacheControl
             )
         } else {
             // シンプルなテキストリクエスト
@@ -144,9 +150,15 @@ object RequestConverter {
                 max_tokens = geminiRequest.generationConfig?.maxOutputTokens,
                 stop = geminiRequest.generationConfig?.stopSequences,
                 provider = providerPreferences,
-                reasoning = reasoningConfig
+                reasoning = reasoningConfig,
+                cacheControl = cacheControl
             )
         }
+    }
+
+    private fun shouldEnableOpenRouterPromptCache(model: String): Boolean {
+        val normalized = model.trim().lowercase(Locale.ROOT)
+        return normalized.startsWith("anthropic/claude") || normalized.startsWith("claude")
     }
 
     /**

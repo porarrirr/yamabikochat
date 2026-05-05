@@ -158,7 +158,15 @@ final class ChatViewModel: ObservableObject {
         inputText = text
     }
 
-    func addAttachment(url: URL) {
+    func addAttachment(
+        url: URL,
+        displayName: String? = nil,
+        deleteSourceWhenHandled: Bool = false
+    ) {
+        defer {
+            guard deleteSourceWhenHandled else { return }
+            try? FileManager.default.removeItem(at: url)
+        }
         guard let attachmentRepository else {
             errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             DiagnosticsLogger.log(
@@ -173,7 +181,7 @@ final class ChatViewModel: ObservableObject {
             do {
                 let persistedURL = try attachmentRepository.persistAttachment(url: url)
                 attachments.append(
-                    AttachmentDraft(url: persistedURL, displayName: url.lastPathComponent)
+                    AttachmentDraft(url: persistedURL, displayName: displayName ?? url.lastPathComponent)
                 )
                 errorMessage = nil
             } catch {

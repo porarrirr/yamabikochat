@@ -983,6 +983,78 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(reasoning["exclude"] as? Bool, true)
     }
 
+    func testOpenRouterClaudeRequestEnablesPromptCacheControl() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("openrouter-key", for: .openRouter)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenAICompatibleProviderClient()
+        let request = ProviderRequest(
+            model: "anthropic/claude-sonnet-4.6",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENROUTER"]
+        )
+
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        let bodyData = try XCTUnwrap(captured.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        let cacheControl = try XCTUnwrap(root["cache_control"] as? [String: Any])
+        XCTAssertEqual(cacheControl["type"] as? String, "ephemeral")
+        XCTAssertNil(root["prompt_cache_key"])
+    }
+
+    func testOpenAIGenerateIncludesConversationPromptCacheKey() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("openai-key", for: .openAI)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenAICompatibleProviderClient()
+        let request = ProviderRequest(
+            model: "gpt-4o-mini",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: [
+                "provider": "OPENAI",
+                "promptCacheKey": "conversation-42"
+            ]
+        )
+
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        let bodyData = try XCTUnwrap(captured.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertEqual(root["prompt_cache_key"] as? String, "conversation-42")
+        XCTAssertNil(root["cache_control"])
+    }
+
     func testQwenGenerateUsesNormalizedResourceURLAndParsesReasoningContent() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("qwen-access-token", for: .qwenCode)
@@ -1357,6 +1429,125 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(usage.reasoningTokens, 21)
         XCTAssertEqual(usage.cachedInputTokens, 35)
         XCTAssertEqual(usage.cacheCreationInputTokens, 8)
+    }
+
+    func testOpenCodeGoChatModelUsesChatCompletionsEndpointAndCacheKey() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":20,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":12}}}"#
+                .data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "opencode-go/kimi-k2.6",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            systemPrompt: "stable system",
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENCODE_GO", "promptCacheKey": "conversation-42"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(response.text, "ok")
+        XCTAssertEqual(response.usage?.cachedInputTokens, 12)
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(captured.url.absoluteString, "https://opencode.ai/zen/go/v1/chat/completions")
+        XCTAssertEqual(captured.headers["Authorization"], "Bearer go-key")
+
+        let bodyData = try XCTUnwrap(captured.body)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertEqual(body["model"] as? String, "kimi-k2.6")
+        XCTAssertEqual(body["prompt_cache_key"] as? String, "conversation-42")
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages.first?["role"] as? String, "system")
+        XCTAssertEqual(messages.first?["content"] as? String, "stable system")
+    }
+
+    func testOpenCodeGoMiniMaxModelUsesMessagesEndpoint() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":10,"output_tokens":3,"cache_read_input_tokens":7}}"#
+                .data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "minimax-m2.7",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            systemPrompt: "stable system",
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENCODE_GO"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(response.text, "ok")
+        XCTAssertEqual(response.usage?.cachedInputTokens, 7)
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(captured.url.absoluteString, "https://opencode.ai/zen/go/v1/messages")
+        XCTAssertEqual(captured.headers["x-api-key"], "go-key")
+        XCTAssertEqual(captured.headers["anthropic-version"], "2023-06-01")
+
+        let bodyData = try XCTUnwrap(captured.body)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertEqual(body["model"] as? String, "minimax-m2.7")
+        XCTAssertEqual(body["system"] as? String, "stable system")
+        XCTAssertNil(body["prompt_cache_key"])
+    }
+
+    func testOpenCodeGoUnsupportedModelFailsInsteadOfFallback() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "not-official",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENCODE_GO"]
+        )
+
+        do {
+            _ = try await client.generate(
+                request: request,
+                settings: AppSettings(),
+                credentialStore: store,
+                httpClient: CapturingHTTPClient()
+            )
+            XCTFail("Expected unsupported model to fail")
+        } catch let error as ProviderClientError {
+            guard case let .invalidBaseURL(message) = error else {
+                return XCTFail("Expected invalidBaseURL, got \(error)")
+            }
+            XCTAssertTrue(message.contains("Unsupported OpenCode Go model"))
+        }
     }
 
     func testGeminiGenerateParsesUsageMetadata() async throws {

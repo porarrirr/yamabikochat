@@ -8,6 +8,10 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         var content: String
     }
 
+    private struct PromptCacheControl: Encodable {
+        var type: String = "ephemeral"
+    }
+
     private struct OpenAIRequestBody: Encodable {
         var model: String
         var messages: [OpenAIMessage]
@@ -15,6 +19,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         var tools: [[String: AnyEncodable]]?
         var provider: [String: AnyEncodable]?
         var reasoning: [String: AnyEncodable]?
+        var cacheControl: PromptCacheControl?
+        var promptCacheKey: String?
 
         enum CodingKeys: String, CodingKey {
             case model
@@ -23,6 +29,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             case tools
             case provider
             case reasoning
+            case cacheControl = "cache_control"
+            case promptCacheKey = "prompt_cache_key"
         }
 
         func encode(to encoder: Encoder) throws {
@@ -33,6 +41,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             try container.encodeIfPresent(tools, forKey: .tools)
             try container.encodeIfPresent(provider, forKey: .provider)
             try container.encodeIfPresent(reasoning, forKey: .reasoning)
+            try container.encodeIfPresent(cacheControl, forKey: .cacheControl)
+            try container.encodeIfPresent(promptCacheKey, forKey: .promptCacheKey)
         }
     }
 
@@ -191,9 +201,25 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             stream: stream,
             tools: toolsPayload,
             provider: providerPayload,
-            reasoning: reasoningPayload
+            reasoning: reasoningPayload,
+            cacheControl: cacheControl(for: request, provider: provider),
+            promptCacheKey: promptCacheKey(for: request, provider: provider)
         )
         return try JSONEncoder().encode(body)
+    }
+
+    private func cacheControl(for request: ProviderRequest, provider: LLMProvider) -> PromptCacheControl? {
+        guard provider == .openRouter else { return nil }
+        let normalizedModel = request.model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard normalizedModel.hasPrefix("anthropic/claude") || normalizedModel.hasPrefix("claude") else {
+            return nil
+        }
+        return PromptCacheControl()
+    }
+
+    private func promptCacheKey(for request: ProviderRequest, provider: LLMProvider) -> String? {
+        guard provider == .openAI else { return nil }
+        return request.metadata["promptCacheKey"]?.trimmedNonEmpty
     }
 
     private func parseStreamChunk(_ chunk: String, fullText: inout String) -> ProviderStreamEvent? {
@@ -256,6 +282,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         switch provider {
         case .openRouter:
             return .openRouter
+        case .openCodeGo:
+            return .openCodeGo
         case .qwenCode:
             return .qwenCode
         case .openAI:
@@ -286,6 +314,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                 throw ProviderClientError.invalidBaseURL("https://openrouter.ai/api/v1/chat/completions")
             }
             return url
+        case .openCodeGo:
+            throw ProviderClientError.invalidBaseURL("Provider not supported by generic OpenAI compatible client")
         case .qwenCode:
             let baseURL = QwenAuthRepository.normalizedBaseURL(resourceURL: try credentialStore.qwenResourceURL())
             guard let url = URL(string: baseURL)?.appendingPathComponent("chat/completions") else {

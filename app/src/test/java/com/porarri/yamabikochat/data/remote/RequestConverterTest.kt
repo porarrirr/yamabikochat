@@ -35,7 +35,8 @@ class RequestConverterTest {
 
         val converted = RequestConverter.geminiToOpenRouter(request, "anthropic/claude-3.7-sonnet")
         assertTrue(converted is OpenRouterRequest)
-        val reasoning = (converted as OpenRouterRequest).reasoning
+        val openRouterRequest = converted as OpenRouterRequest
+        val reasoning = openRouterRequest.reasoning
 
         assertNotNull(reasoning)
         reasoning!!
@@ -43,6 +44,7 @@ class RequestConverterTest {
         assertEquals(true, reasoning.exclude)
         assertEquals(true, reasoning.enabled)
         assertNull(reasoning.effort)
+        assertEquals("ephemeral", openRouterRequest.cacheControl?.type)
     }
 
     @Test
@@ -60,7 +62,8 @@ class RequestConverterTest {
 
         val converted = RequestConverter.geminiToOpenRouter(request, "openai/gpt-5a")
         assertTrue(converted is OpenRouterRequest)
-        val reasoning = (converted as OpenRouterRequest).reasoning
+        val openRouterRequest = converted as OpenRouterRequest
+        val reasoning = openRouterRequest.reasoning
 
         assertNotNull(reasoning)
         reasoning!!
@@ -68,5 +71,25 @@ class RequestConverterTest {
         assertNull(reasoning.max_tokens)
         assertNull(reasoning.exclude)
         assertNull(reasoning.enabled)
+        assertNull(openRouterRequest.cacheControl)
+    }
+
+    @Test
+    fun geminiToOpenRouter_enablesPromptCacheControlForClaudeMultimodalRequests() {
+        val request = GenerateContentRequest(
+            contents = listOf(
+                Content(
+                    role = "user",
+                    parts = listOf(
+                        Part(text = "describe"),
+                        Part(inlineData = InlineData(mimeType = "image/png", data = "AAAA"))
+                    )
+                )
+            )
+        )
+
+        val converted = RequestConverter.geminiToOpenRouter(request, "claude-sonnet-4.6")
+        assertTrue(converted is OpenRouterMultiModalRequest)
+        assertEquals("ephemeral", (converted as OpenRouterMultiModalRequest).cacheControl?.type)
     }
 }

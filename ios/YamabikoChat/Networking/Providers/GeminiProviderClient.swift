@@ -4,10 +4,6 @@ import UniformTypeIdentifiers
 struct GeminiProviderClient: ProviderClient {
     let provider: LLMProvider = .gemini
     private let geminiApiBase = "https://generativelanguage.googleapis.com/v1beta"
-    private let geminiCliBase = "https://cloudcode-pa.googleapis.com/v1internal"
-    private static let geminiCliUserAgent = "google-api-nodejs-client/9.15.1"
-    private static let geminiCliApiClient = "gl-node/22.17.0"
-    private static let geminiCliClientMetadata = "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI"
     private static let geminiCliProcessSessionID = geminiCliUUID()
     private static let geminiCliModelFallbacks = [
         "gemini-2.5-flash-image": "gemini-2.5-flash"
@@ -50,16 +46,18 @@ struct GeminiProviderClient: ProviderClient {
                 do {
                     let resolvedProvider = LLMProvider(rawOrDefault: request.metadata["provider"] ?? settings.apiProvider)
                     let credential = try await resolveCredential(provider: resolvedProvider, store: credentialStore)
-                    let projectID = try credentialStore.readSecret(key: "gemini_project_id")
+                    let projectID = try requireGeminiCliProjectID(provider: resolvedProvider, store: credentialStore)
                     let endpoint = try streamEndpoint(
                         model: request.model,
                         provider: resolvedProvider,
-                        token: credential.token
+                        token: credential.token,
+                        credentialStore: credentialStore
                     )
                     let body = try buildGeminiBody(
                         request: request,
                         provider: resolvedProvider,
-                        projectID: projectID
+                        projectID: projectID,
+                        credentialStore: credentialStore
                     )
 
                     var headers = ["Content-Type": "application/json"]
@@ -67,10 +65,12 @@ struct GeminiProviderClient: ProviderClient {
                         headers["Authorization"] = "Bearer \(credential.token)"
                     }
                     if resolvedProvider == .geminiAuth {
-                        let requestID = body.requestIdentifier ?? Self.geminiCliUUID()
+                        let compatibility = GeminiCliCompatibility.resolved(using: credentialStore)
                         applyGeminiCliHeaders(
                             to: &headers,
-                            requestIdentifier: requestID,
+                            compatibility: compatibility,
+                            model: request.model,
+                            activityRequestID: GeminiCliCompatibility.makeActivityRequestID(),
                             streaming: true
                         )
                     }
@@ -679,11 +679,21 @@ struct GeminiProviderClient: ProviderClient {
             throw ProviderClientError.missingCredential(LLMProvider.gemini.rawValue)
         }
 
-        guard let url = nonStreamingEndpoint(model: request.model, provider: .gemini, token: apiKey) else {
+        guard let url = nonStreamingEndpoint(
+            model: request.model,
+            provider: .gemini,
+            token: apiKey,
+            credentialStore: credentialStore
+        ) else {
             throw ProviderClientError.invalidBaseURL("Gemini endpoint")
         }
 
-        let payload = try buildGeminiBody(request: request, provider: .gemini, projectID: nil)
+        let payload = try buildGeminiBody(
+            request: request,
+            provider: .gemini,
+            projectID: nil,
+            credentialStore: credentialStore
+        )
         let httpRequest = HTTPRequest(
             url: url,
             headers: ["Content-Type": "application/json"],
@@ -708,19 +718,32 @@ struct GeminiProviderClient: ProviderClient {
             throw ProviderClientError.missingCredential(LLMProvider.geminiAuth.rawValue)
         }
 
-        let projectID = try credentialStore.readSecret(key: "gemini_project_id")
-        guard let endpoint = nonStreamingEndpoint(model: request.model, provider: .geminiAuth, token: accessToken) else {
+        let projectID = try requireGeminiCliProjectID(provider: .geminiAuth, store: credentialStore)
+        guard let endpoint = nonStreamingEndpoint(
+            model: request.model,
+            provider: .geminiAuth,
+            token: accessToken,
+            credentialStore: credentialStore
+        ) else {
             throw ProviderClientError.invalidBaseURL("Gemini endpoint")
         }
 
-        let payload = try buildGeminiBody(request: request, provider: .geminiAuth, projectID: projectID)
+        let payload = try buildGeminiBody(
+            request: request,
+            provider: .geminiAuth,
+            projectID: projectID,
+            credentialStore: credentialStore
+        )
+        let compatibility = GeminiCliCompatibility.resolved(using: credentialStore)
         var headers = [
             "Authorization": "Bearer \(accessToken)",
             "Content-Type": "application/json"
         ]
         applyGeminiCliHeaders(
             to: &headers,
-            requestIdentifier: payload.requestIdentifier ?? Self.geminiCliUUID(),
+            compatibility: compatibility,
+            model: request.model,
+            activityRequestID: GeminiCliCompatibility.makeActivityRequestID(),
             streaming: false
         )
         let httpRequest = HTTPRequest(
@@ -737,20 +760,33 @@ struct GeminiProviderClient: ProviderClient {
         return try parseGeminiCliResponse(data: data)
     }
 
-    private func nonStreamingEndpoint(model: String, provider: LLMProvider, token: String) -> URL? {
+    private func nonStreamingEndpoint(
+        model: String,
+        provider: LLMProvider,
+        token: String,
+        credentialStore: SecureCredentialStore
+    ) -> URL? {
         switch provider {
         case .gemini:
             var components = URLComponents(string: "\(geminiApiBase)/models/\(model):generateContent")
             components?.queryItems = [URLQueryItem(name: "key", value: token)]
             return components?.url
         case .geminiAuth:
-            return URL(string: "\(geminiCliBase):generateContent")
+            let compatibility = GeminiCliCompatibility.resolved(using: credentialStore)
+            return URL(
+                string: "\(compatibility.remote.codeAssistEndpoint)/\(compatibility.remote.codeAssistVersion):\(compatibility.remote.requestFormat.generateAction)"
+            )
         default:
             return nil
         }
     }
 
-    private func streamEndpoint(model: String, provider: LLMProvider, token: String) throws -> URL {
+    private func streamEndpoint(
+        model: String,
+        provider: LLMProvider,
+        token: String,
+        credentialStore: SecureCredentialStore
+    ) throws -> URL {
         switch provider {
         case .gemini:
             var components = URLComponents(string: "\(geminiApiBase)/models/\(model):streamGenerateContent")
@@ -761,8 +797,13 @@ struct GeminiProviderClient: ProviderClient {
             guard let url = components?.url else { throw ProviderClientError.invalidBaseURL("Gemini streaming endpoint") }
             return url
         case .geminiAuth:
-            var components = URLComponents(string: "\(geminiCliBase):streamGenerateContent")
-            components?.queryItems = [URLQueryItem(name: "alt", value: "sse")]
+            let compatibility = GeminiCliCompatibility.resolved(using: credentialStore)
+            var components = URLComponents(
+                string: "\(compatibility.remote.codeAssistEndpoint)/\(compatibility.remote.codeAssistVersion):\(compatibility.remote.requestFormat.streamAction)"
+            )
+            if compatibility.remote.requestFormat.streamUsesAltSse {
+                components?.queryItems = [URLQueryItem(name: "alt", value: "sse")]
+            }
             guard let url = components?.url else { throw ProviderClientError.invalidBaseURL("Gemini streaming endpoint") }
             return url
         default:
@@ -778,7 +819,8 @@ struct GeminiProviderClient: ProviderClient {
     private func buildGeminiBody(
         request: ProviderRequest,
         provider: LLMProvider,
-        projectID: String?
+        projectID: String?,
+        credentialStore: SecureCredentialStore
     ) throws -> GeminiBodyBuildResult {
         let contents = request.messages.map { message -> [String: Any] in
             [
@@ -817,6 +859,7 @@ struct GeminiProviderClient: ProviderClient {
 
         switch provider {
         case .geminiAuth:
+            let compatibility = GeminiCliCompatibility.resolved(using: credentialStore)
             let sessionID = resolveGeminiCliSessionID(from: request.metadata)
             let userPromptID = resolveGeminiCliRequestIdentifier(from: request.metadata)
             var inner: [String: Any] = [
@@ -824,7 +867,7 @@ struct GeminiProviderClient: ProviderClient {
                 "session_id": sessionID
             ]
             if let systemPrompt = request.systemPrompt, !systemPrompt.isEmpty {
-                inner["systemInstruction"] = [
+                inner[compatibility.remote.requestFormat.systemInstructionFieldName] = [
                     "role": "system",
                     "parts": [["text": systemPrompt]]
                 ]
@@ -837,12 +880,12 @@ struct GeminiProviderClient: ProviderClient {
             }
 
             var root: [String: Any] = [
-                "model": normalizedGeminiCliModel(request.model),
-                "user_prompt_id": userPromptID,
-                "request": inner
+                compatibility.remote.requestFormat.modelFieldName: normalizedGeminiCliModel(request.model),
+                compatibility.remote.requestFormat.userPromptIDFieldName: userPromptID,
+                compatibility.remote.requestFormat.requestFieldName: inner
             ]
             if let projectID = projectID?.trimmedNonEmpty {
-                root["project"] = projectID
+                root[compatibility.remote.requestFormat.projectFieldName] = projectID
             }
             return GeminiBodyBuildResult(
                 data: try JSONSerialization.data(withJSONObject: root),
@@ -1076,20 +1119,38 @@ struct GeminiProviderClient: ProviderClient {
 
     private func applyGeminiCliHeaders(
         to headers: inout [String: String],
-        requestIdentifier: String,
+        compatibility: GeminiCliResolvedCompatibility,
+        model: String,
+        activityRequestID: String,
         streaming: Bool
     ) {
-        headers["User-Agent"] = Self.geminiCliUserAgent
-        headers["X-Goog-Api-Client"] = Self.geminiCliApiClient
-        headers["Client-Metadata"] = Self.geminiCliClientMetadata
-        headers["x-activity-request-id"] = requestIdentifier
+        headers["User-Agent"] = compatibility.buildUserAgent(model: normalizedGeminiCliModel(model))
+        headers["x-activity-request-id"] = activityRequestID
         if streaming {
             headers["Accept"] = "text/event-stream"
         }
-        let apiKeyHeaderKeys = headers.keys.filter { $0.caseInsensitiveCompare("x-api-key") == .orderedSame }
-        for key in apiKeyHeaderKeys {
+        let strippedHeaderKeys = headers.keys.filter {
+            $0.caseInsensitiveCompare("x-api-key") == .orderedSame ||
+                $0.caseInsensitiveCompare("x-goog-api-key") == .orderedSame ||
+                $0.caseInsensitiveCompare("x-goog-api-client") == .orderedSame ||
+                $0.caseInsensitiveCompare("client-metadata") == .orderedSame
+        }
+        for key in strippedHeaderKeys {
             headers.removeValue(forKey: key)
         }
+    }
+
+    private func requireGeminiCliProjectID(
+        provider: LLMProvider,
+        store: SecureCredentialStore
+    ) throws -> String? {
+        guard provider == .geminiAuth else {
+            return try store.readSecret(key: "gemini_project_id")
+        }
+        guard let projectID = try store.readSecret(key: "gemini_project_id")?.trimmedNonEmpty else {
+            throw ProviderClientError.parseFailure("Project ID is required")
+        }
+        return projectID
     }
 
     private func resolveGeminiCliSessionID(from metadata: [String: String]) -> String {

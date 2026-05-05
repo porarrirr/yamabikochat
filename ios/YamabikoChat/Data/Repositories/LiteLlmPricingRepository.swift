@@ -178,7 +178,7 @@ actor LiteLlmPricingRepository: LiteLlmPricingEstimating {
                 let suffix = suffixAfterFirstSlash(base)
                 append("openrouter/\(suffix.isEmpty ? base : suffix)")
             }
-        case "OPENAI", "CODEX_AUTH", "OPENAI_COMPAT", "ALIBABA_CODING_PLAN", "MINIMAX", "ZAI":
+        case "OPENAI", "CODEX_AUTH", "OPENAI_COMPAT", "OPENCODE_GO", "ALIBABA_CODING_PLAN", "MINIMAX", "ZAI":
             append(canonical.replacingOccurrences(of: "openai/", with: ""))
             append(canonical.replacingOccurrences(of: "google/", with: ""))
             append(canonical.replacingOccurrences(of: "anthropic/", with: ""))

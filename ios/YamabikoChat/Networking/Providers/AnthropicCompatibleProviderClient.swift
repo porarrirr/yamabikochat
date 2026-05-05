@@ -4,6 +4,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
     let provider: LLMProvider = .alibabaCodingPlan
 
     private static let anthropicVersion = "2023-06-01"
+    private static let mcpBetaHeader = "mcp-client-2025-11-20"
     private static let defaultMaxTokens = 4096
     private static let minimumThinkingBudgetTokens = 1024
 
@@ -27,6 +28,47 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         }
     }
 
+    private struct AnthropicMCPServer: Encodable {
+        var type: String = "url"
+        var url: String
+        var name: String
+        var authorizationToken: String?
+
+        enum CodingKeys: String, CodingKey {
+            case type
+            case url
+            case name
+            case authorizationToken = "authorization_token"
+        }
+    }
+
+    private struct AnthropicMCPToolConfiguration: Encodable {
+        var enabled: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case enabled
+        }
+    }
+
+    private struct AnthropicMCPToolset: Encodable {
+        var type: String = "mcp_toolset"
+        var mcpServerName: String
+        var defaultConfig: AnthropicMCPToolConfiguration?
+        var configs: [String: AnthropicMCPToolConfiguration]?
+
+        enum CodingKeys: String, CodingKey {
+            case type
+            case mcpServerName = "mcp_server_name"
+            case defaultConfig = "default_config"
+            case configs
+        }
+    }
+
+    private struct AnthropicMCPConfiguration {
+        var servers: [AnthropicMCPServer]
+        var toolsets: [AnthropicMCPToolset]
+    }
+
     private struct AnthropicRequestBody: Encodable {
         var model: String
         var messages: [AnthropicMessage]
@@ -34,6 +76,8 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         var maxTokens: Int
         var stream: Bool
         var thinking: AnthropicThinking?
+        var mcpServers: [AnthropicMCPServer]?
+        var tools: [AnthropicMCPToolset]?
 
         enum CodingKeys: String, CodingKey {
             case model
@@ -42,6 +86,8 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
             case maxTokens = "max_tokens"
             case stream
             case thinking
+            case mcpServers = "mcp_servers"
+            case tools
         }
 
         func encode(to encoder: Encoder) throws {
@@ -52,6 +98,8 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
             try container.encode(maxTokens, forKey: .maxTokens)
             try container.encode(stream, forKey: .stream)
             try container.encodeIfPresent(thinking, forKey: .thinking)
+            try container.encodeIfPresent(mcpServers, forKey: .mcpServers)
+            try container.encodeIfPresent(tools, forKey: .tools)
         }
     }
 
@@ -64,11 +112,12 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         try ensureAlibabaCodingPlan(request: request, settings: settings)
         let apiKey = try resolvedCredential(credentialStore: credentialStore)
         let endpoint = try endpointURL()
-        let payload = try buildPayload(for: request, stream: false)
+        let mcpConfiguration = try buildMCPConfiguration(for: request, credentialStore: credentialStore)
+        let payload = try buildPayload(for: request, stream: false, mcpConfiguration: mcpConfiguration)
 
         let httpRequest = HTTPRequest(
             url: endpoint,
-            headers: headers(token: apiKey, streaming: false),
+            headers: headers(token: apiKey, streaming: false, includesMCP: mcpConfiguration != nil),
             body: payload
         )
 
@@ -92,11 +141,12 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
                     try ensureAlibabaCodingPlan(request: request, settings: settings)
                     let apiKey = try resolvedCredential(credentialStore: credentialStore)
                     let endpoint = try endpointURL()
-                    let payload = try buildPayload(for: request, stream: true)
+                    let mcpConfiguration = try buildMCPConfiguration(for: request, credentialStore: credentialStore)
+                    let payload = try buildPayload(for: request, stream: true, mcpConfiguration: mcpConfiguration)
 
                     let httpRequest = HTTPRequest(
                         url: endpoint,
-                        headers: headers(token: apiKey, streaming: true),
+                        headers: headers(token: apiKey, streaming: true, includesMCP: mcpConfiguration != nil),
                         body: payload
                     )
 
@@ -190,19 +240,26 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         return url
     }
 
-    private func headers(token: String, streaming: Bool) -> [String: String] {
+    private func headers(token: String, streaming: Bool, includesMCP: Bool) -> [String: String] {
         var headers = [
             "Content-Type": "application/json",
             "x-api-key": token,
             "anthropic-version": Self.anthropicVersion
         ]
+        if includesMCP {
+            headers["anthropic-beta"] = Self.mcpBetaHeader
+        }
         if streaming {
             headers["Accept"] = "text/event-stream"
         }
         return headers
     }
 
-    private func buildPayload(for request: ProviderRequest, stream: Bool) throws -> Data {
+    private func buildPayload(
+        for request: ProviderRequest,
+        stream: Bool,
+        mcpConfiguration: AnthropicMCPConfiguration?
+    ) throws -> Data {
         let thinking = buildThinking(request.thinking)
         let maxTokens = max(Self.defaultMaxTokens, (thinking?.budgetTokens ?? 0) + 1024)
         let body = AnthropicRequestBody(
@@ -211,9 +268,68 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
             system: optionalNonEmpty(request.systemPrompt),
             maxTokens: maxTokens,
             stream: stream,
-            thinking: thinking
+            thinking: thinking,
+            mcpServers: mcpConfiguration?.servers,
+            tools: mcpConfiguration?.toolsets
         )
         return try JSONEncoder().encode(body)
+    }
+
+    private func buildMCPConfiguration(
+        for request: ProviderRequest,
+        credentialStore: SecureCredentialStore
+    ) throws -> AnthropicMCPConfiguration? {
+        guard let tool = request.tools.first(where: { $0.type == "mcp_toolset" }) else {
+            return nil
+        }
+
+        let rawURL = tool.payload["server_url"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !rawURL.isEmpty,
+              let components = URLComponents(string: rawURL),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "https",
+              let host = components.host?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !host.isEmpty,
+              components.user == nil,
+              components.password == nil,
+              let normalizedURL = components.url?.absoluteString
+        else {
+            throw ProviderClientError.invalidBaseURL(rawURL)
+        }
+
+        let serverName = tool.payload["server_name"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .ifBlank(AppConstants.alibabaMCPDefaultServerName) ?? AppConstants.alibabaMCPDefaultServerName
+        let authorizationToken = try credentialStore.readSecret(key: AppConstants.alibabaMCPAuthorizationTokenKey)?.trimmedNonEmpty
+        let allowedTools = parseAllowedTools(tool.payload["allowed_tools"])
+        let server = AnthropicMCPServer(
+            url: normalizedURL,
+            name: serverName,
+            authorizationToken: authorizationToken
+        )
+
+        let toolset: AnthropicMCPToolset
+        if allowedTools.isEmpty {
+            toolset = AnthropicMCPToolset(
+                mcpServerName: serverName,
+                defaultConfig: nil,
+                configs: nil
+            )
+        } else {
+            let configs = allowedTools.reduce(into: [String: AnthropicMCPToolConfiguration]()) { result, toolName in
+                result[toolName] = AnthropicMCPToolConfiguration(enabled: true)
+            }
+            toolset = AnthropicMCPToolset(
+                mcpServerName: serverName,
+                defaultConfig: AnthropicMCPToolConfiguration(enabled: false),
+                configs: configs
+            )
+        }
+
+        return AnthropicMCPConfiguration(
+            servers: [server],
+            toolsets: [toolset]
+        )
     }
 
     private func buildThinking(_ thinking: ProviderThinkingConfig?) -> AnthropicThinking? {
@@ -277,6 +393,13 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         let type = (root["type"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
         switch type {
+        case "content_block_start":
+            guard let block = root["content_block"] as? [String: Any],
+                  (block["type"] as? String)?.lowercased() == "mcp_tool_use" else {
+                return nil
+            }
+            let name = (block["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return .toolCallDelta(name?.ifBlank("mcp_tool_use") ?? "mcp_tool_use")
         case "content_block_delta":
             guard let delta = root["delta"] as? [String: Any] else { return nil }
             let deltaType = (delta["type"] as? String)?.lowercased()
@@ -396,5 +519,30 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         guard let value else { return nil }
         guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return value
+    }
+
+    private func parseAllowedTools(_ raw: String?) -> [String] {
+        guard let raw else { return [] }
+        var result: [String] = []
+        for value in raw.split(whereSeparator: \.isNewline).flatMap({ $0.split(separator: ",") }) {
+            let normalized = String(value).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else { continue }
+            if !result.contains(where: { $0.caseInsensitiveCompare(normalized) == .orderedSame }) {
+                result.append(normalized)
+            }
+        }
+        return result
+    }
+}
+
+private extension String {
+    var trimmedNonEmpty: String? {
+        let value = trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    func ifBlank(_ fallback: String) -> String {
+        let value = trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? fallback : value
     }
 }

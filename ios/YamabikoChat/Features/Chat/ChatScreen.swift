@@ -1,4 +1,5 @@
 import SwiftUI
+import Photos
 import PhotosUI
 import UniformTypeIdentifiers
 import UIKit
@@ -31,11 +32,14 @@ struct ChatScreen: View {
     @ObservedObject var viewModel: ChatViewModel
     var onNavigateToConversation: ((Int64) -> Void)? = nil
 
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showFileImporter = false
     @State private var showPhotoPicker = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var scrollPositionID: String?
     @State private var isUserNearBottom = true
+    @State private var addingRecentPhotoIDs: Set<String> = []
+    @StateObject private var recentPhotoLibrary = RecentPhotoLibrary()
     @FocusState private var isComposerFocused: Bool
     private let bottomAnchorID = "chat-bottom-anchor"
 
@@ -152,6 +156,13 @@ struct ChatScreen: View {
                 }
         }
         .background(Color.chatScreenBackground)
+        .task {
+            recentPhotoLibrary.refresh()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            recentPhotoLibrary.refresh()
+        }
         .fileImporter(
             isPresented: $showFileImporter,
             allowedContentTypes: [.image, .pdf, .plainText, .utf8PlainText],
@@ -175,16 +186,7 @@ struct ChatScreen: View {
         .onChange(of: photoItems) { _, items in
             guard !items.isEmpty else { return }
             Task {
-                for item in items {
-                    if let url = await loadTemporaryFileURL(from: item) {
-                        await MainActor.run {
-                            viewModel.addAttachment(url: url)
-                        }
-                    }
-                }
-                await MainActor.run {
-                    photoItems = []
-                }
+                await importSelectedPhotos(items)
             }
         }
         .overlay(alignment: .bottomLeading) {
@@ -223,6 +225,8 @@ struct ChatScreen: View {
                     .truncationMode(.tail)
                     .padding(.horizontal, 8)
             }
+
+            recentPhotoStrip
 
             HStack(alignment: .bottom, spacing: 10) {
                 Menu {
@@ -291,16 +295,148 @@ struct ChatScreen: View {
         }
     }
 
-    private func loadTemporaryFileURL(from item: PhotosPickerItem) async -> URL? {
-        do {
-            guard let data = try await item.loadTransferable(type: Data.self) else { return nil }
-            let fileURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent(UUID().uuidString + ".jpg")
-            try data.write(to: fileURL)
-            return fileURL
-        } catch {
-            return nil
+    @ViewBuilder
+    private var recentPhotoStrip: some View {
+        if recentPhotoLibrary.canShowRecentPhotos, !recentPhotoLibrary.items.isEmpty {
+            RecentPhotoStrip(
+                items: recentPhotoLibrary.items,
+                loadingIDs: addingRecentPhotoIDs,
+                onOpenLibrary: {
+                    showPhotoPicker = true
+                },
+                onSelect: { item in
+                    addRecentPhoto(item)
+                }
+            )
+        } else if recentPhotoLibrary.isLoading {
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("最近の写真を読み込み中...")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(Color.chatInputBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        } else if recentPhotoLibrary.needsAuthorizationPrompt {
+            HStack(spacing: 10) {
+                Image(systemName: "photo.stack")
+                    .foregroundStyle(Color.chatAccent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("最近の写真を表示")
+                        .font(.subheadline.weight(.semibold))
+                    Text("許可するとここからすぐ添付できます。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Button("許可する") {
+                    recentPhotoLibrary.requestAuthorization()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.chatInputBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        } else if recentPhotoLibrary.isAccessDenied {
+            HStack(spacing: 10) {
+                Image(systemName: "photo.stack")
+                    .foregroundStyle(.secondary)
+                Text("写真アクセスを許可すると、最近の写真をここに表示できます。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Button("設定") {
+                    openAppSettings()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.chatInputBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
+    }
+
+    private func importSelectedPhotos(_ items: [PhotosPickerItem]) async {
+        var importedCount = 0
+        var failedCount = 0
+
+        for item in items {
+            do {
+                let attachment = try await loadTemporaryPhotoAttachment(from: item)
+                await MainActor.run {
+                    viewModel.addAttachment(
+                        url: attachment.url,
+                        displayName: attachment.displayName,
+                        deleteSourceWhenHandled: true
+                    )
+                }
+                importedCount += 1
+            } catch {
+                failedCount += 1
+                DiagnosticsLogger.log("Photos picker import failed", category: .chat, error: error)
+            }
+        }
+
+        await MainActor.run {
+            photoItems = []
+            if failedCount > 0 {
+                viewModel.errorMessage = importedCount == 0
+                    ? L10n.text("写真を読み込めませんでした。")
+                    : L10n.text("一部の写真を読み込めませんでした。")
+            }
+        }
+    }
+
+    private func loadTemporaryPhotoAttachment(
+        from item: PhotosPickerItem
+    ) async throws -> (url: URL, displayName: String) {
+        guard let data = try await item.loadTransferable(type: Data.self) else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        let preferredExtension = item.supportedContentTypes
+            .compactMap(\.preferredFilenameExtension)
+            .first ?? "jpg"
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(preferredExtension)
+        try data.write(to: fileURL)
+        return (fileURL, "photo.\(preferredExtension)")
+    }
+
+    private func addRecentPhoto(_ item: RecentPhotoItem) {
+        guard !addingRecentPhotoIDs.contains(item.id) else { return }
+        addingRecentPhotoIDs.insert(item.id)
+        Task {
+            do {
+                let fileURL = try await recentPhotoLibrary.exportFileURL(for: item.asset)
+                await MainActor.run {
+                    viewModel.addAttachment(
+                        url: fileURL,
+                        displayName: recentPhotoLibrary.suggestedFilename(for: item.asset),
+                        deleteSourceWhenHandled: true
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    viewModel.errorMessage = L10n.text("写真を読み込めませんでした。")
+                }
+            }
+            await MainActor.run {
+                addingRecentPhotoIDs.remove(item.id)
+            }
+        }
+    }
+
+    private func openAppSettings() {
+        guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(settingsURL)
     }
 
     private func dismissComposerKeyboard() {
@@ -391,7 +527,185 @@ private struct AttachmentPreviewRow: View {
     }
 }
 
+private struct RecentPhotoStrip: View {
+    let items: [RecentPhotoItem]
+    let loadingIDs: Set<String>
+    let onOpenLibrary: () -> Void
+    let onSelect: (RecentPhotoItem) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("最近の写真")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("すべての写真") {
+                    onOpenLibrary()
+                }
+                .font(.caption.weight(.semibold))
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    Button {
+                        onOpenLibrary()
+                    } label: {
+                        VStack(spacing: 6) {
+                            Image(systemName: "photo.on.rectangle.angled")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundStyle(Color.chatComposerIcon)
+                            Text("すべて")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(width: 68, height: 68)
+                        .background(Color.chatInputChipBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.chatBubbleBorder.opacity(0.45), lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    ForEach(items) { item in
+                        RecentPhotoButton(
+                            asset: item.asset,
+                            isLoading: loadingIDs.contains(item.id),
+                            onTap: {
+                                onSelect(item)
+                            }
+                        )
+                    }
+                }
+                .padding(.horizontal, 2)
+                .padding(.vertical, 2)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .background(Color.chatInputBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+private struct RecentPhotoButton: View {
+    let asset: PHAsset
+    let isLoading: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button {
+            onTap()
+        } label: {
+                ZStack {
+                    RecentPhotoThumbnail(asset: asset, sideLength: 68)
+                if isLoading {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(.black.opacity(0.28))
+                    ProgressView()
+                        .tint(.white)
+                        .controlSize(.small)
+                }
+            }
+            .frame(width: 68, height: 68)
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.chatBubbleBorder.opacity(0.35), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+    }
+}
+
+private struct RecentPhotoThumbnail: View {
+    @Environment(\.displayScale) private var displayScale
+    let asset: PHAsset
+    let sideLength: CGFloat
+    @State private var image: UIImage?
+    @State private var didAttemptLoad = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if didAttemptLoad {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.chatInputChipBackground)
+                    Image(systemName: "photo")
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.chatInputChipBackground)
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+        }
+        .frame(width: sideLength, height: sideLength)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .task(id: asset.localIdentifier) {
+            guard image == nil else { return }
+            image = await RecentPhotoThumbnailLoader.thumbnail(
+                for: asset,
+                maxPixelSize: sideLength * displayScale * 1.6
+            )
+            didAttemptLoad = true
+        }
+    }
+}
+
+private enum RecentPhotoThumbnailLoader {
+    static func thumbnail(for asset: PHAsset, maxPixelSize: CGFloat) async -> UIImage? {
+        await withCheckedContinuation { continuation in
+            let options = PHImageRequestOptions()
+            options.deliveryMode = .highQualityFormat
+            options.resizeMode = .fast
+            options.isNetworkAccessAllowed = true
+
+            let target = CGSize(
+                width: max(maxPixelSize, 48),
+                height: max(maxPixelSize, 48)
+            )
+
+            var didResume = false
+            PHImageManager.default().requestImage(
+                for: asset,
+                targetSize: target,
+                contentMode: .aspectFill,
+                options: options
+            ) { image, info in
+                guard !didResume else { return }
+                let isCancelled = (info?[PHImageCancelledKey] as? NSNumber)?.boolValue ?? false
+                let isDegraded = (info?[PHImageResultIsDegradedKey] as? NSNumber)?.boolValue ?? false
+                if isCancelled {
+                    didResume = true
+                    continuation.resume(returning: nil)
+                    return
+                }
+                if let error = info?[PHImageErrorKey] as? Error {
+                    didResume = true
+                    DiagnosticsLogger.log("Recent photo thumbnail load failed", category: .chat, error: error)
+                    continuation.resume(returning: nil)
+                    return
+                }
+                guard !isDegraded else { return }
+                didResume = true
+                continuation.resume(returning: image)
+            }
+        }
+    }
+}
+
 private struct AttachmentThumbnail: View {
+    @Environment(\.displayScale) private var displayScale
     let url: URL
     let sideLength: CGFloat
     @State private var image: UIImage?
@@ -425,7 +739,7 @@ private struct AttachmentThumbnail: View {
             guard image == nil else { return }
             image = ImageThumbnailGenerator.thumbnail(
                 for: url,
-                maxPixelSize: Int(sideLength * UIScreen.main.scale * 1.6)
+                maxPixelSize: Int(sideLength * displayScale * 1.6)
             )
             didAttemptLoad = true
         }

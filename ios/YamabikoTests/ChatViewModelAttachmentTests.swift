@@ -58,6 +58,27 @@ final class ChatViewModelAttachmentTests: XCTestCase {
         }
     }
 
+    func testAddAttachmentDeletesOwnedTemporarySourceAfterImport() throws {
+        let fixture = try makeFixture()
+        let conversationId = try fixture.repository.createConversation(title: "Attachment Cleanup Test")
+        let viewModel = ChatViewModel(conversationID: conversationId)
+        viewModel.bind(
+            repository: fixture.repository,
+            attachmentRepository: AttachmentRepository()
+        )
+
+        let source = try makeTemporaryFile(name: "owned.txt", text: "temporary attachment")
+
+        viewModel.addAttachment(url: source, deleteSourceWhenHandled: true)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
+        XCTAssertEqual(viewModel.attachments.count, 1)
+
+        if let persisted = viewModel.attachments.first?.url {
+            try? FileManager.default.removeItem(at: persisted)
+        }
+    }
+
     private func makeTemporaryFile(name: String, text: String) throws -> URL {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         try text.data(using: .utf8)?.write(to: file)

@@ -14,7 +14,9 @@ data class GenerateContentRequest(
     @SerialName("toolConfig")
     val toolConfig: ToolConfig? = null,
     @Transient
-    val codexConfig: CodexRequestConfig? = null
+    val codexConfig: CodexRequestConfig? = null,
+    @Transient
+    val promptCacheKey: String? = null
 )
 
 @Serializable

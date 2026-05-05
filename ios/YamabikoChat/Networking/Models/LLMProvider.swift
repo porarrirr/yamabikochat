@@ -5,6 +5,7 @@ enum LLMProvider: String, Codable, CaseIterable, Sendable {
     case geminiAuth = "GEMINI_AUTH"
     case qwenCode = "QWEN_CODE"
     case openRouter = "OPENROUTER"
+    case openCodeGo = "OPENCODE_GO"
     case alibabaCodingPlan = "ALIBABA_CODING_PLAN"
     case openAI = "OPENAI"
     case openAICompat = "OPENAI_COMPAT"

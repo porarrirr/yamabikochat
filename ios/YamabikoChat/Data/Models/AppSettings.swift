@@ -663,6 +663,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             "GEMINI_AUTH",
             "QWEN_CODE",
             "OPENROUTER",
+            "OPENCODE_GO",
             "ALIBABA_CODING_PLAN",
             "ZAI",
             "MINIMAX",

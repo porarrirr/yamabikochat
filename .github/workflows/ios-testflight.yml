@@ -41,6 +41,8 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security list-keychain -d user -s "$KEYCHAIN_PATH"
+          echo "IOS_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          echo "IOS_BUILD_CERT_PATH=$CERT_PATH" >> "$GITHUB_ENV"
 
       - name: Install provisioning profile
         env:
@@ -49,6 +51,7 @@ jobs:
           PP_PATH=$HOME/Library/MobileDevice/Provisioning\ Profiles
           mkdir -p "$PP_PATH"
           echo -n "$PROFILE_BASE64" | base64 --decode -o "$PP_PATH/yamabiko.mobileprovision"
+          echo "IOS_PROVISION_PROFILE_PATH=$PP_PATH/yamabiko.mobileprovision" >> "$GITHUB_ENV"
 
       - name: Archive
         run: |
@@ -98,3 +101,13 @@ jobs:
             --file $RUNNER_TEMP/export/YamabikoChat.ipa \
             --apiKey $APP_STORE_CONNECT_KEY_ID \
             --apiIssuer $APP_STORE_CONNECT_ISSUER_ID
+
+      - name: Clean up signing artifacts
+        if: always()
+        run: |
+          rm -f "${IOS_BUILD_CERT_PATH:-}"
+          rm -f "${IOS_PROVISION_PROFILE_PATH:-}"
+          rm -f "$RUNNER_TEMP"/AuthKey_*.p8
+          if [ -n "${IOS_KEYCHAIN_PATH:-}" ]; then
+            security delete-keychain "$IOS_KEYCHAIN_PATH" || true
+          fi

@@ -167,6 +167,9 @@ struct SettingsScreen: View {
             if currentProviderKey == "OPENROUTER" {
                 openRouterSection
             }
+            if currentProviderKey == "OPENCODE_GO" {
+                openCodeGoSection
+            }
             if currentProviderKey == "OPENAI" {
                 openAIEndpointSection
             }
@@ -624,6 +627,18 @@ struct SettingsScreen: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private var openCodeGoSection: some View {
+        Section("OpenCode Go") {
+            Text("Endpoint: \(AppConstants.defaultOpenCodeGoBaseURL.absoluteString)")
+                .font(.caption)
+                .textSelection(.enabled)
+
+            Text("OpenCode Go の API key を保存してください。MiniMax M2.7/M2.5 は `/messages`、それ以外の公式 Go モデルは `/chat/completions` に送信します。Chat Completions 系には会話単位の prompt cache key を付けて、同じ長い prefix が同じ cache route に乗りやすいようにします。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -1542,6 +1557,29 @@ struct SettingsScreen: View {
                     get: { viewModel.settings.defaultModel },
                     set: { viewModel.setDefaultModel($0) }
                 ))
+            } else if isOpenCodeGoProvider {
+                Picker("OpenCode Go Model", selection: Binding(
+                    get: { viewModel.settings.defaultModel },
+                    set: { viewModel.setDefaultModel($0) }
+                )) {
+                    ForEach(openCodeGoModelOptions) { model in
+                        Text(model.displayName).tag(model.id)
+                    }
+                }
+
+                if let model = OpenCodeGoModelCatalog.model(for: viewModel.settings.defaultModel) {
+                    Text(model.description)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                TextField("Model", text: Binding(
+                    get: { viewModel.settings.defaultModel },
+                    set: { viewModel.setDefaultModel($0) }
+                ))
+                Text("未掲載モデルは endpoint を安全に判定できないため、実行時に明示エラーで停止します。新しい Go モデルを使う場合は catalog 更新が必要です。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             } else if isQwenProvider {
                 Picker("Qwen Model", selection: Binding(
                     get: { viewModel.settings.defaultModel },
@@ -1770,6 +1808,10 @@ struct SettingsScreen: View {
         currentProviderKey == "ALIBABA_CODING_PLAN"
     }
 
+    private var isOpenCodeGoProvider: Bool {
+        currentProviderKey == "OPENCODE_GO"
+    }
+
     private var geminiModelOptions: [String] {
         var list = [viewModel.settings.defaultModel] + GeminiModelCatalog.suggestedModels
         var seen: Set<String> = []
@@ -1792,6 +1834,10 @@ struct SettingsScreen: View {
             return true
         }
         return list
+    }
+
+    private var openCodeGoModelOptions: [OpenCodeGoModel] {
+        OpenCodeGoModelCatalog.supportedModels
     }
 
     private var qwenModelOptions: [String] {

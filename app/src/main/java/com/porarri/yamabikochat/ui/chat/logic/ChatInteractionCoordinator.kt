@@ -122,7 +122,8 @@ class ChatInteractionCoordinator(
             tools = tools.takeIf { it.isNotEmpty() },
             generationConfig = generationConfig,
             system_instruction = systemInstruction,
-            codexConfig = codexConfig
+            codexConfig = codexConfig,
+            promptCacheKey = "conversation-${conversation.id}"
         )
 
         if (skipModelResponse) {
@@ -219,7 +220,8 @@ class ChatInteractionCoordinator(
             tools = tools.takeIf { it.isNotEmpty() },
             generationConfig = generationConfig,
             system_instruction = systemInstruction,
-            codexConfig = codexConfig
+            codexConfig = codexConfig,
+            promptCacheKey = "conversation-${conversation.id}"
         )
 
         if (settings.isStreamingEnabledFor(activeProvider)) {
@@ -343,7 +345,8 @@ class ChatInteractionCoordinator(
             system_instruction = settings.dualSystemPromptA?.let { SystemInstruction(parts = listOf(Part(it))) },
             generationConfig = buildGenerationConfig(settings, settings.dualProviderA, settings.dualModelA, thinkingConfigA),
             tools = toolsForA.takeIf { it.isNotEmpty() }?.toList(),
-            codexConfig = codexConfigA
+            codexConfig = codexConfigA,
+            promptCacheKey = "conversation-$conversationId-dual-a"
         )
 
         val requestB = GenerateContentRequest(
@@ -351,7 +354,8 @@ class ChatInteractionCoordinator(
             system_instruction = settings.dualSystemPromptB?.let { SystemInstruction(parts = listOf(Part(it))) },
             generationConfig = buildGenerationConfig(settings, settings.dualProviderB, settings.dualModelB, thinkingConfigB),
             tools = toolsForB.takeIf { it.isNotEmpty() }?.toList(),
-            codexConfig = codexConfigB
+            codexConfig = codexConfigB,
+            promptCacheKey = "conversation-$conversationId-dual-b"
         )
 
         val modelDualMessage = DualChatMessage(

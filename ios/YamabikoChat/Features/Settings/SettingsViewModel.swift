@@ -751,6 +751,8 @@ final class SettingsViewModel: ObservableObject {
             return "gemini-2.5-flash"
         case "ALIBABA_CODING_PLAN":
             return AlibabaCodingPlanModelCatalog.defaultModel
+        case "OPENCODE_GO":
+            return OpenCodeGoModelCatalog.defaultModel
         case "QWEN_CODE":
             return QwenModelCatalog.defaultModel
         case "MINIMAX":
