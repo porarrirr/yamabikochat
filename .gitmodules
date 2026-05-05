@@ -1,0 +1,4 @@
+[submodule "pryamabiko"]
+	path = pryamabiko
+	url = https://github.com/porarrirr/yamabikochat.git
+	branch = ios
