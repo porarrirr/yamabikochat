@@ -164,8 +164,9 @@ final class ChatViewModel: ObservableObject {
         deleteSourceWhenHandled: Bool = false
     ) {
         defer {
-            guard deleteSourceWhenHandled else { return }
-            try? FileManager.default.removeItem(at: url)
+            if deleteSourceWhenHandled {
+                try? FileManager.default.removeItem(at: url)
+            }
         }
         guard let attachmentRepository else {
             errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
