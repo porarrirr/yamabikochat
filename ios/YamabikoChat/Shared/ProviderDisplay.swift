@@ -24,6 +24,7 @@ enum ProviderCatalog {
         ProviderDisplay(key: "MINIMAX", title: "MiniMax"),
         ProviderDisplay(key: "OPENAI", title: "OpenAI"),
         ProviderDisplay(key: "CODEX_AUTH", title: "Codex Auth"),
+        ProviderDisplay(key: "APPLE_INTELLIGENCE", title: "Apple Intelligence"),
         ProviderDisplay(key: "OPENAI_COMPAT", title: "OpenAI (Custom)")
     ]
 

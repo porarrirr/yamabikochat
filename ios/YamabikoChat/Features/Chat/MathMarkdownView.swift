@@ -481,9 +481,9 @@ enum MathJaxLoadPlanner {
             )
         }
 
-        logger("MathJax local script missing; using CDN fallback.")
+        logger("MathJax local script missing; math rendering disabled for this message.")
         return MathJaxLoadPlan(
-            scriptTag: "<script src=\"https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js\" onerror=\"\(onErrorHandler)\"></script>",
+            scriptTag: "",
             baseURL: nil
         )
     }

@@ -548,6 +548,7 @@ final class ConversationRepository {
         boundChatConversationId: Int64?
     ) throws -> Int64 {
         try dbQueue.write { db in
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
             var conversation = AutoConversation(
                 title: config.title,
                 modelA: config.modelA,
@@ -559,8 +560,9 @@ final class ConversationRepository {
                 status: .active,
                 maxTurns: config.maxTurns,
                 currentTurn: 0,
-                createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
-                lastActiveAtMs: Int64(Date().timeIntervalSince1970 * 1000),
+                createdAtMs: now,
+                updatedAtMs: now,
+                lastActiveAtMs: now,
                 endReason: nil,
                 endSignal: config.endSignal,
                 boundChatConversationId: boundChatConversationId
@@ -573,7 +575,9 @@ final class ConversationRepository {
     func updateAutoConversation(_ conversation: AutoConversation) throws {
         try dbQueue.write { db in
             var mutable = conversation
-            mutable.lastActiveAtMs = Int64(Date().timeIntervalSince1970 * 1000)
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            mutable.updatedAtMs = now
+            mutable.lastActiveAtMs = now
             try mutable.update(db)
         }
     }
@@ -773,8 +777,8 @@ final class ConversationRepository {
             try mutable.insert(db)
             let now = Int64(Date().timeIntervalSince1970 * 1000)
             try db.execute(
-                sql: "UPDATE auto_conversations SET lastActiveAtMs = ? WHERE id = ?",
-                arguments: [now, message.autoConversationId]
+                sql: "UPDATE auto_conversations SET updatedAtMs = ?, lastActiveAtMs = ? WHERE id = ?",
+                arguments: [now, now, message.autoConversationId]
             )
             return mutable.id ?? 0
         }

@@ -619,7 +619,7 @@ final class AuthRepositoryTests: XCTestCase {
         }
     }
 
-    func testGeminiCliCompatibilitySyncStoresFetchedRemoteValues() async throws {
+    func testGeminiCliCompatibilitySyncStoresFetchedRemoteValuesWithoutImportingOAuthClient() async throws {
         let store = InMemoryCredentialStore()
         let httpClient = GeminiCompatibilitySyncHTTPClient()
         seedUpstreamCompatibilityResponses(into: httpClient)
@@ -636,27 +636,15 @@ final class AuthRepositoryTests: XCTestCase {
         XCTAssertEqual(compatibility.codeAssistEndpoint, "https://example.invalid/code-assist")
         XCTAssertEqual(compatibility.codeAssistVersion, "v9internal")
         XCTAssertEqual(compatibility.requestFormat.systemInstructionFieldName, "systemInstruction")
-        XCTAssertEqual(
-            compatibility.oauthClient,
-            GeminiOAuthClientConfig(
-                clientID: "test-client-id.apps.googleusercontent.com",
-                clientSecret: "test-client-secret"
-            )
-        )
+        XCTAssertNil(compatibility.oauthClient)
 
         let resolved = repo.currentGeminiCliCompatibility()
         XCTAssertEqual(resolved.source, .remote)
         XCTAssertEqual(resolved.remote.version, "9.9.9-test")
         XCTAssertNotNil(resolved.lastSyncISO8601)
-        XCTAssertEqual(
-            repo.importedOAuthClientConfig(),
-            GeminiOAuthClientConfig(
-                clientID: "test-client-id.apps.googleusercontent.com",
-                clientSecret: "test-client-secret"
-            )
-        )
-        XCTAssertTrue(repo.hasImportedOAuthClientConfig())
-        XCTAssertTrue(repo.isOAuthClientConfigured())
+        XCTAssertNil(repo.importedOAuthClientConfig())
+        XCTAssertFalse(repo.hasImportedOAuthClientConfig())
+        XCTAssertFalse(repo.isOAuthClientConfigured())
         XCTAssertEqual(httpClient.requestedURLs.count, GeminiCliCompatibilityStore.upstreamRawFileURLs.count)
     }
 

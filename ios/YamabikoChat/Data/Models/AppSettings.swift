@@ -669,6 +669,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             "MINIMAX",
             "OPENAI",
             "CODEX_AUTH",
+            "APPLE_INTELLIGENCE",
             "OPENAI_COMPAT"
         ]
         let orderedProviders =

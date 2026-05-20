@@ -8,6 +8,7 @@ final class ProviderEnumTests: XCTestCase {
         XCTAssertEqual(LLMProvider(rawOrDefault: "alibaba_coding_plan"), .alibabaCodingPlan)
         XCTAssertEqual(LLMProvider(rawOrDefault: "qwen_code"), .qwenCode)
         XCTAssertEqual(LLMProvider(rawOrDefault: "CODEX_AUTH"), .codexAuth)
+        XCTAssertEqual(LLMProvider(rawOrDefault: "apple_intelligence"), .appleIntelligence)
         XCTAssertEqual(LLMProvider(rawOrDefault: "unknown"), .gemini)
     }
 }

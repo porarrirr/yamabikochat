@@ -954,7 +954,7 @@ struct GeminiProviderClient: ProviderClient {
             DiagnosticsLogger.log(
                 "Gemini attachment skipped: unreadable file URL",
                 category: .network,
-                metadata: ["attachment": rawAttachment]
+                metadata: ["attachment_extension": URL(fileURLWithPath: rawAttachment).pathExtension]
             )
             return nil
         }
@@ -973,8 +973,7 @@ struct GeminiProviderClient: ProviderClient {
                 "Gemini attachment skipped: file read failed",
                 category: .network,
                 metadata: [
-                    "attachment": rawAttachment,
-                    "path": fileURL.path
+                    "attachment_extension": fileURL.pathExtension
                 ],
                 error: error
             )

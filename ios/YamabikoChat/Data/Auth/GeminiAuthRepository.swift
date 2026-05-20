@@ -245,21 +245,15 @@ final class GeminiAuthRepository {
                 files[name] = body
             }
 
-            let compatibility = try GeminiCliCompatibilityStore.parseUpstreamFiles(files)
-            guard let oauthClient = compatibility.oauthClient else {
-                throw ProviderClientError.parseFailure("Fetched upstream Gemini OAuth client configuration is incomplete.")
-            }
-            _ = try saveOAuthClientConfig(
-                clientID: oauthClient.clientID,
-                clientSecret: oauthClient.clientSecret
-            )
+            var compatibility = try GeminiCliCompatibilityStore.parseUpstreamFiles(files)
+            compatibility.oauthClient = nil
             try GeminiCliCompatibilityStore.saveRemote(
                 compatibility,
                 syncedAtISO8601: Self.nowISO8601(),
                 using: credentialStore
             )
             DiagnosticsLogger.log(
-                "Gemini CLI compatibility synced from upstream version=\(compatibility.version) oauth_config=synced",
+                "Gemini CLI compatibility synced from upstream version=\(compatibility.version)",
                 category: .auth
             )
             return .success(compatibility)

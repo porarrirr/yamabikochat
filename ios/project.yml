@@ -32,12 +32,16 @@ targets:
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
       - package: GRDB
+      - target: YamabikoShareExtension
+        embed: true
   YamabikoShareExtension:
     type: app-extension
     platform: iOS
     deploymentTarget: 17.0
     sources:
       - path: YamabikoShareExtension
+    resources:
+      - path: YamabikoShareExtension/PrivacyInfo.xcprivacy
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.porarri.yamabikochat.ios.share
       INFOPLIST_FILE: YamabikoShareExtension/Info.plist

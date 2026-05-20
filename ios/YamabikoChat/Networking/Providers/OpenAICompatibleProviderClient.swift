@@ -298,7 +298,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             return .zai
         case .codexAuth:
             return .codexAuth
-        case .gemini, .geminiAuth:
+        case .gemini, .geminiAuth, .appleIntelligence:
             return .gemini
         }
     }
@@ -347,7 +347,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                 throw ProviderClientError.invalidBaseURL("https://api.z.ai/v1/chat/completions")
             }
             return url
-        case .codexAuth, .gemini, .geminiAuth:
+        case .codexAuth, .gemini, .geminiAuth, .appleIntelligence:
             throw ProviderClientError.invalidBaseURL("Provider not supported by OpenAI compatible client")
         }
     }

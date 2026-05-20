@@ -116,6 +116,10 @@ private actor PricingSpyRepository: LiteLlmPricingEstimating {
         )
         return returnValue
     }
+
+    func lastCall() -> Call? {
+        calls.last
+    }
 }
 
 final class ChatRepositorySyncTests: XCTestCase {
@@ -379,7 +383,8 @@ final class ChatRepositorySyncTests: XCTestCase {
             attachments: []
         )
 
-        let call = try XCTUnwrap(await pricingSpy.calls.last)
+        let lastCall = await pricingSpy.lastCall()
+        let call = try XCTUnwrap(lastCall)
         XCTAssertEqual(call.provider, "OPENROUTER")
         XCTAssertEqual(call.model, "openai/gpt-4o-mini")
         XCTAssertEqual(call.inputTokens, 80)

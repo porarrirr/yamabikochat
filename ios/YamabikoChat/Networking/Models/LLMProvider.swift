@@ -12,6 +12,7 @@ enum LLMProvider: String, Codable, CaseIterable, Sendable {
     case miniMax = "MINIMAX"
     case codexAuth = "CODEX_AUTH"
     case zai = "ZAI"
+    case appleIntelligence = "APPLE_INTELLIGENCE"
 
     init(rawOrDefault value: String) {
         self = LLMProvider(rawValue: value.uppercased()) ?? .gemini

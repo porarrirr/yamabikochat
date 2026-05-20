@@ -23,6 +23,7 @@ private final class SettingsViewModelCredentialStore: SecureCredentialStore {
 }
 
 final class SettingsViewModelTests: XCTestCase {
+    @MainActor
     func testGeminiQuotaMissingCredentialErrorIsDetected() {
         XCTAssertTrue(
             SettingsViewModel.isGeminiQuotaMissingCredentialError(
@@ -36,6 +37,7 @@ final class SettingsViewModelTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testGeminiQuotaMissingCredentialErrorIgnoresOtherErrors() {
         XCTAssertFalse(
             SettingsViewModel.isGeminiQuotaMissingCredentialError(

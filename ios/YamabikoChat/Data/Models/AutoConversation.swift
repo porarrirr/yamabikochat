@@ -43,6 +43,7 @@ struct AutoConversation: Codable, FetchableRecord, MutablePersistableRecord, Ide
         case maxTurns
         case currentTurn
         case createdAtMs
+        case updatedAtMs
         case lastActiveAtMs
         case endReason
         case endSignal
@@ -61,6 +62,7 @@ struct AutoConversation: Codable, FetchableRecord, MutablePersistableRecord, Ide
     var maxTurns: Int
     var currentTurn: Int
     var createdAtMs: Int64
+    var updatedAtMs: Int64
     var lastActiveAtMs: Int64
     var endReason: String?
     var endSignal: String
@@ -84,6 +86,7 @@ struct AutoConversation: Codable, FetchableRecord, MutablePersistableRecord, Ide
         maxTurns: Int,
         currentTurn: Int = 0,
         createdAtMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
+        updatedAtMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
         lastActiveAtMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
         endReason: String? = nil,
         endSignal: String = "[END]",
@@ -101,6 +104,7 @@ struct AutoConversation: Codable, FetchableRecord, MutablePersistableRecord, Ide
         self.maxTurns = maxTurns
         self.currentTurn = currentTurn
         self.createdAtMs = createdAtMs
+        self.updatedAtMs = updatedAtMs
         self.lastActiveAtMs = lastActiveAtMs
         self.endReason = endReason
         self.endSignal = endSignal

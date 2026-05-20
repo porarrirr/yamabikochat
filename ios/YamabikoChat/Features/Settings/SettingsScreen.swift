@@ -922,7 +922,7 @@ struct SettingsScreen: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
-            Text("Refresh で GitHub upstream の wire format と OAuth Client ID / Client Secret も同期します。")
+            Text("Refresh では GitHub upstream の wire format だけを同期します。OAuth Client ID / Client Secret はユーザーが明示的に取り込むか手動入力した値だけを使います。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 

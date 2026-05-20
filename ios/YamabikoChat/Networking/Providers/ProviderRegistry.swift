@@ -6,6 +6,7 @@ struct ProviderRegistry {
     private let openCodeGo: OpenCodeGoProviderClient
     private let gemini: GeminiProviderClient
     private let codex: CodexProviderClient
+    private let appleIntelligence: AppleIntelligenceProviderClient
 
     init() {
         openAICompatible = OpenAICompatibleProviderClient()
@@ -13,6 +14,7 @@ struct ProviderRegistry {
         openCodeGo = OpenCodeGoProviderClient()
         gemini = GeminiProviderClient()
         codex = CodexProviderClient()
+        appleIntelligence = AppleIntelligenceProviderClient()
     }
 
     func client(for provider: LLMProvider) -> ProviderClient {
@@ -21,6 +23,8 @@ struct ProviderRegistry {
             return gemini
         case .codexAuth:
             return codex
+        case .appleIntelligence:
+            return appleIntelligence
         case .openCodeGo:
             return openCodeGo
         case .alibabaCodingPlan:

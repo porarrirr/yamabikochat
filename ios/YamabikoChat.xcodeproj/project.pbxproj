@@ -1,0 +1,1197 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		03532725DD2B55909FB526E9 /* ChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEE1F7C1D36E90F3AC5C8C74 /* ChatScreen.swift */; };
+		06872ECCFAD394292A44A8F7 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DDFDE867E825EB89B66D36A /* ChatViewModel.swift */; };
+		0776A15CFEB49CDA726E2495 /* ChatViewModelAttachmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 544B698E62EDD214009B7D7A /* ChatViewModelAttachmentTests.swift */; };
+		09686EB3A3445E07BE1460EF /* ChatViewModelSystemPromptLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DE067888B1007F0A3129E03 /* ChatViewModelSystemPromptLabelTests.swift */; };
+		0C3BB6177F58002E5A66449A /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = A830A97218DEF74E9FA3C2AF /* AppConstants.swift */; };
+		0CDA21EA006C871E5AC3164F /* CodexUserAgentCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63E141DD6CBBC6B7BD021B42 /* CodexUserAgentCatalog.swift */; };
+		10D322B8F73405F360B85BBE /* OpenCodeGoModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60224F6EBCC6491A82E063D /* OpenCodeGoModelCatalog.swift */; };
+		11741302C42E0079EDC6E0D4 /* OpenCodeGoProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B17B8FC83DEF587229515B1 /* OpenCodeGoProviderClient.swift */; };
+		1496CEA828F2AB0422533262 /* AttachmentRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F19C0624B1D761F882F6EBB /* AttachmentRepository.swift */; };
+		14BF6506C9D8F6C2BE2A7AD8 /* BackgroundTaskGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AD5BFFA938AB90157FB5E3F /* BackgroundTaskGuard.swift */; };
+		162459CC3F5A69C2E4423019 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B660E8DACB6DDA3ECAC45423 /* ChatMessage.swift */; };
+		1B74D8D45E9E029D607B5DC7 /* GeminiCliCompatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D5579ADACDE96AEE1B9189 /* GeminiCliCompatibility.swift */; };
+		1E008ECA9DD0FE0FB13EA463 /* ReasoningExtractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ECE967CBAB3BDDC5E028715 /* ReasoningExtractionTests.swift */; };
+		23EDCEE4A45503E5C672C366 /* TokenUsageRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF98E65F9A6271C2C6396E89 /* TokenUsageRecord.swift */; };
+		254CF84CEA71BEF991539659 /* GeminiModelUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AFADAD85FDF09DED54072D8 /* GeminiModelUtils.swift */; };
+		28F0BE4462B7BE4BDADB89DC /* ChatProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 425C9F974B954BB239A10CA5 /* ChatProject.swift */; };
+		29555BD490F34189056A684A /* ChatMessageVariant.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAB5DB55D3CE8664531EC01E /* ChatMessageVariant.swift */; };
+		2A8999A902854B3C516715B5 /* LiteLlmPricingRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46EC372D26102F3D22DE62C6 /* LiteLlmPricingRepository.swift */; };
+		2AB5391EDBA3C46611B33496 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = F797EB5B4E9A1A120BD718DB /* Localizable.strings */; };
+		2EAD672EDECBCA4C9DFEFC96 /* OpenRouterModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1DCF3DC302B2389310C7088 /* OpenRouterModels.swift */; };
+		2F385FBF449F22A1560291F6 /* SvgCodeExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25418095A457767B82727AED /* SvgCodeExtractor.swift */; };
+		315256D3D28F249024506BD1 /* CodexModelPresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A394920B0293DB363D2D092D /* CodexModelPresets.swift */; };
+		34A0432A76484628739B77F7 /* ProviderGatewayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7750E5527AF38A1C22312B /* ProviderGatewayTests.swift */; };
+		3B85342C06EEE33A7A4FE9F7 /* SharePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E5EC327A302F432B8A4083 /* SharePayload.swift */; };
+		420A27134573C14D0C25C8D4 /* ProviderResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32CA8311076713E626B18DDF /* ProviderResponse.swift */; };
+		47ACB5DE38ECF54503D03CB7 /* QwenModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4936125AF5188D983D15A9D /* QwenModelCatalog.swift */; };
+		49E4DCE20748F2F22FB31465 /* LocalAuthCallbackServerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59D76AC83FA6381A252F9360 /* LocalAuthCallbackServerTests.swift */; };
+		4A3350967D0FB05191267527 /* ProviderRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DFF46198541856F3786897A /* ProviderRegistry.swift */; };
+		4AE260CE4DB0D3B686D40CEF /* AnthropicCompatibleProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5632CDAAD8445EB4126CA344 /* AnthropicCompatibleProviderClient.swift */; };
+		4AF8DCF064E32B3DD82E1D65 /* ModelPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE1F31BD54AADF6461CBC67C /* ModelPreset.swift */; };
+		558958AC9605E2A2DFB01C75 /* ProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF24176365C39342C367D630 /* ProviderClient.swift */; };
+		571C85C9DE0C54A8D05F13A3 /* YamabikoChatApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB82A26885ADF535C4F4C4BA /* YamabikoChatApp.swift */; };
+		58640E1AB03C281DCCD490A2 /* ChatRepositoryBranchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 675569E061B2D501C62AC37B /* ChatRepositoryBranchTests.swift */; };
+		597408051A74D4E377CF101C /* AnyEncodable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 868A2D4B962B0447C2B55BEF /* AnyEncodable.swift */; };
+		5D27722FA0D489EB470653FB /* ProviderClientParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3470CFFE969A9B32DA280E0 /* ProviderClientParityTests.swift */; };
+		5DD1BF2FFADC0EDDBF1E4F24 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3EBA92A44EE4C86F2E89505 /* AppState.swift */; };
+		5EEC2EDE7DD1098AE5A24FFB /* AuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C80771801FDEE9773008CF0 /* AuthModels.swift */; };
+		615791B4B229DB6A6AD8D4C5 /* OpenRouterModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C3E31EC64A965F4851AE80A /* OpenRouterModelTests.swift */; };
+		62858D753E8FDE9E560BD802 /* AppleIntelligenceProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FF77399450389CF5892A94D /* AppleIntelligenceProviderClient.swift */; };
+		674D06E4C49E2F3F7B6B3B6A /* ProviderDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB55024341507549B0165D92 /* ProviderDisplay.swift */; };
+		67A83D5BBD97B63A244F9AE9 /* QueryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC33A86476882AF4CAB47380 /* QueryModels.swift */; };
+		68C5E943C2E9603B736DDE83 /* GeminiModelUtilsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7824746250F630294D76127F /* GeminiModelUtilsTests.swift */; };
+		68D3D5243FD371FA5A94E8B3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = DF5A86DA79BCA1DE64424AEB /* GRDB */; };
+		68F2C57FC9094A7B7D551127 /* AuthRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25B179C43C1498EFC4B1DF4B /* AuthRepositoryTests.swift */; };
+		696478CAFDBA3D897D3DE015 /* SvgPreviewWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0668334AA8F62D1F58F6B2F6 /* SvgPreviewWebView.swift */; };
+		69A868E7A0FE2AB17FD68584 /* LiteLlmPricingRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 354A655F2DAC30AF82690AAD /* LiteLlmPricingRepositoryTests.swift */; };
+		6BE4255C9859E8CBF13D8485 /* CodexProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB85B3BEFED3BED3125DD003 /* CodexProviderClient.swift */; };
+		73E2661F0342C7184867B14D /* ChatRepositoryDualTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CE95A107E6CAC3E8A4BC48 /* ChatRepositoryDualTests.swift */; };
+		760DDEAE99F1EE0CF4070FEF /* ProviderError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E0CA7213C1361207E3BA5F2 /* ProviderError.swift */; };
+		77B7FED703C2BBAC4947F8E8 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65438877F0411D1956AB70FB /* AppContainer.swift */; };
+		77EFC73B14FE3A57CAF6B1C3 /* AutoConversationFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC763DA5C2E9F9656E06CA07 /* AutoConversationFormatter.swift */; };
+		78405D71C3D2598BDE49D70F /* LocalAuthCallbackServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5CFFE9C93FC61F9A3335A21 /* LocalAuthCallbackServer.swift */; };
+		79A232362351686E2A7742CC /* SpeechRecognitionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54DB2C1D3F5C4C02F1C2632F /* SpeechRecognitionService.swift */; };
+		7AA55F94D1771B63F74DAE98 /* CodexAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = C470C52136C0F5806543DD92 /* CodexAuthRepository.swift */; };
+		7BFAACD8E93287663F02909C /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A4495C8B20F93382A8E4847 /* AppSettings.swift */; };
+		7E687F15AA9ED90CC7CABE7B /* ConversationListViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47940928BCA24ACBA0867772 /* ConversationListViewModelTests.swift */; };
+		7ECFAF36ED62E3488F99484B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5E76571802BD1DCDB737AD8 /* RootView.swift */; };
+		805DF4CF2E89A50E4719DF5D /* OpenAICompatibleProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3547BEA762DAAB71C17AC763 /* OpenAICompatibleProviderClient.swift */; };
+		849D27D7F89B502B1F05E424 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B03D691C10949EDBFCACB34 /* L10n.swift */; };
+		85FC7B737290A7F2AEF76EA1 /* ChatRepositorySyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BB165FEAEAED23FC6FB6EF8 /* ChatRepositorySyncTests.swift */; };
+		8647CA0CCFA82D5C469B4853 /* tex-svg.js in Resources */ = {isa = PBXBuildFile; fileRef = 68417249749E064D56E23ACE /* tex-svg.js */; };
+		86C1A71D4FE84F258D89E013 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 86C1A71C4FE84F258D89E013 /* PrivacyInfo.xcprivacy */; };
+		922866C08D7F9507A748D15E /* ChatRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81BEFD60BAA4BF4DA1A9286B /* ChatRepository.swift */; };
+		962D63DC04F87D3F8083C055 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */; };
+		9956FF9B0D965DD8D01BA6BA /* SvgPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BD71648A1094DBA64CF4949 /* SvgPreviewCard.swift */; };
+		9A4643F98030A10AB665492D /* SettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0034572985CEC32177512AA8 /* SettingsViewModelTests.swift */; };
+		9B7C6CCA982CA1EE8E0230D0 /* Conversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DB849BCF850C7043309A152 /* Conversation.swift */; };
+		9BD4FAE526CE71050BECC62F /* AutoConversationScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 083B2E8ED266219AFBEA0E3F /* AutoConversationScreen.swift */; };
+		9BD931169E39B228157F7725 /* MathMarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E24B2D0E1B8B5D9D45FF6161 /* MathMarkdownView.swift */; };
+		9C8DF35292A9094BBC4AC80B /* DualChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AC5A236291207F4B1999405 /* DualChatScreen.swift */; };
+		9D1015095502D66198ACFCAA /* SharePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9363C3CAA9719CCF18383531 /* SharePayload.swift */; };
+		9DDD92F6311397EE7798ECBE /* DiagnosticsLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43C7CD5EB5CC05FED3F202A /* DiagnosticsLogger.swift */; };
+		9EFE66AD7151E071A14BEB4A /* LLMProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E39A438B710CF8BB0B6199 /* LLMProvider.swift */; };
+		A258A4BFE2E6449D6D1EC9FE /* ConversationVariantSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 165EBDEB744C9307E8CCF4C7 /* ConversationVariantSelectionTests.swift */; };
+		A5EDE85ADAE21979AFD0F21B /* AuthFlowReadySignal.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2DD044916B4D621321F9D61 /* AuthFlowReadySignal.swift */; };
+		A6DF3315E8E4B98E25854E2D /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB870EF06AABC09F6C08A140 /* SettingsScreen.swift */; };
+		A6FD4DD0049C2696FF7EA66B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2559F5CDE33F1C6606E7C9D0 /* Assets.xcassets */; };
+		AF21AD63CE43E7C3CA3AE2A6 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E00C2C05164977DE56584F /* SettingsViewModel.swift */; };
+		B03BF199C336CBF54E9C64A9 /* AutoConversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 858FCD319B989915370556E1 /* AutoConversation.swift */; };
+		B55F3394DAC60DFB4F360453 /* GeminiAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F12B0E929729F00F81E776F /* GeminiAuthRepository.swift */; };
+		B5F815461384B7A783B82034 /* ProviderRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF047B35C735D75B50DB5BAD /* ProviderRequest.swift */; };
+		B8E790B614AEA481BCBD4273 /* QwenAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFB22DDA2BABCE0AE109F751 /* QwenAuthRepository.swift */; };
+		B913EC775D7E5EFB3A90770D /* ConversationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D8BA2FD667A80E1498097F0 /* ConversationRepository.swift */; };
+		B9CBE41E5D9DEFC79C81DE9C /* OpenRouterModelService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9640B4B2BAEBA68E8C24CC6D /* OpenRouterModelService.swift */; };
+		BA20375105BFC8A79A60FBFF /* ProviderGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DCCF57D57AD52F33A2B009A /* ProviderGateway.swift */; };
+		BEB75013CC194BC6481ECAE4 /* AutoConversationRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D45BDA96C2B777C80AA6387 /* AutoConversationRepositoryTests.swift */; };
+		C912D70FEA5AD0AAB1133DC4 /* DualChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B5936D9B9C6967F14740D01 /* DualChatMessage.swift */; };
+		C9387C530EFE099A6E673152 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4096E23296858EC0BE363960 /* ShareViewController.swift */; };
+		CA77F3456BBE6F922CD2A4C0 /* GeminiAuthInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 71F8C33EB4EF9996517CE462 /* GeminiAuthInfo.plist */; };
+		CB6D07009F1B45E9999D7860 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = CB6D06FF9F1B45E9999D7860 /* PrivacyInfo.xcprivacy */; };
+		CE67F1C6513857BEBB98C462 /* TokenUsageStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89C94BED57FA07CCF9938A80 /* TokenUsageStats.swift */; };
+		D27E29A04A40CC534C77F870 /* SettingsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A487FA3FBC0728FA70BC4DC2 /* SettingsRepository.swift */; };
+		D3F24BA15CE46220C3494CF3 /* ProjectFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E7DA902C4E31F43AC67F6DE /* ProjectFeatureTests.swift */; };
+		D47A3DA9EA4B8C62A4554CD6 /* GeminiModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEAC567088AC21851EC5F65E /* GeminiModelCatalog.swift */; };
+		D50FEEF4BBB585DACA27F0EA /* AppDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F787F7E2A908AFEEEBA0E1F /* AppDatabase.swift */; };
+		D63F06CADBC32DCDED7D808E /* MathMarkdownViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 961BCEE0B9725B362F606EA0 /* MathMarkdownViewTests.swift */; };
+		DDC070B5A41C4C19A59A6B9C /* YamabikoShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 875043B225A7D44033DFD07D /* YamabikoShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E00E1BEED00E37AA48679DBC /* ProviderEnumTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF7CF673D03C83995B954FE0 /* ProviderEnumTests.swift */; };
+		E06F6B142947E79244C240DE /* ConversationListScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BB73A6E778AA23087EEB852 /* ConversationListScreen.swift */; };
+		E27A6862F9650B6AA7DBDCA4 /* ChatWorkspaceScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37FA26435A6801B2A3687B6C /* ChatWorkspaceScreen.swift */; };
+		E3D2C8117C27F2B1F3A5F379 /* AppSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B52DE6355353E52D1B7576D /* AppSettingsTests.swift */; };
+		E8974A4399A27CF3C732BCF4 /* ChatMessageThinking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 481CA1A12D0312351DABD396 /* ChatMessageThinking.swift */; };
+		E8DA2924C68103B34BDA3BBF /* ConversationListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6012B61691A11858B0918E5 /* ConversationListViewModel.swift */; };
+		E92E653594F51DA8DB04B311 /* markdown-renderer.js in Resources */ = {isa = PBXBuildFile; fileRef = 103A4F6B6DC37D5F26D3B66A /* markdown-renderer.js */; };
+		EA532937FF143B56F4BA2FF5 /* HTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE885E298CFD7325CE27F89 /* HTTPClient.swift */; };
+		EB84D0CE80232324476608EF /* AlibabaCodingPlanModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C19A7AE41E0E5052471F871 /* AlibabaCodingPlanModelCatalog.swift */; };
+		EBA3AC5384FD499D7A5F0CFF /* AttachmentRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22F0C11892572A2CBD1C39E7 /* AttachmentRepositoryTests.swift */; };
+		EF12AD93CA25107FB63F52E2 /* SvgPreviewSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51CC989E2C978463E973E22C /* SvgPreviewSanitizerTests.swift */; };
+		F21ED9977B4C899512D10E80 /* RecentPhotoLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71E38ECB6FCC39AB8BABE949 /* RecentPhotoLibrary.swift */; };
+		F385BC565CFD26EB915C163B /* SvgCodeExtractorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0B056D22F60CAD49BD2587 /* SvgCodeExtractorTests.swift */; };
+		F6E818106835DBDE88EB9479 /* GeminiProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88E60BB6D93FEC509378FC79 /* GeminiProviderClient.swift */; };
+		F83EFAD8650B49B29FD63F50 /* AutoConversationMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E0AF024AFDE4AE3554BA68 /* AutoConversationMessage.swift */; };
+		F9D736C50BFE0923A5D98C63 /* ChatViewModelBranchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC2326E949464E12375DC82 /* ChatViewModelBranchTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		94F6A2F0177D37222ECB6B82 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 74EC9AC2FED264F13D5283FF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8902EC7AC6F4A0CE2556BA5E;
+			remoteInfo = YamabikoChat;
+		};
+		DDC070B7A41C4C19A59A6B9C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 74EC9AC2FED264F13D5283FF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A0482E078852897EA805FB9B;
+			remoteInfo = YamabikoShareExtension;
+		};
+	/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		DDC070B6A41C4C19A59A6B9C /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				DDC070B5A41C4C19A59A6B9C /* YamabikoShareExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0034572985CEC32177512AA8 /* SettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModelTests.swift; sourceTree = "<group>"; };
+		02841C260164C20D9258C6B7 /* YamabikoShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YamabikoShareExtension.entitlements; sourceTree = "<group>"; };
+		0668334AA8F62D1F58F6B2F6 /* SvgPreviewWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgPreviewWebView.swift; sourceTree = "<group>"; };
+		083B2E8ED266219AFBEA0E3F /* AutoConversationScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversationScreen.swift; sourceTree = "<group>"; };
+		0D45BDA96C2B777C80AA6387 /* AutoConversationRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversationRepositoryTests.swift; sourceTree = "<group>"; };
+		0DCCF57D57AD52F33A2B009A /* ProviderGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderGateway.swift; sourceTree = "<group>"; };
+		0EBC88F61E3A18DAF4B087B7 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		0F0B056D22F60CAD49BD2587 /* SvgCodeExtractorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgCodeExtractorTests.swift; sourceTree = "<group>"; };
+		0F787F7E2A908AFEEEBA0E1F /* AppDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDatabase.swift; sourceTree = "<group>"; };
+		103A4F6B6DC37D5F26D3B66A /* markdown-renderer.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "markdown-renderer.js"; sourceTree = "<group>"; };
+		165EBDEB744C9307E8CCF4C7 /* ConversationVariantSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationVariantSelectionTests.swift; sourceTree = "<group>"; };
+		1AC5A236291207F4B1999405 /* DualChatScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualChatScreen.swift; sourceTree = "<group>"; };
+		1B03D691C10949EDBFCACB34 /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
+		1DDFDE867E825EB89B66D36A /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
+		1DE067888B1007F0A3129E03 /* ChatViewModelSystemPromptLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModelSystemPromptLabelTests.swift; sourceTree = "<group>"; };
+		1FF77399450389CF5892A94D /* AppleIntelligenceProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIntelligenceProviderClient.swift; sourceTree = "<group>"; };
+		22F0C11892572A2CBD1C39E7 /* AttachmentRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentRepositoryTests.swift; sourceTree = "<group>"; };
+		25418095A457767B82727AED /* SvgCodeExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgCodeExtractor.swift; sourceTree = "<group>"; };
+		2559F5CDE33F1C6606E7C9D0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		25B179C43C1498EFC4B1DF4B /* AuthRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepositoryTests.swift; sourceTree = "<group>"; };
+		2A4495C8B20F93382A8E4847 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		2A7750E5527AF38A1C22312B /* ProviderGatewayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderGatewayTests.swift; sourceTree = "<group>"; };
+		2B17B8FC83DEF587229515B1 /* OpenCodeGoProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeGoProviderClient.swift; sourceTree = "<group>"; };
+		2BD71648A1094DBA64CF4949 /* SvgPreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgPreviewCard.swift; sourceTree = "<group>"; };
+		2D8BA2FD667A80E1498097F0 /* ConversationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationRepository.swift; sourceTree = "<group>"; };
+		2DB849BCF850C7043309A152 /* Conversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Conversation.swift; sourceTree = "<group>"; };
+		2E0CA7213C1361207E3BA5F2 /* ProviderError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderError.swift; sourceTree = "<group>"; };
+		2ECE967CBAB3BDDC5E028715 /* ReasoningExtractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReasoningExtractionTests.swift; sourceTree = "<group>"; };
+		321B02A1F52280A6AF7BD4EE /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
+		32CA8311076713E626B18DDF /* ProviderResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderResponse.swift; sourceTree = "<group>"; };
+		3547BEA762DAAB71C17AC763 /* OpenAICompatibleProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatibleProviderClient.swift; sourceTree = "<group>"; };
+		354A655F2DAC30AF82690AAD /* LiteLlmPricingRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteLlmPricingRepositoryTests.swift; sourceTree = "<group>"; };
+		37FA26435A6801B2A3687B6C /* ChatWorkspaceScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatWorkspaceScreen.swift; sourceTree = "<group>"; };
+		3BB73A6E778AA23087EEB852 /* ConversationListScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListScreen.swift; sourceTree = "<group>"; };
+		3C19A7AE41E0E5052471F871 /* AlibabaCodingPlanModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlibabaCodingPlanModelCatalog.swift; sourceTree = "<group>"; };
+		3DFF46198541856F3786897A /* ProviderRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderRegistry.swift; sourceTree = "<group>"; };
+		4096E23296858EC0BE363960 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		425C9F974B954BB239A10CA5 /* ChatProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatProject.swift; sourceTree = "<group>"; };
+		46EC372D26102F3D22DE62C6 /* LiteLlmPricingRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteLlmPricingRepository.swift; sourceTree = "<group>"; };
+		47940928BCA24ACBA0867772 /* ConversationListViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListViewModelTests.swift; sourceTree = "<group>"; };
+		481CA1A12D0312351DABD396 /* ChatMessageThinking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageThinking.swift; sourceTree = "<group>"; };
+		4A4A275C5AEA3B4900440F13 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		4AD5BFFA938AB90157FB5E3F /* BackgroundTaskGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundTaskGuard.swift; sourceTree = "<group>"; };
+		4B52DE6355353E52D1B7576D /* AppSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsTests.swift; sourceTree = "<group>"; };
+		4C3E31EC64A965F4851AE80A /* OpenRouterModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterModelTests.swift; sourceTree = "<group>"; };
+		51CC989E2C978463E973E22C /* SvgPreviewSanitizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgPreviewSanitizerTests.swift; sourceTree = "<group>"; };
+		544B698E62EDD214009B7D7A /* ChatViewModelAttachmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModelAttachmentTests.swift; sourceTree = "<group>"; };
+		54DB2C1D3F5C4C02F1C2632F /* SpeechRecognitionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognitionService.swift; sourceTree = "<group>"; };
+		5632CDAAD8445EB4126CA344 /* AnthropicCompatibleProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicCompatibleProviderClient.swift; sourceTree = "<group>"; };
+		59D76AC83FA6381A252F9360 /* LocalAuthCallbackServerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAuthCallbackServerTests.swift; sourceTree = "<group>"; };
+		5BB165FEAEAED23FC6FB6EF8 /* ChatRepositorySyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepositorySyncTests.swift; sourceTree = "<group>"; };
+		5C80771801FDEE9773008CF0 /* AuthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthModels.swift; sourceTree = "<group>"; };
+		63E141DD6CBBC6B7BD021B42 /* CodexUserAgentCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUserAgentCatalog.swift; sourceTree = "<group>"; };
+		65438877F0411D1956AB70FB /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
+		675569E061B2D501C62AC37B /* ChatRepositoryBranchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepositoryBranchTests.swift; sourceTree = "<group>"; };
+		68417249749E064D56E23ACE /* tex-svg.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "tex-svg.js"; sourceTree = "<group>"; };
+		6F12B0E929729F00F81E776F /* GeminiAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiAuthRepository.swift; sourceTree = "<group>"; };
+		71E38ECB6FCC39AB8BABE949 /* RecentPhotoLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentPhotoLibrary.swift; sourceTree = "<group>"; };
+		71F8C33EB4EF9996517CE462 /* GeminiAuthInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = GeminiAuthInfo.plist; sourceTree = "<group>"; };
+		734FF62164855B98A15ECE62 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		86C1A71C4FE84F258D89E013 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		7824746250F630294D76127F /* GeminiModelUtilsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiModelUtilsTests.swift; sourceTree = "<group>"; };
+		7AFADAD85FDF09DED54072D8 /* GeminiModelUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiModelUtils.swift; sourceTree = "<group>"; };
+		7BE885E298CFD7325CE27F89 /* HTTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPClient.swift; sourceTree = "<group>"; };
+		81BEFD60BAA4BF4DA1A9286B /* ChatRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepository.swift; sourceTree = "<group>"; };
+		84A73C52D0DE4C504F3BA2DC /* YamabikoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YamabikoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		858FCD319B989915370556E1 /* AutoConversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversation.swift; sourceTree = "<group>"; };
+		868A2D4B962B0447C2B55BEF /* AnyEncodable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnyEncodable.swift; sourceTree = "<group>"; };
+		875043B225A7D44033DFD07D /* YamabikoShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = YamabikoShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		88E60BB6D93FEC509378FC79 /* GeminiProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiProviderClient.swift; sourceTree = "<group>"; };
+		89C94BED57FA07CCF9938A80 /* TokenUsageStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenUsageStats.swift; sourceTree = "<group>"; };
+		8A8AAD9C976A025E68725D68 /* YamabikoChat.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YamabikoChat.entitlements; sourceTree = "<group>"; };
+		8B5936D9B9C6967F14740D01 /* DualChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualChatMessage.swift; sourceTree = "<group>"; };
+		8DC2326E949464E12375DC82 /* ChatViewModelBranchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModelBranchTests.swift; sourceTree = "<group>"; };
+		8F19C0624B1D761F882F6EBB /* AttachmentRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentRepository.swift; sourceTree = "<group>"; };
+		9363C3CAA9719CCF18383531 /* SharePayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharePayload.swift; sourceTree = "<group>"; };
+		961BCEE0B9725B362F606EA0 /* MathMarkdownViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathMarkdownViewTests.swift; sourceTree = "<group>"; };
+		9640B4B2BAEBA68E8C24CC6D /* OpenRouterModelService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterModelService.swift; sourceTree = "<group>"; };
+		9E7DA902C4E31F43AC67F6DE /* ProjectFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectFeatureTests.swift; sourceTree = "<group>"; };
+		A0D5579ADACDE96AEE1B9189 /* GeminiCliCompatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiCliCompatibility.swift; sourceTree = "<group>"; };
+		A0E39A438B710CF8BB0B6199 /* LLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProvider.swift; sourceTree = "<group>"; };
+		A394920B0293DB363D2D092D /* CodexModelPresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexModelPresets.swift; sourceTree = "<group>"; };
+		A3EBA92A44EE4C86F2E89505 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		A487FA3FBC0728FA70BC4DC2 /* SettingsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsRepository.swift; sourceTree = "<group>"; };
+		A4936125AF5188D983D15A9D /* QwenModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenModelCatalog.swift; sourceTree = "<group>"; };
+		A5E00C2C05164977DE56584F /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
+		A830A97218DEF74E9FA3C2AF /* AppConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConstants.swift; sourceTree = "<group>"; };
+		AAFB800375481AE013AF9773 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		AB8DAEE8D6609BEE6A100480 /* YamabikoChat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YamabikoChat.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B0CE95A107E6CAC3E8A4BC48 /* ChatRepositoryDualTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepositoryDualTests.swift; sourceTree = "<group>"; };
+		B3470CFFE969A9B32DA280E0 /* ProviderClientParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderClientParityTests.swift; sourceTree = "<group>"; };
+		B660E8DACB6DDA3ECAC45423 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
+		BAB5DB55D3CE8664531EC01E /* ChatMessageVariant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageVariant.swift; sourceTree = "<group>"; };
+		BB55024341507549B0165D92 /* ProviderDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderDisplay.swift; sourceTree = "<group>"; };
+		BC763DA5C2E9F9656E06CA07 /* AutoConversationFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversationFormatter.swift; sourceTree = "<group>"; };
+		BF24176365C39342C367D630 /* ProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderClient.swift; sourceTree = "<group>"; };
+		C0E5EC327A302F432B8A4083 /* SharePayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharePayload.swift; sourceTree = "<group>"; };
+		C2DD044916B4D621321F9D61 /* AuthFlowReadySignal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthFlowReadySignal.swift; sourceTree = "<group>"; };
+		C470C52136C0F5806543DD92 /* CodexAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexAuthRepository.swift; sourceTree = "<group>"; };
+		C4E0AF024AFDE4AE3554BA68 /* AutoConversationMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversationMessage.swift; sourceTree = "<group>"; };
+		C60224F6EBCC6491A82E063D /* OpenCodeGoModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeGoModelCatalog.swift; sourceTree = "<group>"; };
+		CADA957F12D5C9DC605007FE /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/Localizable.strings; sourceTree = "<group>"; };
+		CB82A26885ADF535C4F4C4BA /* YamabikoChatApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YamabikoChatApp.swift; sourceTree = "<group>"; };
+		CB85B3BEFED3BED3125DD003 /* CodexProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexProviderClient.swift; sourceTree = "<group>"; };
+		CB6D06FF9F1B45E9999D7860 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		CEAC567088AC21851EC5F65E /* GeminiModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiModelCatalog.swift; sourceTree = "<group>"; };
+		D43C7CD5EB5CC05FED3F202A /* DiagnosticsLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsLogger.swift; sourceTree = "<group>"; };
+		D5CFFE9C93FC61F9A3335A21 /* LocalAuthCallbackServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAuthCallbackServer.swift; sourceTree = "<group>"; };
+		D6012B61691A11858B0918E5 /* ConversationListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListViewModel.swift; sourceTree = "<group>"; };
+		DB870EF06AABC09F6C08A140 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
+		DEE1F7C1D36E90F3AC5C8C74 /* ChatScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatScreen.swift; sourceTree = "<group>"; };
+		DF7CF673D03C83995B954FE0 /* ProviderEnumTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderEnumTests.swift; sourceTree = "<group>"; };
+		DF98E65F9A6271C2C6396E89 /* TokenUsageRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenUsageRecord.swift; sourceTree = "<group>"; };
+		E1DCF3DC302B2389310C7088 /* OpenRouterModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterModels.swift; sourceTree = "<group>"; };
+		E24B2D0E1B8B5D9D45FF6161 /* MathMarkdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathMarkdownView.swift; sourceTree = "<group>"; };
+		EC33A86476882AF4CAB47380 /* QueryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryModels.swift; sourceTree = "<group>"; };
+		EE1F31BD54AADF6461CBC67C /* ModelPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPreset.swift; sourceTree = "<group>"; };
+		F5E76571802BD1DCDB737AD8 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		FF047B35C735D75B50DB5BAD /* ProviderRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderRequest.swift; sourceTree = "<group>"; };
+		FFB22DDA2BABCE0AE109F751 /* QwenAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenAuthRepository.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		3BCE835AB20804B68F2E52B2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				68D3D5243FD371FA5A94E8B3 /* GRDB in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0B0D47F1E5744A9966786D95 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				DB870EF06AABC09F6C08A140 /* SettingsScreen.swift */,
+				A5E00C2C05164977DE56584F /* SettingsViewModel.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		0DA7CB047F64EA9817D69431 /* Providers */ = {
+			isa = PBXGroup;
+			children = (
+				5632CDAAD8445EB4126CA344 /* AnthropicCompatibleProviderClient.swift */,
+				1FF77399450389CF5892A94D /* AppleIntelligenceProviderClient.swift */,
+				CB85B3BEFED3BED3125DD003 /* CodexProviderClient.swift */,
+				88E60BB6D93FEC509378FC79 /* GeminiProviderClient.swift */,
+				3547BEA762DAAB71C17AC763 /* OpenAICompatibleProviderClient.swift */,
+				2B17B8FC83DEF587229515B1 /* OpenCodeGoProviderClient.swift */,
+				BF24176365C39342C367D630 /* ProviderClient.swift */,
+				3DFF46198541856F3786897A /* ProviderRegistry.swift */,
+			);
+			path = Providers;
+			sourceTree = "<group>";
+		};
+		100B8DE2230EC4A242017198 /* Database */ = {
+			isa = PBXGroup;
+			children = (
+				0F787F7E2A908AFEEEBA0E1F /* AppDatabase.swift */,
+			);
+			path = Database;
+			sourceTree = "<group>";
+		};
+		2D051A385D8284D05255144D /* Conversations */ = {
+			isa = PBXGroup;
+			children = (
+				3BB73A6E778AA23087EEB852 /* ConversationListScreen.swift */,
+				D6012B61691A11858B0918E5 /* ConversationListViewModel.swift */,
+			);
+			path = Conversations;
+			sourceTree = "<group>";
+		};
+		31D0D8E587D4C62FB9458D99 /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+				4AD5BFFA938AB90157FB5E3F /* BackgroundTaskGuard.swift */,
+				54DB2C1D3F5C4C02F1C2632F /* SpeechRecognitionService.swift */,
+			);
+			path = Utils;
+			sourceTree = "<group>";
+		};
+		3329798AB57FB20DA98238EE /* Resources */ = {
+			isa = PBXGroup;
+				children = (
+					2559F5CDE33F1C6606E7C9D0 /* Assets.xcassets */,
+					71F8C33EB4EF9996517CE462 /* GeminiAuthInfo.plist */,
+					734FF62164855B98A15ECE62 /* Info.plist */,
+					86C1A71C4FE84F258D89E013 /* PrivacyInfo.xcprivacy */,
+					8A8AAD9C976A025E68725D68 /* YamabikoChat.entitlements */,
+					F797EB5B4E9A1A120BD718DB /* Localizable.strings */,
+					E83CFF0DED67E322E8A458B7 /* mathjax */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		36504CD0B2CD13D1D32FD3A9 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				3C19A7AE41E0E5052471F871 /* AlibabaCodingPlanModelCatalog.swift */,
+				A830A97218DEF74E9FA3C2AF /* AppConstants.swift */,
+				A394920B0293DB363D2D092D /* CodexModelPresets.swift */,
+				63E141DD6CBBC6B7BD021B42 /* CodexUserAgentCatalog.swift */,
+				D43C7CD5EB5CC05FED3F202A /* DiagnosticsLogger.swift */,
+				A0D5579ADACDE96AEE1B9189 /* GeminiCliCompatibility.swift */,
+				CEAC567088AC21851EC5F65E /* GeminiModelCatalog.swift */,
+				7AFADAD85FDF09DED54072D8 /* GeminiModelUtils.swift */,
+				1B03D691C10949EDBFCACB34 /* L10n.swift */,
+				C60224F6EBCC6491A82E063D /* OpenCodeGoModelCatalog.swift */,
+				BB55024341507549B0165D92 /* ProviderDisplay.swift */,
+				A4936125AF5188D983D15A9D /* QwenModelCatalog.swift */,
+				C0E5EC327A302F432B8A4083 /* SharePayload.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		3D68671B793E192366CD9284 /* Dual */ = {
+			isa = PBXGroup;
+			children = (
+				1AC5A236291207F4B1999405 /* DualChatScreen.swift */,
+			);
+			path = Dual;
+			sourceTree = "<group>";
+		};
+		48009355032C6872089DC265 /* Security */ = {
+			isa = PBXGroup;
+			children = (
+				FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */,
+			);
+			path = Security;
+			sourceTree = "<group>";
+		};
+		48115C8DD90C811ACE9BD2A3 /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				7BE885E298CFD7325CE27F89 /* HTTPClient.swift */,
+				84A4D046619F55F57085FB26 /* Models */,
+				0DA7CB047F64EA9817D69431 /* Providers */,
+			);
+			path = Networking;
+			sourceTree = "<group>";
+		};
+		6E49D3A7197F793EC96B4724 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				65438877F0411D1956AB70FB /* AppContainer.swift */,
+				A3EBA92A44EE4C86F2E89505 /* AppState.swift */,
+				F5E76571802BD1DCDB737AD8 /* RootView.swift */,
+				CB82A26885ADF535C4F4C4BA /* YamabikoChatApp.swift */,
+				3329798AB57FB20DA98238EE /* Resources */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		7E433B417218B57E7377F3F6 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AB8DAEE8D6609BEE6A100480 /* YamabikoChat.app */,
+				875043B225A7D44033DFD07D /* YamabikoShareExtension.appex */,
+				84A73C52D0DE4C504F3BA2DC /* YamabikoTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		83BF9A25705AFCD70F554218 /* Repositories */ = {
+			isa = PBXGroup;
+			children = (
+				8F19C0624B1D761F882F6EBB /* AttachmentRepository.swift */,
+				81BEFD60BAA4BF4DA1A9286B /* ChatRepository.swift */,
+				2D8BA2FD667A80E1498097F0 /* ConversationRepository.swift */,
+				46EC372D26102F3D22DE62C6 /* LiteLlmPricingRepository.swift */,
+				9640B4B2BAEBA68E8C24CC6D /* OpenRouterModelService.swift */,
+				0DCCF57D57AD52F33A2B009A /* ProviderGateway.swift */,
+				A487FA3FBC0728FA70BC4DC2 /* SettingsRepository.swift */,
+			);
+			path = Repositories;
+			sourceTree = "<group>";
+		};
+		84A4D046619F55F57085FB26 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				868A2D4B962B0447C2B55BEF /* AnyEncodable.swift */,
+				A0E39A438B710CF8BB0B6199 /* LLMProvider.swift */,
+				2E0CA7213C1361207E3BA5F2 /* ProviderError.swift */,
+				FF047B35C735D75B50DB5BAD /* ProviderRequest.swift */,
+				32CA8311076713E626B18DDF /* ProviderResponse.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		9B051ED65D3F969F44C66D30 /* YamabikoShareExtension */ = {
+				isa = PBXGroup;
+				children = (
+					4A4A275C5AEA3B4900440F13 /* Info.plist */,
+					CB6D06FF9F1B45E9999D7860 /* PrivacyInfo.xcprivacy */,
+					9363C3CAA9719CCF18383531 /* SharePayload.swift */,
+					4096E23296858EC0BE363960 /* ShareViewController.swift */,
+					02841C260164C20D9258C6B7 /* YamabikoShareExtension.entitlements */,
+			);
+			path = YamabikoShareExtension;
+			sourceTree = "<group>";
+		};
+		B3C6CFCCCF1D7D2816FFAF5A /* Chat */ = {
+			isa = PBXGroup;
+			children = (
+				DEE1F7C1D36E90F3AC5C8C74 /* ChatScreen.swift */,
+				1DDFDE867E825EB89B66D36A /* ChatViewModel.swift */,
+				37FA26435A6801B2A3687B6C /* ChatWorkspaceScreen.swift */,
+				E24B2D0E1B8B5D9D45FF6161 /* MathMarkdownView.swift */,
+				71E38ECB6FCC39AB8BABE949 /* RecentPhotoLibrary.swift */,
+				25418095A457767B82727AED /* SvgCodeExtractor.swift */,
+				2BD71648A1094DBA64CF4949 /* SvgPreviewCard.swift */,
+				0668334AA8F62D1F58F6B2F6 /* SvgPreviewWebView.swift */,
+			);
+			path = Chat;
+			sourceTree = "<group>";
+		};
+		C0D22E507300EA558774E904 /* YamabikoChat */ = {
+			isa = PBXGroup;
+			children = (
+				6E49D3A7197F793EC96B4724 /* App */,
+				C6992A34681ADE7708B96F81 /* Data */,
+				EB069321F4B417E26A15AB31 /* Features */,
+				48115C8DD90C811ACE9BD2A3 /* Networking */,
+				48009355032C6872089DC265 /* Security */,
+				36504CD0B2CD13D1D32FD3A9 /* Shared */,
+				31D0D8E587D4C62FB9458D99 /* Utils */,
+			);
+			path = YamabikoChat;
+			sourceTree = "<group>";
+		};
+		C6992A34681ADE7708B96F81 /* Data */ = {
+			isa = PBXGroup;
+			children = (
+				F40DCCF5D32F5FE9580D1B6D /* Auth */,
+				100B8DE2230EC4A242017198 /* Database */,
+				DD9364AB78803454AF3A2F48 /* Models */,
+				83BF9A25705AFCD70F554218 /* Repositories */,
+			);
+			path = Data;
+			sourceTree = "<group>";
+		};
+		CA79F65567A9EE7A6B469183 /* AutoConversation */ = {
+			isa = PBXGroup;
+			children = (
+				083B2E8ED266219AFBEA0E3F /* AutoConversationScreen.swift */,
+			);
+			path = AutoConversation;
+			sourceTree = "<group>";
+		};
+		CF8AC1DDF84BCF3EEBF3010A = {
+			isa = PBXGroup;
+			children = (
+				C0D22E507300EA558774E904 /* YamabikoChat */,
+				9B051ED65D3F969F44C66D30 /* YamabikoShareExtension */,
+				D0C44008F19DBFAFA5D062EA /* YamabikoTests */,
+				7E433B417218B57E7377F3F6 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D0C44008F19DBFAFA5D062EA /* YamabikoTests */ = {
+			isa = PBXGroup;
+			children = (
+				4B52DE6355353E52D1B7576D /* AppSettingsTests.swift */,
+				22F0C11892572A2CBD1C39E7 /* AttachmentRepositoryTests.swift */,
+				25B179C43C1498EFC4B1DF4B /* AuthRepositoryTests.swift */,
+				0D45BDA96C2B777C80AA6387 /* AutoConversationRepositoryTests.swift */,
+				675569E061B2D501C62AC37B /* ChatRepositoryBranchTests.swift */,
+				B0CE95A107E6CAC3E8A4BC48 /* ChatRepositoryDualTests.swift */,
+				5BB165FEAEAED23FC6FB6EF8 /* ChatRepositorySyncTests.swift */,
+				544B698E62EDD214009B7D7A /* ChatViewModelAttachmentTests.swift */,
+				8DC2326E949464E12375DC82 /* ChatViewModelBranchTests.swift */,
+				1DE067888B1007F0A3129E03 /* ChatViewModelSystemPromptLabelTests.swift */,
+				47940928BCA24ACBA0867772 /* ConversationListViewModelTests.swift */,
+				165EBDEB744C9307E8CCF4C7 /* ConversationVariantSelectionTests.swift */,
+				7824746250F630294D76127F /* GeminiModelUtilsTests.swift */,
+				354A655F2DAC30AF82690AAD /* LiteLlmPricingRepositoryTests.swift */,
+				59D76AC83FA6381A252F9360 /* LocalAuthCallbackServerTests.swift */,
+				961BCEE0B9725B362F606EA0 /* MathMarkdownViewTests.swift */,
+				4C3E31EC64A965F4851AE80A /* OpenRouterModelTests.swift */,
+				9E7DA902C4E31F43AC67F6DE /* ProjectFeatureTests.swift */,
+				B3470CFFE969A9B32DA280E0 /* ProviderClientParityTests.swift */,
+				DF7CF673D03C83995B954FE0 /* ProviderEnumTests.swift */,
+				2A7750E5527AF38A1C22312B /* ProviderGatewayTests.swift */,
+				2ECE967CBAB3BDDC5E028715 /* ReasoningExtractionTests.swift */,
+				0034572985CEC32177512AA8 /* SettingsViewModelTests.swift */,
+				0F0B056D22F60CAD49BD2587 /* SvgCodeExtractorTests.swift */,
+				51CC989E2C978463E973E22C /* SvgPreviewSanitizerTests.swift */,
+			);
+			path = YamabikoTests;
+			sourceTree = "<group>";
+		};
+		DD9364AB78803454AF3A2F48 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				2A4495C8B20F93382A8E4847 /* AppSettings.swift */,
+				858FCD319B989915370556E1 /* AutoConversation.swift */,
+				BC763DA5C2E9F9656E06CA07 /* AutoConversationFormatter.swift */,
+				C4E0AF024AFDE4AE3554BA68 /* AutoConversationMessage.swift */,
+				B660E8DACB6DDA3ECAC45423 /* ChatMessage.swift */,
+				481CA1A12D0312351DABD396 /* ChatMessageThinking.swift */,
+				BAB5DB55D3CE8664531EC01E /* ChatMessageVariant.swift */,
+				425C9F974B954BB239A10CA5 /* ChatProject.swift */,
+				2DB849BCF850C7043309A152 /* Conversation.swift */,
+				8B5936D9B9C6967F14740D01 /* DualChatMessage.swift */,
+				EE1F31BD54AADF6461CBC67C /* ModelPreset.swift */,
+				E1DCF3DC302B2389310C7088 /* OpenRouterModels.swift */,
+				EC33A86476882AF4CAB47380 /* QueryModels.swift */,
+				DF98E65F9A6271C2C6396E89 /* TokenUsageRecord.swift */,
+				89C94BED57FA07CCF9938A80 /* TokenUsageStats.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		E83CFF0DED67E322E8A458B7 /* mathjax */ = {
+			isa = PBXGroup;
+			children = (
+				103A4F6B6DC37D5F26D3B66A /* markdown-renderer.js */,
+				68417249749E064D56E23ACE /* tex-svg.js */,
+			);
+			path = mathjax;
+			sourceTree = "<group>";
+		};
+		EB069321F4B417E26A15AB31 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				CA79F65567A9EE7A6B469183 /* AutoConversation */,
+				B3C6CFCCCF1D7D2816FFAF5A /* Chat */,
+				2D051A385D8284D05255144D /* Conversations */,
+				3D68671B793E192366CD9284 /* Dual */,
+				0B0D47F1E5744A9966786D95 /* Settings */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		F40DCCF5D32F5FE9580D1B6D /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				C2DD044916B4D621321F9D61 /* AuthFlowReadySignal.swift */,
+				5C80771801FDEE9773008CF0 /* AuthModels.swift */,
+				C470C52136C0F5806543DD92 /* CodexAuthRepository.swift */,
+				6F12B0E929729F00F81E776F /* GeminiAuthRepository.swift */,
+				D5CFFE9C93FC61F9A3335A21 /* LocalAuthCallbackServer.swift */,
+				FFB22DDA2BABCE0AE109F751 /* QwenAuthRepository.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		23541159A695777175C2A5A4 /* YamabikoTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4D4D5051E60C05FE3B682D34 /* Build configuration list for PBXNativeTarget "YamabikoTests" */;
+			buildPhases = (
+				17537FC54E250558F22276A8 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				9EE36695410FF58BB941ACDE /* PBXTargetDependency */,
+			);
+			name = YamabikoTests;
+			packageProductDependencies = (
+			);
+			productName = YamabikoTests;
+			productReference = 84A73C52D0DE4C504F3BA2DC /* YamabikoTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		8902EC7AC6F4A0CE2556BA5E /* YamabikoChat */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 22B0C31F749280BD1E4EF6F8 /* Build configuration list for PBXNativeTarget "YamabikoChat" */;
+				buildPhases = (
+					3267E8155895DFF610029068 /* Sources */,
+					E253B5C8992D434DCF0FBE3E /* Resources */,
+					3BCE835AB20804B68F2E52B2 /* Frameworks */,
+					DDC070B6A41C4C19A59A6B9C /* Embed App Extensions */,
+				);
+				buildRules = (
+				);
+				dependencies = (
+					DDC070B8A41C4C19A59A6B9C /* PBXTargetDependency */,
+				);
+			name = YamabikoChat;
+			packageProductDependencies = (
+				DF5A86DA79BCA1DE64424AEB /* GRDB */,
+			);
+			productName = YamabikoChat;
+			productReference = AB8DAEE8D6609BEE6A100480 /* YamabikoChat.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A0482E078852897EA805FB9B /* YamabikoShareExtension */ = {
+			isa = PBXNativeTarget;
+				buildConfigurationList = C9A380E97ECB67873B67FC3B /* Build configuration list for PBXNativeTarget "YamabikoShareExtension" */;
+				buildPhases = (
+					29481B9788D9648575EFD4A8 /* Sources */,
+					CB6D07019F1B45E9999D7860 /* Resources */,
+				);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = YamabikoShareExtension;
+			packageProductDependencies = (
+			);
+			productName = YamabikoShareExtension;
+			productReference = 875043B225A7D44033DFD07D /* YamabikoShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		74EC9AC2FED264F13D5283FF /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					8902EC7AC6F4A0CE2556BA5E = {
+						ProvisioningStyle = Automatic;
+					};
+					A0482E078852897EA805FB9B = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 2E44A3824122281B5C0FBCE1 /* Build configuration list for PBXProject "YamabikoChat" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+				es,
+				ja,
+				"zh-Hans",
+			);
+			mainGroup = CF8AC1DDF84BCF3EEBF3010A;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AF91411EDFFAD3C8F1B3C9AB /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 7E433B417218B57E7377F3F6 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				8902EC7AC6F4A0CE2556BA5E /* YamabikoChat */,
+				A0482E078852897EA805FB9B /* YamabikoShareExtension */,
+				23541159A695777175C2A5A4 /* YamabikoTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CB6D07019F1B45E9999D7860 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CB6D07009F1B45E9999D7860 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E253B5C8992D434DCF0FBE3E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A6FD4DD0049C2696FF7EA66B /* Assets.xcassets in Resources */,
+				CA77F3456BBE6F922CD2A4C0 /* GeminiAuthInfo.plist in Resources */,
+				2AB5391EDBA3C46611B33496 /* Localizable.strings in Resources */,
+				86C1A71D4FE84F258D89E013 /* PrivacyInfo.xcprivacy in Resources */,
+				E92E653594F51DA8DB04B311 /* markdown-renderer.js in Resources */,
+				8647CA0CCFA82D5C469B4853 /* tex-svg.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		17537FC54E250558F22276A8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E3D2C8117C27F2B1F3A5F379 /* AppSettingsTests.swift in Sources */,
+				EBA3AC5384FD499D7A5F0CFF /* AttachmentRepositoryTests.swift in Sources */,
+				68F2C57FC9094A7B7D551127 /* AuthRepositoryTests.swift in Sources */,
+				BEB75013CC194BC6481ECAE4 /* AutoConversationRepositoryTests.swift in Sources */,
+				58640E1AB03C281DCCD490A2 /* ChatRepositoryBranchTests.swift in Sources */,
+				73E2661F0342C7184867B14D /* ChatRepositoryDualTests.swift in Sources */,
+				85FC7B737290A7F2AEF76EA1 /* ChatRepositorySyncTests.swift in Sources */,
+				0776A15CFEB49CDA726E2495 /* ChatViewModelAttachmentTests.swift in Sources */,
+				F9D736C50BFE0923A5D98C63 /* ChatViewModelBranchTests.swift in Sources */,
+				09686EB3A3445E07BE1460EF /* ChatViewModelSystemPromptLabelTests.swift in Sources */,
+				7E687F15AA9ED90CC7CABE7B /* ConversationListViewModelTests.swift in Sources */,
+				A258A4BFE2E6449D6D1EC9FE /* ConversationVariantSelectionTests.swift in Sources */,
+				68C5E943C2E9603B736DDE83 /* GeminiModelUtilsTests.swift in Sources */,
+				69A868E7A0FE2AB17FD68584 /* LiteLlmPricingRepositoryTests.swift in Sources */,
+				49E4DCE20748F2F22FB31465 /* LocalAuthCallbackServerTests.swift in Sources */,
+				D63F06CADBC32DCDED7D808E /* MathMarkdownViewTests.swift in Sources */,
+				615791B4B229DB6A6AD8D4C5 /* OpenRouterModelTests.swift in Sources */,
+				D3F24BA15CE46220C3494CF3 /* ProjectFeatureTests.swift in Sources */,
+				5D27722FA0D489EB470653FB /* ProviderClientParityTests.swift in Sources */,
+				E00E1BEED00E37AA48679DBC /* ProviderEnumTests.swift in Sources */,
+				34A0432A76484628739B77F7 /* ProviderGatewayTests.swift in Sources */,
+				1E008ECA9DD0FE0FB13EA463 /* ReasoningExtractionTests.swift in Sources */,
+				9A4643F98030A10AB665492D /* SettingsViewModelTests.swift in Sources */,
+				F385BC565CFD26EB915C163B /* SvgCodeExtractorTests.swift in Sources */,
+				EF12AD93CA25107FB63F52E2 /* SvgPreviewSanitizerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		29481B9788D9648575EFD4A8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9D1015095502D66198ACFCAA /* SharePayload.swift in Sources */,
+				C9387C530EFE099A6E673152 /* ShareViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3267E8155895DFF610029068 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EB84D0CE80232324476608EF /* AlibabaCodingPlanModelCatalog.swift in Sources */,
+				4AE260CE4DB0D3B686D40CEF /* AnthropicCompatibleProviderClient.swift in Sources */,
+				597408051A74D4E377CF101C /* AnyEncodable.swift in Sources */,
+				0C3BB6177F58002E5A66449A /* AppConstants.swift in Sources */,
+				77B7FED703C2BBAC4947F8E8 /* AppContainer.swift in Sources */,
+				D50FEEF4BBB585DACA27F0EA /* AppDatabase.swift in Sources */,
+				7BFAACD8E93287663F02909C /* AppSettings.swift in Sources */,
+				5DD1BF2FFADC0EDDBF1E4F24 /* AppState.swift in Sources */,
+				62858D753E8FDE9E560BD802 /* AppleIntelligenceProviderClient.swift in Sources */,
+				1496CEA828F2AB0422533262 /* AttachmentRepository.swift in Sources */,
+				A5EDE85ADAE21979AFD0F21B /* AuthFlowReadySignal.swift in Sources */,
+				5EEC2EDE7DD1098AE5A24FFB /* AuthModels.swift in Sources */,
+				B03BF199C336CBF54E9C64A9 /* AutoConversation.swift in Sources */,
+				77EFC73B14FE3A57CAF6B1C3 /* AutoConversationFormatter.swift in Sources */,
+				F83EFAD8650B49B29FD63F50 /* AutoConversationMessage.swift in Sources */,
+				9BD4FAE526CE71050BECC62F /* AutoConversationScreen.swift in Sources */,
+				14BF6506C9D8F6C2BE2A7AD8 /* BackgroundTaskGuard.swift in Sources */,
+				162459CC3F5A69C2E4423019 /* ChatMessage.swift in Sources */,
+				E8974A4399A27CF3C732BCF4 /* ChatMessageThinking.swift in Sources */,
+				29555BD490F34189056A684A /* ChatMessageVariant.swift in Sources */,
+				28F0BE4462B7BE4BDADB89DC /* ChatProject.swift in Sources */,
+				922866C08D7F9507A748D15E /* ChatRepository.swift in Sources */,
+				03532725DD2B55909FB526E9 /* ChatScreen.swift in Sources */,
+				06872ECCFAD394292A44A8F7 /* ChatViewModel.swift in Sources */,
+				E27A6862F9650B6AA7DBDCA4 /* ChatWorkspaceScreen.swift in Sources */,
+				7AA55F94D1771B63F74DAE98 /* CodexAuthRepository.swift in Sources */,
+				315256D3D28F249024506BD1 /* CodexModelPresets.swift in Sources */,
+				6BE4255C9859E8CBF13D8485 /* CodexProviderClient.swift in Sources */,
+				0CDA21EA006C871E5AC3164F /* CodexUserAgentCatalog.swift in Sources */,
+				9B7C6CCA982CA1EE8E0230D0 /* Conversation.swift in Sources */,
+				E06F6B142947E79244C240DE /* ConversationListScreen.swift in Sources */,
+				E8DA2924C68103B34BDA3BBF /* ConversationListViewModel.swift in Sources */,
+				B913EC775D7E5EFB3A90770D /* ConversationRepository.swift in Sources */,
+				9DDD92F6311397EE7798ECBE /* DiagnosticsLogger.swift in Sources */,
+				C912D70FEA5AD0AAB1133DC4 /* DualChatMessage.swift in Sources */,
+				9C8DF35292A9094BBC4AC80B /* DualChatScreen.swift in Sources */,
+				B55F3394DAC60DFB4F360453 /* GeminiAuthRepository.swift in Sources */,
+				1B74D8D45E9E029D607B5DC7 /* GeminiCliCompatibility.swift in Sources */,
+				D47A3DA9EA4B8C62A4554CD6 /* GeminiModelCatalog.swift in Sources */,
+				254CF84CEA71BEF991539659 /* GeminiModelUtils.swift in Sources */,
+				F6E818106835DBDE88EB9479 /* GeminiProviderClient.swift in Sources */,
+				EA532937FF143B56F4BA2FF5 /* HTTPClient.swift in Sources */,
+				962D63DC04F87D3F8083C055 /* KeychainStore.swift in Sources */,
+				849D27D7F89B502B1F05E424 /* L10n.swift in Sources */,
+				9EFE66AD7151E071A14BEB4A /* LLMProvider.swift in Sources */,
+				2A8999A902854B3C516715B5 /* LiteLlmPricingRepository.swift in Sources */,
+				78405D71C3D2598BDE49D70F /* LocalAuthCallbackServer.swift in Sources */,
+				9BD931169E39B228157F7725 /* MathMarkdownView.swift in Sources */,
+				4AF8DCF064E32B3DD82E1D65 /* ModelPreset.swift in Sources */,
+				805DF4CF2E89A50E4719DF5D /* OpenAICompatibleProviderClient.swift in Sources */,
+				10D322B8F73405F360B85BBE /* OpenCodeGoModelCatalog.swift in Sources */,
+				11741302C42E0079EDC6E0D4 /* OpenCodeGoProviderClient.swift in Sources */,
+				B9CBE41E5D9DEFC79C81DE9C /* OpenRouterModelService.swift in Sources */,
+				2EAD672EDECBCA4C9DFEFC96 /* OpenRouterModels.swift in Sources */,
+				558958AC9605E2A2DFB01C75 /* ProviderClient.swift in Sources */,
+				674D06E4C49E2F3F7B6B3B6A /* ProviderDisplay.swift in Sources */,
+				760DDEAE99F1EE0CF4070FEF /* ProviderError.swift in Sources */,
+				BA20375105BFC8A79A60FBFF /* ProviderGateway.swift in Sources */,
+				4A3350967D0FB05191267527 /* ProviderRegistry.swift in Sources */,
+				B5F815461384B7A783B82034 /* ProviderRequest.swift in Sources */,
+				420A27134573C14D0C25C8D4 /* ProviderResponse.swift in Sources */,
+				67A83D5BBD97B63A244F9AE9 /* QueryModels.swift in Sources */,
+				B8E790B614AEA481BCBD4273 /* QwenAuthRepository.swift in Sources */,
+				47ACB5DE38ECF54503D03CB7 /* QwenModelCatalog.swift in Sources */,
+				F21ED9977B4C899512D10E80 /* RecentPhotoLibrary.swift in Sources */,
+				7ECFAF36ED62E3488F99484B /* RootView.swift in Sources */,
+				D27E29A04A40CC534C77F870 /* SettingsRepository.swift in Sources */,
+				A6DF3315E8E4B98E25854E2D /* SettingsScreen.swift in Sources */,
+				AF21AD63CE43E7C3CA3AE2A6 /* SettingsViewModel.swift in Sources */,
+				3B85342C06EEE33A7A4FE9F7 /* SharePayload.swift in Sources */,
+				79A232362351686E2A7742CC /* SpeechRecognitionService.swift in Sources */,
+				2F385FBF449F22A1560291F6 /* SvgCodeExtractor.swift in Sources */,
+				9956FF9B0D965DD8D01BA6BA /* SvgPreviewCard.swift in Sources */,
+				696478CAFDBA3D897D3DE015 /* SvgPreviewWebView.swift in Sources */,
+				23EDCEE4A45503E5C672C366 /* TokenUsageRecord.swift in Sources */,
+				CE67F1C6513857BEBB98C462 /* TokenUsageStats.swift in Sources */,
+				571C85C9DE0C54A8D05F13A3 /* YamabikoChatApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		9EE36695410FF58BB941ACDE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8902EC7AC6F4A0CE2556BA5E /* YamabikoChat */;
+			targetProxy = 94F6A2F0177D37222ECB6B82 /* PBXContainerItemProxy */;
+		};
+		DDC070B8A41C4C19A59A6B9C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A0482E078852897EA805FB9B /* YamabikoShareExtension */;
+			targetProxy = DDC070B7A41C4C19A59A6B9C /* PBXContainerItemProxy */;
+		};
+	/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		F797EB5B4E9A1A120BD718DB /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				AAFB800375481AE013AF9773 /* en */,
+				CADA957F12D5C9DC605007FE /* es */,
+				321B02A1F52280A6AF7BD4EE /* ja */,
+				0EBC88F61E3A18DAF4B087B7 /* zh-Hans */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		36150C4E471BB78C2B35E9E0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.1;
+			};
+			name = Debug;
+		};
+		495714958B86AFE944832759 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = YamabikoShareExtension/YamabikoShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 77V64TWCFD;
+				INFOPLIST_FILE = YamabikoShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.porarri.yamabikochat.ios.share;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		5B9142915EAA8C3CC4871688 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = YamabikoShareExtension/YamabikoShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 77V64TWCFD;
+				INFOPLIST_FILE = YamabikoShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.porarri.yamabikochat.ios.share;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		7358344EB74681DE4555340E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = YamabikoChat/App/Resources/YamabikoChat.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_LANGUAGE = ja;
+				DEVELOPMENT_TEAM = 77V64TWCFD;
+				INFOPLIST_FILE = YamabikoChat/App/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.porarri.yamabikochat.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B7558F54AE448D62B2F75FE7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEVELOPMENT_TEAM = 77V64TWCFD;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.porarri.yamabikochat.ios.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/YamabikoChat.app/YamabikoChat";
+			};
+			name = Debug;
+		};
+		CB6C2B0273766BB1AD2C1C8A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEVELOPMENT_TEAM = 77V64TWCFD;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.porarri.yamabikochat.ios.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/YamabikoChat.app/YamabikoChat";
+			};
+			name = Release;
+		};
+		DBC97E1FA6D6EF0EE6BE15CF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.1;
+			};
+			name = Release;
+		};
+		F6C13170B34BB2AE98E5A984 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = YamabikoChat/App/Resources/YamabikoChat.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_LANGUAGE = ja;
+				DEVELOPMENT_TEAM = 77V64TWCFD;
+				INFOPLIST_FILE = YamabikoChat/App/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.porarri.yamabikochat.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		22B0C31F749280BD1E4EF6F8 /* Build configuration list for PBXNativeTarget "YamabikoChat" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7358344EB74681DE4555340E /* Debug */,
+				F6C13170B34BB2AE98E5A984 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		2E44A3824122281B5C0FBCE1 /* Build configuration list for PBXProject "YamabikoChat" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				36150C4E471BB78C2B35E9E0 /* Debug */,
+				DBC97E1FA6D6EF0EE6BE15CF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		4D4D5051E60C05FE3B682D34 /* Build configuration list for PBXNativeTarget "YamabikoTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B7558F54AE448D62B2F75FE7 /* Debug */,
+				CB6C2B0273766BB1AD2C1C8A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C9A380E97ECB67873B67FC3B /* Build configuration list for PBXNativeTarget "YamabikoShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				495714958B86AFE944832759 /* Debug */,
+				5B9142915EAA8C3CC4871688 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AF91411EDFFAD3C8F1B3C9AB /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		DF5A86DA79BCA1DE64424AEB /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AF91411EDFFAD3C8F1B3C9AB /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 74EC9AC2FED264F13D5283FF /* Project object */;
+}

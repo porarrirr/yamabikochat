@@ -26,7 +26,7 @@ final class SvgPreviewSanitizerTests: XCTestCase {
     }
 
     func testSanitizeAllowsHashHrefAndBlocksExternalHref() {
-        let input = #"<svg><use href="#shape"/><use href="https://evil.example/a.svg#shape"/></svg>"#
+        let input = ##"<svg><use href="#shape"/><use href="https://evil.example/a.svg#shape"/></svg>"##
         let sanitized = SvgPreviewSanitizer.sanitize(input)
 
         XCTAssertTrue(sanitized.contains("href=\"#shape\""))

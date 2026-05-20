@@ -37,20 +37,23 @@
     <key>UILaunchScreen</key>
     <dict/>
     <key>UISupportedInterfaceOrientations</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-        <string>UIInterfaceOrientationLandscapeLeft</string>
-        <string>UIInterfaceOrientationLandscapeRight</string>
-    </array>
-    <key>NSSpeechRecognitionUsageDescription</key>
+	    <array>
+	        <string>UIInterfaceOrientationPortrait</string>
+	        <string>UIInterfaceOrientationLandscapeLeft</string>
+	        <string>UIInterfaceOrientationLandscapeRight</string>
+	    </array>
+	    <key>UISupportedInterfaceOrientations~ipad</key>
+	    <array>
+	        <string>UIInterfaceOrientationPortrait</string>
+	        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+	        <string>UIInterfaceOrientationLandscapeLeft</string>
+	        <string>UIInterfaceOrientationLandscapeRight</string>
+	    </array>
+	    <key>NSSpeechRecognitionUsageDescription</key>
     <string>音声入力でテキストを入力するために音声認識を使用します。</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>音声入力でテキストを入力するためにマイクを使用します。</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>最近の写真を会話にすばやく添付するために写真ライブラリを使用します。</string>
-    <key>GEMINI_OAUTH_CLIENT_ID</key>
-    <string>__SET_ME__</string>
-    <key>GEMINI_OAUTH_CLIENT_SECRET</key>
-    <string>__SET_ME__</string>
 </dict>
 </plist>

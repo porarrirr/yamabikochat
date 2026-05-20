@@ -104,7 +104,7 @@ final class LocalAuthCallbackServerTests: XCTestCase {
 }
 
 private func occupyLocalPort(_ port: UInt16) throws -> Int32 {
-    let fd = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+    let fd = socket(AF_INET, SOCK_STREAM, 0)
     guard fd >= 0 else {
         throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
     }
@@ -144,7 +144,7 @@ private func occupyLocalPort(_ port: UInt16) throws -> Int32 {
 }
 
 private func sendRawRequest(port: UInt16, request: String) throws -> String {
-    let fd = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+    let fd = socket(AF_INET, SOCK_STREAM, 0)
     guard fd >= 0 else {
         throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
     }
