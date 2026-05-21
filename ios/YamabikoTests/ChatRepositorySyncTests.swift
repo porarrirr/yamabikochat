@@ -333,6 +333,41 @@ final class ChatRepositorySyncTests: XCTestCase {
         XCTAssertEqual(totals.totalCostUsd, 0.42, accuracy: 0.000_001)
     }
 
+    func testOpenCodeGoEmptyStreamFallsBackToNonStreamingResponse() async throws {
+        let payload = #"""
+        {
+          "choices":[{"message":{"content":"fallback ok","reasoning_content":"fallback reasoning"}}],
+          "usage":{"prompt_tokens":12,"completion_tokens":4,"total_tokens":16}
+        }
+        """#
+        let httpClient = GeminiStreamFallbackHTTPClient(
+            streamLines: ["data: [DONE]", ""],
+            nonStreamingBody: payload
+        )
+        let fixture = try makeFixture(httpClient: httpClient) { settings in
+            settings.apiProvider = "OPENCODE_GO"
+            settings.defaultModel = "deepseek-v4-flash"
+            settings.providerDefaultModelsJSON = #"{"OPENCODE_GO":"deepseek-v4-flash"}"#
+            settings.isStreamingEnabled = true
+        }
+        try fixture.credentials.setCredential("opencode-go-key", for: .openCodeGo)
+
+        let conversationID = try fixture.repository.createConversation(title: "New Chat")
+        let result = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "hello",
+            attachments: []
+        )
+
+        XCTAssertEqual(httpClient.streamCallCount, 1)
+        XCTAssertEqual(httpClient.sendCallCount, 1)
+        XCTAssertEqual(result.response.text, "fallback ok")
+
+        let assistant = try XCTUnwrap(fixture.conversations.fetchFullMessage(id: result.assistantMessageId))
+        XCTAssertEqual(assistant.message.text, "fallback ok")
+        XCTAssertEqual(assistant.thinkingStream, "fallback reasoning")
+    }
+
     private func makeFixture(
         httpClient: HTTPClientProtocol = URLSessionHTTPClient(),
         pricingRepository: any LiteLlmPricingEstimating = NoopPricingRepository(),

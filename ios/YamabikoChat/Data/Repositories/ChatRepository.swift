@@ -489,6 +489,36 @@ final class ChatRepository {
             throw error
         }
 
+        if provider == .openCodeGo,
+           fullText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            do {
+                DiagnosticsLogger.log(
+                    "OpenCode Go stream completed without text; retrying non-streaming",
+                    category: .network,
+                    metadata: [
+                        "provider": provider.rawValue,
+                        "model": request.model
+                    ]
+                )
+                let fallbackResponse = try await providers.generate(request: request, provider: provider)
+                finalUsage = fallbackResponse.usage ?? finalUsage
+                fullText = fallbackResponse.text
+                try conversations.updateMessageText(messageId: assistantMessageId, text: fullText)
+                if let reasoning = fallbackResponse.reasoningSummary, !reasoning.isEmpty {
+                    reasoningText = reasoning
+                    try conversations.saveThinking(messageId: assistantMessageId, stream: reasoningText)
+                }
+            } catch {
+                if reasoningText.isEmpty {
+                    try? conversations.updateMessageText(
+                        messageId: assistantMessageId,
+                        text: L10n.format("エラー: %@", error.localizedDescription)
+                    )
+                }
+                throw error
+            }
+        }
+
         await recordTokenUsageIfAvailable(
             provider: provider.rawValue,
             model: request.model,
@@ -565,6 +595,36 @@ final class ChatRepository {
                 )
             }
             throw error
+        }
+
+        if provider == .openCodeGo,
+           fullText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            do {
+                DiagnosticsLogger.log(
+                    "OpenCode Go regenerate stream completed without text; retrying non-streaming",
+                    category: .network,
+                    metadata: [
+                        "provider": provider.rawValue,
+                        "model": request.model
+                    ]
+                )
+                let fallbackResponse = try await providers.generate(request: request, provider: provider)
+                finalUsage = fallbackResponse.usage ?? finalUsage
+                fullText = fallbackResponse.text
+                try conversations.updateMessageVariantText(variantId: variantId, text: fullText)
+                if let reasoning = fallbackResponse.reasoningSummary, !reasoning.isEmpty {
+                    reasoningText = reasoning
+                    try conversations.saveMessageVariantThinking(variantId: variantId, stream: reasoningText)
+                }
+            } catch {
+                if reasoningText.isEmpty {
+                    try? conversations.updateMessageVariantText(
+                        variantId: variantId,
+                        text: L10n.format("エラー: %@", error.localizedDescription)
+                    )
+                }
+                throw error
+            }
         }
 
         await recordTokenUsageIfAvailable(
