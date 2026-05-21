@@ -55,5 +55,7 @@
     <string>音声入力でテキストを入力するためにマイクを使用します。</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>最近の写真を会話にすばやく添付するために写真ライブラリを使用します。</string>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
 </dict>
 </plist>

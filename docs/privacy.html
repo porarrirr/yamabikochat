@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy — YamabikoChat</title>
+    <meta name="description" content="YamabikoChat privacy policy" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <nav class="site-nav" aria-label="Site">
+        <a href="index.html">ホーム</a>
+        <a href="privacy.html" aria-current="page">プライバシー</a>
+        <a href="support.html">サポート</a>
+        <a href="terms.html">利用規約</a>
+      </nav>
+      <h1>プライバシーポリシー</h1>
+      <p class="lead">最終更新: 2026-05-21</p>
+    </header>
+
+    <main>
+      <section class="card lang-block">
+        <p class="lang-label">日本語</p>
+        <p>
+          YamabikoChat（以下「本アプリ」）は、ユーザー自身の API キーまたは OAuth
+          アカウントを用いて第三者の AI サービスと通信する BYOK 型チャットクライアントです。
+        </p>
+        <h2>端末に保存する情報</h2>
+        <ul>
+          <li>会話履歴、プロジェクト、各種設定</li>
+          <li>API キーおよび OAuth トークン（iOS Keychain / Android の安全な保存領域）</li>
+          <li>ユーザーが任意で保存・共有できる診断ログ</li>
+        </ul>
+        <h2>第三者へ送信する情報</h2>
+        <ul>
+          <li>メッセージ送信時、ユーザーが選択したプロバイダーへプロンプト、モデル設定、添付を送信します。</li>
+          <li>
+            リモート MCP、検索、コード実行などのオプション機能は既定で無効です。有効化した場合、ユーザーが設定した
+            HTTPS エンドポイントまたは選択プロバイダーへ関連情報が送信されます。
+          </li>
+          <li>Share Extension は共有テキストまたは URL をアプリグループに保存し、本体アプリで下書き会話を開きます。</li>
+        </ul>
+        <h2>行わないこと</h2>
+        <ul>
+          <li>アプリ内での AI 利用枠・サブスクリプションの販売</li>
+          <li>App Tracking Transparency によるクロスアプリ追跡</li>
+          <li>診断ログへの API キー、トークン、プロンプト全文の意図的な記録</li>
+        </ul>
+        <h2>権限</h2>
+        <ul>
+          <li>写真: 会話への添付のための読み取り専用アクセス</li>
+          <li>マイク・音声認識: 音声入力（任意）のみ</li>
+        </ul>
+        <h2>お問い合わせ</h2>
+        <p>
+          <a href="https://github.com/porarrirr/yamabikochat/issues">GitHub Issues</a>
+          または <a href="support.html">サポートページ</a>
+        </p>
+      </section>
+
+      <section class="card lang-block">
+        <p class="lang-label">English</p>
+        <p>
+          YamabikoChat is a bring-your-own-key (BYOK) chat client. This policy describes how the app
+          handles information on your device.
+        </p>
+        <h2>Stored locally</h2>
+        <ul>
+          <li>Conversation history, projects, and app settings</li>
+          <li>API keys and OAuth tokens in the platform secure store</li>
+          <li>Optional diagnostic logs you can view, copy, share, or clear</li>
+        </ul>
+        <h2>Sent to third parties</h2>
+        <ul>
+          <li>
+            When you send a message, your prompt, model settings, and attachments go only to the provider
+            you selected (for example OpenAI, Google Gemini, OpenRouter, or a custom endpoint you configure).
+          </li>
+          <li>
+            Optional tools (remote MCP, search, code execution, and similar features) are off by default.
+            When enabled, related requests are sent to the provider or HTTPS endpoint you configure.
+          </li>
+          <li>
+            The Share Extension stores shared text or a URL in the app group so the main app can open a
+            draft conversation.
+          </li>
+        </ul>
+        <h2>What we do not do</h2>
+        <ul>
+          <li>Sell subscriptions, tokens, or provider access inside the app</li>
+          <li>Use cross-app tracking via ATT</li>
+          <li>Record API keys, tokens, refresh tokens, or full prompts in diagnostic logs by design</li>
+        </ul>
+        <h2>Permissions</h2>
+        <ul>
+          <li>Photos: read-only access to attach recent images</li>
+          <li>Microphone and speech recognition: optional voice dictation only</li>
+        </ul>
+        <h2>Contact</h2>
+        <p>
+          <a href="https://github.com/porarrirr/yamabikochat/issues">GitHub Issues</a> or the
+          <a href="support.html">support page</a>.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <p><a href="index.html">← YamabikoChat</a></p>
+    </footer>
+  </body>
+</html>

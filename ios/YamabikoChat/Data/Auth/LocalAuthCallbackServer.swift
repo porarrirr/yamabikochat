@@ -182,7 +182,10 @@ final class LocalAuthCallbackServer {
 
                     let pathWithQuery = String(methodAndPath[1])
                     guard let components = URLComponents(string: "http://127.0.0.1\(pathWithQuery)") else {
-                        DiagnosticsLogger.log("Auth callback URL parse failed path=\(pathWithQuery)", category: .auth)
+                        DiagnosticsLogger.log(
+                            "Auth callback URL parse failed path=\(DiagnosticsLogSanitizer.sanitizeCallbackPath(pathWithQuery))",
+                            category: .auth
+                        )
                         self.respond(
                             connectionFD: connectionFD,
                             status: 400,

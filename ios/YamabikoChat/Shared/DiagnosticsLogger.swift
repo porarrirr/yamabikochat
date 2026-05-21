@@ -51,14 +51,15 @@ enum DiagnosticsLogger {
             requestSegment = ""
         }
 
+        let sanitizedMessage = DiagnosticsLogSanitizer.sanitize(message)
         var lines: [String] = [
-            "\(timestamp) | \(resolvedLevel.rawValue) | \(category.rawValue)\(requestSegment) | \(message)"
+            "\(timestamp) | \(resolvedLevel.rawValue) | \(category.rawValue)\(requestSegment) | \(sanitizedMessage)"
         ]
 
         if !metadata.isEmpty {
             let renderedMetadata = metadata
                 .sorted(by: { $0.key < $1.key })
-                .map { "\($0.key)=\($0.value)" }
+                .map { "\($0.key)=\(DiagnosticsLogSanitizer.sanitize($0.value))" }
                 .joined(separator: " ")
             if !renderedMetadata.isEmpty {
                 lines.append("meta=\(renderedMetadata)")
@@ -68,14 +69,16 @@ enum DiagnosticsLogger {
         if let error {
             let nsError = error as NSError
             lines.append("type=\(String(reflecting: type(of: error)))")
-            lines.append("\(nsError.domain) (\(nsError.code)): \(nsError.localizedDescription)")
+            lines.append(
+                "\(nsError.domain) (\(nsError.code)): \(DiagnosticsLogSanitizer.sanitize(nsError.localizedDescription))"
+            )
             if let reason = nsError.localizedFailureReason, !reason.isEmpty {
-                lines.append("reason=\(reason)")
+                lines.append("reason=\(DiagnosticsLogSanitizer.sanitize(reason))")
             }
             if let suggestion = nsError.localizedRecoverySuggestion, !suggestion.isEmpty {
-                lines.append("suggestion=\(suggestion)")
+                lines.append("suggestion=\(DiagnosticsLogSanitizer.sanitize(suggestion))")
             }
-            let debugDescription = String(reflecting: error)
+            let debugDescription = DiagnosticsLogSanitizer.sanitize(String(reflecting: error))
             if !debugDescription.isEmpty {
                 lines.append("debug=\(debugDescription)")
             }

@@ -12,7 +12,12 @@ enum AppConstants {
 
     static let defaultOpenAIBaseURL = URL(string: "https://api.openai.com/v1/")!
     static let defaultOpenCodeGoBaseURL = URL(string: "https://opencode.ai/zen/go/v1/")!
-    static let defaultQwenCodeBaseURL = URL(string: "https://dashscope.aliyuncs.com/compatible-mode/v1")!
     static let defaultAlibabaCodingPlanBaseURL = URL(string: "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/")!
     static let defaultMiniMaxBaseURL = URL(string: "https://api.minimax.io/v1/")!
+
+    /// GitHub Pages (`docs/`). Enable Pages on the repo before App Store submission.
+    static let marketingURL = URL(string: "https://porarrirr.github.io/yamabikochat/")!
+    static let privacyPolicyURL = URL(string: "https://porarrirr.github.io/yamabikochat/privacy.html")!
+    static let supportURL = URL(string: "https://porarrirr.github.io/yamabikochat/support.html")!
+    static let termsOfUseURL = URL(string: "https://porarrirr.github.io/yamabikochat/terms.html")!
 }

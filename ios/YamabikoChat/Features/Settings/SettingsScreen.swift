@@ -9,7 +9,6 @@ struct SettingsScreen: View {
     @ObservedObject var viewModel: SettingsViewModel
     @State private var selectedTab: SettingsTab = .api
     @State private var showDiagnosticsSheet = false
-    @State private var showGeminiOAuthConfigImporter = false
 
     enum SettingsTab: String, CaseIterable, Identifiable {
         case api
@@ -89,25 +88,6 @@ struct SettingsScreen: View {
             .task {
                 viewModel.bind(repository: container.chatRepository, credentialStore: container.credentialStore)
             }
-            .fileImporter(
-                isPresented: $showGeminiOAuthConfigImporter,
-                allowedContentTypes: [.item],
-                allowsMultipleSelection: false
-            ) { result in
-                switch result {
-                case let .success(urls):
-                    guard let url = urls.first else { return }
-                    let secured = url.startAccessingSecurityScopedResource()
-                    defer {
-                        if secured {
-                            url.stopAccessingSecurityScopedResource()
-                        }
-                    }
-                    viewModel.importGeminiOAuthClientConfig(fileURL: url)
-                case let .failure(error):
-                    viewModel.errorMessage = error.localizedDescription
-                }
-            }
         }
     }
 
@@ -151,7 +131,7 @@ struct SettingsScreen: View {
                     .foregroundStyle(.secondary)
             }
 
-            if currentProviderKey != "CODEX_AUTH" && currentProviderKey != "GEMINI_AUTH" && currentProviderKey != "QWEN_CODE" {
+            if currentProviderKey != "CODEX_AUTH" {
                 Section("APIキー") {
                     SecureField(currentProviderAPIKeyLabel, text: $viewModel.apiKeyDraft)
                     Button("Save API key") {
@@ -183,12 +163,6 @@ struct SettingsScreen: View {
             geminiProviderSettingsSection
             if currentProviderKey == "CODEX_AUTH" {
                 codexAuthSection
-            }
-            if currentProviderKey == "GEMINI_AUTH" {
-                geminiAuthSection
-            }
-            if currentProviderKey == "QWEN_CODE" {
-                qwenAuthSection
             }
         }
     }
@@ -268,8 +242,23 @@ struct SettingsScreen: View {
                     .foregroundStyle(.secondary)
             }
 
+            legalSection
             tokenUsageSection
             diagnosticsSection
+        }
+    }
+
+    private var legalSection: some View {
+        Section("法的情報") {
+            Link(destination: AppConstants.privacyPolicyURL) {
+                Label(L10n.text("プライバシーポリシー"), systemImage: "hand.raised")
+            }
+            Link(destination: AppConstants.termsOfUseURL) {
+                Label(L10n.text("利用規約"), systemImage: "doc.text")
+            }
+            Link(destination: AppConstants.supportURL) {
+                Label(L10n.text("サポート"), systemImage: "questionmark.circle")
+            }
         }
     }
 
@@ -902,188 +891,6 @@ struct SettingsScreen: View {
         }
     }
 
-    private var geminiAuthSection: some View {
-        Section("Gemini Auth (CLI)") {
-            Text(geminiSummary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Text("Source: \(GeminiCliCompatibilityStore.remoteRepositoryURL)")
-                .font(.caption2)
-                .textSelection(.enabled)
-            Text("Wire format source: \(viewModel.geminiCliCompatibility.source == .remote ? "synced" : "built-in")")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text("Gemini CLI version: \(viewModel.geminiCliCompatibility.remote.version)")
-                .font(.caption2)
-            if let lastSync = viewModel.geminiCliCompatibility.lastSyncISO8601, !lastSync.isEmpty {
-                Text("Last sync: \(lastSync)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-            }
-            Text("Refresh では GitHub upstream の wire format だけを同期します。OAuth Client ID / Client Secret はユーザーが明示的に取り込むか手動入力した値だけを使います。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-
-            if !viewModel.isGeminiOAuthConfigured {
-                Text("Gemini OAuth client ID/secret が未設定です。GeminiAuthInfo.plist（または Info.plist）を設定するか、下の「設定ファイルを取り込む」を実行してください。")
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
-            }
-
-            HStack {
-                Button("設定ファイルを取り込む") {
-                    showGeminiOAuthConfigImporter = true
-                }
-                .buttonStyle(.bordered)
-
-                if viewModel.hasImportedGeminiOAuthClientConfig {
-                    Button("取り込み設定をクリア") {
-                        viewModel.clearImportedGeminiOAuthClientConfig()
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
-            .disabled(viewModel.isGeminiAuthActionRunning)
-
-            Text(
-                viewModel.hasImportedGeminiOAuthClientConfig
-                    ? L10n.text("ファイル取り込み済みのOAuth設定を使用中です。")
-                    : L10n.text("FilesからGeminiAuthInfo.plistを選択すると、アプリ内にOAuth設定を保存します。")
-            )
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-
-            TextField("OAuth Client ID", text: $viewModel.geminiOAuthClientIDInput)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            SecureField("OAuth Client Secret", text: $viewModel.geminiOAuthClientSecretInput)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-
-            Button("手動入力を保存") {
-                viewModel.saveGeminiOAuthClientConfigManually()
-            }
-            .buttonStyle(.bordered)
-            .disabled(viewModel.isGeminiAuthActionRunning)
-
-            Text("ファイル選択がうまく動作しない場合は、上の入力欄に手動で貼り付けて保存できます。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-
-            HStack {
-                Button("Sign in") {
-                    Task { await viewModel.loginGeminiAuth() }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isGeminiAuthActionRunning || !viewModel.isGeminiOAuthConfigured)
-
-                Button("Refresh") {
-                    Task { await viewModel.refreshGeminiAuth(force: true) }
-                }
-                .buttonStyle(.bordered)
-
-                Button("Sign out") {
-                    Task { await viewModel.logoutGeminiAuth() }
-                }
-                .buttonStyle(.bordered)
-            }
-            .disabled(viewModel.isGeminiAuthActionRunning)
-
-            if viewModel.isGeminiAuthActionRunning {
-                ProgressView("Gemini認証処理中...")
-                    .font(.caption2)
-            }
-
-            TextField("Project ID", text: $viewModel.geminiProjectIdInput)
-            Button("Project ID保存") {
-                viewModel.saveGeminiProjectId()
-            }
-            .buttonStyle(.bordered)
-            .disabled(viewModel.isGeminiAuthActionRunning)
-
-            if !viewModel.geminiEmailInput.isEmpty {
-                Text("Email: \(viewModel.geminiEmailInput)")
-                    .font(.caption2)
-            }
-            if !viewModel.geminiTierInput.isEmpty {
-                Text("Tier: \(viewModel.geminiTierInput)")
-                    .font(.caption2)
-            }
-            if !viewModel.geminiTierNameInput.isEmpty {
-                Text("Tier Name: \(viewModel.geminiTierNameInput)")
-                    .font(.caption2)
-            }
-
-            Button("クォータ取得") {
-                Task { await viewModel.retrieveGeminiQuota() }
-            }
-            .buttonStyle(.bordered)
-            .disabled(viewModel.isGeminiAuthActionRunning)
-
-            if viewModel.geminiUserQuota != nil {
-                ForEach(viewModel.geminiQuotaDisplayRows) { row in
-                    Text("\(row.modelId) : \(row.detail)")
-                        .font(.caption2)
-                }
-            }
-        }
-    }
-
-    private var qwenAuthSection: some View {
-        Section("Qwen Code OAuth") {
-            Text(qwenSummary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Text("qwen.ai の Device Flow を使ってブラウザ認証し、Qwen Code CLI 互換の OAuth トークンで `/chat/completions` を呼び出します。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-
-            HStack {
-                Button("Sign in") {
-                    Task { await viewModel.loginQwenCode() }
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button("Refresh") {
-                    Task { await viewModel.refreshQwenCode(force: true) }
-                }
-                .buttonStyle(.bordered)
-
-                Button("Sign out") {
-                    Task { await viewModel.logoutQwenCode() }
-                }
-                .buttonStyle(.bordered)
-            }
-            .disabled(viewModel.isQwenAuthActionRunning)
-
-            if viewModel.isQwenAuthActionRunning {
-                ProgressView("Qwen Code認証処理中...")
-                    .font(.caption2)
-            }
-
-            if let resourceURL = viewModel.qwenAuthState.resourceURL, !resourceURL.isEmpty {
-                Text("resource_url: \(resourceURL)")
-                    .font(.caption2)
-                    .textSelection(.enabled)
-            }
-            if let baseURL = viewModel.qwenAuthState.baseURL, !baseURL.isEmpty {
-                Text("Base URL: \(baseURL)")
-                    .font(.caption2)
-                    .textSelection(.enabled)
-            }
-            if let expiresAtEpochMs = viewModel.qwenAuthState.expiresAtEpochMs {
-                Text(
-                    "Expires: \(Date(timeIntervalSince1970: TimeInterval(expiresAtEpochMs) / 1000).formatted(date: .abbreviated, time: .shortened))"
-                )
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            }
-        }
-    }
-
     private var dualSection: some View {
         Section("デュアルモード") {
             Toggle("Enable dual mode", isOn: Binding(
@@ -1452,14 +1259,6 @@ struct SettingsScreen: View {
         "loggedIn=\(viewModel.codexAuthState.isLoggedIn ? "yes" : "no"), hasApiKey=\(viewModel.codexAuthState.hasApiKey ? "yes" : "no")"
     }
 
-    private var geminiSummary: String {
-        "loggedIn=\(viewModel.geminiAuthState.isLoggedIn ? "yes" : "no"), project=\(viewModel.geminiAuthState.projectId ?? "-")"
-    }
-
-    private var qwenSummary: String {
-        "loggedIn=\(viewModel.qwenAuthState.isLoggedIn ? "yes" : "no"), baseURL=\(viewModel.qwenAuthState.baseURL ?? "-")"
-    }
-
     private var systemPromptPresetSection: some View {
         Section("System Prompt Preset") {
             Picker("選択中のプリセット", selection: Binding(
@@ -1580,20 +1379,6 @@ struct SettingsScreen: View {
                 Text("未掲載モデルは endpoint を安全に判定できないため、実行時に明示エラーで停止します。新しい Go モデルを使う場合は catalog 更新が必要です。")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-            } else if isQwenProvider {
-                Picker("Qwen Model", selection: Binding(
-                    get: { viewModel.settings.defaultModel },
-                    set: { viewModel.setDefaultModel($0) }
-                )) {
-                    ForEach(qwenModelOptions, id: \.self) { model in
-                        Text(model).tag(model)
-                    }
-                }
-
-                TextField("Model", text: Binding(
-                    get: { viewModel.settings.defaultModel },
-                    set: { viewModel.setDefaultModel($0) }
-                ))
             } else {
                 TextField("Default model", text: Binding(
                     get: { viewModel.settings.defaultModel },
@@ -1793,11 +1578,7 @@ struct SettingsScreen: View {
     }
 
     private var isGeminiProvider: Bool {
-        currentProviderKey == "GEMINI" || currentProviderKey == "GEMINI_AUTH"
-    }
-
-    private var isQwenProvider: Bool {
-        currentProviderKey == "QWEN_CODE"
+        currentProviderKey == "GEMINI"
     }
 
     private var isCodexProvider: Bool {
@@ -1838,18 +1619,6 @@ struct SettingsScreen: View {
 
     private var openCodeGoModelOptions: [OpenCodeGoModel] {
         OpenCodeGoModelCatalog.supportedModels
-    }
-
-    private var qwenModelOptions: [String] {
-        var list = [viewModel.settings.defaultModel] + QwenModelCatalog.supportedModels
-        var seen: Set<String> = []
-        list = list.filter {
-            let normalized = $0.lowercased()
-            guard !normalized.isEmpty, !seen.contains(normalized) else { return false }
-            seen.insert(normalized)
-            return true
-        }
-        return list
     }
 
     private var codexReasoningEffortOptions: [CodexReasoningEffortPreset] {

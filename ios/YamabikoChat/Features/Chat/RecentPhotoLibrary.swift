@@ -29,11 +29,11 @@ final class RecentPhotoLibrary: ObservableObject {
     }
 
     init() {
-        authorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        authorizationStatus = PHPhotoLibrary.authorizationStatus()
     }
 
     func refresh() {
-        authorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        authorizationStatus = PHPhotoLibrary.authorizationStatus()
         guard canShowRecentPhotos else {
             isLoading = false
             items = []
@@ -43,14 +43,14 @@ final class RecentPhotoLibrary: ObservableObject {
     }
 
     func requestAuthorization() {
-        let currentStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        let currentStatus = PHPhotoLibrary.authorizationStatus()
         authorizationStatus = currentStatus
         guard currentStatus == .notDetermined else {
             refresh()
             return
         }
 
-        PHPhotoLibrary.requestAuthorization(for: .readWrite) { [weak self] status in
+        PHPhotoLibrary.requestAuthorization { [weak self] status in
             Task { @MainActor in
                 self?.authorizationStatus = status
                 self?.refresh()

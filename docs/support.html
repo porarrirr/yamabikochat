@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Support — YamabikoChat</title>
+    <meta name="description" content="YamabikoChat support and contact" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <nav class="site-nav" aria-label="Site">
+        <a href="index.html">ホーム</a>
+        <a href="privacy.html">プライバシー</a>
+        <a href="support.html" aria-current="page">サポート</a>
+        <a href="terms.html">利用規約</a>
+      </nav>
+      <h1>サポート</h1>
+      <p class="lead">
+        不具合報告・機能要望・利用に関する質問は GitHub Issues で受け付けています。
+      </p>
+      <div class="cta-row">
+        <a class="button" href="https://github.com/porarrirr/yamabikochat/issues/new/choose"
+          >Issue を作成</a
+        >
+        <a class="button secondary" href="https://github.com/porarrirr/yamabikochat/issues"
+          >既存の Issue 一覧</a
+        >
+      </div>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>報告時に含めてほしい情報</h2>
+        <ul>
+          <li>アプリのバージョン（設定 → 診断ログに記録あり）</li>
+          <li>端末モデルと OS バージョン</li>
+          <li>使用しているプロバイダー名（API キー本体は送らないでください）</li>
+          <li>再現手順と期待する動作</li>
+          <li>可能なら設定画面の診断ログ（API キーやトークンを除いたもの）</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>よくある質問</h2>
+        <h3>メッセージを送れない</h3>
+        <p>
+          本アプリは BYOK です。設定で API キーまたは OAuth（Codex など）の接続が必要です。キー未設定のままでは送信できません。
+        </p>
+        <h3>料金はかかりますか？</h3>
+        <p>
+          アプリ自体は無料ですが、接続した各 AI プロバイダーの利用料金が発生する場合があります。プロバイダー側の契約をご確認ください。
+        </p>
+        <h3>データはどこに保存されますか？</h3>
+        <p>
+          会話履歴と設定は端末内に保存されます。プロンプトは送信時に選択したプロバイダーへ送られます。詳細は
+          <a href="privacy.html">プライバシーポリシー</a>を参照してください。
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>English</h2>
+        <p>
+          For bugs, feature requests, and usage questions, please use
+          <a href="https://github.com/porarrirr/yamabikochat/issues">GitHub Issues</a>. Do not post API
+          keys, access tokens, or refresh tokens in public issues.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        <a href="privacy.html">Privacy Policy</a> ·
+        <a href="terms.html">Terms of Use</a> ·
+        <a href="index.html">Home</a>
+      </p>
+    </footer>
+  </body>
+</html>
