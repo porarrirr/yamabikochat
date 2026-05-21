@@ -31,6 +31,13 @@ YamabikoChat is a bring-your-own-key (BYOK) chat client. This policy describes h
 
 https://porarrirr.github.io/yamabikochat/privacy.html
 
+## Disclaimer (data and security)
+
+- No guarantee of complete security, leak prevention, or data recovery.
+- You are responsible for backups, deletion, and protection of local data and shared diagnostic logs.
+- Developers do not control how third-party providers or user-configured endpoints handle your data.
+- Liability limitations for use of the app are in the [Terms of Use](https://porarrirr.github.io/yamabikochat/terms.html).
+
 ## Contact
 
 Questions or requests: https://porarrirr.github.io/yamabikochat/support.html
