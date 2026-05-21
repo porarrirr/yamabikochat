@@ -647,7 +647,6 @@ private fun formatProviderModel(provider: String?, model: String?): String {
 private fun providerDisplayName(provider: String?): String {
     return when (provider?.uppercase()) {
         "GEMINI" -> "Google Gemini"
-        "GEMINI_AUTH" -> "Gemini Auth (CLI)"
         "OPENROUTER" -> "OpenRouter"
         "MINIMAX" -> "MiniMax"
         "OPENAI" -> "OpenAI"

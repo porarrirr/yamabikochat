@@ -5,8 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.porarri.yamabikochat.data.ChatRepository
 import com.porarri.yamabikochat.data.auth.CodexAuthState
 import com.porarri.yamabikochat.data.auth.CodexUsageStatus
-import com.porarri.yamabikochat.data.auth.GeminiAuthState
-import com.porarri.yamabikochat.data.auth.GeminiQuotaBucket
 import com.porarri.yamabikochat.data.local.ModelPreset
 import com.porarri.yamabikochat.data.local.Settings
 import com.porarri.yamabikochat.data.local.TokenUsageByModel
@@ -54,16 +52,10 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
     val secureStorageError: StateFlow<String?> = _secureStorageError.asStateFlow()
 
     val codexAuthState: StateFlow<CodexAuthState> = repository.codexAuthState
-    val geminiAuthState: StateFlow<GeminiAuthState> = repository.geminiAuthState
 
     private val _codexAuthError = MutableStateFlow<String?>(null)
     val codexAuthError: StateFlow<String?> = _codexAuthError.asStateFlow()
 
-    private val _geminiAuthError = MutableStateFlow<String?>(null)
-    val geminiAuthError: StateFlow<String?> = _geminiAuthError.asStateFlow()
-
-    private val _geminiQuotaState = MutableStateFlow(GeminiQuotaUiState())
-    val geminiQuotaState: StateFlow<GeminiQuotaUiState> = _geminiQuotaState.asStateFlow()
     private val _codexUsageState = MutableStateFlow(CodexUsageUiState())
     val codexUsageState: StateFlow<CodexUsageUiState> = _codexUsageState.asStateFlow()
     private val _tokenUsageState = MutableStateFlow(TokenUsageUiState())
@@ -77,7 +69,6 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
     fun clearSecureStorageError() { _secureStorageError.value = null }
 
     fun clearCodexAuthError() { _codexAuthError.value = null }
-    fun clearGeminiAuthError() { _geminiAuthError.value = null }
 
     fun refreshApiKeyStatus() {
         viewModelScope.launch { updateApiKeyStatus() }
@@ -91,14 +82,6 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
         }
     }
 
-    fun loginGeminiAuth() {
-        viewModelScope.launch {
-            val result = repository.loginGeminiAuth()
-            _geminiAuthError.value = result.exceptionOrNull()?.message
-            updateApiKeyStatus()
-        }
-    }
-
     fun logoutCodexAuth() {
         viewModelScope.launch {
             val result = repository.logoutCodexAuth()
@@ -108,58 +91,11 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
         }
     }
 
-    fun logoutGeminiAuth() {
-        viewModelScope.launch {
-            val result = repository.logoutGeminiAuth()
-            _geminiAuthError.value = result.exceptionOrNull()?.message
-            clearGeminiQuota()
-            updateApiKeyStatus()
-        }
-    }
-
     fun refreshCodexAuth(force: Boolean = false) {
         viewModelScope.launch {
             val result = repository.refreshCodexAuth(force)
             _codexAuthError.value = result.exceptionOrNull()?.message
             updateApiKeyStatus()
-        }
-    }
-
-    fun refreshGeminiAuth(force: Boolean = false) {
-        viewModelScope.launch {
-            val result = repository.refreshGeminiAuth(force)
-            _geminiAuthError.value = result.exceptionOrNull()?.message
-            updateApiKeyStatus()
-        }
-    }
-
-    fun saveGeminiAuthProjectId(projectId: String?) {
-        viewModelScope.launch(Dispatchers.IO) {
-            repository.saveGeminiAuthProjectId(projectId)
-        }
-    }
-
-    fun refreshGeminiQuota() {
-        viewModelScope.launch {
-            val current = _geminiQuotaState.value
-            _geminiQuotaState.value = current.copy(isLoading = true, error = null)
-            val result = repository.retrieveGeminiAuthQuota()
-            _geminiQuotaState.value = result.fold(
-                onSuccess = { quota ->
-                    GeminiQuotaUiState(
-                        isLoading = false,
-                        error = null,
-                        buckets = quota.buckets,
-                        lastUpdated = Instant.now().toString()
-                    )
-                },
-                onFailure = { err ->
-                    current.copy(
-                        isLoading = false,
-                        error = err.message ?: "Failed to load rate limits"
-                    )
-                }
-            )
         }
     }
 
@@ -185,10 +121,6 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
                 }
             )
         }
-    }
-
-    private fun clearGeminiQuota() {
-        _geminiQuotaState.value = GeminiQuotaUiState()
     }
 
     private fun clearCodexUsage() {
@@ -238,8 +170,7 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
             hasOpenAiKey = repository.hasApiKey("OPENAI"),
             hasMiniMaxKey = repository.hasApiKey("MINIMAX"),
             hasZaiKey = repository.hasApiKey("ZAI"),
-            hasCodexAuth = repository.hasCodexAuth(),
-            hasGeminiAuth = repository.hasGeminiAuth()
+            hasCodexAuth = repository.hasCodexAuth()
         )
     }
 
@@ -311,7 +242,7 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
                 previousProvider = previousProvider,
                 previousModel = previousProviderModel
             )
-            repository.saveSettings(settingsWithModel)
+            repository.saveSettings(settingsWithModel.remapRemovedProviders())
             val codexUaPresetSaved = repository.saveCodexUserAgentPreset(normalizedRequest.codexUserAgentPreset)
 
             val geminiSaveResult = when (request.geminiApiKeyAction) {
@@ -711,15 +642,7 @@ data class ApiKeyStatus(
     val hasOpenAiKey: Boolean = false,
     val hasMiniMaxKey: Boolean = false,
     val hasZaiKey: Boolean = false,
-    val hasCodexAuth: Boolean = false,
-    val hasGeminiAuth: Boolean = false
-)
-
-data class GeminiQuotaUiState(
-    val isLoading: Boolean = false,
-    val error: String? = null,
-    val buckets: List<GeminiQuotaBucket> = emptyList(),
-    val lastUpdated: String? = null
+    val hasCodexAuth: Boolean = false
 )
 
 data class CodexUsageUiState(

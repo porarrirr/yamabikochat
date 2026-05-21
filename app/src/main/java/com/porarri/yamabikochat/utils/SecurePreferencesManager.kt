@@ -28,7 +28,6 @@ class SecurePreferencesManager private constructor(private val context: Context)
         private const val KEY_MINIMAX_API_KEY = "minimax_api_key"
         private const val KEY_ZAI_API_KEY = "zai_api_key"
         private const val KEY_CODEX_AUTH_JSON = "codex_auth_json"
-        private const val KEY_GEMINI_AUTH_JSON = "gemini_auth_json"
         private const val KEY_CODEX_USER_AGENT_PRESET = "codex_user_agent_preset"
         private const val KEY_CODEX_USER_AGENT_CLI_VERSION = "codex_user_agent_cli_version"
     }
@@ -228,18 +227,6 @@ class SecurePreferencesManager private constructor(private val context: Context)
 
     fun clearCodexAuthJson() =
         clearKey(KEY_CODEX_AUTH_JSON, "Codex Auth")
-
-    fun storeGeminiAuthJson(payload: String?): Boolean =
-        storeString(KEY_GEMINI_AUTH_JSON, payload, "Gemini Auth")
-
-    fun getGeminiAuthJson(): String? =
-        readString(KEY_GEMINI_AUTH_JSON, "Gemini Auth")
-
-    fun hasGeminiAuthJson(): Boolean =
-        hasString(KEY_GEMINI_AUTH_JSON, "Gemini Auth")
-
-    fun clearGeminiAuthJson() =
-        clearKey(KEY_GEMINI_AUTH_JSON, "Gemini Auth")
 
     fun storeCodexUserAgentPreset(preset: String?): Boolean =
         storeString(KEY_CODEX_USER_AGENT_PRESET, preset, "Codex User-Agent preset")

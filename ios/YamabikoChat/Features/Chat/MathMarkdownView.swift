@@ -198,6 +198,7 @@ enum MathMarkdownHTMLBuilder {
         return """
         <html>
         <head>
+          <meta charset=\"utf-8\" />
           <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
           <meta name=\"color-scheme\" content=\"light dark\" />
           \(copyLabelSetupScript)
@@ -1000,8 +1001,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         )
         contentController.addUserScript(userScript)
 
-        let config = WKWebViewConfiguration()
-        config.userContentController = contentController
+        let config = YamabikoWebKitSupport.makeConfiguration(userContentController: contentController)
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
@@ -1050,7 +1050,14 @@ private struct MathMarkdownWebView: UIViewRepresentable {
 
         if context.coordinator.lastHTML != html {
             context.coordinator.lastHTML = html
-            webView.loadHTMLString(html, baseURL: mathJaxLoadPlan.baseURL)
+            let resourceDirectory = mathJaxLoadPlan.baseURL == nil
+                ? nil
+                : MathMarkdownWebResourceLoader.preparedResourceDirectory()
+            YamabikoWebKitSupport.loadHTMLDocument(
+                html,
+                resourceDirectory: resourceDirectory,
+                in: webView
+            )
         } else {
             context.coordinator.requestHeightMeasurement(for: webView)
         }

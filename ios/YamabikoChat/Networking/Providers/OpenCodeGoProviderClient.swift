@@ -238,8 +238,8 @@ struct OpenCodeGoProviderClient: ProviderClient {
               let message = choices.first?["message"] as? [String: Any] else {
             throw ProviderClientError.parseFailure("OpenCode Go chat response is missing choices[0].message")
         }
-        let content = (message["content"] as? String) ?? ""
-        let reasoning = (message["reasoning_content"] as? String)?.trimmedNonEmpty
+        let content = openAICompatibleText(from: message["content"])
+        let reasoning = reasoningText(from: message)
         return ProviderResponse(
             text: content,
             reasoningSummary: reasoning,
@@ -269,13 +269,20 @@ struct OpenCodeGoProviderClient: ProviderClient {
         continuation: AsyncThrowingStream<ProviderStreamEvent, Error>.Continuation
     ) async throws {
         var fullText = ""
+        var fullReasoning = ""
         var latestUsage: ProviderUsage?
-        for try await line in lineStream {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty || !trimmed.hasPrefix("data:") { continue }
-            let dataChunk = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+        for try await dataChunk in SSEPayloadAssembly.payloads(from: lineStream) {
             if dataChunk == "[DONE]" {
-                continuation.yield(.completed(ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: latestUsage)))
+                continuation.yield(
+                    .completed(
+                        ProviderResponse(
+                            text: fullText,
+                            reasoningSummary: fullReasoning.trimmedNonEmpty,
+                            raw: nil,
+                            usage: latestUsage
+                        )
+                    )
+                )
                 continuation.finish()
                 return
             }
@@ -283,13 +290,56 @@ struct OpenCodeGoProviderClient: ProviderClient {
             if let usage = parseUsage(root["usage"] as? [String: Any]) {
                 latestUsage = usage
             }
-            guard let choices = root["choices"] as? [[String: Any]], let delta = choices.first?["delta"] as? [String: Any] else { continue }
-            if let text = delta["content"] as? String, !text.isEmpty {
-                fullText += text
-                continuation.yield(.textDelta(text))
+            guard let choices = root["choices"] as? [[String: Any]], let choice = choices.first else { continue }
+
+            if let delta = choice["delta"] as? [String: Any] {
+                if let incoming = reasoningText(from: delta) {
+                    let reasoningDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullReasoning, incoming: incoming)
+                    if !reasoningDelta.isEmpty {
+                        fullReasoning += reasoningDelta
+                        continuation.yield(.reasoningDelta(reasoningDelta))
+                    }
+                }
+
+                let incomingContent = openAICompatibleText(from: delta["content"])
+                if !incomingContent.isEmpty {
+                    let textDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: incomingContent)
+                    if !textDelta.isEmpty {
+                        fullText += textDelta
+                        continuation.yield(.textDelta(textDelta))
+                    }
+                }
+            }
+
+            if let message = choice["message"] as? [String: Any] {
+                if let incoming = reasoningText(from: message) {
+                    let reasoningDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullReasoning, incoming: incoming)
+                    if !reasoningDelta.isEmpty {
+                        fullReasoning += reasoningDelta
+                        continuation.yield(.reasoningDelta(reasoningDelta))
+                    }
+                }
+
+                let incomingContent = openAICompatibleText(from: message["content"])
+                if !incomingContent.isEmpty {
+                    let textDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: incomingContent)
+                    if !textDelta.isEmpty {
+                        fullText += textDelta
+                        continuation.yield(.textDelta(textDelta))
+                    }
+                }
             }
         }
-        continuation.yield(.completed(ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: latestUsage)))
+        continuation.yield(
+            .completed(
+                ProviderResponse(
+                    text: fullText,
+                    reasoningSummary: fullReasoning.trimmedNonEmpty,
+                    raw: nil,
+                    usage: latestUsage
+                )
+            )
+        )
         continuation.finish()
     }
 
@@ -299,10 +349,7 @@ struct OpenCodeGoProviderClient: ProviderClient {
     ) async throws {
         var fullText = ""
         var latestUsage: ProviderUsage?
-        for try await line in lineStream {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty || !trimmed.hasPrefix("data:") { continue }
-            let dataChunk = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+        for try await dataChunk in SSEPayloadAssembly.payloads(from: lineStream) {
             if dataChunk == "[DONE]" {
                 continuation.yield(.completed(ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: latestUsage)))
                 continuation.finish()
@@ -318,10 +365,13 @@ struct OpenCodeGoProviderClient: ProviderClient {
             }
             if let delta = root["delta"] as? [String: Any],
                (delta["type"] as? String)?.lowercased() == "text_delta",
-               let text = delta["text"] as? String,
-               !text.isEmpty {
-                fullText += text
-                continuation.yield(.textDelta(text))
+               let incoming = delta["text"] as? String,
+               !incoming.isEmpty {
+                let textDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: incoming)
+                if !textDelta.isEmpty {
+                    fullText += textDelta
+                    continuation.yield(.textDelta(textDelta))
+                }
             }
             if (root["type"] as? String)?.lowercased() == "message_stop" {
                 continuation.yield(.completed(ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: latestUsage)))
@@ -339,6 +389,39 @@ struct OpenCodeGoProviderClient: ProviderClient {
             guard (block["type"] as? String)?.lowercased() == "text" else { return nil }
             return (block["text"] as? String)?.trimmedNonEmpty
         }
+    }
+
+    private func openAICompatibleText(from value: Any?) -> String {
+        guard let value else { return "" }
+        if let text = value as? String {
+            return text
+        }
+        if let number = value as? NSNumber {
+            return number.stringValue
+        }
+        guard let parts = value as? [Any] else { return "" }
+        return parts.compactMap { part -> String? in
+            if let text = part as? String {
+                return text
+            }
+            guard let block = part as? [String: Any] else { return nil }
+            let type = (block["type"] as? String)?.lowercased()
+            if let type, !["input_text", "output_text", "text"].contains(type) {
+                return nil
+            }
+            return block["text"] as? String
+        }
+        .joined()
+    }
+
+    private func reasoningText(from object: [String: Any]) -> String? {
+        for key in ["reasoning_content", "reasoning", "thinking"] {
+            let incoming = openAICompatibleText(from: object[key])
+            if let trimmed = incoming.trimmedNonEmpty {
+                return trimmed
+            }
+        }
+        return nil
     }
 
     private func parseUsage(_ object: [String: Any]?) -> ProviderUsage? {

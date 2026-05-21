@@ -439,7 +439,62 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         if let value = normalized.autoThinkingBudgetB {
             normalized.autoThinkingBudgetB = max(0, value)
         }
+        normalized.remapRemovedProviders()
+        normalized.applyAppleIntelligenceModelNormalization()
         return normalized
+    }
+
+    mutating func remapRemovedProviders() {
+        func remap(_ provider: String) -> String {
+            switch provider.uppercased() {
+            case "GEMINI_AUTH":
+                return "GEMINI"
+            case "QWEN_CODE":
+                return "OPENROUTER"
+            default:
+                return provider.uppercased()
+            }
+        }
+
+        func remapDualAutoProvider(_ provider: String) -> String {
+            let normalized = remap(provider)
+            if normalized == "APPLE_INTELLIGENCE" {
+                return "GEMINI"
+            }
+            return normalized
+        }
+
+        apiProvider = remap(apiProvider)
+        dualProviderA = remapDualAutoProvider(dualProviderA)
+        dualProviderB = remapDualAutoProvider(dualProviderB)
+        autoProviderA = remapDualAutoProvider(autoProviderA)
+        autoProviderB = remapDualAutoProvider(autoProviderB)
+
+        var models = providerModelMap()
+        var remappedModels: [String: String] = [:]
+        let legacyRemovedKeys: Set<String> = ["GEMINI_AUTH", "QWEN_CODE"]
+        for (key, value) in models {
+            let newKey = remap(key)
+            if legacyRemovedKeys.contains(key.uppercased()) {
+                remappedModels[newKey] = value
+            } else if remappedModels[newKey] == nil {
+                remappedModels[newKey] = value
+            }
+        }
+        if let data = try? JSONEncoder().encode(remappedModels),
+           let json = String(data: data, encoding: .utf8) {
+            providerDefaultModelsJSON = json
+        }
+
+        var visibility = showGlobalProviderPresetsInChatByProviderMap()
+        var remappedVisibility: [String: Bool] = [:]
+        for (key, value) in visibility {
+            remappedVisibility[remap(key)] = value
+        }
+        if let data = try? JSONEncoder().encode(remappedVisibility),
+           let json = String(data: data, encoding: .utf8) {
+            showGlobalProviderPresetsInChatByProviderJSON = json
+        }
     }
 
     func toolOverride(for context: ReasoningContext) -> (
@@ -573,8 +628,27 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     }
 
     func modelForProvider(_ provider: String) -> String {
+        let normalizedProvider = provider.uppercased()
+        if normalizedProvider == "APPLE_INTELLIGENCE" {
+            return AppleIntelligenceModelCatalog.displayModel
+        }
         let map = providerModelMap()
-        return map[provider.uppercased()] ?? defaultModel
+        return map[normalizedProvider] ?? defaultModel
+    }
+
+    mutating func applyAppleIntelligenceModelNormalization() {
+        let modelName = AppleIntelligenceModelCatalog.displayModel
+        if apiProvider.uppercased() == "APPLE_INTELLIGENCE" {
+            defaultModel = modelName
+        }
+
+        var models = providerModelMap()
+        guard models.keys.contains(where: { $0.uppercased() == "APPLE_INTELLIGENCE" }) else { return }
+        models["APPLE_INTELLIGENCE"] = modelName
+        if let data = try? JSONEncoder().encode(models),
+           let json = String(data: data, encoding: .utf8) {
+            providerDefaultModelsJSON = json
+        }
     }
 
     func providerModelMap() -> [String: String] {
@@ -660,8 +734,6 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
 
         let preferredOrder = [
             "GEMINI",
-            "GEMINI_AUTH",
-            "QWEN_CODE",
             "OPENROUTER",
             "OPENCODE_GO",
             "ALIBABA_CODING_PLAN",
@@ -762,7 +834,13 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
 
     private static func resolveBaseURL(_ value: String, fallback: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, URL(string: trimmed) != nil else {
+        guard !trimmed.isEmpty,
+              let components = URLComponents(string: trimmed),
+              let scheme = components.scheme?.lowercased(),
+              !scheme.isEmpty,
+              let host = components.host?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !host.isEmpty
+        else {
             return fallback
         }
         return trimmed

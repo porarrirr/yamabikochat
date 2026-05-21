@@ -414,7 +414,6 @@ fun ChatScreen(
                                 options = presetOptions.map { preset ->
                                     val providerLabel = when (preset.apiProvider.uppercase()) {
                                         "GEMINI" -> "Google Gemini"
-                                        "GEMINI_AUTH" -> "Gemini Auth (CLI)"
                                         "OPENROUTER" -> "OpenRouter"
                                         "MINIMAX" -> "MiniMax"
                                         "OPENAI" -> "OpenAI"

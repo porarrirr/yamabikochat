@@ -19,7 +19,7 @@ struct ProviderRegistry {
 
     func client(for provider: LLMProvider) -> ProviderClient {
         switch provider {
-        case .gemini, .geminiAuth:
+        case .gemini:
             return gemini
         case .codexAuth:
             return codex
@@ -29,7 +29,7 @@ struct ProviderRegistry {
             return openCodeGo
         case .alibabaCodingPlan:
             return anthropicCompatible
-        case .qwenCode, .openRouter, .openAI, .openAICompat, .miniMax, .zai:
+        case .openRouter, .openAI, .openAICompat, .miniMax, .zai:
             return openAICompatible
         }
     }

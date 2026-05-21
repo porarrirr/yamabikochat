@@ -49,6 +49,20 @@
                ReferencedContainer = "container:YamabikoChat.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "CA9DB7A8FF77C763986E4942"
+               BuildableName = "YamabikoUITests.xctest"
+               BlueprintName = "YamabikoUITests"
+               ReferencedContainer = "container:YamabikoChat.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -75,6 +89,17 @@
                BlueprintIdentifier = "23541159A695777175C2A5A4"
                BuildableName = "YamabikoTests.xctest"
                BlueprintName = "YamabikoTests"
+               ReferencedContainer = "container:YamabikoChat.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "CA9DB7A8FF77C763986E4942"
+               BuildableName = "YamabikoUITests.xctest"
+               BlueprintName = "YamabikoUITests"
                ReferencedContainer = "container:YamabikoChat.xcodeproj">
             </BuildableReference>
          </TestableReference>

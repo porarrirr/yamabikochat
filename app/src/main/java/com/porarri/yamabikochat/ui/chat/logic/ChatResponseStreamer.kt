@@ -7,7 +7,6 @@ import com.porarri.yamabikochat.data.remote.GenerateContentRequest
 import com.porarri.yamabikochat.data.remote.GenerateContentResponse
 import com.porarri.yamabikochat.data.remote.FunctionCall
 import com.porarri.yamabikochat.data.remote.FunctionResponse
-import com.porarri.yamabikochat.data.remote.GeminiCliGenerateContentResponse
 import com.porarri.yamabikochat.data.remote.Part
 import com.porarri.yamabikochat.data.remote.ResponsePart
 import com.porarri.yamabikochat.data.remote.TokenUsageSnapshot
@@ -193,23 +192,6 @@ class ChatResponseStreamer(
                                     deltaText = textDelta,
                                     deltaThinking = thinkingDelta,
                                     usage = streamResponse.usage?.toTokenUsageSnapshot()
-                                )
-                            } else if (provider.uppercase() == "GEMINI_AUTH") {
-                                val chunk = unwrapGeminiCliResponse(payload)
-                                val parts = chunk.candidates?.firstOrNull()?.content?.parts.orEmpty()
-                                val parsed = parseGeminiParts(parts)
-                                val attachmentsAdded = parsed.attachments.isNotEmpty()
-                                if (attachmentsAdded) {
-                                    currentAttachments.addAll(parsed.attachments)
-                                }
-                                val textDelta = parsed.text + chunk.text.orEmpty()
-                                if (attachmentsAdded && textDelta.isEmpty() && parsed.thinking.isEmpty()) {
-                                    hasData = true
-                                }
-                                StreamChunkParse(
-                                    deltaText = textDelta,
-                                    deltaThinking = parsed.thinking,
-                                    usage = chunk.extractTokenUsageSnapshot()
                                 )
                             } else {
                                 val chunk = json.decodeFromString<GenerateContentResponse>(payload)
@@ -479,7 +461,7 @@ class ChatResponseStreamer(
     private fun apiFailureMessage(provider: String, code: Int): String {
         val p = provider.uppercase()
         return when (code) {
-            401 -> if (p == "GEMINI_AUTH") "認証が必要です（$p）" else "APIキーが未設定または無効です（$p）"
+            401 -> "APIキーが未設定または無効です（$p）"
             403 -> "アクセスが拒否されました（$p）"
             404 -> "エンドポイント/モデルが見つかりません（$p）"
             408 -> "タイムアウトしました（$p）"
@@ -538,15 +520,6 @@ class ChatResponseStreamer(
             text = textBuilder.toString(),
             thinking = thinkingBuilder.toString(),
             attachments = attachments
-        )
-    }
-
-    private fun unwrapGeminiCliResponse(payload: String): GenerateContentResponse {
-        val wrapper = json.decodeFromString<GeminiCliGenerateContentResponse>(payload)
-        return GenerateContentResponse(
-            candidates = wrapper.response.candidates,
-            promptFeedback = wrapper.response.promptFeedback,
-            usageMetadata = wrapper.response.usageMetadata
         )
     }
 

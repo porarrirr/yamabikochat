@@ -2,8 +2,6 @@ import Foundation
 
 enum LLMProvider: String, Codable, CaseIterable, Sendable {
     case gemini = "GEMINI"
-    case geminiAuth = "GEMINI_AUTH"
-    case qwenCode = "QWEN_CODE"
     case openRouter = "OPENROUTER"
     case openCodeGo = "OPENCODE_GO"
     case alibabaCodingPlan = "ALIBABA_CODING_PLAN"
@@ -15,6 +13,13 @@ enum LLMProvider: String, Codable, CaseIterable, Sendable {
     case appleIntelligence = "APPLE_INTELLIGENCE"
 
     init(rawOrDefault value: String) {
-        self = LLMProvider(rawValue: value.uppercased()) ?? .gemini
+        switch value.uppercased() {
+        case "GEMINI_AUTH":
+            self = .gemini
+        case "QWEN_CODE":
+            self = .openRouter
+        default:
+            self = LLMProvider(rawValue: value.uppercased()) ?? .gemini
+        }
     }
 }

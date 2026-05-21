@@ -4,9 +4,6 @@ import android.net.Uri
 import com.porarri.yamabikochat.data.api.ApiRepository
 import com.porarri.yamabikochat.data.auth.CodexAuthRepository
 import com.porarri.yamabikochat.data.auth.CodexAuthState
-import com.porarri.yamabikochat.data.auth.GeminiAuthRepository
-import com.porarri.yamabikochat.data.auth.GeminiAuthState
-import com.porarri.yamabikochat.data.auth.GeminiUserQuota
 import com.porarri.yamabikochat.data.auth.CodexUsageStatus
 import com.porarri.yamabikochat.data.database.DatabaseRepository
 import com.porarri.yamabikochat.data.files.FileProcessingRepository
@@ -50,7 +47,6 @@ class ChatRepository(
     private val fileProcessingRepository: FileProcessingRepository,
     private val modelRepository: ModelRepository,
     private val codexAuthRepository: CodexAuthRepository,
-    private val geminiAuthRepository: GeminiAuthRepository,
     private val pricingRepository: LiteLlmPricingRepository
 ) {
 
@@ -264,24 +260,6 @@ class ChatRepository(
 
     suspend fun retrieveCodexAuthUsage(): Result<CodexUsageStatus> =
         codexAuthRepository.retrieveUsageStatus()
-    // endregion
-
-    // region Gemini Auth
-    val geminiAuthState: StateFlow<GeminiAuthState> = geminiAuthRepository.state
-
-    suspend fun loginGeminiAuth(): Result<GeminiAuthState> = geminiAuthRepository.login()
-
-    suspend fun logoutGeminiAuth(): Result<GeminiAuthState> = geminiAuthRepository.logout()
-
-    suspend fun refreshGeminiAuth(force: Boolean = false): Result<GeminiAuthState> =
-        geminiAuthRepository.refreshIfNeeded(force)
-
-    fun hasGeminiAuth(): Boolean = geminiAuthRepository.hasAuthToken()
-
-    fun saveGeminiAuthProjectId(projectId: String?): Boolean = geminiAuthRepository.saveProjectId(projectId)
-
-    suspend fun retrieveGeminiAuthQuota(): Result<GeminiUserQuota> =
-        geminiAuthRepository.retrieveUserQuota()
     // endregion
 
     // region OpenAI-compatible key helpers

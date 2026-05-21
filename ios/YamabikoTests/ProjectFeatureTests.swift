@@ -109,7 +109,6 @@ final class ProjectFeatureTests: XCTestCase {
         let providers = ProviderGateway(settingsRepository: settings, credentialStore: credentials)
         let modelService = OpenRouterModelService(credentialStore: credentials)
         let codexAuth = CodexAuthRepository(credentialStore: credentials)
-        let geminiAuth = GeminiAuthRepository(credentialStore: credentials)
 
         let repository = ChatRepository(
             conversations: conversations,
@@ -117,8 +116,7 @@ final class ProjectFeatureTests: XCTestCase {
             providers: providers,
             credentialStore: credentials,
             modelService: modelService,
-            codexAuthRepository: codexAuth,
-            geminiAuthRepository: geminiAuth
+            codexAuthRepository: codexAuth
         )
         return (repository, conversations)
     }

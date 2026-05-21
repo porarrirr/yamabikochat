@@ -159,13 +159,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
                     var fullReasoning = ""
                     var latestUsage: ProviderUsage?
 
-                    for try await line in lineStream {
-                        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if trimmed.isEmpty || !trimmed.hasPrefix("data:") {
-                            continue
-                        }
-
-                        let dataChunk = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                    for try await dataChunk in SSEPayloadAssembly.payloads(from: lineStream) {
                         if dataChunk == "[DONE]" {
                             let final = ProviderResponse(
                                 text: fullText,
@@ -190,7 +184,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
                             root,
                             fullText: &fullText,
                             fullReasoning: &fullReasoning,
-                            latestUsage: latestUsage
+                            latestUsage: &latestUsage
                         ) {
                             if case let .completed(response) = event {
                                 continuation.yield(.completed(response))
@@ -388,7 +382,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         _ root: [String: Any],
         fullText: inout String,
         fullReasoning: inout String,
-        latestUsage: ProviderUsage?
+        latestUsage: inout ProviderUsage?
     ) -> ProviderStreamEvent? {
         let type = (root["type"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
@@ -405,13 +399,17 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
             let deltaType = (delta["type"] as? String)?.lowercased()
             switch deltaType {
             case "text_delta":
-                guard let text = delta["text"] as? String, !text.isEmpty else { return nil }
-                fullText += text
-                return .textDelta(text)
+                guard let incoming = delta["text"] as? String, !incoming.isEmpty else { return nil }
+                let textDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: incoming)
+                if textDelta.isEmpty { return nil }
+                fullText += textDelta
+                return .textDelta(textDelta)
             case "thinking_delta":
-                guard let thinking = delta["thinking"] as? String, !thinking.isEmpty else { return nil }
-                fullReasoning += thinking
-                return .reasoningDelta(thinking)
+                guard let incoming = delta["thinking"] as? String, !incoming.isEmpty else { return nil }
+                let reasoningDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullReasoning, incoming: incoming)
+                if reasoningDelta.isEmpty { return nil }
+                fullReasoning += reasoningDelta
+                return .reasoningDelta(reasoningDelta)
             default:
                 return nil
             }
@@ -451,7 +449,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         let cacheCreationTokens =
             intValue(in: object, keys: ["cache_creation_input_tokens", "cacheCreationInputTokens", "cache_creation_input_token_count"])
 
-        return ProviderUsage(
+        let usage = ProviderUsage(
             inputTokens: inputTokens,
             outputTokens: outputTokens,
             totalTokens: totalTokens,
@@ -459,7 +457,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
             cachedInputTokens: cachedTokens,
             cacheCreationInputTokens: cacheCreationTokens
         )
-        .normalizedNonEmpty()
+        return usage.isEmpty ? nil : usage.normalized()
     }
 
     private func mergeUsage(current: ProviderUsage?, incoming: ProviderUsage) -> ProviderUsage {
@@ -508,6 +506,9 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         }
         if let value = raw as? NSNumber {
             return value.intValue
+        }
+        if let value = raw as? Double {
+            return Int(value)
         }
         if let value = raw as? String {
             return Int(value)

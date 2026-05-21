@@ -20,29 +20,14 @@ final class SettingsViewModel: ObservableObject {
     @Published var alibabaMCPAuthorizationTokenInput: String = ""
 
     @Published var codexAuthState: CodexAuthState = .init()
-    @Published var geminiAuthState: GeminiAuthState = .init()
-    @Published var qwenAuthState: QwenAuthState = .init()
     @Published var codexUsageStatus: CodexUsageStatus?
-    @Published var geminiUserQuota: GeminiUserQuota?
     @Published var isCodexAuthActionRunning: Bool = false
-    @Published var isGeminiAuthActionRunning: Bool = false
-    @Published var isQwenAuthActionRunning: Bool = false
-    @Published var hasImportedGeminiOAuthClientConfig: Bool = false
 
     @Published var codexApiKeyInput: String = ""
     @Published var codexAccessTokenInput: String = ""
     @Published var codexAccountIdInput: String = ""
     @Published var codexEmailInput: String = ""
     @Published var codexPlanTypeInput: String = ""
-
-    @Published var geminiAccessTokenInput: String = ""
-    @Published var geminiProjectIdInput: String = ""
-    @Published var geminiEmailInput: String = ""
-    @Published var geminiTierInput: String = ""
-    @Published var geminiTierNameInput: String = ""
-    @Published var geminiOAuthClientIDInput: String = ""
-    @Published var geminiOAuthClientSecretInput: String = ""
-    @Published var geminiCliCompatibility: GeminiCliResolvedCompatibility = GeminiCliCompatibility.resolved()
 
     @Published var statusMessage: String?
     @Published var errorMessage: String?
@@ -52,27 +37,11 @@ final class SettingsViewModel: ObservableObject {
     private var repository: ChatRepository?
     private var credentialStore: SecureCredentialStore?
     private var cancellables: Set<AnyCancellable> = []
-    private var geminiOAuthMissingMessage: String {
-        L10n.text("Gemini OAuth client ID/secret が未設定です。GeminiAuthInfo.plist/Info.plist か、設定画面のファイル取り込みで GEMINI_OAUTH_CLIENT_ID / GEMINI_OAUTH_CLIENT_SECRET を設定してください。")
-    }
-
-    var isGeminiOAuthConfigured: Bool {
-        if let repository {
-            return repository.isGeminiOAuthClientConfigured()
-        }
-        return GeminiAuthRepository.isDefaultOAuthClientConfigured()
-    }
-
-    var geminiQuotaDisplayRows: [GeminiQuotaDisplayRow] {
-        geminiUserQuota?.displayRows(limit: 5) ?? []
-    }
 
     func bind(repository: ChatRepository, credentialStore: SecureCredentialStore) {
         guard self.repository == nil else { return }
         self.repository = repository
         self.credentialStore = credentialStore
-        refreshGeminiOAuthClientConfigStatus()
-        refreshGeminiCliCompatibilityStatus()
 
         repository.settingsPublisher()
             .receive(on: DispatchQueue.main)
@@ -91,24 +60,6 @@ final class SettingsViewModel: ObservableObject {
                 self?.codexAccountIdInput = $0.accountId ?? ""
                 self?.codexEmailInput = $0.email ?? ""
                 self?.codexPlanTypeInput = $0.planType ?? ""
-            }
-            .store(in: &cancellables)
-
-        repository.geminiAuthStatePublisher()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] in
-                self?.geminiAuthState = $0
-                self?.geminiProjectIdInput = $0.projectId ?? ""
-                self?.geminiEmailInput = $0.email ?? ""
-                self?.geminiTierInput = $0.userTier ?? ""
-                self?.geminiTierNameInput = $0.userTierName ?? ""
-            }
-            .store(in: &cancellables)
-
-        repository.qwenAuthStatePublisher()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] in
-                self?.qwenAuthState = $0
             }
             .store(in: &cancellables)
 
@@ -166,10 +117,6 @@ final class SettingsViewModel: ObservableObject {
         Task {
             await refreshOpenRouterModels(force: false)
             await refreshCodexAuth(force: false)
-            await refreshGeminiAuth(force: false)
-            await refreshQwenCode(force: false)
-            refreshGeminiOAuthClientConfigStatus()
-            refreshGeminiCliCompatibilityStatus()
             refreshDiagnosticsLog()
         }
     }
@@ -269,7 +216,9 @@ final class SettingsViewModel: ObservableObject {
         }
 
         settings.apiProvider = nextProvider
-        let nextModel = providerMap[nextProvider] ?? defaultModelForProvider(nextProvider)
+        let nextModel = nextProvider == "APPLE_INTELLIGENCE"
+            ? AppleIntelligenceModelCatalog.displayModel
+            : (providerMap[nextProvider] ?? defaultModelForProvider(nextProvider))
         settings.defaultModel = nextModel
         providerMap[nextProvider] = nextModel
 
@@ -530,207 +479,6 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
-    func loginGeminiAuth() async {
-        guard let repository = requireRepository(action: "gemini_login") else { return }
-        guard isGeminiOAuthConfigured else {
-            statusMessage = nil
-            errorMessage = geminiOAuthMissingMessage
-            DiagnosticsLogger.log(
-                "Gemini auth login blocked because oauth client config is missing",
-                level: .warning,
-                category: .auth
-            )
-            refreshDiagnosticsLog()
-            return
-        }
-        isGeminiAuthActionRunning = true
-        statusMessage = L10n.text("Geminiログインを開始しました")
-        errorMessage = nil
-        DiagnosticsLogger.log("Gemini auth login tapped", category: .auth)
-        refreshDiagnosticsLog()
-        defer {
-            isGeminiAuthActionRunning = false
-            refreshDiagnosticsLog()
-        }
-        let result = await repository.loginGeminiAuthWithBrowser()
-        switch result {
-        case let .success(state):
-            geminiAuthState = state
-            geminiProjectIdInput = state.projectId ?? ""
-            geminiEmailInput = state.email ?? ""
-            geminiTierInput = state.userTier ?? ""
-            geminiTierNameInput = state.userTierName ?? ""
-            statusMessage = L10n.text("Geminiにログインしました")
-            DiagnosticsLogger.log("Gemini auth login succeeded project=\(state.projectId ?? "-")")
-        case let .failure(error):
-            errorMessage = error.localizedDescription
-            DiagnosticsLogger.log("Gemini auth login failed", error: error)
-        }
-    }
-
-    func logoutGeminiAuth() async {
-        guard let repository = requireRepository(action: "gemini_logout") else { return }
-        isGeminiAuthActionRunning = true
-        errorMessage = nil
-        defer {
-            isGeminiAuthActionRunning = false
-            refreshDiagnosticsLog()
-        }
-        let result = await repository.logoutGeminiAuth()
-        switch result {
-        case let .success(state):
-            geminiAuthState = state
-            geminiUserQuota = nil
-            statusMessage = L10n.text("Geminiからログアウトしました")
-            DiagnosticsLogger.log("Gemini auth logout succeeded")
-        case let .failure(error):
-            errorMessage = error.localizedDescription
-            DiagnosticsLogger.log("Gemini auth logout failed", error: error)
-        }
-    }
-
-    func refreshGeminiAuth(force: Bool) async {
-        guard let repository = requireRepository(action: "gemini_refresh") else { return }
-        isGeminiAuthActionRunning = true
-        var syncSucceeded = false
-        defer {
-            isGeminiAuthActionRunning = false
-            refreshGeminiOAuthClientConfigStatus()
-            refreshGeminiCliCompatibilityStatus()
-            refreshDiagnosticsLog()
-        }
-        if force {
-            let syncResult = await repository.syncGeminiCliCompatibilityFromUpstream()
-            switch syncResult {
-            case let .success(compatibility):
-                syncSucceeded = true
-                DiagnosticsLogger.log(
-                    "Gemini CLI compatibility refresh succeeded version=\(compatibility.version)",
-                    category: .auth
-                )
-            case let .failure(error):
-                errorMessage = error.localizedDescription
-                DiagnosticsLogger.log(
-                    "Gemini CLI compatibility refresh failed before auth refresh",
-                    level: .warning,
-                    category: .auth,
-                    error: error
-                )
-            }
-        }
-        let result = await repository.refreshGeminiAuth(force: force)
-        switch result {
-        case let .success(state):
-            geminiAuthState = state
-            if force, syncSucceeded {
-                statusMessage = L10n.text("Gemini互換情報、OAuth設定、認証を更新しました")
-            }
-        case let .failure(error):
-            errorMessage = error.localizedDescription
-            DiagnosticsLogger.log("Gemini auth refresh failed", error: error)
-        }
-    }
-
-    func retrieveGeminiQuota() async {
-        guard let repository = requireRepository(action: "gemini_quota") else { return }
-        isGeminiAuthActionRunning = true
-        defer {
-            isGeminiAuthActionRunning = false
-            refreshDiagnosticsLog()
-        }
-        let result = await repository.retrieveGeminiAuthQuota()
-        switch result {
-        case let .success(quota):
-            geminiUserQuota = quota
-            statusMessage = L10n.text("Geminiクォータを更新しました")
-            DiagnosticsLogger.log("Gemini quota refresh succeeded buckets=\(quota.buckets.count)")
-        case let .failure(error):
-            if Self.isGeminiQuotaMissingCredentialError(error) {
-                geminiUserQuota = nil
-                errorMessage = nil
-                statusMessage = L10n.text("Geminiにログインするとクォータを取得できます")
-                DiagnosticsLogger.log(
-                    "Gemini quota refresh skipped: missing GEMINI_AUTH credential",
-                    level: .info
-                )
-            } else {
-                errorMessage = error.localizedDescription
-                DiagnosticsLogger.log("Gemini quota refresh failed", error: error)
-            }
-        }
-    }
-
-    func saveGeminiProjectId() {
-        guard let repository = requireRepository(action: "gemini_save_project_id") else { return }
-        let ok = repository.saveGeminiAuthProjectId(geminiProjectIdInput.nilIfBlank)
-        if ok {
-            statusMessage = L10n.text("Gemini Project IDを保存しました")
-        } else {
-            errorMessage = L10n.text("Gemini Project IDの保存に失敗しました")
-            DiagnosticsLogger.log("Gemini project id save failed")
-            refreshDiagnosticsLog()
-        }
-    }
-
-    func importGeminiOAuthClientConfig(fileURL: URL) {
-        guard let repository = requireRepository(action: "gemini_import_oauth_config") else { return }
-        let result = repository.importGeminiOAuthClientConfig(fileURL: fileURL)
-        switch result {
-        case .success:
-            statusMessage = L10n.text("Gemini OAuth設定をファイルから取り込みました")
-            errorMessage = nil
-            DiagnosticsLogger.log("Gemini oauth config imported from file", category: .auth)
-        case let .failure(error):
-            errorMessage = error.localizedDescription
-            DiagnosticsLogger.log("Gemini oauth config import failed", level: .warning, category: .auth, error: error)
-        }
-        refreshGeminiOAuthClientConfigStatus()
-        refreshDiagnosticsLog()
-    }
-
-    func saveGeminiOAuthClientConfigManually() {
-        guard let repository = requireRepository(action: "gemini_save_oauth_config_manual") else { return }
-        let result = repository.saveGeminiOAuthClientConfig(
-            clientID: geminiOAuthClientIDInput,
-            clientSecret: geminiOAuthClientSecretInput
-        )
-        switch result {
-        case let .success(saved):
-            geminiOAuthClientIDInput = saved.clientID
-            geminiOAuthClientSecretInput = saved.clientSecret
-            statusMessage = L10n.text("Gemini OAuth設定を手動入力から保存しました")
-            errorMessage = nil
-            DiagnosticsLogger.log("Gemini oauth config saved from manual input", category: .auth)
-        case let .failure(error):
-            errorMessage = error.localizedDescription
-            DiagnosticsLogger.log(
-                "Gemini oauth config manual save failed",
-                level: .warning,
-                category: .auth,
-                error: error
-            )
-        }
-        refreshGeminiOAuthClientConfigStatus()
-        refreshDiagnosticsLog()
-    }
-
-    func clearImportedGeminiOAuthClientConfig() {
-        guard let repository = requireRepository(action: "gemini_clear_imported_oauth_config") else { return }
-        let ok = repository.clearImportedGeminiOAuthClientConfig()
-        if ok {
-            statusMessage = L10n.text("取り込み済みGemini OAuth設定をクリアしました")
-            errorMessage = nil
-            geminiOAuthClientIDInput = ""
-            geminiOAuthClientSecretInput = ""
-            DiagnosticsLogger.log("Gemini imported oauth config cleared", category: .auth)
-        } else {
-            errorMessage = L10n.text("取り込み済みGemini OAuth設定のクリアに失敗しました")
-            DiagnosticsLogger.log("Gemini imported oauth config clear failed", level: .warning, category: .auth)
-        }
-        refreshGeminiOAuthClientConfigStatus()
-        refreshDiagnosticsLog()
-    }
-
     private func requireRepository(action: String) -> ChatRepository? {
         guard let repository else {
             errorMessage = L10n.text("設定画面の初期化が完了していません。画面を開き直して再試行してください。")
@@ -747,18 +495,18 @@ final class SettingsViewModel: ObservableObject {
 
     private func defaultModelForProvider(_ provider: String) -> String {
         switch provider.uppercased() {
-        case "GEMINI", "GEMINI_AUTH":
+        case "GEMINI":
             return "gemini-2.5-flash"
         case "ALIBABA_CODING_PLAN":
             return AlibabaCodingPlanModelCatalog.defaultModel
         case "OPENCODE_GO":
             return OpenCodeGoModelCatalog.defaultModel
-        case "QWEN_CODE":
-            return QwenModelCatalog.defaultModel
         case "MINIMAX":
             return "MiniMax-M2.1"
         case "CODEX_AUTH":
             return CodexModelCatalog.defaultModel()
+        case "APPLE_INTELLIGENCE":
+            return AppleIntelligenceModelCatalog.displayModel
         default:
             return settings.modelForProvider(provider.uppercased())
         }
@@ -819,98 +567,6 @@ final class SettingsViewModel: ObservableObject {
         return components.url?.absoluteString
     }
 
-    private func refreshGeminiOAuthClientConfigStatus() {
-        guard let repository else {
-            hasImportedGeminiOAuthClientConfig = false
-            return
-        }
-        if let imported = repository.importedGeminiOAuthClientConfig() {
-            hasImportedGeminiOAuthClientConfig = true
-            geminiOAuthClientIDInput = imported.clientID
-            geminiOAuthClientSecretInput = imported.clientSecret
-            return
-        }
-        hasImportedGeminiOAuthClientConfig = false
-    }
-
-    private func refreshGeminiCliCompatibilityStatus() {
-        guard let repository else {
-            geminiCliCompatibility = GeminiCliCompatibility.resolved()
-            return
-        }
-        geminiCliCompatibility = repository.currentGeminiCliCompatibility()
-    }
-
-    static func isGeminiQuotaMissingCredentialError(_ error: Error) -> Bool {
-        guard let providerError = error as? ProviderClientError else { return false }
-        if case let .missingCredential(provider) = providerError {
-            return provider.uppercased() == "GEMINI_AUTH"
-        }
-        return false
-    }
-
-    func loginQwenCode() async {
-        guard let repository = requireRepository(action: "qwen_login") else { return }
-        isQwenAuthActionRunning = true
-        statusMessage = L10n.text("Qwen Codeログインを開始しました")
-        errorMessage = nil
-        DiagnosticsLogger.log("Qwen auth login tapped", category: .auth)
-        refreshDiagnosticsLog()
-        defer {
-            isQwenAuthActionRunning = false
-            refreshDiagnosticsLog()
-        }
-        let result = await repository.loginQwenCodeWithBrowser()
-        switch result {
-        case let .success(state):
-            qwenAuthState = state
-            statusMessage = L10n.text("Qwen Codeにログインしました")
-            DiagnosticsLogger.log("Qwen auth login succeeded", category: .auth)
-        case let .failure(error):
-            errorMessage = error.localizedDescription
-            DiagnosticsLogger.log("Qwen auth login failed", category: .auth, error: error)
-        }
-    }
-
-    func logoutQwenCode() async {
-        guard let repository = requireRepository(action: "qwen_logout") else { return }
-        isQwenAuthActionRunning = true
-        errorMessage = nil
-        defer {
-            isQwenAuthActionRunning = false
-            refreshDiagnosticsLog()
-        }
-        let result = await repository.logoutQwenCode()
-        switch result {
-        case let .success(state):
-            qwenAuthState = state
-            statusMessage = L10n.text("Qwen Codeからログアウトしました")
-            DiagnosticsLogger.log("Qwen auth logout succeeded", category: .auth)
-        case let .failure(error):
-            errorMessage = error.localizedDescription
-            DiagnosticsLogger.log("Qwen auth logout failed", category: .auth, error: error)
-        }
-    }
-
-    func refreshQwenCode(force: Bool) async {
-        guard let repository = requireRepository(action: "qwen_refresh") else { return }
-        isQwenAuthActionRunning = true
-        defer {
-            isQwenAuthActionRunning = false
-            refreshDiagnosticsLog()
-        }
-        let result = await repository.refreshQwenCode(force: force)
-        switch result {
-        case let .success(state):
-            qwenAuthState = state
-            if force {
-                statusMessage = L10n.text("Qwen Code認証を更新しました")
-            }
-        case let .failure(error):
-            errorMessage = error.localizedDescription
-            DiagnosticsLogger.log("Qwen auth refresh failed", category: .auth, error: error)
-        }
-    }
 }
 
 struct TokenUsageUiState: Equatable {

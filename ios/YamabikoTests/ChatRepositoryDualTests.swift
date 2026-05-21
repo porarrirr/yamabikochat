@@ -183,7 +183,6 @@ final class ChatRepositoryDualTests: XCTestCase {
         )
         let modelService = OpenRouterModelService(credentialStore: credentials)
         let codexAuth = CodexAuthRepository(credentialStore: credentials)
-        let geminiAuth = GeminiAuthRepository(credentialStore: credentials)
 
         if configureSettings != nil {
             var current = try settings.load()
@@ -197,8 +196,7 @@ final class ChatRepositoryDualTests: XCTestCase {
             providers: providers,
             credentialStore: credentials,
             modelService: modelService,
-            codexAuthRepository: codexAuth,
-            geminiAuthRepository: geminiAuth
+            codexAuthRepository: codexAuth
         )
         return (repository, conversations, credentials)
     }

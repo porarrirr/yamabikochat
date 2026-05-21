@@ -307,7 +307,6 @@ private fun PresetProviderCard(
             var showProviderSheet by remember { mutableStateOf(false) }
             val providerLabel = when (state.apiProvider) {
                 "GEMINI" -> "Google Gemini"
-                "GEMINI_AUTH" -> "Gemini Auth (CLI)"
                 "OPENROUTER" -> "OpenRouter"
                 "MINIMAX" -> "MiniMax"
                 "OPENAI" -> "OpenAI"
@@ -326,7 +325,6 @@ private fun PresetProviderCard(
                     title = "Provider",
                     options = listOf(
                         YamabikoOption(key = "GEMINI", title = "Google Gemini"),
-                        YamabikoOption(key = "GEMINI_AUTH", title = "Gemini Auth (CLI)"),
                         YamabikoOption(key = "OPENROUTER", title = "OpenRouter"),
                         YamabikoOption(key = "MINIMAX", title = "MiniMax"),
                         YamabikoOption(key = "OPENAI", title = "OpenAI"),
@@ -383,7 +381,7 @@ private fun PresetProviderCard(
                 }
             }
 
-            val requiresApiKey = state.apiProvider != "CODEX_AUTH" && state.apiProvider != "GEMINI_AUTH"
+            val requiresApiKey = state.apiProvider != "CODEX_AUTH"
             if (requiresApiKey) {
                 YamabikoTextField(
                     value = state.apiKey,
@@ -432,7 +430,7 @@ private fun PresetThinkingCard(state: ModelPresetDialogState) {
             val isOpenRouter = state.apiProvider == "OPENROUTER"
             val isCodex = state.apiProvider == "CODEX_AUTH"
             val isZai = state.apiProvider == "ZAI"
-            val isGeminiProvider = state.apiProvider == "GEMINI" || state.apiProvider == "GEMINI_AUTH"
+            val isGeminiProvider = state.apiProvider == "GEMINI"
             val isGeminiThinkingLevel = isGeminiProvider && ModelUtils.isThinkingLevelSupported(state.model)
             val isAlwaysOn = isGeminiProvider && ModelUtils.isThinkingAlwaysOn(state.model)
             val thinkingLabel = when (state.apiProvider) {
@@ -587,7 +585,7 @@ private fun PresetThinkingCard(state: ModelPresetDialogState) {
 
 @Composable
 private fun PresetToolsCard(state: ModelPresetDialogState) {
-    val isGemini = state.apiProvider == "GEMINI" || state.apiProvider == "GEMINI_AUTH"
+    val isGemini = state.apiProvider == "GEMINI"
     val isOpenRouter = state.apiProvider == "OPENROUTER"
     if (!isGemini && !isOpenRouter) return
 
@@ -648,7 +646,7 @@ private fun PresetToolsCard(state: ModelPresetDialogState) {
 
 @Composable
 private fun PresetGeminiAdvancedCard(state: ModelPresetDialogState) {
-    val isGemini = state.apiProvider == "GEMINI" || state.apiProvider == "GEMINI_AUTH"
+    val isGemini = state.apiProvider == "GEMINI"
     if (!isGemini) return
 
     Card(
@@ -898,7 +896,6 @@ fun LazyListScope.modelPresetsSection(
                             "MINIMAX" -> "MiniMax"
                             "OPENAI" -> "OpenAI"
                             "CODEX_AUTH" -> "Codex Auth"
-                            "GEMINI_AUTH" -> "Gemini Auth (CLI)"
                             "OPENAI_COMPAT" -> "OpenAI (Custom)"
                             "ZAI" -> "Z.ai"
                             else -> "Gemini"

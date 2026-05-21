@@ -15,8 +15,6 @@ struct ProviderDisplay: Identifiable, Equatable, Sendable {
 enum ProviderCatalog {
     static let options: [ProviderDisplay] = [
         ProviderDisplay(key: "GEMINI", title: "Google Gemini"),
-        ProviderDisplay(key: "GEMINI_AUTH", title: "Gemini Auth (CLI)"),
-        ProviderDisplay(key: "QWEN_CODE", title: "Qwen Code"),
         ProviderDisplay(key: "OPENROUTER", title: "OpenRouter"),
         ProviderDisplay(key: "OPENCODE_GO", title: "OpenCode Go"),
         ProviderDisplay(key: "ALIBABA_CODING_PLAN", title: "Alibaba Coding Plan"),
@@ -27,6 +25,11 @@ enum ProviderCatalog {
         ProviderDisplay(key: "APPLE_INTELLIGENCE", title: "Apple Intelligence"),
         ProviderDisplay(key: "OPENAI_COMPAT", title: "OpenAI (Custom)")
     ]
+
+    /// Providers available in dual mode and auto conversation settings (Apple Intelligence excluded).
+    static let dualAutoConversationOptions: [ProviderDisplay] = options.filter {
+        $0.key != "APPLE_INTELLIGENCE"
+    }
 
     static func displayName(for provider: String) -> String {
         let normalized = provider.uppercased()

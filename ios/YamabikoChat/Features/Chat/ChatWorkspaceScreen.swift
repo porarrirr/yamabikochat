@@ -9,30 +9,20 @@ struct ChatWorkspaceScreen: View {
     @ObservedObject var viewModel: ChatViewModel
     var onSelectConversation: ((Int64) -> Void)?
 
-    private enum WorkspaceMode {
-        case chat
-        case auto
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             topBar
 
-            switch currentMode {
-            case .chat:
-                ChatScreen(
-                    viewModel: viewModel,
-                    onNavigateToConversation: { newConversationId in
-                        if let onSelectConversation {
-                            onSelectConversation(newConversationId)
-                        } else {
-                            appState.selectedConversationID = newConversationId
-                        }
+            ChatScreen(
+                viewModel: viewModel,
+                onNavigateToConversation: { newConversationId in
+                    if let onSelectConversation {
+                        onSelectConversation(newConversationId)
+                    } else {
+                        appState.selectedConversationID = newConversationId
                     }
-                )
-            case .auto:
-                AutoConversationScreen(viewModel: viewModel)
-            }
+                }
+            )
         }
         .background(workspaceBackground.ignoresSafeArea())
         .navigationTitle("")
@@ -54,18 +44,6 @@ struct ChatWorkspaceScreen: View {
         Color(uiColor: .systemGroupedBackground)
     }
 
-    private var currentMode: WorkspaceMode {
-        if viewModel.settings.isAutoConversationEnabled {
-            return .auto
-        }
-        return .chat
-    }
-
-    private var modelPresetLabel: String {
-        let model = viewModel.settings.currentModel().trimmingCharacters(in: .whitespacesAndNewlines)
-        return model.isEmpty ? L10n.text("Chat") : model
-    }
-
     private var currentProvider: String {
         viewModel.settings.apiProvider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
     }
@@ -75,6 +53,11 @@ struct ChatWorkspaceScreen: View {
     }
 
     private func isActiveChatPreset(_ preset: ModelPreset) -> Bool {
+        guard !viewModel.settings.isDualModeEnabled,
+              !viewModel.settings.isAutoConversationEnabled
+        else {
+            return false
+        }
         let presetProvider = preset.apiProvider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let presetModel = preset.model.trimmingCharacters(in: .whitespacesAndNewlines)
         return presetProvider == currentProvider && presetModel == currentModel
@@ -136,17 +119,29 @@ struct ChatWorkspaceScreen: View {
                     }
                 }
             } label: {
-                HStack(spacing: 4) {
-                    Text(modelPresetLabel)
-                        .font(.system(size: 19, weight: .semibold))
-                        .lineLimit(1)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(viewModel.workspaceTitleLabel)
+                            .font(.system(size: 19, weight: .semibold))
+                            .lineLimit(1)
+                        if !viewModel.settings.isDualModeEnabled,
+                           !viewModel.settings.isAutoConversationEnabled {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if let subtitle = viewModel.workspaceSubtitleLabel {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .disabled(viewModel.settings.isDualModeEnabled || viewModel.settings.isAutoConversationEnabled)
 
             Button {
                 createConversation()
@@ -164,13 +159,31 @@ struct ChatWorkspaceScreen: View {
                 }
                 .disabled(!viewModel.canRegenerateLastAssistant)
 
-                Button(viewModel.settings.isDualModeEnabled ? L10n.text("デュアルをOFF") : L10n.text("デュアルをON")) {
+                Button {
                     viewModel.toggleDualMode()
+                } label: {
+                    if viewModel.settings.isDualModeEnabled {
+                        Label(L10n.text("デュアルモード"), systemImage: "checkmark")
+                    } else {
+                        Text(L10n.text("デュアルモード"))
+                    }
                 }
+                .disabled(
+                    viewModel.settings.isAutoConversationEnabled && !viewModel.settings.isDualModeEnabled
+                )
 
-                Button(viewModel.settings.isAutoConversationEnabled ? L10n.text("自動会話をOFF") : L10n.text("自動会話をON")) {
+                Button {
                     viewModel.toggleAutoConversation()
+                } label: {
+                    if viewModel.settings.isAutoConversationEnabled {
+                        Label(L10n.text("自動会話"), systemImage: "checkmark")
+                    } else {
+                        Text(L10n.text("自動会話"))
+                    }
                 }
+                .disabled(
+                    viewModel.settings.isDualModeEnabled && !viewModel.settings.isAutoConversationEnabled
+                )
 
                 if viewModel.isAutoConversationRunning {
                     Button("自動会話を一時停止") {
@@ -246,20 +259,11 @@ struct ChatWorkspaceScreen: View {
         }
     }
 
-    private func toggleSidebar() {
-        UIApplication.shared.sendAction(
-            #selector(UISplitViewController.toggleSidebar(_:)),
-            to: nil,
-            from: nil,
-            for: nil
-        )
-    }
-
     private func openConversationHistory() {
         if horizontalSizeClass == .compact {
             appState.isConversationHistoryPresented = true
         } else {
-            toggleSidebar()
+            appState.requestConversationSidebarReveal()
         }
     }
 }

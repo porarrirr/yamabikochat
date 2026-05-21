@@ -9,7 +9,7 @@ data class SettingsUpdateRequest(
     val model: String,
     /**
      * Provider-specific model selections being edited in the Settings UI.
-     * Keys are provider ids (e.g. GEMINI/GEMINI_AUTH/OPENROUTER/MINIMAX/OPENAI/CODEX_AUTH/OPENAI_COMPAT/ZAI).
+     * Keys are provider ids (e.g. GEMINI/OPENROUTER/MINIMAX/OPENAI/CODEX_AUTH/OPENAI_COMPAT/ZAI).
      */
     val providerModels: Map<String, String> = emptyMap(),
     val googleSearchEnabled: Boolean,

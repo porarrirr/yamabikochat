@@ -251,6 +251,9 @@ final class ChatViewModel: ObservableObject {
         let attachmentDrafts = attachments
         attachments = []
 
+        let isAutoConversationEnabled = settings.isAutoConversationEnabled
+        let shouldStartAutoConversation = isAutoConversationEnabled && AutoConversationTrigger.matches(text)
+
         Task {
             defer { isSending = false }
             do {
@@ -267,6 +270,15 @@ final class ChatViewModel: ObservableObject {
                         text: text,
                         attachments: attachmentPaths
                     )
+                } else if shouldStartAutoConversation,
+                          !isAutoConversationRunning,
+                          !isAutoConversationPaused {
+                    try repository.sendUserMessageOnly(
+                        conversationId: conversationID,
+                        text: text,
+                        attachments: attachmentPaths
+                    )
+                    startAutoConversation(initialMessage: text, insertSeedInChat: false)
                 } else {
                     _ = try await repository.sendMessage(
                         conversationId: conversationID,
@@ -397,8 +409,12 @@ final class ChatViewModel: ObservableObject {
         }
         do {
             var updated = settings
+            let enablingDual = !updated.isDualModeEnabled
             updated.isDualModeEnabled.toggle()
-            if updated.isDualModeEnabled {
+            if updated.isDualModeEnabled, enablingDual {
+                if isAutoConversationRunning || isAutoConversationPaused {
+                    stopAutoConversation()
+                }
                 updated.isAutoConversationEnabled = false
             }
             try repository.saveSettings(updated)
@@ -415,11 +431,12 @@ final class ChatViewModel: ObservableObject {
         }
         do {
             var updated = settings
-            let nextEnabled = !updated.isAutoConversationEnabled
-            updated.isAutoConversationEnabled = nextEnabled
-            if nextEnabled {
+            let enablingAuto = !updated.isAutoConversationEnabled
+            updated.isAutoConversationEnabled.toggle()
+            if updated.isAutoConversationEnabled, enablingAuto {
                 updated.isDualModeEnabled = false
-            } else if isAutoConversationRunning || isAutoConversationPaused {
+            } else if !updated.isAutoConversationEnabled,
+                      isAutoConversationRunning || isAutoConversationPaused {
                 stopAutoConversation()
             }
             try repository.saveSettings(updated)
@@ -438,6 +455,94 @@ final class ChatViewModel: ObservableObject {
             activePresetName: activeSystemPromptPresetName,
             conversationSystemPrompt: conversationSystemPrompt
         )
+    }
+
+    var workspaceTitleLabel: String {
+        if settings.isDualModeEnabled {
+            return L10n.text("デュアル")
+        }
+        if settings.isAutoConversationEnabled {
+            return L10n.text("自動会話")
+        }
+        let model = settings.currentModel().trimmingCharacters(in: .whitespacesAndNewlines)
+        return model.isEmpty ? L10n.text("Chat") : model
+    }
+
+    var workspaceSubtitleLabel: String? {
+        if settings.isDualModeEnabled {
+            return L10n.format(
+                "%@ %@ vs %@ %@",
+                settings.dualProviderA,
+                Self.shortModelLabel(settings.dualModelA),
+                settings.dualProviderB,
+                Self.shortModelLabel(settings.dualModelB)
+            )
+        }
+        if settings.isAutoConversationEnabled {
+            let status = isAutoConversationRunning
+                ? L10n.text("実行中")
+                : (isAutoConversationPaused ? L10n.text("一時停止") : L10n.text("待機中"))
+            return L10n.format(
+                "%@ · %@ %@ ⇄ %@ %@",
+                status,
+                settings.autoProviderA,
+                Self.shortModelLabel(settings.autoModelA),
+                settings.autoProviderB,
+                Self.shortModelLabel(settings.autoModelB)
+            )
+        }
+        let provider = settings.apiProvider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let model = settings.currentModel().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty else { return nil }
+        return "\(provider) · \(Self.shortModelLabel(model))"
+    }
+
+    var composerContextLabel: String {
+        if settings.isDualModeEnabled {
+            return L10n.format(
+                "DUAL · %@ %@ vs %@ %@",
+                settings.dualProviderA,
+                Self.shortModelLabel(settings.dualModelA),
+                settings.dualProviderB,
+                Self.shortModelLabel(settings.dualModelB)
+            )
+        }
+        if settings.isAutoConversationEnabled {
+            return L10n.format(
+                "AUTO · %@ %@ ⇄ %@ %@",
+                settings.autoProviderA,
+                Self.shortModelLabel(settings.autoModelA),
+                settings.autoProviderB,
+                Self.shortModelLabel(settings.autoModelB)
+            )
+        }
+        let provider = activeConversationProvider.isEmpty
+            ? settings.apiProvider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            : activeConversationProvider
+        let model = activeConversationModel.isEmpty
+            ? settings.currentModel().trimmingCharacters(in: .whitespacesAndNewlines)
+            : activeConversationModel
+        guard !model.isEmpty else { return provider }
+        return "\(provider) · \(Self.shortModelLabel(model))"
+    }
+
+    var composerPlaceholder: String {
+        settings.isAutoConversationEnabled
+            ? L10n.text("AIへの指示…")
+            : L10n.text("質問してみましょう")
+    }
+
+    var showsAutoConversationStatusBanner: Bool {
+        settings.isAutoConversationEnabled &&
+            (isAutoConversationRunning || isAutoConversationPaused || !(autoConversationStatus?.isEmpty ?? true))
+    }
+
+    nonisolated static func shortModelLabel(_ model: String) -> String {
+        let core = model.split(separator: "/").last.map(String.init) ?? model
+        if core.count > 32 {
+            return String(core.prefix(31)) + "…"
+        }
+        return core
     }
 
     nonisolated static func systemPromptContextLabel(activePresetName: String?, conversationSystemPrompt: String?) -> String {
@@ -532,7 +637,6 @@ final class ChatViewModel: ObservableObject {
     }
 
     func startAutoConversationManually() {
-        guard let repository else { return }
         guard settings.isAutoConversationEnabled else {
             errorMessage = L10n.text("先に自動会話をONにしてください。")
             return
@@ -546,6 +650,16 @@ final class ChatViewModel: ObservableObject {
         }
 
         inputText = ""
+        startAutoConversation(initialMessage: initial, insertSeedInChat: true)
+    }
+
+    private func startAutoConversation(initialMessage: String, insertSeedInChat: Bool) {
+        guard let repository else { return }
+        guard !isAutoConversationRunning else { return }
+
+        let normalized = initialMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+
         autoConversationTask?.cancel()
         isAutoConversationRunning = true
         isAutoConversationPaused = false
@@ -553,48 +667,18 @@ final class ChatViewModel: ObservableObject {
         errorMessage = nil
 
         do {
-            try repository.prepareAutoConversationSeedMessage(
-                conversationId: conversationID,
-                text: initial
-            )
+            if insertSeedInChat {
+                try repository.prepareAutoConversationSeedMessage(
+                    conversationId: conversationID,
+                    text: normalized
+                )
+            }
             let autoConversationId = try repository.createAutoConversation(
                 conversationId: conversationID,
-                initialMessage: initial
+                initialMessage: normalized
             )
             activeAutoConversationID = autoConversationId
-
-            autoConversationTask = Task {
-                do {
-                    try await repository.resumeAutoConversation(
-                        autoConversationId: autoConversationId
-                    ) { [weak self] turn, speaker, _ in
-                        Task { @MainActor in
-                            self?.autoConversationStatus = L10n.format("%dターン目: %@", turn, speaker)
-                        }
-                    }
-                    await MainActor.run {
-                        self.isAutoConversationRunning = false
-                        self.isAutoConversationPaused = false
-                        self.autoConversationStatus = L10n.text("自動会話が完了しました")
-                        self.activeAutoConversationID = nil
-                    }
-                } catch is CancellationError {
-                    // pause/stopで明示更新するため何もしない
-                } catch {
-                    await MainActor.run {
-                        self.isAutoConversationRunning = false
-                        self.isAutoConversationPaused = false
-                        self.errorMessage = error.localizedDescription
-                        self.autoConversationStatus = L10n.text("自動会話でエラーが発生しました")
-                        self.activeAutoConversationID = nil
-                    }
-                    DiagnosticsLogger.log(
-                        "Auto conversation start failed conversation=\(conversationID)",
-                        category: .chat,
-                        error: error
-                    )
-                }
-            }
+            launchAutoConversationTask(autoConversationId: autoConversationId)
         } catch {
             isAutoConversationRunning = false
             isAutoConversationPaused = false
@@ -609,32 +693,13 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    func pauseAutoConversation() {
-        guard let repository, let autoConversationID = activeAutoConversationID else { return }
-        do {
-            autoConversationTask?.cancel()
-            autoConversationTask = nil
-            try repository.pauseAutoConversation(autoConversationId: autoConversationID)
-            isAutoConversationRunning = false
-            isAutoConversationPaused = true
-            autoConversationStatus = L10n.text("自動会話を一時停止しました")
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    func resumeAutoConversation() {
-        guard let repository, let autoConversationID = activeAutoConversationID else { return }
-        guard !isAutoConversationRunning else { return }
-
-        isAutoConversationRunning = true
-        isAutoConversationPaused = false
-        autoConversationStatus = L10n.text("自動会話を再開しています...")
+    private func launchAutoConversationTask(autoConversationId: Int64) {
+        guard let repository else { return }
 
         autoConversationTask = Task {
             do {
                 try await repository.resumeAutoConversation(
-                    autoConversationId: autoConversationID
+                    autoConversationId: autoConversationId
                 ) { [weak self] turn, speaker, _ in
                     Task { @MainActor in
                         self?.autoConversationStatus = L10n.format("%dターン目: %@", turn, speaker)
@@ -657,12 +722,36 @@ final class ChatViewModel: ObservableObject {
                     self.activeAutoConversationID = nil
                 }
                 DiagnosticsLogger.log(
-                    "Auto conversation resume failed conversation=\(conversationID)",
+                    "Auto conversation start failed conversation=\(conversationID)",
                     category: .chat,
                     error: error
                 )
             }
         }
+    }
+
+    func pauseAutoConversation() {
+        guard let repository, let autoConversationID = activeAutoConversationID else { return }
+        do {
+            autoConversationTask?.cancel()
+            autoConversationTask = nil
+            try repository.pauseAutoConversation(autoConversationId: autoConversationID)
+            isAutoConversationRunning = false
+            isAutoConversationPaused = true
+            autoConversationStatus = L10n.text("自動会話を一時停止しました")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func resumeAutoConversation() {
+        guard let autoConversationID = activeAutoConversationID else { return }
+        guard !isAutoConversationRunning else { return }
+
+        isAutoConversationRunning = true
+        isAutoConversationPaused = false
+        autoConversationStatus = L10n.text("自動会話を再開しています...")
+        launchAutoConversationTask(autoConversationId: autoConversationID)
     }
 
     func stopAutoConversation() {

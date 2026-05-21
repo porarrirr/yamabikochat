@@ -182,7 +182,7 @@ data class Settings(
     fun getCurrentGoogleSearchEnabled(): Boolean {
         return when (apiProvider.uppercase()) {
             "OPENROUTER" -> openRouterGoogleSearchEnabled
-            "GEMINI", "GEMINI_AUTH" -> geminiGoogleSearchEnabled
+            "GEMINI" -> geminiGoogleSearchEnabled
             else -> false
         }
     }
@@ -190,28 +190,28 @@ data class Settings(
     fun getCurrentCodeExecutionEnabled(): Boolean {
         return when (apiProvider.uppercase()) {
             "OPENROUTER" -> openRouterCodeExecutionEnabled
-            "GEMINI", "GEMINI_AUTH" -> geminiCodeExecutionEnabled
+            "GEMINI" -> geminiCodeExecutionEnabled
             else -> false
         }
     }
 
     fun getCurrentUrlContextEnabled(): Boolean {
         return when (apiProvider.uppercase()) {
-            "GEMINI", "GEMINI_AUTH" -> geminiUrlContextEnabled
+            "GEMINI" -> geminiUrlContextEnabled
             else -> false
         }
     }
 
     fun getCurrentGoogleMapsEnabled(): Boolean {
         return when (apiProvider.uppercase()) {
-            "GEMINI", "GEMINI_AUTH" -> geminiGoogleMapsEnabled
+            "GEMINI" -> geminiGoogleMapsEnabled
             else -> false
         }
     }
 
     fun getCurrentComputerUseEnabled(): Boolean {
         return when (apiProvider.uppercase()) {
-            "GEMINI", "GEMINI_AUTH" -> geminiComputerUseEnabled
+            "GEMINI" -> geminiComputerUseEnabled
             else -> false
         }
     }
@@ -255,7 +255,7 @@ data class Settings(
         if (override != null) return override
         return when (provider.uppercase()) {
             "OPENROUTER" -> openRouterGoogleSearchEnabled
-            "GEMINI", "GEMINI_AUTH" -> geminiGoogleSearchEnabled
+            "GEMINI" -> geminiGoogleSearchEnabled
             else -> false
         }
     }
@@ -271,7 +271,7 @@ data class Settings(
         if (override != null) return override
         return when (provider.uppercase()) {
             "OPENROUTER" -> openRouterCodeExecutionEnabled
-            "GEMINI", "GEMINI_AUTH" -> geminiCodeExecutionEnabled
+            "GEMINI" -> geminiCodeExecutionEnabled
             else -> false
         }
     }
@@ -286,7 +286,7 @@ data class Settings(
         }
         if (override != null) return override
         return when (provider.uppercase()) {
-            "GEMINI", "GEMINI_AUTH" -> geminiUrlContextEnabled
+            "GEMINI" -> geminiUrlContextEnabled
             else -> false
         }
     }
@@ -301,7 +301,7 @@ data class Settings(
         }
         if (override != null) return override
         return when (provider.uppercase()) {
-            "GEMINI", "GEMINI_AUTH" -> geminiGoogleMapsEnabled
+            "GEMINI" -> geminiGoogleMapsEnabled
             else -> false
         }
     }
@@ -316,7 +316,7 @@ data class Settings(
         }
         if (override != null) return override
         return when (provider.uppercase()) {
-            "GEMINI", "GEMINI_AUTH" -> geminiComputerUseEnabled
+            "GEMINI" -> geminiComputerUseEnabled
             else -> false
         }
     }
@@ -471,7 +471,7 @@ data class Settings(
                 effortOverride = overrides?.codexEffort
             )
             "ZAI" -> buildZaiThinkingConfig(enabledOverride = overrides?.enabled)
-            "GEMINI", "GEMINI_AUTH" -> buildGeminiThinkingConfig(
+            "GEMINI" -> buildGeminiThinkingConfig(
                 model,
                 enabledOverride = overrides?.enabled,
                 budgetOverride = overrides?.budget,
@@ -663,7 +663,7 @@ data class Settings(
         val models = getProviderModels()
         if (models.isEmpty()) return emptyList()
 
-        val preferredOrder = listOf("GEMINI", "GEMINI_AUTH", "OPENROUTER", "ZAI", "MINIMAX", "OPENAI", "CODEX_AUTH", "OPENAI_COMPAT")
+        val preferredOrder = listOf("GEMINI", "OPENROUTER", "ZAI", "MINIMAX", "OPENAI", "CODEX_AUTH", "OPENAI_COMPAT")
         val orderedProviders = preferredOrder.filter { models.containsKey(it) } +
             models.keys.filterNot { preferredOrder.contains(it) }.sorted()
 
@@ -673,7 +673,7 @@ data class Settings(
 
             val providerKey = provider.uppercase()
             val isOpenRouter = providerKey == "OPENROUTER"
-            val isGemini = providerKey == "GEMINI" || providerKey == "GEMINI_AUTH"
+            val isGemini = providerKey == "GEMINI"
             val isCodex = providerKey == "CODEX_AUTH"
             val isOpenAiCompat = providerKey == "OPENAI_COMPAT"
             val resolvedPrompt = if (includeSystemPrompt) {
@@ -737,6 +737,50 @@ data class Settings(
         val normalized = provider.uppercase()
         val models = providerModelMap()
         return models[normalized] ?: defaultModel
+    }
+
+    fun remapRemovedProviders(): Settings {
+        fun remap(provider: String): String = when (provider.uppercase()) {
+            "GEMINI_AUTH" -> "GEMINI"
+            "QWEN_CODE" -> "OPENROUTER"
+            else -> provider.uppercase()
+        }
+
+        val legacyRemovedKeys = setOf("GEMINI_AUTH", "QWEN_CODE")
+        val remappedModels = linkedMapOf<String, String>()
+        providerModelMap().forEach { (key, value) ->
+            val newKey = remap(key)
+            if (key.uppercase() in legacyRemovedKeys) {
+                remappedModels[newKey] = value
+            } else if (!remappedModels.containsKey(newKey)) {
+                remappedModels[newKey] = value
+            }
+        }
+        val remappedProviderDefaultModels = if (remappedModels.isEmpty()) {
+            providerDefaultModels
+        } else {
+            gson.toJson(remappedModels)
+        }
+
+        val remappedVisibility = linkedMapOf<String, Boolean>()
+        getShowGlobalProviderPresetsInChatByProviderMap().forEach { (key, value) ->
+            remappedVisibility[remap(key)] = value
+        }
+        val remappedVisibilityJson = if (remappedVisibility.isEmpty()) {
+            showGlobalProviderPresetsInChatByProvider
+        } else {
+            gson.toJson(remappedVisibility)
+        }
+
+        return copy(
+            apiProvider = remap(apiProvider),
+            dualProviderA = remap(dualProviderA),
+            dualProviderB = remap(dualProviderB),
+            autoProviderA = remap(autoProviderA),
+            autoProviderB = remap(autoProviderB),
+            providerDefaultModels = remappedProviderDefaultModels,
+            showGlobalProviderPresetsInChatByProvider = remappedVisibilityJson
+        )
     }
 
     fun withModelForProvider(
@@ -860,7 +904,6 @@ data class Settings(
     private fun providerDisplayName(provider: String): String {
         return when (provider.uppercase()) {
             "GEMINI" -> "Google Gemini"
-            "GEMINI_AUTH" -> "Gemini Auth (CLI)"
             "OPENROUTER" -> "OpenRouter"
             "MINIMAX" -> "MiniMax"
             "OPENAI" -> "OpenAI"

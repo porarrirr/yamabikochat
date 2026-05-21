@@ -35,6 +35,7 @@ struct ChatScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var showFileImporter = false
     @State private var showPhotoPicker = false
+    @State private var isAttachmentPanelVisible = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var scrollPositionID: String?
     @State private var isUserNearBottom = true
@@ -108,7 +109,7 @@ struct ChatScreen: View {
                 .scrollDismissesKeyboard(.interactively)
                 .simultaneousGesture(
                     TapGesture().onEnded {
-                        dismissComposerKeyboard()
+                        dismissComposerChrome()
                     }
                 )
                 .onAppear {
@@ -210,12 +211,22 @@ struct ChatScreen: View {
 
     private var composerBar: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(viewModel.systemPromptContextLabel)
+            Text(viewModel.composerContextLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .padding(.horizontal, 8)
+
+            if viewModel.showsAutoConversationStatusBanner,
+               let status = viewModel.autoConversationStatus,
+               !status.isEmpty {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(viewModel.isAutoConversationRunning ? .secondary : .tertiary)
+                    .lineLimit(2)
+                    .padding(.horizontal, 8)
+            }
 
             if let contextUsage = viewModel.contextUsageLabel {
                 Text(contextUsage)
@@ -226,18 +237,15 @@ struct ChatScreen: View {
                     .padding(.horizontal, 8)
             }
 
-            recentPhotoStrip
+            if isAttachmentPanelVisible {
+                attachmentPanel
+            }
 
             HStack(alignment: .bottom, spacing: 10) {
-                Menu {
-                    Button("写真を追加") {
-                        showPhotoPicker = true
-                    }
-                    Button("ファイルを追加") {
-                        showFileImporter = true
-                    }
+                Button {
+                    toggleAttachmentPanel()
                 } label: {
-                    Image(systemName: "plus")
+                    Image(systemName: isAttachmentPanelVisible ? "xmark" : "plus")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Color.chatComposerIcon)
                         .frame(width: 34, height: 34)
@@ -248,9 +256,9 @@ struct ChatScreen: View {
                         }
                         .clipShape(Circle())
                 }
-                .menuStyle(.button)
+                .buttonStyle(.plain)
 
-                TextField("質問してみましょう", text: $viewModel.inputText, axis: .vertical)
+                TextField(viewModel.composerPlaceholder, text: $viewModel.inputText, axis: .vertical)
                     .lineLimit(1 ... 6)
                     .focused($isComposerFocused)
                     .padding(.horizontal, 14)
@@ -273,6 +281,7 @@ struct ChatScreen: View {
 
                 Button {
                     if canSend {
+                        isAttachmentPanelVisible = false
                         viewModel.sendMessage()
                     }
                 } label: {
@@ -296,13 +305,35 @@ struct ChatScreen: View {
     }
 
     @ViewBuilder
+    private var attachmentPanel: some View {
+        Button {
+            openFileImporter()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "paperclip")
+                Text("ファイルを追加")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+            }
+            .foregroundStyle(Color.chatComposerIcon)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.chatInputBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+
+        recentPhotoStrip
+    }
+
+    @ViewBuilder
     private var recentPhotoStrip: some View {
         if recentPhotoLibrary.canShowRecentPhotos, !recentPhotoLibrary.items.isEmpty {
             RecentPhotoStrip(
                 items: recentPhotoLibrary.items,
                 loadingIDs: addingRecentPhotoIDs,
                 onOpenLibrary: {
-                    showPhotoPicker = true
+                    openPhotoPicker()
                 },
                 onSelect: { item in
                     addRecentPhoto(item)
@@ -386,6 +417,9 @@ struct ChatScreen: View {
 
         await MainActor.run {
             photoItems = []
+            if importedCount > 0 {
+                isAttachmentPanelVisible = false
+            }
             if failedCount > 0 {
                 viewModel.errorMessage = importedCount == 0
                     ? L10n.text("写真を読み込めませんでした。")
@@ -422,6 +456,7 @@ struct ChatScreen: View {
                         displayName: recentPhotoLibrary.suggestedFilename(for: item.asset),
                         deleteSourceWhenHandled: true
                     )
+                    isAttachmentPanelVisible = false
                 }
             } catch {
                 await MainActor.run {
@@ -439,8 +474,26 @@ struct ChatScreen: View {
         UIApplication.shared.open(settingsURL)
     }
 
-    private func dismissComposerKeyboard() {
+    private func toggleAttachmentPanel() {
+        isAttachmentPanelVisible.toggle()
+        if isAttachmentPanelVisible {
+            recentPhotoLibrary.refresh()
+        }
+    }
+
+    private func openPhotoPicker() {
+        isAttachmentPanelVisible = false
+        showPhotoPicker = true
+    }
+
+    private func openFileImporter() {
+        isAttachmentPanelVisible = false
+        showFileImporter = true
+    }
+
+    private func dismissComposerChrome() {
         isComposerFocused = false
+        isAttachmentPanelVisible = false
     }
 
     private func updateIsUserNearBottom(positionID: String?) {

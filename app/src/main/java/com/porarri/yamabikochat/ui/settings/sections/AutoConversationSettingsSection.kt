@@ -344,7 +344,6 @@ private fun AutoConversationModelConfiguration(
         var showProviderSheet by remember { mutableStateOf(false) }
         val providerLabel = when (provider) {
             "GEMINI" -> "Google Gemini"
-            "GEMINI_AUTH" -> "Gemini Auth (CLI)"
             "OPENROUTER" -> "OpenRouter"
             "MINIMAX" -> "MiniMax"
             "OPENAI" -> "OpenAI"
@@ -363,7 +362,6 @@ private fun AutoConversationModelConfiguration(
                 title = "プロバイダー",
                 options = listOf(
                     YamabikoOption(key = "GEMINI", title = "Google Gemini"),
-                    YamabikoOption(key = "GEMINI_AUTH", title = "Gemini Auth (CLI)"),
                     YamabikoOption(key = "OPENROUTER", title = "OpenRouter"),
                     YamabikoOption(key = "MINIMAX", title = "MiniMax"),
                     YamabikoOption(key = "OPENAI", title = "OpenAI"),
@@ -423,7 +421,6 @@ private fun AutoConversationModelConfiguration(
 private fun providerDisplayName(provider: String): String {
     return when (provider.uppercase()) {
         "GEMINI" -> "Google Gemini"
-        "GEMINI_AUTH" -> "Gemini Auth (CLI)"
         "OPENROUTER" -> "OpenRouter"
         "MINIMAX" -> "MiniMax"
         "OPENAI" -> "OpenAI"

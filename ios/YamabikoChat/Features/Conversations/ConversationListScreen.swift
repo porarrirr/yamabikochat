@@ -237,6 +237,8 @@ struct ConversationListScreen: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text("設定"))
+        .accessibilityIdentifier("open-settings")
         .background(Color(uiColor: .systemBackground))
     }
 

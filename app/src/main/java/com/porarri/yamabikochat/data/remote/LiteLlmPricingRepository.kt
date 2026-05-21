@@ -130,7 +130,7 @@ class LiteLlmPricingRepository(
                 values.add(canonical.removePrefix("google/"))
                 values.add(canonical.removePrefix("anthropic/"))
             }
-            "GEMINI", "GEMINI_AUTH" -> {
+            "GEMINI" -> {
                 values.add(canonical.removePrefix("google/"))
                 values.add("openrouter/google/${canonical.removePrefix("google/")}")
             }

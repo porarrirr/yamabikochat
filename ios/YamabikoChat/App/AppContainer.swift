@@ -12,8 +12,6 @@ final class AppContainer: ObservableObject {
     let attachmentRepository: AttachmentRepository
     let openRouterModelService: OpenRouterModelService
     let codexAuthRepository: CodexAuthRepository
-    let geminiAuthRepository: GeminiAuthRepository
-    let qwenAuthRepository: QwenAuthRepository
     let providerGateway: ProviderGateway
     let chatRepository: ChatRepository
     let sharePayloadStore: SharePayloadStore
@@ -32,13 +30,9 @@ final class AppContainer: ObservableObject {
         attachmentRepository = AttachmentRepository()
         openRouterModelService = OpenRouterModelService(credentialStore: credentialStore)
         codexAuthRepository = CodexAuthRepository(credentialStore: credentialStore)
-        geminiAuthRepository = GeminiAuthRepository(credentialStore: credentialStore)
-        qwenAuthRepository = QwenAuthRepository(credentialStore: credentialStore)
         providerGateway = ProviderGateway(
             settingsRepository: settingsRepository,
-            credentialStore: credentialStore,
-            geminiAuthRepository: geminiAuthRepository,
-            qwenAuthRepository: qwenAuthRepository
+            credentialStore: credentialStore
         )
         chatRepository = ChatRepository(
             conversations: conversationRepository,
@@ -46,10 +40,13 @@ final class AppContainer: ObservableObject {
             providers: providerGateway,
             credentialStore: credentialStore,
             modelService: openRouterModelService,
-            codexAuthRepository: codexAuthRepository,
-            geminiAuthRepository: geminiAuthRepository,
-            qwenAuthRepository: qwenAuthRepository
+            codexAuthRepository: codexAuthRepository
         )
         sharePayloadStore = SharePayloadStore()
+
+        AppStoreScreenshotDemoSeeder.seedIfNeeded(
+            chatRepository: chatRepository,
+            conversations: conversationRepository
+        )
     }
 }

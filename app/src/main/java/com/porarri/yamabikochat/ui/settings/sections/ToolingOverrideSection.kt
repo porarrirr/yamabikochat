@@ -12,11 +12,11 @@ fun ToolingOverrideSection(
     tooling: ToolingOverrideUiState
 ) {
     val normalized = provider.uppercase()
-    val supportsGoogleSearch = normalized == "GEMINI" || normalized == "GEMINI_AUTH" || normalized == "OPENROUTER"
+    val supportsGoogleSearch = normalized == "GEMINI" || normalized == "OPENROUTER"
     val supportsCodeExecution = supportsGoogleSearch
-    val supportsUrlContext = normalized == "GEMINI" || normalized == "GEMINI_AUTH"
-    val supportsGoogleMaps = normalized == "GEMINI" || normalized == "GEMINI_AUTH"
-    val supportsComputerUse = normalized == "GEMINI" || normalized == "GEMINI_AUTH"
+    val supportsUrlContext = normalized == "GEMINI"
+    val supportsGoogleMaps = normalized == "GEMINI"
+    val supportsComputerUse = normalized == "GEMINI"
     val supportsAny = supportsGoogleSearch || supportsCodeExecution || supportsUrlContext || supportsGoogleMaps || supportsComputerUse
 
     if (!supportsAny) return

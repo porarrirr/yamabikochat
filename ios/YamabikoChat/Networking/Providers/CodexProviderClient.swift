@@ -96,11 +96,7 @@ struct CodexProviderClient: ProviderClient {
                     var reasoning = ""
                     var latestUsage: ProviderUsage?
 
-                    for try await line in lineStream {
-                        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if trimmed.isEmpty || !trimmed.hasPrefix("data:") { continue }
-
-                        let jsonChunk = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                    for try await jsonChunk in SSEPayloadAssembly.payloads(from: lineStream) {
                         if let root = try? JSONSerialization.jsonObject(with: Data(jsonChunk.utf8)) as? [String: Any],
                            let usage = parseResponsesUsage(from: root)?.normalizedNonEmpty() {
                             latestUsage = usage
@@ -162,19 +158,25 @@ struct CodexProviderClient: ProviderClient {
         if let type = root["type"] as? String {
             switch type {
             case "response.output_text.delta":
-                if let delta = root["delta"] as? String, !delta.isEmpty {
-                    fullText += delta
-                    return .textDelta(delta)
+                if let incoming = root["delta"] as? String, !incoming.isEmpty {
+                    let delta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: incoming)
+                    if !delta.isEmpty {
+                        fullText += delta
+                        return .textDelta(delta)
+                    }
                 }
             case "response.reasoning_summary_text.delta", "response.reasoning_text.delta", "response.reasoning.delta":
-                if let delta = root["delta"] as? String, !delta.isEmpty {
-                    fullReasoning += delta
-                    return .reasoningDelta(delta)
+                if let incoming = root["delta"] as? String, !incoming.isEmpty {
+                    let delta = StreamDeltaAccumulator.incrementalDelta(buffer: fullReasoning, incoming: incoming)
+                    if !delta.isEmpty {
+                        fullReasoning += delta
+                        return .reasoningDelta(delta)
+                    }
                 }
             case "response.output_item.done":
                 if let item = root["item"] as? [String: Any] {
                     let fullItemText = extractOutputTextFromOutputItem(item)
-                    let delta = incrementalDelta(current: fullText, incoming: fullItemText)
+                    let delta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: fullItemText)
                     if !delta.isEmpty {
                         fullText += delta
                         return .textDelta(delta)
@@ -199,19 +201,14 @@ struct CodexProviderClient: ProviderClient {
         }
 
         if let outputText = root["output_text"] as? String, !outputText.isEmpty {
-            fullText += outputText
-            return .textDelta(outputText)
+            let delta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: outputText)
+            if !delta.isEmpty {
+                fullText += delta
+                return .textDelta(delta)
+            }
         }
 
         return nil
-    }
-
-    private func incrementalDelta(current: String, incoming: String) -> String {
-        guard !incoming.isEmpty else { return "" }
-        if incoming.count > current.count, incoming.hasPrefix(current) {
-            return String(incoming.dropFirst(current.count))
-        }
-        return incoming
     }
 
     private func extractOutputTextFromOutputItem(_ item: [String: Any]) -> String {

@@ -105,12 +105,9 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                     }
 
                     var fullText = ""
+                    var fullReasoning = ""
                     var latestUsage: ProviderUsage?
-                    for try await line in lineStream {
-                        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if trimmed.isEmpty || !trimmed.hasPrefix("data:") { continue }
-
-                        let dataChunk = String(trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces))
+                    for try await dataChunk in SSEPayloadAssembly.payloads(from: lineStream) {
                         if dataChunk == "[DONE]" {
                             let final = ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: latestUsage)
                             continuation.yield(.completed(final))
@@ -126,7 +123,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                             }
                         }
 
-                        if let event = parseStreamChunk(dataChunk, fullText: &fullText) {
+                        if let event = parseStreamChunk(dataChunk, fullText: &fullText, fullReasoning: &fullReasoning) {
                             if case let .completed(response) = event {
                                 let merged = ProviderResponse(
                                     text: response.text,
@@ -222,7 +219,11 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         return request.metadata["promptCacheKey"]?.trimmedNonEmpty
     }
 
-    private func parseStreamChunk(_ chunk: String, fullText: inout String) -> ProviderStreamEvent? {
+    private func parseStreamChunk(
+        _ chunk: String,
+        fullText: inout String,
+        fullReasoning: inout String
+    ) -> ProviderStreamEvent? {
         guard let root = try? JSONSerialization.jsonObject(with: Data(chunk.utf8)) as? [String: Any] else {
             return nil
         }
@@ -230,17 +231,28 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         // OpenAI / OpenRouter ChatCompletions streaming format
         if let choices = root["choices"] as? [[String: Any]], let first = choices.first {
             if let delta = first["delta"] as? [String: Any] {
-                if let text = delta["content"] as? String, !text.isEmpty {
-                    fullText += text
-                    return .textDelta(text)
+                if let incoming = delta["content"] as? String, !incoming.isEmpty {
+                    let textDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: incoming)
+                    if !textDelta.isEmpty {
+                        fullText += textDelta
+                        return .textDelta(textDelta)
+                    }
                 }
 
-                if let reasoning = delta["reasoning"] as? String, !reasoning.isEmpty {
-                    return .reasoningDelta(reasoning)
+                if let incoming = delta["reasoning"] as? String, !incoming.isEmpty {
+                    let reasoningDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullReasoning, incoming: incoming)
+                    if !reasoningDelta.isEmpty {
+                        fullReasoning += reasoningDelta
+                        return .reasoningDelta(reasoningDelta)
+                    }
                 }
 
-                if let reasoningContent = delta["reasoning_content"] as? String, !reasoningContent.isEmpty {
-                    return .reasoningDelta(reasoningContent)
+                if let incoming = delta["reasoning_content"] as? String, !incoming.isEmpty {
+                    let reasoningDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullReasoning, incoming: incoming)
+                    if !reasoningDelta.isEmpty {
+                        fullReasoning += reasoningDelta
+                        return .reasoningDelta(reasoningDelta)
+                    }
                 }
 
                 if let toolCalls = delta["tool_calls"] as? [[String: Any]],
@@ -284,8 +296,6 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             return .openRouter
         case .openCodeGo:
             return .openCodeGo
-        case .qwenCode:
-            return .qwenCode
         case .openAI:
             return .openAI
         case .alibabaCodingPlan:
@@ -298,7 +308,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             return .zai
         case .codexAuth:
             return .codexAuth
-        case .gemini, .geminiAuth, .appleIntelligence:
+        case .gemini, .appleIntelligence:
             return .gemini
         }
     }
@@ -316,12 +326,6 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             return url
         case .openCodeGo:
             throw ProviderClientError.invalidBaseURL("Provider not supported by generic OpenAI compatible client")
-        case .qwenCode:
-            let baseURL = QwenAuthRepository.normalizedBaseURL(resourceURL: try credentialStore.qwenResourceURL())
-            guard let url = URL(string: baseURL)?.appendingPathComponent("chat/completions") else {
-                throw ProviderClientError.invalidBaseURL(baseURL)
-            }
-            return url
         case .alibabaCodingPlan:
             throw ProviderClientError.invalidBaseURL("Provider not supported by OpenAI compatible client")
         case .openAI:
@@ -347,7 +351,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                 throw ProviderClientError.invalidBaseURL("https://api.z.ai/v1/chat/completions")
             }
             return url
-        case .codexAuth, .gemini, .geminiAuth, .appleIntelligence:
+        case .codexAuth, .gemini, .appleIntelligence:
             throw ProviderClientError.invalidBaseURL("Provider not supported by OpenAI compatible client")
         }
     }

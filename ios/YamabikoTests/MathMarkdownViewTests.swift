@@ -300,7 +300,7 @@ line1\\nline2
         XCTAssertEqual(plan.baseURL, localURL.deletingLastPathComponent())
     }
 
-    func testMathJaxLoadPlannerFallsBackToCDNWhenLocalScriptMissing() {
+    func testMathJaxLoadPlannerDisablesRenderingWhenLocalScriptMissing() {
         var logs: [String] = []
 
         let plan = MathJaxLoadPlanner.plan(
@@ -311,10 +311,10 @@ line1\\nline2
             }
         )
 
-        XCTAssertTrue(plan.scriptTag.contains("cdn.jsdelivr.net"))
+        XCTAssertTrue(plan.scriptTag.isEmpty)
         XCTAssertNil(plan.baseURL)
         XCTAssertEqual(logs.count, 1)
-        XCTAssertTrue(logs[0].contains("CDN fallback"))
+        XCTAssertTrue(logs[0].contains("local script missing"))
     }
 
     func testMarkdownRendererUsesPlaceholderKeysWithoutUnderscores() throws {

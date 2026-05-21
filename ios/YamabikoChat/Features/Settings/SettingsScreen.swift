@@ -7,6 +7,7 @@ struct SettingsScreen: View {
     @Environment(\.dismiss) private var dismiss
 
     @ObservedObject var viewModel: SettingsViewModel
+    var initialTab: SettingsTab? = nil
     @State private var selectedTab: SettingsTab = .api
     @State private var showDiagnosticsSheet = false
 
@@ -88,6 +89,11 @@ struct SettingsScreen: View {
             .task {
                 viewModel.bind(repository: container.chatRepository, credentialStore: container.credentialStore)
             }
+            .onAppear {
+                if let initialTab {
+                    selectedTab = initialTab
+                }
+            }
         }
     }
 
@@ -131,7 +137,7 @@ struct SettingsScreen: View {
                     .foregroundStyle(.secondary)
             }
 
-            if currentProviderKey != "CODEX_AUTH" {
+            if currentProviderKey != "CODEX_AUTH", currentProviderKey != "APPLE_INTELLIGENCE" {
                 Section("APIキー") {
                     SecureField(currentProviderAPIKeyLabel, text: $viewModel.apiKeyDraft)
                     Button("Save API key") {
@@ -182,14 +188,12 @@ struct SettingsScreen: View {
     }
 
     private var dualTabContent: some View {
-        Group {
-            dualSection
-        }
+        DualModeSettingsSection(viewModel: viewModel)
     }
 
     private var autoTabContent: some View {
         Group {
-            autoSection
+            AutoConversationSettingsSection(viewModel: viewModel)
 
             Section("数式") {
                 Toggle("数式レンダリング", isOn: Binding(
@@ -891,365 +895,6 @@ struct SettingsScreen: View {
         }
     }
 
-    private var dualSection: some View {
-        Section("デュアルモード") {
-            Toggle("Enable dual mode", isOn: Binding(
-                get: { viewModel.settings.isDualModeEnabled },
-                set: { viewModel.setDualModeEnabled($0) }
-            ))
-            .disabled(viewModel.settings.isAutoConversationEnabled && !viewModel.settings.isDualModeEnabled)
-
-            if viewModel.settings.isAutoConversationEnabled && !viewModel.settings.isDualModeEnabled {
-                Text("自動会話が有効な間はデュアルモードをONにできません。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
-            TextField("Model A", text: Binding(
-                get: { viewModel.settings.dualModelA },
-                set: { viewModel.settings.dualModelA = $0 }
-            ))
-            providerPickerRow(
-                title: "Provider A",
-                selection: Binding(
-                    get: { viewModel.settings.dualProviderA.uppercased() },
-                    set: { viewModel.settings.dualProviderA = $0.uppercased() }
-                )
-            )
-            TextField("Model B", text: Binding(
-                get: { viewModel.settings.dualModelB },
-                set: { viewModel.settings.dualModelB = $0 }
-            ))
-            providerPickerRow(
-                title: "Provider B",
-                selection: Binding(
-                    get: { viewModel.settings.dualProviderB.uppercased() },
-                    set: { viewModel.settings.dualProviderB = $0.uppercased() }
-                )
-            )
-
-            TextField("Dual system prompt A", text: Binding(
-                get: { viewModel.settings.dualSystemPromptA ?? "" },
-                set: { viewModel.settings.dualSystemPromptA = $0.nilIfBlank }
-            ), axis: .vertical)
-            .lineLimit(2 ... 8)
-
-            TextField("Dual system prompt B", text: Binding(
-                get: { viewModel.settings.dualSystemPromptB ?? "" },
-                set: { viewModel.settings.dualSystemPromptB = $0.nilIfBlank }
-            ), axis: .vertical)
-            .lineLimit(2 ... 8)
-
-            Picker("Split layout", selection: Binding(
-                get: {
-                    let normalized = viewModel.settings.dualSplitLayout.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-                    return normalized == "HORIZONTAL" ? "HORIZONTAL" : "VERTICAL"
-                },
-                set: { viewModel.settings.dualSplitLayout = $0 }
-            )) {
-                Text("左右").tag("VERTICAL")
-                Text("上下").tag("HORIZONTAL")
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Split ratio: \(Int(viewModel.settings.dualSplitRatio * 100))%")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Slider(
-                    value: Binding(
-                        get: { min(max(viewModel.settings.dualSplitRatio, 0.1), 0.9) },
-                        set: { viewModel.settings.dualSplitRatio = $0 }
-                    ),
-                    in: 0.1 ... 0.9
-                )
-            }
-
-            Divider()
-            Text("Dual A Overrides")
-                .font(.subheadline)
-                .fontWeight(.semibold)
-
-            Toggle("A: Google Search", isOn: Binding(
-                get: { viewModel.settings.dualGoogleSearchEnabledA ?? viewModel.settings.geminiGoogleSearchEnabled },
-                set: { viewModel.settings.dualGoogleSearchEnabledA = $0 }
-            ))
-            Toggle("A: Code Execution", isOn: Binding(
-                get: { viewModel.settings.dualCodeExecutionEnabledA ?? viewModel.settings.geminiCodeExecutionEnabled },
-                set: { viewModel.settings.dualCodeExecutionEnabledA = $0 }
-            ))
-            Toggle("A: URL Context", isOn: Binding(
-                get: { viewModel.settings.dualURLContextEnabledA ?? viewModel.settings.geminiURLContextEnabled },
-                set: { viewModel.settings.dualURLContextEnabledA = $0 }
-            ))
-            Toggle("A: Google Maps", isOn: Binding(
-                get: { viewModel.settings.dualGoogleMapsEnabledA ?? viewModel.settings.geminiGoogleMapsEnabled },
-                set: { viewModel.settings.dualGoogleMapsEnabledA = $0 }
-            ))
-            Toggle("A: Computer Use", isOn: Binding(
-                get: { viewModel.settings.dualComputerUseEnabledA ?? viewModel.settings.geminiComputerUseEnabled },
-                set: { viewModel.settings.dualComputerUseEnabledA = $0 }
-            ))
-            Toggle("A: Thinking enabled", isOn: Binding(
-                get: { viewModel.settings.dualThinkingEnabledA ?? viewModel.settings.geminiThinkingEnabled },
-                set: { viewModel.settings.dualThinkingEnabledA = $0 }
-            ))
-            TextField("A: Thinking budget override", text: Binding(
-                get: { viewModel.settings.dualThinkingBudgetA.map(String.init) ?? "" },
-                set: { value in
-                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if trimmed.isEmpty {
-                        viewModel.settings.dualThinkingBudgetA = nil
-                    } else if let parsed = Int(trimmed) {
-                        viewModel.settings.dualThinkingBudgetA = max(0, parsed)
-                    }
-                }
-            ))
-            .keyboardType(.numberPad)
-            TextField("A: Thinking level override", text: Binding(
-                get: { viewModel.settings.dualThinkingLevelA ?? "" },
-                set: { viewModel.settings.dualThinkingLevelA = $0.nilIfBlank }
-            ))
-            TextField("A: Codex reasoning effort override", text: Binding(
-                get: { viewModel.settings.dualCodexReasoningEffortA ?? "" },
-                set: { viewModel.settings.dualCodexReasoningEffortA = $0.nilIfBlank }
-            ))
-
-            if viewModel.settings.dualProviderA.uppercased() == "OPENROUTER" {
-                Picker("A: OpenRouter reasoning mode", selection: Binding(
-                    get: { viewModel.settings.dualOpenRouterReasoningModeA ?? "inherit" },
-                    set: { viewModel.settings.dualOpenRouterReasoningModeA = ($0 == "inherit") ? nil : $0 }
-                )) {
-                    Text("inherit").tag("inherit")
-                    Text("auto").tag("auto")
-                    Text("effort").tag("effort")
-                    Text("budget").tag("budget")
-                }
-
-                Toggle("A: OpenRouter thinking enabled", isOn: Binding(
-                    get: { viewModel.settings.dualOpenRouterThinkingEnabledA ?? viewModel.settings.openRouterThinkingEnabled },
-                    set: { viewModel.settings.dualOpenRouterThinkingEnabledA = $0 }
-                ))
-                TextField("A: OpenRouter budget override", text: Binding(
-                    get: { viewModel.settings.dualOpenRouterThinkingBudgetA.map(String.init) ?? "" },
-                    set: { value in
-                        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if trimmed.isEmpty {
-                            viewModel.settings.dualOpenRouterThinkingBudgetA = nil
-                        } else if let parsed = Int(trimmed) {
-                            viewModel.settings.dualOpenRouterThinkingBudgetA = max(0, parsed)
-                        }
-                    }
-                ))
-                .keyboardType(.numberPad)
-                TextField("A: OpenRouter effort override", text: Binding(
-                    get: { viewModel.settings.dualOpenRouterReasoningEffortA ?? "" },
-                    set: { viewModel.settings.dualOpenRouterReasoningEffortA = $0.nilIfBlank }
-                ))
-                Toggle("A: Exclude reasoning", isOn: Binding(
-                    get: { viewModel.settings.dualOpenRouterReasoningExcludeA ?? viewModel.settings.openRouterReasoningExclude },
-                    set: { viewModel.settings.dualOpenRouterReasoningExcludeA = $0 }
-                ))
-            }
-
-            Button("A override をリセット") {
-                viewModel.settings.dualOpenRouterThinkingEnabledA = nil
-                viewModel.settings.dualOpenRouterThinkingBudgetA = nil
-                viewModel.settings.dualOpenRouterReasoningModeA = nil
-                viewModel.settings.dualOpenRouterReasoningEffortA = nil
-                viewModel.settings.dualOpenRouterReasoningExcludeA = nil
-                viewModel.settings.dualGoogleSearchEnabledA = nil
-                viewModel.settings.dualCodeExecutionEnabledA = nil
-                viewModel.settings.dualURLContextEnabledA = nil
-                viewModel.settings.dualGoogleMapsEnabledA = nil
-                viewModel.settings.dualComputerUseEnabledA = nil
-                viewModel.settings.dualThinkingEnabledA = nil
-                viewModel.settings.dualThinkingBudgetA = nil
-                viewModel.settings.dualThinkingLevelA = nil
-                viewModel.settings.dualCodexReasoningEffortA = nil
-            }
-            .buttonStyle(.bordered)
-
-            Divider()
-            Text("Dual B Overrides")
-                .font(.subheadline)
-                .fontWeight(.semibold)
-
-            Toggle("B: Google Search", isOn: Binding(
-                get: { viewModel.settings.dualGoogleSearchEnabledB ?? viewModel.settings.geminiGoogleSearchEnabled },
-                set: { viewModel.settings.dualGoogleSearchEnabledB = $0 }
-            ))
-            Toggle("B: Code Execution", isOn: Binding(
-                get: { viewModel.settings.dualCodeExecutionEnabledB ?? viewModel.settings.geminiCodeExecutionEnabled },
-                set: { viewModel.settings.dualCodeExecutionEnabledB = $0 }
-            ))
-            Toggle("B: URL Context", isOn: Binding(
-                get: { viewModel.settings.dualURLContextEnabledB ?? viewModel.settings.geminiURLContextEnabled },
-                set: { viewModel.settings.dualURLContextEnabledB = $0 }
-            ))
-            Toggle("B: Google Maps", isOn: Binding(
-                get: { viewModel.settings.dualGoogleMapsEnabledB ?? viewModel.settings.geminiGoogleMapsEnabled },
-                set: { viewModel.settings.dualGoogleMapsEnabledB = $0 }
-            ))
-            Toggle("B: Computer Use", isOn: Binding(
-                get: { viewModel.settings.dualComputerUseEnabledB ?? viewModel.settings.geminiComputerUseEnabled },
-                set: { viewModel.settings.dualComputerUseEnabledB = $0 }
-            ))
-            Toggle("B: Thinking enabled", isOn: Binding(
-                get: { viewModel.settings.dualThinkingEnabledB ?? viewModel.settings.geminiThinkingEnabled },
-                set: { viewModel.settings.dualThinkingEnabledB = $0 }
-            ))
-            TextField("B: Thinking budget override", text: Binding(
-                get: { viewModel.settings.dualThinkingBudgetB.map(String.init) ?? "" },
-                set: { value in
-                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if trimmed.isEmpty {
-                        viewModel.settings.dualThinkingBudgetB = nil
-                    } else if let parsed = Int(trimmed) {
-                        viewModel.settings.dualThinkingBudgetB = max(0, parsed)
-                    }
-                }
-            ))
-            .keyboardType(.numberPad)
-            TextField("B: Thinking level override", text: Binding(
-                get: { viewModel.settings.dualThinkingLevelB ?? "" },
-                set: { viewModel.settings.dualThinkingLevelB = $0.nilIfBlank }
-            ))
-            TextField("B: Codex reasoning effort override", text: Binding(
-                get: { viewModel.settings.dualCodexReasoningEffortB ?? "" },
-                set: { viewModel.settings.dualCodexReasoningEffortB = $0.nilIfBlank }
-            ))
-
-            if viewModel.settings.dualProviderB.uppercased() == "OPENROUTER" {
-                Picker("B: OpenRouter reasoning mode", selection: Binding(
-                    get: { viewModel.settings.dualOpenRouterReasoningModeB ?? "inherit" },
-                    set: { viewModel.settings.dualOpenRouterReasoningModeB = ($0 == "inherit") ? nil : $0 }
-                )) {
-                    Text("inherit").tag("inherit")
-                    Text("auto").tag("auto")
-                    Text("effort").tag("effort")
-                    Text("budget").tag("budget")
-                }
-
-                Toggle("B: OpenRouter thinking enabled", isOn: Binding(
-                    get: { viewModel.settings.dualOpenRouterThinkingEnabledB ?? viewModel.settings.openRouterThinkingEnabled },
-                    set: { viewModel.settings.dualOpenRouterThinkingEnabledB = $0 }
-                ))
-                TextField("B: OpenRouter budget override", text: Binding(
-                    get: { viewModel.settings.dualOpenRouterThinkingBudgetB.map(String.init) ?? "" },
-                    set: { value in
-                        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if trimmed.isEmpty {
-                            viewModel.settings.dualOpenRouterThinkingBudgetB = nil
-                        } else if let parsed = Int(trimmed) {
-                            viewModel.settings.dualOpenRouterThinkingBudgetB = max(0, parsed)
-                        }
-                    }
-                ))
-                .keyboardType(.numberPad)
-                TextField("B: OpenRouter effort override", text: Binding(
-                    get: { viewModel.settings.dualOpenRouterReasoningEffortB ?? "" },
-                    set: { viewModel.settings.dualOpenRouterReasoningEffortB = $0.nilIfBlank }
-                ))
-                Toggle("B: Exclude reasoning", isOn: Binding(
-                    get: { viewModel.settings.dualOpenRouterReasoningExcludeB ?? viewModel.settings.openRouterReasoningExclude },
-                    set: { viewModel.settings.dualOpenRouterReasoningExcludeB = $0 }
-                ))
-            }
-
-            Button("B override をリセット") {
-                viewModel.settings.dualOpenRouterThinkingEnabledB = nil
-                viewModel.settings.dualOpenRouterThinkingBudgetB = nil
-                viewModel.settings.dualOpenRouterReasoningModeB = nil
-                viewModel.settings.dualOpenRouterReasoningEffortB = nil
-                viewModel.settings.dualOpenRouterReasoningExcludeB = nil
-                viewModel.settings.dualGoogleSearchEnabledB = nil
-                viewModel.settings.dualCodeExecutionEnabledB = nil
-                viewModel.settings.dualURLContextEnabledB = nil
-                viewModel.settings.dualGoogleMapsEnabledB = nil
-                viewModel.settings.dualComputerUseEnabledB = nil
-                viewModel.settings.dualThinkingEnabledB = nil
-                viewModel.settings.dualThinkingBudgetB = nil
-                viewModel.settings.dualThinkingLevelB = nil
-                viewModel.settings.dualCodexReasoningEffortB = nil
-            }
-            .buttonStyle(.bordered)
-        }
-    }
-
-    private var autoSection: some View {
-        Section("自動会話") {
-            Toggle("Enable auto conversation", isOn: Binding(
-                get: { viewModel.settings.isAutoConversationEnabled },
-                set: { viewModel.setAutoConversationEnabled($0) }
-            ))
-            .disabled(viewModel.settings.isDualModeEnabled && !viewModel.settings.isAutoConversationEnabled)
-
-            if viewModel.settings.isDualModeEnabled && !viewModel.settings.isAutoConversationEnabled {
-                Text("デュアルモードが有効な間は自動会話をONにできません。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
-            TextField("Auto model A", text: Binding(
-                get: { viewModel.settings.autoModelA },
-                set: { viewModel.settings.autoModelA = $0 }
-            ))
-            providerPickerRow(
-                title: "Auto provider A",
-                selection: Binding(
-                    get: { viewModel.settings.autoProviderA.uppercased() },
-                    set: { viewModel.settings.autoProviderA = $0.uppercased() }
-                )
-            )
-            TextField("Auto model B", text: Binding(
-                get: { viewModel.settings.autoModelB },
-                set: { viewModel.settings.autoModelB = $0 }
-            ))
-            providerPickerRow(
-                title: "Auto provider B",
-                selection: Binding(
-                    get: { viewModel.settings.autoProviderB.uppercased() },
-                    set: { viewModel.settings.autoProviderB = $0.uppercased() }
-                )
-            )
-            TextField("Auto system prompt A", text: Binding(
-                get: { viewModel.settings.autoSystemPromptA },
-                set: { viewModel.settings.autoSystemPromptA = $0 }
-            ), axis: .vertical)
-            .lineLimit(2 ... 6)
-            TextField("Auto system prompt B", text: Binding(
-                get: { viewModel.settings.autoSystemPromptB },
-                set: { viewModel.settings.autoSystemPromptB = $0 }
-            ), axis: .vertical)
-            .lineLimit(2 ... 6)
-            Stepper(
-                viewModel.settings.autoMaxTurns <= 0
-                    ? L10n.text("Max turns: Unlimited")
-                    : L10n.format("Max turns: %d", viewModel.settings.autoMaxTurns),
-                value: Binding(
-                    get: { viewModel.settings.autoMaxTurns },
-                    set: { viewModel.settings.autoMaxTurns = $0 }
-                ),
-                in: 0 ... 200
-            )
-            Text("`0` を指定すると無制限で実行します。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-
-            Text("デュアルモードと自動会話は同時に有効化できません。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func providerPickerRow(title: String, selection: Binding<String>) -> some View {
-        Picker(title, selection: selection) {
-            ForEach(ProviderCatalog.options) { provider in
-                Text(provider.title).tag(provider.key)
-            }
-        }
-    }
-
     private var currentProviderAPIKeyLabel: String {
         let providerLabel = ProviderCatalog.displayName(for: viewModel.settings.apiProvider)
         return L10n.format("%@ API Key", providerLabel)
@@ -1379,6 +1024,8 @@ struct SettingsScreen: View {
                 Text("未掲載モデルは endpoint を安全に判定できないため、実行時に明示エラーで停止します。新しい Go モデルを使う場合は catalog 更新が必要です。")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+            } else if isAppleIntelligenceProvider {
+                Text(AppleIntelligenceModelCatalog.displayModel)
             } else {
                 TextField("Default model", text: Binding(
                     get: { viewModel.settings.defaultModel },
@@ -1591,6 +1238,10 @@ struct SettingsScreen: View {
 
     private var isOpenCodeGoProvider: Bool {
         currentProviderKey == "OPENCODE_GO"
+    }
+
+    private var isAppleIntelligenceProvider: Bool {
+        currentProviderKey == "APPLE_INTELLIGENCE"
     }
 
     private var geminiModelOptions: [String] {

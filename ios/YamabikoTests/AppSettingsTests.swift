@@ -2,6 +2,31 @@ import XCTest
 @testable import YamabikoChat
 
 final class AppSettingsTests: XCTestCase {
+    func testModelForProviderReturnsAppleIntelligenceDisplayModel() {
+        var settings = AppSettings()
+        settings.providerDefaultModelsJSON = #"{"APPLE_INTELLIGENCE":"legacy-model-id"}"#
+
+        XCTAssertEqual(
+            settings.modelForProvider("APPLE_INTELLIGENCE"),
+            AppleIntelligenceModelCatalog.displayModel
+        )
+    }
+
+    func testNormalizedForPersistenceAppliesAppleIntelligenceDisplayModel() {
+        var settings = AppSettings()
+        settings.apiProvider = "APPLE_INTELLIGENCE"
+        settings.defaultModel = "gemini-2.5-flash"
+        settings.providerDefaultModelsJSON = #"{"APPLE_INTELLIGENCE":"legacy-model-id"}"#
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertEqual(normalized.defaultModel, AppleIntelligenceModelCatalog.displayModel)
+        XCTAssertEqual(
+            normalized.modelForProvider("APPLE_INTELLIGENCE"),
+            AppleIntelligenceModelCatalog.displayModel
+        )
+    }
+
     func testCurrentModelUsesProviderMapFallback() {
         var settings = AppSettings()
         settings.apiProvider = "OPENAI"
@@ -70,14 +95,37 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(presets.first?.name, L10n.format("グローバル: %@", "Google Gemini"))
     }
 
-    func testBuildGlobalProviderPresetsPlacesQwenBeforeOpenRouter() {
+    func testRemapRemovedProvidersMigratesAppleIntelligenceFromDualAutoProviders() {
         var settings = AppSettings()
-        settings.providerDefaultModelsJSON = #"{"OPENROUTER":"deepseek/deepseek-chat","QWEN_CODE":"coder-model","GEMINI_AUTH":"gemini-2.5-flash"}"#
+        settings.dualProviderA = "APPLE_INTELLIGENCE"
+        settings.dualProviderB = "apple_intelligence"
+        settings.autoProviderA = "APPLE_INTELLIGENCE"
+        settings.autoProviderB = "OPENROUTER"
 
-        let presets = settings.buildGlobalProviderPresets()
+        let normalized = settings.normalizedForPersistence()
 
-        XCTAssertEqual(presets.map(\.apiProvider), ["GEMINI_AUTH", "QWEN_CODE", "OPENROUTER"])
-        XCTAssertEqual(presets[1].model, "coder-model")
+        XCTAssertEqual(normalized.dualProviderA, "GEMINI")
+        XCTAssertEqual(normalized.dualProviderB, "GEMINI")
+        XCTAssertEqual(normalized.autoProviderA, "GEMINI")
+        XCTAssertEqual(normalized.autoProviderB, "OPENROUTER")
+    }
+
+    func testRemapRemovedProvidersMigratesLegacyProviderKeys() {
+        var settings = AppSettings()
+        settings.apiProvider = "GEMINI_AUTH"
+        settings.dualProviderA = "QWEN_CODE"
+        settings.autoProviderB = "GEMINI_AUTH"
+        settings.providerDefaultModelsJSON = #"{"GEMINI_AUTH":"gemini-2.5-flash","QWEN_CODE":"coder-model","OPENROUTER":"deepseek/deepseek-chat"}"#
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertEqual(normalized.apiProvider, "GEMINI")
+        XCTAssertEqual(normalized.dualProviderA, "OPENROUTER")
+        XCTAssertEqual(normalized.autoProviderB, "GEMINI")
+        XCTAssertEqual(normalized.modelForProvider("GEMINI"), "gemini-2.5-flash")
+        XCTAssertEqual(normalized.modelForProvider("OPENROUTER"), "coder-model")
+        XCTAssertNil(normalized.providerModelMap()["GEMINI_AUTH"])
+        XCTAssertNil(normalized.providerModelMap()["QWEN_CODE"])
     }
 
     func testProviderSpecificGlobalPresetVisibilityOverridesDefault() {

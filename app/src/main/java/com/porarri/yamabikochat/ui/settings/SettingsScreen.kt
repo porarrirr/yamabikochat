@@ -106,9 +106,6 @@ fun SettingsScreen(
     val secureStorageError by viewModel.secureStorageError.collectAsState()
     val codexAuthState by viewModel.codexAuthState.collectAsState()
     val codexAuthError by viewModel.codexAuthError.collectAsState()
-    val geminiAuthState by viewModel.geminiAuthState.collectAsState()
-    val geminiAuthError by viewModel.geminiAuthError.collectAsState()
-    val geminiQuotaState by viewModel.geminiQuotaState.collectAsState()
     val codexUsageState by viewModel.codexUsageState.collectAsState()
     val tokenUsageState by viewModel.tokenUsageState.collectAsState()
 
@@ -123,13 +120,6 @@ fun SettingsScreen(
         codexAuthError?.let {
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
             viewModel.clearCodexAuthError()
-        }
-    }
-
-    LaunchedEffect(geminiAuthError) {
-        geminiAuthError?.let {
-            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
-            viewModel.clearGeminiAuthError()
         }
     }
 
@@ -259,7 +249,6 @@ fun SettingsScreen(
                         title = "API Provider",
                         options = listOf(
                             YamabikoOption(key = "GEMINI", title = "Google Gemini"),
-                            YamabikoOption(key = "GEMINI_AUTH", title = "Gemini Auth (CLI)"),
                             YamabikoOption(key = "OPENROUTER", title = "OpenRouter"),
                             YamabikoOption(key = "ZAI", title = "Z.ai"),
                             YamabikoOption(key = "MINIMAX", title = "MiniMax"),
@@ -811,160 +800,6 @@ fun SettingsScreen(
                                 }
                             }
                         }
-                        if (apiProvider == "GEMINI_AUTH") {
-                            item {
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                                    ) {
-                                        Text(
-                                            text = "Gemini Auth (CLI)",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        val statusText = if (geminiAuthState.isLoggedIn) "Signed in" else "Not signed in"
-                                        Text(
-                                            text = statusText,
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        geminiAuthState.email?.let {
-                                            LabeledValueBlock(label = "Email", value = it)
-                                        }
-                                        geminiAuthState.projectId?.let {
-                                            LabeledValueBlock(label = "Project", value = it)
-                                        }
-                                        geminiAuthState.userTierName?.let {
-                                            LabeledValueBlock(label = "Tier", value = it)
-                                        }
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            FilledTonalButton(onClick = { viewModel.loginGeminiAuth() }) { Text("Sign in") }
-                                            TextButton(onClick = { viewModel.refreshGeminiAuth(force = true) }) { Text("Refresh") }
-                                            TextButton(onClick = { viewModel.logoutGeminiAuth() }) { Text("Sign out") }
-                                        }
-                                        Text(
-                                            text = if (geminiAuthState.hasAccessToken) "Access token ready" else "Access token not available yet",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        var projectIdInput by remember(geminiAuthState.projectId) {
-                                            mutableStateOf(geminiAuthState.projectId.orEmpty())
-                                        }
-                                        val projectDirty = projectIdInput.trim() != geminiAuthState.projectId.orEmpty()
-                                        YamabikoTextField(
-                                            value = projectIdInput,
-                                            onValueChange = { projectIdInput = it },
-                                            label = { Text("GCP Project ID (optional)") },
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                        TextButton(
-                                            enabled = projectDirty,
-                                            onClick = { viewModel.saveGeminiAuthProjectId(projectIdInput.ifBlank { null }) }
-                                        ) { Text("Save Project ID") }
-
-                                        Spacer(modifier = Modifier.height(4.dp))
-
-                                        Text(
-                                            text = "Rate limits",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        val canCheckQuota = geminiAuthState.hasAccessToken &&
-                                            !geminiAuthState.projectId.isNullOrBlank()
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            TextButton(
-                                                onClick = { viewModel.refreshGeminiQuota() },
-                                                enabled = canCheckQuota && !geminiQuotaState.isLoading
-                                            ) { Text("Check /status") }
-                                            if (geminiQuotaState.isLoading) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(18.dp),
-                                                    strokeWidth = 2.dp
-                                                )
-                                            }
-                                        }
-                                        if (!geminiAuthState.hasAccessToken) {
-                                            Text(
-                                                text = "Sign in to check rate limits.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        } else if (geminiAuthState.projectId.isNullOrBlank()) {
-                                            Text(
-                                                text = "Project ID is required to check rate limits.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        geminiQuotaState.error?.let { err ->
-                                            Text(
-                                                text = err,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.error
-                                            )
-                                        }
-                                        geminiQuotaState.lastUpdated?.let { timestamp ->
-                                            Text(
-                                                text = "Updated: $timestamp",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        if (geminiQuotaState.buckets.isNotEmpty()) {
-                                            val grouped = geminiQuotaState.buckets.groupBy { it.modelId ?: "Unknown model" }
-                                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                grouped.forEach { (modelId, buckets) ->
-                                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                        Text(
-                                                            text = modelId,
-                                                            style = MaterialTheme.typography.bodyMedium,
-                                                            fontWeight = FontWeight.SemiBold
-                                                        )
-                                                        buckets.forEach { bucket ->
-                                                            val percent = bucket.remainingFraction?.let {
-                                                                val value = if (it > 1.0) it else it * 100.0
-                                                                "${value.roundToInt()}%"
-                                                            }
-                                                            val pieces = listOfNotNull(
-                                                                bucket.tokenType?.takeIf { it.isNotBlank() },
-                                                                bucket.remainingAmount?.takeIf { it.isNotBlank() }?.let { "remaining $it" },
-                                                                percent,
-                                                                bucket.resetTime?.takeIf { it.isNotBlank() }?.let { "reset $it" }
-                                                            )
-                                                            Text(
-                                                                text = pieces.joinToString(" \u2022 ").ifBlank { "quota info unavailable" },
-                                                                style = MaterialTheme.typography.bodySmall,
-                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        } else if (!geminiQuotaState.isLoading &&
-                                            geminiQuotaState.error == null &&
-                                            canCheckQuota
-                                        ) {
-                                            Text(
-                                                text = "No quota data returned.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                }
-                        }
-                    }
                         item {
                             TokenUsageStatsCard(state = tokenUsageState)
                         }
@@ -986,7 +821,6 @@ fun SettingsScreen(
                     )
                     val providerLabel = when (apiProvider) {
                         "GEMINI" -> "Google Gemini"
-                        "GEMINI_AUTH" -> "Gemini Auth (CLI)"
                         "OPENROUTER" -> "OpenRouter"
                         "MINIMAX" -> "MiniMax"
                         "ZAI" -> "Z.ai"
@@ -1004,7 +838,7 @@ fun SettingsScreen(
             }
         }
 
-        if (apiProvider != "CODEX_AUTH" && apiProvider != "GEMINI_AUTH") {
+        if (apiProvider != "CODEX_AUTH") {
             item {
                 Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1026,7 +860,7 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        val isGeminiProvider = apiProvider == "GEMINI" || apiProvider == "GEMINI_AUTH"
+                        val isGeminiProvider = apiProvider == "GEMINI"
                         val isOpenRouterProvider = apiProvider == "OPENROUTER"
                         val isOpenAiProvider = apiProvider == "OPENAI"
                         val isMiniMaxProvider = apiProvider == "MINIMAX"
@@ -1607,7 +1441,7 @@ fun SettingsScreen(
         }
                     }
                     if (selectedTab == 0) {
-        if (apiProvider == "GEMINI" || apiProvider == "GEMINI_AUTH") {
+        if (apiProvider == "GEMINI") {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -1817,14 +1651,14 @@ fun SettingsScreen(
                 val thinkingLabel = when (apiProvider) {
                     "OPENROUTER" -> "Reasoning"
                     "ZAI" -> "Deep Thinking"
-                    "GEMINI", "GEMINI_AUTH" -> "Thinking"
+                    "GEMINI" -> "Thinking"
                     else -> "\u30B7\u30B9\u30C6\u30E0\u306B\u5F93\u3046"
                 }
-                val isGeminiThinkingLevel = (apiProvider == "GEMINI" || apiProvider == "GEMINI_AUTH") &&
+                val isGeminiThinkingLevel = (apiProvider == "GEMINI") &&
                     ModelUtils.isThinkingLevelSupported(model)
-                val isAlwaysOn = (apiProvider == "GEMINI" || apiProvider == "GEMINI_AUTH") &&
+                val isAlwaysOn = (apiProvider == "GEMINI") &&
                     ModelUtils.isThinkingAlwaysOn(model)
-                val isGeminiThinkingLevelModel = (apiProvider == "GEMINI" || apiProvider == "GEMINI_AUTH") &&
+                val isGeminiThinkingLevelModel = (apiProvider == "GEMINI") &&
                     ModelUtils.isThinkingLevelSupported(model)
                 val showBudgetSlider = !isGeminiThinkingLevelModel &&
                     thinkingEnabled &&
@@ -1871,7 +1705,7 @@ fun SettingsScreen(
                                 )
                             }
                         )
-                        if ((apiProvider == "GEMINI" || apiProvider == "GEMINI_AUTH") && ModelUtils.isThinkingLevelSupported(model)) {
+                        if ((apiProvider == "GEMINI") && ModelUtils.isThinkingLevelSupported(model)) {
                             val normalized = ModelUtils.normalizeThinkingLevel(model, thinkingLevel)
                             val selected = normalized ?: ModelUtils.getDefaultThinkingLevel(model)
                             val levelSelectorEnabled = isAlwaysOn || thinkingEnabled
@@ -1901,12 +1735,12 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
 
-                            val optimalRange = if (apiProvider == "GEMINI" || apiProvider == "GEMINI_AUTH") {
+                            val optimalRange = if (apiProvider == "GEMINI") {
                                 ModelUtils.getThinkingBudgetFloatRange(model) ?: 0f..24576f
                             } else {
                                 0f..32000f
                             }
-                            val optimalSteps = if (apiProvider == "GEMINI" || apiProvider == "GEMINI_AUTH") {
+                            val optimalSteps = if (apiProvider == "GEMINI") {
                                 ModelUtils.getOptimalThinkingSteps(model)
                             } else {
                                 0
@@ -1943,7 +1777,7 @@ fun SettingsScreen(
                 thinkingEnabled = thinkingEnabled
             )
         }
-        if (apiProvider == "GEMINI" || apiProvider == "GEMINI_AUTH") {
+        if (apiProvider == "GEMINI") {
             geminiThinkingInfoSection(model = model)
         }
         item {
@@ -1969,7 +1803,6 @@ fun SettingsScreen(
                     )
                     val providerLabel = when (apiProvider) {
                         "GEMINI" -> "Google Gemini"
-                        "GEMINI_AUTH" -> "Gemini Auth (CLI)"
                         "OPENROUTER" -> "OpenRouter"
                         "MINIMAX" -> "MiniMax"
                         "ZAI" -> "Z.ai"
@@ -2903,7 +2736,6 @@ private fun SettingsScreenPreviewContent(initialTab: Int) {
                                     )
                                     val providerLabel = when (apiProvider) {
                                         "GEMINI" -> "Google Gemini"
-                                        "GEMINI_AUTH" -> "Gemini Auth (CLI)"
                                         "OPENROUTER" -> "OpenRouter"
                                         "MINIMAX" -> "MiniMax"
                                         "ZAI" -> "Z.ai"
@@ -3037,7 +2869,7 @@ private fun SettingsScreenPreviewContent(initialTab: Int) {
                             val thinkingLabel = when (apiProvider) {
                                 "OPENROUTER" -> "Reasoning"
                                 "ZAI" -> "Deep Thinking"
-                                "GEMINI", "GEMINI_AUTH" -> "Thinking"
+                                "GEMINI" -> "Thinking"
                                 else -> "\u30B7\u30B9\u30C6\u30E0\u306B\u5F93\u3046"
                             }
                             SettingsToggleRow(

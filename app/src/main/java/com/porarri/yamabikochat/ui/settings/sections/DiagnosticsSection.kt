@@ -91,7 +91,6 @@ fun LazyListScope.diagnosticsSection(apiKeyStatus: ApiKeyStatus) {
                     label = "APIキー",
                     value = buildString {
                         append("GEMINI="); append(if (apiKeyStatus.hasGeminiKey) "OK" else "NG"); append(" / ")
-                        append("GEMINI_AUTH="); append(if (apiKeyStatus.hasGeminiAuth) "OK" else "NG"); append(" / ")
                         append("OPENAI="); append(if (apiKeyStatus.hasOpenAiKey) "OK" else "NG"); append(" / ")
                         append("OPENROUTER="); append(if (apiKeyStatus.hasOpenRouterKey) "OK" else "NG"); append(" / ")
                         append("MINIMAX="); append(if (apiKeyStatus.hasMiniMaxKey) "OK" else "NG"); append(" / ")

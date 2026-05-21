@@ -5,14 +5,12 @@ import com.porarri.yamabikochat.data.local.Settings
 import com.porarri.yamabikochat.data.local.Settings.ReasoningContext
 import com.porarri.yamabikochat.data.local.SettingsManager
 import com.porarri.yamabikochat.data.auth.CodexAuthRepository
-import com.porarri.yamabikochat.data.auth.GeminiAuthRepository
 import com.porarri.yamabikochat.data.model.ModelRepository
 import com.porarri.yamabikochat.data.remote.ApiProvider
 import com.porarri.yamabikochat.data.remote.Content
 import com.porarri.yamabikochat.data.remote.GenerateContentRequest
 import com.porarri.yamabikochat.data.remote.GenerateContentResponse
 import com.porarri.yamabikochat.data.remote.GenerationConfig
-import com.porarri.yamabikochat.data.remote.GeminiCliProvider
 import com.porarri.yamabikochat.data.remote.GeminiProvider
 import com.porarri.yamabikochat.data.remote.OpenRouterProvider
 import com.porarri.yamabikochat.data.remote.OpenAiProvider
@@ -33,14 +31,12 @@ import kotlinx.serialization.json.Json
 
 class ApiRepository(
     private val geminiProvider: GeminiProvider,
-    private val geminiCliProvider: GeminiCliProvider,
     private val openRouterProvider: OpenRouterProvider,
     private val openAiProvider: OpenAiProvider,
     private val codexResponsesProvider: CodexResponsesProvider,
     private val zaiProvider: ZaiProvider,
     private val settingsManager: SettingsManager,
     private val codexAuthRepository: CodexAuthRepository,
-    private val geminiAuthRepository: GeminiAuthRepository,
     private val modelRepository: ModelRepository,
     private val settingsProvider: suspend () -> Settings?
 ) {
@@ -55,8 +51,7 @@ class ApiRepository(
         val apiKey: String,
         val settings: Settings?,
         val baseUrlOverride: String? = null,
-        val accountId: String? = null,
-        val projectId: String? = null
+        val accountId: String? = null
     )
 
     private sealed interface ApiContextResult {
@@ -70,8 +65,7 @@ class ApiRepository(
         data class Success(
             val apiKey: String,
             val tokenKind: TokenKind = TokenKind.ApiKey,
-            val accountId: String? = null,
-            val projectId: String? = null
+            val accountId: String? = null
         ) : ApiKeyResult
         data class Missing(val providerId: String) : ApiKeyResult
     }
@@ -95,7 +89,6 @@ class ApiRepository(
             ?: "GEMINI"
 
         val apiProvider = when (resolvedProvider) {
-            "GEMINI_AUTH" -> geminiCliProvider
             "OPENROUTER" -> openRouterProvider
             "OPENAI", "OPENAI_COMPAT", "MINIMAX" -> openAiProvider
             "CODEX_AUTH" -> codexResponsesProvider
@@ -105,7 +98,6 @@ class ApiRepository(
 
         val keyResult = when (resolvedProvider) {
             "CODEX_AUTH" -> resolveCodexAuthToken()
-            "GEMINI_AUTH" -> resolveGeminiAuthToken()
             else -> resolveApiKey(
                 resolvedProvider,
                 when (resolvedProvider) {
@@ -150,8 +142,7 @@ class ApiRepository(
                         apiKey = keyResult.apiKey,
                         settings = settings,
                         baseUrlOverride = baseUrlOverride,
-                        accountId = keyResult.accountId,
-                        projectId = keyResult.projectId
+                        accountId = keyResult.accountId
                     )
                 )
             }
@@ -188,28 +179,12 @@ class ApiRepository(
         }
     }
 
-    private suspend fun resolveGeminiAuthToken(): ApiKeyResult {
-        val bearer = geminiAuthRepository.getBearerToken()
-        return if (bearer == null || bearer.token.isBlank()) {
-            ApiKeyResult.Missing("GEMINI_AUTH")
-        } else {
-            ApiKeyResult.Success(bearer.token, TokenKind.AccessToken, projectId = bearer.projectId)
-        }
-    }
-
     private suspend fun refreshCodexAuthToken(settings: Settings?): ApiKeyResult.Success? {
         codexAuthRepository.refreshIfNeeded(force = true)
         val bearer = codexAuthRepository.getBearerToken() ?: return null
         if (bearer.token.isBlank()) return null
         val kind = if (bearer.isApiKey) TokenKind.ApiKey else TokenKind.AccessToken
         return ApiKeyResult.Success(bearer.token, kind, bearer.accountId)
-    }
-
-    private suspend fun refreshGeminiAuthToken(): ApiKeyResult.Success? {
-        geminiAuthRepository.refreshIfNeeded(force = true)
-        val bearer = geminiAuthRepository.getBearerToken() ?: return null
-        if (bearer.token.isBlank()) return null
-        return ApiKeyResult.Success(bearer.token, TokenKind.AccessToken, projectId = bearer.projectId)
     }
 
     private fun codexAuthBaseUrl(tokenKind: TokenKind, settings: Settings?): String {
@@ -235,18 +210,6 @@ class ApiRepository(
         return call(refreshed.apiKey, refreshedBaseUrl, refreshed.accountId)
     }
 
-    private suspend fun <T> callGeminiAuthWithRetry(
-        initialToken: String,
-        projectId: String?,
-        call: suspend (String, String?) -> retrofit2.Response<T>
-    ): retrofit2.Response<T> {
-        val first = call(initialToken, projectId)
-        if (first.code() != 401) return first
-
-        val refreshed = refreshGeminiAuthToken() ?: return first
-        return call(refreshed.apiKey, refreshed.projectId)
-    }
-
     suspend fun generateContent(
         model: String,
         request: GenerateContentRequest,
@@ -263,20 +226,6 @@ class ApiRepository(
                 Log.d("ApiRepository", "About to call provider (${context.providerId}) with model: '$model'")
 
                 when (context.providerId) {
-                    "GEMINI_AUTH" -> {
-                        callGeminiAuthWithRetry(
-                            initialToken = actualApiKey,
-                            projectId = context.projectId
-                        ) { token, resolvedProjectId ->
-                            geminiCliProvider.generateContent(
-                                apiKey = token,
-                                model = model,
-                                request = request,
-                                projectId = resolvedProjectId,
-                                sessionId = sessionId
-                            )
-                        }
-                    }
                     "OPENROUTER" -> {
                         val prefs = normalizedOpenRouterPreferences(settings)
                         openRouterProvider.generateContent(actualApiKey, model, request, prefs)
@@ -333,20 +282,6 @@ class ApiRepository(
                 val actualApiKey = context.apiKey
 
                 when (context.providerId) {
-                    "GEMINI_AUTH" -> {
-                        callGeminiAuthWithRetry(
-                            initialToken = actualApiKey,
-                            projectId = context.projectId
-                        ) { token, resolvedProjectId ->
-                            geminiCliProvider.streamGenerateContent(
-                                apiKey = token,
-                                model = model,
-                                request = request,
-                                projectId = resolvedProjectId,
-                                sessionId = sessionId
-                            )
-                        }
-                    }
                     "OPENROUTER" -> {
                         val prefs = normalizedOpenRouterPreferences(settings)
                         openRouterProvider.streamGenerateContent(actualApiKey, model, request, prefs)
@@ -401,7 +336,6 @@ class ApiRepository(
 
         val apiKeyResultA = when (providerA) {
             "CODEX_AUTH" -> resolveCodexAuthToken()
-            "GEMINI_AUTH" -> resolveGeminiAuthToken()
             else -> resolveApiKey(
                 providerA,
                 when (providerA) {
@@ -417,7 +351,6 @@ class ApiRepository(
 
         val apiKeyResultB = when (providerB) {
             "CODEX_AUTH" -> resolveCodexAuthToken()
-            "GEMINI_AUTH" -> resolveGeminiAuthToken()
             else -> resolveApiKey(
                 providerB,
                 when (providerB) {
@@ -440,18 +373,6 @@ class ApiRepository(
         val deferredA = async {
             when (apiKeyResultA) {
                 is ApiKeyResult.Success -> when (providerA) {
-                    "GEMINI_AUTH" -> callGeminiAuthWithRetry(
-                        initialToken = apiKeyResultA.apiKey,
-                        projectId = apiKeyResultA.projectId
-                    ) { token, resolvedProjectId ->
-                        geminiCliProvider.generateContent(
-                            token,
-                            modelA,
-                            requestA,
-                            resolvedProjectId,
-                            null
-                        )
-                    }
                     "OPENROUTER" -> openRouterProvider.generateContent(apiKeyResultA.apiKey, modelA, requestA, normalizedPrefs)
                     "OPENAI" -> openAiProvider.generateContent(apiKeyResultA.apiKey, modelA, requestA, settings?.openAiBaseUrl ?: "https://api.openai.com/v1/")
                     "MINIMAX" -> openAiProvider.generateContent(apiKeyResultA.apiKey, modelA, requestA, settings?.miniMaxBaseUrl ?: MiniMaxUtils.INTERNATIONAL_BASE_URL)
@@ -483,18 +404,6 @@ class ApiRepository(
         val deferredB = async {
             when (apiKeyResultB) {
                 is ApiKeyResult.Success -> when (providerB) {
-                    "GEMINI_AUTH" -> callGeminiAuthWithRetry(
-                        initialToken = apiKeyResultB.apiKey,
-                        projectId = apiKeyResultB.projectId
-                    ) { token, resolvedProjectId ->
-                        geminiCliProvider.generateContent(
-                            token,
-                            modelB,
-                            requestB,
-                            resolvedProjectId,
-                            null
-                        )
-                    }
                     "OPENROUTER" -> openRouterProvider.generateContent(apiKeyResultB.apiKey, modelB, requestB, normalizedPrefs)
                     "OPENAI" -> openAiProvider.generateContent(apiKeyResultB.apiKey, modelB, requestB, settings?.openAiBaseUrl ?: "https://api.openai.com/v1/")
                     "MINIMAX" -> openAiProvider.generateContent(apiKeyResultB.apiKey, modelB, requestB, settings?.miniMaxBaseUrl ?: MiniMaxUtils.INTERNATIONAL_BASE_URL)
@@ -538,7 +447,6 @@ class ApiRepository(
 
         val apiKeyResultA = when (providerA) {
             "CODEX_AUTH" -> resolveCodexAuthToken()
-            "GEMINI_AUTH" -> resolveGeminiAuthToken()
             else -> resolveApiKey(
                 providerA,
                 when (providerA) {
@@ -554,7 +462,6 @@ class ApiRepository(
 
         val apiKeyResultB = when (providerB) {
             "CODEX_AUTH" -> resolveCodexAuthToken()
-            "GEMINI_AUTH" -> resolveGeminiAuthToken()
             else -> resolveApiKey(
                 providerB,
                 when (providerB) {
@@ -577,18 +484,6 @@ class ApiRepository(
         val deferredA = async {
             when (apiKeyResultA) {
                 is ApiKeyResult.Success -> when (providerA) {
-                    "GEMINI_AUTH" -> callGeminiAuthWithRetry(
-                        initialToken = apiKeyResultA.apiKey,
-                        projectId = apiKeyResultA.projectId
-                    ) { token, resolvedProjectId ->
-                        geminiCliProvider.streamGenerateContent(
-                            token,
-                            modelA,
-                            requestA,
-                            resolvedProjectId,
-                            null
-                        )
-                    }
                     "OPENROUTER" -> openRouterProvider.streamGenerateContent(apiKeyResultA.apiKey, modelA, requestA, normalizedPrefs)
                     "OPENAI" -> openAiProvider.streamGenerateContent(apiKeyResultA.apiKey, modelA, requestA, settings?.openAiBaseUrl ?: "https://api.openai.com/v1/")
                     "MINIMAX" -> openAiProvider.streamGenerateContent(apiKeyResultA.apiKey, modelA, requestA, settings?.miniMaxBaseUrl ?: MiniMaxUtils.INTERNATIONAL_BASE_URL)
@@ -620,18 +515,6 @@ class ApiRepository(
         val deferredB = async {
             when (apiKeyResultB) {
                 is ApiKeyResult.Success -> when (providerB) {
-                    "GEMINI_AUTH" -> callGeminiAuthWithRetry(
-                        initialToken = apiKeyResultB.apiKey,
-                        projectId = apiKeyResultB.projectId
-                    ) { token, resolvedProjectId ->
-                        geminiCliProvider.streamGenerateContent(
-                            token,
-                            modelB,
-                            requestB,
-                            resolvedProjectId,
-                            null
-                        )
-                    }
                     "OPENROUTER" -> openRouterProvider.streamGenerateContent(apiKeyResultB.apiKey, modelB, requestB, normalizedPrefs)
                     "OPENAI" -> openAiProvider.streamGenerateContent(apiKeyResultB.apiKey, modelB, requestB, settings?.openAiBaseUrl ?: "https://api.openai.com/v1/")
                     "MINIMAX" -> openAiProvider.streamGenerateContent(apiKeyResultB.apiKey, modelB, requestB, settings?.miniMaxBaseUrl ?: MiniMaxUtils.INTERNATIONAL_BASE_URL)
@@ -673,7 +556,6 @@ class ApiRepository(
         val settings = settingsProvider()
         val apiKeyResult = when (provider) {
             "CODEX_AUTH" -> resolveCodexAuthToken()
-            "GEMINI_AUTH" -> resolveGeminiAuthToken()
             else -> resolveApiKey(
                 provider,
                 when (provider) {
@@ -714,12 +596,6 @@ class ApiRepository(
         )
 
         return when (provider) {
-            "GEMINI_AUTH" -> callGeminiAuthWithRetry(
-                initialToken = apiKey,
-                projectId = apiKeySuccess.projectId
-            ) { token, resolvedProjectId ->
-                geminiCliProvider.generateContent(token, model, request, resolvedProjectId, null)
-            }
             "OPENROUTER" -> openRouterProvider.generateContent(apiKey, model, request, normalizedOpenRouterPreferences(settings))
             "OPENAI" -> openAiProvider.generateContent(apiKey, model, request, settings?.openAiBaseUrl ?: "https://api.openai.com/v1/")
             "MINIMAX" -> openAiProvider.generateContent(apiKey, model, request, settings?.miniMaxBaseUrl ?: MiniMaxUtils.INTERNATIONAL_BASE_URL)
@@ -747,7 +623,7 @@ class ApiRepository(
         thinkingConfig: ThinkingConfig?
     ): GenerationConfig {
         val base = GenerationConfig(thinkingConfig = thinkingConfig)
-        if (provider.uppercase() != "GEMINI" && provider.uppercase() != "GEMINI_AUTH") return base
+        if (provider.uppercase() != "GEMINI") return base
 
         val responseMimeType = settings?.geminiResponseMimeType?.trim()?.takeIf { it.isNotEmpty() }
         val responseJsonSchema = settings?.geminiResponseJsonSchema?.trim()?.takeIf { it.isNotEmpty() }?.let { raw ->

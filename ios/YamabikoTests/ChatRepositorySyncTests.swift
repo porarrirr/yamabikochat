@@ -239,70 +239,6 @@ final class ChatRepositorySyncTests: XCTestCase {
         XCTAssertEqual(synced?.model, originalConversation?.model)
     }
 
-    func testSendMessageFallsBackToNonStreamingWhenGeminiAuthStreamIsEmpty() async throws {
-        let httpClient = GeminiStreamFallbackHTTPClient(
-            streamLines: [
-                #"data: {"event":"keepalive"}"#,
-                "",
-                "data: [DONE]",
-                ""
-            ],
-            nonStreamingBody: #"{"response":{"candidates":[{"content":{"parts":[{"text":"fallback answer"}]}}]}}"#
-        )
-        let fixture = try makeFixture(httpClient: httpClient) { settings in
-            settings.apiProvider = "GEMINI_AUTH"
-            settings.defaultModel = "gemini-2.5-flash"
-            settings.providerDefaultModelsJSON = #"{"GEMINI_AUTH":"gemini-2.5-flash"}"#
-        }
-        try fixture.credentials.setGeminiAccessToken("gemini-access-token")
-        try fixture.credentials.saveSecret("project-1", key: "gemini_project_id")
-
-        let conversationID = try fixture.repository.createConversation(title: "New Chat")
-        let result = try await fixture.repository.sendMessage(
-            conversationId: conversationID,
-            text: "hello",
-            attachments: []
-        )
-
-        XCTAssertEqual(result.response.text, "fallback answer")
-        let assistant = try fixture.conversations.fetchLastAssistantMessage(conversationId: conversationID)
-        XCTAssertEqual(assistant?.text, "fallback answer")
-        XCTAssertEqual(httpClient.streamCallCount, 1)
-        XCTAssertEqual(httpClient.sendCallCount, 1)
-    }
-
-    func testRegenerateFallsBackToNonStreamingWhenGeminiAuthStreamIsEmpty() async throws {
-        let httpClient = GeminiStreamFallbackHTTPClient(
-            streamLines: [
-                #"data: {"event":"keepalive"}"#,
-                "",
-                "data: [DONE]",
-                ""
-            ],
-            nonStreamingBody: #"{"response":{"candidates":[{"content":{"parts":[{"text":"fallback answer"}]}}]}}"#
-        )
-        let fixture = try makeFixture(httpClient: httpClient) { settings in
-            settings.apiProvider = "GEMINI_AUTH"
-            settings.defaultModel = "gemini-2.5-flash"
-            settings.providerDefaultModelsJSON = #"{"GEMINI_AUTH":"gemini-2.5-flash"}"#
-        }
-        try fixture.credentials.setGeminiAccessToken("gemini-access-token")
-        try fixture.credentials.saveSecret("project-1", key: "gemini_project_id")
-
-        let conversationID = try fixture.repository.createConversation(title: "New Chat")
-        _ = try await fixture.repository.sendMessage(
-            conversationId: conversationID,
-            text: "initial",
-            attachments: []
-        )
-
-        let targetMessageID = try await fixture.repository.regenerateLastAssistantVariant(conversationId: conversationID)
-        let full = try fixture.conversations.fetchFullMessage(id: targetMessageID)
-        XCTAssertEqual(full?.variants.last?.text, "fallback answer")
-        XCTAssertEqual(httpClient.streamCallCount, 2)
-        XCTAssertEqual(httpClient.sendCallCount, 2)
-    }
-
     func testSendMessageRecordsTokenUsageFromUsagePayload() async throws {
         let payload = #"""
         {
@@ -415,7 +351,6 @@ final class ChatRepositorySyncTests: XCTestCase {
         )
         let modelService = OpenRouterModelService(credentialStore: credentials)
         let codexAuth = CodexAuthRepository(credentialStore: credentials)
-        let geminiAuth = GeminiAuthRepository(credentialStore: credentials)
 
         if configureSettings != nil {
             var current = try settings.load()
@@ -430,7 +365,6 @@ final class ChatRepositorySyncTests: XCTestCase {
             credentialStore: credentials,
             modelService: modelService,
             codexAuthRepository: codexAuth,
-            geminiAuthRepository: geminiAuth,
             pricingRepository: pricingRepository
         )
         return (repository, conversations, credentials)

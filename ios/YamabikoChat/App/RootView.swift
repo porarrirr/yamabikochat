@@ -7,6 +7,7 @@ struct RootView: View {
     @StateObject private var listViewModel = ConversationListViewModel()
     @StateObject private var settingsViewModel = SettingsViewModel()
     @State private var isSettingsPresented = false
+    @State private var screenshotSettingsTab: SettingsScreen.SettingsTab?
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
     @State private var dynamicColorEnabled = true
@@ -47,20 +48,20 @@ struct RootView: View {
         }
         .task {
             listViewModel.bind(repository: container.chatRepository)
-            if appState.selectedConversationID == nil {
-                appState.selectedConversationID = listViewModel.conversations.first?.id
-                if appState.selectedConversationID != nil {
-                    preferredCompactColumn = .detail
-                }
-            }
             if let settings = try? container.chatRepository.loadSettings() {
                 applyAppearance(settings)
             }
+            await applyScreenshotRoutingIfNeeded()
         }
         .onReceive(container.chatRepository.settingsPublisher()) { settings in
             applyAppearance(settings)
         }
+        .onChange(of: appState.conversationSidebarRevealGeneration) { _, _ in
+            columnVisibility = .all
+            preferredCompactColumn = .sidebar
+        }
         .onChange(of: listViewModel.conversations.map(\.id)) { _, ids in
+            guard !AppStoreScreenshotRouting.isEnabled else { return }
             guard !ids.isEmpty else {
                 appState.selectedConversationID = nil
                 preferredCompactColumn = .sidebar
@@ -75,7 +76,7 @@ struct RootView: View {
             }
         }
         .sheet(isPresented: $isSettingsPresented) {
-            SettingsScreen(viewModel: settingsViewModel)
+            SettingsScreen(viewModel: settingsViewModel, initialTab: screenshotSettingsTab)
                 .environmentObject(container)
         }
         .sheet(isPresented: $appState.isConversationHistoryPresented) {
@@ -130,6 +131,51 @@ struct RootView: View {
         dynamicColorEnabled = settings.dynamicColorEnabled
         themeColor = settings.themeColor
         themeMode = settings.themeMode
+    }
+
+    @MainActor
+    private func applyScreenshotRoutingIfNeeded() async {
+        guard let launch = AppStoreScreenshotRouting.launchConfiguration() else {
+            if appState.selectedConversationID == nil {
+                appState.selectedConversationID = listViewModel.conversations.first?.id
+                if appState.selectedConversationID != nil {
+                    preferredCompactColumn = .detail
+                }
+            }
+            return
+        }
+
+        try? await Task.sleep(nanoseconds: 300_000_000)
+
+        switch launch.scene {
+        case .list:
+            appState.selectedConversationID = nil
+            preferredCompactColumn = .sidebar
+        case .chat:
+            if let conversationID = launch.conversationID ?? listViewModel.conversations.first?.id {
+                selectConversation(id: conversationID)
+            }
+        case .settingsAPI:
+            screenshotSettingsTab = .api
+            isSettingsPresented = true
+        case .settingsAppearance:
+            screenshotSettingsTab = .appearance
+            isSettingsPresented = true
+        case .settingsDual:
+            screenshotSettingsTab = .dual
+            isSettingsPresented = true
+        case .settingsAuto:
+            screenshotSettingsTab = .auto
+            isSettingsPresented = true
+        case .project:
+            if let projectID = launch.projectID {
+                listViewModel.selectProject(projectID)
+            }
+            appState.selectedConversationID = nil
+            preferredCompactColumn = .sidebar
+        }
+
+        try? await Task.sleep(nanoseconds: 500_000_000)
     }
 
     private func selectConversation(id: Int64, closeHistory: Bool = false) {

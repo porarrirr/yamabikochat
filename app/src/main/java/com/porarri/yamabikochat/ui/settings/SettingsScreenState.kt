@@ -729,23 +729,23 @@ class SettingsScreenState(
         val autoExcludeBOverride = if (autoProviderB == "OPENROUTER" && autoReasonOverrideB) autoReasonExcludeB else null
 
         fun supportsGoogleSearch(provider: String): Boolean =
-            provider.uppercase() == "GEMINI" || provider.uppercase() == "GEMINI_AUTH" || provider.uppercase() == "OPENROUTER"
+            provider.uppercase() == "GEMINI" || provider.uppercase() == "OPENROUTER"
 
         fun supportsCodeExecution(provider: String): Boolean =
-            provider.uppercase() == "GEMINI" || provider.uppercase() == "GEMINI_AUTH" || provider.uppercase() == "OPENROUTER"
+            provider.uppercase() == "GEMINI" || provider.uppercase() == "OPENROUTER"
 
         fun supportsUrlContext(provider: String): Boolean =
-            provider.uppercase() == "GEMINI" || provider.uppercase() == "GEMINI_AUTH"
+            provider.uppercase() == "GEMINI"
 
         fun supportsGoogleMaps(provider: String): Boolean =
-            provider.uppercase() == "GEMINI" || provider.uppercase() == "GEMINI_AUTH"
+            provider.uppercase() == "GEMINI"
 
         fun supportsComputerUse(provider: String): Boolean =
-            provider.uppercase() == "GEMINI" || provider.uppercase() == "GEMINI_AUTH"
+            provider.uppercase() == "GEMINI"
 
         fun supportsThinkingLevel(provider: String, model: String): Boolean {
             val normalized = provider.uppercase()
-            return (normalized == "GEMINI" || normalized == "GEMINI_AUTH") &&
+            return (normalized == "GEMINI") &&
                 ModelUtils.isThinkingLevelSupported(model)
         }
 
@@ -1802,7 +1802,7 @@ fun rememberSettingsScreenState(
                 state.presetCodexPromptCacheMinLength = 0
             }
         }
-        if (state.presetApiProvider == "GEMINI" || state.presetApiProvider == "GEMINI_AUTH") {
+        if (state.presetApiProvider == "GEMINI") {
             val isSupported = ModelUtils.isThinkingSupported(state.presetModel)
             if (!isSupported && state.presetThinkingEnabled) {
                 state.presetThinkingEnabled = false
@@ -1916,20 +1916,6 @@ fun rememberSettingsScreenState(
                 state.zaiKeyVisible = false
                 state.zaiKeyLoadedFromStorage = false
             }
-            "GEMINI_AUTH" -> {
-                state.geminiKeyVisible = false
-                state.geminiKeyLoadedFromStorage = false
-                state.openRouterKeyVisible = false
-                state.openRouterKeyLoadedFromStorage = false
-                state.openAiKeyVisible = false
-                state.openAiKeyLoadedFromStorage = false
-                state.miniMaxKeyVisible = false
-                state.miniMaxKeyLoadedFromStorage = false
-                state.openAiCompatKeyVisible = false
-                state.openAiCompatKeyLoadedFromStorage = false
-                state.zaiKeyVisible = false
-                state.zaiKeyLoadedFromStorage = false
-            }
             "ZAI" -> {
                 state.geminiKeyVisible = false
                 state.geminiKeyLoadedFromStorage = false
@@ -1980,7 +1966,7 @@ fun rememberSettingsScreenState(
                 state.reasoningEffort = it.openRouterReasoningEffort
                 state.reasoningExclude = it.openRouterReasoningExclude
             }
-            if (state.apiProvider == "GEMINI" || state.apiProvider == "GEMINI_AUTH") {
+            if (state.apiProvider == "GEMINI") {
                 state.responseMimeType = it.geminiResponseMimeType
                 state.responseJsonSchema = it.geminiResponseJsonSchema
                 state.functionDeclarations = it.geminiFunctionDeclarations
@@ -2002,7 +1988,7 @@ fun rememberSettingsScreenState(
             state.providerModels.remove(normalizedProvider)
         }
 
-        if (state.apiProvider == "GEMINI" || state.apiProvider == "GEMINI_AUTH") {
+        if (state.apiProvider == "GEMINI") {
             val isSupported = ModelUtils.isThinkingSupported(state.model)
             if (!isSupported && state.thinkingEnabled) {
                 state.thinkingEnabled = false
@@ -2065,7 +2051,7 @@ fun rememberSettingsScreenState(
 
     LaunchedEffect(state.dualProviderA, state.dualModelA, state.dualThinkingOverrideA) {
         if (!state.dualThinkingOverrideA) return@LaunchedEffect
-        if (state.dualProviderA == "GEMINI" || state.dualProviderA == "GEMINI_AUTH") {
+        if (state.dualProviderA == "GEMINI") {
             val isSupported = ModelUtils.isThinkingSupported(state.dualModelA)
             if (!isSupported && state.dualThinkingEnabledA) {
                 state.dualThinkingEnabledA = false
@@ -2101,7 +2087,7 @@ fun rememberSettingsScreenState(
 
     LaunchedEffect(state.dualProviderB, state.dualModelB, state.dualThinkingOverrideB) {
         if (!state.dualThinkingOverrideB) return@LaunchedEffect
-        if (state.dualProviderB == "GEMINI" || state.dualProviderB == "GEMINI_AUTH") {
+        if (state.dualProviderB == "GEMINI") {
             val isSupported = ModelUtils.isThinkingSupported(state.dualModelB)
             if (!isSupported && state.dualThinkingEnabledB) {
                 state.dualThinkingEnabledB = false
@@ -2137,7 +2123,7 @@ fun rememberSettingsScreenState(
 
     LaunchedEffect(state.autoProviderA, state.autoModelA, state.autoThinkingOverrideA) {
         if (!state.autoThinkingOverrideA) return@LaunchedEffect
-        if (state.autoProviderA == "GEMINI" || state.autoProviderA == "GEMINI_AUTH") {
+        if (state.autoProviderA == "GEMINI") {
             val isSupported = ModelUtils.isThinkingSupported(state.autoModelA)
             if (!isSupported && state.autoThinkingEnabledA) {
                 state.autoThinkingEnabledA = false
@@ -2173,7 +2159,7 @@ fun rememberSettingsScreenState(
 
     LaunchedEffect(state.autoProviderB, state.autoModelB, state.autoThinkingOverrideB) {
         if (!state.autoThinkingOverrideB) return@LaunchedEffect
-        if (state.autoProviderB == "GEMINI" || state.autoProviderB == "GEMINI_AUTH") {
+        if (state.autoProviderB == "GEMINI") {
             val isSupported = ModelUtils.isThinkingSupported(state.autoModelB)
             if (!isSupported && state.autoThinkingEnabledB) {
                 state.autoThinkingEnabledB = false

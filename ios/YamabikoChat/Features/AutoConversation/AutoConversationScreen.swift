@@ -15,10 +15,6 @@ struct AutoConversationScreen: View {
 
             HStack {
                 Button(viewModel.isAutoConversationRunning ? L10n.text("実行中") : L10n.text("開始")) {
-                    if !viewModel.settings.isAutoConversationEnabled {
-                        viewModel.toggleAutoConversation()
-                        return
-                    }
                     viewModel.startAutoConversationManually()
                 }
                 .buttonStyle(.borderedProminent)

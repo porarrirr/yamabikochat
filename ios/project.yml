@@ -26,7 +26,7 @@ targets:
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.porarri.yamabikochat.ios
       INFOPLIST_FILE: YamabikoChat/App/Resources/Info.plist
-      DEVELOPMENT_LANGUAGE: ja
+      DEVELOPMENT_LANGUAGE: en
       CODE_SIGN_ENTITLEMENTS: YamabikoChat/App/Resources/YamabikoChat.entitlements
       CODE_SIGN_STYLE: Automatic
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -40,6 +40,11 @@ targets:
     deploymentTarget: 17.0
     sources:
       - path: YamabikoShareExtension
+      - path: YamabikoChat/Shared
+        includes:
+          - AppConstants.swift
+          - AppGroupShareStorage.swift
+          - SharePayload.swift
     resources:
       - path: YamabikoShareExtension/PrivacyInfo.xcprivacy
     settings:
@@ -59,6 +64,17 @@ targets:
       GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: YamabikoChat
+  YamabikoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: 17.0
+    sources:
+      - path: YamabikoUITests
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.porarri.yamabikochat.ios.uitests
+      GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: YamabikoChat
 schemes:
   YamabikoChat:
     build:
@@ -66,6 +82,8 @@ schemes:
         YamabikoChat: all
         YamabikoShareExtension: all
         YamabikoTests: [test]
+        YamabikoUITests: [test]
     test:
       targets:
         - YamabikoTests
+        - YamabikoUITests

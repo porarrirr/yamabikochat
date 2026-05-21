@@ -13,21 +13,32 @@ struct SharePayload: Codable, Equatable {
 }
 
 final class SharePayloadStore {
-    private let defaults: UserDefaults?
-
     init() {
-        defaults = UserDefaults(suiteName: AppConstants.appGroupIdentifier)
+        SharePayloadDarwinNotifier.startObserving {
+            NotificationCenter.default.post(name: AppConstants.sharePayloadDidChangeNotification, object: nil)
+        }
     }
 
     func save(_ payload: SharePayload) {
         guard let data = try? JSONEncoder().encode(payload) else { return }
-        defaults?.set(data, forKey: AppConstants.sharePayloadDefaultsKey)
+        guard AppGroupShareStorage.writePayloadData(data) else { return }
         NotificationCenter.default.post(name: AppConstants.sharePayloadDidChangeNotification, object: nil)
     }
 
     func consumeLatest() -> SharePayload? {
-        guard let data = defaults?.data(forKey: AppConstants.sharePayloadDefaultsKey) else { return nil }
-        defaults?.removeObject(forKey: AppConstants.sharePayloadDefaultsKey)
+        guard let data = AppGroupShareStorage.consumePayloadData() else { return nil }
         return try? JSONDecoder().decode(SharePayload.self, from: data)
+    }
+}
+
+enum SharePayloadPersister {
+    static func save(text: String, sourceApp: String?) {
+        let payload = SharePayload(
+            text: text,
+            sourceApp: sourceApp,
+            createdAtMs: Int64(Date().timeIntervalSince1970 * 1000)
+        )
+        guard let data = try? JSONEncoder().encode(payload) else { return }
+        AppGroupShareStorage.writePayloadData(data)
     }
 }

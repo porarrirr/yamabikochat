@@ -116,9 +116,13 @@ final class ProviderClientParityTests: XCTestCase {
         httpClient.streamResponder = { request in
             let stream = AsyncThrowingStream<String, Error> { continuation in
                 continuation.yield(#"data: {"type":"response.reasoning_text.delta","delta":"reason"}"#)
+                continuation.yield("")
                 continuation.yield(#"data: {"type":"response.output_text.delta","delta":"A"}"#)
+                continuation.yield("")
                 continuation.yield(#"data: {"type":"response.output_item.done","item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"AB"}]}}"#)
+                continuation.yield("")
                 continuation.yield("data: [DONE]")
+                continuation.yield("")
                 continuation.finish()
             }
             return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
@@ -158,98 +162,165 @@ final class ProviderClientParityTests: XCTestCase {
         }
     }
 
-    func testGeminiCliHeadersMatchOpencodeAndRequestIDMatchesBody() async throws {
+    func testCodexStreamDedupesCumulativeJapaneseOutputTextDelta() async throws {
         let store = ProviderTestCredentialStore()
-        try store.setGeminiAccessToken("gemini-access-token")
-        try store.saveSecret("project-1", key: "gemini_project_id")
+        try store.setCodexAccessToken("codex-access-token")
 
+        let greeting = "こんにちは！\n今日はどんなことでお手伝いしましょうか？"
         let httpClient = CapturingHTTPClient()
-        httpClient.sendResponder = { request in
-            let data = #"{"response":{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}}"#.data(using: .utf8)!
-            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(
+                    #"data: {"type":"response.output_text.delta","delta":"こんにちは！"}"#
+                )
+                continuation.yield("")
+                continuation.yield(
+                    #"data: {"type":"response.output_text.delta","delta":"こんにちは！\n今日はどんなことでお手伝いしましょうか？"}"#
+                )
+                continuation.yield("")
+                continuation.yield("data: [DONE]")
+                continuation.yield("")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
         }
 
-        let client = GeminiProviderClient()
+        let client = CodexProviderClient()
         let request = ProviderRequest(
-            model: "gemini-2.5-flash",
+            model: "gpt-5.4-mini",
             messages: [ProviderRequestMessage(role: "user", content: "hello")],
-            stream: false,
+            stream: true,
             tools: [],
             thinking: nil,
-            metadata: ["provider": "GEMINI_AUTH"]
+            metadata: ["provider": "CODEX_AUTH"]
         )
 
-        let response = try await client.generate(
+        let stream = client.stream(
             request: request,
             settings: AppSettings(),
             credentialStore: store,
             httpClient: httpClient
         )
-        XCTAssertEqual(response.text, "ok")
 
-        let captured = try XCTUnwrap(httpClient.lastRequest)
-        XCTAssertEqual(captured.headers["User-Agent"], GeminiCliCompatibility.buildUserAgent(model: "gemini-2.5-flash"))
-        XCTAssertNil(captured.headers["X-Goog-Api-Client"])
-        XCTAssertNil(captured.headers["Client-Metadata"])
-        XCTAssertTrue(captured.url.absoluteString.contains(":generateContent"))
-        let requestID = try XCTUnwrap(captured.headers["x-activity-request-id"])
-        assertGeminiCliActivityRequestID(requestID)
-        let bodyData = try XCTUnwrap(captured.body)
-        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
-        XCTAssertNotEqual(root["user_prompt_id"] as? String, requestID)
+        var textDeltas: [String] = []
+        var final: ProviderResponse?
+        for try await event in stream {
+            switch event {
+            case let .textDelta(delta):
+                textDeltas.append(delta)
+            case let .completed(response):
+                final = response
+            default:
+                break
+            }
+        }
+
+        XCTAssertEqual(textDeltas, ["こんにちは！", "\n今日はどんなことでお手伝いしましょうか？"])
+        XCTAssertEqual(final?.text, greeting)
     }
 
-    func testGeminiCliHeadersUseSavedRemoteCompatibility() async throws {
+    func testCodexStreamOutputTextFallbackDoesNotDuplicateAfterDeltas() async throws {
         let store = ProviderTestCredentialStore()
-        try store.setGeminiAccessToken("gemini-access-token")
-        try store.saveSecret("project-1", key: "gemini_project_id")
-        try GeminiCliCompatibilityStore.saveRemote(
-            GeminiCliRemoteCompatibility(
-                version: "7.7.7-remote",
-                defaultModel: "gemini-remote-default",
-                metadata: GeminiCliMetadata(
-                    ideType: "IDE_REMOTE",
-                    platform: "PLATFORM_REMOTE",
-                    pluginType: "GEMINI_REMOTE"
-                ),
-                codeAssistEndpoint: "https://remote.invalid",
-                codeAssistVersion: "v7internal",
-                requestFormat: GeminiCliCompatibilityStore.builtIn.requestFormat,
-                oauthClient: nil
-            ),
-            syncedAtISO8601: "2026-03-31T00:00:00Z",
-            using: store
-        )
+        try store.setCodexAccessToken("codex-access-token")
 
         let httpClient = CapturingHTTPClient()
-        httpClient.sendResponder = { request in
-            let data = #"{"response":{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}}"#.data(using: .utf8)!
-            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"type":"response.output_text.delta","delta":"Hi"}"#)
+                continuation.yield("")
+                continuation.yield(#"data: {"output_text":"Hi there"}"#)
+                continuation.yield("")
+                continuation.yield("data: [DONE]")
+                continuation.yield("")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
         }
 
-        let client = GeminiProviderClient()
+        let client = CodexProviderClient()
         let request = ProviderRequest(
-            model: "gemini-2.5-flash",
+            model: "gpt-5.4-mini",
             messages: [ProviderRequestMessage(role: "user", content: "hello")],
-            stream: false,
+            stream: true,
             tools: [],
             thinking: nil,
-            metadata: ["provider": "GEMINI_AUTH"]
+            metadata: ["provider": "CODEX_AUTH"]
         )
 
-        _ = try await client.generate(
+        let stream = client.stream(
             request: request,
             settings: AppSettings(),
             credentialStore: store,
             httpClient: httpClient
         )
 
-        let captured = try XCTUnwrap(httpClient.lastRequest)
-        XCTAssertEqual(captured.url.absoluteString, "https://remote.invalid/v7internal:generateContent")
-        XCTAssertEqual(
-            captured.headers["User-Agent"],
-            GeminiCliCompatibility.resolved(using: store).buildUserAgent(model: "gemini-2.5-flash")
+        var textDeltas: [String] = []
+        var final: ProviderResponse?
+        for try await event in stream {
+            switch event {
+            case let .textDelta(delta):
+                textDeltas.append(delta)
+            case let .completed(response):
+                final = response
+            default:
+                break
+            }
+        }
+
+        XCTAssertEqual(textDeltas, ["Hi", " there"])
+        XCTAssertEqual(final?.text, "Hi there")
+    }
+
+    func testOpenAICompatibleStreamDedupesCumulativeContent() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("openrouter-key", for: .openRouter)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"choices":[{"delta":{"content":"Hello"}}]}"#)
+                continuation.yield("")
+                continuation.yield(#"data: {"choices":[{"delta":{"content":"Hello world"}}]}"#)
+                continuation.yield("")
+                continuation.yield("data: [DONE]")
+                continuation.yield("")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenAICompatibleProviderClient()
+        let request = ProviderRequest(
+            model: "openai/gpt-4o-mini",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENROUTER"]
         )
+
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var textDeltas: [String] = []
+        var final: ProviderResponse?
+        for try await event in stream {
+            switch event {
+            case let .textDelta(delta):
+                textDeltas.append(delta)
+            case let .completed(response):
+                final = response
+            default:
+                break
+            }
+        }
+
+        XCTAssertEqual(textDeltas, ["Hello", " world"])
+        XCTAssertEqual(final?.text, "Hello world")
     }
 
     func testGeminiBuildBodyEmbedsImageAttachmentAsInlineData() async throws {
@@ -346,135 +417,8 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertNotNil(parts.last?["inlineData"])
     }
 
-    func testGeminiAuthBodyIncludesSessionIdWhenMetadataProvided() async throws {
-        let store = ProviderTestCredentialStore()
-        try store.setGeminiAccessToken("  gemini-access-token  ")
-        try store.saveSecret("project-1", key: "gemini_project_id")
-        let model = "gemini-3.1-pro-preview"
 
-        let httpClient = CapturingHTTPClient()
-        httpClient.sendResponder = { request in
-            let data = #"{"response":{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}}"#.data(using: .utf8)!
-            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
-        }
 
-        let request = ProviderRequest(
-            model: model,
-            messages: [ProviderRequestMessage(role: "user", content: "hello")],
-            stream: false,
-            tools: [],
-            thinking: nil,
-            metadata: [
-                "provider": "GEMINI_AUTH",
-                "geminiSessionId": "session-123"
-            ]
-        )
-
-        let client = GeminiProviderClient()
-        _ = try await client.generate(
-            request: request,
-            settings: AppSettings(),
-            credentialStore: store,
-            httpClient: httpClient
-        )
-
-        let captured = try XCTUnwrap(httpClient.lastRequest)
-        XCTAssertEqual(captured.headers["Authorization"], "Bearer gemini-access-token")
-        let bodyData = try XCTUnwrap(captured.body)
-        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
-        XCTAssertEqual(root["model"] as? String, model)
-        let inner = try XCTUnwrap(root["request"] as? [String: Any])
-        XCTAssertEqual(inner["session_id"] as? String, "session-123")
-    }
-
-    func testGeminiAuthBodyUsesStableSessionIDWhenMetadataMissing() async throws {
-        let store = ProviderTestCredentialStore()
-        try store.setGeminiAccessToken("gemini-access-token")
-        try store.saveSecret("project-1", key: "gemini_project_id")
-
-        let httpClient = CapturingHTTPClient()
-        httpClient.sendResponder = { request in
-            let data = #"{"response":{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}}"#.data(using: .utf8)!
-            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
-        }
-
-        let request = ProviderRequest(
-            model: "gemini-2.5-flash",
-            messages: [ProviderRequestMessage(role: "user", content: "hello")],
-            stream: false,
-            tools: [],
-            thinking: nil,
-            metadata: [
-                "provider": "GEMINI_AUTH"
-            ]
-        )
-
-        let client = GeminiProviderClient()
-        _ = try await client.generate(
-            request: request,
-            settings: AppSettings(),
-            credentialStore: store,
-            httpClient: httpClient
-        )
-        _ = try await client.generate(
-            request: request,
-            settings: AppSettings(),
-            credentialStore: store,
-            httpClient: httpClient
-        )
-
-        XCTAssertEqual(httpClient.requests.count, 2)
-        let firstBody = try XCTUnwrap(httpClient.requests[0].body)
-        let secondBody = try XCTUnwrap(httpClient.requests[1].body)
-        let firstRoot = try XCTUnwrap(try JSONSerialization.jsonObject(with: firstBody) as? [String: Any])
-        let secondRoot = try XCTUnwrap(try JSONSerialization.jsonObject(with: secondBody) as? [String: Any])
-        let firstInner = try XCTUnwrap(firstRoot["request"] as? [String: Any])
-        let secondInner = try XCTUnwrap(secondRoot["request"] as? [String: Any])
-        let firstSessionID = try XCTUnwrap(firstInner["session_id"] as? String)
-        let secondSessionID = try XCTUnwrap(secondInner["session_id"] as? String)
-        XCTAssertFalse(firstSessionID.isEmpty)
-        assertLowercaseUUIDv4(firstSessionID)
-        XCTAssertEqual(firstSessionID, secondSessionID)
-    }
-
-    func testGeminiAuthGenerateFailsFastWhenProjectMissing() async throws {
-        let store = ProviderTestCredentialStore()
-        try store.setGeminiAccessToken("gemini-access-token")
-
-        let httpClient = CapturingHTTPClient()
-        httpClient.sendResponder = { _ in
-            XCTFail("Gemini Auth request should not be sent without a project ID")
-            let data = Data()
-            return (data, Self.makeHTTPResponse(url: URL(string: "https://example.invalid")!, statusCode: 500))
-        }
-
-        let request = ProviderRequest(
-            model: "gemini-2.5-flash",
-            messages: [ProviderRequestMessage(role: "user", content: "hello")],
-            stream: false,
-            tools: [],
-            thinking: nil,
-            metadata: ["provider": "GEMINI_AUTH"]
-        )
-
-        let client = GeminiProviderClient()
-
-        do {
-            _ = try await client.generate(
-                request: request,
-                settings: AppSettings(),
-                credentialStore: store,
-                httpClient: httpClient
-            )
-            XCTFail("Expected Gemini Auth generate to fail without a project ID")
-        } catch let ProviderClientError.parseFailure(reason) {
-            XCTAssertEqual(reason, "Project ID is required")
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
-
-        XCTAssertNil(httpClient.lastRequest)
-    }
 
     func testGeminiStreamSeparatesThoughtIntoReasoningDelta() async throws {
         let store = ProviderTestCredentialStore()
@@ -524,195 +468,9 @@ final class ProviderClientParityTests: XCTestCase {
         }
     }
 
-    func testGeminiCliStreamSeparatesThoughtAndWrapperPayload() async throws {
-        let store = ProviderTestCredentialStore()
-        try store.setGeminiAccessToken("gemini-access-token")
-        try store.saveSecret("project-1", key: "gemini_project_id")
 
-        let httpClient = CapturingHTTPClient()
-        httpClient.streamResponder = { request in
-            let stream = AsyncThrowingStream<String, Error> { continuation in
-                continuation.yield(#"data: {"response":{"candidates":[{"content":{"parts":[{"text":"plan","thought":true},{"text":"answer"}]}}]}}"#)
-                continuation.yield("")
-                continuation.yield("data: [DONE]")
-                continuation.yield("")
-                continuation.finish()
-            }
-            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
-        }
 
-        let request = ProviderRequest(
-            model: "gemini-2.5-flash",
-            messages: [ProviderRequestMessage(role: "user", content: "hello")],
-            stream: true,
-            tools: [],
-            thinking: nil,
-            metadata: ["provider": "GEMINI_AUTH"]
-        )
 
-        let client = GeminiProviderClient()
-        let stream = client.stream(
-            request: request,
-            settings: AppSettings(),
-            credentialStore: store,
-            httpClient: httpClient
-        )
-
-        var events: [ProviderStreamEvent] = []
-        for try await event in stream {
-            events.append(event)
-        }
-
-        let captured = try XCTUnwrap(httpClient.lastRequest)
-        XCTAssertEqual(captured.headers["Accept"], "text/event-stream")
-        XCTAssertEqual(captured.headers["User-Agent"], GeminiCliCompatibility.buildUserAgent(model: "gemini-2.5-flash"))
-        XCTAssertNil(captured.headers["X-Goog-Api-Client"])
-        XCTAssertNil(captured.headers["Client-Metadata"])
-        let requestID = try XCTUnwrap(captured.headers["x-activity-request-id"])
-        assertGeminiCliActivityRequestID(requestID)
-        let bodyData = try XCTUnwrap(captured.body)
-        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
-        XCTAssertNotEqual(root["user_prompt_id"] as? String, requestID)
-
-        XCTAssertTrue(events.contains(.textDelta("answer")))
-        XCTAssertTrue(events.contains(.reasoningDelta("plan")))
-        if case let .completed(final) = try XCTUnwrap(events.last) {
-            XCTAssertEqual(final.text, "answer")
-            XCTAssertEqual(final.reasoningSummary, "plan")
-        } else {
-            XCTFail("Expected completed event")
-        }
-    }
-
-    func testGeminiCliStreamParsesTextOnlyPayloadWithoutCandidates() async throws {
-        let store = ProviderTestCredentialStore()
-        try store.setGeminiAccessToken("gemini-access-token")
-        try store.saveSecret("project-1", key: "gemini_project_id")
-
-        let httpClient = CapturingHTTPClient()
-        httpClient.streamResponder = { request in
-            let stream = AsyncThrowingStream<String, Error> { continuation in
-                continuation.yield(#"data: {"response":{"text":"A"}}"#)
-                continuation.yield(#"data: {"text":"B"}"#)
-                continuation.yield("data: [DONE]")
-                continuation.finish()
-            }
-            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
-        }
-
-        let request = ProviderRequest(
-            model: "gemini-2.5-flash",
-            messages: [ProviderRequestMessage(role: "user", content: "hello")],
-            stream: true,
-            tools: [],
-            thinking: nil,
-            metadata: ["provider": "GEMINI_AUTH"]
-        )
-
-        let client = GeminiProviderClient()
-        let stream = client.stream(
-            request: request,
-            settings: AppSettings(),
-            credentialStore: store,
-            httpClient: httpClient
-        )
-
-        var events: [ProviderStreamEvent] = []
-        for try await event in stream {
-            events.append(event)
-        }
-
-        XCTAssertTrue(events.contains(.textDelta("A")))
-        XCTAssertTrue(events.contains(.textDelta("B")))
-        if case let .completed(final) = try XCTUnwrap(events.last) {
-            XCTAssertEqual(final.text, "AB")
-            XCTAssertNil(final.reasoningSummary)
-        } else {
-            XCTFail("Expected completed event")
-        }
-    }
-
-    func testGeminiCliStreamFlushesOnDataBoundaryWhenBlankLineMissing() async throws {
-        let store = ProviderTestCredentialStore()
-        try store.setGeminiAccessToken("gemini-access-token")
-        try store.saveSecret("project-1", key: "gemini_project_id")
-
-        let httpClient = CapturingHTTPClient()
-        httpClient.streamResponder = { request in
-            let stream = AsyncThrowingStream<String, Error> { continuation in
-                continuation.yield("data: {")
-                continuation.yield(#"data: "response":{"candidates":[{"content":{"parts":[{"text":"A"}]}}]}"#)
-                continuation.yield("data: }")
-                continuation.yield(#"data: {"response":{"candidates":[{"content":{"parts":[{"text":"B"}]}}]}}"#)
-                continuation.yield("data: [DONE]")
-                continuation.finish()
-            }
-            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
-        }
-
-        let request = ProviderRequest(
-            model: "gemini-2.5-flash",
-            messages: [ProviderRequestMessage(role: "user", content: "hello")],
-            stream: true,
-            tools: [],
-            thinking: nil,
-            metadata: ["provider": "GEMINI_AUTH"]
-        )
-
-        let client = GeminiProviderClient()
-        let stream = client.stream(
-            request: request,
-            settings: AppSettings(),
-            credentialStore: store,
-            httpClient: httpClient
-        )
-
-        var events: [ProviderStreamEvent] = []
-        for try await event in stream {
-            events.append(event)
-        }
-
-        XCTAssertTrue(events.contains(.textDelta("A")))
-        XCTAssertTrue(events.contains(.textDelta("B")))
-        if case let .completed(final) = try XCTUnwrap(events.last) {
-            XCTAssertEqual(final.text, "AB")
-            XCTAssertNil(final.reasoningSummary)
-        } else {
-            XCTFail("Expected completed event")
-        }
-    }
-
-    func testGeminiCliNonStreamingReturnsReasoningFromThoughtParts() async throws {
-        let store = ProviderTestCredentialStore()
-        try store.setGeminiAccessToken("gemini-access-token")
-        try store.saveSecret("project-1", key: "gemini_project_id")
-
-        let httpClient = CapturingHTTPClient()
-        httpClient.sendResponder = { request in
-            let data = #"{"response":{"candidates":[{"content":{"parts":[{"text":"plan","thought":true},{"text":"answer"}]}}]}}"#.data(using: .utf8)!
-            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
-        }
-
-        let request = ProviderRequest(
-            model: "gemini-2.5-flash",
-            messages: [ProviderRequestMessage(role: "user", content: "hello")],
-            stream: false,
-            tools: [],
-            thinking: nil,
-            metadata: ["provider": "GEMINI_AUTH"]
-        )
-
-        let client = GeminiProviderClient()
-        let response = try await client.generate(
-            request: request,
-            settings: AppSettings(),
-            credentialStore: store,
-            httpClient: httpClient
-        )
-
-        XCTAssertEqual(response.text, "answer")
-        XCTAssertEqual(response.reasoningSummary, "plan")
-    }
 
     func testGeminiStreamParsesMultilineSSEDataEvent() async throws {
         let store = ProviderTestCredentialStore()
@@ -763,159 +521,8 @@ final class ProviderClientParityTests: XCTestCase {
         }
     }
 
-    func testGeminiCliStreamThrowsWhenNoUsableData() async throws {
-        let store = ProviderTestCredentialStore()
-        try store.setGeminiAccessToken("gemini-access-token")
-        try store.saveSecret("project-1", key: "gemini_project_id")
 
-        let httpClient = CapturingHTTPClient()
-        httpClient.streamResponder = { request in
-            let stream = AsyncThrowingStream<String, Error> { continuation in
-                continuation.yield(#"data: {"event":"keepalive"}"#)
-                continuation.yield("")
-                continuation.yield("data: [DONE]")
-                continuation.yield("")
-                continuation.finish()
-            }
-            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
-        }
 
-        let request = ProviderRequest(
-            model: "gemini-2.5-flash",
-            messages: [ProviderRequestMessage(role: "user", content: "hello")],
-            stream: true,
-            tools: [],
-            thinking: nil,
-            metadata: ["provider": "GEMINI_AUTH"]
-        )
-
-        let client = GeminiProviderClient()
-        let stream = client.stream(
-            request: request,
-            settings: AppSettings(),
-            credentialStore: store,
-            httpClient: httpClient
-        )
-
-        do {
-            for try await _ in stream {}
-            XCTFail("Expected stream to fail for empty Gemini CLI payload")
-        } catch let ProviderClientError.parseFailure(reason) {
-            XCTAssertEqual(reason, GeminiProviderClient.noUsableStreamDataReason)
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
-    }
-
-    func testGeminiCliStreamRetriesRateLimit429AndSucceeds() async throws {
-        let store = ProviderTestCredentialStore()
-        try store.setGeminiAccessToken("gemini-access-token")
-        try store.saveSecret("project-1", key: "gemini_project_id")
-
-        let httpClient = CapturingHTTPClient()
-        var attempts = 0
-        httpClient.streamResponder = { request in
-            attempts += 1
-            if attempts == 1 {
-                let stream = AsyncThrowingStream<String, Error> { continuation in
-                    continuation.yield(#"data: {"error":{"message":"rate limit","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"RATE_LIMIT_EXCEEDED","domain":"cloudcode-pa.googleapis.com"}]}}"#)
-                    continuation.yield("")
-                    continuation.finish()
-                }
-                return (
-                    stream,
-                    Self.makeHTTPResponse(
-                        url: request.url,
-                        statusCode: 429,
-                        headers: ["retry-after-ms": "1"]
-                    )
-                )
-            }
-
-            let stream = AsyncThrowingStream<String, Error> { continuation in
-                continuation.yield(#"data: {"response":{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}}"#)
-                continuation.yield("")
-                continuation.yield("data: [DONE]")
-                continuation.yield("")
-                continuation.finish()
-            }
-            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
-        }
-
-        let request = ProviderRequest(
-            model: "gemini-3.1-pro-preview",
-            messages: [ProviderRequestMessage(role: "user", content: "hello")],
-            stream: true,
-            tools: [],
-            thinking: nil,
-            metadata: ["provider": "GEMINI_AUTH"]
-        )
-
-        let client = GeminiProviderClient()
-        let stream = client.stream(
-            request: request,
-            settings: AppSettings(),
-            credentialStore: store,
-            httpClient: httpClient
-        )
-
-        var final: ProviderResponse?
-        for try await event in stream {
-            if case let .completed(response) = event {
-                final = response
-            }
-        }
-
-        XCTAssertEqual(attempts, 2)
-        XCTAssertEqual(final?.text, "ok")
-    }
-
-    func testGeminiCliStreamDoesNotRetryTerminalQuota429() async throws {
-        let store = ProviderTestCredentialStore()
-        try store.setGeminiAccessToken("gemini-access-token")
-        try store.saveSecret("project-1", key: "gemini_project_id")
-
-        let httpClient = CapturingHTTPClient()
-        var attempts = 0
-        httpClient.streamResponder = { request in
-            attempts += 1
-            let stream = AsyncThrowingStream<String, Error> { continuation in
-                continuation.yield(#"data: {"error":{"message":"quota exhausted","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"QUOTA_EXHAUSTED","domain":"cloudcode-pa.googleapis.com"}]}}"#)
-                continuation.yield("")
-                continuation.finish()
-            }
-            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 429))
-        }
-
-        let request = ProviderRequest(
-            model: "gemini-3.1-pro-preview",
-            messages: [ProviderRequestMessage(role: "user", content: "hello")],
-            stream: true,
-            tools: [],
-            thinking: nil,
-            metadata: ["provider": "GEMINI_AUTH"]
-        )
-
-        let client = GeminiProviderClient()
-        let stream = client.stream(
-            request: request,
-            settings: AppSettings(),
-            credentialStore: store,
-            httpClient: httpClient
-        )
-
-        do {
-            for try await _ in stream {}
-            XCTFail("Expected stream failure for terminal quota error")
-        } catch let ProviderClientError.httpStatus(status, body) {
-            XCTAssertEqual(status, 429)
-            XCTAssertTrue(body.contains("Quota exhausted for this account"))
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
-
-        XCTAssertEqual(attempts, 1)
-    }
 
     func testOpenRouterGenerateIncludesProviderRoutingAndReasoning() async throws {
         let store = ProviderTestCredentialStore()
@@ -1055,40 +662,6 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertNil(root["cache_control"])
     }
 
-    func testQwenGenerateUsesNormalizedResourceURLAndParsesReasoningContent() async throws {
-        let store = ProviderTestCredentialStore()
-        try store.setCredential("qwen-access-token", for: .qwenCode)
-        try store.setQwenResourceURL("gateway.qwen.ai/runtime")
-
-        let httpClient = CapturingHTTPClient()
-        httpClient.sendResponder = { request in
-            let data = #"{"choices":[{"message":{"content":"ok","reasoning_content":"plan first"}}]}"#.data(using: .utf8)!
-            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
-        }
-
-        let client = OpenAICompatibleProviderClient()
-        let request = ProviderRequest(
-            model: "coder-model",
-            messages: [ProviderRequestMessage(role: "user", content: "hello")],
-            stream: false,
-            tools: [],
-            thinking: nil,
-            metadata: ["provider": "QWEN_CODE"]
-        )
-
-        let response = try await client.generate(
-            request: request,
-            settings: AppSettings(),
-            credentialStore: store,
-            httpClient: httpClient
-        )
-
-        XCTAssertEqual(response.text, "ok")
-        XCTAssertEqual(response.reasoningSummary, "plan first")
-        let captured = try XCTUnwrap(httpClient.lastRequest)
-        XCTAssertEqual(captured.url.absoluteString, "https://gateway.qwen.ai/runtime/v1/chat/completions")
-        XCTAssertEqual(captured.headers["Authorization"], "Bearer qwen-access-token")
-    }
 
     func testAlibabaCodingPlanGenerateUsesDedicatedBaseURLAndCredential() async throws {
         let store = ProviderTestCredentialStore()
@@ -1225,6 +798,51 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(extractConfig["enabled"] as? Bool, true)
     }
 
+    func testAlibabaStreamMessageStartUsageOnly() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("alibaba-key", for: .alibabaCodingPlan)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"type":"message_start","message":{"usage":{"input_tokens":21,"cache_creation_input_tokens":6,"cache_read_input_tokens":3}}}"#)
+                continuation.yield("")
+                continuation.yield(#"data: {"type":"message_stop"}"#)
+                continuation.yield("")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = AnthropicCompatibleProviderClient()
+        let request = ProviderRequest(
+            model: "qwen3.5-plus",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "ALIBABA_CODING_PLAN"]
+        )
+
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var final: ProviderResponse?
+        for try await event in stream {
+            if case let .completed(response) = event {
+                final = response
+            }
+        }
+
+        XCTAssertEqual(final?.usage?.inputTokens, 21)
+        XCTAssertEqual(final?.usage?.cachedInputTokens, 3)
+        XCTAssertEqual(final?.usage?.cacheCreationInputTokens, 6)
+    }
+
     func testAlibabaCodingPlanStreamParsesAnthropicStyleChunks() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("alibaba-key", for: .alibabaCodingPlan)
@@ -1234,13 +852,21 @@ final class ProviderClientParityTests: XCTestCase {
             let stream = AsyncThrowingStream<String, Error> { continuation in
                 continuation.yield("event: message_start")
                 continuation.yield(#"data: {"type":"message_start","message":{"usage":{"input_tokens":21,"cache_creation_input_tokens":6,"cache_read_input_tokens":3}}}"#)
+                continuation.yield("")
                 continuation.yield("event: content_block_delta")
                 continuation.yield(#"data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Plan "}}"#)
+                continuation.yield("")
                 continuation.yield("event: content_block_delta")
                 continuation.yield(#"data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Ali"}}"#)
+                continuation.yield("")
                 continuation.yield(#"data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"baba"}}"#)
-                continuation.yield(#"data: {"type":"message_delta","usage":{"output_tokens":8}}"#)
+                continuation.yield("")
+                continuation.yield(
+                    #"data: {"type":"message_delta","usage":{"input_tokens":21,"output_tokens":8,"cache_read_input_tokens":3,"cache_creation_input_tokens":6}}"#
+                )
+                continuation.yield("")
                 continuation.yield(#"data: {"type":"message_stop"}"#)
+                continuation.yield("")
                 continuation.finish()
             }
             return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
@@ -1344,9 +970,13 @@ final class ProviderClientParityTests: XCTestCase {
         httpClient.streamResponder = { request in
             let stream = AsyncThrowingStream<String, Error> { continuation in
                 continuation.yield(#"data: {"choices":[{"delta":{"content":"A"}}]}"#)
+                continuation.yield("")
                 continuation.yield(#"data: {"choices":[{"delta":{},"finish_reason":"stop"}]}"#)
+                continuation.yield("")
                 continuation.yield(#"data: {"usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120,"completion_tokens_details":{"reasoning_tokens":4},"prompt_tokens_details":{"cached_tokens":16}}}"#)
+                continuation.yield("")
                 continuation.yield("data: [DONE]")
+                continuation.yield("")
                 continuation.finish()
             }
             return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
@@ -1518,6 +1148,97 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(body["model"] as? String, "minimax-m2.7")
         XCTAssertEqual(body["system"] as? String, "stable system")
         XCTAssertNil(body["prompt_cache_key"])
+    }
+
+    func testOpenCodeGoChatStreamParsesReasoningContent() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"choices":[{"delta":{"reasoning_content":"考"}}]}"#)
+                continuation.yield("")
+                continuation.yield(#"data: {"choices":[{"delta":{"reasoning_content":"考え中"}}]}"#)
+                continuation.yield("")
+                continuation.yield(#"data: {"choices":[{"delta":{"content":"こんにちは"}}]}"#)
+                continuation.yield("")
+                continuation.yield("data: [DONE]")
+                continuation.yield("")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "deepseek-v4-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "た")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENCODE_GO"]
+        )
+
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var textDeltas: [String] = []
+        var reasoningDeltas: [String] = []
+        var final: ProviderResponse?
+        for try await event in stream {
+            switch event {
+            case let .textDelta(delta):
+                textDeltas.append(delta)
+            case let .reasoningDelta(delta):
+                reasoningDeltas.append(delta)
+            case let .completed(response):
+                final = response
+            default:
+                break
+            }
+        }
+
+        XCTAssertEqual(reasoningDeltas, ["考", "え中"])
+        XCTAssertEqual(textDeltas, ["こんにちは"])
+        XCTAssertEqual(final?.text, "こんにちは")
+        XCTAssertEqual(final?.reasoningSummary, "考え中")
+    }
+
+    func testOpenCodeGoChatResponseParsesArrayContent() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":[{"type":"text","text":"ok"}],"reasoning_content":"think"}}],"usage":{"prompt_tokens":1,"completion_tokens":1}}"#
+                .data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "deepseek-v4-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENCODE_GO"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(response.text, "ok")
+        XCTAssertEqual(response.reasoningSummary, "think")
     }
 
     func testOpenCodeGoUnsupportedModelFailsInsteadOfFallback() async throws {
@@ -1751,8 +1472,11 @@ final class ProviderClientParityTests: XCTestCase {
         httpClient.streamResponder = { request in
             let stream = AsyncThrowingStream<String, Error> { continuation in
                 continuation.yield(#"data: {"type":"response.output_text.delta","delta":"A"}"#)
+                continuation.yield("")
                 continuation.yield(#"data: {"type":"response.completed","response":{"usage":{"input_tokens":21,"output_tokens":9,"total_tokens":30,"input_tokens_details":{"cached_tokens":3},"output_tokens_details":{"reasoning_tokens":4}}}}"#)
+                continuation.yield("")
                 continuation.yield("data: [DONE]")
+                continuation.yield("")
                 continuation.finish()
             }
             return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
@@ -1865,19 +1589,4 @@ final class ProviderClientParityTests: XCTestCase {
         )
     }
 
-    private func assertGeminiCliActivityRequestID(
-        _ value: String,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        let pattern = #"^[0-9a-z]+$"#
-        XCTAssertFalse(value.isEmpty, "Expected non-empty activity request id", file: file, line: line)
-        XCTAssertFalse(value.contains("-"), "Expected short Gemini CLI activity id but got \(value)", file: file, line: line)
-        XCTAssertNotNil(
-            value.range(of: pattern, options: .regularExpression),
-            "Expected base36 Gemini CLI activity id but got \(value)",
-            file: file,
-            line: line
-        )
-    }
 }

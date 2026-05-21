@@ -41,7 +41,7 @@ actor LiteLlmPricingRepository: LiteLlmPricingEstimating {
         let cacheCreationInputRate = price.cacheCreationInputCostPerToken ?? inputRate
         let outputRate = price.outputCostPerToken ?? price.inputCostPerToken ?? 0
         let reasoningCount = max(0, reasoningTokens ?? 0)
-        let reasoningIncludedInOutput = providerKey != "GEMINI" && providerKey != "GEMINI_AUTH"
+        let reasoningIncludedInOutput = providerKey != "GEMINI"
         let nonReasoningOutput = reasoningIncludedInOutput
             ? max(0, outputTokens - reasoningCount)
             : max(0, outputTokens)
@@ -182,7 +182,7 @@ actor LiteLlmPricingRepository: LiteLlmPricingEstimating {
             append(canonical.replacingOccurrences(of: "openai/", with: ""))
             append(canonical.replacingOccurrences(of: "google/", with: ""))
             append(canonical.replacingOccurrences(of: "anthropic/", with: ""))
-        case "GEMINI", "GEMINI_AUTH":
+        case "GEMINI":
             let noGoogle = canonical.replacingOccurrences(of: "google/", with: "")
             append(noGoogle)
             append("openrouter/google/\(noGoogle)")

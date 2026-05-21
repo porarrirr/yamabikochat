@@ -24,61 +24,6 @@ private final class SettingsViewModelCredentialStore: SecureCredentialStore {
 
 final class SettingsViewModelTests: XCTestCase {
     @MainActor
-    func testGeminiQuotaMissingCredentialErrorIsDetected() {
-        XCTAssertTrue(
-            SettingsViewModel.isGeminiQuotaMissingCredentialError(
-                ProviderClientError.missingCredential("GEMINI_AUTH")
-            )
-        )
-        XCTAssertTrue(
-            SettingsViewModel.isGeminiQuotaMissingCredentialError(
-                ProviderClientError.missingCredential("gemini_auth")
-            )
-        )
-    }
-
-    @MainActor
-    func testGeminiQuotaMissingCredentialErrorIgnoresOtherErrors() {
-        XCTAssertFalse(
-            SettingsViewModel.isGeminiQuotaMissingCredentialError(
-                ProviderClientError.missingCredential("GEMINI")
-            )
-        )
-        XCTAssertFalse(
-            SettingsViewModel.isGeminiQuotaMissingCredentialError(
-                ProviderClientError.parseFailure("bad response")
-            )
-        )
-    }
-
-    @MainActor
-    func testGeminiQuotaDisplayRowsUseRemainingFractionWhenAmountMissing() {
-        let viewModel = SettingsViewModel()
-        viewModel.geminiUserQuota = GeminiUserQuota(
-            buckets: [
-                GeminiQuotaBucket(
-                    modelId: "gemini-3-pro-preview",
-                    tokenType: "REQUESTS",
-                    remainingAmount: nil,
-                    remainingFraction: 0.75,
-                    resetTime: "2026-02-10T00:00:00Z"
-                )
-            ]
-        )
-
-        XCTAssertEqual(
-            viewModel.geminiQuotaDisplayRows,
-            [
-                GeminiQuotaDisplayRow(
-                    modelId: "gemini-3-pro-preview",
-                    detail: "25% used",
-                    resetTime: "2026-02-10T00:00:00Z"
-                )
-            ]
-        )
-    }
-
-    @MainActor
     func testBindLoadsCurrentProviderApiKeyFromCredentialStore() throws {
         let fixture = try makeFixture()
         var settings = try fixture.repository.loadSettings()
@@ -123,6 +68,25 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testSetProviderSetsAppleIntelligenceDisplayModel() throws {
+        let fixture = try makeFixture()
+        var settings = try fixture.repository.loadSettings()
+        settings.apiProvider = "GEMINI"
+        settings.defaultModel = "gemini-2.5-flash"
+        try fixture.repository.saveSettings(settings)
+
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.setProvider("APPLE_INTELLIGENCE")
+
+        XCTAssertEqual(viewModel.settings.defaultModel, AppleIntelligenceModelCatalog.displayModel)
+        XCTAssertEqual(
+            viewModel.settings.modelForProvider("APPLE_INTELLIGENCE"),
+            AppleIntelligenceModelCatalog.displayModel
+        )
+    }
+
+    @MainActor
     func testSetProviderReloadsAlibabaApiKeyDraftForSelectedProvider() throws {
         let fixture = try makeFixture()
         var settings = try fixture.repository.loadSettings()
@@ -137,23 +101,6 @@ final class SettingsViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.apiKeyDraft, "alibaba-key")
         XCTAssertEqual(viewModel.settings.defaultModel, AlibabaCodingPlanModelCatalog.defaultModel)
-    }
-
-    @MainActor
-    func testSetProviderReloadsQwenCredentialAndDefaultModel() throws {
-        let fixture = try makeFixture()
-        var settings = try fixture.repository.loadSettings()
-        settings.apiProvider = "OPENAI"
-        try fixture.repository.saveSettings(settings)
-        try fixture.credentials.setCredential("openai-key", for: .openAI)
-        try fixture.credentials.setCredential("qwen-token", for: .qwenCode)
-
-        let viewModel = SettingsViewModel()
-        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
-        viewModel.setProvider("QWEN_CODE")
-
-        XCTAssertEqual(viewModel.apiKeyDraft, "qwen-token")
-        XCTAssertEqual(viewModel.settings.defaultModel, QwenModelCatalog.defaultModel)
     }
 
     @MainActor
@@ -220,15 +167,13 @@ final class SettingsViewModelTests: XCTestCase {
         let providers = ProviderGateway(settingsRepository: settings, credentialStore: credentials)
         let modelService = OpenRouterModelService(credentialStore: credentials)
         let codexAuth = CodexAuthRepository(credentialStore: credentials)
-        let geminiAuth = GeminiAuthRepository(credentialStore: credentials)
         let repository = ChatRepository(
             conversations: conversations,
             settings: settings,
             providers: providers,
             credentialStore: credentials,
             modelService: modelService,
-            codexAuthRepository: codexAuth,
-            geminiAuthRepository: geminiAuth
+            codexAuthRepository: codexAuth
         )
 
         return (repository, credentials)

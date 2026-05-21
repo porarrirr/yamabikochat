@@ -4,13 +4,11 @@ import android.app.Application
 import com.porarri.yamabikochat.data.ChatRepository
 import com.porarri.yamabikochat.data.api.ApiRepository
 import com.porarri.yamabikochat.data.auth.CodexAuthRepository
-import com.porarri.yamabikochat.data.auth.GeminiAuthRepository
 import com.porarri.yamabikochat.data.attachments.AttachmentStorage
 import com.porarri.yamabikochat.data.database.DatabaseRepository
 import com.porarri.yamabikochat.data.files.FileProcessingRepository
 import com.porarri.yamabikochat.data.local.AppDatabase
 import com.porarri.yamabikochat.data.local.SettingsManager
-import com.porarri.yamabikochat.data.remote.GeminiCliProvider
 import com.porarri.yamabikochat.data.model.ModelRepository
 import com.porarri.yamabikochat.data.remote.GeminiProvider
 import com.porarri.yamabikochat.data.remote.LiteLlmPricingRepository
@@ -47,18 +45,15 @@ class MyApplication : Application() {
     private val pricingRepository by lazy { LiteLlmPricingRepository(RetrofitClient.liteLlmPricingInstance) }
     private val settingsManager by lazy { SettingsManager.getInstance(applicationContext, chatDao) }
     private val codexAuthRepository by lazy { CodexAuthRepository(applicationContext) }
-    private val geminiAuthRepository by lazy { GeminiAuthRepository(applicationContext) }
     private val apiRepository by lazy {
         ApiRepository(
             geminiProvider = GeminiProvider(geminiApiService),
-            geminiCliProvider = GeminiCliProvider(),
             openRouterProvider = OpenRouterProvider(openRouterApiService),
             openAiProvider = OpenAiProvider { baseUrl -> RetrofitClient.makeOpenAiInstance(baseUrl) },
             codexResponsesProvider = CodexResponsesProvider(applicationContext),
             zaiProvider = ZaiProvider(zaiApiService),
             settingsManager = settingsManager,
             codexAuthRepository = codexAuthRepository,
-            geminiAuthRepository = geminiAuthRepository,
             modelRepository = modelRepository,
             settingsProvider = { databaseRepository.getLatestSettings() }
         )
@@ -73,7 +68,6 @@ class MyApplication : Application() {
             fileProcessingRepository = fileRepository,
             modelRepository = modelRepository,
             codexAuthRepository = codexAuthRepository,
-            geminiAuthRepository = geminiAuthRepository,
             pricingRepository = pricingRepository
         )
     }

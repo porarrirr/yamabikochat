@@ -23,32 +23,7 @@ final class ChatRepository {
     private let credentialStore: SecureCredentialStore
     private let modelService: OpenRouterModelService
     private let codexAuthRepository: CodexAuthRepository
-    private let geminiAuthRepository: GeminiAuthRepository
-    private let qwenAuthRepository: QwenAuthRepository
     private let pricingRepository: any LiteLlmPricingEstimating
-
-    convenience init(
-        conversations: ConversationRepository,
-        settings: SettingsRepository,
-        providers: ProviderGateway,
-        credentialStore: SecureCredentialStore,
-        modelService: OpenRouterModelService,
-        codexAuthRepository: CodexAuthRepository,
-        geminiAuthRepository: GeminiAuthRepository,
-        pricingRepository: any LiteLlmPricingEstimating = LiteLlmPricingRepository()
-    ) {
-        self.init(
-            conversations: conversations,
-            settings: settings,
-            providers: providers,
-            credentialStore: credentialStore,
-            modelService: modelService,
-            codexAuthRepository: codexAuthRepository,
-            geminiAuthRepository: geminiAuthRepository,
-            qwenAuthRepository: QwenAuthRepository(credentialStore: credentialStore),
-            pricingRepository: pricingRepository
-        )
-    }
 
     init(
         conversations: ConversationRepository,
@@ -57,8 +32,6 @@ final class ChatRepository {
         credentialStore: SecureCredentialStore,
         modelService: OpenRouterModelService,
         codexAuthRepository: CodexAuthRepository,
-        geminiAuthRepository: GeminiAuthRepository,
-        qwenAuthRepository: QwenAuthRepository,
         pricingRepository: any LiteLlmPricingEstimating = LiteLlmPricingRepository()
     ) {
         self.conversations = conversations
@@ -67,8 +40,6 @@ final class ChatRepository {
         self.credentialStore = credentialStore
         self.modelService = modelService
         self.codexAuthRepository = codexAuthRepository
-        self.geminiAuthRepository = geminiAuthRepository
-        self.qwenAuthRepository = qwenAuthRepository
         self.pricingRepository = pricingRepository
     }
 
@@ -509,54 +480,7 @@ final class ChatRepository {
                 }
             }
         } catch {
-            guard shouldRetryGeminiWithGenerate(provider: provider, error: error) else {
-                throw error
-            }
-
-            DiagnosticsLogger.log(
-                "Gemini stream empty; retrying non-streaming generate",
-                category: .network,
-                metadata: [
-                    "provider": provider.rawValue,
-                    "model": request.model,
-                    "assistantMessageId": String(assistantMessageId)
-                ],
-                error: error
-            )
-
-            do {
-                let fallback = try await providers.generate(request: request, provider: provider)
-                fullText = fallback.text
-                try conversations.updateMessageText(messageId: assistantMessageId, text: fullText)
-
-                if let reasoning = fallback.reasoningSummary, !reasoning.isEmpty {
-                    reasoningText = reasoning
-                    try conversations.saveThinking(messageId: assistantMessageId, stream: reasoningText)
-                }
-                finalUsage = fallback.usage
-                onStreamEvent?(.completed(fallback))
-                DiagnosticsLogger.log(
-                    "Gemini non-streaming fallback succeeded",
-                    category: .network,
-                    metadata: [
-                        "provider": provider.rawValue,
-                        "model": request.model,
-                        "assistantMessageId": String(assistantMessageId)
-                    ]
-                )
-            } catch {
-                DiagnosticsLogger.log(
-                    "Gemini non-streaming fallback failed",
-                    category: .network,
-                    metadata: [
-                        "provider": provider.rawValue,
-                        "model": request.model,
-                        "assistantMessageId": String(assistantMessageId)
-                    ],
-                    error: error
-                )
-                throw error
-            }
+            throw error
         }
 
         await recordTokenUsageIfAvailable(
@@ -628,54 +552,7 @@ final class ChatRepository {
                 }
             }
         } catch {
-            guard shouldRetryGeminiWithGenerate(provider: provider, error: error) else {
-                throw error
-            }
-
-            DiagnosticsLogger.log(
-                "Gemini stream empty during regeneration; retrying non-streaming generate",
-                category: .network,
-                metadata: [
-                    "provider": provider.rawValue,
-                    "model": request.model,
-                    "variantId": String(variantId)
-                ],
-                error: error
-            )
-
-            do {
-                let fallback = try await providers.generate(request: request, provider: provider)
-                fullText = fallback.text
-                try conversations.updateMessageVariantText(variantId: variantId, text: fullText)
-
-                if let reasoning = fallback.reasoningSummary, !reasoning.isEmpty {
-                    reasoningText = reasoning
-                    try conversations.saveMessageVariantThinking(variantId: variantId, stream: reasoningText)
-                }
-                finalUsage = fallback.usage
-                onStreamEvent?(.completed(fallback))
-                DiagnosticsLogger.log(
-                    "Gemini non-streaming fallback succeeded for regeneration",
-                    category: .network,
-                    metadata: [
-                        "provider": provider.rawValue,
-                        "model": request.model,
-                        "variantId": String(variantId)
-                    ]
-                )
-            } catch {
-                DiagnosticsLogger.log(
-                    "Gemini non-streaming fallback failed for regeneration",
-                    category: .network,
-                    metadata: [
-                        "provider": provider.rawValue,
-                        "model": request.model,
-                        "variantId": String(variantId)
-                    ],
-                    error: error
-                )
-                throw error
-            }
+            throw error
         }
 
         await recordTokenUsageIfAvailable(
@@ -878,9 +755,16 @@ final class ChatRepository {
         return modelRow
     }
 
-    func prepareAutoConversationSeedMessage(conversationId: Int64, text: String) throws {
+    func sendUserMessageOnly(
+        conversationId: Int64,
+        text: String,
+        attachments: [String] = []
+    ) throws {
         let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return }
+        let normalizedAttachments = attachments.filter {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        guard !normalized.isEmpty || !normalizedAttachments.isEmpty else { return }
         guard var conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
         }
@@ -890,14 +774,18 @@ final class ChatRepository {
                 conversationId: conversationId,
                 role: "user",
                 text: normalized,
-                attachmentsJSON: "[]"
+                attachmentsJSON: encodeArray(normalizedAttachments)
             )
         )
         try updateConversationTitleIfNeeded(
             conversation: &conversation,
-            firstPrompt: normalized,
+            firstPrompt: normalized.isEmpty ? normalizedAttachments.first ?? "" : normalized,
             isFirstMessage: isFirstMessage
         )
+    }
+
+    func prepareAutoConversationSeedMessage(conversationId: Int64, text: String) throws {
+        try sendUserMessageOnly(conversationId: conversationId, text: text)
     }
 
     @discardableResult
@@ -1025,14 +913,6 @@ final class ChatRepository {
         codexAuthRepository.state
     }
 
-    func geminiAuthStatePublisher() -> AnyPublisher<GeminiAuthState, Never> {
-        geminiAuthRepository.state
-    }
-
-    func qwenAuthStatePublisher() -> AnyPublisher<QwenAuthState, Never> {
-        qwenAuthRepository.state
-    }
-
     func loginCodexAuth(
         apiKey: String?,
         accessToken: String?,
@@ -1063,104 +943,6 @@ final class ChatRepository {
 
     func retrieveCodexAuthUsage() async -> Result<CodexUsageStatus, Error> {
         await codexAuthRepository.retrieveUsageStatus()
-    }
-
-    func loginGeminiAuth(
-        accessToken: String,
-        projectId: String?,
-        email: String?,
-        userTier: String?,
-        userTierName: String?
-    ) async -> Result<GeminiAuthState, Error> {
-        await geminiAuthRepository.login(
-            accessToken: accessToken,
-            projectId: projectId,
-            email: email,
-            userTier: userTier,
-            userTierName: userTierName
-        )
-    }
-
-    func loginGeminiAuthWithBrowser() async -> Result<GeminiAuthState, Error> {
-        await geminiAuthRepository.loginWithBrowser()
-    }
-
-    func isGeminiOAuthClientConfigured() -> Bool {
-        geminiAuthRepository.isOAuthClientConfigured()
-    }
-
-    func hasImportedGeminiOAuthClientConfig() -> Bool {
-        geminiAuthRepository.hasImportedOAuthClientConfig()
-    }
-
-    func importedGeminiOAuthClientConfig() -> GeminiOAuthClientConfig? {
-        geminiAuthRepository.importedOAuthClientConfig()
-    }
-
-    func currentGeminiCliCompatibility() -> GeminiCliResolvedCompatibility {
-        geminiAuthRepository.currentGeminiCliCompatibility()
-    }
-
-    func syncGeminiCliCompatibilityFromUpstream() async -> Result<GeminiCliRemoteCompatibility, Error> {
-        await geminiAuthRepository.syncGeminiCliCompatibilityFromUpstream()
-    }
-
-    func importGeminiOAuthClientConfig(fileURL: URL) -> Result<GeminiOAuthClientConfig, Error> {
-        do {
-            return .success(try geminiAuthRepository.importOAuthClientConfig(fileURL: fileURL))
-        } catch {
-            return .failure(error)
-        }
-    }
-
-    func saveGeminiOAuthClientConfig(clientID: String, clientSecret: String) -> Result<GeminiOAuthClientConfig, Error> {
-        do {
-            return .success(
-                try geminiAuthRepository.saveOAuthClientConfig(
-                    clientID: clientID,
-                    clientSecret: clientSecret
-                )
-            )
-        } catch {
-            return .failure(error)
-        }
-    }
-
-    func clearImportedGeminiOAuthClientConfig() -> Bool {
-        do {
-            try geminiAuthRepository.clearImportedOAuthClientConfig()
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    func logoutGeminiAuth() async -> Result<GeminiAuthState, Error> {
-        await geminiAuthRepository.logout()
-    }
-
-    func refreshGeminiAuth(force: Bool = false) async -> Result<GeminiAuthState, Error> {
-        await geminiAuthRepository.refreshIfNeeded(force: force)
-    }
-
-    func retrieveGeminiAuthQuota() async -> Result<GeminiUserQuota, Error> {
-        await geminiAuthRepository.retrieveUserQuota()
-    }
-
-    func saveGeminiAuthProjectId(_ projectId: String?) -> Bool {
-        geminiAuthRepository.saveProjectId(projectId)
-    }
-
-    func loginQwenCodeWithBrowser() async -> Result<QwenAuthState, Error> {
-        await qwenAuthRepository.loginWithBrowser()
-    }
-
-    func logoutQwenCode() async -> Result<QwenAuthState, Error> {
-        await qwenAuthRepository.logout()
-    }
-
-    func refreshQwenCode(force: Bool = false) async -> Result<QwenAuthState, Error> {
-        await qwenAuthRepository.refreshIfNeeded(force: force)
     }
 
     func saveOpenAiCompatApiKey(name: String, apiKey: String?) -> Bool {
@@ -1610,16 +1392,6 @@ final class ChatRepository {
         }
     }
 
-    private func shouldRetryGeminiWithGenerate(provider: LLMProvider, error: Error) -> Bool {
-        guard provider == .geminiAuth else { return false }
-        guard case let ProviderClientError.parseFailure(reason) = error else { return false }
-        let normalized = reason.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if normalized == GeminiProviderClient.noUsableStreamDataReason.lowercased() {
-            return true
-        }
-        return normalized.contains("no usable data")
-    }
-
     private func buildSingleTurnRequest(
         model: String,
         text: String,
@@ -1660,7 +1432,7 @@ final class ChatRepository {
     ) -> [ProviderTool] {
         let overrides = settings.toolOverride(for: context)
         switch provider.uppercased() {
-        case "GEMINI", "GEMINI_AUTH":
+        case "GEMINI":
             var tools: [ProviderTool] = []
             if overrides.googleSearch ?? settings.geminiGoogleSearchEnabled {
                 tools.append(ProviderTool(type: "google_search", payload: [:]))
@@ -1753,7 +1525,7 @@ final class ChatRepository {
                 metadata["codexVerbosity"] = verbosityToSend
             }
             return metadata
-        case "GEMINI", "GEMINI_AUTH":
+        case "GEMINI":
             let overrides = settings.thinkingOverride(for: context)
             let level = effectiveGeminiThinkingLevel(
                 settings: settings,
@@ -1794,7 +1566,7 @@ final class ChatRepository {
                 includeThoughts: true,
                 exclude: nil
             )
-        case "GEMINI", "GEMINI_AUTH":
+        case "GEMINI":
             let enabled = overrides.enabled ?? settings.geminiThinkingEnabled
             let budget = overrides.budget ?? settings.geminiThinkingBudget
             if GeminiModelUtils.isThinkingLevelSupported(model: model) {

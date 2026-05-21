@@ -83,7 +83,6 @@ final class ChatViewModelBranchTests: XCTestCase {
         )
         let modelService = OpenRouterModelService(credentialStore: credentials)
         let codexAuth = CodexAuthRepository(credentialStore: credentials)
-        let geminiAuth = GeminiAuthRepository(credentialStore: credentials)
 
         let repository = ChatRepository(
             conversations: conversations,
@@ -91,8 +90,7 @@ final class ChatViewModelBranchTests: XCTestCase {
             providers: providers,
             credentialStore: credentials,
             modelService: modelService,
-            codexAuthRepository: codexAuth,
-            geminiAuthRepository: geminiAuth
+            codexAuthRepository: codexAuth
         )
         return (repository, conversations)
     }

@@ -577,7 +577,7 @@ class ChatViewModel(
                         codexPromptCacheMinLength = preset.codexPromptCacheMinLength,
                         codexPromptCacheType = preset.codexPromptCacheType
                     )
-                    "GEMINI", "GEMINI_AUTH" -> currentSettings.copy(
+                    "GEMINI" -> currentSettings.copy(
                         thinkingEnabled = preset.thinkingEnabled,
                         thinkingBudget = preset.thinkingBudget,
                         geminiThinkingLevel = preset.thinkingLevel,

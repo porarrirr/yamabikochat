@@ -405,7 +405,7 @@ class ChatInteractionCoordinator(
         thinkingConfig: com.porarri.yamabikochat.data.remote.ThinkingConfig?
     ): GenerationConfig {
         val base = GenerationConfig(thinkingConfig = thinkingConfig)
-        if (provider.uppercase() != "GEMINI" && provider.uppercase() != "GEMINI_AUTH") return base
+        if (provider.uppercase() != "GEMINI") return base
 
         val responseMimeType = settings.geminiResponseMimeType.trim().takeIf { it.isNotEmpty() }
         val responseJsonSchema = settings.geminiResponseJsonSchema.trim().takeIf { it.isNotEmpty() }?.let { raw ->

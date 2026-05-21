@@ -31,7 +31,7 @@ fun ThinkingOverrideSection(
     val normalized = provider.uppercase()
     if (normalized == "OPENROUTER") return
 
-    val isGemini = normalized == "GEMINI" || normalized == "GEMINI_AUTH"
+    val isGemini = normalized == "GEMINI"
     val isCodex = normalized == "CODEX_AUTH"
     val isZai = normalized == "ZAI"
     val isGeminiThinkingLevel = isGemini && ModelUtils.isThinkingLevelSupported(model)

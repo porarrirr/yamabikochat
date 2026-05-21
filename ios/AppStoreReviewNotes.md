@@ -6,8 +6,7 @@ YamabikoChat is a bring-your-own-key chat client. The app does not sell digital 
 
 - The app can be opened and inspected without signing in.
 - API key providers require the reviewer's own test API key.
-- Gemini Auth, Codex Auth, and Qwen Code are optional provider connections. They open the provider's web authentication page only after the user taps Sign in.
-- Gemini Auth requires a user-supplied OAuth client configuration. The app does not ship placeholder OAuth credentials and does not import OAuth client secrets from GitHub upstream sync.
+- Codex Auth is an optional provider connection. It opens the provider's web authentication page only after the user taps Sign in.
 
 ## Privacy And Data Use
 
@@ -27,4 +26,4 @@ YamabikoChat is a bring-your-own-key chat client. The app does not sell digital 
 
 ## Privacy Manifest
 
-The app and share extension include privacy manifests. UserDefaults is declared for app settings and app-group handoff between the share extension and the main app.
+The app and share extension include privacy manifests. Share extension handoff uses an app-group file, not UserDefaults.

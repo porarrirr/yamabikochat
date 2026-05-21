@@ -38,7 +38,7 @@ object ToolingUtils {
         if (settings.isComputerUseEnabledFor(provider, context)) {
             providerTools.add(Tool(computer_use = ComputerUse()))
         }
-        if (provider.uppercase() == "GEMINI" || provider.uppercase() == "GEMINI_AUTH") {
+        if (provider.uppercase() == "GEMINI") {
             parseFunctionDeclarations(settings.geminiFunctionDeclarations)?.let { declarations ->
                 providerTools.add(Tool(function_declarations = declarations))
             }

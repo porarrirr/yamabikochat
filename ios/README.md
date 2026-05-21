@@ -13,15 +13,6 @@ xcodegen generate
 open YamabikoChat.xcodeproj
 ```
 
-## Gemini OAuth Setup
-- Edit `ios/YamabikoChat/App/Resources/GeminiAuthInfo.plist`.
-- Set:
-  - `GEMINI_OAUTH_CLIENT_ID`
-  - `GEMINI_OAUTH_CLIENT_SECRET`
-- Replace `__SET_ME__` placeholders with your Google OAuth client values before using `Gemini Auth (CLI)` sign-in.
-- Fallback: if `GeminiAuthInfo.plist` is missing, the app also reads the same keys from `ios/YamabikoChat/App/Resources/Info.plist`.
-- Alternatively, in iOS Settings screen (`Gemini Auth (CLI)` section), you can import a `.plist` file from Files app. Imported values are stored securely and override bundled plist values.
-
 ## Targets
 - `YamabikoChat`: iOS app (SwiftUI)
 - `YamabikoShareExtension`: Share extension for text import
@@ -33,7 +24,7 @@ open YamabikoChat.xcodeproj
 - Provider abstraction and all planned provider IDs
 - Keychain credential storage
 - Share extension payload handoff
-- Codex/Gemini auth state management
+- Codex auth state management
 - OpenRouter model directory/model endpoint retrieval
 - Attachment picker/validation/persistence
 

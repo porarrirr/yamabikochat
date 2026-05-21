@@ -32,14 +32,14 @@ final class AttachmentRepository {
                 return .tooLarge(sizeBytes: size)
             }
 
+            if isDangerous(url: url) {
+                return .dangerousFile
+            }
+
             if let type = values.contentType {
                 if !isSupported(type: type) {
                     return .unsupportedType
                 }
-            }
-
-            if isDangerous(url: url) {
-                return .dangerousFile
             }
             return .valid
         } catch {
