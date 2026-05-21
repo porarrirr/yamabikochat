@@ -32,6 +32,7 @@ struct ProviderHistoryMessage: Equatable {
     var role: String
     var text: String
     var attachments: [String]
+    var thinkingStream: String?
 }
 
 struct FullChatMessage: Identifiable, Equatable {

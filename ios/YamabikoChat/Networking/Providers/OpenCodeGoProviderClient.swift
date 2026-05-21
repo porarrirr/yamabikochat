@@ -10,6 +10,13 @@ struct OpenCodeGoProviderClient: ProviderClient {
     private struct ChatMessage: Encodable {
         var role: String
         var content: String
+        var reasoningContent: String?
+
+        enum CodingKeys: String, CodingKey {
+            case role
+            case content
+            case reasoningContent = "reasoning_content"
+        }
     }
 
     private struct ChatRequestBody: Encodable {
@@ -184,10 +191,17 @@ struct OpenCodeGoProviderClient: ProviderClient {
     private func mapChatMessages(_ messages: [ProviderRequestMessage], systemPrompt: String?) -> [ChatMessage] {
         var mapped: [ChatMessage] = []
         if let systemPrompt = systemPrompt?.trimmedNonEmpty {
-            mapped.append(ChatMessage(role: "system", content: systemPrompt))
+            mapped.append(ChatMessage(role: "system", content: systemPrompt, reasoningContent: nil))
         }
         for message in messages {
-            mapped.append(ChatMessage(role: normalizeChatRole(message.role), content: textWithAttachments(message)))
+            let role = normalizeChatRole(message.role)
+            mapped.append(
+                ChatMessage(
+                    role: role,
+                    content: textWithAttachments(message),
+                    reasoningContent: role == "assistant" ? message.reasoningContent?.trimmedNonEmpty : nil
+                )
+            )
         }
         return mapped
     }

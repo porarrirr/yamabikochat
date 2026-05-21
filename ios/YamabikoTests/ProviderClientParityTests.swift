@@ -1106,6 +1106,45 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(messages.first?["content"] as? String, "stable system")
     }
 
+    func testOpenCodeGoChatModelPassesBackAssistantReasoningContent() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "deepseek-v4-flash",
+            messages: [
+                ProviderRequestMessage(role: "user", content: "hello"),
+                ProviderRequestMessage(role: "assistant", content: "answer", reasoningContent: "kept reasoning"),
+                ProviderRequestMessage(role: "user", content: "again", reasoningContent: "ignored")
+            ],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENCODE_GO"]
+        )
+
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let bodyData = try XCTUnwrap(httpClient.lastRequest?.body)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages[1]["role"] as? String, "assistant")
+        XCTAssertEqual(messages[1]["reasoning_content"] as? String, "kept reasoning")
+        XCTAssertNil(messages[2]["reasoning_content"])
+    }
+
     func testOpenCodeGoMiniMaxModelUsesMessagesEndpoint() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("go-key", for: .openCodeGo)

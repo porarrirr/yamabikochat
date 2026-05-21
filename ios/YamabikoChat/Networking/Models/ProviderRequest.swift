@@ -50,11 +50,13 @@ struct ProviderRequestMessage: Codable, Sendable, Equatable, Identifiable {
     var role: String
     var content: String
     var attachments: [String]
+    var reasoningContent: String?
 
-    init(role: String, content: String, attachments: [String] = []) {
+    init(role: String, content: String, attachments: [String] = [], reasoningContent: String? = nil) {
         self.role = role
         self.content = content
         self.attachments = attachments
+        self.reasoningContent = reasoningContent
     }
 }
 

@@ -480,6 +480,12 @@ final class ChatRepository {
                 }
             }
         } catch {
+            if fullText.isEmpty && reasoningText.isEmpty {
+                try? conversations.updateMessageText(
+                    messageId: assistantMessageId,
+                    text: L10n.format("エラー: %@", error.localizedDescription)
+                )
+            }
             throw error
         }
 
@@ -552,6 +558,12 @@ final class ChatRepository {
                 }
             }
         } catch {
+            if fullText.isEmpty && reasoningText.isEmpty {
+                try? conversations.updateMessageVariantText(
+                    variantId: variantId,
+                    text: L10n.format("エラー: %@", error.localizedDescription)
+                )
+            }
             throw error
         }
 
@@ -576,7 +588,12 @@ final class ChatRepository {
         } else {
             let history = try conversations.fetchProviderHistory(conversationId: conversationId)
             resolvedMessages = history.map {
-                ProviderRequestMessage(role: $0.role, content: $0.text, attachments: $0.attachments)
+                ProviderRequestMessage(
+                    role: $0.role,
+                    content: $0.text,
+                    attachments: $0.attachments,
+                    reasoningContent: $0.thinkingStream
+                )
             }
         }
 
@@ -1771,7 +1788,12 @@ final class ChatRepository {
         modelSide: DualHistorySide
     ) throws -> [ProviderRequestMessage] {
         var messages: [ProviderRequestMessage] = try conversations.fetchProviderHistory(conversationId: conversationId).map {
-            ProviderRequestMessage(role: $0.role, content: $0.text, attachments: $0.attachments)
+            ProviderRequestMessage(
+                role: $0.role,
+                content: $0.text,
+                attachments: $0.attachments,
+                reasoningContent: $0.thinkingStream
+            )
         }
 
         let sortedDual = dualMessages.sorted {

@@ -486,7 +486,17 @@ final class ConversationRepository {
                 .filter(Column("conversationId") == conversationId)
                 .order(Column("createdAtMs").asc)
                 .fetchAll(db)
-            let variantsByMessageID = try fetchVariantsByBaseMessageIDs(db: db, messageIds: messages.compactMap(\.id))
+            let messageIds = messages.compactMap(\.id)
+            let variantsByMessageID = try fetchVariantsByBaseMessageIDs(db: db, messageIds: messageIds)
+            let thinkingRows: [ChatMessageThinking]
+            if messageIds.isEmpty {
+                thinkingRows = []
+            } else {
+                thinkingRows = try ChatMessageThinking
+                    .filter(messageIds.contains(Column("messageId")))
+                    .fetchAll(db)
+            }
+            let thinkingByMessageID = Dictionary(uniqueKeysWithValues: thinkingRows.map { ($0.messageId, $0.thinkingStream) })
 
             return messages.compactMap { message in
                 guard let messageId = message.id else { return nil }
@@ -495,7 +505,8 @@ final class ConversationRepository {
                     messageId: messageId,
                     role: message.role == "model" ? "assistant" : message.role,
                     text: resolved.text,
-                    attachments: decodeArray(resolved.attachmentsJSON)
+                    attachments: decodeArray(resolved.attachmentsJSON),
+                    thinkingStream: resolved.thinkingStream ?? thinkingByMessageID[messageId]
                 )
             }
         }
@@ -917,15 +928,15 @@ final class ConversationRepository {
     private func resolveMessageContent(
         message: ChatMessage,
         variantsByMessageID: [Int64: [ChatMessageVariant]]
-    ) -> (text: String, attachmentsJSON: String) {
+    ) -> (text: String, attachmentsJSON: String, thinkingStream: String?) {
         guard message.role == "model",
               message.selectedVariantIndex > 0,
               let messageId = message.id,
               let selectedVariant = variantsByMessageID[messageId]?.first(where: { $0.variantIndex == message.selectedVariantIndex })
         else {
-            return (message.text, message.attachmentsJSON)
+            return (message.text, message.attachmentsJSON, nil)
         }
-        return (selectedVariant.text, selectedVariant.attachmentsJSON)
+        return (selectedVariant.text, selectedVariant.attachmentsJSON, selectedVariant.thinkingStream)
     }
 
     private func fetchVariantsByBaseMessageIDs(db: Database, messageIds: [Int64]) throws -> [Int64: [ChatMessageVariant]] {

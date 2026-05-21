@@ -38,6 +38,42 @@ final class ConversationVariantSelectionTests: XCTestCase {
         XCTAssertEqual(history[1].text, "fixed answer")
     }
 
+    func testFetchProviderHistoryIncludesSelectedThinkingContent() throws {
+        let repository = try makeRepository()
+        let conversationId = try repository.createConversation(
+            title: "New Chat",
+            model: "deepseek-v4-flash",
+            provider: "OPENCODE_GO"
+        )
+
+        _ = try repository.insertMessage(
+            ChatMessage(
+                conversationId: conversationId,
+                role: "user",
+                text: "question"
+            )
+        )
+        let assistantId = try repository.insertMessage(
+            ChatMessage(
+                conversationId: conversationId,
+                role: "model",
+                text: "base answer"
+            )
+        )
+        try repository.saveThinking(messageId: assistantId, stream: "base reasoning")
+        let variant = try repository.insertMessageVariant(
+            baseMessageId: assistantId,
+            text: "variant answer",
+            thinkingStream: "variant reasoning"
+        )
+
+        try repository.updateMessageSelectedVariantIndex(messageId: assistantId, variantIndex: variant.variantIndex)
+        let history = try repository.fetchProviderHistory(conversationId: conversationId)
+
+        XCTAssertEqual(history.last?.text, "variant answer")
+        XCTAssertEqual(history.last?.thinkingStream, "variant reasoning")
+    }
+
     func testChangingSelectedVariantIndexUpdatesHistoryAndSummaryPreview() throws {
         let repository = try makeRepository()
         let conversationId = try repository.createConversation(
