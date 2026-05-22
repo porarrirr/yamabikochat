@@ -1,0 +1,3 @@
+"NSMicrophoneUsageDescription" = "YamabikoChat utilise le microphone uniquement pour la saisie vocale dans le composeur de messages.";
+"NSSpeechRecognitionUsageDescription" = "YamabikoChat utilise la reconnaissance vocale pour convertir votre voix en texte de message.";
+"NSPhotoLibraryUsageDescription" = "YamabikoChat utilise l'acces a la phototheque pour joindre des images selectionnees ou recentes aux conversations.";

@@ -1123,6 +1123,7 @@ private struct DualMessageCard: View {
                         )
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
                 .background(Color.chatDualCard)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -1172,24 +1173,23 @@ private struct DualSplitContainer<First: View, Second: View>: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            if layout == "HORIZONTAL" {
-                VStack(spacing: 8) {
-                    first()
-                        .frame(height: proxy.size.height * splitRatio, alignment: .top)
-                    second()
-                        .frame(height: proxy.size.height * (1 - splitRatio), alignment: .top)
-                }
-            } else {
-                HStack(spacing: 8) {
-                    first()
-                        .frame(width: proxy.size.width * splitRatio, alignment: .topLeading)
-                    second()
-                        .frame(width: proxy.size.width * (1 - splitRatio), alignment: .topLeading)
-                }
+        if layout == "HORIZONTAL" {
+            VStack(alignment: .leading, spacing: 8) {
+                first()
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                second()
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+        } else {
+            HStack(alignment: .top, spacing: 8) {
+                first()
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
+                    .layoutPriority(splitRatio)
+                second()
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
+                    .layoutPriority(1 - splitRatio)
             }
         }
-        .frame(minHeight: 220)
     }
 }
 
@@ -1205,6 +1205,9 @@ private struct DualResponsePane: View {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             if let thinking = thinking?.trimmingCharacters(in: .whitespacesAndNewlines),
                !thinking.isEmpty {
@@ -1238,6 +1241,7 @@ private struct DualResponsePane: View {
             )
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
         .padding(10)
         .background(Color.chatAssistantBubble)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))

@@ -5,8 +5,14 @@ YamabikoChat is a bring-your-own-key chat client. The app does not sell digital 
 ## Reviewer Access
 
 - The app can be opened and inspected without signing in.
-- API key providers require the reviewer's own test API key.
+- A demo API key is provided separately in App Store Connect App Review Notes. It is not embedded in the app or repository.
+- To test an API key provider: open Settings, choose API / Model, select the provider for the demo key, paste the key, and tap Save API key.
 - Codex Auth is an optional provider connection. It opens the provider's web authentication page only after the user taps Sign in.
+
+## China Mainland Availability
+
+- China mainland is not selected for this version in App Store Connect Availability.
+- OpenAI, Codex, and related provider references remain available only for storefronts where this functionality is permitted.
 
 ## Privacy And Data Use
 
