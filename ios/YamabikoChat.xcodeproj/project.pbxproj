@@ -37,6 +37,7 @@
 		315256D3D28F249024506BD1 /* CodexModelPresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A394920B0293DB363D2D092D /* CodexModelPresets.swift */; };
 		327128F66F2B0EDC0FADD90D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FDFB9E3E80818460DA5CDA5A /* PrivacyInfo.xcprivacy */; };
 		34A0432A76484628739B77F7 /* ProviderGatewayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7750E5527AF38A1C22312B /* ProviderGatewayTests.swift */; };
+		353AB5AA99651B0E3EB882F9 /* AnthropicMessagesStreamParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B58CAC4F6C3257E317CD02 /* AnthropicMessagesStreamParser.swift */; };
 		3841881EDF31F3A3A8ABE6CD /* AutoConversationTriggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F78E25D8F74B8F031620DD9 /* AutoConversationTriggerTests.swift */; };
 		3B85342C06EEE33A7A4FE9F7 /* SharePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E5EC327A302F432B8A4083 /* SharePayload.swift */; };
 		420A27134573C14D0C25C8D4 /* ProviderResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32CA8311076713E626B18DDF /* ProviderResponse.swift */; };
@@ -80,9 +81,11 @@
 		7E687F15AA9ED90CC7CABE7B /* ConversationListViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47940928BCA24ACBA0867772 /* ConversationListViewModelTests.swift */; };
 		7ECFAF36ED62E3488F99484B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5E76571802BD1DCDB737AD8 /* RootView.swift */; };
 		805DF4CF2E89A50E4719DF5D /* OpenAICompatibleProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3547BEA762DAAB71C17AC763 /* OpenAICompatibleProviderClient.swift */; };
+		845EF806947869EFB4FD8D8B /* ChatStreamingPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = C34472FD81A9F19E5F21FAC1 /* ChatStreamingPersistence.swift */; };
 		849D27D7F89B502B1F05E424 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B03D691C10949EDBFCACB34 /* L10n.swift */; };
 		85FC7B737290A7F2AEF76EA1 /* ChatRepositorySyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BB165FEAEAED23FC6FB6EF8 /* ChatRepositorySyncTests.swift */; };
 		8647CA0CCFA82D5C469B4853 /* tex-svg.js in Resources */ = {isa = PBXBuildFile; fileRef = 68417249749E064D56E23ACE /* tex-svg.js */; };
+		8F212E3FE830E6095D057FE1 /* ThinkingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3C59B2791747A64D7889D5C /* ThinkingViews.swift */; };
 		922866C08D7F9507A748D15E /* ChatRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81BEFD60BAA4BF4DA1A9286B /* ChatRepository.swift */; };
 		9621F9E7E3AD0FA8C8261E37 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7CB427210D89DB2E91F4D299 /* PrivacyInfo.xcprivacy */; };
 		962D63DC04F87D3F8083C055 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */; };
@@ -101,9 +104,11 @@
 		A6AEA588DA5A864F7350E68F /* StreamDeltaAccumulatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A12FA9662EE2E9EFA66419C /* StreamDeltaAccumulatorTests.swift */; };
 		A6DF3315E8E4B98E25854E2D /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB870EF06AABC09F6C08A140 /* SettingsScreen.swift */; };
 		A6FD4DD0049C2696FF7EA66B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2559F5CDE33F1C6606E7C9D0 /* Assets.xcassets */; };
+		AC275389D3D963097D95CF92 /* SSEPayloadAssemblerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C999B182C41BD1B53399513E /* SSEPayloadAssemblerTests.swift */; };
 		AF21AD63CE43E7C3CA3AE2A6 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E00C2C05164977DE56584F /* SettingsViewModel.swift */; };
 		B03BF199C336CBF54E9C64A9 /* AutoConversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 858FCD319B989915370556E1 /* AutoConversation.swift */; };
 		B0982733D890C510E2495D61 /* YamabikoWebKitSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C173F954D959718068C98D5A /* YamabikoWebKitSupport.swift */; };
+		B12BB2A788389FD0217237E4 /* OpenAICompatibleStreamParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D22DB8ED63FAA1B7D1AE907 /* OpenAICompatibleStreamParser.swift */; };
 		B5F815461384B7A783B82034 /* ProviderRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF047B35C735D75B50DB5BAD /* ProviderRequest.swift */; };
 		B8653F8C2F6E20B968D0F531 /* AppleIntelligenceModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAF47F360F8B2274F4651393 /* AppleIntelligenceModelCatalog.swift */; };
 		B913EC775D7E5EFB3A90770D /* ConversationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D8BA2FD667A80E1498097F0 /* ConversationRepository.swift */; };
@@ -253,6 +258,7 @@
 		5BB165FEAEAED23FC6FB6EF8 /* ChatRepositorySyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepositorySyncTests.swift; sourceTree = "<group>"; };
 		5BE2E023753B0AED403097DD /* ProviderAttachmentEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderAttachmentEncoder.swift; sourceTree = "<group>"; };
 		5C80771801FDEE9773008CF0 /* AuthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthModels.swift; sourceTree = "<group>"; };
+		5D22DB8ED63FAA1B7D1AE907 /* OpenAICompatibleStreamParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatibleStreamParser.swift; sourceTree = "<group>"; };
 		5E768138EA0DAB37FD43835D /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		6116B1ECB916D417EE404728 /* DualAutoModelSideForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualAutoModelSideForm.swift; sourceTree = "<group>"; };
 		63E141DD6CBBC6B7BD021B42 /* CodexUserAgentCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUserAgentCatalog.swift; sourceTree = "<group>"; };
@@ -266,13 +272,13 @@
 		7824746250F630294D76127F /* GeminiModelUtilsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiModelUtilsTests.swift; sourceTree = "<group>"; };
 		7AFADAD85FDF09DED54072D8 /* GeminiModelUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiModelUtils.swift; sourceTree = "<group>"; };
 		7BE885E298CFD7325CE27F89 /* HTTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPClient.swift; sourceTree = "<group>"; };
-		7CB427210D89DB2E91F4D299 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		7CB427210D89DB2E91F4D299 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		7CCB6D4DB2A9801E56AAC85B /* YamabikoUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = YamabikoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		81BEFD60BAA4BF4DA1A9286B /* ChatRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepository.swift; sourceTree = "<group>"; };
 		84A73C52D0DE4C504F3BA2DC /* YamabikoTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = YamabikoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		858FCD319B989915370556E1 /* AutoConversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversation.swift; sourceTree = "<group>"; };
 		868A2D4B962B0447C2B55BEF /* AnyEncodable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnyEncodable.swift; sourceTree = "<group>"; };
-		875043B225A7D44033DFD07D /* YamabikoShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = YamabikoShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		875043B225A7D44033DFD07D /* YamabikoShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = YamabikoShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		88E60BB6D93FEC509378FC79 /* GeminiProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiProviderClient.swift; sourceTree = "<group>"; };
 		89C94BED57FA07CCF9938A80 /* TokenUsageStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenUsageStats.swift; sourceTree = "<group>"; };
 		8A8AAD9C976A025E68725D68 /* YamabikoChat.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YamabikoChat.entitlements; sourceTree = "<group>"; };
@@ -296,7 +302,7 @@
 		A830A97218DEF74E9FA3C2AF /* AppConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConstants.swift; sourceTree = "<group>"; };
 		AAAE60022019121E086B1627 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		AAFB800375481AE013AF9773 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
-		AB8DAEE8D6609BEE6A100480 /* YamabikoChat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YamabikoChat.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB8DAEE8D6609BEE6A100480 /* YamabikoChat.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = YamabikoChat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B0CE95A107E6CAC3E8A4BC48 /* ChatRepositoryDualTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepositoryDualTests.swift; sourceTree = "<group>"; };
 		B0D9D7267F7551E4A0918A48 /* SettingsStringHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStringHelpers.swift; sourceTree = "<group>"; };
 		B3470CFFE969A9B32DA280E0 /* ProviderClientParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderClientParityTests.swift; sourceTree = "<group>"; };
@@ -309,14 +315,17 @@
 		C16A2CA6FB5AD4BB4C5E21CF /* AppStoreScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotTests.swift; sourceTree = "<group>"; };
 		C173F954D959718068C98D5A /* YamabikoWebKitSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YamabikoWebKitSupport.swift; sourceTree = "<group>"; };
 		C2DD044916B4D621321F9D61 /* AuthFlowReadySignal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthFlowReadySignal.swift; sourceTree = "<group>"; };
+		C34472FD81A9F19E5F21FAC1 /* ChatStreamingPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStreamingPersistence.swift; sourceTree = "<group>"; };
 		C470C52136C0F5806543DD92 /* CodexAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexAuthRepository.swift; sourceTree = "<group>"; };
 		C4E0AF024AFDE4AE3554BA68 /* AutoConversationMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversationMessage.swift; sourceTree = "<group>"; };
 		C60224F6EBCC6491A82E063D /* OpenCodeGoModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeGoModelCatalog.swift; sourceTree = "<group>"; };
+		C999B182C41BD1B53399513E /* SSEPayloadAssemblerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSEPayloadAssemblerTests.swift; sourceTree = "<group>"; };
 		CADA957F12D5C9DC605007FE /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/Localizable.strings; sourceTree = "<group>"; };
 		CAF47F360F8B2274F4651393 /* AppleIntelligenceModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIntelligenceModelCatalog.swift; sourceTree = "<group>"; };
 		CB82A26885ADF535C4F4C4BA /* YamabikoChatApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YamabikoChatApp.swift; sourceTree = "<group>"; };
 		CB85B3BEFED3BED3125DD003 /* CodexProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexProviderClient.swift; sourceTree = "<group>"; };
 		CEAC567088AC21851EC5F65E /* GeminiModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiModelCatalog.swift; sourceTree = "<group>"; };
+		D3C59B2791747A64D7889D5C /* ThinkingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingViews.swift; sourceTree = "<group>"; };
 		D43C7CD5EB5CC05FED3F202A /* DiagnosticsLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsLogger.swift; sourceTree = "<group>"; };
 		D5CFFE9C93FC61F9A3335A21 /* LocalAuthCallbackServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAuthCallbackServer.swift; sourceTree = "<group>"; };
 		D6012B61691A11858B0918E5 /* ConversationListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListViewModel.swift; sourceTree = "<group>"; };
@@ -324,6 +333,7 @@
 		DEE1F7C1D36E90F3AC5C8C74 /* ChatScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatScreen.swift; sourceTree = "<group>"; };
 		DF7CF673D03C83995B954FE0 /* ProviderEnumTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderEnumTests.swift; sourceTree = "<group>"; };
 		DF98E65F9A6271C2C6396E89 /* TokenUsageRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenUsageRecord.swift; sourceTree = "<group>"; };
+		E1B58CAC4F6C3257E317CD02 /* AnthropicMessagesStreamParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicMessagesStreamParser.swift; sourceTree = "<group>"; };
 		E1DCF3DC302B2389310C7088 /* OpenRouterModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterModels.swift; sourceTree = "<group>"; };
 		E24B2D0E1B8B5D9D45FF6161 /* MathMarkdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathMarkdownView.swift; sourceTree = "<group>"; };
 		E2819C18702B2FF815D12869 /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/Localizable.strings; sourceTree = "<group>"; };
@@ -333,7 +343,7 @@
 		F5E76571802BD1DCDB737AD8 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		F9196309A73916FCCD1FD7B0 /* StreamDeltaAccumulator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDeltaAccumulator.swift; sourceTree = "<group>"; };
 		FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
-		FDFB9E3E80818460DA5CDA5A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		FDFB9E3E80818460DA5CDA5A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		FF047B35C735D75B50DB5BAD /* ProviderRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderRequest.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -468,7 +478,9 @@
 		48115C8DD90C811ACE9BD2A3 /* Networking */ = {
 			isa = PBXGroup;
 			children = (
+				E1B58CAC4F6C3257E317CD02 /* AnthropicMessagesStreamParser.swift */,
 				7BE885E298CFD7325CE27F89 /* HTTPClient.swift */,
+				5D22DB8ED63FAA1B7D1AE907 /* OpenAICompatibleStreamParser.swift */,
 				5BE2E023753B0AED403097DD /* ProviderAttachmentEncoder.swift */,
 				957F74093A344F2E0FCCA1A0 /* SSEPayloadAssembler.swift */,
 				F9196309A73916FCCD1FD7B0 /* StreamDeltaAccumulator.swift */,
@@ -508,6 +520,7 @@
 			children = (
 				8F19C0624B1D761F882F6EBB /* AttachmentRepository.swift */,
 				81BEFD60BAA4BF4DA1A9286B /* ChatRepository.swift */,
+				C34472FD81A9F19E5F21FAC1 /* ChatStreamingPersistence.swift */,
 				2D8BA2FD667A80E1498097F0 /* ConversationRepository.swift */,
 				46EC372D26102F3D22DE62C6 /* LiteLlmPricingRepository.swift */,
 				9640B4B2BAEBA68E8C24CC6D /* OpenRouterModelService.swift */,
@@ -563,6 +576,7 @@
 				25418095A457767B82727AED /* SvgCodeExtractor.swift */,
 				2BD71648A1094DBA64CF4949 /* SvgPreviewCard.swift */,
 				0668334AA8F62D1F58F6B2F6 /* SvgPreviewWebView.swift */,
+				D3C59B2791747A64D7889D5C /* ThinkingViews.swift */,
 			);
 			path = Chat;
 			sourceTree = "<group>";
@@ -641,6 +655,7 @@
 				0034572985CEC32177512AA8 /* SettingsViewModelTests.swift */,
 				A4A9C812D9D73FCE829CA50E /* ShareImportFlowTests.swift */,
 				00BE476866FB6887397FFD9C /* SharePayloadStorageTests.swift */,
+				C999B182C41BD1B53399513E /* SSEPayloadAssemblerTests.swift */,
 				4A12FA9662EE2E9EFA66419C /* StreamDeltaAccumulatorTests.swift */,
 				0F0B056D22F60CAD49BD2587 /* SvgCodeExtractorTests.swift */,
 				51CC989E2C978463E973E22C /* SvgPreviewSanitizerTests.swift */,
@@ -884,6 +899,7 @@
 				E00E1BEED00E37AA48679DBC /* ProviderEnumTests.swift in Sources */,
 				34A0432A76484628739B77F7 /* ProviderGatewayTests.swift in Sources */,
 				1E008ECA9DD0FE0FB13EA463 /* ReasoningExtractionTests.swift in Sources */,
+				AC275389D3D963097D95CF92 /* SSEPayloadAssemblerTests.swift in Sources */,
 				9A4643F98030A10AB665492D /* SettingsViewModelTests.swift in Sources */,
 				0874DFCCF9B6CAF9750364AF /* ShareImportFlowTests.swift in Sources */,
 				1A99660ADDB01688C1C504C1 /* SharePayloadStorageTests.swift in Sources */,
@@ -912,6 +928,7 @@
 			files = (
 				EB84D0CE80232324476608EF /* AlibabaCodingPlanModelCatalog.swift in Sources */,
 				4AE260CE4DB0D3B686D40CEF /* AnthropicCompatibleProviderClient.swift in Sources */,
+				353AB5AA99651B0E3EB882F9 /* AnthropicMessagesStreamParser.swift in Sources */,
 				597408051A74D4E377CF101C /* AnyEncodable.swift in Sources */,
 				0C3BB6177F58002E5A66449A /* AppConstants.swift in Sources */,
 				77B7FED703C2BBAC4947F8E8 /* AppContainer.swift in Sources */,
@@ -939,6 +956,7 @@
 				28F0BE4462B7BE4BDADB89DC /* ChatProject.swift in Sources */,
 				922866C08D7F9507A748D15E /* ChatRepository.swift in Sources */,
 				03532725DD2B55909FB526E9 /* ChatScreen.swift in Sources */,
+				845EF806947869EFB4FD8D8B /* ChatStreamingPersistence.swift in Sources */,
 				06872ECCFAD394292A44A8F7 /* ChatViewModel.swift in Sources */,
 				E27A6862F9650B6AA7DBDCA4 /* ChatWorkspaceScreen.swift in Sources */,
 				7AA55F94D1771B63F74DAE98 /* CodexAuthRepository.swift in Sources */,
@@ -968,6 +986,7 @@
 				9BD931169E39B228157F7725 /* MathMarkdownView.swift in Sources */,
 				4AF8DCF064E32B3DD82E1D65 /* ModelPreset.swift in Sources */,
 				805DF4CF2E89A50E4719DF5D /* OpenAICompatibleProviderClient.swift in Sources */,
+				B12BB2A788389FD0217237E4 /* OpenAICompatibleStreamParser.swift in Sources */,
 				10D322B8F73405F360B85BBE /* OpenCodeGoModelCatalog.swift in Sources */,
 				11741302C42E0079EDC6E0D4 /* OpenCodeGoProviderClient.swift in Sources */,
 				B9CBE41E5D9DEFC79C81DE9C /* OpenRouterModelService.swift in Sources */,
@@ -995,6 +1014,7 @@
 				2F385FBF449F22A1560291F6 /* SvgCodeExtractor.swift in Sources */,
 				9956FF9B0D965DD8D01BA6BA /* SvgPreviewCard.swift in Sources */,
 				696478CAFDBA3D897D3DE015 /* SvgPreviewWebView.swift in Sources */,
+				8F212E3FE830E6095D057FE1 /* ThinkingViews.swift in Sources */,
 				23EDCEE4A45503E5C672C366 /* TokenUsageRecord.swift in Sources */,
 				CE67F1C6513857BEBB98C462 /* TokenUsageStats.swift in Sources */,
 				571C85C9DE0C54A8D05F13A3 /* YamabikoChatApp.swift in Sources */,
@@ -1141,7 +1161,6 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = YamabikoShareExtension/YamabikoShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 77V64TWCFD;
 				INFOPLIST_FILE = YamabikoShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1161,7 +1180,6 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = YamabikoShareExtension/YamabikoShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 77V64TWCFD;
 				INFOPLIST_FILE = YamabikoShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1183,7 +1201,6 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_LANGUAGE = en;
-				DEVELOPMENT_TEAM = 77V64TWCFD;
 				INFOPLIST_FILE = YamabikoChat/App/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1334,7 +1351,6 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_LANGUAGE = en;
-				DEVELOPMENT_TEAM = 77V64TWCFD;
 				INFOPLIST_FILE = YamabikoChat/App/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

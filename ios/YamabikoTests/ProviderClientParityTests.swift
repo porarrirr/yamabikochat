@@ -1452,6 +1452,68 @@ final class ProviderClientParityTests: XCTestCase {
         }
     }
 
+    func testOpenCodeGoDeepSeekStreamParsesBackToBackDataLines() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"choices":[{"delta":{"reasoning_content":"考"}}]}"#)
+                continuation.yield(#"data: {"choices":[{"delta":{"reasoning_content":"え"}}]}"#)
+                continuation.yield(#"data: {"choices":[{"delta":{"content":"答"}}]}"#)
+                continuation.yield(#"data: {"choices":[{"delta":{"content":"え"}}]}"#)
+                continuation.yield("data: [DONE]")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "deepseek-v4-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hi")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENCODE_GO"]
+        )
+
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var textDeltas: [String] = []
+        var reasoningDeltas: [String] = []
+        var final: ProviderResponse?
+        for try await event in stream {
+            switch event {
+            case let .textDelta(delta):
+                textDeltas.append(delta)
+            case let .reasoningDelta(delta):
+                reasoningDeltas.append(delta)
+            case let .completed(response):
+                final = response
+            default:
+                break
+            }
+        }
+
+        XCTAssertEqual(reasoningDeltas, ["考", "え"])
+        XCTAssertEqual(textDeltas, ["答", "え"])
+        XCTAssertEqual(final?.text, "答え")
+        XCTAssertEqual(final?.reasoningSummary, "考え")
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(captured.body)) as? [String: Any])
+        XCTAssertEqual(body["stream"] as? Bool, true)
+        let streamOptions = try XCTUnwrap(body["stream_options"] as? [String: Any])
+        XCTAssertEqual(streamOptions["include_usage"] as? Bool, true)
+    }
+
     func testOpenCodeGoChatStreamParsesReasoningContent() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("go-key", for: .openCodeGo)

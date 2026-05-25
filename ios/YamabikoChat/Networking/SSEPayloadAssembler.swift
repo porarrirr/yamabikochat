@@ -10,14 +10,48 @@ struct SSEPayloadAssembler {
             return []
         }
         if trimmed.isEmpty {
+            // A single complete stream chunk may arrive without a following blank line (OpenCode Go).
+            if dataLines.count == 1,
+               Self.looksLikeCompleteJSONEvent(dataLines[0]) {
+                return []
+            }
             return flush()
+        }
+        if trimmed.hasPrefix("{") || trimmed.hasPrefix("[") {
+            var payloads = flush()
+            payloads.append(trimmed)
+            return payloads
         }
         guard trimmed.hasPrefix("data:") else {
             return []
         }
         let payload = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+        guard !payload.isEmpty else {
+            return []
+        }
+        // Some gateways (incl. OpenCode Go / DeepSeek) omit the blank line between events.
+        var payloads: [String] = []
+        if !dataLines.isEmpty {
+            let pending = dataLines.joined(separator: "\n")
+            if Self.looksLikeCompleteJSONEvent(pending) {
+                // Emit the previous event before buffering the next `data:` line.
+                payloads.append(contentsOf: flush())
+            }
+        }
         dataLines.append(payload)
-        return []
+        return payloads
+    }
+
+    private static func looksLikeCompleteJSONEvent(_ raw: String) -> Bool {
+        guard raw.first == "{",
+              let data = raw.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return false
+        }
+        // Multiline `data:` fragments can be valid JSON but belong to one event; only split
+        // back-to-back provider stream chunks (OpenAI choices, Anthropic type, Gemini candidates).
+        return object["choices"] != nil || object["type"] != nil || object["candidates"] != nil
     }
 
     mutating func flushRemaining() -> [String] {

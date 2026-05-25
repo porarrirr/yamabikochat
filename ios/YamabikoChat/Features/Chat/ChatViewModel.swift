@@ -32,6 +32,7 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var activeSystemPromptPresetName: String?
     @Published private(set) var contextUsageLabel: String?
     @Published private(set) var canAttachImages: Bool = false
+    @Published private(set) var streamingSnapshots: [Int64: ChatStreamingSnapshot] = [:]
 
     let speechService = SpeechRecognitionService()
 
@@ -173,10 +174,6 @@ final class ChatViewModel: ObservableObject {
                 try? FileManager.default.removeItem(at: url)
             }
         }
-        guard canAttachImages else {
-            errorMessage = L10n.text("このモデルは画像入力に対応していません。")
-            return
-        }
         guard let attachmentRepository else {
             errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             DiagnosticsLogger.log(
@@ -188,6 +185,10 @@ final class ChatViewModel: ObservableObject {
         }
         switch attachmentRepository.validate(url: url) {
         case .valid:
+            if attachmentRepository.requiresVision(url: url), !canAttachImages {
+                errorMessage = L10n.text("このモデルは画像入力に対応していません。")
+                return
+            }
             do {
                 let persistedURL = try attachmentRepository.persistAttachment(url: url)
                 attachments.append(
@@ -298,6 +299,11 @@ final class ChatViewModel: ObservableObject {
                             Task { @MainActor in
                                 self?.autoConversationStatus = delta.isEmpty ? self?.autoConversationStatus : L10n.text("推論中...")
                             }
+                        },
+                        onStreamingSnapshot: { [weak self] snapshot in
+                            Task { @MainActor in
+                                self?.handleStreamingSnapshot(snapshot)
+                            }
                         }
                     )
                 }
@@ -310,6 +316,23 @@ final class ChatViewModel: ObservableObject {
                     error: error
                 )
             }
+        }
+    }
+
+    func streamingSnapshot(for messageId: Int64) -> ChatStreamingSnapshot? {
+        streamingSnapshots[messageId]
+    }
+
+    func isMessageStreaming(_ messageId: Int64) -> Bool {
+        guard isSending, let snapshot = streamingSnapshots[messageId] else { return false }
+        return !snapshot.isFinal
+    }
+
+    private func handleStreamingSnapshot(_ snapshot: ChatStreamingSnapshot) {
+        if snapshot.isFinal {
+            streamingSnapshots.removeValue(forKey: snapshot.targetId)
+        } else {
+            streamingSnapshots[snapshot.targetId] = snapshot
         }
     }
 
@@ -347,6 +370,11 @@ final class ChatViewModel: ObservableObject {
                         guard case let .reasoningDelta(delta) = event else { return }
                         Task { @MainActor in
                             self?.autoConversationStatus = delta.isEmpty ? self?.autoConversationStatus : L10n.text("推論中...")
+                        }
+                    },
+                    onStreamingSnapshot: { [weak self] snapshot in
+                        Task { @MainActor in
+                            self?.handleStreamingSnapshot(snapshot)
                         }
                     }
                 )

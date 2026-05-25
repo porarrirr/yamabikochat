@@ -19,17 +19,27 @@ struct OpenCodeGoProviderClient: ProviderClient {
         }
     }
 
+    private struct ChatStreamOptions: Encodable {
+        var includeUsage: Bool = true
+
+        enum CodingKeys: String, CodingKey {
+            case includeUsage = "include_usage"
+        }
+    }
+
     private struct ChatRequestBody: Encodable {
         var model: String
         var messages: [ChatMessage]
         var stream: Bool
         var promptCacheKey: String?
+        var streamOptions: ChatStreamOptions?
 
         enum CodingKeys: String, CodingKey {
             case model
             case messages
             case stream
             case promptCacheKey = "prompt_cache_key"
+            case streamOptions = "stream_options"
         }
     }
 
@@ -150,7 +160,8 @@ struct OpenCodeGoProviderClient: ProviderClient {
                 embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
             ),
             stream: stream,
-            promptCacheKey: promptCacheKey(for: request, route: route)
+            promptCacheKey: promptCacheKey(for: request, route: route),
+            streamOptions: stream ? ChatStreamOptions() : nil
         )
         var headers = [
             "Authorization": "Bearer \(apiKey)",
@@ -282,8 +293,8 @@ struct OpenCodeGoProviderClient: ProviderClient {
               let message = choices.first?["message"] as? [String: Any] else {
             throw ProviderClientError.parseFailure("OpenCode Go chat response is missing choices[0].message")
         }
-        let content = openAICompatibleText(from: message["content"])
-        let reasoning = reasoningText(from: message)
+        let content = OpenAICompatibleStreamParser.openAICompatibleText(from: message["content"])
+        let reasoning = OpenAICompatibleStreamParser.reasoningText(from: message)
         return ProviderResponse(
             text: content,
             reasoningSummary: reasoning,
@@ -334,44 +345,12 @@ struct OpenCodeGoProviderClient: ProviderClient {
             if let usage = parseUsage(root["usage"] as? [String: Any]) {
                 latestUsage = usage
             }
-            guard let choices = root["choices"] as? [[String: Any]], let choice = choices.first else { continue }
-
-            if let delta = choice["delta"] as? [String: Any] {
-                if let incoming = reasoningText(from: delta) {
-                    let reasoningDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullReasoning, incoming: incoming)
-                    if !reasoningDelta.isEmpty {
-                        fullReasoning += reasoningDelta
-                        continuation.yield(.reasoningDelta(reasoningDelta))
-                    }
-                }
-
-                let incomingContent = openAICompatibleText(from: delta["content"])
-                if !incomingContent.isEmpty {
-                    let textDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: incomingContent)
-                    if !textDelta.isEmpty {
-                        fullText += textDelta
-                        continuation.yield(.textDelta(textDelta))
-                    }
-                }
-            }
-
-            if let message = choice["message"] as? [String: Any] {
-                if let incoming = reasoningText(from: message) {
-                    let reasoningDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullReasoning, incoming: incoming)
-                    if !reasoningDelta.isEmpty {
-                        fullReasoning += reasoningDelta
-                        continuation.yield(.reasoningDelta(reasoningDelta))
-                    }
-                }
-
-                let incomingContent = openAICompatibleText(from: message["content"])
-                if !incomingContent.isEmpty {
-                    let textDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: incomingContent)
-                    if !textDelta.isEmpty {
-                        fullText += textDelta
-                        continuation.yield(.textDelta(textDelta))
-                    }
-                }
+            for event in OpenAICompatibleStreamParser.events(
+                fromPayload: dataChunk,
+                fullText: &fullText,
+                fullReasoning: &fullReasoning
+            ) {
+                continuation.yield(event)
             }
         }
         continuation.yield(
@@ -413,8 +392,8 @@ struct OpenCodeGoProviderClient: ProviderClient {
             if let usage = parseMessagesStreamUsage(root) {
                 latestUsage = usage
             }
-            if let event = parseMessagesStreamChunk(
-                root,
+            if let event = AnthropicMessagesStreamParser.event(
+                from: root,
                 fullText: &fullText,
                 fullReasoning: &fullReasoning
             ) {
@@ -426,7 +405,7 @@ struct OpenCodeGoProviderClient: ProviderClient {
                 case let .completed(response):
                     let final = ProviderResponse(
                         text: response.text,
-                        reasoningSummary: response.reasoningSummary,
+                        reasoningSummary: response.reasoningSummary?.trimmedNonEmpty,
                         raw: response.raw,
                         usage: response.usage ?? latestUsage
                     )
@@ -462,84 +441,12 @@ struct OpenCodeGoProviderClient: ProviderClient {
         return nil
     }
 
-    private func parseMessagesStreamChunk(
-        _ root: [String: Any],
-        fullText: inout String,
-        fullReasoning: inout String
-    ) -> ProviderStreamEvent? {
-        let type = (root["type"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        switch type {
-        case "content_block_delta":
-            guard let delta = root["delta"] as? [String: Any] else { return nil }
-            switch (delta["type"] as? String)?.lowercased() {
-            case "text_delta":
-                guard let incoming = delta["text"] as? String, !incoming.isEmpty else { return nil }
-                let textDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: incoming)
-                guard !textDelta.isEmpty else { return nil }
-                fullText += textDelta
-                return .textDelta(textDelta)
-            case "thinking_delta":
-                guard let incoming = delta["thinking"] as? String, !incoming.isEmpty else { return nil }
-                let reasoningDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullReasoning, incoming: incoming)
-                guard !reasoningDelta.isEmpty else { return nil }
-                fullReasoning += reasoningDelta
-                return .reasoningDelta(reasoningDelta)
-            default:
-                return nil
-            }
-        case "message_stop":
-            return .completed(
-                ProviderResponse(
-                    text: fullText,
-                    reasoningSummary: fullReasoning.trimmedNonEmpty,
-                    raw: nil,
-                    usage: nil
-                )
-            )
-        default:
-            return nil
-        }
-    }
-
     private func extractText(from rawContent: Any?) -> [String] {
         guard let blocks = rawContent as? [[String: Any]] else { return [] }
         return blocks.compactMap { block in
             guard (block["type"] as? String)?.lowercased() == "text" else { return nil }
             return (block["text"] as? String)?.trimmedNonEmpty
         }
-    }
-
-    private func openAICompatibleText(from value: Any?) -> String {
-        guard let value else { return "" }
-        if let text = value as? String {
-            return text
-        }
-        if let number = value as? NSNumber {
-            return number.stringValue
-        }
-        guard let parts = value as? [Any] else { return "" }
-        return parts.compactMap { part -> String? in
-            if let text = part as? String {
-                return text
-            }
-            guard let block = part as? [String: Any] else { return nil }
-            let type = (block["type"] as? String)?.lowercased()
-            if let type, !["input_text", "output_text", "text"].contains(type) {
-                return nil
-            }
-            return block["text"] as? String
-        }
-        .joined()
-    }
-
-    private func reasoningText(from object: [String: Any]) -> String? {
-        for key in ["reasoning_content", "reasoning", "thinking"] {
-            let incoming = openAICompatibleText(from: object[key])
-            if let trimmed = incoming.trimmedNonEmpty {
-                return trimmed
-            }
-        }
-        return nil
     }
 
     private func parseUsage(_ object: [String: Any]?) -> ProviderUsage? {

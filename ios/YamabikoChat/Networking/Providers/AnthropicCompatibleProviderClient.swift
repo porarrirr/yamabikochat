@@ -387,46 +387,30 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         latestUsage: inout ProviderUsage?
     ) -> ProviderStreamEvent? {
         let type = (root["type"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
-        switch type {
-        case "content_block_start":
-            guard let block = root["content_block"] as? [String: Any],
-                  (block["type"] as? String)?.lowercased() == "mcp_tool_use" else {
-                return nil
-            }
+        if type == "content_block_start",
+           let block = root["content_block"] as? [String: Any],
+           (block["type"] as? String)?.lowercased() == "mcp_tool_use" {
             let name = (block["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
             return .toolCallDelta(name?.ifBlank("mcp_tool_use") ?? "mcp_tool_use")
-        case "content_block_delta":
-            guard let delta = root["delta"] as? [String: Any] else { return nil }
-            let deltaType = (delta["type"] as? String)?.lowercased()
-            switch deltaType {
-            case "text_delta":
-                guard let incoming = delta["text"] as? String, !incoming.isEmpty else { return nil }
-                let textDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: incoming)
-                if textDelta.isEmpty { return nil }
-                fullText += textDelta
-                return .textDelta(textDelta)
-            case "thinking_delta":
-                guard let incoming = delta["thinking"] as? String, !incoming.isEmpty else { return nil }
-                let reasoningDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullReasoning, incoming: incoming)
-                if reasoningDelta.isEmpty { return nil }
-                fullReasoning += reasoningDelta
-                return .reasoningDelta(reasoningDelta)
-            default:
-                return nil
-            }
-        case "message_stop":
-            return .completed(
-                ProviderResponse(
-                    text: fullText,
-                    reasoningSummary: optionalNonEmpty(fullReasoning),
-                    raw: nil,
-                    usage: latestUsage
-                )
-            )
-        default:
+        }
+        guard let event = AnthropicMessagesStreamParser.event(
+            from: root,
+            fullText: &fullText,
+            fullReasoning: &fullReasoning
+        ) else {
             return nil
         }
+        if case let .completed(response) = event {
+            return .completed(
+                ProviderResponse(
+                    text: response.text,
+                    reasoningSummary: response.reasoningSummary,
+                    raw: response.raw,
+                    usage: response.usage ?? latestUsage
+                )
+            )
+        }
+        return event
     }
 
     private func parseStreamUsage(_ root: [String: Any]) -> ProviderUsage? {

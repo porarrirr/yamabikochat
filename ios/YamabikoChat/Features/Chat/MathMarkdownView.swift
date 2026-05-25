@@ -538,23 +538,35 @@ struct MathMarkdownView: View {
 
     let markdownText: String
     var mathRenderingEnabled: Bool = true
+    var isStreaming: Bool = false
     @Environment(\.colorScheme) private var colorScheme
     @State private var contentHeight: CGFloat = minimumHeight
 
     var body: some View {
-        MathMarkdownWebView(
-            markdownText: markdownText,
-            mathRenderingEnabled: mathRenderingEnabled,
-            colorScheme: colorScheme,
-            measuredHeight: $contentHeight
-        )
-        .id("\(markdownText.hashValue)-\(mathRenderingEnabled)")
-        .frame(height: max(Self.minimumHeight, contentHeight))
-        .onChange(of: markdownText) { _, _ in
-            contentHeight = Self.minimumHeight
+        Group {
+            if isStreaming {
+                Text(markdownText)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                MathMarkdownWebView(
+                    markdownText: markdownText,
+                    mathRenderingEnabled: mathRenderingEnabled,
+                    colorScheme: colorScheme,
+                    measuredHeight: $contentHeight
+                )
+                .frame(height: max(Self.minimumHeight, contentHeight))
+            }
         }
         .onChange(of: mathRenderingEnabled) { _, _ in
             contentHeight = Self.minimumHeight
+        }
+        .onChange(of: isStreaming) { _, streaming in
+            if !streaming {
+                contentHeight = Self.minimumHeight
+            }
         }
     }
 }
@@ -1107,7 +1119,6 @@ private struct MathMarkdownWebView: UIViewRepresentable {
 
         if context.coordinator.lastHTML != html {
             context.coordinator.lastHTML = html
-            measuredHeight = 44
             let resourceDirectory = mathJaxLoadPlan.baseURL == nil
                 ? nil
                 : MathMarkdownWebResourceLoader.preparedResourceDirectory()

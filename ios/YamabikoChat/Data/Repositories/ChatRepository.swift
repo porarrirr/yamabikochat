@@ -304,7 +304,8 @@ final class ChatRepository {
         conversationId: Int64,
         text: String,
         attachments: [String],
-        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil
+        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
+        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
     ) async throws -> SendMessageResult {
         let settings = try self.settings.load()
         guard var conversation = try conversations.fetchConversation(id: conversationId) else {
@@ -339,7 +340,8 @@ final class ChatRepository {
                 userMessageId: userMessageId,
                 request: request,
                 provider: provider,
-                onStreamEvent: onStreamEvent
+                onStreamEvent: onStreamEvent,
+                onStreamingSnapshot: onStreamingSnapshot
             )
         }
 
@@ -373,7 +375,8 @@ final class ChatRepository {
 
     func regenerateLastAssistantVariant(
         conversationId: Int64,
-        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil
+        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
+        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
     ) async throws -> Int64 {
         let settings = try self.settings.load()
         guard let conversation = try conversations.fetchConversation(id: conversationId) else {
@@ -409,7 +412,8 @@ final class ChatRepository {
                 provider: provider,
                 conversationId: conversationId,
                 baseMessageId: targetMessageID,
-                onStreamEvent: onStreamEvent
+                onStreamEvent: onStreamEvent,
+                onStreamingSnapshot: onStreamingSnapshot
             )
             return targetMessageID
         }
@@ -436,7 +440,8 @@ final class ChatRepository {
         userMessageId: Int64,
         request: ProviderRequest,
         provider: LLMProvider,
-        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?
+        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
+        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
     ) async throws -> SendMessageResult {
         let bgGuard = BackgroundTaskGuard()
         bgGuard.begin(name: "YamabikoChatStreaming")
@@ -453,31 +458,26 @@ final class ChatRepository {
         var fullText = ""
         var reasoningText = ""
         var finalUsage: ProviderUsage?
+        var coordinator = ChatStreamingPersistenceCoordinator()
         do {
             let stream = try await providers.stream(request: request, provider: provider)
-
             for try await event in stream {
-                onStreamEvent?(event)
-                switch event {
-                case let .textDelta(delta):
-                    fullText += delta
-                    try conversations.updateMessageText(messageId: assistantMessageId, text: fullText)
-                case let .reasoningDelta(delta):
-                    reasoningText += delta
-                    try conversations.saveThinking(messageId: assistantMessageId, stream: reasoningText)
-                case .toolCallDelta:
-                    continue
-                case let .completed(response):
-                    finalUsage = response.usage ?? finalUsage
-                    if fullText.isEmpty {
-                        fullText = response.text
-                        try conversations.updateMessageText(messageId: assistantMessageId, text: fullText)
-                    }
-                    if let reasoning = response.reasoningSummary, !reasoning.isEmpty {
-                        reasoningText = reasoning
-                        try conversations.saveThinking(messageId: assistantMessageId, stream: reasoningText)
-                    }
-                }
+                try consumeStreamEvent(
+                    event,
+                    targetId: assistantMessageId,
+                    fullText: &fullText,
+                    reasoningText: &reasoningText,
+                    finalUsage: &finalUsage,
+                    coordinator: &coordinator,
+                    persist: { text, thinking in
+                        try conversations.updateMessageText(messageId: assistantMessageId, text: text)
+                        if !thinking.isEmpty {
+                            try conversations.saveThinking(messageId: assistantMessageId, stream: thinking)
+                        }
+                    },
+                    onStreamEvent: onStreamEvent,
+                    onStreamingSnapshot: onStreamingSnapshot
+                )
             }
         } catch {
             if fullText.isEmpty && reasoningText.isEmpty {
@@ -486,38 +486,27 @@ final class ChatRepository {
                     text: L10n.format("エラー: %@", error.localizedDescription)
                 )
             }
+            publishStreamingSnapshot(
+                targetId: assistantMessageId,
+                coordinator: coordinator,
+                isFinal: true,
+                onStreamingSnapshot: onStreamingSnapshot
+            )
             throw error
         }
 
-        if provider == .openCodeGo,
-           fullText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            do {
-                DiagnosticsLogger.log(
-                    "OpenCode Go stream completed without text; retrying non-streaming",
-                    category: .network,
-                    metadata: [
-                        "provider": provider.rawValue,
-                        "model": request.model
-                    ]
-                )
-                let fallbackResponse = try await providers.generate(request: request, provider: provider)
-                finalUsage = fallbackResponse.usage ?? finalUsage
-                fullText = fallbackResponse.text
-                try conversations.updateMessageText(messageId: assistantMessageId, text: fullText)
-                if let reasoning = fallbackResponse.reasoningSummary, !reasoning.isEmpty {
-                    reasoningText = reasoning
-                    try conversations.saveThinking(messageId: assistantMessageId, stream: reasoningText)
-                }
-            } catch {
-                if reasoningText.isEmpty {
-                    try? conversations.updateMessageText(
-                        messageId: assistantMessageId,
-                        text: L10n.format("エラー: %@", error.localizedDescription)
-                    )
-                }
-                throw error
+        try coordinator.apply(text: fullText, thinking: reasoningText, force: true) { text, thinking in
+            try conversations.updateMessageText(messageId: assistantMessageId, text: text)
+            if !thinking.isEmpty {
+                try conversations.saveThinking(messageId: assistantMessageId, stream: thinking)
             }
         }
+        publishStreamingSnapshot(
+            targetId: assistantMessageId,
+            coordinator: coordinator,
+            isFinal: true,
+            onStreamingSnapshot: onStreamingSnapshot
+        )
 
         await recordTokenUsageIfAvailable(
             provider: provider.rawValue,
@@ -546,7 +535,8 @@ final class ChatRepository {
         provider: LLMProvider,
         conversationId: Int64,
         baseMessageId: Int64,
-        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?
+        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
+        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
     ) async throws {
         let variant = try conversations.insertMessageVariant(
             baseMessageId: baseMessageId,
@@ -561,31 +551,26 @@ final class ChatRepository {
         var fullText = ""
         var reasoningText = ""
         var finalUsage: ProviderUsage?
+        var coordinator = ChatStreamingPersistenceCoordinator()
         do {
             let stream = try await providers.stream(request: request, provider: provider)
-
             for try await event in stream {
-                onStreamEvent?(event)
-                switch event {
-                case let .textDelta(delta):
-                    fullText += delta
-                    try conversations.updateMessageVariantText(variantId: variantId, text: fullText)
-                case let .reasoningDelta(delta):
-                    reasoningText += delta
-                    try conversations.saveMessageVariantThinking(variantId: variantId, stream: reasoningText)
-                case .toolCallDelta:
-                    continue
-                case let .completed(response):
-                    finalUsage = response.usage ?? finalUsage
-                    if fullText.isEmpty {
-                        fullText = response.text
-                        try conversations.updateMessageVariantText(variantId: variantId, text: fullText)
-                    }
-                    if let reasoning = response.reasoningSummary, !reasoning.isEmpty {
-                        reasoningText = reasoning
-                        try conversations.saveMessageVariantThinking(variantId: variantId, stream: reasoningText)
-                    }
-                }
+                try consumeStreamEvent(
+                    event,
+                    targetId: baseMessageId,
+                    fullText: &fullText,
+                    reasoningText: &reasoningText,
+                    finalUsage: &finalUsage,
+                    coordinator: &coordinator,
+                    persist: { text, thinking in
+                        try conversations.updateMessageVariantText(variantId: variantId, text: text)
+                        if !thinking.isEmpty {
+                            try conversations.saveMessageVariantThinking(variantId: variantId, stream: thinking)
+                        }
+                    },
+                    onStreamEvent: onStreamEvent,
+                    onStreamingSnapshot: onStreamingSnapshot
+                )
             }
         } catch {
             if fullText.isEmpty && reasoningText.isEmpty {
@@ -594,38 +579,27 @@ final class ChatRepository {
                     text: L10n.format("エラー: %@", error.localizedDescription)
                 )
             }
+            publishStreamingSnapshot(
+                targetId: baseMessageId,
+                coordinator: coordinator,
+                isFinal: true,
+                onStreamingSnapshot: onStreamingSnapshot
+            )
             throw error
         }
 
-        if provider == .openCodeGo,
-           fullText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            do {
-                DiagnosticsLogger.log(
-                    "OpenCode Go regenerate stream completed without text; retrying non-streaming",
-                    category: .network,
-                    metadata: [
-                        "provider": provider.rawValue,
-                        "model": request.model
-                    ]
-                )
-                let fallbackResponse = try await providers.generate(request: request, provider: provider)
-                finalUsage = fallbackResponse.usage ?? finalUsage
-                fullText = fallbackResponse.text
-                try conversations.updateMessageVariantText(variantId: variantId, text: fullText)
-                if let reasoning = fallbackResponse.reasoningSummary, !reasoning.isEmpty {
-                    reasoningText = reasoning
-                    try conversations.saveMessageVariantThinking(variantId: variantId, stream: reasoningText)
-                }
-            } catch {
-                if reasoningText.isEmpty {
-                    try? conversations.updateMessageVariantText(
-                        variantId: variantId,
-                        text: L10n.format("エラー: %@", error.localizedDescription)
-                    )
-                }
-                throw error
+        try coordinator.apply(text: fullText, thinking: reasoningText, force: true) { text, thinking in
+            try conversations.updateMessageVariantText(variantId: variantId, text: text)
+            if !thinking.isEmpty {
+                try conversations.saveMessageVariantThinking(variantId: variantId, stream: thinking)
             }
         }
+        publishStreamingSnapshot(
+            targetId: baseMessageId,
+            coordinator: coordinator,
+            isFinal: true,
+            onStreamingSnapshot: onStreamingSnapshot
+        )
 
         await recordTokenUsageIfAvailable(
             provider: provider.rawValue,
@@ -633,6 +607,73 @@ final class ChatRepository {
             usage: finalUsage,
             conversationId: conversationId,
             requestType: "regenerate_stream"
+        )
+    }
+
+    private func consumeStreamEvent(
+        _ event: ProviderStreamEvent,
+        targetId: Int64,
+        fullText: inout String,
+        reasoningText: inout String,
+        finalUsage: inout ProviderUsage?,
+        coordinator: inout ChatStreamingPersistenceCoordinator,
+        persist: (_ text: String, _ thinking: String) throws -> Void,
+        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
+        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
+    ) throws {
+        onStreamEvent?(event)
+        switch event {
+        case let .textDelta(delta):
+            fullText += delta
+            try coordinator.apply(text: fullText, thinking: reasoningText, force: false, persist: persist)
+            publishStreamingSnapshot(
+                targetId: targetId,
+                coordinator: coordinator,
+                isFinal: false,
+                onStreamingSnapshot: onStreamingSnapshot
+            )
+        case let .reasoningDelta(delta):
+            reasoningText += delta
+            try coordinator.apply(text: fullText, thinking: reasoningText, force: false, persist: persist)
+            publishStreamingSnapshot(
+                targetId: targetId,
+                coordinator: coordinator,
+                isFinal: false,
+                onStreamingSnapshot: onStreamingSnapshot
+            )
+        case .toolCallDelta:
+            break
+        case let .completed(response):
+            finalUsage = response.usage ?? finalUsage
+            if fullText.isEmpty, !response.text.isEmpty {
+                fullText = response.text
+            }
+            if let reasoning = response.reasoningSummary, !reasoning.isEmpty {
+                reasoningText = reasoning
+            }
+            try coordinator.apply(text: fullText, thinking: reasoningText, force: true, persist: persist)
+            publishStreamingSnapshot(
+                targetId: targetId,
+                coordinator: coordinator,
+                isFinal: false,
+                onStreamingSnapshot: onStreamingSnapshot
+            )
+        }
+    }
+
+    private func publishStreamingSnapshot(
+        targetId: Int64,
+        coordinator: ChatStreamingPersistenceCoordinator,
+        isFinal: Bool,
+        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
+    ) {
+        onStreamingSnapshot?(
+            ChatStreamingSnapshot(
+                targetId: targetId,
+                text: coordinator.text,
+                thinking: coordinator.thinking,
+                isFinal: isFinal
+            )
         )
     }
 

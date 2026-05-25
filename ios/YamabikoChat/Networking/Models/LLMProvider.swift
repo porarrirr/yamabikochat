@@ -22,4 +22,9 @@ enum LLMProvider: String, Codable, CaseIterable, Sendable {
             self = LLMProvider(rawValue: value.uppercased()) ?? .gemini
         }
     }
+
+    /// When a stream completes without visible answer text, retry once with a non-streaming request.
+    var retriesNonStreamingWhenStreamReturnsNoText: Bool {
+        self == .openCodeGo
+    }
 }

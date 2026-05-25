@@ -40,6 +40,8 @@ local.properties
 *.iml
 *.ipr
 *.iws
+*.xcuserstate
+**/xcuserdata/
 
 # OS generated files
 .DS_Store

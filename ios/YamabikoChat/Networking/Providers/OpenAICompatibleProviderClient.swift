@@ -123,7 +123,11 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                             }
                         }
 
-                        if let event = parseStreamChunk(dataChunk, fullText: &fullText, fullReasoning: &fullReasoning) {
+                        for event in OpenAICompatibleStreamParser.events(
+                            fromPayload: dataChunk,
+                            fullText: &fullText,
+                            fullReasoning: &fullReasoning
+                        ) {
                             if case let .completed(response) = event {
                                 let merged = ProviderResponse(
                                     text: response.text,
@@ -221,58 +225,6 @@ struct OpenAICompatibleProviderClient: ProviderClient {
     private func promptCacheKey(for request: ProviderRequest, provider: LLMProvider) -> String? {
         guard provider == .openAI else { return nil }
         return request.metadata["promptCacheKey"]?.trimmedNonEmpty
-    }
-
-    private func parseStreamChunk(
-        _ chunk: String,
-        fullText: inout String,
-        fullReasoning: inout String
-    ) -> ProviderStreamEvent? {
-        guard let root = try? JSONSerialization.jsonObject(with: Data(chunk.utf8)) as? [String: Any] else {
-            return nil
-        }
-
-        // OpenAI / OpenRouter ChatCompletions streaming format
-        if let choices = root["choices"] as? [[String: Any]], let first = choices.first {
-            if let delta = first["delta"] as? [String: Any] {
-                if let incoming = delta["content"] as? String, !incoming.isEmpty {
-                    let textDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: incoming)
-                    if !textDelta.isEmpty {
-                        fullText += textDelta
-                        return .textDelta(textDelta)
-                    }
-                }
-
-                if let incoming = delta["reasoning"] as? String, !incoming.isEmpty {
-                    let reasoningDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullReasoning, incoming: incoming)
-                    if !reasoningDelta.isEmpty {
-                        fullReasoning += reasoningDelta
-                        return .reasoningDelta(reasoningDelta)
-                    }
-                }
-
-                if let incoming = delta["reasoning_content"] as? String, !incoming.isEmpty {
-                    let reasoningDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullReasoning, incoming: incoming)
-                    if !reasoningDelta.isEmpty {
-                        fullReasoning += reasoningDelta
-                        return .reasoningDelta(reasoningDelta)
-                    }
-                }
-
-                if let toolCalls = delta["tool_calls"] as? [[String: Any]],
-                   let data = try? JSONSerialization.data(withJSONObject: toolCalls),
-                   let raw = String(data: data, encoding: .utf8),
-                   !raw.isEmpty {
-                    return .toolCallDelta(raw)
-                }
-            }
-
-            if let finish = first["finish_reason"] as? String, !finish.isEmpty, finish != "null" {
-                return nil
-            }
-        }
-
-        return nil
     }
 
     private func resolvedCredential(

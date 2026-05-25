@@ -16,6 +16,13 @@ final class AttachmentRepository {
         self.fileManager = fileManager
     }
 
+    func requiresVision(url: URL) -> Bool {
+        guard let type = UTType(filenameExtension: url.pathExtension.lowercased()) else {
+            return false
+        }
+        return type.conforms(to: .image)
+    }
+
     func validate(url: URL) -> AttachmentValidationResult {
         guard url.isFileURL else { return .unreadable }
         let secured = url.startAccessingSecurityScopedResource()

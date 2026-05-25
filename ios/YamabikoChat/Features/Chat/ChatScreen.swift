@@ -70,6 +70,8 @@ struct ChatScreen: View {
                                     MessageBubble(
                                         message: message,
                                         mathRenderingEnabled: viewModel.settings.mathRenderingEnabled,
+                                        streamingSnapshot: viewModel.streamingSnapshot(for: message.id),
+                                        isActivelyStreaming: viewModel.isMessageStreaming(message.id),
                                         canRegenerate: viewModel.canRegenerateLastAssistant && message.id == viewModel.fullMessages.last?.id,
                                         onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
                                         onNextVariant: { viewModel.showNextVariant(messageId: message.id) },
@@ -831,6 +833,8 @@ private extension URL {
 private struct MessageBubble: View {
     let message: FullChatMessage
     let mathRenderingEnabled: Bool
+    let streamingSnapshot: ChatStreamingSnapshot?
+    let isActivelyStreaming: Bool
     let canRegenerate: Bool
     let onPrevVariant: () -> Void
     let onNextVariant: () -> Void
@@ -844,10 +848,17 @@ private struct MessageBubble: View {
     }
 
     private var responseText: String {
-        message.displayText
+        if let overlay = streamingSnapshot?.text, !overlay.isEmpty {
+            return overlay
+        }
+        return message.displayText
     }
 
     private var thinkingText: String? {
+        if let overlay = streamingSnapshot?.thinking.trimmingCharacters(in: .whitespacesAndNewlines),
+           !overlay.isEmpty {
+            return overlay
+        }
         guard let value = message.displayThinkingStream?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !value.isEmpty
@@ -932,7 +943,8 @@ private struct MessageBubble: View {
                         if !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             MathMarkdownView(
                                 markdownText: markdownText,
-                                mathRenderingEnabled: mathRenderingEnabled
+                                mathRenderingEnabled: mathRenderingEnabled,
+                                isStreaming: isActivelyStreaming
                             )
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -1006,45 +1018,9 @@ private struct MessageBubble: View {
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         .sheet(isPresented: $isThinkingSheetPresented) {
             if let thinkingText {
-                ThinkingSheet(
-                    thinkingText: thinkingText,
-                    mathRenderingEnabled: mathRenderingEnabled
-                )
+                ThinkingSheet(thinkingText: thinkingText)
             }
         }
-    }
-}
-
-private struct ThinkingSheet: View {
-    let thinkingText: String
-    let mathRenderingEnabled: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "brain.head.profile")
-                Text("Thinking")
-                    .font(.headline)
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 10)
-
-            Divider()
-
-            ScrollView {
-                MathMarkdownView(
-                    markdownText: thinkingText,
-                    mathRenderingEnabled: mathRenderingEnabled
-                )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-            }
-        }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
     }
 }
 
@@ -1232,19 +1208,18 @@ private struct DualResponsePane: View {
                 .foregroundStyle(.secondary)
 
                 if showThinking {
-                    MathMarkdownView(
-                        markdownText: thinking,
-                        mathRenderingEnabled: mathRenderingEnabled
-                    )
-                    .padding(8)
-                    .background(Color.chatInputBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    ThinkingStreamTextView(text: thinking)
+                        .frame(minHeight: 80, maxHeight: 220)
+                        .padding(8)
+                        .background(Color.chatInputBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
             }
 
             MathMarkdownView(
                 markdownText: content,
-                mathRenderingEnabled: mathRenderingEnabled
+                mathRenderingEnabled: mathRenderingEnabled,
+                isStreaming: false
             )
             .frame(maxWidth: .infinity, alignment: .leading)
         }
