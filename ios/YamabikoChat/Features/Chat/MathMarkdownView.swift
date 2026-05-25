@@ -300,6 +300,12 @@ enum MathMarkdownHTMLBuilder {
               overflow-x: auto;
               overflow-y: hidden;
               -webkit-overflow-scrolling: touch;
+              touch-action: pan-x pan-y;
+              overscroll-behavior-x: contain;
+            }
+            .yamabiko-table-wrap mjx-container,
+            .yamabiko-table-wrap mjx-container svg {
+              max-width: none;
             }
             table {
               border-collapse: collapse;
@@ -379,7 +385,44 @@ enum MathMarkdownHTMLBuilder {
                   setCopyButtonLabel(target, copyLabel);
                 });
               });
+              function enableHorizontalScrollContainers() {
+                var selector = '.yamabiko-table-wrap, pre, mjx-container[display="true"]';
+                var containers = document.querySelectorAll(selector);
+                containers.forEach(function(element) {
+                  if (element.__yamabikoHorizontalScrollBound) return;
+                  element.__yamabikoHorizontalScrollBound = true;
+                  var touchStartX = 0;
+                  var touchStartY = 0;
+                  var scrollLeftStart = 0;
+                  var isHorizontalScroll = false;
+                  element.addEventListener('touchstart', function(e) {
+                    if (!e.touches || !e.touches.length) return;
+                    touchStartX = e.touches[0].clientX;
+                    touchStartY = e.touches[0].clientY;
+                    scrollLeftStart = element.scrollLeft;
+                    isHorizontalScroll = false;
+                  }, { passive: true });
+                  element.addEventListener('touchmove', function(e) {
+                    if (!e.touches || !e.touches.length) return;
+                    var dx = e.touches[0].clientX - touchStartX;
+                    var dy = e.touches[0].clientY - touchStartY;
+                    if (!isHorizontalScroll) {
+                      if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+                      isHorizontalScroll = Math.abs(dx) > Math.abs(dy);
+                    }
+                    if (isHorizontalScroll && element.scrollWidth > element.clientWidth) {
+                      element.scrollLeft = scrollLeftStart - dx;
+                      e.preventDefault();
+                    }
+                  }, { passive: false });
+                  element.addEventListener('touchend', function() {
+                    isHorizontalScroll = false;
+                  }, { passive: true });
+                });
+              }
+              window.__yamabikoEnableHorizontalScroll = enableHorizontalScrollContainers;
               var finish = function() {
+                enableHorizontalScrollContainers();
                 if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();
               };
         \(mathTypesetScript)
@@ -491,10 +534,12 @@ enum MathJaxLoadPlanner {
 }
 
 struct MathMarkdownView: View {
+    private static let minimumHeight: CGFloat = 44
+
     let markdownText: String
     var mathRenderingEnabled: Bool = true
     @Environment(\.colorScheme) private var colorScheme
-    @State private var contentHeight: CGFloat = 44
+    @State private var contentHeight: CGFloat = minimumHeight
 
     var body: some View {
         MathMarkdownWebView(
@@ -503,7 +548,14 @@ struct MathMarkdownView: View {
             colorScheme: colorScheme,
             measuredHeight: $contentHeight
         )
-        .frame(height: max(44, contentHeight))
+        .id("\(markdownText.hashValue)-\(mathRenderingEnabled)")
+        .frame(height: max(Self.minimumHeight, contentHeight))
+        .onChange(of: markdownText) { _, _ in
+            contentHeight = Self.minimumHeight
+        }
+        .onChange(of: mathRenderingEnabled) { _, _ in
+            contentHeight = Self.minimumHeight
+        }
     }
 }
 
@@ -682,7 +734,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         });
     
         output = output.replace(/@@YBMATH(\d+)@@/g, function(_, index) {
-          return escapeHtml(mathProtected.tokens[Number(index)] || "");
+          return mathProtected.tokens[Number(index)] || "";
         });
     
         return output;
@@ -970,6 +1022,9 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         let resizeObserverScript = """
         (function() {
           function sendHeight() {
+            if (window.__yamabikoEnableHorizontalScroll) {
+              window.__yamabikoEnableHorizontalScroll();
+            }
             var body = document.body;
             var doc = document.documentElement;
             if (!body || !doc || !window.webkit || !window.webkit.messageHandlers || !window.webkit.messageHandlers.\(Coordinator.heightMessageName)) {
@@ -1010,6 +1065,8 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         webView.scrollView.backgroundColor = .clear
         webView.scrollView.isScrollEnabled = false
         webView.scrollView.bounces = false
+        webView.scrollView.delaysContentTouches = false
+        webView.scrollView.isDirectionalLockEnabled = true
         return webView
     }
 
@@ -1050,6 +1107,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
 
         if context.coordinator.lastHTML != html {
             context.coordinator.lastHTML = html
+            measuredHeight = 44
             let resourceDirectory = mathJaxLoadPlan.baseURL == nil
                 ? nil
                 : MathMarkdownWebResourceLoader.preparedResourceDirectory()

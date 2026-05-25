@@ -10,11 +10,12 @@ struct YamabikoChatApp: App {
             RootView()
                 .environmentObject(container)
                 .environmentObject(appState)
-                .onAppear {
-                    appState.consumeSharePayload(from: container.sharePayloadStore)
-                }
-                .onReceive(NotificationCenter.default.publisher(for: AppConstants.sharePayloadDidChangeNotification)) { _ in
-                    appState.consumeSharePayload(from: container.sharePayloadStore)
+                .onOpenURL { url in
+                    guard url == AppConstants.importShareURL else { return }
+                    appState.importSharePayload(
+                        from: container.sharePayloadStore,
+                        repository: container.chatRepository
+                    )
                 }
         }
     }

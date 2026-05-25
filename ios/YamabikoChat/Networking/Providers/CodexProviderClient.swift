@@ -269,21 +269,24 @@ struct CodexProviderClient: ProviderClient {
     }
 
     private func buildBody(request: ProviderRequest, stream: Bool, sessionID: String?) throws -> Data {
+        let embedImages = ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
         let input = request.messages.map { message -> [String: Any] in
-            var text = message.content
-            if !message.attachments.isEmpty {
-                let attachmentText = message.attachments.map { "- \($0)" }.joined(separator: "\n")
-                text += "\n\nAttachments:\n\(attachmentText)"
-            }
             let role = message.role == "assistant" ? "assistant" : "user"
-            let contentType = role == "assistant" ? "output_text" : "input_text"
+            ProviderAttachmentEncoder.logSkippedAttachmentsIfNeeded(
+                message.attachments,
+                providerLabel: "Codex",
+                embedImages: embedImages
+            )
+            let content = ProviderAttachmentEncoder.buildCodexInputContent(
+                text: message.content,
+                attachments: message.attachments,
+                role: role,
+                embedImages: embedImages
+            )
             return [
                 "type": "message",
                 "role": role,
-                "content": [[
-                    "type": contentType,
-                    "text": text
-                ]]
+                "content": content
             ]
         }
 

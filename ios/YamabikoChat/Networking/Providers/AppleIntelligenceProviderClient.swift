@@ -85,11 +85,13 @@ private enum AppleIntelligenceSession {
     private static func prompt(from request: ProviderRequest) -> String {
         request.messages
             .map { message in
+                ProviderAttachmentEncoder.logSkippedAttachmentsIfNeeded(
+                    message.attachments,
+                    providerLabel: "Apple Intelligence",
+                    embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
+                )
                 let role = roleLabel(message.role)
-                let attachments = message.attachments.isEmpty
-                    ? ""
-                    : "\n\nAttachments:\n" + message.attachments.joined(separator: "\n\n")
-                return "\(role):\n\(message.content)\(attachments)"
+                return "\(role):\n\(message.content)"
             }
             .joined(separator: "\n\n")
     }

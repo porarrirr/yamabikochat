@@ -167,7 +167,7 @@
     });
 
     output = output.replace(/@@YBMATH(\d+)@@/g, function(_, index) {
-      return escapeHtml(mathProtected.tokens[Number(index)] || "");
+      return mathProtected.tokens[Number(index)] || "";
     });
 
     return output;

@@ -9,7 +9,7 @@ struct OpenCodeGoProviderClient: ProviderClient {
 
     private struct ChatMessage: Encodable {
         var role: String
-        var content: String
+        var content: ProviderAttachmentEncoder.OpenAIMessageContent
         var reasoningContent: String?
 
         enum CodingKeys: String, CodingKey {
@@ -33,14 +33,9 @@ struct OpenCodeGoProviderClient: ProviderClient {
         }
     }
 
-    private struct MessageTextContentBlock: Encodable {
-        var type: String = "text"
-        var text: String
-    }
-
     private struct MessageRequestMessage: Encodable {
         var role: String
-        var content: [MessageTextContentBlock]
+        var content: [ProviderAttachmentEncoder.AnthropicContentBlock]
     }
 
     private struct MessageRequestBody: Encodable {
@@ -149,16 +144,24 @@ struct OpenCodeGoProviderClient: ProviderClient {
         let endpoint = AppConstants.defaultOpenCodeGoBaseURL.appendingPathComponent("chat/completions")
         let body = ChatRequestBody(
             model: route.id,
-            messages: mapChatMessages(request.messages, systemPrompt: request.systemPrompt),
+            messages: mapChatMessages(
+                request.messages,
+                systemPrompt: request.systemPrompt,
+                embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
+            ),
             stream: stream,
             promptCacheKey: promptCacheKey(for: request, route: route)
         )
+        var headers = [
+            "Authorization": "Bearer \(apiKey)",
+            "Content-Type": "application/json"
+        ]
+        if stream {
+            headers["Accept"] = "text/event-stream"
+        }
         return HTTPRequest(
             url: endpoint,
-            headers: [
-                "Authorization": "Bearer \(apiKey)",
-                "Content-Type": "application/json"
-            ],
+            headers: headers,
             body: try JSONEncoder().encode(body)
         )
     }
@@ -172,33 +175,59 @@ struct OpenCodeGoProviderClient: ProviderClient {
         let endpoint = AppConstants.defaultOpenCodeGoBaseURL.appendingPathComponent("messages")
         let body = MessageRequestBody(
             model: route.id,
-            messages: mapMessages(request.messages),
+            messages: mapMessages(
+                request.messages,
+                embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
+            ),
             system: request.systemPrompt?.trimmedNonEmpty,
             maxTokens: Self.defaultMaxTokens,
             stream: stream
         )
+        var headers = [
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": Self.anthropicVersion
+        ]
+        if stream {
+            headers["Accept"] = "text/event-stream"
+        }
         return HTTPRequest(
             url: endpoint,
-            headers: [
-                "Content-Type": "application/json",
-                "x-api-key": apiKey,
-                "anthropic-version": Self.anthropicVersion
-            ],
+            headers: headers,
             body: try JSONEncoder().encode(body)
         )
     }
 
-    private func mapChatMessages(_ messages: [ProviderRequestMessage], systemPrompt: String?) -> [ChatMessage] {
+    private func mapChatMessages(
+        _ messages: [ProviderRequestMessage],
+        systemPrompt: String?,
+        embedImages: Bool
+    ) -> [ChatMessage] {
         var mapped: [ChatMessage] = []
         if let systemPrompt = systemPrompt?.trimmedNonEmpty {
-            mapped.append(ChatMessage(role: "system", content: systemPrompt, reasoningContent: nil))
+            mapped.append(
+                ChatMessage(
+                    role: "system",
+                    content: .plain(systemPrompt),
+                    reasoningContent: nil
+                )
+            )
         }
         for message in messages {
             let role = normalizeChatRole(message.role)
+            ProviderAttachmentEncoder.logSkippedAttachmentsIfNeeded(
+                message.attachments,
+                providerLabel: "OpenCode Go chat",
+                embedImages: embedImages
+            )
             mapped.append(
                 ChatMessage(
                     role: role,
-                    content: textWithAttachments(message),
+                    content: ProviderAttachmentEncoder.buildOpenAIMessageContent(
+                        text: message.content,
+                        attachments: message.attachments,
+                        embedImages: embedImages
+                    ),
                     reasoningContent: role == "assistant" ? message.reasoningContent?.trimmedNonEmpty : nil
                 )
             )
@@ -206,21 +235,22 @@ struct OpenCodeGoProviderClient: ProviderClient {
         return mapped
     }
 
-    private func mapMessages(_ messages: [ProviderRequestMessage]) -> [MessageRequestMessage] {
-        messages.map {
-            MessageRequestMessage(
-                role: normalizeMessagesRole($0.role),
-                content: [MessageTextContentBlock(text: textWithAttachments($0))]
+    private func mapMessages(_ messages: [ProviderRequestMessage], embedImages: Bool) -> [MessageRequestMessage] {
+        messages.map { message in
+            ProviderAttachmentEncoder.logSkippedAttachmentsIfNeeded(
+                message.attachments,
+                providerLabel: "OpenCode Go messages",
+                embedImages: embedImages
+            )
+            return MessageRequestMessage(
+                role: normalizeMessagesRole(message.role),
+                content: ProviderAttachmentEncoder.buildAnthropicContentBlocks(
+                    text: message.content,
+                    attachments: message.attachments,
+                    embedImages: embedImages
+                )
             )
         }
-    }
-
-    private func textWithAttachments(_ message: ProviderRequestMessage) -> String {
-        var content = message.content
-        if !message.attachments.isEmpty {
-            content += "\n\nAttachments:\n" + message.attachments.map { "- \($0)" }.joined(separator: "\n")
-        }
-        return content
     }
 
     private func normalizeChatRole(_ raw: String) -> String {
@@ -362,39 +392,113 @@ struct OpenCodeGoProviderClient: ProviderClient {
         continuation: AsyncThrowingStream<ProviderStreamEvent, Error>.Continuation
     ) async throws {
         var fullText = ""
+        var fullReasoning = ""
         var latestUsage: ProviderUsage?
         for try await dataChunk in SSEPayloadAssembly.payloads(from: lineStream) {
             if dataChunk == "[DONE]" {
-                continuation.yield(.completed(ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: latestUsage)))
+                continuation.yield(
+                    .completed(
+                        ProviderResponse(
+                            text: fullText,
+                            reasoningSummary: fullReasoning.trimmedNonEmpty,
+                            raw: nil,
+                            usage: latestUsage
+                        )
+                    )
+                )
                 continuation.finish()
                 return
             }
             guard let root = try? JSONSerialization.jsonObject(with: Data(dataChunk.utf8)) as? [String: Any] else { continue }
-            if let usage = parseUsage(root["usage"] as? [String: Any]) {
+            if let usage = parseMessagesStreamUsage(root) {
                 latestUsage = usage
             }
-            if let message = root["message"] as? [String: Any],
-               let usage = parseUsage(message["usage"] as? [String: Any]) {
-                latestUsage = usage
-            }
-            if let delta = root["delta"] as? [String: Any],
-               (delta["type"] as? String)?.lowercased() == "text_delta",
-               let incoming = delta["text"] as? String,
-               !incoming.isEmpty {
-                let textDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: incoming)
-                if !textDelta.isEmpty {
-                    fullText += textDelta
-                    continuation.yield(.textDelta(textDelta))
+            if let event = parseMessagesStreamChunk(
+                root,
+                fullText: &fullText,
+                fullReasoning: &fullReasoning
+            ) {
+                switch event {
+                case let .textDelta(delta):
+                    continuation.yield(.textDelta(delta))
+                case let .reasoningDelta(delta):
+                    continuation.yield(.reasoningDelta(delta))
+                case let .completed(response):
+                    let final = ProviderResponse(
+                        text: response.text,
+                        reasoningSummary: response.reasoningSummary,
+                        raw: response.raw,
+                        usage: response.usage ?? latestUsage
+                    )
+                    continuation.yield(.completed(final))
+                    continuation.finish()
+                    return
+                default:
+                    continue
                 }
             }
-            if (root["type"] as? String)?.lowercased() == "message_stop" {
-                continuation.yield(.completed(ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: latestUsage)))
-                continuation.finish()
-                return
-            }
         }
-        continuation.yield(.completed(ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: latestUsage)))
+        continuation.yield(
+            .completed(
+                ProviderResponse(
+                    text: fullText,
+                    reasoningSummary: fullReasoning.trimmedNonEmpty,
+                    raw: nil,
+                    usage: latestUsage
+                )
+            )
+        )
         continuation.finish()
+    }
+
+    private func parseMessagesStreamUsage(_ root: [String: Any]) -> ProviderUsage? {
+        if let usage = parseUsage(root["usage"] as? [String: Any]) {
+            return usage
+        }
+        if let message = root["message"] as? [String: Any],
+           let usage = parseUsage(message["usage"] as? [String: Any]) {
+            return usage
+        }
+        return nil
+    }
+
+    private func parseMessagesStreamChunk(
+        _ root: [String: Any],
+        fullText: inout String,
+        fullReasoning: inout String
+    ) -> ProviderStreamEvent? {
+        let type = (root["type"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch type {
+        case "content_block_delta":
+            guard let delta = root["delta"] as? [String: Any] else { return nil }
+            switch (delta["type"] as? String)?.lowercased() {
+            case "text_delta":
+                guard let incoming = delta["text"] as? String, !incoming.isEmpty else { return nil }
+                let textDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullText, incoming: incoming)
+                guard !textDelta.isEmpty else { return nil }
+                fullText += textDelta
+                return .textDelta(textDelta)
+            case "thinking_delta":
+                guard let incoming = delta["thinking"] as? String, !incoming.isEmpty else { return nil }
+                let reasoningDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullReasoning, incoming: incoming)
+                guard !reasoningDelta.isEmpty else { return nil }
+                fullReasoning += reasoningDelta
+                return .reasoningDelta(reasoningDelta)
+            default:
+                return nil
+            }
+        case "message_stop":
+            return .completed(
+                ProviderResponse(
+                    text: fullText,
+                    reasoningSummary: fullReasoning.trimmedNonEmpty,
+                    raw: nil,
+                    usage: nil
+                )
+            )
+        default:
+            return nil
+        }
     }
 
     private func extractText(from rawContent: Any?) -> [String] {

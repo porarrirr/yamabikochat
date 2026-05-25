@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>Yamabiko Share</string>
+    <string>YamabikoChat</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -43,7 +43,7 @@
         <key>NSExtensionPointIdentifier</key>
         <string>com.apple.share-services</string>
         <key>NSExtensionPrincipalClass</key>
-        <string>$(PRODUCT_MODULE_NAME).ShareViewController</string>
+        <string>$(PRODUCT_MODULE_NAME).ShareImportViewController</string>
     </dict>
 </dict>
 </plist>

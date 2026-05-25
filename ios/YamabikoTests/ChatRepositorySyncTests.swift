@@ -74,6 +74,10 @@ private struct NoopPricingRepository: LiteLlmPricingEstimating {
     ) async -> Double? {
         nil
     }
+
+    func modelSupportsVision(provider: String, model: String) async -> Bool {
+        false
+    }
 }
 
 private actor PricingSpyRepository: LiteLlmPricingEstimating {
@@ -115,6 +119,10 @@ private actor PricingSpyRepository: LiteLlmPricingEstimating {
             )
         )
         return returnValue
+    }
+
+    func modelSupportsVision(provider: String, model: String) async -> Bool {
+        false
     }
 
     func lastCall() -> Call? {

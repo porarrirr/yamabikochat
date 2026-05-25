@@ -6,6 +6,7 @@ struct ChatWorkspaceScreen: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
+    let conversationID: Int64
     @ObservedObject var viewModel: ChatViewModel
     var onSelectConversation: ((Int64) -> Void)?
 
@@ -33,11 +34,17 @@ struct ChatWorkspaceScreen: View {
                 repository: container.chatRepository,
                 attachmentRepository: container.attachmentRepository
             )
-            viewModel.applySharedText(appState.consumePendingText())
+            applyShareImportDraftIfNeeded()
         }
-        .onChange(of: appState.pendingSharedText) { _, _ in
-            viewModel.applySharedText(appState.consumePendingText())
+        .onChange(of: appState.shareImportDraft) { _, _ in
+            applyShareImportDraftIfNeeded()
         }
+    }
+
+    private func applyShareImportDraftIfNeeded() {
+        guard let text = appState.shareImportText(for: conversationID) else { return }
+        viewModel.applySharedText(text)
+        appState.clearShareImportDraft(for: conversationID)
     }
 
     private var workspaceBackground: Color {

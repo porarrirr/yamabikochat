@@ -26,8 +26,8 @@ enum OpenCodeGoModelCatalog {
         OpenCodeGoModel(id: "mimo-v2-omni", displayName: "MiMo-V2-Omni", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
         OpenCodeGoModel(id: "mimo-v2.5-pro", displayName: "MiMo-V2.5-Pro", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
         OpenCodeGoModel(id: "mimo-v2.5", displayName: "MiMo-V2.5", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
-        OpenCodeGoModel(id: "qwen3.6-plus", displayName: "Qwen3.6 Plus", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
-        OpenCodeGoModel(id: "qwen3.5-plus", displayName: "Qwen3.5 Plus", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
+        OpenCodeGoModel(id: "qwen3.6-plus", displayName: "Qwen3.6 Plus", endpointKind: .messages, description: "OpenCode Go messages API model."),
+        OpenCodeGoModel(id: "qwen3.5-plus", displayName: "Qwen3.5 Plus", endpointKind: .messages, description: "OpenCode Go messages API model."),
         OpenCodeGoModel(id: "minimax-m2.7", displayName: "MiniMax M2.7", endpointKind: .messages, description: "OpenCode Go messages API model."),
         OpenCodeGoModel(id: "minimax-m2.5", displayName: "MiniMax M2.5", endpointKind: .messages, description: "OpenCode Go messages API model.")
     ]

@@ -8,14 +8,9 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
     private static let defaultMaxTokens = 4096
     private static let minimumThinkingBudgetTokens = 1024
 
-    private struct AnthropicTextContentBlock: Encodable {
-        var type: String = "text"
-        var text: String
-    }
-
     private struct AnthropicMessage: Encodable {
         var role: String
-        var content: [AnthropicTextContentBlock]
+        var content: [ProviderAttachmentEncoder.AnthropicContentBlock]
     }
 
     private struct AnthropicThinking: Encodable {
@@ -258,7 +253,10 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         let maxTokens = max(Self.defaultMaxTokens, (thinking?.budgetTokens ?? 0) + 1024)
         let body = AnthropicRequestBody(
             model: request.model.trimmingCharacters(in: .whitespacesAndNewlines),
-            messages: mapMessages(request.messages),
+            messages: mapMessages(
+                request.messages,
+                embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
+            ),
             system: optionalNonEmpty(request.systemPrompt),
             maxTokens: maxTokens,
             stream: stream,
@@ -334,17 +332,21 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         return AnthropicThinking(budgetTokens: budget)
     }
 
-    private func mapMessages(_ messages: [ProviderRequestMessage]) -> [AnthropicMessage] {
+    private func mapMessages(_ messages: [ProviderRequestMessage], embedImages: Bool) -> [AnthropicMessage] {
         messages.map { message in
-            var content = message.content
-            if !message.attachments.isEmpty {
-                let attachmentText = message.attachments.map { "- \($0)" }.joined(separator: "\n")
-                content += "\n\nAttachments:\n\(attachmentText)"
-            }
+            ProviderAttachmentEncoder.logSkippedAttachmentsIfNeeded(
+                message.attachments,
+                providerLabel: "Anthropic compatible",
+                embedImages: embedImages
+            )
             let normalizedRole = normalizeRole(message.role)
             return AnthropicMessage(
                 role: normalizedRole,
-                content: [AnthropicTextContentBlock(text: content)]
+                content: ProviderAttachmentEncoder.buildAnthropicContentBlocks(
+                    text: message.content,
+                    attachments: message.attachments,
+                    embedImages: embedImages
+                )
             )
         }
     }

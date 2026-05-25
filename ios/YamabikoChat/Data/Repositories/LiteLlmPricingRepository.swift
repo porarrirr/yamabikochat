@@ -10,11 +10,14 @@ protocol LiteLlmPricingEstimating: Sendable {
         cacheCreationInputTokens: Int?,
         reasoningTokens: Int?
     ) async -> Double?
+
+    func modelSupportsVision(provider: String, model: String) async -> Bool
 }
 
 actor LiteLlmPricingRepository: LiteLlmPricingEstimating {
     private let session: URLSession
-    private var cachedPrices: [String: LiteLlmModelPrice] = [:]
+    private var cachedCatalog: [String: LiteLlmModelCatalogEntry] = [:]
+    private var visionByBasename: [String: Bool] = [:]
     private var lastFetchedAtMs: Int64 = 0
 
     init(session: URLSession = .shared) {
@@ -57,13 +60,29 @@ actor LiteLlmPricingRepository: LiteLlmPricingEstimating {
         return total
     }
 
-    private func resolvePrice(provider: String, model: String) async -> LiteLlmModelPrice? {
+    func modelSupportsVision(provider: String, model: String) async -> Bool {
         await ensureCatalogLoaded()
-        guard !cachedPrices.isEmpty else { return nil }
+        guard !cachedCatalog.isEmpty else { return false }
+
         let candidates = buildLookupCandidates(provider: provider, model: model)
         for candidate in candidates {
-            if let price = cachedPrices[candidate] {
-                return price
+            if let entry = cachedCatalog[candidate] {
+                return entry.supportsVision == true
+            }
+        }
+
+        let basename = modelBasename(from: model)
+        guard !basename.isEmpty else { return false }
+        return visionByBasename[basename] == true
+    }
+
+    private func resolvePrice(provider: String, model: String) async -> LiteLlmModelPrice? {
+        await ensureCatalogLoaded()
+        guard !cachedCatalog.isEmpty else { return nil }
+        let candidates = buildLookupCandidates(provider: provider, model: model)
+        for candidate in candidates {
+            if let entry = cachedCatalog[candidate], entry.hasPricing {
+                return entry.price
             }
         }
         return nil
@@ -71,7 +90,7 @@ actor LiteLlmPricingRepository: LiteLlmPricingEstimating {
 
     private func ensureCatalogLoaded(forceRefresh: Bool = false) async {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
-        if !forceRefresh, !cachedPrices.isEmpty, (now - lastFetchedAtMs) < Self.cacheTTLms {
+        if !forceRefresh, !cachedCatalog.isEmpty, (now - lastFetchedAtMs) < Self.cacheTTLms {
             return
         }
 
@@ -86,8 +105,9 @@ actor LiteLlmPricingRepository: LiteLlmPricingEstimating {
                 return
             }
             let parsed = parseCatalog(data: data)
-            if !parsed.isEmpty {
-                cachedPrices = parsed
+            if !parsed.catalog.isEmpty {
+                cachedCatalog = parsed.catalog
+                visionByBasename = parsed.visionByBasename
                 lastFetchedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
             }
         } catch {
@@ -95,11 +115,17 @@ actor LiteLlmPricingRepository: LiteLlmPricingEstimating {
         }
     }
 
-    private func parseCatalog(data: Data) -> [String: LiteLlmModelPrice] {
+    private struct ParsedCatalog {
+        var catalog: [String: LiteLlmModelCatalogEntry]
+        var visionByBasename: [String: Bool]
+    }
+
+    private func parseCatalog(data: Data) -> ParsedCatalog {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return [:]
+            return ParsedCatalog(catalog: [:], visionByBasename: [:])
         }
-        var output: [String: LiteLlmModelPrice] = [:]
+        var output: [String: LiteLlmModelCatalogEntry] = [:]
+        var visionByBasename: [String: Bool] = [:]
         for (rawKey, rawValue) in root {
             let key = rawKey.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             if key == "sample_spec" { continue }
@@ -111,17 +137,39 @@ actor LiteLlmPricingRepository: LiteLlmPricingEstimating {
                 cacheReadInputCostPerToken: object.doubleValue(for: "cache_read_input_token_cost"),
                 cacheCreationInputCostPerToken: object.doubleValue(for: "cache_creation_input_token_cost")
             )
-            if
+            let supportsVision = object.boolValue(for: "supports_vision")
+            let hasPricing =
                 price.inputCostPerToken != nil ||
                 price.outputCostPerToken != nil ||
                 price.outputCostPerReasoningToken != nil ||
                 price.cacheReadInputCostPerToken != nil ||
                 price.cacheCreationInputCostPerToken != nil
-            {
-                output[key] = price
+            guard hasPricing || supportsVision != nil else { continue }
+
+            output[key] = LiteLlmModelCatalogEntry(price: price, supportsVision: supportsVision)
+
+            if supportsVision == true {
+                let basename = modelBasename(from: key)
+                if !basename.isEmpty {
+                    visionByBasename[basename] = true
+                }
             }
         }
-        return output
+        return ParsedCatalog(catalog: output, visionByBasename: visionByBasename)
+    }
+
+    private func modelBasename(from model: String) -> String {
+        let cleaned = model
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"^/+"#, with: "", options: .regularExpression)
+            .lowercased()
+        guard !cleaned.isEmpty else { return "" }
+        let canonical = cleaned.components(separatedBy: "@").first ?? cleaned
+        let withoutVariant = canonical.components(separatedBy: ":").first ?? canonical
+        if let last = withoutVariant.split(separator: "/").last, !last.isEmpty {
+            return String(last)
+        }
+        return withoutVariant
     }
 
     private func buildLookupCandidates(provider: String, model: String) -> [String] {
@@ -213,6 +261,19 @@ actor LiteLlmPricingRepository: LiteLlmPricingEstimating {
     private static let cacheTTLms: Int64 = 12 * 60 * 60 * 1000
 }
 
+struct LiteLlmModelCatalogEntry: Sendable {
+    var price: LiteLlmModelPrice
+    var supportsVision: Bool?
+
+    var hasPricing: Bool {
+        price.inputCostPerToken != nil ||
+            price.outputCostPerToken != nil ||
+            price.outputCostPerReasoningToken != nil ||
+            price.cacheReadInputCostPerToken != nil ||
+            price.cacheCreationInputCostPerToken != nil
+    }
+}
+
 struct LiteLlmModelPrice: Sendable {
     var inputCostPerToken: Double?
     var outputCostPerToken: Double?
@@ -231,6 +292,26 @@ private extension Dictionary where Key == String, Value == Any {
         }
         if let value = self[key] as? String {
             return Double(value)
+        }
+        return nil
+    }
+
+    func boolValue(for key: String) -> Bool? {
+        if let value = self[key] as? Bool {
+            return value
+        }
+        if let value = self[key] as? NSNumber {
+            return value.boolValue
+        }
+        if let value = self[key] as? String {
+            switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "true", "1", "yes":
+                return true
+            case "false", "0", "no":
+                return false
+            default:
+                return nil
+            }
         }
         return nil
     }

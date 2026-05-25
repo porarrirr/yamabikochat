@@ -5,7 +5,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
 
     private struct OpenAIMessage: Encodable {
         var role: String
-        var content: String
+        var content: ProviderAttachmentEncoder.OpenAIMessageContent
     }
 
     private struct PromptCacheControl: Encodable {
@@ -194,7 +194,11 @@ struct OpenAICompatibleProviderClient: ProviderClient {
 
         let body = OpenAIRequestBody(
             model: request.model,
-            messages: mapMessages(request.messages, systemPrompt: request.systemPrompt),
+            messages: mapMessages(
+                request.messages,
+                systemPrompt: request.systemPrompt,
+                embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
+            ),
             stream: stream,
             tools: toolsPayload,
             provider: providerPayload,
@@ -370,19 +374,32 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         return headers
     }
 
-    private func mapMessages(_ messages: [ProviderRequestMessage], systemPrompt: String?) -> [OpenAIMessage] {
+    private func mapMessages(
+        _ messages: [ProviderRequestMessage],
+        systemPrompt: String?,
+        embedImages: Bool
+    ) -> [OpenAIMessage] {
         var mapped: [OpenAIMessage] = []
         if let systemPrompt, !systemPrompt.isEmpty {
-            mapped.append(OpenAIMessage(role: "system", content: systemPrompt))
+            mapped.append(OpenAIMessage(role: "system", content: .plain(systemPrompt)))
         }
 
         for message in messages {
-            var content = message.content
-            if !message.attachments.isEmpty {
-                let attachmentText = message.attachments.map { "- \($0)" }.joined(separator: "\n")
-                content += "\n\nAttachments:\n\(attachmentText)"
-            }
-            mapped.append(OpenAIMessage(role: message.role, content: content))
+            ProviderAttachmentEncoder.logSkippedAttachmentsIfNeeded(
+                message.attachments,
+                providerLabel: "OpenAI compatible",
+                embedImages: embedImages
+            )
+            mapped.append(
+                OpenAIMessage(
+                    role: message.role,
+                    content: ProviderAttachmentEncoder.buildOpenAIMessageContent(
+                        text: message.content,
+                        attachments: message.attachments,
+                        embedImages: embedImages
+                    )
+                )
+            )
         }
         return mapped
     }

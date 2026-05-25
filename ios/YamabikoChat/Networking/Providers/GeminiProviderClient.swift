@@ -1,5 +1,4 @@
 import Foundation
-import UniformTypeIdentifiers
 
 struct GeminiProviderClient: ProviderClient {
     let provider: LLMProvider = .gemini
@@ -334,10 +333,11 @@ struct GeminiProviderClient: ProviderClient {
         credentialStore: SecureCredentialStore
     ) throws -> GeminiBodyBuildResult {
         _ = credentialStore
+        let embedImages = ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
         let contents = request.messages.map { message -> [String: Any] in
             [
                 "role": message.role == "assistant" ? "model" : "user",
-                "parts": buildGeminiParts(for: message)
+                "parts": buildGeminiParts(for: message, embedImages: embedImages)
             ]
         }
 
@@ -387,86 +387,12 @@ struct GeminiProviderClient: ProviderClient {
         )
     }
 
-    private func resolveAttachmentFileURL(_ rawAttachment: String) -> URL? {
-        if let parsed = URL(string: rawAttachment), parsed.isFileURL {
-            return parsed
-        }
-
-        let directPath = URL(fileURLWithPath: rawAttachment)
-        if FileManager.default.fileExists(atPath: directPath.path) {
-            return directPath
-        }
-
-        if let decoded = rawAttachment.removingPercentEncoding {
-            let decodedPath = URL(fileURLWithPath: decoded)
-            if FileManager.default.fileExists(atPath: decodedPath.path) {
-                return decodedPath
-            }
-        }
-
-        return nil
-    }
-
-    private func resolveAttachmentMimeType(fileURL: URL) -> String {
-        if let values = try? fileURL.resourceValues(forKeys: [.contentTypeKey]),
-           let contentType = values.contentType,
-           let mime = contentType.preferredMIMEType,
-           !mime.isEmpty {
-            return mime
-        }
-
-        let ext = fileURL.pathExtension
-        if let type = UTType(filenameExtension: ext),
-           let mime = type.preferredMIMEType,
-           !mime.isEmpty {
-            return mime
-        }
-
-        return "application/octet-stream"
-    }
-
-    private func inlineDataPart(from rawAttachment: String) -> [String: Any]? {
-        guard let fileURL = resolveAttachmentFileURL(rawAttachment) else {
-            DiagnosticsLogger.log(
-                "Gemini attachment skipped: unreadable file URL",
-                category: .network,
-                metadata: ["attachment_extension": URL(fileURLWithPath: rawAttachment).pathExtension]
-            )
-            return nil
-        }
-
-        do {
-            let data = try Data(contentsOf: fileURL)
-            let mime = resolveAttachmentMimeType(fileURL: fileURL)
-            return [
-                "inlineData": [
-                    "mimeType": mime,
-                    "data": data.base64EncodedString()
-                ]
-            ]
-        } catch {
-            DiagnosticsLogger.log(
-                "Gemini attachment skipped: file read failed",
-                category: .network,
-                metadata: [
-                    "attachment_extension": fileURL.pathExtension
-                ],
-                error: error
-            )
-            return nil
-        }
-    }
-
-    private func buildGeminiParts(for message: ProviderRequestMessage) -> [[String: Any]] {
-        var parts: [[String: Any]] = [["text": message.content]]
-
-        for attachment in message.attachments {
-            if let inline = inlineDataPart(from: attachment) {
-                parts.append(inline)
-            }
-        }
-
-        return parts
+    private func buildGeminiParts(for message: ProviderRequestMessage, embedImages: Bool) -> [[String: Any]] {
+        ProviderAttachmentEncoder.buildGeminiParts(
+            text: message.content,
+            attachments: message.attachments,
+            embedImages: embedImages
+        )
     }
 
     private func parseGeminiParts(_ parts: [[String: Any]], payloadText: String? = nil) -> ParsedGeminiParts {

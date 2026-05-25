@@ -119,4 +119,65 @@ final class LiteLlmPricingRepositoryTests: XCTestCase {
 
         XCTAssertEqual(result ?? -1, 0.0002, accuracy: 0.0000000001)
     }
+
+    func testModelSupportsVisionPhase1UsesProviderAwareCatalogEntry() async {
+        let repository = makeRepository(
+            withCatalogJSON: #"""
+            {
+              "openai/gpt-4o": {
+                "input_cost_per_token": 0.000001,
+                "supports_vision": true
+              }
+            }
+            """#
+        )
+
+        let supports = await repository.modelSupportsVision(provider: "OPENROUTER", model: "openai/gpt-4o")
+        XCTAssertTrue(supports)
+    }
+
+    func testModelSupportsVisionPhase1ExplicitFalse() async {
+        let repository = makeRepository(
+            withCatalogJSON: #"""
+            {
+              "text-only-model": {
+                "supports_vision": false
+              }
+            }
+            """#
+        )
+
+        let supports = await repository.modelSupportsVision(provider: "OPENROUTER", model: "text-only-model")
+        XCTAssertFalse(supports)
+    }
+
+    func testModelSupportsVisionPhase2FallsBackToBasenameAcrossProviders() async {
+        let repository = makeRepository(
+            withCatalogJSON: #"""
+            {
+              "openrouter/foo-model": {
+                "supports_vision": true
+              }
+            }
+            """#
+        )
+
+        let supports = await repository.modelSupportsVision(provider: "OPENCODE_GO", model: "foo-model")
+        XCTAssertTrue(supports)
+    }
+
+    func testModelSupportsVisionUnknownModelReturnsFalse() async {
+        let repository = makeRepository(
+            withCatalogJSON: #"""
+            {
+              "openai/gpt-4o": {
+                "supports_vision": true
+              }
+            }
+            """#
+        )
+
+        let supports = await repository.modelSupportsVision(provider: "OPENROUTER", model: "totally-unknown-model-xyz")
+        XCTAssertFalse(supports)
+    }
 }

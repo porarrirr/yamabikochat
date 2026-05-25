@@ -352,7 +352,7 @@ final class ProviderClientParityTests: XCTestCase {
             stream: false,
             tools: [],
             thinking: nil,
-            metadata: ["provider": "GEMINI"]
+            metadata: ["provider": "GEMINI", "supportsVision": "true"]
         )
 
         let client = GeminiProviderClient()
@@ -398,7 +398,7 @@ final class ProviderClientParityTests: XCTestCase {
             stream: false,
             tools: [],
             thinking: nil,
-            metadata: ["provider": "GEMINI"]
+            metadata: ["provider": "GEMINI", "supportsVision": "true"]
         )
 
         let client = GeminiProviderClient()
@@ -1187,6 +1187,269 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(body["model"] as? String, "minimax-m2.7")
         XCTAssertEqual(body["system"] as? String, "stable system")
         XCTAssertNil(body["prompt_cache_key"])
+    }
+
+    func testOpenCodeGoQwenModelUsesMessagesEndpoint() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"content":[{"type":"text","text":"qwen ok"}],"usage":{"input_tokens":4,"output_tokens":2}}"#
+                .data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "qwen3.5-plus",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENCODE_GO"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(response.text, "qwen ok")
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(captured.url.absoluteString, "https://opencode.ai/zen/go/v1/messages")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(captured.body)) as? [String: Any])
+        XCTAssertEqual(body["model"] as? String, "qwen3.5-plus")
+    }
+
+    func testOpenCodeGoMessagesStreamParsesAnthropicStyleChunks() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield("event: content_block_delta")
+                continuation.yield(#"data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Plan "}}"#)
+                continuation.yield("")
+                continuation.yield("event: content_block_delta")
+                continuation.yield(#"data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Go"}}"#)
+                continuation.yield("")
+                continuation.yield(#"data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" stream"}}"#)
+                continuation.yield("")
+                continuation.yield(#"data: {"type":"message_stop"}"#)
+                continuation.yield("")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "minimax-m2.7",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENCODE_GO"]
+        )
+
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        var textDeltas: [String] = []
+        var reasoningDeltas: [String] = []
+        var final: ProviderResponse?
+        for try await event in stream {
+            switch event {
+            case let .textDelta(delta):
+                textDeltas.append(delta)
+            case let .reasoningDelta(delta):
+                reasoningDeltas.append(delta)
+            case let .completed(response):
+                final = response
+            default:
+                break
+            }
+        }
+
+        XCTAssertEqual(reasoningDeltas, ["Plan "])
+        XCTAssertEqual(textDeltas, ["Go", " stream"])
+        XCTAssertEqual(final?.text, "Go stream")
+        XCTAssertEqual(final?.reasoningSummary, "Plan")
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(captured.headers["Accept"], "text/event-stream")
+        XCTAssertEqual(captured.url.absoluteString, "https://opencode.ai/zen/go/v1/messages")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(captured.body)) as? [String: Any])
+        XCTAssertEqual(body["stream"] as? Bool, true)
+    }
+
+    func testOpenCodeGoChatModelEmbedsImageAsImageURL() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("png")
+        let imageData = Data([0x89, 0x50, 0x4E, 0x47])
+        try imageData.write(to: tempURL)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "kimi-k2.6",
+            messages: [
+                ProviderRequestMessage(
+                    role: "user",
+                    content: "describe this image",
+                    attachments: [tempURL.absoluteString]
+                )
+            ],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENCODE_GO", "supportsVision": "true"]
+        )
+
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let bodyData = try XCTUnwrap(httpClient.lastRequest?.body)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        let userMessage = try XCTUnwrap(messages.last)
+        let content = try XCTUnwrap(userMessage["content"] as? [[String: Any]])
+        XCTAssertEqual(content.first?["type"] as? String, "text")
+        XCTAssertEqual(content.first?["text"] as? String, "describe this image")
+        XCTAssertEqual(content.last?["type"] as? String, "image_url")
+        let imageURL = try XCTUnwrap(content.last?["image_url"] as? [String: Any])
+        let url = try XCTUnwrap(imageURL["url"] as? String)
+        XCTAssertTrue(url.hasPrefix("data:image/png;base64,"))
+        XCTAssertFalse(url.contains("Attachments:"))
+        XCTAssertFalse(url.contains("file://"))
+    }
+
+    func testOpenCodeGoMiniMaxModelEmbedsImageBlock() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1,"output_tokens":1}}"#
+                .data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("png")
+        let imageData = Data([0x89, 0x50, 0x4E, 0x47])
+        try imageData.write(to: tempURL)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "minimax-m2.7",
+            messages: [
+                ProviderRequestMessage(
+                    role: "user",
+                    content: "describe this image",
+                    attachments: [tempURL.absoluteString]
+                )
+            ],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENCODE_GO", "supportsVision": "true"]
+        )
+
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let bodyData = try XCTUnwrap(httpClient.lastRequest?.body)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        let content = try XCTUnwrap(messages.first?["content"] as? [[String: Any]])
+        XCTAssertEqual(content.first?["type"] as? String, "text")
+        XCTAssertEqual(content.last?["type"] as? String, "image")
+        let source = try XCTUnwrap(content.last?["source"] as? [String: Any])
+        XCTAssertEqual(source["type"] as? String, "base64")
+        XCTAssertEqual(source["media_type"] as? String, "image/png")
+        XCTAssertEqual(source["data"] as? String, imageData.base64EncodedString())
+    }
+
+    func testOpenCodeGoChatModelSkipsImageWhenVisionDisabled() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("png")
+        try Data([0x89, 0x50, 0x4E, 0x47]).write(to: tempURL)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "kimi-k2.6",
+            messages: [
+                ProviderRequestMessage(
+                    role: "user",
+                    content: "describe this image",
+                    attachments: [tempURL.absoluteString]
+                )
+            ],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENCODE_GO", "supportsVision": "false"]
+        )
+
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let bodyData = try XCTUnwrap(httpClient.lastRequest?.body)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        let userMessage = try XCTUnwrap(messages.last)
+        let content = userMessage["content"]
+        if let text = content as? String {
+            XCTAssertEqual(text, "describe this image")
+            XCTAssertFalse(text.contains("Attachments:"))
+            XCTAssertFalse(text.contains("file://"))
+        } else {
+            XCTFail("Expected plain string content when vision is disabled")
+        }
     }
 
     func testOpenCodeGoChatStreamParsesReasoningContent() async throws {

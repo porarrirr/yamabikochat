@@ -47,6 +47,11 @@ targets:
           - SharePayload.swift
     resources:
       - path: YamabikoShareExtension/PrivacyInfo.xcprivacy
+      - path: YamabikoShareExtension/en.lproj
+      - path: YamabikoShareExtension/ja.lproj
+      - path: YamabikoShareExtension/es.lproj
+      - path: YamabikoShareExtension/fr.lproj
+      - path: YamabikoShareExtension/zh-Hans.lproj
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.porarri.yamabikochat.ios.share
       INFOPLIST_FILE: YamabikoShareExtension/Info.plist

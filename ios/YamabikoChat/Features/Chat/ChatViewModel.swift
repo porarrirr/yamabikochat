@@ -31,6 +31,7 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var activeChatPresetName: String?
     @Published private(set) var activeSystemPromptPresetName: String?
     @Published private(set) var contextUsageLabel: String?
+    @Published private(set) var canAttachImages: Bool = false
 
     let speechService = SpeechRecognitionService()
 
@@ -130,6 +131,9 @@ final class ChatViewModel: ObservableObject {
                 self.syncNewChatWithSettingsIfEmpty(settings: $0, previousSettings: previous)
                 self.updateActiveChatPresetName()
                 self.updateActiveSystemPromptPresetName()
+                Task { [weak self] in
+                    await self?.refreshVisionSupport()
+                }
             }
             .store(in: &cancellables)
 
@@ -142,6 +146,7 @@ final class ChatViewModel: ObservableObject {
                 updateActiveSystemPromptPresetName()
                 Task { [weak self] in
                     await self?.refreshContextLimit()
+                    await self?.refreshVisionSupport()
                 }
             }
         } catch {
@@ -167,6 +172,10 @@ final class ChatViewModel: ObservableObject {
             if deleteSourceWhenHandled {
                 try? FileManager.default.removeItem(at: url)
             }
+        }
+        guard canAttachImages else {
+            errorMessage = L10n.text("このモデルは画像入力に対応していません。")
+            return
         }
         guard let attachmentRepository else {
             errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
@@ -595,6 +604,7 @@ final class ChatViewModel: ObservableObject {
             updateActiveChatPresetName()
             Task { [weak self] in
                 await self?.refreshContextLimit()
+                await self?.refreshVisionSupport()
             }
             errorMessage = nil
         } catch {
@@ -794,6 +804,7 @@ final class ChatViewModel: ObservableObject {
                 updateActiveSystemPromptPresetName()
                 Task { [weak self] in
                     await self?.refreshContextLimit()
+                    await self?.refreshVisionSupport()
                 }
             }
         } catch {
@@ -843,6 +854,22 @@ final class ChatViewModel: ObservableObject {
         )
         resolvedContextLimit = limit
         rebuildContextUsageLabel()
+    }
+
+    private func refreshVisionSupport() async {
+        guard let repository else {
+            canAttachImages = false
+            return
+        }
+        let supportsVision = await repository.resolveCanAttachImages(
+            settings: settings,
+            conversationProvider: activeConversationProvider,
+            conversationModel: activeConversationModel
+        )
+        canAttachImages = supportsVision
+        if !supportsVision, !attachments.isEmpty {
+            attachments = []
+        }
     }
 
     private func rebuildContextUsageLabel() {

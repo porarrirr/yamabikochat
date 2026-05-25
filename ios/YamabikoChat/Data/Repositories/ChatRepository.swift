@@ -326,7 +326,7 @@ final class ChatRepository {
             isFirstMessage: isFirstMessage
         )
 
-        let request = try buildProviderRequest(
+        let request = try await buildProviderRequest(
             conversation: conversation,
             settings: settings,
             conversationId: conversationId
@@ -395,7 +395,7 @@ final class ChatRepository {
         let requestMessages = Array(history.prefix(targetIndex)).map {
             ProviderRequestMessage(role: $0.role, content: $0.text, attachments: $0.attachments)
         }
-        let request = try buildProviderRequest(
+        let request = try await buildProviderRequest(
             conversation: conversation,
             settings: settings,
             conversationId: conversationId,
@@ -641,7 +641,7 @@ final class ChatRepository {
         settings: AppSettings,
         conversationId: Int64,
         providerMessages: [ProviderRequestMessage]? = nil
-    ) throws -> ProviderRequest {
+    ) async throws -> ProviderRequest {
         let resolvedMessages: [ProviderRequestMessage]
         if let providerMessages {
             resolvedMessages = providerMessages
@@ -669,6 +669,10 @@ final class ChatRepository {
         }
         metadata["provider"] = conversation.apiProvider
         metadata["promptCacheKey"] = "conversation-\(conversationId)"
+        metadata["supportsVision"] = await visionMetadataFlag(
+            provider: conversation.apiProvider,
+            model: conversation.model
+        )
 
         return ProviderRequest(
             model: conversation.model,
@@ -724,7 +728,7 @@ final class ChatRepository {
             modelSide: .b
         )
 
-        let requestA = buildSingleTurnRequest(
+        let requestA = await buildSingleTurnRequest(
             model: settings.dualModelA,
             text: text,
             systemPrompt: settings.dualSystemPromptA,
@@ -736,7 +740,7 @@ final class ChatRepository {
             promptCacheKey: "conversation-\(conversationId)-dual-a"
         )
 
-        let requestB = buildSingleTurnRequest(
+        let requestB = await buildSingleTurnRequest(
             model: settings.dualModelB,
             text: text,
             systemPrompt: settings.dualSystemPromptB,
@@ -1094,6 +1098,45 @@ final class ChatRepository {
         await modelService.getModelEndpoints(modelId: modelId)
     }
 
+    func resolveModelSupportsVision(provider: String, model: String) async -> Bool {
+        await pricingRepository.modelSupportsVision(provider: provider, model: model)
+    }
+
+    func resolveCanAttachImages(
+        settings: AppSettings,
+        conversationProvider: String,
+        conversationModel: String
+    ) async -> Bool {
+        if settings.isDualModeEnabled {
+            async let modelA = pricingRepository.modelSupportsVision(
+                provider: settings.dualProviderA,
+                model: settings.dualModelA
+            )
+            async let modelB = pricingRepository.modelSupportsVision(
+                provider: settings.dualProviderB,
+                model: settings.dualModelB
+            )
+            let (supportsA, supportsB) = await (modelA, modelB)
+            return supportsA && supportsB
+        }
+        if settings.isAutoConversationEnabled {
+            async let modelA = pricingRepository.modelSupportsVision(
+                provider: settings.autoProviderA,
+                model: settings.autoModelA
+            )
+            async let modelB = pricingRepository.modelSupportsVision(
+                provider: settings.autoProviderB,
+                model: settings.autoModelB
+            )
+            let (supportsA, supportsB) = await (modelA, modelB)
+            return supportsA && supportsB
+        }
+        return await pricingRepository.modelSupportsVision(
+            provider: conversationProvider,
+            model: conversationModel
+        )
+    }
+
     func resolveContextLimit(provider: String, model: String) async -> Int? {
         let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedModel.isEmpty else { return nil }
@@ -1134,6 +1177,11 @@ final class ChatRepository {
     }
 
     // MARK: - Helpers
+
+    private func visionMetadataFlag(provider: String, model: String) async -> String {
+        let supports = await pricingRepository.modelSupportsVision(provider: provider, model: model)
+        return supports ? "true" : "false"
+    }
 
     private enum AutoSpeaker {
         case a
@@ -1229,7 +1277,7 @@ final class ChatRepository {
 
             let history = buildAutoConversationHistory(messages: messages, speaker: speaker)
             let currentSettings = try settings.load()
-            let request = buildSingleTurnRequest(
+            let request = await buildSingleTurnRequest(
                 model: turnModel,
                 text: "",
                 systemPrompt: turnPrompt,
@@ -1479,7 +1527,7 @@ final class ChatRepository {
         messages: [ProviderRequestMessage]? = nil,
         context: AppSettings.ReasoningContext = .default,
         promptCacheKey: String? = nil
-    ) -> ProviderRequest {
+    ) async -> ProviderRequest {
         var metadata = metadataForProvider(
             settings: settings,
             provider: provider,
@@ -1490,6 +1538,7 @@ final class ChatRepository {
         if let promptCacheKey = promptCacheKey?.trimmingCharacters(in: .whitespacesAndNewlines), !promptCacheKey.isEmpty {
             metadata["promptCacheKey"] = promptCacheKey
         }
+        metadata["supportsVision"] = await visionMetadataFlag(provider: provider, model: model)
         return ProviderRequest(
             model: model,
             messages: messages ?? [ProviderRequestMessage(role: "user", content: text)],

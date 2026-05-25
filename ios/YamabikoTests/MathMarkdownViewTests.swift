@@ -85,8 +85,29 @@ final class MathMarkdownViewTests: XCTestCase {
         )
 
         XCTAssertTrue(html.contains(".yamabiko-table-wrap"))
+        XCTAssertTrue(html.contains("touch-action: pan-x pan-y"))
+        XCTAssertTrue(html.contains("overscroll-behavior-x: contain"))
+        XCTAssertTrue(html.contains(".yamabiko-table-wrap mjx-container"))
+        XCTAssertTrue(html.contains("max-width: none"))
         XCTAssertTrue(html.contains("table {"))
         XCTAssertTrue(html.contains("th, td {"))
+    }
+
+    func testBuildHTMLIncludesHorizontalScrollHelper() {
+        let html = MathMarkdownHTMLBuilder.buildHTML(
+            markdownPayload: "\"| A | B |\\n| --- | --- |\\n| 1 | 2 |\"",
+            markdownRendererScript: "window.yamabikoRenderMarkdown = function(){ return ''; };",
+            bodyTextColor: "#000000",
+            codeBackgroundColor: "#111111",
+            borderColor: "#222222",
+            linkColor: "#333333",
+            mathRenderingEnabled: false,
+            mathJaxScriptTag: ""
+        )
+
+        XCTAssertTrue(html.contains("enableHorizontalScrollContainers"))
+        XCTAssertTrue(html.contains("__yamabikoEnableHorizontalScroll"))
+        XCTAssertTrue(html.contains(".yamabiko-table-wrap, pre, mjx-container[display=\"true\"]"))
     }
 
     func testResolveResourceURLPrefersMathJaxSubdirectory() {
@@ -407,6 +428,29 @@ line1\\nline2
 
         XCTAssertTrue(result.contains("&lt;script&gt;alert(1)&lt;/script&gt;"))
         XCTAssertFalse(result.contains("<script>alert(1)</script>"))
+    }
+
+    func testMarkdownRendererPreservesMathTokensInTableCell() throws {
+        let result = try renderMarkdownWithJavaScript(
+            """
+            | 式 |
+            | --- |
+            | $a_c = v^2/r$ |
+            """
+        )
+
+        XCTAssertTrue(result.contains("yamabiko-table-wrap"))
+        XCTAssertTrue(result.contains("$a_c = v^2/r$"))
+        XCTAssertFalse(result.contains("&amp;"))
+    }
+
+    func testMarkdownRendererPreservesMathWithSpecialCharacters() throws {
+        let result = try renderMarkdownWithJavaScript("本文 $a < b$ と $c & d$")
+
+        XCTAssertTrue(result.contains("$a < b$"))
+        XCTAssertTrue(result.contains("$c & d$"))
+        XCTAssertFalse(result.contains("&lt;"))
+        XCTAssertFalse(result.contains("&amp;"))
     }
 
     func testMarkdownRendererDoesNotParseInvalidTableDelimiter() throws {

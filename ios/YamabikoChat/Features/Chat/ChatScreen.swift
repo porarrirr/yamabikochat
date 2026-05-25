@@ -237,26 +237,28 @@ struct ChatScreen: View {
                     .padding(.horizontal, 8)
             }
 
-            if isAttachmentPanelVisible {
+            if viewModel.canAttachImages, isAttachmentPanelVisible {
                 attachmentPanel
             }
 
             HStack(alignment: .bottom, spacing: 10) {
-                Button {
-                    toggleAttachmentPanel()
-                } label: {
-                    Image(systemName: isAttachmentPanelVisible ? "xmark" : "plus")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.chatComposerIcon)
-                        .frame(width: 34, height: 34)
-                        .background(Color.chatInputChipBackground)
-                        .overlay {
-                            Circle()
-                                .stroke(Color.chatBubbleBorder.opacity(0.5), lineWidth: 1)
-                        }
-                        .clipShape(Circle())
+                if viewModel.canAttachImages {
+                    Button {
+                        toggleAttachmentPanel()
+                    } label: {
+                        Image(systemName: isAttachmentPanelVisible ? "xmark" : "plus")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Color.chatComposerIcon)
+                            .frame(width: 34, height: 34)
+                            .background(Color.chatInputChipBackground)
+                            .overlay {
+                                Circle()
+                                    .stroke(Color.chatBubbleBorder.opacity(0.5), lineWidth: 1)
+                            }
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
 
                 TextField(viewModel.composerPlaceholder, text: $viewModel.inputText, axis: .vertical)
                     .lineLimit(1 ... 6)
@@ -907,36 +909,41 @@ private struct MessageBubble: View {
 
                 let svgBlocks = SvgCodeExtractor.extract(from: responseText)
                 let markdownText = SvgCodeExtractor.removeExtractedBlocks(from: responseText, blocks: svgBlocks)
+                let hasAssistantBubbleContent = !attachmentNames.isEmpty
+                    || !svgBlocks.isEmpty
+                    || !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
-                VStack(alignment: .leading, spacing: 8) {
-                    if !attachmentNames.isEmpty {
-                        ForEach(attachmentNames, id: \.self) { name in
-                            Label(name, systemImage: "paperclip")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                if hasAssistantBubbleContent {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if !attachmentNames.isEmpty {
+                            ForEach(attachmentNames, id: \.self) { name in
+                                Label(name, systemImage: "paperclip")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        if !svgBlocks.isEmpty {
+                            ForEach(svgBlocks) { block in
+                                SvgPreviewCard(block: block)
+                            }
+                        }
+
+                        if !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            MathMarkdownView(
+                                markdownText: markdownText,
+                                mathRenderingEnabled: mathRenderingEnabled
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-
-                    if !svgBlocks.isEmpty {
-                        ForEach(svgBlocks) { block in
-                            SvgPreviewCard(block: block)
-                        }
+                    .padding(12)
+                    .background(Color.chatAssistantBubble)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.chatBubbleBorder.opacity(0.45), lineWidth: 1)
                     }
-
-                    if !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        MathMarkdownView(
-                            markdownText: markdownText,
-                            mathRenderingEnabled: mathRenderingEnabled
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                .padding(12)
-                .background(Color.chatAssistantBubble)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.chatBubbleBorder.opacity(0.45), lineWidth: 1)
                 }
 
                 if message.variantCount > 1 {

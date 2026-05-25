@@ -132,6 +132,20 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    func setStreamingEnabled(_ enabled: Bool) {
+        settings.isStreamingEnabled = enabled
+        guard let repository else { return }
+        do {
+            let normalized = settings.normalizedForPersistence()
+            try repository.saveSettings(normalized)
+            settings = normalized
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log("Streaming setting save failed", error: error)
+        }
+    }
+
     func saveSettings() {
         guard let repository else { return }
         do {

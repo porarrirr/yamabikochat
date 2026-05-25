@@ -3,6 +3,7 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var appState: AppState
+    @Environment(\.scenePhase) private var scenePhase
 
     @StateObject private var listViewModel = ConversationListViewModel()
     @StateObject private var settingsViewModel = SettingsViewModel()
@@ -51,7 +52,16 @@ struct RootView: View {
             if let settings = try? container.chatRepository.loadSettings() {
                 applyAppearance(settings)
             }
+            importSharePayloadIfNeeded()
             await applyScreenshotRoutingIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AppConstants.sharePayloadDidChangeNotification)) { _ in
+            importSharePayloadIfNeeded()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                importSharePayloadIfNeeded()
+            }
         }
         .onReceive(container.chatRepository.settingsPublisher()) { settings in
             applyAppearance(settings)
@@ -62,6 +72,11 @@ struct RootView: View {
         }
         .onChange(of: listViewModel.conversations.map(\.id)) { _, ids in
             guard !AppStoreScreenshotRouting.isEnabled else { return }
+            if let draft = appState.shareImportDraft, ids.contains(draft.conversationID) {
+                appState.selectedConversationID = draft.conversationID
+                preferredCompactColumn = .detail
+                return
+            }
             guard !ids.isEmpty else {
                 appState.selectedConversationID = nil
                 preferredCompactColumn = .sidebar
@@ -186,6 +201,16 @@ struct RootView: View {
             appState.isConversationHistoryPresented = false
         }
     }
+
+    private func importSharePayloadIfNeeded() {
+        guard appState.importSharePayload(
+            from: container.sharePayloadStore,
+            repository: container.chatRepository
+        ) else {
+            return
+        }
+        preferredCompactColumn = .detail
+    }
 }
 
 private struct ConversationDetailHost: View {
@@ -207,6 +232,7 @@ private struct ConversationDetailHost: View {
 
     var body: some View {
         ChatWorkspaceScreen(
+            conversationID: conversationID,
             viewModel: viewModel,
             onSelectConversation: onSelectConversation
         )
