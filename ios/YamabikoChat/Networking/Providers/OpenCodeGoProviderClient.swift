@@ -323,111 +323,62 @@ struct OpenCodeGoProviderClient: ProviderClient {
         _ lineStream: AsyncThrowingStream<String, Error>,
         continuation: AsyncThrowingStream<ProviderStreamEvent, Error>.Continuation
     ) async throws {
-        var fullText = ""
-        var fullReasoning = ""
-        var latestUsage: ProviderUsage?
-        for try await dataChunk in SSEPayloadAssembly.payloads(from: lineStream) {
-            if dataChunk == "[DONE]" {
-                continuation.yield(
-                    .completed(
-                        ProviderResponse(
-                            text: fullText,
-                            reasoningSummary: fullReasoning.trimmedNonEmpty,
-                            raw: nil,
-                            usage: latestUsage
-                        )
+        try await ProviderSSEStreamRunner.pump(
+            lineStream: lineStream,
+            continuation: continuation,
+            options: openCodeGoSSEOptions(
+                usageFromRoot: { parseUsage($0["usage"] as? [String: Any]) },
+                eventsFromRoot: { root, fullText, fullReasoning in
+                    OpenAICompatibleStreamParser.events(
+                        fromRoot: root,
+                        fullText: &fullText,
+                        fullReasoning: &fullReasoning
                     )
-                )
-                continuation.finish()
-                return
-            }
-            guard let root = try? JSONSerialization.jsonObject(with: Data(dataChunk.utf8)) as? [String: Any] else { continue }
-            if let usage = parseUsage(root["usage"] as? [String: Any]) {
-                latestUsage = usage
-            }
-            for event in OpenAICompatibleStreamParser.events(
-                fromPayload: dataChunk,
-                fullText: &fullText,
-                fullReasoning: &fullReasoning
-            ) {
-                continuation.yield(event)
-            }
-        }
-        continuation.yield(
-            .completed(
-                ProviderResponse(
-                    text: fullText,
-                    reasoningSummary: fullReasoning.trimmedNonEmpty,
-                    raw: nil,
-                    usage: latestUsage
-                )
+                }
             )
         )
-        continuation.finish()
     }
 
     private func streamMessages(
         _ lineStream: AsyncThrowingStream<String, Error>,
         continuation: AsyncThrowingStream<ProviderStreamEvent, Error>.Continuation
     ) async throws {
-        var fullText = ""
-        var fullReasoning = ""
-        var latestUsage: ProviderUsage?
-        for try await dataChunk in SSEPayloadAssembly.payloads(from: lineStream) {
-            if dataChunk == "[DONE]" {
-                continuation.yield(
-                    .completed(
-                        ProviderResponse(
-                            text: fullText,
-                            reasoningSummary: fullReasoning.trimmedNonEmpty,
-                            raw: nil,
-                            usage: latestUsage
-                        )
-                    )
-                )
-                continuation.finish()
-                return
-            }
-            guard let root = try? JSONSerialization.jsonObject(with: Data(dataChunk.utf8)) as? [String: Any] else { continue }
-            if let usage = parseMessagesStreamUsage(root) {
-                latestUsage = usage
-            }
-            if let event = AnthropicMessagesStreamParser.event(
-                from: root,
-                fullText: &fullText,
-                fullReasoning: &fullReasoning
-            ) {
-                switch event {
-                case let .textDelta(delta):
-                    continuation.yield(.textDelta(delta))
-                case let .reasoningDelta(delta):
-                    continuation.yield(.reasoningDelta(delta))
-                case let .completed(response):
-                    let final = ProviderResponse(
-                        text: response.text,
-                        reasoningSummary: response.reasoningSummary?.trimmedNonEmpty,
-                        raw: response.raw,
-                        usage: response.usage ?? latestUsage
-                    )
-                    continuation.yield(.completed(final))
-                    continuation.finish()
-                    return
-                default:
-                    continue
+        try await ProviderSSEStreamRunner.pump(
+            lineStream: lineStream,
+            continuation: continuation,
+            options: openCodeGoSSEOptions(
+                usageFromRoot: parseMessagesStreamUsage,
+                eventsFromRoot: { root, fullText, fullReasoning in
+                    guard let event = AnthropicMessagesStreamParser.event(
+                        from: root,
+                        fullText: &fullText,
+                        fullReasoning: &fullReasoning
+                    ) else {
+                        return []
+                    }
+                    return [event]
                 }
-            }
-        }
-        continuation.yield(
-            .completed(
-                ProviderResponse(
-                    text: fullText,
-                    reasoningSummary: fullReasoning.trimmedNonEmpty,
-                    raw: nil,
-                    usage: latestUsage
-                )
             )
         )
-        continuation.finish()
+    }
+
+    private func openCodeGoSSEOptions(
+        usageFromRoot: @escaping ([String: Any]) -> ProviderUsage?,
+        eventsFromRoot: @escaping ([String: Any], inout String, inout String) -> [ProviderStreamEvent]
+    ) -> ProviderSSEStreamRunner.Options {
+        ProviderSSEStreamRunner.Options(
+            usageFromRoot: usageFromRoot,
+            eventsFromRoot: eventsFromRoot,
+            streamEndReasoningSummary: { $0.trimmedNonEmpty },
+            mergeInlineCompleted: { response, latestUsage in
+                ProviderResponse(
+                    text: response.text,
+                    reasoningSummary: response.reasoningSummary?.trimmedNonEmpty,
+                    raw: response.raw,
+                    usage: response.usage ?? latestUsage
+                )
+            }
+        )
     }
 
     private func parseMessagesStreamUsage(_ root: [String: Any]) -> ProviderUsage? {
@@ -482,12 +433,5 @@ struct OpenCodeGoProviderClient: ProviderClient {
         if let value = raw as? NSNumber { return value.intValue }
         if let value = raw as? String { return Int(value) }
         return nil
-    }
-}
-
-private extension String {
-    var trimmedNonEmpty: String? {
-        let value = trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
     }
 }

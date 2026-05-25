@@ -20,8 +20,10 @@ enum AnthropicMessagesStreamParser {
                 return .textDelta(textDelta)
             case "thinking_delta":
                 guard let incoming = delta["thinking"] as? String, !incoming.isEmpty else { return nil }
-                fullReasoning += incoming
-                return .reasoningDelta(incoming)
+                let reasoningDelta = StreamDeltaAccumulator.incrementalDelta(buffer: fullReasoning, incoming: incoming)
+                guard !reasoningDelta.isEmpty else { return nil }
+                fullReasoning += reasoningDelta
+                return .reasoningDelta(reasoningDelta)
             default:
                 return nil
             }
@@ -37,12 +39,5 @@ enum AnthropicMessagesStreamParser {
         default:
             return nil
         }
-    }
-}
-
-private extension String {
-    var trimmedNonEmpty: String? {
-        let value = trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
     }
 }

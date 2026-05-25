@@ -42,6 +42,9 @@ struct SSEPayloadAssembler {
         return payloads
     }
 
+    /// True when joined `data:` lines form one complete provider chunk (not a multiline fragment).
+    /// Auto-flush only when top-level keys match known stream shapes: OpenAI `choices`,
+    /// Anthropic `type`, Gemini `candidates`. Multiline JSON without these keys waits for a blank line.
     private static func looksLikeCompleteJSONEvent(_ raw: String) -> Bool {
         guard raw.first == "{",
               let data = raw.data(using: .utf8),
@@ -49,8 +52,6 @@ struct SSEPayloadAssembler {
         else {
             return false
         }
-        // Multiline `data:` fragments can be valid JSON but belong to one event; only split
-        // back-to-back provider stream chunks (OpenAI choices, Anthropic type, Gemini candidates).
         return object["choices"] != nil || object["type"] != nil || object["candidates"] != nil
     }
 

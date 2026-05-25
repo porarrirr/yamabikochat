@@ -523,11 +523,6 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
 }
 
 private extension String {
-    var trimmedNonEmpty: String? {
-        let value = trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
-    }
-
     func ifBlank(_ fallback: String) -> String {
         let value = trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? fallback : value

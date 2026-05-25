@@ -104,48 +104,25 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                         throw ProviderClientError.httpStatus(response.statusCode, "Streaming endpoint returned \(response.statusCode)")
                     }
 
-                    var fullText = ""
-                    var fullReasoning = ""
-                    var latestUsage: ProviderUsage?
-                    for try await dataChunk in SSEPayloadAssembly.payloads(from: lineStream) {
-                        if dataChunk == "[DONE]" {
-                            let final = ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: latestUsage)
-                            continuation.yield(.completed(final))
-                            continuation.finish()
-                            return
-                        }
-
-                        if let root = try? JSONSerialization.jsonObject(with: Data(dataChunk.utf8)) as? [String: Any] {
-                            if let usage = parseUsage(root["usage"] as? [String: Any])?.normalizedNonEmpty() {
-                                latestUsage = usage
-                            } else if let usage = parseUsage(root)?.normalizedNonEmpty() {
-                                latestUsage = usage
-                            }
-                        }
-
-                        for event in OpenAICompatibleStreamParser.events(
-                            fromPayload: dataChunk,
-                            fullText: &fullText,
-                            fullReasoning: &fullReasoning
-                        ) {
-                            if case let .completed(response) = event {
-                                let merged = ProviderResponse(
-                                    text: response.text,
-                                    reasoningSummary: response.reasoningSummary,
-                                    raw: response.raw,
-                                    usage: response.usage ?? latestUsage
+                    try await ProviderSSEStreamRunner.pump(
+                        lineStream: lineStream,
+                        continuation: continuation,
+                        options: ProviderSSEStreamRunner.Options(
+                            usageFromRoot: { [self] root in
+                                if let usage = parseUsage(root["usage"] as? [String: Any])?.normalizedNonEmpty() {
+                                    return usage
+                                }
+                                return parseUsage(root)?.normalizedNonEmpty()
+                            },
+                            eventsFromRoot: { root, fullText, fullReasoning in
+                                OpenAICompatibleStreamParser.events(
+                                    fromRoot: root,
+                                    fullText: &fullText,
+                                    fullReasoning: &fullReasoning
                                 )
-                                continuation.yield(.completed(merged))
-                                continuation.finish()
-                                return
                             }
-                            continuation.yield(event)
-                        }
-                    }
-
-                    let final = ProviderResponse(text: fullText, reasoningSummary: nil, raw: nil, usage: latestUsage)
-                    continuation.yield(.completed(final))
-                    continuation.finish()
+                        )
+                    )
                 } catch {
                     continuation.finish(throwing: error)
                 }
@@ -439,12 +416,5 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             return Int(value)
         }
         return nil
-    }
-}
-
-private extension String {
-    var trimmedNonEmpty: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

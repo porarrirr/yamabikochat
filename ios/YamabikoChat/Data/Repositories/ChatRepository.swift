@@ -455,72 +455,28 @@ final class ChatRepository {
             )
         )
 
-        var fullText = ""
-        var reasoningText = ""
-        var finalUsage: ProviderUsage?
-        var coordinator = ChatStreamingPersistenceCoordinator()
-        do {
-            let stream = try await providers.stream(request: request, provider: provider)
-            for try await event in stream {
-                try consumeStreamEvent(
-                    event,
-                    targetId: assistantMessageId,
-                    fullText: &fullText,
-                    reasoningText: &reasoningText,
-                    finalUsage: &finalUsage,
-                    coordinator: &coordinator,
-                    persist: { text, thinking in
-                        try conversations.updateMessageText(messageId: assistantMessageId, text: text)
-                        if !thinking.isEmpty {
-                            try conversations.saveThinking(messageId: assistantMessageId, stream: thinking)
-                        }
-                    },
-                    onStreamEvent: onStreamEvent,
-                    onStreamingSnapshot: onStreamingSnapshot
-                )
-            }
-        } catch {
-            if fullText.isEmpty && reasoningText.isEmpty {
-                try? conversations.updateMessageText(
-                    messageId: assistantMessageId,
-                    text: L10n.format("エラー: %@", error.localizedDescription)
-                )
-            }
-            publishStreamingSnapshot(
-                targetId: assistantMessageId,
-                coordinator: coordinator,
-                isFinal: true,
-                onStreamingSnapshot: onStreamingSnapshot
-            )
-            throw error
-        }
-
-        try coordinator.apply(text: fullText, thinking: reasoningText, force: true) { text, thinking in
-            try conversations.updateMessageText(messageId: assistantMessageId, text: text)
-            if !thinking.isEmpty {
-                try conversations.saveThinking(messageId: assistantMessageId, stream: thinking)
-            }
-        }
-        publishStreamingSnapshot(
-            targetId: assistantMessageId,
-            coordinator: coordinator,
-            isFinal: true,
+        let stream = try await providers.stream(request: request, provider: provider)
+        let session = try await ChatStreamSession.run(
+            stream: stream,
+            conversations: conversations,
+            kind: .message(messageId: assistantMessageId),
+            onStreamEvent: onStreamEvent,
             onStreamingSnapshot: onStreamingSnapshot
         )
 
         await recordTokenUsageIfAvailable(
             provider: provider.rawValue,
             model: request.model,
-            usage: finalUsage,
+            usage: session.usage,
             conversationId: conversationId,
             requestType: "chat_stream"
         )
 
         let response = ProviderResponse(
-            text: fullText,
-            reasoningSummary: reasoningText.isEmpty ? nil : reasoningText,
+            text: session.text,
+            reasoningSummary: session.reasoningText.isEmpty ? nil : session.reasoningText,
             raw: nil,
-            usage: finalUsage
+            usage: session.usage
         )
 
         return SendMessageResult(
@@ -548,132 +504,21 @@ final class ChatRepository {
             throw ProviderClientError.parseFailure("Variant creation failed")
         }
 
-        var fullText = ""
-        var reasoningText = ""
-        var finalUsage: ProviderUsage?
-        var coordinator = ChatStreamingPersistenceCoordinator()
-        do {
-            let stream = try await providers.stream(request: request, provider: provider)
-            for try await event in stream {
-                try consumeStreamEvent(
-                    event,
-                    targetId: baseMessageId,
-                    fullText: &fullText,
-                    reasoningText: &reasoningText,
-                    finalUsage: &finalUsage,
-                    coordinator: &coordinator,
-                    persist: { text, thinking in
-                        try conversations.updateMessageVariantText(variantId: variantId, text: text)
-                        if !thinking.isEmpty {
-                            try conversations.saveMessageVariantThinking(variantId: variantId, stream: thinking)
-                        }
-                    },
-                    onStreamEvent: onStreamEvent,
-                    onStreamingSnapshot: onStreamingSnapshot
-                )
-            }
-        } catch {
-            if fullText.isEmpty && reasoningText.isEmpty {
-                try? conversations.updateMessageVariantText(
-                    variantId: variantId,
-                    text: L10n.format("エラー: %@", error.localizedDescription)
-                )
-            }
-            publishStreamingSnapshot(
-                targetId: baseMessageId,
-                coordinator: coordinator,
-                isFinal: true,
-                onStreamingSnapshot: onStreamingSnapshot
-            )
-            throw error
-        }
-
-        try coordinator.apply(text: fullText, thinking: reasoningText, force: true) { text, thinking in
-            try conversations.updateMessageVariantText(variantId: variantId, text: text)
-            if !thinking.isEmpty {
-                try conversations.saveMessageVariantThinking(variantId: variantId, stream: thinking)
-            }
-        }
-        publishStreamingSnapshot(
-            targetId: baseMessageId,
-            coordinator: coordinator,
-            isFinal: true,
+        let stream = try await providers.stream(request: request, provider: provider)
+        let session = try await ChatStreamSession.run(
+            stream: stream,
+            conversations: conversations,
+            kind: .variant(variantId: variantId, snapshotMessageId: baseMessageId),
+            onStreamEvent: onStreamEvent,
             onStreamingSnapshot: onStreamingSnapshot
         )
 
         await recordTokenUsageIfAvailable(
             provider: provider.rawValue,
             model: request.model,
-            usage: finalUsage,
+            usage: session.usage,
             conversationId: conversationId,
             requestType: "regenerate_stream"
-        )
-    }
-
-    private func consumeStreamEvent(
-        _ event: ProviderStreamEvent,
-        targetId: Int64,
-        fullText: inout String,
-        reasoningText: inout String,
-        finalUsage: inout ProviderUsage?,
-        coordinator: inout ChatStreamingPersistenceCoordinator,
-        persist: (_ text: String, _ thinking: String) throws -> Void,
-        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
-        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
-    ) throws {
-        onStreamEvent?(event)
-        switch event {
-        case let .textDelta(delta):
-            fullText += delta
-            try coordinator.apply(text: fullText, thinking: reasoningText, force: false, persist: persist)
-            publishStreamingSnapshot(
-                targetId: targetId,
-                coordinator: coordinator,
-                isFinal: false,
-                onStreamingSnapshot: onStreamingSnapshot
-            )
-        case let .reasoningDelta(delta):
-            reasoningText += delta
-            try coordinator.apply(text: fullText, thinking: reasoningText, force: false, persist: persist)
-            publishStreamingSnapshot(
-                targetId: targetId,
-                coordinator: coordinator,
-                isFinal: false,
-                onStreamingSnapshot: onStreamingSnapshot
-            )
-        case .toolCallDelta:
-            break
-        case let .completed(response):
-            finalUsage = response.usage ?? finalUsage
-            if fullText.isEmpty, !response.text.isEmpty {
-                fullText = response.text
-            }
-            if let reasoning = response.reasoningSummary, !reasoning.isEmpty {
-                reasoningText = reasoning
-            }
-            try coordinator.apply(text: fullText, thinking: reasoningText, force: true, persist: persist)
-            publishStreamingSnapshot(
-                targetId: targetId,
-                coordinator: coordinator,
-                isFinal: false,
-                onStreamingSnapshot: onStreamingSnapshot
-            )
-        }
-    }
-
-    private func publishStreamingSnapshot(
-        targetId: Int64,
-        coordinator: ChatStreamingPersistenceCoordinator,
-        isFinal: Bool,
-        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
-    ) {
-        onStreamingSnapshot?(
-            ChatStreamingSnapshot(
-                targetId: targetId,
-                text: coordinator.text,
-                thinking: coordinator.thinking,
-                isFinal: isFinal
-            )
         )
     }
 

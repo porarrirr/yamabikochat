@@ -49,3 +49,18 @@ enum ProviderStreamEvent: Sendable, Equatable {
     case toolCallDelta(String)
     case completed(ProviderResponse)
 }
+
+extension ProviderStreamEvent {
+    /// True when the event carries non-whitespace assistant answer text (not reasoning).
+    /// Used by `ProviderGateway` for non-streaming retry; reasoning-only streams still retry.
+    var includesNonEmptyAnswerText: Bool {
+        switch self {
+        case let .textDelta(delta):
+            return delta.trimmedNonEmpty != nil
+        case let .completed(response):
+            return response.text.trimmedNonEmpty != nil
+        case .reasoningDelta, .toolCallDelta:
+            return false
+        }
+    }
+}

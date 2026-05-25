@@ -7,9 +7,18 @@ enum OpenAICompatibleStreamParser {
         fullText: inout String,
         fullReasoning: inout String
     ) -> [ProviderStreamEvent] {
-        guard let root = try? JSONSerialization.jsonObject(with: Data(dataChunk.utf8)) as? [String: Any],
-              let choices = root["choices"] as? [[String: Any]]
-        else {
+        guard let root = try? JSONSerialization.jsonObject(with: Data(dataChunk.utf8)) as? [String: Any] else {
+            return []
+        }
+        return events(fromRoot: root, fullText: &fullText, fullReasoning: &fullReasoning)
+    }
+
+    static func events(
+        fromRoot root: [String: Any],
+        fullText: inout String,
+        fullReasoning: inout String
+    ) -> [ProviderStreamEvent] {
+        guard let choices = root["choices"] as? [[String: Any]] else {
             return []
         }
         return events(fromChoices: choices, fullText: &fullText, fullReasoning: &fullReasoning)
@@ -111,12 +120,5 @@ enum OpenAICompatibleStreamParser {
             return block["text"] as? String
         }
         .joined()
-    }
-}
-
-private extension String {
-    var trimmedNonEmpty: String? {
-        let value = trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
     }
 }
