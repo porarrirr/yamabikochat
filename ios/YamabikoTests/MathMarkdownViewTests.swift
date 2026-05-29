@@ -110,6 +110,50 @@ final class MathMarkdownViewTests: XCTestCase {
         XCTAssertTrue(html.contains(".yamabiko-table-wrap, pre, mjx-container[display=\"true\"]"))
     }
 
+    func testHeightScriptMeasuresRenderedMarkdownRootInsteadOfViewport() {
+        let script = MathMarkdownHeightScript.source(messageName: "contentHeight")
+
+        XCTAssertTrue(script.contains("getElementById('yamabiko-markdown')"))
+        XCTAssertTrue(script.contains("root.scrollHeight"))
+        XCTAssertTrue(script.contains("root.offsetHeight"))
+        XCTAssertTrue(script.contains("root.getBoundingClientRect()"))
+        XCTAssertTrue(script.contains("postMessage(Math.ceil(height))"))
+        XCTAssertFalse(script.contains("document.documentElement"))
+        XCTAssertFalse(script.contains("doc.clientHeight"))
+        XCTAssertFalse(script.contains("doc.scrollHeight"))
+        XCTAssertFalse(script.contains("doc.offsetHeight"))
+    }
+
+    func testBuildHTMLCanShrinkAfterSvgBlockIsExtracted() throws {
+        let response = """
+        ```svg
+        <svg viewBox="0 0 1200 900"><rect width="1200" height="900" /></svg>
+        ```
+
+        After
+        """
+        let blocks = SvgCodeExtractor.extract(from: response)
+        let cleaned = SvgCodeExtractor.removeExtractedBlocks(from: response, blocks: blocks)
+        let html = MathMarkdownHTMLBuilder.buildHTML(
+            markdownPayload: try jsonLiteral(cleaned),
+            markdownRendererScript: "window.yamabikoRenderMarkdown = function(value){ return '<p>' + value + '</p>'; };",
+            bodyTextColor: "#000000",
+            codeBackgroundColor: "#111111",
+            borderColor: "#222222",
+            linkColor: "#333333",
+            mathRenderingEnabled: false,
+            mathJaxScriptTag: ""
+        )
+        let script = MathMarkdownHeightScript.source(messageName: "contentHeight")
+
+        XCTAssertEqual(blocks.count, 1)
+        XCTAssertEqual(cleaned, "After")
+        XCTAssertTrue(html.contains("var source = \"After\";"))
+        XCTAssertFalse(html.contains("<svg viewBox"))
+        XCTAssertTrue(script.contains("root.scrollHeight"))
+        XCTAssertFalse(script.contains("doc.clientHeight"))
+    }
+
     func testBuildHTMLIncludesLiveMarkdownRenderBridge() {
         let html = MathMarkdownHTMLBuilder.buildHTML(
             markdownPayload: "\"# Title\"",
@@ -562,5 +606,10 @@ line1\\nline2
             XCTFail("Renderer function failed: \(jsError)")
         }
         return output
+    }
+
+    private func jsonLiteral(_ value: String) throws -> String {
+        let data = try JSONEncoder().encode(value)
+        return String(decoding: data, as: UTF8.self)
     }
 }

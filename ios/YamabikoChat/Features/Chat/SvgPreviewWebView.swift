@@ -120,12 +120,13 @@ enum SvgPreviewHTMLBuilder {
               margin: 0;
               padding: 0;
               background: transparent;
+              height: 100%;
             }
             body {
               display: flex;
               align-items: center;
               justify-content: center;
-              min-height: 100vh;
+              min-height: 0;
               padding: 8px;
               box-sizing: border-box;
             }

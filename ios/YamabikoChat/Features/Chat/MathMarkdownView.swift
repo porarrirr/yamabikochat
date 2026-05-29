@@ -572,6 +572,55 @@ private enum MathMarkdownDiagnostics {
     }
 }
 
+enum MathMarkdownHeightScript {
+    static func source(messageName: String) -> String {
+        """
+        (function() {
+          function sendHeight() {
+            if (window.__yamabikoEnableHorizontalScroll) {
+              window.__yamabikoEnableHorizontalScroll();
+            }
+            var body = document.body;
+            var root = document.getElementById('yamabiko-markdown');
+            if (!body || !root || !window.webkit || !window.webkit.messageHandlers || !window.webkit.messageHandlers.\(messageName)) {
+              return;
+            }
+            var rect = root.getBoundingClientRect();
+            var height = Math.max(
+              root.scrollHeight || 0,
+              root.offsetHeight || 0,
+              rect && isFinite(rect.height) ? rect.height : 0
+            );
+            if (!isFinite(height) || height <= 0) {
+              height = Math.max(body.scrollHeight || 0, body.offsetHeight || 0);
+            }
+            window.webkit.messageHandlers.\(messageName).postMessage(Math.ceil(height));
+          }
+          window.__yamabikoSendHeight = sendHeight;
+          window.addEventListener('load', function() {
+            sendHeight();
+            setTimeout(sendHeight, 80);
+            setTimeout(sendHeight, 220);
+            setTimeout(sendHeight, 420);
+          });
+          window.addEventListener('resize', sendHeight);
+          if (window.ResizeObserver) {
+            var observer = new ResizeObserver(function() { sendHeight(); });
+            var observedRoot = document.getElementById('yamabiko-markdown');
+            if (observedRoot) observer.observe(observedRoot);
+          }
+          if (window.MutationObserver) {
+            var mutationRoot = document.getElementById('yamabiko-markdown');
+            if (mutationRoot) {
+              var mutationObserver = new MutationObserver(function() { sendHeight(); });
+              mutationObserver.observe(mutationRoot, { childList: true, subtree: true, characterData: true });
+            }
+          }
+        })();
+        """
+    }
+}
+
 struct MathMarkdownView: View {
     private static let minimumHeight: CGFloat = 44
 
@@ -1060,38 +1109,8 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         contentController.add(context.coordinator, name: Coordinator.heightMessageName)
         contentController.add(context.coordinator, name: Coordinator.copyMessageName)
 
-        let resizeObserverScript = """
-        (function() {
-          function sendHeight() {
-            if (window.__yamabikoEnableHorizontalScroll) {
-              window.__yamabikoEnableHorizontalScroll();
-            }
-            var body = document.body;
-            var doc = document.documentElement;
-            if (!body || !doc || !window.webkit || !window.webkit.messageHandlers || !window.webkit.messageHandlers.\(Coordinator.heightMessageName)) {
-              return;
-            }
-            var height = Math.max(
-              body.scrollHeight, body.offsetHeight,
-              doc.clientHeight, doc.scrollHeight, doc.offsetHeight
-            );
-            window.webkit.messageHandlers.\(Coordinator.heightMessageName).postMessage(height);
-          }
-          window.__yamabikoSendHeight = sendHeight;
-          window.addEventListener('load', function() {
-            sendHeight();
-            setTimeout(sendHeight, 80);
-            setTimeout(sendHeight, 220);
-            setTimeout(sendHeight, 420);
-          });
-          if (window.ResizeObserver) {
-            var observer = new ResizeObserver(function() { sendHeight(); });
-            observer.observe(document.documentElement);
-          }
-        })();
-        """
         let userScript = WKUserScript(
-            source: resizeObserverScript,
+            source: MathMarkdownHeightScript.source(messageName: Coordinator.heightMessageName),
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: true
         )
