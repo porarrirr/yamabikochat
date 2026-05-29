@@ -821,9 +821,11 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					8902EC7AC6F4A0CE2556BA5E = {
+						DevelopmentTeam = 77V64TWCFD;
 						ProvisioningStyle = Automatic;
 					};
 					A0482E078852897EA805FB9B = {
+						DevelopmentTeam = 77V64TWCFD;
 						ProvisioningStyle = Automatic;
 					};
 					CA9DB7A8FF77C763986E4942 = {
@@ -1181,6 +1183,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = YamabikoShareExtension/YamabikoShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 77V64TWCFD;
 				INFOPLIST_FILE = YamabikoShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1200,6 +1203,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = YamabikoShareExtension/YamabikoShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 77V64TWCFD;
 				INFOPLIST_FILE = YamabikoShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1228,6 +1232,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.porarri.yamabikochat.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1379,6 +1384,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.porarri.yamabikochat.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

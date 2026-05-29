@@ -7,9 +7,9 @@
 
 | ファイル | 内容 |
 |---------|------|
-| `01-settings-api.png` | API設定（プロバイダー選択） |
-| `02-chat-story.png` | チャット応答（小説生成） |
-| `03-settings-system-prompt.png` | システムプロンプト設定 |
+| `01-settings-api.png` | 使うAIを自由に選べる（API設定） |
+| `02-chat-math.png` | 数式もわかりやすく解説（極限の公式チャット） |
+| `03-token-statistics.png` | 利用状況をひと目で把握（トークン統計） |
 
 ## iPad（13インチディスプレイ）
 

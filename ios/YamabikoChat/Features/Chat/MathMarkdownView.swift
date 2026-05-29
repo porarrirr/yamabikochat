@@ -533,6 +533,14 @@ enum MathJaxLoadPlanner {
     }
 }
 
+private enum MathMarkdownDiagnostics {
+    static func logWarning(_ message: String) {
+        DispatchQueue.main.async {
+            DiagnosticsLogger.log(message, level: .warning, category: .chat)
+        }
+    }
+}
+
 struct MathMarkdownView: View {
     private static let minimumHeight: CGFloat = 44
 
@@ -1018,7 +1026,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
             in: .main,
             fallbackScript: fallbackMarkdownRendererScript
         ) { message in
-            DiagnosticsLogger.log(message, level: .warning, category: .chat)
+            MathMarkdownDiagnostics.logWarning(message)
         }
     }()
 
@@ -1096,7 +1104,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
             mathRenderingEnabled: mathRenderingEnabled,
             localScriptURL: localMathJaxURL
         ) { message in
-            DiagnosticsLogger.log(message, level: .warning, category: .chat)
+            MathMarkdownDiagnostics.logWarning(message)
         }
 
         let bodyTextColor = colorScheme == .dark ? "#F2F2F7" : "#1C1C1E"
@@ -1122,13 +1130,13 @@ private struct MathMarkdownWebView: UIViewRepresentable {
             let resourceDirectory = mathJaxLoadPlan.baseURL == nil
                 ? nil
                 : MathMarkdownWebResourceLoader.preparedResourceDirectory()
-            YamabikoWebKitSupport.loadHTMLDocument(
+            context.coordinator.scheduleHTMLLoad(
                 html,
                 resourceDirectory: resourceDirectory,
                 in: webView
             )
         } else {
-            context.coordinator.requestHeightMeasurement(for: webView)
+            context.coordinator.scheduleHeightMeasurement(for: webView)
         }
     }
 
@@ -1144,6 +1152,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
 
         var parent: MathMarkdownWebView
         var lastHTML: String?
+        private var pendingLoadToken = 0
 
         init(parent: MathMarkdownWebView) {
             self.parent = parent
@@ -1197,6 +1206,28 @@ private struct MathMarkdownWebView: UIViewRepresentable {
 
         func requestHeightMeasurement(for webView: WKWebView) {
             webView.evaluateJavaScript("window.__yamabikoSendHeight && window.__yamabikoSendHeight();", completionHandler: nil)
+        }
+
+        func scheduleHTMLLoad(_ html: String, resourceDirectory: URL?, in webView: WKWebView) {
+            pendingLoadToken += 1
+            let token = pendingLoadToken
+            DispatchQueue.main.async { [weak self, weak webView] in
+                guard let self, let webView, token == self.pendingLoadToken, self.lastHTML == html else {
+                    return
+                }
+                YamabikoWebKitSupport.loadHTMLDocument(
+                    html,
+                    resourceDirectory: resourceDirectory,
+                    in: webView
+                )
+            }
+        }
+
+        func scheduleHeightMeasurement(for webView: WKWebView) {
+            DispatchQueue.main.async { [weak self, weak webView] in
+                guard let self, let webView else { return }
+                self.requestHeightMeasurement(for: webView)
+            }
         }
 
         private func apply(height rawHeight: CGFloat) {
