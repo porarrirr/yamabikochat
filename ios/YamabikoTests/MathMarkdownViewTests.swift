@@ -110,6 +110,62 @@ final class MathMarkdownViewTests: XCTestCase {
         XCTAssertTrue(html.contains(".yamabiko-table-wrap, pre, mjx-container[display=\"true\"]"))
     }
 
+    func testBuildHTMLIncludesLiveMarkdownRenderBridge() {
+        let html = MathMarkdownHTMLBuilder.buildHTML(
+            markdownPayload: "\"# Title\"",
+            markdownRendererScript: "window.yamabikoRenderMarkdown = function(value){ return '<p>' + value + '</p>'; };",
+            bodyTextColor: "#000000",
+            codeBackgroundColor: "#111111",
+            borderColor: "#222222",
+            linkColor: "#333333",
+            mathRenderingEnabled: true,
+            mathJaxScriptTag: "<script src=\"tex-svg.js\"></script>"
+        )
+
+        XCTAssertTrue(html.contains("window.__yamabikoRenderSource = function(nextSource)"))
+        XCTAssertTrue(html.contains("window.__yamabikoRenderSource(source);"))
+        XCTAssertTrue(html.contains("root.innerHTML = window.yamabikoRenderMarkdown(source);"))
+        XCTAssertTrue(html.contains("typesetRenderedContent(root, function()"))
+        XCTAssertTrue(html.contains("window.MathJax.typesetClear([root])"))
+        XCTAssertTrue(html.contains("if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();"))
+    }
+
+    func testBuildHTMLUsesSharedRendererForInitialAndLiveContent() {
+        let html = MathMarkdownHTMLBuilder.buildHTML(
+            markdownPayload: "\"**hello**\"",
+            markdownRendererScript: "window.yamabikoRenderMarkdown = function(value){ return '<strong>' + value + '</strong>'; };",
+            bodyTextColor: "#000000",
+            codeBackgroundColor: "#111111",
+            borderColor: "#222222",
+            linkColor: "#333333",
+            mathRenderingEnabled: false,
+            mathJaxScriptTag: ""
+        )
+
+        XCTAssertTrue(html.contains("var source = \"**hello**\";"))
+        XCTAssertTrue(html.contains("source = String(nextSource || '');"))
+        XCTAssertTrue(html.contains("window.__yamabikoRenderSource(source);"))
+        XCTAssertEqual(html.components(separatedBy: "window.yamabikoRenderMarkdown(source)").count - 1, 1)
+    }
+
+    func testBuildHTMLIncludesStreamingTypographyStyles() {
+        let html = MathMarkdownHTMLBuilder.buildHTML(
+            markdownPayload: "\"hello\"",
+            markdownRendererScript: "window.yamabikoRenderMarkdown = function(){ return ''; };",
+            bodyTextColor: "#000000",
+            codeBackgroundColor: "#111111",
+            borderColor: "#222222",
+            linkColor: "#333333",
+            mathRenderingEnabled: false,
+            mathJaxScriptTag: ""
+        )
+
+        XCTAssertTrue(html.contains("line-height: 1.48;"))
+        XCTAssertTrue(html.contains("font-weight: 650;"))
+        XCTAssertTrue(html.contains("h1 { font-size: 1.42em; }"))
+        XCTAssertTrue(html.contains("pre code {"))
+    }
+
     func testResolveResourceURLPrefersMathJaxSubdirectory() {
         let subdirectoryURL = URL(fileURLWithPath: "/tmp/mathjax/markdown-renderer.js")
         let rootURL = URL(fileURLWithPath: "/tmp/markdown-renderer.js")

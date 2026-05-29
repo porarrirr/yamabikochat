@@ -132,6 +132,26 @@ final class ConversationVariantSelectionTests: XCTestCase {
         XCTAssertNil(empty)
     }
 
+    func testObserveConversationListHidesEmptyConversations() throws {
+        let repository = try makeRepository()
+        let conversationId = try repository.createConversation(
+            title: "New Chat",
+            model: "gpt-4o-mini",
+            provider: "OPENAI"
+        )
+
+        let expectation = expectation(description: "conversation list emits without empty conversation")
+        var cancellable: AnyCancellable?
+        cancellable = repository.observeConversationList()
+            .sink { entries in
+                XCTAssertFalse(entries.contains(where: { $0.id == conversationId }))
+                expectation.fulfill()
+                cancellable?.cancel()
+            }
+
+        wait(for: [expectation], timeout: 2.0)
+    }
+
     func testInsertDualMessageUpdatesConversationTimestamp() throws {
         let repository = try makeRepository()
         let conversationId = try repository.createConversation(
@@ -187,6 +207,19 @@ final class ConversationVariantSelectionTests: XCTestCase {
 
         let results = try repository.searchConversations(query: "searchable token")
         XCTAssertTrue(results.contains(where: { $0.id == conversationId }))
+    }
+
+    func testSearchConversationsExcludesEmptyTitleOnlyMatches() throws {
+        let repository = try makeRepository()
+        let conversationId = try repository.createConversation(
+            title: "New Chat",
+            model: "gpt-4o-mini",
+            provider: "OPENAI"
+        )
+
+        let results = try repository.searchConversations(query: "New Chat")
+
+        XCTAssertFalse(results.contains(where: { $0.id == conversationId }))
     }
 
     func testObserveConversationListUsesDualPreviewWhenNoChatMessages() throws {

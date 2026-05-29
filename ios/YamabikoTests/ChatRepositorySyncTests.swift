@@ -131,6 +131,15 @@ private actor PricingSpyRepository: LiteLlmPricingEstimating {
 }
 
 final class ChatRepositorySyncTests: XCTestCase {
+    func testCreateConversationReusesExistingEmptyNewChat() throws {
+        let fixture = try makeFixture()
+
+        let firstID = try fixture.repository.createConversation(title: "New Chat")
+        let secondID = try fixture.repository.createConversation(title: "New Chat")
+
+        XCTAssertEqual(secondID, firstID)
+    }
+
     func testSendMessageRenamesDefaultConversationToFirstPrompt() async throws {
         let fixture = try makeFixture()
         let conversationID = try fixture.repository.createConversation(title: "New Chat")

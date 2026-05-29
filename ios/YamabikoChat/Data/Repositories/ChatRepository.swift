@@ -101,6 +101,12 @@ final class ChatRepository {
     }
 
     func createConversation(title: String = "New Chat", projectId: Int64? = nil) throws -> Int64 {
+        if title == "New Chat",
+           let existing = try conversations.fetchLatestEmptyConversation(title: title, projectId: projectId),
+           let id = existing.id {
+            return id
+        }
+
         let currentSettings = try settingsForNewConversation()
         let resolvedPrompt = try resolveSystemPromptForProject(projectId: projectId, fallbackPrompt: currentSettings.systemPrompt)
         return try conversations.createConversation(

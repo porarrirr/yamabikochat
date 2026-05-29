@@ -246,6 +246,16 @@ final class ConversationRepository {
                        ) AS lastMessagePreview
                 FROM conversations c
                 LEFT JOIN projects p ON p.id = c.projectId
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM chat_messages m
+                    WHERE m.conversationId = c.id
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM dual_chat_messages d
+                    WHERE d.conversationId = c.id
+                )
                 ORDER BY c.updatedAtMs DESC
                 """
             )
@@ -867,23 +877,37 @@ final class ConversationRepository {
                     ) AS lastMessagePreview
                 FROM conversations c
                 LEFT JOIN projects p ON p.id = c.projectId
-                WHERE c.title LIKE ?
-                   OR EXISTS (
+                WHERE (
+                    EXISTS (
                         SELECT 1
-                        FROM chat_messages m
-                        WHERE m.conversationId = c.id
-                          AND m.text LIKE ?
-                   )
-                   OR EXISTS (
+                        FROM chat_messages message_presence
+                        WHERE message_presence.conversationId = c.id
+                    )
+                    OR EXISTS (
                         SELECT 1
-                        FROM dual_chat_messages d
-                        WHERE d.conversationId = c.id
-                          AND (
-                            d.userText LIKE ?
-                            OR d.modelAText LIKE ?
-                            OR d.modelBText LIKE ?
-                          )
-                   )
+                        FROM dual_chat_messages dual_presence
+                        WHERE dual_presence.conversationId = c.id
+                    )
+                )
+                AND (
+                    c.title LIKE ?
+                    OR EXISTS (
+                         SELECT 1
+                         FROM chat_messages m
+                         WHERE m.conversationId = c.id
+                           AND m.text LIKE ?
+                    )
+                    OR EXISTS (
+                         SELECT 1
+                         FROM dual_chat_messages d
+                         WHERE d.conversationId = c.id
+                           AND (
+                             d.userText LIKE ?
+                             OR d.modelAText LIKE ?
+                             OR d.modelBText LIKE ?
+                           )
+                    )
+                )
                 ORDER BY c.updatedAtMs DESC
                 LIMIT ?
                 """,

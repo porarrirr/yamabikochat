@@ -207,18 +207,21 @@ enum MathMarkdownHTMLBuilder {
           <style>
             html, body { margin: 0; padding: 0; background: transparent; }
             body {
-              font-family: -apple-system;
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
               font-size: 15px;
-              line-height: 1.35;
+              line-height: 1.48;
               color: \(bodyTextColor);
               overflow-wrap: anywhere;
               word-break: break-word;
+              -webkit-font-smoothing: antialiased;
             }
             #yamabiko-markdown {
               max-width: 100%;
             }
             #yamabiko-markdown > :first-child { margin-top: 0; }
             #yamabiko-markdown > :last-child { margin-bottom: 0; }
+            strong { font-weight: 650; }
+            em { font-style: italic; }
             mjx-container {
               max-width: 100%;
             }
@@ -231,28 +234,38 @@ enum MathMarkdownHTMLBuilder {
               max-width: 100%;
               height: auto;
             }
-            h1, h2, h3, h4, h5, h6 { margin: 0.9em 0 0.4em 0; line-height: 1.2; }
-            p { margin: 0.45em 0; }
-            ul, ol { margin: 0.45em 0; padding-left: 1.35em; }
-            li { margin: 0.2em 0; }
+            h1, h2, h3, h4, h5, h6 {
+              margin: 1.05em 0 0.45em 0;
+              line-height: 1.22;
+              font-weight: 700;
+            }
+            h1 { font-size: 1.42em; }
+            h2 { font-size: 1.28em; }
+            h3 { font-size: 1.15em; }
+            h4, h5, h6 { font-size: 1.04em; }
+            p { margin: 0.55em 0; }
+            ul, ol { margin: 0.55em 0; padding-left: 1.38em; }
+            li { margin: 0.28em 0; padding-left: 0.08em; }
+            li > p { margin: 0.28em 0; }
             blockquote {
-              margin: 0.55em 0;
+              margin: 0.7em 0;
               border-left: 3px solid \(borderColor);
-              padding: 0.2em 0 0.2em 0.8em;
+              padding: 0.25em 0 0.25em 0.85em;
               color: \(bodyTextColor);
-              opacity: 0.9;
+              opacity: 0.84;
             }
             .yamabiko-code-block {
               position: relative;
-              margin: 0.6em 0;
+              margin: 0.7em 0;
             }
             pre {
-              margin: 0.6em 0;
-              padding: 0.7em 0.8em;
+              margin: 0.7em 0;
+              padding: 0.8em 0.9em;
               border-radius: 8px;
               background: \(codeBackgroundColor);
               border: 1px solid \(borderColor);
               overflow-x: auto;
+              line-height: 1.45;
             }
             .yamabiko-code-block pre {
               margin: 0;
@@ -281,21 +294,22 @@ enum MathMarkdownHTMLBuilder {
               background: \(codeBackgroundColor);
               border: 1px solid \(borderColor);
               border-radius: 6px;
-              padding: 0.08em 0.35em;
-              font-size: 0.92em;
+              padding: 0.1em 0.34em;
+              font-size: 0.91em;
             }
             pre code {
               background: transparent;
               border: none;
               padding: 0;
+              font-size: 0.9em;
             }
             hr {
               border: none;
               border-top: 1px solid \(borderColor);
-              margin: 0.9em 0;
+              margin: 1em 0;
             }
             .yamabiko-table-wrap {
-              margin: 0.6em 0;
+              margin: 0.75em 0;
               max-width: 100%;
               overflow-x: auto;
               overflow-y: hidden;
@@ -316,7 +330,7 @@ enum MathMarkdownHTMLBuilder {
             }
             th, td {
               border: 1px solid \(borderColor);
-              padding: 0.4em 0.55em;
+              padding: 0.46em 0.62em;
               vertical-align: top;
               white-space: normal;
               overflow-wrap: anywhere;
@@ -336,13 +350,9 @@ enum MathMarkdownHTMLBuilder {
               var source = \(markdownPayload);
               var root = document.getElementById('yamabiko-markdown');
               if (!root) return;
-              if (typeof window.yamabikoRenderMarkdown === 'function') {
-                root.innerHTML = window.yamabikoRenderMarkdown(source);
-              } else {
-                root.textContent = source || '';
-              }
               var copyLabel = window.__yamabikoCopyButtonLabel || 'Copy';
               var copiedLabel = window.__yamabikoCopiedButtonLabel || 'Copied';
+              var renderGeneration = 0;
               function setCopyButtonLabel(button, label) {
                 if (!button) return;
                 button.textContent = label;
@@ -421,11 +431,32 @@ enum MathMarkdownHTMLBuilder {
                 });
               }
               window.__yamabikoEnableHorizontalScroll = enableHorizontalScrollContainers;
-              var finish = function() {
-                enableHorizontalScrollContainers();
-                if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();
-              };
+              function typesetRenderedContent(renderRoot, completion) {
+                var root = renderRoot;
+                var finish = completion;
         \(mathTypesetScript)
+              }
+              window.__yamabikoRenderSource = function(nextSource) {
+                renderGeneration += 1;
+                var generation = renderGeneration;
+                source = String(nextSource || '');
+                if (window.MathJax && window.MathJax.typesetClear) {
+                  try {
+                    window.MathJax.typesetClear([root]);
+                  } catch (_) {}
+                }
+                if (typeof window.yamabikoRenderMarkdown === 'function') {
+                  root.innerHTML = window.yamabikoRenderMarkdown(source);
+                } else {
+                  root.textContent = source || '';
+                }
+                typesetRenderedContent(root, function() {
+                  if (generation !== renderGeneration) return;
+                  enableHorizontalScrollContainers();
+                  if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();
+                });
+              };
+              window.__yamabikoRenderSource(source);
             })();
           </script>
         </body>
@@ -551,24 +582,18 @@ struct MathMarkdownView: View {
     @State private var contentHeight: CGFloat = minimumHeight
 
     var body: some View {
-        Group {
-            if isStreaming {
-                Text(markdownText)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                MathMarkdownWebView(
-                    markdownText: markdownText,
-                    mathRenderingEnabled: mathRenderingEnabled,
-                    colorScheme: colorScheme,
-                    measuredHeight: $contentHeight
-                )
-                .frame(height: max(Self.minimumHeight, contentHeight))
-            }
-        }
+        MathMarkdownWebView(
+            markdownText: markdownText,
+            mathRenderingEnabled: mathRenderingEnabled,
+            isStreaming: isStreaming,
+            colorScheme: colorScheme,
+            measuredHeight: $contentHeight
+        )
+        .frame(height: max(Self.minimumHeight, contentHeight))
         .onChange(of: mathRenderingEnabled) { _, _ in
+            contentHeight = Self.minimumHeight
+        }
+        .onChange(of: colorScheme) { _, _ in
             contentHeight = Self.minimumHeight
         }
         .onChange(of: isStreaming) { _, streaming in
@@ -582,6 +607,7 @@ struct MathMarkdownView: View {
 private struct MathMarkdownWebView: UIViewRepresentable {
     let markdownText: String
     let mathRenderingEnabled: Bool
+    let isStreaming: Bool
     let colorScheme: ColorScheme
     @Binding var measuredHeight: CGFloat
     private static let fallbackMarkdownRendererScript = #"""
@@ -1097,8 +1123,6 @@ private struct MathMarkdownWebView: UIViewRepresentable {
             markdownText,
             mathRenderingEnabled: mathRenderingEnabled
         )
-        let markdownPayload = normalizedMarkdown.jsonStringLiteral
-
         let localMathJaxURL = MathMarkdownResourceResolver.mathJaxScriptURL(in: .main)
         let mathJaxLoadPlan = MathJaxLoadPlanner.plan(
             mathRenderingEnabled: mathRenderingEnabled,
@@ -1113,7 +1137,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         let linkColor = colorScheme == .dark ? "#70A7FF" : "#1F64E0"
 
         let html = MathMarkdownHTMLBuilder.buildHTML(
-            markdownPayload: markdownPayload,
+            markdownPayload: "\"\"",
             markdownRendererScript: Self.markdownRendererScript,
             bodyTextColor: bodyTextColor,
             codeBackgroundColor: codeBackgroundColor,
@@ -1125,19 +1149,16 @@ private struct MathMarkdownWebView: UIViewRepresentable {
             copiedButtonLabel: L10n.text("コピー済み")
         )
 
-        if context.coordinator.lastHTML != html {
-            context.coordinator.lastHTML = html
-            let resourceDirectory = mathJaxLoadPlan.baseURL == nil
-                ? nil
-                : MathMarkdownWebResourceLoader.preparedResourceDirectory()
-            context.coordinator.scheduleHTMLLoad(
-                html,
-                resourceDirectory: resourceDirectory,
-                in: webView
-            )
-        } else {
-            context.coordinator.scheduleHeightMeasurement(for: webView)
-        }
+        let resourceDirectory = mathJaxLoadPlan.baseURL == nil
+            ? nil
+            : MathMarkdownWebResourceLoader.preparedResourceDirectory()
+        context.coordinator.updateDocument(
+            html: html,
+            markdownPayload: normalizedMarkdown.jsonStringLiteral,
+            isStreaming: isStreaming,
+            resourceDirectory: resourceDirectory,
+            in: webView
+        )
     }
 
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
@@ -1153,13 +1174,29 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         var parent: MathMarkdownWebView
         var lastHTML: String?
         private var pendingLoadToken = 0
+        private var pendingRenderToken = 0
+        private var didFinishInitialLoad = false
+        private var pendingMarkdownPayload: String?
+        private var pendingIsStreaming = false
+        private var lastRenderedMarkdownPayload: String?
+        private var lastRenderWasStreaming = false
 
         init(parent: MathMarkdownWebView) {
             self.parent = parent
         }
 
         func webView(_ webView: WKWebView, didFinish _: WKNavigation!) {
-            requestHeightMeasurement(for: webView)
+            didFinishInitialLoad = true
+            if let payload = pendingMarkdownPayload {
+                scheduleMarkdownRender(
+                    payload,
+                    isStreaming: pendingIsStreaming,
+                    in: webView,
+                    force: true
+                )
+            } else {
+                requestHeightMeasurement(for: webView)
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak webView] in
                 guard let webView else { return }
                 self.requestHeightMeasurement(for: webView)
@@ -1208,9 +1245,41 @@ private struct MathMarkdownWebView: UIViewRepresentable {
             webView.evaluateJavaScript("window.__yamabikoSendHeight && window.__yamabikoSendHeight();", completionHandler: nil)
         }
 
+        func updateDocument(
+            html: String,
+            markdownPayload: String,
+            isStreaming: Bool,
+            resourceDirectory: URL?,
+            in webView: WKWebView
+        ) {
+            pendingMarkdownPayload = markdownPayload
+            pendingIsStreaming = isStreaming
+
+            if lastHTML != html {
+                lastHTML = html
+                lastRenderedMarkdownPayload = nil
+                lastRenderWasStreaming = false
+                scheduleHTMLLoad(
+                    html,
+                    resourceDirectory: resourceDirectory,
+                    in: webView
+                )
+                return
+            }
+
+            scheduleMarkdownRender(
+                markdownPayload,
+                isStreaming: isStreaming,
+                in: webView,
+                force: !isStreaming && lastRenderWasStreaming
+            )
+        }
+
         func scheduleHTMLLoad(_ html: String, resourceDirectory: URL?, in webView: WKWebView) {
             pendingLoadToken += 1
+            pendingRenderToken += 1
             let token = pendingLoadToken
+            didFinishInitialLoad = false
             DispatchQueue.main.async { [weak self, weak webView] in
                 guard let self, let webView, token == self.pendingLoadToken, self.lastHTML == html else {
                     return
@@ -1220,6 +1289,45 @@ private struct MathMarkdownWebView: UIViewRepresentable {
                     resourceDirectory: resourceDirectory,
                     in: webView
                 )
+            }
+        }
+
+        func scheduleMarkdownRender(
+            _ markdownPayload: String,
+            isStreaming: Bool,
+            in webView: WKWebView,
+            force: Bool = false
+        ) {
+            pendingMarkdownPayload = markdownPayload
+            pendingIsStreaming = isStreaming
+
+            guard didFinishInitialLoad else { return }
+            guard force || lastRenderedMarkdownPayload != markdownPayload else {
+                scheduleHeightMeasurement(for: webView)
+                return
+            }
+
+            pendingRenderToken += 1
+            let token = pendingRenderToken
+            let delay: TimeInterval = isStreaming ? 0.045 : 0
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak webView] in
+                guard let self,
+                      let webView,
+                      token == self.pendingRenderToken,
+                      self.pendingMarkdownPayload == markdownPayload
+                else {
+                    return
+                }
+
+                let script = "window.__yamabikoRenderSource && window.__yamabikoRenderSource(\(markdownPayload));"
+                webView.evaluateJavaScript(script) { [weak self, weak webView] _, _ in
+                    guard let self, token == self.pendingRenderToken else { return }
+                    self.lastRenderedMarkdownPayload = markdownPayload
+                    self.lastRenderWasStreaming = isStreaming
+                    if let webView {
+                        self.requestHeightMeasurement(for: webView)
+                    }
+                }
             }
         }
 
