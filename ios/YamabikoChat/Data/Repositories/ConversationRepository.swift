@@ -138,6 +138,7 @@ final class ConversationRepository {
                 sql: "DELETE FROM token_usage_records WHERE conversationId = ?",
                 arguments: [id]
             )
+            try deleteAutoConversationsBoundToConversations(db, idsSQL: "?", arguments: StatementArguments([id]))
             _ = try Conversation.deleteOne(db, key: id)
         }
     }
@@ -149,8 +150,64 @@ final class ConversationRepository {
             try TokenUsageRecord
                 .filter(idArray.contains(Column("conversationId")))
                 .deleteAll(db)
+            try deleteAutoConversationsBoundToConversations(
+                db,
+                idsSQL: idArray.map { _ in "?" }.joined(separator: ","),
+                arguments: StatementArguments(idArray)
+            )
             try Conversation
                 .filter(idArray.contains(Column("id")))
+                .deleteAll(db)
+        }
+    }
+
+    func deleteSecretConversationIfNeeded(id: Int64) throws -> Bool {
+        try dbQueue.write { db in
+            guard let isSecret = try Bool.fetchOne(
+                db,
+                sql: "SELECT isSecret FROM conversations WHERE id = ?",
+                arguments: [id]
+            ), isSecret else {
+                return false
+            }
+
+            try db.execute(
+                sql: "DELETE FROM token_usage_records WHERE conversationId = ?",
+                arguments: [id]
+            )
+            try deleteAutoConversationsBoundToConversations(db, idsSQL: "?", arguments: StatementArguments([id]))
+            _ = try Conversation.deleteOne(db, key: id)
+            return true
+        }
+    }
+
+    func purgeSecretConversations() throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: """
+                DELETE FROM token_usage_records
+                WHERE conversationId IN (SELECT id FROM conversations WHERE isSecret = 1)
+                """
+            )
+            try db.execute(
+                sql: """
+                DELETE FROM auto_conversation_messages
+                WHERE autoConversationId IN (
+                    SELECT id FROM auto_conversations
+                    WHERE boundChatConversationId IN (SELECT id FROM conversations WHERE isSecret = 1)
+                       OR boundConversationId IN (SELECT id FROM conversations WHERE isSecret = 1)
+                )
+                """
+            )
+            try db.execute(
+                sql: """
+                DELETE FROM auto_conversations
+                WHERE boundChatConversationId IN (SELECT id FROM conversations WHERE isSecret = 1)
+                   OR boundConversationId IN (SELECT id FROM conversations WHERE isSecret = 1)
+                """
+            )
+            try Conversation
+                .filter(Column("isSecret") == true)
                 .deleteAll(db)
         }
     }
@@ -927,6 +984,33 @@ final class ConversationRepository {
                 )
             }
         }
+    }
+
+    private func deleteAutoConversationsBoundToConversations(
+        _ db: Database,
+        idsSQL: String,
+        arguments: StatementArguments
+    ) throws {
+        guard !idsSQL.isEmpty else { return }
+        try db.execute(
+            sql: """
+            DELETE FROM auto_conversation_messages
+            WHERE autoConversationId IN (
+                SELECT id FROM auto_conversations
+                WHERE boundChatConversationId IN (\(idsSQL))
+                   OR boundConversationId IN (\(idsSQL))
+            )
+            """,
+            arguments: arguments + arguments
+        )
+        try db.execute(
+            sql: """
+            DELETE FROM auto_conversations
+            WHERE boundChatConversationId IN (\(idsSQL))
+               OR boundConversationId IN (\(idsSQL))
+            """,
+            arguments: arguments + arguments
+        )
     }
 
     private func fetchMessageSummaries(db: Database, conversationId: Int64) throws -> [ChatMessageSummary] {

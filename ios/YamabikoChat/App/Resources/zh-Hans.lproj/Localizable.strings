@@ -378,3 +378,7 @@
 "%@: OpenRouter budget override" = "%@：OpenRouter 预算覆盖";
 "%@: OpenRouter effort override" = "%@：OpenRouter 力度覆盖";
 "%@: Exclude reasoning" = "%@：排除推理";
+"シークレット" = "私密";
+"シークレットチャット" = "私密聊天";
+"閉じると破棄 · %@" = "关闭后丢弃 · %@";
+"このチャットは閉じると破棄されます。" = "此聊天关闭后会被丢弃。";

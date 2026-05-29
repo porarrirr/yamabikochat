@@ -389,9 +389,17 @@ struct ConversationListScreen: View {
                         .foregroundStyle(.primary)
 
                     if entry.isSecret {
-                        Image(systemName: "lock.fill")
-                            .foregroundStyle(.secondary)
-                            .font(.system(size: 12))
+                        HStack(spacing: 4) {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text(L10n.text("シークレット"))
+                                .font(.caption2.weight(.semibold))
+                        }
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.accentColor.opacity(0.12))
+                        .clipShape(Capsule())
                     }
 
                     Spacer()

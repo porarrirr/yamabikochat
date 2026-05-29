@@ -14,6 +14,7 @@ struct RootView: View {
     @State private var dynamicColorEnabled = true
     @State private var themeColor = "BLUE_PURPLE"
     @State private var themeMode = "SYSTEM"
+    @State private var keepSidebarAfterSecretDiscard = false
 
     var body: some View {
         NavigationSplitView(
@@ -36,6 +37,9 @@ struct RootView: View {
                     conversationID: conversationID,
                     onSelectConversation: { id in
                         selectConversation(id: id)
+                    },
+                    onDiscardSecretConversation: { id in
+                        discardSecretConversationIfNeeded(id: id, keepSidebar: true)
                     }
                 )
                 .id(conversationID)
@@ -61,6 +65,8 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 importSharePayloadIfNeeded()
+            } else {
+                discardSelectedSecretConversationIfNeeded()
             }
         }
         .onReceive(container.chatRepository.settingsPublisher()) { settings in
@@ -79,6 +85,11 @@ struct RootView: View {
             }
             guard !ids.isEmpty else {
                 appState.selectedConversationID = nil
+                preferredCompactColumn = .sidebar
+                return
+            }
+            if keepSidebarAfterSecretDiscard, appState.selectedConversationID == nil {
+                keepSidebarAfterSecretDiscard = false
                 preferredCompactColumn = .sidebar
                 return
             }
@@ -194,8 +205,12 @@ struct RootView: View {
     }
 
     private func selectConversation(id: Int64, closeHistory: Bool = false) {
+        if appState.selectedConversationID != id {
+            discardSelectedSecretConversationIfNeeded(keepSidebar: false)
+        }
         listViewModel.resetProjectFilterForNonProjectConversation(conversationId: id)
         appState.selectedConversationID = id
+        keepSidebarAfterSecretDiscard = false
         preferredCompactColumn = .detail
         if closeHistory {
             appState.isConversationHistoryPresented = false
@@ -211,6 +226,28 @@ struct RootView: View {
         }
         preferredCompactColumn = .detail
     }
+
+    private func discardSelectedSecretConversationIfNeeded(keepSidebar: Bool = true) {
+        guard let id = appState.selectedConversationID else { return }
+        discardSecretConversationIfNeeded(id: id, keepSidebar: keepSidebar)
+    }
+
+    private func discardSecretConversationIfNeeded(id: Int64, keepSidebar: Bool) {
+        do {
+            let deleted = try container.chatRepository.deleteSecretConversationIfNeeded(id: id)
+            if deleted, appState.selectedConversationID == id {
+                appState.selectedConversationID = nil
+                keepSidebarAfterSecretDiscard = keepSidebar
+                preferredCompactColumn = .sidebar
+            }
+        } catch {
+            DiagnosticsLogger.log(
+                "Discard secret conversation failed conversation=\(id)",
+                category: .chat,
+                error: error
+            )
+        }
+    }
 }
 
 private struct ConversationDetailHost: View {
@@ -219,14 +256,17 @@ private struct ConversationDetailHost: View {
 
     let conversationID: Int64
     let onSelectConversation: (Int64) -> Void
+    let onDiscardSecretConversation: (Int64) -> Void
     @StateObject private var viewModel: ChatViewModel
 
     init(
         conversationID: Int64,
-        onSelectConversation: @escaping (Int64) -> Void
+        onSelectConversation: @escaping (Int64) -> Void,
+        onDiscardSecretConversation: @escaping (Int64) -> Void
     ) {
         self.conversationID = conversationID
         self.onSelectConversation = onSelectConversation
+        self.onDiscardSecretConversation = onDiscardSecretConversation
         _viewModel = StateObject(wrappedValue: ChatViewModel(conversationID: conversationID))
     }
 
@@ -238,6 +278,9 @@ private struct ConversationDetailHost: View {
         )
             .environmentObject(container)
             .environmentObject(appState)
+            .onDisappear {
+                onDiscardSecretConversation(conversationID)
+            }
     }
 }
 

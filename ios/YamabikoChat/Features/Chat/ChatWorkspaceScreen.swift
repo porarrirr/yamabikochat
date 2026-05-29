@@ -128,6 +128,11 @@ struct ChatWorkspaceScreen: View {
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
+                        if viewModel.isSecretConversation {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Color.accentColor)
+                        }
                         Text(viewModel.workspaceTitleLabel)
                             .font(.system(size: 19, weight: .semibold))
                             .lineLimit(1)

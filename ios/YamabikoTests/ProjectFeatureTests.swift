@@ -99,7 +99,47 @@ final class ProjectFeatureTests: XCTestCase {
         XCTAssertNotNil(otherConversation)
     }
 
-    private func makeFixture() throws -> (repository: ChatRepository, conversations: ConversationRepository) {
+    func testPurgeSecretConversationsRemovesSecretDataOnly() throws {
+        let fixture = try makeFixture()
+        let secretConversationId = try fixture.repository.createSecretConversation()
+        let regularConversationId = try fixture.repository.createConversation(title: "Persistent Chat")
+
+        _ = try fixture.conversations.insertMessage(
+            ChatMessage(conversationId: secretConversationId, role: "user", text: "secret", createdAtMs: 1)
+        )
+        _ = try fixture.conversations.insertMessage(
+            ChatMessage(conversationId: regularConversationId, role: "user", text: "regular", createdAtMs: 2)
+        )
+        try insertTokenUsage(dbQueue: fixture.dbQueue, conversationId: secretConversationId)
+        try insertTokenUsage(dbQueue: fixture.dbQueue, conversationId: regularConversationId)
+
+        try fixture.repository.purgeSecretConversations()
+
+        XCTAssertNil(try fixture.repository.conversation(id: secretConversationId))
+        XCTAssertNotNil(try fixture.repository.conversation(id: regularConversationId))
+        XCTAssertEqual(try tokenUsageCount(dbQueue: fixture.dbQueue, conversationId: secretConversationId), 0)
+        XCTAssertEqual(try tokenUsageCount(dbQueue: fixture.dbQueue, conversationId: regularConversationId), 1)
+    }
+
+    func testDeleteSecretConversationIfNeededDeletesOnlySecretConversation() throws {
+        let fixture = try makeFixture()
+        let secretConversationId = try fixture.repository.createSecretConversation()
+        let regularConversationId = try fixture.repository.createConversation(title: "Persistent Chat")
+
+        let deletedSecret = try fixture.repository.deleteSecretConversationIfNeeded(id: secretConversationId)
+        let deletedRegular = try fixture.repository.deleteSecretConversationIfNeeded(id: regularConversationId)
+
+        XCTAssertTrue(deletedSecret)
+        XCTAssertFalse(deletedRegular)
+        XCTAssertNil(try fixture.repository.conversation(id: secretConversationId))
+        XCTAssertNotNil(try fixture.repository.conversation(id: regularConversationId))
+    }
+
+    private func makeFixture() throws -> (
+        repository: ChatRepository,
+        conversations: ConversationRepository,
+        dbQueue: DatabaseQueue
+    ) {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)
 
@@ -118,6 +158,30 @@ final class ProjectFeatureTests: XCTestCase {
             modelService: modelService,
             codexAuthRepository: codexAuth
         )
-        return (repository, conversations)
+        return (repository, conversations, dbQueue)
+    }
+
+    private func insertTokenUsage(dbQueue: DatabaseQueue, conversationId: Int64) throws {
+        try dbQueue.write { db in
+            var record = TokenUsageRecord(
+                provider: "GEMINI",
+                model: "gemini-2.5-flash",
+                conversationId: conversationId,
+                inputTokens: 1,
+                outputTokens: 1,
+                totalTokens: 2
+            )
+            try record.insert(db)
+        }
+    }
+
+    private func tokenUsageCount(dbQueue: DatabaseQueue, conversationId: Int64) throws -> Int {
+        try dbQueue.read { db in
+            try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM token_usage_records WHERE conversationId = ?",
+                arguments: [conversationId]
+            ) ?? 0
+        }
     }
 }

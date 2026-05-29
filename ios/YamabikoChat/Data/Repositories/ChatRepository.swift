@@ -170,6 +170,15 @@ final class ChatRepository {
         try conversations.deleteConversations(ids: ids)
     }
 
+    @discardableResult
+    func deleteSecretConversationIfNeeded(id: Int64) throws -> Bool {
+        try conversations.deleteSecretConversationIfNeeded(id: id)
+    }
+
+    func purgeSecretConversations() throws {
+        try conversations.purgeSecretConversations()
+    }
+
     func deleteProject(id: Int64, mode: ProjectDeletionMode) throws {
         switch mode {
         case .projectOnly:

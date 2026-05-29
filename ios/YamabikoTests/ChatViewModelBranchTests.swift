@@ -66,6 +66,19 @@ final class ChatViewModelBranchTests: XCTestCase {
         XCTAssertTrue(viewModel.errorMessage?.contains(localizedPrefix) == true)
     }
 
+    func testBindExposesSecretConversationState() throws {
+        let fixture = try makeFixture()
+        let conversationId = try fixture.repository.createSecretConversation()
+        let viewModel = ChatViewModel(conversationID: conversationId)
+
+        viewModel.bind(
+            repository: fixture.repository,
+            attachmentRepository: AttachmentRepository()
+        )
+
+        XCTAssertTrue(viewModel.isSecretConversation)
+    }
+
     private func makeFixture() throws -> (
         repository: ChatRepository,
         conversations: ConversationRepository

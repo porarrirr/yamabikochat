@@ -44,6 +44,12 @@ final class AppContainer: ObservableObject {
         )
         sharePayloadStore = SharePayloadStore()
 
+        do {
+            try chatRepository.purgeSecretConversations()
+        } catch {
+            DiagnosticsLogger.log("Purge secret conversations failed", category: .app, error: error)
+        }
+
         AppStoreScreenshotDemoSeeder.seedIfNeeded(
             chatRepository: chatRepository,
             conversations: conversationRepository

@@ -33,6 +33,7 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var contextUsageLabel: String?
     @Published private(set) var canAttachImages: Bool = false
     @Published private(set) var streamingSnapshots: [Int64: ChatStreamingSnapshot] = [:]
+    @Published private(set) var isSecretConversation: Bool = false
 
     let speechService = SpeechRecognitionService()
 
@@ -143,6 +144,7 @@ final class ChatViewModel: ObservableObject {
                 conversationSystemPrompt = conversation.systemPrompt
                 activeConversationProvider = conversation.apiProvider
                 activeConversationModel = conversation.model
+                isSecretConversation = conversation.isSecret
                 updateActiveChatPresetName()
                 updateActiveSystemPromptPresetName()
                 Task { [weak self] in
@@ -495,6 +497,9 @@ final class ChatViewModel: ObservableObject {
     }
 
     var workspaceTitleLabel: String {
+        if isSecretConversation {
+            return L10n.text("シークレット")
+        }
         if settings.isDualModeEnabled {
             return L10n.text("デュアル")
         }
@@ -506,6 +511,16 @@ final class ChatViewModel: ObservableObject {
     }
 
     var workspaceSubtitleLabel: String? {
+        if isSecretConversation {
+            let provider = activeConversationProvider.isEmpty
+                ? settings.apiProvider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                : activeConversationProvider
+            let model = activeConversationModel.isEmpty
+                ? settings.currentModel().trimmingCharacters(in: .whitespacesAndNewlines)
+                : activeConversationModel
+            let base = model.isEmpty ? provider : "\(provider) · \(Self.shortModelLabel(model))"
+            return L10n.format("閉じると破棄 · %@", base)
+        }
         if settings.isDualModeEnabled {
             return L10n.format(
                 "%@ %@ vs %@ %@",
@@ -535,23 +550,26 @@ final class ChatViewModel: ObservableObject {
     }
 
     var composerContextLabel: String {
+        let secretPrefix = L10n.text("シークレット")
         if settings.isDualModeEnabled {
-            return L10n.format(
+            let label = L10n.format(
                 "DUAL · %@ %@ vs %@ %@",
                 settings.dualProviderA,
                 Self.shortModelLabel(settings.dualModelA),
                 settings.dualProviderB,
                 Self.shortModelLabel(settings.dualModelB)
             )
+            return isSecretConversation ? "\(secretPrefix) · \(label)" : label
         }
         if settings.isAutoConversationEnabled {
-            return L10n.format(
+            let label = L10n.format(
                 "AUTO · %@ %@ ⇄ %@ %@",
                 settings.autoProviderA,
                 Self.shortModelLabel(settings.autoModelA),
                 settings.autoProviderB,
                 Self.shortModelLabel(settings.autoModelB)
             )
+            return isSecretConversation ? "\(secretPrefix) · \(label)" : label
         }
         let provider = activeConversationProvider.isEmpty
             ? settings.apiProvider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
@@ -559,8 +577,8 @@ final class ChatViewModel: ObservableObject {
         let model = activeConversationModel.isEmpty
             ? settings.currentModel().trimmingCharacters(in: .whitespacesAndNewlines)
             : activeConversationModel
-        guard !model.isEmpty else { return provider }
-        return "\(provider) · \(Self.shortModelLabel(model))"
+        let label = model.isEmpty ? provider : "\(provider) · \(Self.shortModelLabel(model))"
+        return isSecretConversation ? "\(secretPrefix) · \(label)" : label
     }
 
     var composerPlaceholder: String {
@@ -828,6 +846,7 @@ final class ChatViewModel: ObservableObject {
                 conversationSystemPrompt = conversation.systemPrompt
                 activeConversationProvider = conversation.apiProvider
                 activeConversationModel = conversation.model
+                isSecretConversation = conversation.isSecret
                 updateActiveChatPresetName()
                 updateActiveSystemPromptPresetName()
                 Task { [weak self] in

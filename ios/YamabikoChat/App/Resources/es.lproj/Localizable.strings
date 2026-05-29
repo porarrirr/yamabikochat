@@ -378,3 +378,7 @@
 "%@: OpenRouter budget override" = "%@: Presupuesto OpenRouter";
 "%@: OpenRouter effort override" = "%@: Esfuerzo OpenRouter";
 "%@: Exclude reasoning" = "%@: Excluir razonamiento";
+"シークレット" = "Secreto";
+"シークレットチャット" = "Chat secreto";
+"閉じると破棄 · %@" = "Se descarta al cerrar · %@";
+"このチャットは閉じると破棄されます。" = "Este chat se descartará al cerrarlo.";

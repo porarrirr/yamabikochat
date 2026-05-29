@@ -70,9 +70,9 @@ struct ChatScreen: View {
                         VStack(alignment: .leading, spacing: 16) {
                             if timeline.isEmpty {
                                 ContentUnavailableView(
-                                    "会話がありません",
-                                    systemImage: "bubble.left.and.bubble.right",
-                                    description: Text("メッセージを入力して会話を開始してください。")
+                                    emptyStateTitle,
+                                    systemImage: emptyStateSystemImage,
+                                    description: Text(emptyStateDescription)
                                 )
                                 .frame(maxWidth: .infinity)
                                 .padding(.top, 56)
@@ -244,14 +244,34 @@ struct ChatScreen: View {
         !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !viewModel.attachments.isEmpty
     }
 
+    private var emptyStateTitle: String {
+        viewModel.isSecretConversation ? L10n.text("シークレットチャット") : L10n.text("会話がありません")
+    }
+
+    private var emptyStateSystemImage: String {
+        viewModel.isSecretConversation ? "lock.shield" : "bubble.left.and.bubble.right"
+    }
+
+    private var emptyStateDescription: String {
+        viewModel.isSecretConversation
+            ? L10n.text("このチャットは閉じると破棄されます。")
+            : L10n.text("メッセージを入力して会話を開始してください。")
+    }
+
     private var composerBar: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(viewModel.composerContextLabel)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .padding(.horizontal, 8)
+            HStack(spacing: 5) {
+                if viewModel.isSecretConversation {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                Text(viewModel.composerContextLabel)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .font(.caption)
+            .foregroundStyle(viewModel.isSecretConversation ? Color.chatAccent : .secondary)
+            .padding(.horizontal, 8)
 
             if viewModel.showsAutoConversationStatusBanner,
                let status = viewModel.autoConversationStatus,
