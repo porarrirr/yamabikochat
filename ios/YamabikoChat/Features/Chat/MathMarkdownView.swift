@@ -596,11 +596,6 @@ struct MathMarkdownView: View {
         .onChange(of: colorScheme) { _, _ in
             contentHeight = Self.minimumHeight
         }
-        .onChange(of: isStreaming) { _, streaming in
-            if !streaming {
-                contentHeight = Self.minimumHeight
-            }
-        }
     }
 }
 

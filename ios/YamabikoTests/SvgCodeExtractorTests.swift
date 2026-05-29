@@ -73,4 +73,21 @@ final class SvgCodeExtractorTests: XCTestCase {
 
         XCTAssertEqual(cleaned, "Before\n\nAfter")
     }
+
+    func testExtractedSvgIdentityIsStableAcrossExtractions() {
+        let text = """
+        ```svg
+        <svg viewBox="0 0 10 10"><title>Preview</title><path d="M0 0 L10 10" /></svg>
+        ```
+        """
+
+        let first = SvgCodeExtractor.extract(from: text)
+        let second = SvgCodeExtractor.extract(from: text)
+
+        XCTAssertEqual(first.count, 1)
+        XCTAssertEqual(first[0].id, second[0].id)
+        XCTAssertEqual(first[0].filename, second[0].filename)
+        XCTAssertTrue(first[0].filename.hasPrefix("Preview_"))
+        XCTAssertTrue(first[0].filename.hasSuffix(".svg"))
+    }
 }

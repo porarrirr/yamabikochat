@@ -28,6 +28,14 @@ private enum ChatTimelineItem: Identifiable {
     }
 }
 
+private struct ChatBottomAnchorMaxYPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = .infinity
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 struct ChatScreen: View {
     @ObservedObject var viewModel: ChatViewModel
     var onNavigateToConversation: ((Int64) -> Void)? = nil
@@ -37,12 +45,16 @@ struct ChatScreen: View {
     @State private var showPhotoPicker = false
     @State private var isAttachmentPanelVisible = false
     @State private var photoItems: [PhotosPickerItem] = []
-    @State private var scrollPositionID: String?
     @State private var isUserNearBottom = true
+    @State private var bottomAnchorMaxY: CGFloat = .infinity
+    @State private var isUserDraggingScroll = false
+    @State private var scrollInteractionToken = 0
     @State private var addingRecentPhotoIDs: Set<String> = []
     @StateObject private var recentPhotoLibrary = RecentPhotoLibrary()
     @FocusState private var isComposerFocused: Bool
     private let bottomAnchorID = "chat-bottom-anchor"
+    private let scrollCoordinateSpace = "chat-scroll-coordinate-space"
+    private let bottomProximityThreshold: CGFloat = 96
 
     private var timeline: [ChatTimelineItem] {
         (viewModel.fullMessages.map { ChatTimelineItem.message($0) } +
@@ -53,86 +65,107 @@ struct ChatScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        if timeline.isEmpty {
-                            ContentUnavailableView(
-                                "会話がありません",
-                                systemImage: "bubble.left.and.bubble.right",
-                                description: Text("メッセージを入力して会話を開始してください。")
-                            )
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 56)
-                        } else {
-                            ForEach(timeline) { item in
-                                switch item {
-                                case let .message(message):
-                                    MessageBubble(
-                                        message: message,
-                                        mathRenderingEnabled: viewModel.settings.mathRenderingEnabled,
-                                        streamingSnapshot: viewModel.streamingSnapshot(for: message.id),
-                                        isActivelyStreaming: viewModel.isMessageStreaming(message.id),
-                                        canRegenerate: viewModel.canRegenerateLastAssistant && message.id == viewModel.fullMessages.last?.id,
-                                        onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
-                                        onNextVariant: { viewModel.showNextVariant(messageId: message.id) },
-                                        onCopy: {
-                                            UIPasteboard.general.string = message.displayText
-                                        },
-                                        onBranch: {
-                                            guard let newConversationId = viewModel.branchConversation(from: message.id) else { return }
-                                            onNavigateToConversation?(newConversationId)
-                                        },
-                                        onRegenerate: {
-                                            viewModel.regenerateLastAssistantVariant()
-                                        }
-                                    )
-                                        .id(item.id)
-                                case let .dual(message):
-                                    DualMessageCard(
-                                        message: message,
-                                        settings: viewModel.settings,
-                                        mathRenderingEnabled: viewModel.settings.mathRenderingEnabled
-                                    )
-                                        .id(item.id)
+                GeometryReader { scrollGeometry in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            if timeline.isEmpty {
+                                ContentUnavailableView(
+                                    "会話がありません",
+                                    systemImage: "bubble.left.and.bubble.right",
+                                    description: Text("メッセージを入力して会話を開始してください。")
+                                )
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 56)
+                            } else {
+                                ForEach(timeline) { item in
+                                    switch item {
+                                    case let .message(message):
+                                        MessageBubble(
+                                            message: message,
+                                            mathRenderingEnabled: viewModel.settings.mathRenderingEnabled,
+                                            streamingSnapshot: viewModel.streamingSnapshot(for: message.id),
+                                            isActivelyStreaming: viewModel.isMessageStreaming(message.id),
+                                            canRegenerate: viewModel.canRegenerateLastAssistant && message.id == viewModel.fullMessages.last?.id,
+                                            onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
+                                            onNextVariant: { viewModel.showNextVariant(messageId: message.id) },
+                                            onCopy: {
+                                                UIPasteboard.general.string = message.displayText
+                                            },
+                                            onBranch: {
+                                                guard let newConversationId = viewModel.branchConversation(from: message.id) else { return }
+                                                onNavigateToConversation?(newConversationId)
+                                            },
+                                            onRegenerate: {
+                                                viewModel.regenerateLastAssistantVariant()
+                                            }
+                                        )
+                                            .id(item.id)
+                                    case let .dual(message):
+                                        DualMessageCard(
+                                            message: message,
+                                            settings: viewModel.settings,
+                                            mathRenderingEnabled: viewModel.settings.mathRenderingEnabled
+                                        )
+                                            .id(item.id)
+                                    }
                                 }
                             }
-                        }
 
-                        Color.clear
-                            .frame(height: 1)
-                            .id(bottomAnchorID)
+                            Color.clear
+                                .frame(height: 1)
+                                .id(bottomAnchorID)
+                                .background {
+                                    GeometryReader { anchorGeometry in
+                                        Color.clear.preference(
+                                            key: ChatBottomAnchorMaxYPreferenceKey.self,
+                                            value: anchorGeometry.frame(in: .named(scrollCoordinateSpace)).maxY
+                                        )
+                                    }
+                                }
+                        }
+                        .scrollTargetLayout()
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 18)
                     }
-                    .scrollTargetLayout()
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 18)
-                }
-                .scrollPosition(id: $scrollPositionID)
-                .background(Color.chatScreenBackground)
-                .scrollDismissesKeyboard(.interactively)
-                .simultaneousGesture(
-                    TapGesture().onEnded {
-                        dismissComposerChrome()
+                    .coordinateSpace(name: scrollCoordinateSpace)
+                    .background(Color.chatScreenBackground)
+                    .scrollDismissesKeyboard(.interactively)
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            dismissComposerChrome()
+                        }
+                    )
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 8)
+                            .onChanged { _ in
+                                beginScrollInteraction()
+                            }
+                            .onEnded { _ in
+                                endScrollInteraction()
+                            }
+                    )
+                    .onPreferenceChange(ChatBottomAnchorMaxYPreferenceKey.self) { maxY in
+                        handleBottomAnchorChange(
+                            maxY: maxY,
+                            viewportHeight: scrollGeometry.size.height,
+                            proxy: proxy
+                        )
                     }
-                )
-                .onAppear {
-                    guard scrollPositionID == nil else { return }
-                    scrollPositionID = bottomAnchorID
-                    isUserNearBottom = true
-                    scrollToBottom(proxy: proxy, animated: false)
-                }
-                .onChange(of: scrollPositionID) { _, newValue in
-                    updateIsUserNearBottom(positionID: newValue)
-                }
-                .onChange(of: timeline.count) { _, _ in
-                    scrollToBottomIfNeeded(proxy: proxy)
-                }
-                .onChange(of: isComposerFocused) { _, focused in
-                    guard !focused else { return }
-                    scrollToBottomIfNeeded(proxy: proxy)
-                }
-                .onChange(of: viewModel.isSending) { oldValue, newValue in
-                    guard oldValue, !newValue else { return }
-                    scrollToBottomIfNeeded(proxy: proxy)
+                    .onAppear {
+                        isUserNearBottom = true
+                        scrollToBottom(proxy: proxy, animated: false)
+                    }
+                    .onChange(of: timeline.count) { _, _ in
+                        scrollToBottomIfNeeded(proxy: proxy)
+                    }
+                    .onChange(of: isComposerFocused) { _, focused in
+                        guard !focused else { return }
+                        scrollToBottomIfNeeded(proxy: proxy)
+                    }
+                    .onChange(of: viewModel.isSending) { oldValue, newValue in
+                        guard !oldValue, newValue else { return }
+                        scrollToBottom(proxy: proxy, animated: true)
+                    }
                 }
             }
 
@@ -468,7 +501,7 @@ struct ChatScreen: View {
                 }
             }
             await MainActor.run {
-                addingRecentPhotoIDs.remove(item.id)
+                _ = addingRecentPhotoIDs.remove(item.id)
             }
         }
     }
@@ -500,13 +533,36 @@ struct ChatScreen: View {
         isAttachmentPanelVisible = false
     }
 
-    private func updateIsUserNearBottom(positionID: String?) {
-        guard let positionID else {
-            isUserNearBottom = timeline.isEmpty
-            return
+    private func beginScrollInteraction() {
+        isUserDraggingScroll = true
+        scrollInteractionToken += 1
+    }
+
+    private func endScrollInteraction() {
+        scrollInteractionToken += 1
+        let token = scrollInteractionToken
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            guard scrollInteractionToken == token else { return }
+            isUserDraggingScroll = false
         }
-        let lastMessageID = timeline.last?.id
-        isUserNearBottom = positionID == bottomAnchorID || positionID == lastMessageID
+    }
+
+    private func handleBottomAnchorChange(maxY: CGFloat, viewportHeight: CGFloat, proxy: ScrollViewProxy) {
+        let wasNearBottom = isUserNearBottom
+        bottomAnchorMaxY = maxY
+        updateIsUserNearBottom(bottomAnchorMaxY: maxY, viewportHeight: viewportHeight)
+
+        if wasNearBottom,
+           !isUserDraggingScroll,
+           maxY > viewportHeight + bottomProximityThreshold {
+            DispatchQueue.main.async {
+                scrollToBottom(proxy: proxy, animated: false)
+            }
+        }
+    }
+
+    private func updateIsUserNearBottom(bottomAnchorMaxY: CGFloat, viewportHeight: CGFloat) {
+        isUserNearBottom = timeline.isEmpty || bottomAnchorMaxY <= viewportHeight + bottomProximityThreshold
     }
 
     private func scrollToBottomIfNeeded(proxy: ScrollViewProxy, animated: Bool = true) {
@@ -519,7 +575,7 @@ struct ChatScreen: View {
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
         let scrollAction = {
             proxy.scrollTo(bottomAnchorID, anchor: .bottom)
-            scrollPositionID = bottomAnchorID
+            isUserNearBottom = true
         }
         if animated {
             withAnimation {

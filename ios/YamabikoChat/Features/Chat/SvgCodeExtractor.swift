@@ -176,11 +176,18 @@ enum SvgCodeExtractor {
 
     private static func generateFilename(from content: String) -> String {
         let suggestedName = extractSuggestedName(from: content)
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let timestamp = formatter.string(from: Date())
-        return "\(suggestedName)_\(timestamp).svg"
+        let contentID = stableContentIdentifier(for: content)
+        return "\(suggestedName)_\(contentID).svg"
+    }
+
+    private static func stableContentIdentifier(for content: String) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in content.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 1_099_511_628_211
+        }
+        let hex = String(hash, radix: 16)
+        return String(repeating: "0", count: max(0, 16 - hex.count)) + hex
     }
 
     private static func extractSuggestedName(from content: String) -> String {
