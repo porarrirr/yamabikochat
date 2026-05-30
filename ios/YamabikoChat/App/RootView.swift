@@ -1,5 +1,35 @@
 import SwiftUI
 
+enum ConversationListSelectionResolution: Equatable {
+    case keepCurrentSelection
+    case clearSelection
+    case select(Int64)
+}
+
+enum ConversationListSelectionResolver {
+    static func resolve(
+        visibleConversationIDs ids: [Int64],
+        selectedConversationID: Int64?,
+        selectedConversationExists: Bool,
+        keepSidebarAfterSecretDiscard: Bool
+    ) -> ConversationListSelectionResolution {
+        if let selectedConversationID,
+           ids.contains(selectedConversationID) || selectedConversationExists {
+            return .keepCurrentSelection
+        }
+
+        guard !ids.isEmpty else {
+            return .clearSelection
+        }
+
+        if keepSidebarAfterSecretDiscard, selectedConversationID == nil {
+            return .keepCurrentSelection
+        }
+
+        return .select(ids[0])
+    }
+}
+
 struct RootView: View {
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var appState: AppState
@@ -83,21 +113,30 @@ struct RootView: View {
                 preferredCompactColumn = .detail
                 return
             }
-            guard !ids.isEmpty else {
+
+            let selectedConversationExists = appState.selectedConversationID.map { id in
+                (try? container.chatRepository.conversation(id: id)) != nil
+            } ?? false
+            let resolution = ConversationListSelectionResolver.resolve(
+                visibleConversationIDs: ids,
+                selectedConversationID: appState.selectedConversationID,
+                selectedConversationExists: selectedConversationExists,
+                keepSidebarAfterSecretDiscard: keepSidebarAfterSecretDiscard
+            )
+
+            switch resolution {
+            case .keepCurrentSelection:
+                if keepSidebarAfterSecretDiscard, appState.selectedConversationID == nil {
+                    keepSidebarAfterSecretDiscard = false
+                    preferredCompactColumn = .sidebar
+                }
+            case .clearSelection:
                 appState.selectedConversationID = nil
-                preferredCompactColumn = .sidebar
-                return
-            }
-            if keepSidebarAfterSecretDiscard, appState.selectedConversationID == nil {
                 keepSidebarAfterSecretDiscard = false
                 preferredCompactColumn = .sidebar
-                return
-            }
-            if let selected = appState.selectedConversationID, ids.contains(selected) {
-                return
-            }
-            appState.selectedConversationID = ids.first
-            if appState.selectedConversationID != nil {
+            case let .select(id):
+                appState.selectedConversationID = id
+                keepSidebarAfterSecretDiscard = false
                 preferredCompactColumn = .detail
             }
         }

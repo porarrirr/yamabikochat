@@ -660,6 +660,101 @@ private struct AttachmentPreviewRow: View {
     }
 }
 
+private struct ChatAttachmentItem: Identifiable, Equatable {
+    let rawValue: String
+
+    var id: String { rawValue }
+
+    var url: URL? {
+        if let parsedURL = URL(string: rawValue), parsedURL.scheme != nil {
+            return parsedURL
+        }
+        return URL(fileURLWithPath: rawValue)
+    }
+
+    var displayName: String {
+        guard let url else { return rawValue }
+        return url.lastPathComponent.isEmpty ? rawValue : url.lastPathComponent
+    }
+
+    var isImage: Bool {
+        guard let url else { return false }
+        return url.isImageAttachment
+    }
+}
+
+private struct MessageAttachmentList: View {
+    let attachments: [ChatAttachmentItem]
+    let isOutgoing: Bool
+
+    private var imageAttachments: [ChatAttachmentItem] {
+        attachments.filter(\.isImage)
+    }
+
+    private var fileAttachments: [ChatAttachmentItem] {
+        attachments.filter { !$0.isImage }
+    }
+
+    private var horizontalAlignment: HorizontalAlignment {
+        isOutgoing ? .trailing : .leading
+    }
+
+    private var frameAlignment: Alignment {
+        isOutgoing ? .trailing : .leading
+    }
+
+    var body: some View {
+        VStack(alignment: horizontalAlignment, spacing: 6) {
+            if !imageAttachments.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(imageAttachments) { attachment in
+                            if let url = attachment.url {
+                                AttachmentImageCard(
+                                    url: url,
+                                    displayName: attachment.displayName
+                                )
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: frameAlignment)
+                }
+            }
+
+            ForEach(fileAttachments) { attachment in
+                Label(attachment.displayName, systemImage: "paperclip")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: 260, alignment: frameAlignment)
+            }
+        }
+    }
+}
+
+private struct AttachmentImageCard: View {
+    let url: URL
+    let displayName: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            AttachmentThumbnail(url: url, sideLength: 128)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.chatBubbleBorder.opacity(0.45), lineWidth: 1)
+                }
+
+            Text(displayName)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(width: 128, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(L10n.format("添付画像: %@", displayName))
+    }
+}
+
 private struct RecentPhotoStrip: View {
     let items: [RecentPhotoItem]
     let loadingIDs: Set<String>
@@ -944,36 +1039,35 @@ private struct MessageBubble: View {
         return value
     }
 
-    private var attachmentNames: [String] {
+    private var attachmentItems: [ChatAttachmentItem] {
         guard let data = message.displayAttachmentsJSON.data(using: .utf8),
               let values = try? JSONDecoder().decode([String].self, from: data)
         else {
             return []
         }
-        return values.map { URL(string: $0)?.lastPathComponent ?? $0 }
+        return values.map { ChatAttachmentItem(rawValue: $0) }
     }
 
     var body: some View {
         VStack(alignment: isUser ? .trailing : .leading, spacing: 8) {
             if isUser {
-                if !attachmentNames.isEmpty {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        ForEach(attachmentNames, id: \.self) { name in
-                            Label(name, systemImage: "paperclip")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+                if !attachmentItems.isEmpty {
+                    MessageAttachmentList(
+                        attachments: attachmentItems,
+                        isOutgoing: true
+                    )
                 }
 
-                Text(responseText)
-                    .textSelection(.enabled)
-                    .foregroundStyle(Color.chatUserText)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color.chatUserBubble)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                if !responseText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(responseText)
+                        .textSelection(.enabled)
+                        .foregroundStyle(Color.chatUserText)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Color.chatUserBubble)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
             } else {
                 if thinkingText != nil {
                     Button {
@@ -996,18 +1090,17 @@ private struct MessageBubble: View {
 
                 let svgBlocks = SvgCodeExtractor.extract(from: responseText)
                 let markdownText = SvgCodeExtractor.removeExtractedBlocks(from: responseText, blocks: svgBlocks)
-                let hasAssistantBubbleContent = !attachmentNames.isEmpty
+                let hasAssistantBubbleContent = !attachmentItems.isEmpty
                     || !svgBlocks.isEmpty
                     || !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
                 if hasAssistantBubbleContent {
                     VStack(alignment: .leading, spacing: 8) {
-                        if !attachmentNames.isEmpty {
-                            ForEach(attachmentNames, id: \.self) { name in
-                                Label(name, systemImage: "paperclip")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
+                        if !attachmentItems.isEmpty {
+                            MessageAttachmentList(
+                                attachments: attachmentItems,
+                                isOutgoing: false
+                            )
                         }
 
                         if !svgBlocks.isEmpty {
@@ -1131,8 +1224,8 @@ private struct DualMessageCard: View {
         message.userText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var attachmentNames: [String] {
-        message.attachments.map { URL(string: $0)?.lastPathComponent ?? $0 }
+    private var attachmentItems: [ChatAttachmentItem] {
+        message.attachments.map { ChatAttachmentItem(rawValue: $0) }
     }
 
     var body: some View {
@@ -1140,14 +1233,11 @@ private struct DualMessageCard: View {
             switch message.parsedRole {
             case .user:
                 VStack(alignment: .trailing, spacing: 8) {
-                    if !attachmentNames.isEmpty {
-                        VStack(alignment: .trailing, spacing: 4) {
-                            ForEach(attachmentNames, id: \.self) { name in
-                                Label(name, systemImage: "paperclip")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                    if !attachmentItems.isEmpty {
+                        MessageAttachmentList(
+                            attachments: attachmentItems,
+                            isOutgoing: true
+                        )
                     }
                     if !userText.isEmpty {
                         Text(userText)

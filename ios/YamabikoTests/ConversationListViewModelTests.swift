@@ -24,6 +24,50 @@ private final class ConversationListTestCredentialStore: SecureCredentialStore {
 
 @MainActor
 final class ConversationListViewModelTests: XCTestCase {
+    func testSelectionResolverKeepsExistingSelectedConversationEvenWhenItIsNotVisibleInHistoryList() {
+        let resolution = ConversationListSelectionResolver.resolve(
+            visibleConversationIDs: [10, 9],
+            selectedConversationID: 42,
+            selectedConversationExists: true,
+            keepSidebarAfterSecretDiscard: false
+        )
+
+        XCTAssertEqual(resolution, .keepCurrentSelection)
+    }
+
+    func testSelectionResolverSelectsLatestVisibleConversationWhenSelectedConversationWasDeleted() {
+        let resolution = ConversationListSelectionResolver.resolve(
+            visibleConversationIDs: [10, 9],
+            selectedConversationID: 42,
+            selectedConversationExists: false,
+            keepSidebarAfterSecretDiscard: false
+        )
+
+        XCTAssertEqual(resolution, .select(10))
+    }
+
+    func testSelectionResolverKeepsSidebarOpenAfterSecretConversationDiscard() {
+        let resolution = ConversationListSelectionResolver.resolve(
+            visibleConversationIDs: [10, 9],
+            selectedConversationID: nil,
+            selectedConversationExists: false,
+            keepSidebarAfterSecretDiscard: true
+        )
+
+        XCTAssertEqual(resolution, .keepCurrentSelection)
+    }
+
+    func testSelectionResolverClearsSelectionWhenNoVisibleOrSelectedConversationExists() {
+        let resolution = ConversationListSelectionResolver.resolve(
+            visibleConversationIDs: [],
+            selectedConversationID: nil,
+            selectedConversationExists: false,
+            keepSidebarAfterSecretDiscard: false
+        )
+
+        XCTAssertEqual(resolution, .clearSelection)
+    }
+
     func testResetProjectFilterClearsSelectionForNonProjectConversation() throws {
         let repository = try makeFixture()
         let projectId = try repository.createProject(title: "Project A", instructions: nil)

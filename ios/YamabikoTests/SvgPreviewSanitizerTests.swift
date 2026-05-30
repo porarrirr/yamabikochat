@@ -2,6 +2,13 @@ import XCTest
 @testable import YamabikoChat
 
 final class SvgPreviewSanitizerTests: XCTestCase {
+    func testSvgDownloadDocumentEncodesContentAsUTF8() {
+        let input = #"<svg viewBox="0 0 10 10"><text>山彦</text></svg>"#
+        let document = SvgDownloadDocument(svgContent: input)
+
+        XCTAssertEqual(String(data: document.data, encoding: .utf8), input)
+    }
+
     func testSanitizeRemovesScriptTags() {
         let input = #"<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script><rect width="10" height="10"/></svg>"#
         let sanitized = SvgPreviewSanitizer.sanitize(input)

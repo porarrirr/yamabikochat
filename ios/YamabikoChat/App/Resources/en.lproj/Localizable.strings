@@ -69,6 +69,7 @@
 "これ(?:にて|で)(?:終(?:了|わ)り|終了)とさせていただきます" = "これ(?:にて|で)(?:終(?:了|わ)り|終了)とさせていただきます";
 "コピー" = "Copy";
 "コピー済み" = "Copied";
+"ダウンロード" = "Download";
 "サポート外のファイル形式です。" = "Unsupported file format.";
 "システムカラーを使用 (iOS)" = "Use system colors (iOS)";
 "システムプロンプト" = "System Prompt";
@@ -88,6 +89,8 @@
 "デュアルモードが有効な間は自動会話をONにできません。" = "Cannot enable Auto Conversation while Dual Mode is active.";
 "デュアルモードで2つのモデル応答を同時比較します。" = "Compare responses from two models simultaneously in Dual Mode.";
 "デュアルモードでは再生成できません。" = "Regeneration is unavailable in Dual Mode.";
+"SVGのダウンロードに失敗しました" = "Failed to download SVG";
+"SVGをダウンロード" = "Download SVG";
 "デュアルモードでは本文または添付を入力してください。" = "In Dual Mode, enter text or add an attachment.";
 "デュアルモードと自動会話は同時に有効化できません。" = "Dual Mode and Auto Conversation cannot be enabled at the same time.";
 "デュアルをOFF" = "Turn Dual Off";
