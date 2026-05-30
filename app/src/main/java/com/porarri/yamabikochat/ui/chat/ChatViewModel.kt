@@ -382,7 +382,7 @@ class ChatViewModel(
             }
 
             val isAutoConvEnabled = currentSettings.isAutoConversationEnabled
-            val isTriggerMessage = isAutoConversationTrigger(text)
+            val isTriggerMessage = AutoConversationTrigger.matches(text)
 
             interactionCoordinator.sendSingleMessage(
                 ChatInteractionCoordinator.SingleMessageContext(
@@ -752,55 +752,6 @@ class ChatViewModel(
     }
     
     // 自動会話関連のメソッド
-    
-    /**
-     * 自動会話のトリガーとなるメッセージかどうかを判定
-     * 自動会話がオンの時は、意味のあるメッセージなら開始する
-     */
-    private fun isAutoConversationTrigger(text: String): Boolean {
-        val trimmedText = text.trim()
-        
-        // 空のメッセージや明らかにテスト目的の短いメッセージは除外
-        if (trimmedText.length < 2) return false
-        
-        val lowerText = trimmedText.lowercase()
-        
-        // 明らかにテスト目的のメッセージを除外
-        val testPatterns = listOf(
-            "a", "test", "テスト", "t", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
-            "aa", "aaa", "bb", "cc", "dd", "ee", "ff", "gg", "hh", "ii", "jj", "kk"
-        )
-        
-        if (testPatterns.contains(lowerText)) return false
-        
-        // 特定のトリガーワードがある場合は確実に開始
-        val strongTriggers = listOf(
-            "こんにちは", "会話", "話", "議論", "ディスカッション", "チャット",
-            "について", "どう思う", "考える", "語る", "相談", "質問"
-        )
-        
-        if (strongTriggers.any { trigger -> lowerText.contains(trigger) }) {
-            return true
-        }
-        
-        // 3文字以上で疑問符や感嘆符を含む場合も開始
-        if (trimmedText.length >= 3 && (lowerText.contains("？") || lowerText.contains("?") || lowerText.contains("！") || lowerText.contains("!"))) {
-            return true
-        }
-        
-        // 5文字以上の意味のありそうなメッセージは開始
-        if (trimmedText.length >= 5) {
-            // ひらがな、カタカナ、漢字、アルファベットの組み合わせをチェック
-            val hasJapanese = lowerText.any { it in 'あ'..'ん' || it in 'ア'..'ン' || it.code > 0x3000 }
-            val hasAlphabet = lowerText.any { it in 'a'..'z' }
-            
-            if (hasJapanese || hasAlphabet) {
-                return true
-            }
-        }
-        
-        return false
-    }
     
     /**
      * 自動会話を開始

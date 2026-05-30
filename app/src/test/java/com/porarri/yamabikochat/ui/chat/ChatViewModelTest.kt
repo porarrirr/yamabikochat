@@ -4,7 +4,6 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import com.porarri.yamabikochat.data.ChatRepository
 import com.porarri.yamabikochat.data.local.ChatMessage
-import com.porarri.yamabikochat.data.local.ChatMessageSummary
 import com.porarri.yamabikochat.data.local.Settings
 import com.porarri.yamabikochat.data.local.ModelPreset
 import com.porarri.yamabikochat.data.local.DualChatSettings
@@ -195,6 +194,23 @@ class ChatViewModelTest {
         coVerify { repository.getFullMessageById(1L) }
     }
 
+    @Test
+    fun `sendMessage while editing updates existing message without inserting a new one`() = runTest {
+        // Given
+        val original = ChatMessage(id = 10L, conversationId = 1L, role = "user", text = "Before")
+        viewModel.startEditing(original)
+        clearMocks(repository, answers = false, recordedCalls = true, verificationMarks = true)
+
+        // When
+        viewModel.sendMessage("After")
+        advanceUntilIdle()
+
+        // Then
+        coVerify(exactly = 1) { repository.updateMessage(original.copy(text = "After")) }
+        coVerify(exactly = 0) { repository.insertMessage(any()) }
+        assertNull("Editing state should be cleared", viewModel.editingMessage.value)
+    }
+
     // プリセット適用のテスト
     @Test
     fun `applyPreset should update conversation and settings`() = runTest {
@@ -233,6 +249,39 @@ class ChatViewModelTest {
                     settings.thinkingBudget == preset.thinkingBudget &&
                     settings.apiProvider == preset.apiProvider
                 }
+            )
+        }
+    }
+
+    @Test
+    fun `applyPreset should resolve named system prompt preset before inline prompt`() = runTest {
+        // Given
+        settingsFlow.value = createDefaultSettings().copy(
+            systemPromptPresets = """[{"name":"Architect","prompt":"Preset prompt"}]"""
+        )
+        val preset = ModelPreset(
+            id = 3L,
+            name = "Named Prompt Preset",
+            model = "gemini-2.5-pro",
+            apiProvider = "GEMINI",
+            systemPrompt = "Inline prompt",
+            systemPromptPresetName = "architect"
+        )
+        val conversation = createDefaultConversation().copy(systemPrompt = "Existing prompt")
+        coEvery { repository.getConversationById(1L) } returns conversation
+
+        // When
+        viewModel.applyPreset(preset)
+        advanceUntilIdle()
+
+        // Then
+        coVerify {
+            repository.upsertConversation(
+                conversation.copy(
+                    model = "gemini-2.5-pro",
+                    systemPrompt = "Preset prompt",
+                    apiProvider = "GEMINI"
+                )
             )
         }
     }
@@ -352,85 +401,6 @@ class ChatViewModelTest {
         assertFalse(viewModel.dualChatSettings.value.isDualModeEnabled)
     }
 
-    // 自動会話トリガー判定のテスト
-    @Test
-    fun `isAutoConversationTrigger should return false for test messages`() {
-        // Given - ViewModelのプライベートメソッドにアクセスするためリフレクションを使用
-        val method = ChatViewModel::class.java.getDeclaredMethod("isAutoConversationTrigger", String::class.java)
-        method.isAccessible = true
-        
-        val testMessages = listOf("a", "test", "テスト", "1", "aa", "bb")
-        
-        testMessages.forEach { testMessage ->
-            // When
-            val result = method.invoke(viewModel, testMessage) as Boolean
-            
-            // Then
-            assertFalse("Test message '$testMessage' should not trigger auto conversation", result)
-        }
-    }
-    
-    @Test
-    fun `isAutoConversationTrigger should return true for conversation keywords`() {
-        // Given
-        val method = ChatViewModel::class.java.getDeclaredMethod("isAutoConversationTrigger", String::class.java)
-        method.isAccessible = true
-        
-        val triggerMessages = listOf(
-            "こんにちは",
-            "プログラミングについて",
-            "どう思う？",
-            "今日の天気について語る",
-            "質問があります"
-        )
-        
-        triggerMessages.forEach { triggerMessage ->
-            // When
-            val result = method.invoke(viewModel, triggerMessage) as Boolean
-            
-            // Then
-            assertTrue("Message '$triggerMessage' should trigger auto conversation", result)
-        }
-    }
-    
-    @Test
-    fun `isAutoConversationTrigger should return true for questions`() {
-        // Given
-        val method = ChatViewModel::class.java.getDeclaredMethod("isAutoConversationTrigger", String::class.java)
-        method.isAccessible = true
-        
-        val questionMessages = listOf("今日は？", "What?", "どうですか？")
-        
-        questionMessages.forEach { question ->
-            // When
-            val result = method.invoke(viewModel, question) as Boolean
-            
-            // Then
-            assertTrue("Question '$question' should trigger auto conversation", result)
-        }
-    }
-    
-    @Test
-    fun `isAutoConversationTrigger should return true for meaningful long messages`() {
-        // Given
-        val method = ChatViewModel::class.java.getDeclaredMethod("isAutoConversationTrigger", String::class.java)
-        method.isAccessible = true
-        
-        val longMessages = listOf(
-            "今日はとても良い天気です",
-            "Hello world and everyone",
-            "プログラムを書きたいです"
-        )
-        
-        longMessages.forEach { longMessage ->
-            // When
-            val result = method.invoke(viewModel, longMessage) as Boolean
-            
-            // Then
-            assertTrue("Long message '$longMessage' should trigger auto conversation", result)
-        }
-    }
-
     // デュアルチャット設定のテスト
     @Test
     fun `updateDualChatSettings should update repository and local state`() = runTest {
@@ -466,18 +436,6 @@ class ChatViewModelTest {
         assertTrue("Should update dual mode active state", viewModel.isDualModeActive.value)
     }
 
-    // ライフサイクルのテスト
-    @Test
-    fun `onCleared should cleanup auto conversation manager`() = runTest {
-        // Given - AutoConversationManagerはコンストラクタで作成されるため、間接的にテスト
-
-        // When
-        viewModel.triggerOnClearedForTest()
-        
-        // Then
-        assertTrue("onCleared should complete without exception", true)
-    }
-
     // エッジケースのテスト
     @Test
     fun `addAttachment with multiple files should maintain all valid attachments`() = runTest {
@@ -508,20 +466,30 @@ class ChatViewModelTest {
     }
     
     @Test
-    fun `state flow values should be properly initialized`() = runTest {
+    fun `toggleAutoConversation should keep dual mode disabled when enabling from normal mode`() = runTest {
+        // Given
+        settingsFlow.value = createDefaultSettings().copy(
+            isDualModeEnabled = false,
+            isAutoConversationEnabled = false
+        )
         advanceUntilIdle()
+        clearMocks(repository, answers = false, recordedCalls = true, verificationMarks = true)
         
+        // When
+        viewModel.toggleAutoConversation()
+        advanceUntilIdle()
+
         // Then
-        assertNotNull("Messages flow should be initialized", viewModel.messages.value)
-        assertNotNull("Full messages flow should be initialized", viewModel.fullMessages.value)
-        assertNotNull("Dual messages flow should be initialized", viewModel.dualMessages.value)
-        assertNotNull("Dual chat settings should be initialized", viewModel.dualChatSettings.value)
-        assertNotNull("Attachments should be initialized", viewModel.attachments.value)
-        
-        assertEquals("Messages should be empty initially", 0, viewModel.messages.value.size)
-        assertEquals("Attachments should be empty initially", 0, viewModel.attachments.value.size)
-        assertNull("Error message should be null initially", viewModel.errorMessage.value)
-        assertNull("Editing message should be null initially", viewModel.editingMessage.value)
+        coVerify(exactly = 1) {
+            repository.saveSettings(
+                match { settings ->
+                    settings.isAutoConversationEnabled &&
+                        !settings.isDualModeEnabled
+                }
+            )
+        }
+        assertFalse(viewModel.isDualModeActive.value)
+        assertFalse(viewModel.dualChatSettings.value.isDualModeEnabled)
     }
 }
 

@@ -37,15 +37,26 @@ final class AttachmentRepositoryTests: XCTestCase {
         let file = dir.appendingPathComponent("large.txt")
         let payload = Data(count: AppConstants.maxAttachmentSizeBytes + 1)
         try payload.write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
 
         let result = repo.validate(url: file)
-        switch result {
-        case .tooLarge:
-            XCTAssertTrue(true)
-        default:
-            XCTFail("Expected tooLarge, got \(result)")
-        }
+        XCTAssertEqual(result, .tooLarge(sizeBytes: payload.count))
+    }
 
-        try? FileManager.default.removeItem(at: file)
+    func testRequiresVisionOnlyForImageTypes() throws {
+        let repo = AttachmentRepository()
+
+        XCTAssertTrue(repo.requiresVision(url: URL(fileURLWithPath: "/tmp/photo.PNG")))
+        XCTAssertTrue(repo.requiresVision(url: URL(fileURLWithPath: "/tmp/diagram.webp")))
+        XCTAssertFalse(repo.requiresVision(url: URL(fileURLWithPath: "/tmp/readme.txt")))
+        XCTAssertFalse(repo.requiresVision(url: URL(fileURLWithPath: "/tmp/document.pdf")))
+    }
+
+    func testValidateRejectsNonFileURLsAsUnreadable() {
+        let repo = AttachmentRepository()
+
+        let result = repo.validate(url: URL(string: "https://example.com/file.txt")!)
+
+        XCTAssertEqual(result, .unreadable)
     }
 }
