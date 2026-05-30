@@ -1224,6 +1224,41 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(body["model"] as? String, "qwen3.5-plus")
     }
 
+    func testOpenCodeGoQwenMaxModelUsesMessagesEndpoint() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"content":[{"type":"text","text":"qwen max ok"}],"usage":{"input_tokens":4,"output_tokens":2}}"#
+                .data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "opencode-go/qwen3.7-max",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENCODE_GO"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(response.text, "qwen max ok")
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(captured.url.absoluteString, "https://opencode.ai/zen/go/v1/messages")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(captured.body)) as? [String: Any])
+        XCTAssertEqual(body["model"] as? String, "qwen3.7-max")
+    }
+
     func testOpenCodeGoMessagesStreamParsesAnthropicStyleChunks() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("go-key", for: .openCodeGo)

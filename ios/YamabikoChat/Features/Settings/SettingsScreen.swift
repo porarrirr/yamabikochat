@@ -629,7 +629,7 @@ struct SettingsScreen: View {
                 .font(.caption)
                 .textSelection(.enabled)
 
-            Text("OpenCode Go の API key を保存してください。MiniMax M2.7/M2.5 と Qwen3.5/3.6 Plus は `/messages`、それ以外の公式 Go モデルは `/chat/completions` に送信します。Chat Completions 系には会話単位の prompt cache key を付けて、同じ長い prefix が同じ cache route に乗りやすいようにします。")
+            Text("OpenCode Go の API key を保存してください。MiniMax M2.7/M2.5 と Qwen3.5/3.6 Plus、Qwen3.7 Max は `/messages`、それ以外の公式 Go モデルは `/chat/completions` に送信します。Chat Completions 系には会話単位の prompt cache key を付けて、同じ長い prefix が同じ cache route に乗りやすいようにします。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
