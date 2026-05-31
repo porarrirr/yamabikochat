@@ -170,7 +170,7 @@ fun SettingsScreen(
             val providerKey = preset.apiProvider.uppercase()
             showGlobalProviderPresetsInChatByProvider[providerKey] ?: showGlobalProviderPresetsInChat
         }
-        val presetOptions = globalPresetsInChat + presets
+        val presetOptions = globalPresets + presets
 
         ModelPresetDialog(
             state = presetDialogState,

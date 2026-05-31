@@ -19,6 +19,10 @@ struct DualModeSettingsSection: View {
         return L10n.format("Split ratio: %d%% : %d%%", primary, secondary)
     }
 
+    private var providerPresetOptions: [ModelPreset] {
+        viewModel.settings.buildGlobalProviderPresets()
+    }
+
     var body: some View {
         Group {
             Section {
@@ -51,7 +55,9 @@ struct DualModeSettingsSection: View {
                         modelTitleKey: "Model A",
                         model: $viewModel.settings.dualModelA,
                         systemPromptTitleKey: "Dual system prompt A",
-                        systemPrompt: dualSystemPromptABinding
+                        systemPrompt: dualSystemPromptABinding,
+                        providerPresets: providerPresetOptions,
+                        onProviderPresetSelected: applyProviderPresetToDualA
                     )
                 }
 
@@ -62,7 +68,9 @@ struct DualModeSettingsSection: View {
                         modelTitleKey: "Model B",
                         model: $viewModel.settings.dualModelB,
                         systemPromptTitleKey: "Dual system prompt B",
-                        systemPrompt: dualSystemPromptBBinding
+                        systemPrompt: dualSystemPromptBBinding,
+                        providerPresets: providerPresetOptions,
+                        onProviderPresetSelected: applyProviderPresetToDualB
                     )
                 }
 
@@ -120,5 +128,57 @@ struct DualModeSettingsSection: View {
             get: { viewModel.settings.dualSystemPromptB ?? "" },
             set: { viewModel.settings.dualSystemPromptB = SettingsStringHelpers.nilIfBlank($0) }
         )
+    }
+
+    private func applyProviderPresetToDualA(_ preset: ModelPreset) {
+        viewModel.settings.dualProviderA = preset.apiProvider.uppercased()
+        viewModel.settings.dualModelA = preset.model
+        if let prompt = preset.systemPrompt.flatMap(SettingsStringHelpers.nilIfBlank) {
+            viewModel.settings.dualSystemPromptA = prompt
+        }
+        clearDualOverridesA()
+    }
+
+    private func applyProviderPresetToDualB(_ preset: ModelPreset) {
+        viewModel.settings.dualProviderB = preset.apiProvider.uppercased()
+        viewModel.settings.dualModelB = preset.model
+        if let prompt = preset.systemPrompt.flatMap(SettingsStringHelpers.nilIfBlank) {
+            viewModel.settings.dualSystemPromptB = prompt
+        }
+        clearDualOverridesB()
+    }
+
+    private func clearDualOverridesA() {
+        viewModel.settings.dualOpenRouterThinkingEnabledA = nil
+        viewModel.settings.dualOpenRouterThinkingBudgetA = nil
+        viewModel.settings.dualOpenRouterReasoningModeA = nil
+        viewModel.settings.dualOpenRouterReasoningEffortA = nil
+        viewModel.settings.dualOpenRouterReasoningExcludeA = nil
+        viewModel.settings.dualGoogleSearchEnabledA = nil
+        viewModel.settings.dualCodeExecutionEnabledA = nil
+        viewModel.settings.dualURLContextEnabledA = nil
+        viewModel.settings.dualGoogleMapsEnabledA = nil
+        viewModel.settings.dualComputerUseEnabledA = nil
+        viewModel.settings.dualThinkingEnabledA = nil
+        viewModel.settings.dualThinkingBudgetA = nil
+        viewModel.settings.dualThinkingLevelA = nil
+        viewModel.settings.dualCodexReasoningEffortA = nil
+    }
+
+    private func clearDualOverridesB() {
+        viewModel.settings.dualOpenRouterThinkingEnabledB = nil
+        viewModel.settings.dualOpenRouterThinkingBudgetB = nil
+        viewModel.settings.dualOpenRouterReasoningModeB = nil
+        viewModel.settings.dualOpenRouterReasoningEffortB = nil
+        viewModel.settings.dualOpenRouterReasoningExcludeB = nil
+        viewModel.settings.dualGoogleSearchEnabledB = nil
+        viewModel.settings.dualCodeExecutionEnabledB = nil
+        viewModel.settings.dualURLContextEnabledB = nil
+        viewModel.settings.dualGoogleMapsEnabledB = nil
+        viewModel.settings.dualComputerUseEnabledB = nil
+        viewModel.settings.dualThinkingEnabledB = nil
+        viewModel.settings.dualThinkingBudgetB = nil
+        viewModel.settings.dualThinkingLevelB = nil
+        viewModel.settings.dualCodexReasoningEffortB = nil
     }
 }

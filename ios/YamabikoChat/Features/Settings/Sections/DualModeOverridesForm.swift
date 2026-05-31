@@ -23,37 +23,81 @@ struct DualModeOverridesForm: View {
         }
     }
 
+    private var model: String {
+        switch side {
+        case .a: viewModel.settings.dualModelA
+        case .b: viewModel.settings.dualModelB
+        }
+    }
+
     var body: some View {
         Group {
-            Toggle(L10n.format("%@: Google Search", prefix), isOn: googleSearchBinding)
-            Toggle(L10n.format("%@: Code Execution", prefix), isOn: codeExecutionBinding)
-            Toggle(L10n.format("%@: URL Context", prefix), isOn: urlContextBinding)
-            Toggle(L10n.format("%@: Google Maps", prefix), isOn: googleMapsBinding)
-            Toggle(L10n.format("%@: Computer Use", prefix), isOn: computerUseBinding)
-            Toggle(L10n.format("%@: Thinking enabled", prefix), isOn: thinkingEnabledBinding)
-            TextField(L10n.format("%@: Thinking budget override", prefix), text: thinkingBudgetBinding)
-                .keyboardType(.numberPad)
-            TextField(L10n.format("%@: Thinking level override", prefix), text: thinkingLevelBinding)
-            TextField(L10n.format("%@: Codex reasoning effort override", prefix), text: codexReasoningEffortBinding)
-
-            if provider == "OPENROUTER" {
-                Picker(L10n.format("%@: OpenRouter reasoning mode", prefix), selection: openRouterReasoningModeBinding) {
-                    Text(L10n.text("inherit")).tag("inherit")
-                    Text(L10n.text("auto")).tag("auto")
-                    Text(L10n.text("effort")).tag("effort")
-                    Text(L10n.text("budget")).tag("budget")
-                }
-                Toggle(L10n.format("%@: OpenRouter thinking enabled", prefix), isOn: openRouterThinkingEnabledBinding)
-                TextField(L10n.format("%@: OpenRouter budget override", prefix), text: openRouterBudgetBinding)
-                    .keyboardType(.numberPad)
-                TextField(L10n.format("%@: OpenRouter effort override", prefix), text: openRouterEffortBinding)
-                Toggle(L10n.format("%@: Exclude reasoning", prefix), isOn: openRouterExcludeBinding)
-            }
+            providerSpecificControls
 
             Button(side == .a ? L10n.text("A override をリセット") : L10n.text("B override をリセット")) {
                 resetOverrides()
             }
             .buttonStyle(.bordered)
+        }
+    }
+
+    @ViewBuilder
+    private var providerSpecificControls: some View {
+        switch provider {
+        case "GEMINI":
+            geminiControls
+        case "OPENROUTER":
+            openRouterControls
+        case "CODEX_AUTH":
+            codexControls
+        default:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var geminiControls: some View {
+        Toggle(L10n.format("%@: Google Search", prefix), isOn: googleSearchBinding)
+        Toggle(L10n.format("%@: Code Execution", prefix), isOn: codeExecutionBinding)
+        Toggle(L10n.format("%@: URL Context", prefix), isOn: urlContextBinding)
+        Toggle(L10n.format("%@: Google Maps", prefix), isOn: googleMapsBinding)
+        Toggle(L10n.format("%@: Computer Use", prefix), isOn: computerUseBinding)
+        Toggle(L10n.format("%@: Thinking enabled", prefix), isOn: thinkingEnabledBinding)
+        if GeminiModelUtils.isThinkingLevelSupported(model: model) {
+            TextField(L10n.format("%@: Thinking level override", prefix), text: thinkingLevelBinding)
+        } else {
+            TextField(L10n.format("%@: Thinking budget override", prefix), text: thinkingBudgetBinding)
+                .keyboardType(.numberPad)
+        }
+    }
+
+    @ViewBuilder
+    private var openRouterControls: some View {
+        Picker(L10n.format("%@: OpenRouter reasoning mode", prefix), selection: openRouterReasoningModeBinding) {
+            Text(L10n.text("inherit")).tag("inherit")
+            Text(L10n.text("auto")).tag("auto")
+            Text(L10n.text("effort")).tag("effort")
+            Text(L10n.text("budget")).tag("budget")
+        }
+        Toggle(L10n.format("%@: OpenRouter thinking enabled", prefix), isOn: openRouterThinkingEnabledBinding)
+        TextField(L10n.format("%@: OpenRouter budget override", prefix), text: openRouterBudgetBinding)
+            .keyboardType(.numberPad)
+        TextField(L10n.format("%@: OpenRouter effort override", prefix), text: openRouterEffortBinding)
+        Toggle(L10n.format("%@: Exclude reasoning", prefix), isOn: openRouterExcludeBinding)
+    }
+
+    @ViewBuilder
+    private var codexControls: some View {
+        Toggle(L10n.format("%@: Codex reasoning enabled", prefix), isOn: thinkingEnabledBinding)
+        TextField(L10n.format("%@: Codex reasoning effort override", prefix), text: codexReasoningEffortBinding)
+    }
+
+    private var inheritedThinkingEnabled: Bool {
+        switch provider {
+        case "CODEX_AUTH":
+            viewModel.settings.codexReasoningEnabled
+        default:
+            viewModel.settings.geminiThinkingEnabled
         }
     }
 
@@ -136,12 +180,12 @@ struct DualModeOverridesForm: View {
         switch side {
         case .a:
             Binding(
-                get: { viewModel.settings.dualThinkingEnabledA ?? viewModel.settings.geminiThinkingEnabled },
+                get: { viewModel.settings.dualThinkingEnabledA ?? inheritedThinkingEnabled },
                 set: { viewModel.settings.dualThinkingEnabledA = $0 }
             )
         case .b:
             Binding(
-                get: { viewModel.settings.dualThinkingEnabledB ?? viewModel.settings.geminiThinkingEnabled },
+                get: { viewModel.settings.dualThinkingEnabledB ?? inheritedThinkingEnabled },
                 set: { viewModel.settings.dualThinkingEnabledB = $0 }
             )
         }

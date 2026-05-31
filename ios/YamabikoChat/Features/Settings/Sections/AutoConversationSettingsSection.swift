@@ -21,6 +21,10 @@ struct AutoConversationSettingsSection: View {
         return L10n.text("[END]シグナルまたは最大ターン数")
     }
 
+    private var providerPresetOptions: [ModelPreset] {
+        viewModel.settings.buildGlobalProviderPresets()
+    }
+
     var body: some View {
         Group {
             Section {
@@ -54,6 +58,8 @@ struct AutoConversationSettingsSection: View {
                         model: $viewModel.settings.autoModelA,
                         systemPromptTitleKey: "Auto system prompt A",
                         systemPrompt: $viewModel.settings.autoSystemPromptA,
+                        providerPresets: providerPresetOptions,
+                        onProviderPresetSelected: applyProviderPresetToAutoA,
                         systemPromptLineLimit: 2 ... 6
                     )
                 }
@@ -66,6 +72,8 @@ struct AutoConversationSettingsSection: View {
                         model: $viewModel.settings.autoModelB,
                         systemPromptTitleKey: "Auto system prompt B",
                         systemPrompt: $viewModel.settings.autoSystemPromptB,
+                        providerPresets: providerPresetOptions,
+                        onProviderPresetSelected: applyProviderPresetToAutoB,
                         systemPromptLineLimit: 2 ... 6
                     )
                 }
@@ -111,5 +119,57 @@ struct AutoConversationSettingsSection: View {
                 }
             }
         }
+    }
+
+    private func applyProviderPresetToAutoA(_ preset: ModelPreset) {
+        viewModel.settings.autoProviderA = preset.apiProvider.uppercased()
+        viewModel.settings.autoModelA = preset.model
+        if let prompt = preset.systemPrompt.flatMap(SettingsStringHelpers.nilIfBlank) {
+            viewModel.settings.autoSystemPromptA = prompt
+        }
+        clearAutoOverridesA()
+    }
+
+    private func applyProviderPresetToAutoB(_ preset: ModelPreset) {
+        viewModel.settings.autoProviderB = preset.apiProvider.uppercased()
+        viewModel.settings.autoModelB = preset.model
+        if let prompt = preset.systemPrompt.flatMap(SettingsStringHelpers.nilIfBlank) {
+            viewModel.settings.autoSystemPromptB = prompt
+        }
+        clearAutoOverridesB()
+    }
+
+    private func clearAutoOverridesA() {
+        viewModel.settings.autoOpenRouterThinkingEnabledA = nil
+        viewModel.settings.autoOpenRouterThinkingBudgetA = nil
+        viewModel.settings.autoOpenRouterReasoningModeA = nil
+        viewModel.settings.autoOpenRouterReasoningEffortA = nil
+        viewModel.settings.autoOpenRouterReasoningExcludeA = nil
+        viewModel.settings.autoGoogleSearchEnabledA = nil
+        viewModel.settings.autoCodeExecutionEnabledA = nil
+        viewModel.settings.autoURLContextEnabledA = nil
+        viewModel.settings.autoGoogleMapsEnabledA = nil
+        viewModel.settings.autoComputerUseEnabledA = nil
+        viewModel.settings.autoThinkingEnabledA = nil
+        viewModel.settings.autoThinkingBudgetA = nil
+        viewModel.settings.autoThinkingLevelA = nil
+        viewModel.settings.autoCodexReasoningEffortA = nil
+    }
+
+    private func clearAutoOverridesB() {
+        viewModel.settings.autoOpenRouterThinkingEnabledB = nil
+        viewModel.settings.autoOpenRouterThinkingBudgetB = nil
+        viewModel.settings.autoOpenRouterReasoningModeB = nil
+        viewModel.settings.autoOpenRouterReasoningEffortB = nil
+        viewModel.settings.autoOpenRouterReasoningExcludeB = nil
+        viewModel.settings.autoGoogleSearchEnabledB = nil
+        viewModel.settings.autoCodeExecutionEnabledB = nil
+        viewModel.settings.autoURLContextEnabledB = nil
+        viewModel.settings.autoGoogleMapsEnabledB = nil
+        viewModel.settings.autoComputerUseEnabledB = nil
+        viewModel.settings.autoThinkingEnabledB = nil
+        viewModel.settings.autoThinkingBudgetB = nil
+        viewModel.settings.autoThinkingLevelB = nil
+        viewModel.settings.autoCodexReasoningEffortB = nil
     }
 }
