@@ -1363,6 +1363,7 @@ struct SettingsScreen: View {
             AppearanceOption(key: "YELLOW", titleKey: "黄"),
             AppearanceOption(key: "PINK", titleKey: "ピンク"),
             AppearanceOption(key: "ORANGE", titleKey: "オレンジ"),
+            AppearanceOption(key: "WHITE", titleKey: "白"),
             AppearanceOption(key: "BLACK", titleKey: "黒")
         ]
     }

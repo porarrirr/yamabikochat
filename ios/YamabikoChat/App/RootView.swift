@@ -185,6 +185,8 @@ struct RootView: View {
             return Color(uiColor: .systemPink)
         case "ORANGE":
             return Color(uiColor: .systemOrange)
+        case "WHITE":
+            return Color(uiColor: .white)
         case "BLACK":
             return Color(uiColor: .black)
         default:
