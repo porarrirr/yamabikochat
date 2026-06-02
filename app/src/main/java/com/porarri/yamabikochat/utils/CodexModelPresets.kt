@@ -49,6 +49,19 @@ object CodexModelPresets {
             showInPicker = true
         ),
         CodexModelPreset(
+            id = "gpt-5.3-codex-spark",
+            model = "gpt-5.3-codex-spark",
+            displayName = "gpt-5.3-codex-spark",
+            description = "Codex Spark model optimized for faster coding assistance.",
+            defaultReasoningEffort = "medium",
+            supportedReasoningEfforts = listOf(
+                CodexReasoningEffortPreset("medium", "Dynamically adjusts reasoning based on the task"),
+                CodexReasoningEffortPreset("high", "Maximizes reasoning depth for complex or ambiguous problems")
+            ),
+            isDefault = false,
+            showInPicker = true
+        ),
+        CodexModelPreset(
             id = "gpt-5.4-mini",
             model = "gpt-5.4-mini",
             displayName = "gpt-5.4-mini",

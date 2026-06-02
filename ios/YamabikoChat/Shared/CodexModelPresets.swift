@@ -48,6 +48,18 @@ enum CodexModelCatalog {
             showInPicker: true
         ),
         CodexModelPreset(
+            model: "gpt-5.3-codex-spark",
+            displayName: "gpt-5.3-codex-spark",
+            description: "Codex Spark model optimized for faster coding assistance.",
+            defaultReasoningEffort: "medium",
+            supportedReasoningEfforts: [
+                CodexReasoningEffortPreset(effort: "medium", description: "Dynamically adjusts reasoning based on the task"),
+                CodexReasoningEffortPreset(effort: "high", description: "Maximizes reasoning depth for complex or ambiguous problems")
+            ],
+            isDefault: false,
+            showInPicker: true
+        ),
+        CodexModelPreset(
             model: "gpt-5.4-mini",
             displayName: "gpt-5.4-mini",
             description: "Optimized for codex. Cheaper, faster, but less capable.",
