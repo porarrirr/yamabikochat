@@ -5,7 +5,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 object AppDatabaseMigrations {
     private const val LEGACY_TARGET_VERSION = 27
-    private const val LATEST_VERSION = 50
+    private const val LATEST_VERSION = 51
 
     private val legacyRebuildMigrations: List<Migration> = (1 until LEGACY_TARGET_VERSION).map { startVersion ->
         object : Migration(startVersion, LEGACY_TARGET_VERSION) {
@@ -356,6 +356,16 @@ object AppDatabaseMigrations {
         }
     }
 
+    private val migration50To51 = object : Migration(50, 51) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            createProjects(db)
+            ensureColumn(db, "conversations", Column("projectId", "INTEGER"))
+            ensureColumn(db, "chat_messages", Column("selectedVariantIndex", "INTEGER", notNull = true, defaultValue = "0"))
+            createChatMessageVariants(db)
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_conversations_projectId_timestamp` ON `conversations`(`projectId`, `timestamp`)")
+        }
+    }
+
     val ALL_MIGRATIONS: Array<Migration> =
         (legacyRebuildMigrations + listOf(
             migration27To28,
@@ -380,13 +390,16 @@ object AppDatabaseMigrations {
             migration46To47,
             migration47To48,
             migration48To49,
-            migration49To50
+            migration49To50,
+            migration50To51
         )).toTypedArray()
 
     private fun rebuildSchema(db: SupportSQLiteDatabase) {
         db.execSQL("PRAGMA foreign_keys=ON")
+        createProjects(db)
         createConversations(db)
         createChatMessages(db)
+        createChatMessageVariants(db)
         createSettings(db)
         createChatMessageThinking(db)
         createModelPresets(db)
@@ -406,13 +419,33 @@ object AppDatabaseMigrations {
                 `model` TEXT NOT NULL,
                 `apiProvider` TEXT NOT NULL DEFAULT 'GEMINI',
                 `timestamp` INTEGER NOT NULL DEFAULT 0,
-                `isSecret` INTEGER NOT NULL DEFAULT 0
+                `isSecret` INTEGER NOT NULL DEFAULT 0,
+                `projectId` INTEGER
             )
             """.trimIndent()
         )
         ensureColumn(db, "conversations", Column("apiProvider", "TEXT", notNull = true, defaultValue = "'GEMINI'"))
         ensureColumn(db, "conversations", Column("timestamp", "INTEGER", notNull = true, defaultValue = "0"))
         ensureColumn(db, "conversations", Column("isSecret", "INTEGER", notNull = true, defaultValue = "0"))
+        ensureColumn(db, "conversations", Column("projectId", "INTEGER"))
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_conversations_projectId_timestamp` ON `conversations`(`projectId`, `timestamp`)")
+    }
+
+    private fun createProjects(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `projects` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `title` TEXT NOT NULL,
+                `iconName` TEXT NOT NULL DEFAULT 'folder.fill',
+                `colorHex` TEXT NOT NULL DEFAULT '#3A7AFE',
+                `instructions` TEXT,
+                `createdAtMs` INTEGER NOT NULL DEFAULT 0,
+                `updatedAtMs` INTEGER NOT NULL DEFAULT 0
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_projects_updatedAtMs` ON `projects`(`updatedAtMs`)")
     }
 
     private fun createChatMessages(db: SupportSQLiteDatabase) {
@@ -425,13 +458,33 @@ object AppDatabaseMigrations {
                 `text` TEXT NOT NULL,
                 `attachments` TEXT NOT NULL DEFAULT '[]',
                 `timestamp` INTEGER NOT NULL DEFAULT 0,
-                `thinkingSummary` TEXT
+                `thinkingSummary` TEXT,
+                `selectedVariantIndex` INTEGER NOT NULL DEFAULT 0
             )
             """.trimIndent()
         )
         ensureColumn(db, "chat_messages", Column("attachments", "TEXT", notNull = true, defaultValue = "'[]'"))
         ensureColumn(db, "chat_messages", Column("timestamp", "INTEGER", notNull = true, defaultValue = "0"))
         ensureColumn(db, "chat_messages", Column("thinkingSummary", "TEXT"))
+        ensureColumn(db, "chat_messages", Column("selectedVariantIndex", "INTEGER", notNull = true, defaultValue = "0"))
+    }
+
+    private fun createChatMessageVariants(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `chat_message_variants` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `baseMessageId` INTEGER NOT NULL,
+                `variantIndex` INTEGER NOT NULL,
+                `text` TEXT NOT NULL,
+                `attachments` TEXT NOT NULL DEFAULT '[]',
+                `thinkingStream` TEXT,
+                `createdAtMs` INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY(`baseMessageId`) REFERENCES `chat_messages`(`id`) ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_chat_message_variants_baseMessageId_variantIndex` ON `chat_message_variants`(`baseMessageId`, `variantIndex`)")
     }
 
     private fun createSettings(db: SupportSQLiteDatabase) {

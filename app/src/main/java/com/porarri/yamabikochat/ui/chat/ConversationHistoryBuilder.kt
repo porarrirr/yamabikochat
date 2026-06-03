@@ -2,7 +2,6 @@ package com.porarri.yamabikochat.ui.chat
 
 import android.net.Uri
 import com.porarri.yamabikochat.data.ChatRepository
-import com.porarri.yamabikochat.data.local.ChatMessage
 import com.porarri.yamabikochat.data.local.ChatMessageSummary
 import com.porarri.yamabikochat.data.local.DualChatMessage
 import com.porarri.yamabikochat.data.remote.Content
@@ -46,7 +45,7 @@ class ConversationHistoryBuilder(
         val history = limitedSummaries.mapNotNull { summary ->
             val fullMessage = combinedMessages[summary.id] ?: return@mapNotNull null
             val parts = resolveStoredMessageParts(
-                message = fullMessage.chatMessage,
+                message = fullMessage,
                 sessionCache = sessionAttachmentCache,
                 includeThoughts = includeModelThoughts
             )
@@ -94,18 +93,19 @@ class ConversationHistoryBuilder(
     }
 
     private suspend fun resolveStoredMessageParts(
-        message: ChatMessage,
+        message: FullChatMessage,
         sessionCache: MutableMap<String, Part?>,
         includeThoughts: Boolean
     ): List<Part> {
-        val baseText = if (includeThoughts && message.role == "model") {
-            val thought = message.thinkingSummary?.takeIf { it.isNotBlank() }
-            if (thought != null) "<think>$thought</think>\n${message.text}" else message.text
+        val chatMessage = message.chatMessage
+        val baseText = if (includeThoughts && chatMessage.role == "model") {
+            val thought = message.displayThinkingStream?.takeIf { it.isNotBlank() }
+            if (thought != null) "<think>$thought</think>\n${message.displayText}" else message.displayText
         } else {
-            message.text
+            message.displayText
         }
         val parts = mutableListOf(Part(text = baseText))
-        for (path in message.attachments) {
+        for (path in message.displayAttachments) {
             val key = path
             val cached = sessionCache[key] ?: getCachedPart(key)
             val resolved = cached ?: repository.getPartFromUri(Uri.parse(path)).also { part ->

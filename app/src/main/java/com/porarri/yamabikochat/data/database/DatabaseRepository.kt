@@ -8,6 +8,8 @@ import com.porarri.yamabikochat.data.local.ChatDao
 import com.porarri.yamabikochat.data.local.ChatMessage
 import com.porarri.yamabikochat.data.local.ChatMessageSummary
 import com.porarri.yamabikochat.data.local.ChatMessageThinking
+import com.porarri.yamabikochat.data.local.ChatMessageVariant
+import com.porarri.yamabikochat.data.local.ChatProject
 import com.porarri.yamabikochat.data.local.ConversationSearchResult
 import com.porarri.yamabikochat.data.local.Conversation
 import com.porarri.yamabikochat.data.local.ConversationListEntry
@@ -15,6 +17,7 @@ import com.porarri.yamabikochat.data.local.DualChatMessage
 import com.porarri.yamabikochat.data.local.FullAutoConversation
 import com.porarri.yamabikochat.data.local.FullChatMessage
 import com.porarri.yamabikochat.data.local.ModelPreset
+import com.porarri.yamabikochat.data.local.ProjectListEntry
 import com.porarri.yamabikochat.data.local.Settings
 import com.porarri.yamabikochat.data.local.TokenUsageByModel
 import com.porarri.yamabikochat.data.local.TokenUsageDailyPoint
@@ -31,10 +34,37 @@ class DatabaseRepository(private val chatDao: ChatDao) {
     fun getConversationListEntries(): Flow<List<ConversationListEntry>> =
         chatDao.getConversationListEntries()
 
+    fun getProjects(): Flow<List<ProjectListEntry>> = chatDao.getProjects()
+
+    suspend fun getProjectById(id: Long): ChatProject? = chatDao.getProjectById(id)
+
+    suspend fun upsertProject(project: ChatProject): Long = chatDao.upsertProject(project)
+
+    suspend fun assignConversationToProject(conversationId: Long, projectId: Long?) {
+        val conversation = chatDao.getConversationById(conversationId)
+            ?: throw IllegalArgumentException("Conversation not found: $conversationId")
+        if (projectId != null) {
+            chatDao.getProjectById(projectId)
+                ?: throw IllegalArgumentException("Project not found: $projectId")
+        }
+        val now = System.currentTimeMillis()
+        chatDao.assignConversationToProject(conversationId, projectId, now)
+        projectId?.let { chatDao.touchProject(it, now) }
+        conversation.projectId?.takeIf { it != projectId }?.let { chatDao.touchProject(it, now) }
+    }
+
+    suspend fun deleteProject(id: Long, deleteConversations: Boolean) {
+        chatDao.getProjectById(id) ?: throw IllegalArgumentException("Project not found: $id")
+        chatDao.deleteProject(id, deleteConversations)
+    }
+
+    suspend fun countConversationsInProject(projectId: Long): Int =
+        chatDao.countConversationsInProject(projectId)
+
     suspend fun getConversationById(id: Long): Conversation? = chatDao.getConversationById(id)
 
-    suspend fun findLatestEmptyConversationByTitle(title: String): Conversation? =
-        chatDao.findLatestEmptyConversationByTitle(title)
+    suspend fun findLatestEmptyConversationByTitle(title: String, projectId: Long? = null): Conversation? =
+        chatDao.findLatestEmptyConversationByTitle(title, projectId)
 
     suspend fun upsertConversation(conversation: Conversation): Long =
         chatDao.upsertConversation(conversation)
@@ -62,8 +92,9 @@ class DatabaseRepository(private val chatDao: ChatDao) {
     suspend fun getFullMessageById(id: Long): FullChatMessage? {
         val chatMessage = chatDao.getFullMessageById(id)
         val thinking = chatDao.getThinkingByMessageId(id)
+        val variants = chatDao.getVariantsForMessage(id)
         return if (chatMessage != null) {
-            FullChatMessage(chatMessage, thinking?.thinkingStream)
+            FullChatMessage(chatMessage, thinking?.thinkingStream, variants)
         } else {
             null
         }
@@ -76,8 +107,13 @@ class DatabaseRepository(private val chatDao: ChatDao) {
         val messages = chatDao.getFullMessagesByIds(idList)
         val thinking = chatDao.getThinkingByMessageIds(idList)
         val thinkingMap = thinking.associateBy { it.messageId }
+        val variantsByMessageId = chatDao.getVariantsForMessages(idList).groupBy { it.baseMessageId }
         return messages.associate { message ->
-            message.id to FullChatMessage(message, thinkingMap[message.id]?.thinkingStream)
+            message.id to FullChatMessage(
+                message,
+                thinkingMap[message.id]?.thinkingStream,
+                variantsByMessageId[message.id].orEmpty()
+            )
         }
     }
 
@@ -98,6 +134,44 @@ class DatabaseRepository(private val chatDao: ChatDao) {
 
     suspend fun updateThinkingStream(messageId: Long, thinkingStream: String) {
         chatDao.insertThinking(ChatMessageThinking(messageId, thinkingStream))
+    }
+
+    suspend fun insertMessageVariant(
+        baseMessageId: Long,
+        text: String,
+        attachments: List<String> = emptyList(),
+        thinkingStream: String? = null
+    ): ChatMessageVariant {
+        val baseMessage = chatDao.getFullMessageById(baseMessageId)
+            ?: throw IllegalArgumentException("Base message not found: $baseMessageId")
+        val nextIndex = (chatDao.getMaxVariantIndex(baseMessageId) + 1).coerceAtLeast(1)
+        val variant = ChatMessageVariant(
+            baseMessageId = baseMessageId,
+            variantIndex = nextIndex,
+            text = text,
+            attachments = attachments,
+            thinkingStream = thinkingStream
+        )
+        val variantId = chatDao.insertMessageVariant(variant)
+        chatDao.updateMessageSelectedVariantIndex(baseMessageId, nextIndex)
+        touchConversation(baseMessage.conversationId)
+        return variant.copy(id = variantId)
+    }
+
+    suspend fun updateMessageVariant(variant: ChatMessageVariant) {
+        val existing = chatDao.getMessageVariantById(variant.id)
+            ?: throw IllegalArgumentException("Message variant not found: ${variant.id}")
+        chatDao.updateMessageVariant(variant)
+        chatDao.getFullMessageById(existing.baseMessageId)?.let { touchConversation(it.conversationId) }
+    }
+
+    suspend fun setMessageSelectedVariantIndex(messageId: Long, variantIndex: Int) {
+        val message = chatDao.getFullMessageById(messageId)
+            ?: throw IllegalArgumentException("Message not found: $messageId")
+        val maxVariantIndex = chatDao.getMaxVariantIndex(messageId)
+        val normalized = variantIndex.coerceIn(0, maxVariantIndex)
+        chatDao.updateMessageSelectedVariantIndex(messageId, normalized)
+        touchConversation(message.conversationId)
     }
 
     private suspend fun touchConversation(conversationId: Long) {
@@ -130,8 +204,8 @@ class DatabaseRepository(private val chatDao: ChatDao) {
     fun getDualMessagesForConversation(conversationId: Long): Flow<List<DualChatMessage>> =
         chatDao.getDualMessagesForConversation(conversationId)
 
-    fun searchMessages(pattern: String, limit: Int): Flow<List<ConversationSearchResult>> =
-        chatDao.searchMessages(pattern, limit)
+    fun searchMessages(pattern: String, limit: Int, projectId: Long?): Flow<List<ConversationSearchResult>> =
+        chatDao.searchMessages(pattern, projectId, limit)
 
     suspend fun getDualMessageById(id: Long): DualChatMessage? = chatDao.getDualMessageById(id)
 

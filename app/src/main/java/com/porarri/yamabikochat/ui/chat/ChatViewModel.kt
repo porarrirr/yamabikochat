@@ -247,7 +247,12 @@ class ChatViewModel(
                 .collectLatest { summaries ->
                     _messages.value = summaries
                     summaries.forEach { summary ->
-                        if (!_fullMessages.value.containsKey(summary.id)) {
+                        val cached = _fullMessages.value[summary.id]
+                        if (
+                            cached == null ||
+                            cached.normalizedSelectedVariantIndex != summary.selectedVariantIndex ||
+                            cached.variantCount != summary.variantCount
+                        ) {
                             fetchFullMessage(summary.id)
                         }
                     }
@@ -491,7 +496,7 @@ class ChatViewModel(
                 val fullMap =
                     repository.getFullMessagesByIds(selectedSummaries.map { it.id })
                 val branchSourceText =
-                    fullMap[messageId]?.chatMessage?.text ?: selectedSummaries.last().textPreview
+                    fullMap[messageId]?.displayText ?: selectedSummaries.last().textPreview
                 val branchTitle = buildBranchTitle(currentConversation.title, branchSourceText)
                 val newConversationId = repository.upsertConversation(
                     currentConversation.copy(
@@ -503,14 +508,19 @@ class ChatViewModel(
                 selectedSummaries.forEach { summary ->
                     val full = fullMap[summary.id] ?: return@forEach
                     val original = full.chatMessage
+                    val displayThinking = full.displayThinkingStream?.takeIf { it.isNotBlank() }
                     val newMessageId = repository.insertMessage(
                         original.copy(
                             id = 0,
-                            conversationId = newConversationId
+                            conversationId = newConversationId,
+                            text = full.displayText,
+                            attachments = full.displayAttachments,
+                            thinkingSummary = displayThinking,
+                            selectedVariantIndex = 0
                         )
                     )
-                    if (!full.thinkingStream.isNullOrBlank()) {
-                        repository.insertThinking(newMessageId, full.thinkingStream)
+                    if (displayThinking != null) {
+                        repository.insertThinking(newMessageId, displayThinking)
                     }
                 }
                 newConversationId
@@ -668,6 +678,29 @@ class ChatViewModel(
                     targetMessageId = messageId
                 )
             )
+        }
+    }
+
+    fun selectPreviousVariant(messageId: Long) {
+        selectVariantDelta(messageId, -1)
+    }
+
+    fun selectNextVariant(messageId: Long) {
+        selectVariantDelta(messageId, 1)
+    }
+
+    private fun selectVariantDelta(messageId: Long, delta: Int) {
+        viewModelScope.launch {
+            val full = repository.getFullMessageById(messageId)
+            if (full == null) {
+                _errorMessage.value = "メッセージが見つかりませんでした"
+                return@launch
+            }
+            val nextIndex = (full.normalizedSelectedVariantIndex + delta)
+                .coerceIn(0, (full.variantCount - 1).coerceAtLeast(0))
+            if (nextIndex == full.normalizedSelectedVariantIndex) return@launch
+            repository.setMessageSelectedVariantIndex(messageId, nextIndex)
+            fetchFullMessage(messageId)
         }
     }
 
@@ -868,7 +901,7 @@ class ChatViewModel(
                         // 同じ内容のメッセージが既に存在するかチェック
                         val isDuplicate = _messages.value.any { summary -> 
                             val fullMessage = _fullMessages.value[summary.id]
-                            fullMessage?.chatMessage?.text == messageText
+                            fullMessage?.displayText == messageText
                         }
                         if (!isDuplicate) {
                             val chatMessage = ChatMessage(
@@ -918,7 +951,7 @@ class ChatViewModel(
                         // 同じ内容のメッセージが既に存在するかチェック
                         val isDuplicate = _messages.value.any { summary -> 
                             val fullMessage = _fullMessages.value[summary.id]
-                            fullMessage?.chatMessage?.text == messageText
+                            fullMessage?.displayText == messageText
                         }
                         if (!isDuplicate) {
                             val chatMessage = ChatMessage(

@@ -2,6 +2,7 @@ package com.porarri.yamabikochat.ui.chat.logic
 
 import com.porarri.yamabikochat.data.ChatRepository
 import com.porarri.yamabikochat.data.local.ChatMessage
+import com.porarri.yamabikochat.data.local.ChatMessageVariant
 import com.porarri.yamabikochat.data.local.FullChatMessage
 import com.porarri.yamabikochat.data.remote.GenerateContentRequest
 import com.porarri.yamabikochat.data.remote.GenerateContentResponse
@@ -50,29 +51,117 @@ class ChatResponseStreamer(
     ) {
         scope.launch(Dispatchers.IO) {
             val isRegeneration = existingMessageId != null
+            var activeVariant: ChatMessageVariant? = null
             val messageId = if (existingMessageId == null) {
                 val placeholderMessage =
                     ChatMessage(conversationId = conversationId, role = "model", text = "")
                 repository.insertMessage(placeholderMessage)
             } else {
-                val existing = repository.getFullMessageById(existingMessageId)?.chatMessage
-                if (existing == null) {
+                val existingFull = repository.getFullMessageById(existingMessageId)
+                if (existingFull == null) {
                     android.util.Log.e(
                         "ChatResponseStreamer",
                         "Regeneration failed: message not found id=$existingMessageId"
                     )
                     return@launch
                 }
-                val cleared = existing.copy(
+                val createdVariant = repository.insertMessageVariant(
+                    baseMessageId = existingMessageId,
                     text = "",
                     attachments = emptyList(),
-                    thinkingSummary = null
+                    thinkingStream = null
                 )
-                repository.updateMessage(cleared)
-                repository.updateThinkingStream(existingMessageId, "")
-                fullMessages.update { it + (existingMessageId to FullChatMessage(cleared, "")) }
+                activeVariant = createdVariant
+                val selectedBase = existingFull.chatMessage.copy(selectedVariantIndex = createdVariant.variantIndex)
+                fullMessages.update { currentMap ->
+                    currentMap + (
+                        existingMessageId to existingFull.copy(
+                            chatMessage = selectedBase,
+                            variants = (existingFull.variants.filterNot { it.variantIndex == createdVariant.variantIndex } + createdVariant)
+                                .sortedBy { it.variantIndex }
+                        )
+                    )
+                }
                 existingMessageId
             }
+
+            fun updateFullMessageState(
+                text: String,
+                attachments: List<String>,
+                thinkingSummary: String?,
+                thinkingStream: String
+            ) {
+                fullMessages.update { currentMap ->
+                    val existingFull = currentMap[messageId]
+                    val variant = activeVariant
+                    if (variant != null) {
+                        val updatedVariant = variant.copy(
+                            text = text,
+                            attachments = attachments,
+                            thinkingStream = thinkingStream.takeIf { it.isNotBlank() } ?: thinkingSummary
+                        )
+                        activeVariant = updatedVariant
+                        val base = (existingFull?.chatMessage ?: ChatMessage(
+                            id = messageId,
+                            conversationId = conversationId,
+                            role = "model",
+                            text = ""
+                        )).copy(selectedVariantIndex = variant.variantIndex)
+                        val variants = (existingFull?.variants.orEmpty()
+                            .filterNot { it.variantIndex == updatedVariant.variantIndex } + updatedVariant)
+                            .sortedBy { it.variantIndex }
+                        currentMap + (messageId to FullChatMessage(base, existingFull?.thinkingStream, variants))
+                    } else {
+                        val updated = FullChatMessage(
+                            chatMessage = ChatMessage(
+                                id = messageId,
+                                conversationId = conversationId,
+                                role = "model",
+                                text = text,
+                                attachments = attachments,
+                                thinkingSummary = thinkingSummary
+                            ),
+                            thinkingStream = thinkingStream
+                        )
+                        currentMap + (messageId to updated)
+                    }
+                }
+            }
+
+            suspend fun persistResponse(
+                text: String,
+                attachments: List<String> = emptyList(),
+                thinkingSummary: String? = null,
+                thinkingStream: String = ""
+            ) {
+                val variant = activeVariant
+                if (variant != null) {
+                    val updatedVariant = variant.copy(
+                        text = text,
+                        attachments = attachments,
+                        thinkingStream = thinkingStream.takeIf { it.isNotBlank() } ?: thinkingSummary
+                    )
+                    repository.updateMessageVariant(updatedVariant)
+                    activeVariant = updatedVariant
+                    return
+                }
+
+                repository.getFullMessageById(messageId)?.chatMessage?.let {
+                    repository.updateMessage(
+                        it.copy(
+                            text = text,
+                            thinkingSummary = thinkingSummary,
+                            attachments = attachments
+                        )
+                    )
+                }
+                if (thinkingStream.isNotBlank()) {
+                    repository.insertThinking(messageId, thinkingStream)
+                } else if (isRegeneration) {
+                    repository.updateThinkingStream(messageId, "")
+                }
+            }
+
             try {
                 val sessionId = if (provider.equals("CODEX_AUTH", ignoreCase = true)) {
                     repository.getOrCreateCodexSessionId(conversationId)
@@ -105,18 +194,14 @@ class ChatResponseStreamer(
                             "Streaming API failed: code=${response.code()}"
                         )
                     }
-                    repository.getFullMessageById(messageId)?.chatMessage?.let {
-                        repository.updateMessage(it.copy(text = apiFailureMessage(provider, response.code())))
-                    }
+                    persistResponse(text = apiFailureMessage(provider, response.code()))
                     return@launch
                 }
 
                 val body = response.body()
                 if (body == null) {
                     DiagnosticsLogger.log("Streaming API returned empty body provider=${provider.uppercase()} model=$model")
-                    repository.getFullMessageById(messageId)?.chatMessage?.let {
-                        repository.updateMessage(it.copy(text = STREAMING_GENERIC_ERROR))
-                    }
+                    persistResponse(text = STREAMING_GENERIC_ERROR)
                     return@launch
                 }
 
@@ -230,20 +315,12 @@ class ChatResponseStreamer(
                                 } else {
                                     null
                                 }
-                                fullMessages.update { currentMap ->
-                                    val updated = FullChatMessage(
-                                        chatMessage = ChatMessage(
-                                            id = messageId,
-                                            conversationId = conversationId,
-                                            role = "model",
-                                            text = currentText,
-                                            attachments = currentAttachments.toList(),
-                                            thinkingSummary = summaryForMessage
-                                        ),
-                                        thinkingStream = currentThinking
-                                    )
-                                    currentMap + (messageId to updated)
-                                }
+                                updateFullMessageState(
+                                    text = currentText,
+                                    attachments = currentAttachments.toList(),
+                                    thinkingSummary = summaryForMessage,
+                                    thinkingStream = currentThinking
+                                )
                             }
                         } catch (e: Exception) {
                             parseErrorCount += 1
@@ -314,25 +391,15 @@ class ChatResponseStreamer(
                     )
                     when (val fallback = requestSingleResponse(conversationId, model, provider, request)) {
                         is NonStreamingResult.Success -> {
-                            repository.getFullMessageById(messageId)?.chatMessage?.let {
-                                repository.updateMessage(
-                                    it.copy(
-                                        text = fallback.text,
-                                        thinkingSummary = fallback.thinking.ifBlank { null },
-                                        attachments = fallback.attachments
-                                    )
-                                )
-                            }
-                            if (fallback.thinking.isNotBlank()) {
-                                repository.insertThinking(messageId, fallback.thinking)
-                            } else if (isRegeneration) {
-                                repository.updateThinkingStream(messageId, "")
-                            }
+                            persistResponse(
+                                text = fallback.text,
+                                attachments = fallback.attachments,
+                                thinkingSummary = fallback.thinking.ifBlank { null },
+                                thinkingStream = fallback.thinking
+                            )
                         }
                         is NonStreamingResult.Failure -> {
-                            repository.getFullMessageById(messageId)?.chatMessage?.let {
-                                repository.updateMessage(it.copy(text = fallback.message))
-                            }
+                            persistResponse(text = fallback.message)
                         }
                     }
                     return@launch
@@ -347,26 +414,16 @@ class ChatResponseStreamer(
                 } else {
                     finalThinking.ifEmpty { null }
                 }
-                repository.getFullMessageById(messageId)?.chatMessage?.let {
-                    repository.updateMessage(
-                        it.copy(
-                            text = cleanText,
-                            thinkingSummary = summaryToStore,
-                            attachments = currentAttachments.toList()
-                        )
-                    )
-                }
-                if (finalThinking.isNotEmpty()) {
-                    repository.insertThinking(messageId, finalThinking)
-                } else if (isRegeneration) {
-                    repository.updateThinkingStream(messageId, "")
-                }
+                persistResponse(
+                    text = cleanText,
+                    attachments = currentAttachments.toList(),
+                    thinkingSummary = summaryToStore,
+                    thinkingStream = finalThinking
+                )
             } catch (e: Exception) {
                 DiagnosticsLogger.log("Streaming request failed provider=${provider.uppercase()} model=$model", e)
                 android.util.Log.e("ChatResponseStreamer", "Streaming request failed", e)
-                repository.getFullMessageById(messageId)?.chatMessage?.let {
-                    repository.updateMessage(it.copy(text = networkFailureMessage(provider, e)))
-                }
+                persistResponse(text = networkFailureMessage(provider, e))
             } finally {
                 fetchFullMessage.invoke(messageId)
             }

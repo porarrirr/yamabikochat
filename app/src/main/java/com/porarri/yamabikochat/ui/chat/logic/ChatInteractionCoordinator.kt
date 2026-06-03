@@ -188,6 +188,7 @@ class ChatInteractionCoordinator(
             "OPENAI" -> settings.openAiBaseUrl.ifBlank { "https://api.openai.com/v1/" }
             "MINIMAX" -> settings.miniMaxBaseUrl.ifBlank { MiniMaxUtils.INTERNATIONAL_BASE_URL }
             "OPENAI_COMPAT" -> settings.resolveSelectedCompatBaseUrl() ?: "https://api.openai.com/v1/"
+            "CODEX_AUTH" -> settings.openAiBaseUrl.ifBlank { "https://api.openai.com/v1/" }
             else -> null
         }
         val includeModelThoughts = baseUrlForHistory?.let(MiniMaxUtils::isMiniMaxBaseUrl) == true
@@ -238,8 +239,7 @@ class ChatInteractionCoordinator(
             return
         }
 
-        val existingMessage = repository.getFullMessageById(targetMessageId)?.chatMessage
-        if (existingMessage == null) {
+        if (repository.getFullMessageById(targetMessageId) == null) {
             Log.e(TAG, "Regeneration failed: message not found id=$targetMessageId")
             return
         }
@@ -251,29 +251,21 @@ class ChatInteractionCoordinator(
             request = request
         )) {
             is ChatResponseStreamer.NonStreamingResult.Success -> {
-                repository.updateMessage(
-                    existingMessage.copy(
-                        text = result.text,
-                        attachments = result.attachments,
-                        thinkingSummary = result.thinking.ifBlank { null }
-                    )
+                repository.insertMessageVariant(
+                    baseMessageId = targetMessageId,
+                    text = result.text,
+                    attachments = result.attachments,
+                    thinkingStream = result.thinking.ifBlank { null }
                 )
-                if (result.thinking.isNotBlank()) {
-                    repository.insertThinking(targetMessageId, result.thinking)
-                } else {
-                    repository.updateThinkingStream(targetMessageId, "")
-                }
                 fetchFullMessage(targetMessageId)
             }
             is ChatResponseStreamer.NonStreamingResult.Failure -> {
-                repository.updateMessage(
-                    existingMessage.copy(
-                        text = result.message,
-                        attachments = emptyList(),
-                        thinkingSummary = null
-                    )
+                repository.insertMessageVariant(
+                    baseMessageId = targetMessageId,
+                    text = result.message,
+                    attachments = emptyList(),
+                    thinkingStream = null
                 )
-                repository.updateThinkingStream(targetMessageId, "")
                 fetchFullMessage(targetMessageId)
             }
         }

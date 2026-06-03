@@ -19,6 +19,46 @@ interface ChatDao {
     @Query("SELECT * FROM conversations WHERE isSecret = 0 ORDER BY timestamp DESC")
     fun getAllConversations(): Flow<List<Conversation>>
 
+    @Upsert
+    suspend fun upsertProject(project: ChatProject): Long
+
+    @Query(
+        """
+        SELECT
+            p.id as id,
+            p.title as title,
+            p.iconName as iconName,
+            p.colorHex as colorHex,
+            p.instructions as instructions,
+            p.createdAtMs as createdAtMs,
+            p.updatedAtMs as updatedAtMs,
+            COUNT(c.id) as conversationCount
+        FROM projects p
+        LEFT JOIN conversations c ON c.projectId = p.id
+        GROUP BY p.id
+        ORDER BY p.updatedAtMs DESC, p.createdAtMs DESC
+        """
+    )
+    fun getProjects(): Flow<List<ProjectListEntry>>
+
+    @Query("SELECT * FROM projects WHERE id = :id")
+    suspend fun getProjectById(id: Long): ChatProject?
+
+    @Query("UPDATE conversations SET projectId = :projectId, timestamp = :timestamp WHERE id = :conversationId")
+    suspend fun assignConversationToProject(conversationId: Long, projectId: Long?, timestamp: Long)
+
+    @Query("UPDATE projects SET updatedAtMs = :timestamp WHERE id = :projectId")
+    suspend fun touchProject(projectId: Long, timestamp: Long)
+
+    @Query("UPDATE conversations SET projectId = NULL WHERE projectId = :projectId")
+    suspend fun clearProjectAssignments(projectId: Long)
+
+    @Query("DELETE FROM projects WHERE id = :projectId")
+    suspend fun deleteProjectById(projectId: Long)
+
+    @Query("SELECT COUNT(*) FROM conversations WHERE projectId = :projectId")
+    suspend fun countConversationsInProject(projectId: Long): Int
+
     @Query(
         """
         SELECT
@@ -27,13 +67,31 @@ interface ChatDao {
             c.timestamp as timestamp,
             c.apiProvider as apiProvider,
             c.model as model,
+            c.isSecret as isSecret,
+            c.projectId as projectId,
+            p.title as projectTitle,
             (SELECT MAX(timestamp) FROM chat_messages WHERE conversationId = c.id) as lastChatTimestamp,
             (SELECT CASE
-                WHEN LENGTH(text) > 120 THEN SUBSTR(text, 1, 120) || '...'
-                ELSE text
+                WHEN LENGTH(resolvedText) > 120 THEN SUBSTR(resolvedText, 1, 120) || '...'
+                ELSE resolvedText
             END
-            FROM chat_messages
-            WHERE conversationId = c.id
+            FROM (
+                SELECT
+                    timestamp,
+                    CASE
+                        WHEN role = 'model' AND selectedVariantIndex > 0 THEN COALESCE(
+                            (SELECT v.text
+                             FROM chat_message_variants v
+                             WHERE v.baseMessageId = chat_messages.id
+                               AND v.variantIndex = chat_messages.selectedVariantIndex
+                             LIMIT 1),
+                            text
+                        )
+                        ELSE text
+                    END as resolvedText
+                FROM chat_messages
+                WHERE conversationId = c.id
+            ) AS chat_preview
             ORDER BY timestamp DESC
             LIMIT 1) as lastChatSnippet,
             (SELECT MAX(timestamp) FROM dual_chat_messages WHERE conversationId = c.id) as lastDualTimestamp,
@@ -64,7 +122,9 @@ interface ChatDao {
             (SELECT modelBProvider FROM dual_chat_messages WHERE conversationId = c.id AND role = 'dual_model' ORDER BY timestamp DESC LIMIT 1) as lastDualModelBProvider,
             (SELECT modelBName FROM dual_chat_messages WHERE conversationId = c.id AND role = 'dual_model' ORDER BY timestamp DESC LIMIT 1) as lastDualModelBName
         FROM conversations c
-        WHERE c.isSecret = 0
+        LEFT JOIN projects p ON p.id = c.projectId
+        WHERE EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.conversationId = c.id)
+           OR EXISTS (SELECT 1 FROM dual_chat_messages dcm WHERE dcm.conversationId = c.id)
         ORDER BY c.timestamp DESC
         """
     )
@@ -79,13 +139,14 @@ interface ChatDao {
         FROM conversations c
         WHERE c.title = :title
           AND c.isSecret = 0
+          AND ((:projectId IS NULL AND c.projectId IS NULL) OR c.projectId = :projectId)
           AND NOT EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.conversationId = c.id)
           AND NOT EXISTS (SELECT 1 FROM dual_chat_messages dcm WHERE dcm.conversationId = c.id)
         ORDER BY c.timestamp DESC
         LIMIT 1
         """
     )
-    suspend fun findLatestEmptyConversationByTitle(title: String): Conversation?
+    suspend fun findLatestEmptyConversationByTitle(title: String, projectId: Long?): Conversation?
 
     @Query("DELETE FROM conversations WHERE id = :id")
     suspend fun deleteConversationById(id: Long)
@@ -108,13 +169,31 @@ interface ChatDao {
     @Query("DELETE FROM token_usage_records WHERE conversationId = :conversationId")
     suspend fun deleteTokenUsageForConversation(conversationId: Long)
 
+    @Query("DELETE FROM chat_message_variants WHERE baseMessageId IN (SELECT id FROM chat_messages WHERE conversationId = :conversationId)")
+    suspend fun deleteVariantsForConversation(conversationId: Long)
+
     @Transaction
     suspend fun deleteConversationCascade(id: Long) {
+        deleteVariantsForConversation(id)
         deleteMessagesForConversation(id)
         deleteDualMessagesForConversation(id)
         deleteTokenUsageForConversation(id)
         deleteConversationById(id)
     }
+
+    @Transaction
+    suspend fun deleteProject(id: Long, deleteConversations: Boolean) {
+        if (deleteConversations) {
+            val conversationIds = getConversationIdsForProject(id)
+            conversationIds.forEach { deleteConversationCascade(it) }
+        } else {
+            clearProjectAssignments(id)
+        }
+        deleteProjectById(id)
+    }
+
+    @Query("SELECT id FROM conversations WHERE projectId = :projectId")
+    suspend fun getConversationIdsForProject(projectId: Long): List<Long>
 
     // ChatMessage queries
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -131,12 +210,105 @@ interface ChatDao {
             timestamp,
             CASE WHEN attachments != '[]' AND attachments IS NOT NULL THEN 1 ELSE 0 END as hasAttachments,
             CASE WHEN thinkingSummary IS NOT NULL THEN 1 ELSE 0 END as hasThinking,
-            CASE WHEN LENGTH(text) > 100 THEN SUBSTR(text, 1, 100) || '...' ELSE text END as textPreview
-        FROM chat_messages 
-        WHERE conversationId = :conversationId 
+            CASE WHEN LENGTH(resolvedText) > 100 THEN SUBSTR(resolvedText, 1, 100) || '...' ELSE resolvedText END as textPreview,
+            selectedVariantIndex,
+            1 + variantCount as variantCount
+        FROM (
+            SELECT
+                cm.id as id,
+                cm.conversationId as conversationId,
+                cm.role as role,
+                cm.timestamp as timestamp,
+                CASE
+                    WHEN cm.role = 'model' AND cm.selectedVariantIndex > 0 THEN COALESCE(
+                        (SELECT v.attachments
+                         FROM chat_message_variants v
+                         WHERE v.baseMessageId = cm.id AND v.variantIndex = cm.selectedVariantIndex
+                         LIMIT 1),
+                        cm.attachments
+                    )
+                    ELSE cm.attachments
+                END as attachments,
+                CASE
+                    WHEN cm.role = 'model' AND cm.selectedVariantIndex > 0 THEN (
+                        SELECT v.thinkingStream
+                        FROM chat_message_variants v
+                        WHERE v.baseMessageId = cm.id AND v.variantIndex = cm.selectedVariantIndex
+                        LIMIT 1
+                    )
+                    ELSE cm.thinkingSummary
+                END as thinkingSummary,
+                CASE
+                    WHEN cm.role = 'model' AND cm.selectedVariantIndex > 0 THEN COALESCE(
+                        (SELECT v.text
+                         FROM chat_message_variants v
+                         WHERE v.baseMessageId = cm.id AND v.variantIndex = cm.selectedVariantIndex
+                         LIMIT 1),
+                        cm.text
+                    )
+                    ELSE cm.text
+                END as resolvedText,
+                cm.selectedVariantIndex as selectedVariantIndex,
+                (SELECT COUNT(*) FROM chat_message_variants v WHERE v.baseMessageId = cm.id) as variantCount
+            FROM chat_messages cm
+            WHERE cm.conversationId = :conversationId
+        ) AS resolved_messages
         ORDER BY timestamp ASC
     """)
     fun getMessagesForConversation(conversationId: Long): Flow<List<ChatMessageSummary>>
+
+    @Query("""
+        SELECT
+            id,
+            conversationId,
+            role,
+            timestamp,
+            CASE WHEN attachments != '[]' AND attachments IS NOT NULL THEN 1 ELSE 0 END as hasAttachments,
+            CASE WHEN thinkingSummary IS NOT NULL THEN 1 ELSE 0 END as hasThinking,
+            CASE WHEN LENGTH(resolvedText) > 100 THEN SUBSTR(resolvedText, 1, 100) || '...' ELSE resolvedText END as textPreview,
+            selectedVariantIndex,
+            1 + variantCount as variantCount
+        FROM (
+            SELECT
+                cm.id as id,
+                cm.conversationId as conversationId,
+                cm.role as role,
+                cm.timestamp as timestamp,
+                CASE
+                    WHEN cm.role = 'model' AND cm.selectedVariantIndex > 0 THEN (
+                        SELECT v.attachments
+                        FROM chat_message_variants v
+                        WHERE v.baseMessageId = cm.id AND v.variantIndex = cm.selectedVariantIndex
+                        LIMIT 1
+                    )
+                    ELSE cm.attachments
+                END as attachments,
+                CASE
+                    WHEN cm.role = 'model' AND cm.selectedVariantIndex > 0 THEN (
+                        SELECT v.thinkingStream
+                        FROM chat_message_variants v
+                        WHERE v.baseMessageId = cm.id AND v.variantIndex = cm.selectedVariantIndex
+                        LIMIT 1
+                    )
+                    ELSE cm.thinkingSummary
+                END as thinkingSummary,
+                CASE
+                    WHEN cm.role = 'model' AND cm.selectedVariantIndex > 0 THEN (
+                        SELECT v.text
+                        FROM chat_message_variants v
+                        WHERE v.baseMessageId = cm.id AND v.variantIndex = cm.selectedVariantIndex
+                        LIMIT 1
+                    )
+                    ELSE cm.text
+                END as resolvedText,
+                cm.selectedVariantIndex as selectedVariantIndex,
+                (SELECT COUNT(*) FROM chat_message_variants v WHERE v.baseMessageId = cm.id) as variantCount
+            FROM chat_messages cm
+            WHERE cm.id = :messageId
+        ) AS resolved_message
+        ORDER BY timestamp ASC
+    """)
+    suspend fun getMessageSummaryById(messageId: Long): ChatMessageSummary?
 
     @Query("SELECT * FROM chat_messages WHERE id = :id")
     suspend fun getFullMessageById(id: Long): ChatMessage?
@@ -144,24 +316,63 @@ interface ChatDao {
     @Query("SELECT * FROM chat_messages WHERE id IN (:ids)")
     suspend fun getFullMessagesByIds(ids: List<Long>): List<ChatMessage>        
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMessageVariant(variant: ChatMessageVariant): Long
+
+    @Update
+    suspend fun updateMessageVariant(variant: ChatMessageVariant)
+
+    @Query("SELECT * FROM chat_message_variants WHERE id = :id")
+    suspend fun getMessageVariantById(id: Long): ChatMessageVariant?
+
+    @Query("SELECT * FROM chat_message_variants WHERE baseMessageId = :baseMessageId ORDER BY variantIndex ASC")
+    suspend fun getVariantsForMessage(baseMessageId: Long): List<ChatMessageVariant>
+
+    @Query("SELECT * FROM chat_message_variants WHERE baseMessageId IN (:messageIds) ORDER BY baseMessageId ASC, variantIndex ASC")
+    suspend fun getVariantsForMessages(messageIds: List<Long>): List<ChatMessageVariant>
+
+    @Query("SELECT COALESCE(MAX(variantIndex), 0) FROM chat_message_variants WHERE baseMessageId = :baseMessageId")
+    suspend fun getMaxVariantIndex(baseMessageId: Long): Int
+
+    @Query("UPDATE chat_messages SET selectedVariantIndex = :variantIndex WHERE id = :messageId")
+    suspend fun updateMessageSelectedVariantIndex(messageId: Long, variantIndex: Int)
+
     @Query(
         """
+        WITH resolved_chat_messages AS (
+            SELECT
+                cm.id as id,
+                cm.conversationId as conversationId,
+                cm.timestamp as timestamp,
+                cm.role as role,
+                CASE
+                    WHEN cm.role = 'model' AND cm.selectedVariantIndex > 0 THEN (
+                        SELECT v.text
+                        FROM chat_message_variants v
+                        WHERE v.baseMessageId = cm.id AND v.variantIndex = cm.selectedVariantIndex
+                        LIMIT 1
+                    )
+                    ELSE cm.text
+                END as resolvedText
+            FROM chat_messages cm
+        )
         SELECT
             c.id as conversationId,
             c.title as conversationTitle,
             'CHAT' as source,
-            cm.id as messageId,
-            cm.timestamp as timestamp,
-            cm.role as role,
+            rcm.id as messageId,
+            rcm.timestamp as timestamp,
+            rcm.role as role,
             'CHAT' as matchedField,
             CASE
-                WHEN LENGTH(cm.text) > 120 THEN SUBSTR(cm.text, 1, 120) || '...'
-                ELSE cm.text
+                WHEN LENGTH(rcm.resolvedText) > 120 THEN SUBSTR(rcm.resolvedText, 1, 120) || '...'
+                ELSE rcm.resolvedText
             END as snippet
-        FROM chat_messages cm
-        JOIN conversations c ON c.id = cm.conversationId
+        FROM resolved_chat_messages rcm
+        JOIN conversations c ON c.id = rcm.conversationId
         WHERE c.isSecret = 0
-          AND cm.text LIKE :pattern ESCAPE '\'
+          AND (:projectId IS NULL OR c.projectId = :projectId)
+          AND rcm.resolvedText LIKE :pattern ESCAPE '\'
 
         UNION ALL
 
@@ -197,6 +408,7 @@ interface ChatDao {
         FROM dual_chat_messages dcm
         JOIN conversations c ON c.id = dcm.conversationId
         WHERE c.isSecret = 0
+          AND (:projectId IS NULL OR c.projectId = :projectId)
           AND (
                 dcm.userText LIKE :pattern ESCAPE '\'
              OR dcm.modelAText LIKE :pattern ESCAPE '\'
@@ -206,7 +418,7 @@ interface ChatDao {
         LIMIT :limit
         """
     )
-    fun searchMessages(pattern: String, limit: Int): Flow<List<ConversationSearchResult>>
+    fun searchMessages(pattern: String, projectId: Long?, limit: Int): Flow<List<ConversationSearchResult>>
 
     // Thinking queries
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -338,6 +550,17 @@ interface ChatDao {
     )
     suspend fun deleteThinkingForSecretConversations()
 
+    @Query(
+        """
+        DELETE FROM chat_message_variants
+        WHERE baseMessageId IN (
+            SELECT id FROM chat_messages
+            WHERE conversationId IN (SELECT id FROM conversations WHERE isSecret = 1)
+        )
+        """
+    )
+    suspend fun deleteVariantsForSecretConversations()
+
     @Query("DELETE FROM chat_messages WHERE conversationId IN (SELECT id FROM conversations WHERE isSecret = 1)")
     suspend fun deleteChatMessagesForSecretConversations()
 
@@ -366,6 +589,7 @@ interface ChatDao {
 
     @Transaction
     suspend fun purgeSecretConversations() {
+        deleteVariantsForSecretConversations()
         deleteThinkingForSecretConversations()
         deleteChatMessagesForSecretConversations()
         deleteDualMessagesForSecretConversations()

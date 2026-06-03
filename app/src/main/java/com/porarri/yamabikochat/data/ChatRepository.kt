@@ -12,6 +12,8 @@ import com.porarri.yamabikochat.data.local.AutoConversationConfig
 import com.porarri.yamabikochat.data.local.AutoConversationMessage
 import com.porarri.yamabikochat.data.local.ChatMessage
 import com.porarri.yamabikochat.data.local.ChatMessageSummary
+import com.porarri.yamabikochat.data.local.ChatMessageVariant
+import com.porarri.yamabikochat.data.local.ChatProject
 import com.porarri.yamabikochat.data.local.ConversationListEntry
 import com.porarri.yamabikochat.data.local.ConversationSearchResult
 import com.porarri.yamabikochat.data.local.Conversation
@@ -19,6 +21,7 @@ import com.porarri.yamabikochat.data.local.DualChatMessage
 import com.porarri.yamabikochat.data.local.FullAutoConversation
 import com.porarri.yamabikochat.data.local.FullChatMessage
 import com.porarri.yamabikochat.data.local.ModelPreset
+import com.porarri.yamabikochat.data.local.ProjectListEntry
 import com.porarri.yamabikochat.data.local.Settings
 import com.porarri.yamabikochat.data.local.TokenUsageByModel
 import com.porarri.yamabikochat.data.local.TokenUsageDailyPoint
@@ -56,10 +59,25 @@ class ChatRepository(
     fun getConversationListEntries(): Flow<List<ConversationListEntry>> =       
         databaseRepository.getConversationListEntries()
 
+    fun getProjects(): Flow<List<ProjectListEntry>> = databaseRepository.getProjects()
+
+    suspend fun getProjectById(id: Long): ChatProject? = databaseRepository.getProjectById(id)
+
+    suspend fun upsertProject(project: ChatProject): Long = databaseRepository.upsertProject(project)
+
+    suspend fun assignConversationToProject(conversationId: Long, projectId: Long?) =
+        databaseRepository.assignConversationToProject(conversationId, projectId)
+
+    suspend fun deleteProject(id: Long, deleteConversations: Boolean) =
+        databaseRepository.deleteProject(id, deleteConversations)
+
+    suspend fun countConversationsInProject(projectId: Long): Int =
+        databaseRepository.countConversationsInProject(projectId)
+
     suspend fun getConversationById(id: Long): Conversation? = databaseRepository.getConversationById(id)
 
-    suspend fun findLatestEmptyConversationByTitle(title: String): Conversation? =
-        databaseRepository.findLatestEmptyConversationByTitle(title)
+    suspend fun findLatestEmptyConversationByTitle(title: String, projectId: Long? = null): Conversation? =
+        databaseRepository.findLatestEmptyConversationByTitle(title, projectId)
 
     suspend fun upsertConversation(conversation: Conversation): Long =
         databaseRepository.upsertConversation(conversation)
@@ -87,6 +105,20 @@ class ChatRepository(
     suspend fun updateThinkingStream(messageId: Long, thinkingStream: String) =
         databaseRepository.updateThinkingStream(messageId, thinkingStream)
 
+    suspend fun insertMessageVariant(
+        baseMessageId: Long,
+        text: String,
+        attachments: List<String> = emptyList(),
+        thinkingStream: String? = null
+    ): ChatMessageVariant =
+        databaseRepository.insertMessageVariant(baseMessageId, text, attachments, thinkingStream)
+
+    suspend fun updateMessageVariant(variant: ChatMessageVariant) =
+        databaseRepository.updateMessageVariant(variant)
+
+    suspend fun setMessageSelectedVariantIndex(messageId: Long, variantIndex: Int) =
+        databaseRepository.setMessageSelectedVariantIndex(messageId, variantIndex)
+
     fun getSettings(): Flow<Settings?> = databaseRepository.getSettings()
 
     suspend fun saveSettings(settings: Settings) = databaseRepository.saveSettings(settings)
@@ -106,10 +138,15 @@ class ChatRepository(
     fun getDualMessagesForConversation(conversationId: Long): Flow<List<DualChatMessage>> =
         databaseRepository.getDualMessagesForConversation(conversationId)       
 
-    fun searchMessages(query: String, limit: Int = 200): Flow<List<ConversationSearchResult>> =
+    fun searchMessages(
+        query: String,
+        limit: Int = 200,
+        projectId: Long? = null
+    ): Flow<List<ConversationSearchResult>> =
         databaseRepository.searchMessages(
             pattern = SqlLikeUtils.buildEscapedContainsPattern(query),
-            limit = limit
+            limit = limit,
+            projectId = projectId
         )
 
     suspend fun getDualMessageById(id: Long): DualChatMessage? =

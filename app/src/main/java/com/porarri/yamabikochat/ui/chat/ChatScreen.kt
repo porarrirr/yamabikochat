@@ -99,8 +99,12 @@ private fun resolveThinkingText(
     preferSummary: Boolean,
     allowSummary: Boolean
 ): String? {
-    val summary = message.chatMessage.thinkingSummary?.takeIf { it.isNotBlank() }
-    val stream = message.thinkingStream?.takeIf { it.isNotBlank() }
+    val summary = if (message.selectedVariant == null) {
+        message.chatMessage.thinkingSummary?.takeIf { it.isNotBlank() }
+    } else {
+        null
+    }
+    val stream = message.displayThinkingStream?.takeIf { it.isNotBlank() }
     if (preferSummary && summary != null) return summary
     if (stream != null) return stream
     return if (allowSummary) summary else null
@@ -937,15 +941,17 @@ fun ChatMessageItemLegacy(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
-    var editText by remember { mutableStateOf(message.chatMessage.text) }
+    val displayText = message.displayText
+    val displayAttachments = message.displayAttachments
+    var editText by remember(message.chatMessage.id, message.normalizedSelectedVariantIndex) { mutableStateOf(displayText) }
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 
     // 自動会話メッセージの解析
     val autoConvInfo = if (message.chatMessage.role == "model") {
-        parseAutoConversationMessage(message.chatMessage.text)
+        parseAutoConversationMessage(displayText)
     } else {
-        AutoConversationInfo(false, null, message.chatMessage.text)
+        AutoConversationInfo(false, null, displayText)
     }
     
     // 表示位置の決定（自動会話の場合はモデルBを右側に、SYSTEMは中央）
@@ -1068,9 +1074,9 @@ fun ChatMessageItemLegacy(
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                     }
-                    if (message.chatMessage.attachments.isNotEmpty()) {
+                    if (displayAttachments.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        MessageAttachmentList(attachments = message.chatMessage.attachments)
+                        MessageAttachmentList(attachments = displayAttachments)
                         Spacer(modifier = Modifier.height(4.dp))
                     }
                     if (isEditing) {
@@ -1092,7 +1098,7 @@ fun ChatMessageItemLegacy(
                                 TextButton(
                                     onClick = {
                                         isEditing = false
-                                        editText = message.chatMessage.text
+                                        editText = displayText
                                     }
                                 ) {
                                     Text("Cancel")
@@ -1116,7 +1122,7 @@ fun ChatMessageItemLegacy(
                                 markdown = if (autoConvInfo.isAutoConversation) {
                                     autoConvInfo.cleanContent
                                 } else {
-                                    message.chatMessage.text
+                                    displayText
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -1145,7 +1151,7 @@ fun ChatMessageItemLegacy(
                     DropdownMenuItem(
                         text = { Text("Copy") },
                         onClick = {
-                            clipboardManager.setText(AnnotatedString(message.chatMessage.text))
+                            clipboardManager.setText(AnnotatedString(displayText))
                             showMenu = false
                         }
                     )
@@ -1160,7 +1166,7 @@ fun ChatMessageItemLegacy(
                         text = { Text("Edit") },
                         onClick = {
                             isEditing = true
-                            editText = message.chatMessage.text
+                            editText = displayText
                             showMenu = false
                         }
                     )
@@ -1215,13 +1221,16 @@ fun ChatMessageItem(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
-    var editText by remember { mutableStateOf(message.chatMessage.text) }
+    val displayText = message.displayText
+    val displayAttachments = message.displayAttachments
+    val canEditMessage = message.chatMessage.role == "user" || message.normalizedSelectedVariantIndex == 0
+    var editText by remember(message.chatMessage.id, message.normalizedSelectedVariantIndex) { mutableStateOf(displayText) }
     val clipboardManager = LocalClipboardManager.current
 
     val autoConvInfo = if (message.chatMessage.role == "model") {
-        parseAutoConversationMessage(message.chatMessage.text)
+        parseAutoConversationMessage(displayText)
     } else {
-        AutoConversationInfo(false, null, message.chatMessage.text)
+        AutoConversationInfo(false, null, displayText)
     }
 
     val isUserMessage = message.chatMessage.role == "user"
@@ -1277,7 +1286,7 @@ fun ChatMessageItem(
                             DropdownMenuItem(
                                 text = { Text("Copy") },
                                 onClick = {
-                                    clipboardManager.setText(AnnotatedString(message.chatMessage.text))
+                                    clipboardManager.setText(AnnotatedString(displayText))
                                     showMenu = false
                                 }
                             )
@@ -1294,13 +1303,13 @@ fun ChatMessageItem(
             }
 
             isUserMessage -> {
-                if (message.chatMessage.attachments.isNotEmpty()) {
+                if (displayAttachments.isNotEmpty()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End
                     ) {
                         Box(modifier = Modifier.widthIn(max = 420.dp)) {
-                            MessageAttachmentList(attachments = message.chatMessage.attachments)
+                            MessageAttachmentList(attachments = displayAttachments)
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
@@ -1325,7 +1334,7 @@ fun ChatMessageItem(
                             shadowElevation = 0.dp
                         ) {
                             Text(
-                                text = message.chatMessage.text,
+                                text = displayText,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
@@ -1339,7 +1348,7 @@ fun ChatMessageItem(
                             DropdownMenuItem(
                                 text = { Text("Copy") },
                                 onClick = {
-                                    clipboardManager.setText(AnnotatedString(message.chatMessage.text))
+                                    clipboardManager.setText(AnnotatedString(displayText))
                                     showMenu = false
                                 }
                             )
@@ -1350,15 +1359,17 @@ fun ChatMessageItem(
                                     showMenu = false
                                 }
                             )
-                            DropdownMenuItem(
-                                text = { Text("Edit") },
-                                onClick = {
-                                    onEdit()
-                                    isEditing = true
-                                    editText = message.chatMessage.text
-                                    showMenu = false
-                                }
-                            )
+                            if (canEditMessage) {
+                                DropdownMenuItem(
+                                    text = { Text("Edit") },
+                                    onClick = {
+                                        onEdit()
+                                        isEditing = true
+                                        editText = displayText
+                                        showMenu = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -1382,7 +1393,7 @@ fun ChatMessageItem(
                         TextButton(
                             onClick = {
                                 isEditing = false
-                                editText = message.chatMessage.text
+                                editText = displayText
                             }
                         ) {
                             Text("Cancel")
@@ -1458,15 +1469,15 @@ fun ChatMessageItem(
                             }
                         }
 
-                        if (message.chatMessage.attachments.isNotEmpty()) {
-                            MessageAttachmentList(attachments = message.chatMessage.attachments)
+                        if (displayAttachments.isNotEmpty()) {
+                            MessageAttachmentList(attachments = displayAttachments)
                             Spacer(modifier = Modifier.height(10.dp))
                         }
 
                         val contentText = if (autoConvInfo.isAutoConversation) {
                             autoConvInfo.cleanContent
                         } else {
-                            message.chatMessage.text
+                            displayText
                         }
 
                         Surface(
@@ -1499,7 +1510,7 @@ fun ChatMessageItem(
                                         TextButton(
                                             onClick = {
                                                 isEditing = false
-                                                editText = message.chatMessage.text
+                                                editText = displayText
                                             }
                                         ) {
                                             Text("Cancel")
@@ -1524,6 +1535,40 @@ fun ChatMessageItem(
                         }
 
                         if (!isEditing) {
+                            if (message.variantCount > 1) {
+                                Row(
+                                    modifier = Modifier.padding(top = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(
+                                        onClick = { viewModel.selectPreviousVariant(message.chatMessage.id) },
+                                        enabled = message.normalizedSelectedVariantIndex > 0,
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowLeft,
+                                            contentDescription = "前の候補",
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "${message.normalizedSelectedVariantIndex + 1}/${message.variantCount}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    IconButton(
+                                        onClick = { viewModel.selectNextVariant(message.chatMessage.id) },
+                                        enabled = message.normalizedSelectedVariantIndex < message.variantCount - 1,
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowRight,
+                                            contentDescription = "次の候補",
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
                             Row(
                                 modifier = Modifier.padding(top = 6.dp),
                                 horizontalArrangement = Arrangement.Start,
@@ -1566,7 +1611,7 @@ fun ChatMessageItem(
                                     modifier = Modifier
                                         .size(32.dp)
                                         .clickable {
-                                            clipboardManager.setText(AnnotatedString(message.chatMessage.text))
+                                            clipboardManager.setText(AnnotatedString(displayText))
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -1588,7 +1633,7 @@ fun ChatMessageItem(
                         DropdownMenuItem(
                             text = { Text("Copy") },
                             onClick = {
-                                clipboardManager.setText(AnnotatedString(message.chatMessage.text))
+                                clipboardManager.setText(AnnotatedString(displayText))
                                 showMenu = false
                             }
                         )
@@ -1599,15 +1644,17 @@ fun ChatMessageItem(
                                 showMenu = false
                             }
                         )
-                        DropdownMenuItem(
-                            text = { Text("Edit") },
-                            onClick = {
-                                onEdit()
-                                isEditing = true
-                                editText = message.chatMessage.text
-                                showMenu = false
-                            }
-                        )
+                        if (canEditMessage) {
+                            DropdownMenuItem(
+                                text = { Text("Edit") },
+                                onClick = {
+                                    onEdit()
+                                    isEditing = true
+                                    editText = displayText
+                                    showMenu = false
+                                }
+                            )
+                        }
                         if (message.chatMessage.role == "model") {
                             DropdownMenuItem(
                                 text = { Text("Regenerate") },

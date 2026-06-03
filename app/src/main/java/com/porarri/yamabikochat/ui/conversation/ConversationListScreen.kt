@@ -17,31 +17,40 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ViewColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,8 +68,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import com.porarri.yamabikochat.MyApplication
 import com.porarri.yamabikochat.data.local.ConversationListEntry
 import com.porarri.yamabikochat.data.local.ConversationSearchResult
+import com.porarri.yamabikochat.data.local.ProjectListEntry
 import com.porarri.yamabikochat.ui.components.YamabikoTextField
 import com.porarri.yamabikochat.ui.preview.YamabikoPreview
+import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Locale
 
@@ -74,8 +85,11 @@ fun ConversationListScreen(
     )
 ) {
     val conversationEntries by viewModel.conversationEntries.collectAsState()   
+    val projects by viewModel.projects.collectAsState()
+    val selectedProjectId by viewModel.selectedProjectId.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
+    val scope = rememberCoroutineScope()
     val entryMap = remember(conversationEntries) {
         conversationEntries.associateBy { it.conversationId }
     }
@@ -108,10 +122,38 @@ fun ConversationListScreen(
         selectedConversationId = selectedConversationId,
         isSettingsSelected = navController.currentDestination?.route == "settings",
         onNewConversationClick = {
-            navController.navigate("chat/0") {
-                popUpTo("chat/0") { inclusive = true }
+            scope.launch {
+                val conversationId = viewModel.createNewConversation("New Chat")
+                navController.navigate("chat/$conversationId") {
+                    popUpTo("chat/0") { inclusive = true }
+                }
+                onConversationClick()
             }
-            onConversationClick()
+        },
+        onSecretConversationClick = {
+            scope.launch {
+                val conversationId = viewModel.createNewConversation(
+                    title = "Secret Chat",
+                    secret = true
+                )
+                navController.navigate("chat/$conversationId") {
+                    popUpTo("chat/0") { inclusive = true }
+                }
+                onConversationClick()
+            }
+        },
+        projects = projects,
+        selectedProjectId = selectedProjectId,
+        onProjectSelect = viewModel::selectProject,
+        onCreateProject = { title, instructions ->
+            scope.launch {
+                val projectId = viewModel.createProject(title, instructions)
+                val conversationId = viewModel.createNewConversation("New Chat", projectId = projectId)
+                navController.navigate("chat/$conversationId") {
+                    popUpTo("chat/0") { inclusive = true }
+                }
+                onConversationClick()
+            }
         },
         onSearchResultClick = { result ->
             val route = when (result.source) {
@@ -132,6 +174,8 @@ fun ConversationListScreen(
         onDeleteConversationClick = { conversationId ->
             viewModel.deleteConversation(conversationId)
         },
+        onAssignConversationToProject = viewModel::assignConversation,
+        onDeleteProject = viewModel::deleteProject,
         onSettingsClick = {
             navController.navigate("settings")
             onConversationClick()
@@ -149,15 +193,24 @@ private fun ConversationListContent(
     entryMap: Map<Long, ConversationListEntry>,
     selectedConversationId: Long?,
     isSettingsSelected: Boolean,
+    projects: List<ProjectListEntry> = emptyList(),
+    selectedProjectId: Long? = null,
     onNewConversationClick: () -> Unit,
+    onSecretConversationClick: () -> Unit = {},
+    onProjectSelect: (Long?) -> Unit = {},
+    onCreateProject: (String, String?) -> Unit = { _, _ -> },
     onSearchResultClick: (ConversationSearchResult) -> Unit,
     onConversationClick: (Long) -> Unit,
     onDeleteConversationClick: (Long) -> Unit,
+    onAssignConversationToProject: (Long, Long?) -> Unit = { _, _ -> },
+    onDeleteProject: (Long, Boolean) -> Unit = { _, _ -> },
     onSettingsClick: () -> Unit,
     onClose: (() -> Unit)? = null
 ) {
     val isSearching = searchQuery.isNotBlank()
     val focusManager = LocalFocusManager.current
+    var showCreateProjectDialog by remember { mutableStateOf(false) }
+    var pendingProjectDelete by remember { mutableStateOf<ProjectListEntry?>(null) }
     val selectedEntry = selectedConversationId?.let { entryMap[it] }
     val isSelectedPristineNewChat =
         when (selectedConversationId) {
@@ -211,6 +264,32 @@ private fun ConversationListContent(
             }
 
             item {
+                DrawerActionRow(
+                    icon = Icons.Default.Folder,
+                    label = "新しいプロジェクト",
+                    onClick = { showCreateProjectDialog = true }
+                )
+            }
+
+            item {
+                DrawerActionRow(
+                    icon = Icons.Default.Lock,
+                    label = "シークレットチャット",
+                    onClick = onSecretConversationClick
+                )
+            }
+
+            item {
+                ProjectFilterRow(
+                    projects = projects,
+                    selectedProjectId = selectedProjectId,
+                    onProjectSelect = onProjectSelect,
+                    onProjectDeleteRequest = { pendingProjectDelete = it },
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+
+            item {
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
@@ -252,11 +331,14 @@ private fun ConversationListContent(
             } else {
                 items(conversationEntries, key = { it.conversationId }) { entry ->
                     ConversationHistoryRow(
-                        title = entry.title,
-                        timestamp = entry.timestamp,
+                        entry = entry,
+                        projects = projects,
                         isSelected = entry.conversationId == selectedConversationId,
                         onClick = { onConversationClick(entry.conversationId) },
-                        onDeleteClick = { onDeleteConversationClick(entry.conversationId) }
+                        onDeleteClick = { onDeleteConversationClick(entry.conversationId) },
+                        onAssignProject = { projectId ->
+                            onAssignConversationToProject(entry.conversationId, projectId)
+                        }
                     )
                 }
             }
@@ -269,6 +351,44 @@ private fun ConversationListContent(
             subtitle = "設定を開く",
             selected = isSettingsSelected,
             onClick = onSettingsClick
+        )
+    }
+
+    if (showCreateProjectDialog) {
+        CreateProjectDialog(
+            onDismiss = { showCreateProjectDialog = false },
+            onCreate = { title, instructions ->
+                showCreateProjectDialog = false
+                onCreateProject(title, instructions)
+            }
+        )
+    }
+
+    pendingProjectDelete?.let { project ->
+        AlertDialog(
+            onDismissRequest = { pendingProjectDelete = null },
+            title = { Text(project.title) },
+            text = { Text("プロジェクトを削除します。会話を残すか、会話も削除するか選べます。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteProject(project.id, false)
+                        pendingProjectDelete = null
+                    }
+                ) {
+                    Text("会話を残す")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteProject(project.id, true)
+                        pendingProjectDelete = null
+                    }
+                ) {
+                    Text("会話も削除")
+                }
+            }
         )
     }
 }
@@ -333,6 +453,107 @@ private fun ConversationDrawerHeader(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
+private fun ProjectFilterRow(
+    projects: List<ProjectListEntry>,
+    selectedProjectId: Long?,
+    onProjectSelect: (Long?) -> Unit,
+    onProjectDeleteRequest: (ProjectListEntry) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 16.dp),
+    ) {
+        item {
+            FilterChip(
+                selected = selectedProjectId == null,
+                onClick = { onProjectSelect(null) },
+                label = { Text("すべて") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Chat,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+
+        items(projects, key = { it.id }) { project ->
+            Box {
+                FilterChip(
+                    modifier = Modifier.combinedClickable(
+                        onClick = { onProjectSelect(project.id) },
+                        onLongClick = { onProjectDeleteRequest(project) }
+                    ),
+                    selected = selectedProjectId == project.id,
+                    onClick = { onProjectSelect(project.id) },
+                    label = { Text(project.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun CreateProjectDialog(
+    onDismiss: () -> Unit,
+    onCreate: (String, String?) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var instructions by remember { mutableStateOf("") }
+    val canCreate = title.trim().isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("新しいプロジェクト") },
+        text = {
+            Column {
+                YamabikoTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("プロジェクト名") }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                YamabikoTextField(
+                    value = instructions,
+                    onValueChange = { instructions = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    maxLines = 6,
+                    placeholder = { Text("プロジェクト指示（任意）") }
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onCreate(title, instructions.takeIf { it.trim().isNotBlank() }) },
+                enabled = canCreate
+            ) {
+                Text("作成")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        }
+    )
+}
+
+@Composable
 private fun DrawerSectionHeader(
     title: String,
     modifier: Modifier = Modifier
@@ -389,13 +610,18 @@ private fun DrawerActionRow(
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 private fun ConversationHistoryRow(
-    title: String,
-    timestamp: Long,
+    entry: ConversationListEntry,
+    projects: List<ProjectListEntry>,
     isSelected: Boolean,
     onClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    onAssignProject: (Long?) -> Unit
 ) {
     var showDeleteMenu by remember { mutableStateOf(false) }
+    val preview = remember(entry) {
+        listOfNotNull(entry.projectTitle?.takeIf { it.isNotBlank() }, entry.lastMessagePreview())
+            .joinToString(" · ")
+    }
 
     Surface(
         modifier = Modifier
@@ -419,15 +645,38 @@ private fun ConversationHistoryRow(
                     .padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = title,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                val timeLabel = remember(timestamp) { formatRelativeTime(timestamp) }
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = entry.title,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (entry.isSecret) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "Secret",
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    if (preview.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = preview,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                val timeLabel = remember(entry.timestamp) { formatRelativeTime(entry.timestamp) }
                 if (timeLabel.isNotBlank()) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
@@ -442,6 +691,39 @@ private fun ConversationHistoryRow(
                 expanded = showDeleteMenu,
                 onDismissRequest = { showDeleteMenu = false }
             ) {
+                if (projects.isNotEmpty()) {
+                    projects.forEach { project ->
+                        DropdownMenuItem(
+                            text = { Text(project.title) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Folder,
+                                    contentDescription = null
+                                )
+                            },
+                            onClick = {
+                                showDeleteMenu = false
+                                onAssignProject(project.id)
+                            }
+                        )
+                    }
+                    if (entry.projectId != null) {
+                        DropdownMenuItem(
+                            text = { Text("プロジェクトから外す") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = null
+                                )
+                            },
+                            onClick = {
+                                showDeleteMenu = false
+                                onAssignProject(null)
+                            }
+                        )
+                    }
+                    HorizontalDivider()
+                }
                 DropdownMenuItem(
                     text = { Text("削除") },
                     leadingIcon = {
@@ -459,6 +741,13 @@ private fun ConversationHistoryRow(
             }
         }
     }
+}
+
+private fun ConversationListEntry.lastMessagePreview(): String? {
+    val chatTimestamp = lastChatTimestamp ?: 0L
+    val dualTimestamp = lastDualTimestamp ?: 0L
+    val preview = if (dualTimestamp > chatTimestamp) lastDualSnippet else lastChatSnippet
+    return preview?.trim()?.takeIf { it.isNotBlank() }
 }
 
 @Composable
@@ -698,6 +987,9 @@ private fun ConversationListScreenPreview() {
                 timestamp = now - 2 * 60_000L,
                 apiProvider = "GEMINI",
                 model = "gemini-3-flash-preview",
+                isSecret = false,
+                projectId = 1L,
+                projectTitle = "iOS移植",
                 lastChatTimestamp = now - 2 * 60_000L,
                 lastChatSnippet = "こんにちは！今日は何をお手伝いしましょうか？",
                 lastDualTimestamp = null,
@@ -715,6 +1007,9 @@ private fun ConversationListScreenPreview() {
                 timestamp = now - 3 * 60 * 60_000L,
                 apiProvider = "OPENROUTER",
                 model = "deepseek/deepseek-chat",
+                isSecret = false,
+                projectId = null,
+                projectTitle = null,
                 lastChatTimestamp = now - 3 * 60 * 60_000L,
                 lastChatSnippet = "まだメッセージがありません",
                 lastDualTimestamp = null,
@@ -736,6 +1031,19 @@ private fun ConversationListScreenPreview() {
             entryMap = entries.associateBy { it.conversationId },
             selectedConversationId = 1L,
             isSettingsSelected = false,
+            projects = listOf(
+                ProjectListEntry(
+                    id = 1L,
+                    title = "iOS移植",
+                    iconName = "folder.fill",
+                    colorHex = "#3A7AFE",
+                    instructions = null,
+                    createdAtMs = now,
+                    updatedAtMs = now,
+                    conversationCount = 1
+                )
+            ),
+            selectedProjectId = null,
             onNewConversationClick = {},
             onSearchResultClick = {},
             onConversationClick = {},
@@ -758,6 +1066,9 @@ private fun ConversationListSearchPreview() {
                 timestamp = now - 25 * 60_000L,
                 apiProvider = "OPENAI_COMPAT",
                 model = "*[A]-[A]*",
+                isSecret = false,
+                projectId = null,
+                projectTitle = null,
                 lastChatTimestamp = now - 25 * 60_000L,
                 lastChatSnippet = "はち",
                 lastDualTimestamp = null,

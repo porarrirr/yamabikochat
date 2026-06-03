@@ -9,7 +9,9 @@ import androidx.room.TypeConverters
 @Database(
     entities = [
         Conversation::class,
+        ChatProject::class,
         ChatMessage::class,
+        ChatMessageVariant::class,
         Settings::class,
         ChatMessageThinking::class,
         ModelPreset::class,
@@ -18,7 +20,7 @@ import androidx.room.TypeConverters
         AutoConversationMessage::class,
         TokenUsageRecord::class
     ],
-    version = 50,
+    version = 51,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

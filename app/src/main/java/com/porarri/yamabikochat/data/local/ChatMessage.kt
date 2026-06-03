@@ -12,5 +12,6 @@ data class ChatMessage(
     val text: String,
     val attachments: List<String> = emptyList(),
     val timestamp: Long = System.currentTimeMillis(),
-    val thinkingSummary: String? = null
+    val thinkingSummary: String? = null,
+    val selectedVariantIndex: Int = 0
 )

@@ -7,5 +7,7 @@ data class ChatMessageSummary(
     val timestamp: Long,
     val hasAttachments: Boolean,
     val hasThinking: Boolean,
-    val textPreview: String // 最初の100文字のプレビュー
+    val textPreview: String, // 最初の100文字のプレビュー
+    val selectedVariantIndex: Int = 0,
+    val variantCount: Int = 1
 )
