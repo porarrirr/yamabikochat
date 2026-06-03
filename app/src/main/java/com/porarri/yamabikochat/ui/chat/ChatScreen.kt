@@ -1856,8 +1856,9 @@ private fun rememberImageThumbnail(
     key: String,
     loader: suspend () -> android.graphics.Bitmap?
 ): androidx.compose.ui.graphics.ImageBitmap? {
-    val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = key) {
-        value = withContext(Dispatchers.IO) { loader() }
+    var bitmap by remember(key) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    LaunchedEffect(key) {
+        bitmap = withContext(Dispatchers.IO) { loader() }
     }
     return bitmap?.asImageBitmap()
 }

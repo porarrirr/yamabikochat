@@ -9,7 +9,7 @@ data class SettingsUpdateRequest(
     val model: String,
     /**
      * Provider-specific model selections being edited in the Settings UI.
-     * Keys are provider ids (e.g. GEMINI/OPENROUTER/MINIMAX/OPENAI/CODEX_AUTH/OPENAI_COMPAT/ZAI).
+     * Keys are provider ids (e.g. GEMINI/OPENROUTER/OPENCODE_GO/ALIBABA_CODING_PLAN/MINIMAX/OPENAI/CODEX_AUTH/OPENAI_COMPAT/ZAI).
      */
     val providerModels: Map<String, String> = emptyMap(),
     val googleSearchEnabled: Boolean,
@@ -32,12 +32,16 @@ data class SettingsUpdateRequest(
     val openAiApiKey: String = "",
     val miniMaxApiKey: String = "",
     val zaiApiKey: String = "",
+    val openCodeGoApiKey: String = "",
+    val alibabaCodingPlanApiKey: String = "",
     val openAiCompatApiKey: String = "",
     val geminiApiKeyAction: ApiKeyAction = ApiKeyAction.NoChange,
     val openRouterApiKeyAction: ApiKeyAction = ApiKeyAction.NoChange,
     val openAiApiKeyAction: ApiKeyAction = ApiKeyAction.NoChange,
     val miniMaxApiKeyAction: ApiKeyAction = ApiKeyAction.NoChange,
     val zaiApiKeyAction: ApiKeyAction = ApiKeyAction.NoChange,
+    val openCodeGoApiKeyAction: ApiKeyAction = ApiKeyAction.NoChange,
+    val alibabaCodingPlanApiKeyAction: ApiKeyAction = ApiKeyAction.NoChange,
     val openAiCompatApiKeyAction: ApiKeyAction = ApiKeyAction.NoChange,
     val isDualModeEnabled: Boolean,
     val dualModelA: String,
@@ -73,6 +77,12 @@ data class SettingsUpdateRequest(
     val miniMaxBaseUrl: String = "https://api.minimax.io/v1/",
     val openAiCompatPresets: List<com.porarri.yamabikochat.data.remote.OpenAiCompatPreset> = emptyList(),
     val selectedOpenAiCompatPreset: String? = null,
+    val alibabaMcpEnabled: Boolean = false,
+    val alibabaMcpServerUrl: String = "",
+    val alibabaMcpServerName: String = "firecrawl",
+    val alibabaMcpAllowedTools: String = "",
+    val alibabaMcpAuthorizationToken: String = "",
+    val alibabaMcpAuthorizationTokenAction: ApiKeyAction = ApiKeyAction.NoChange,
     val openRouterReasoningMode: String = "auto",
     val openRouterReasoningEffort: String = "",
     val openRouterReasoningExclude: Boolean = false,

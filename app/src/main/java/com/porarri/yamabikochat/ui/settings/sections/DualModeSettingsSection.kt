@@ -37,6 +37,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.Color
 import com.porarri.yamabikochat.data.local.ModelPreset
+import com.porarri.yamabikochat.data.remote.ProviderCatalog
 import com.porarri.yamabikochat.data.remote.SimpleModel
 import com.porarri.yamabikochat.ui.settings.components.OpenRouterModelSelector
 import com.porarri.yamabikochat.ui.settings.sections.ToolingOverrideSection
@@ -271,7 +272,7 @@ private fun DualModelConfiguration(
                         YamabikoOption(
                             key = preset.id.toString(),
                             title = preset.name,
-                            subtitle = "${providerDisplayName(preset.apiProvider)} ・ ${preset.model}"
+                            subtitle = "${ProviderCatalog.displayName(preset.apiProvider)} ・ ${preset.model}"
                         )
                     },
                     selectedKey = selectedPresetKey,
@@ -288,16 +289,7 @@ private fun DualModelConfiguration(
         }
 
         var showProviderSheet by remember { mutableStateOf(false) }
-        val providerLabel = when (provider) {
-            "GEMINI" -> "Google Gemini"
-            "OPENROUTER" -> "OpenRouter"
-            "MINIMAX" -> "MiniMax"
-            "OPENAI" -> "OpenAI"
-            "CODEX_AUTH" -> "Codex Auth"
-            "OPENAI_COMPAT" -> "OpenAI (Custom)"
-            "ZAI" -> "Z.ai"
-            else -> "Google Gemini"
-        }
+        val providerLabel = ProviderCatalog.displayName(provider)
         YamabikoSelectRow(
             title = "プロバイダー",
             value = providerLabel,
@@ -306,15 +298,9 @@ private fun DualModelConfiguration(
         if (showProviderSheet) {
             YamabikoOptionBottomSheet(
                 title = "プロバイダー",
-                options = listOf(
-                    YamabikoOption(key = "GEMINI", title = "Google Gemini"),
-                    YamabikoOption(key = "OPENROUTER", title = "OpenRouter"),
-                    YamabikoOption(key = "MINIMAX", title = "MiniMax"),
-                    YamabikoOption(key = "OPENAI", title = "OpenAI"),
-                    YamabikoOption(key = "CODEX_AUTH", title = "Codex Auth"),
-                    YamabikoOption(key = "OPENAI_COMPAT", title = "OpenAI (Custom)"),
-                    YamabikoOption(key = "ZAI", title = "Z.ai")
-                ),
+                options = ProviderCatalog.dualAutoConversationOptions.map {
+                    YamabikoOption(key = it.key, title = it.title)
+                },
                 selectedKey = provider,
                 onOptionSelected = { onProviderChange(it.key) },
                 onDismissRequest = { showProviderSheet = false }
@@ -354,17 +340,3 @@ private fun DualModelConfiguration(
         }
     }
 }
-
-private fun providerDisplayName(provider: String): String {
-    return when (provider.uppercase()) {
-        "GEMINI" -> "Google Gemini"
-        "OPENROUTER" -> "OpenRouter"
-        "MINIMAX" -> "MiniMax"
-        "OPENAI" -> "OpenAI"
-        "CODEX_AUTH" -> "Codex Auth"
-        "OPENAI_COMPAT" -> "OpenAI (Custom)"
-        "ZAI" -> "Z.ai"
-        else -> provider
-    }
-}
-

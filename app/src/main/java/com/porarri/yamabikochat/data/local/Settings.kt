@@ -6,6 +6,9 @@ import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.porarri.yamabikochat.data.remote.ThinkingConfig
 import com.porarri.yamabikochat.data.remote.CodexRequestConfig
+import com.porarri.yamabikochat.data.remote.OpenCodeGoEndpointKind
+import com.porarri.yamabikochat.data.remote.OpenCodeGoModelCatalog
+import com.porarri.yamabikochat.data.remote.ProviderCatalog
 import com.porarri.yamabikochat.utils.MiniMaxUtils
 import com.porarri.yamabikochat.utils.ModelUtils
 import com.porarri.yamabikochat.data.local.ModelPreset
@@ -163,6 +166,10 @@ data class Settings(
     // OpenAI-compatible endpoint presets (JSON list of OpenAiCompatPreset)     
     val openAiCompatPresets: String = "",
     val selectedOpenAiCompatPreset: String? = null,
+    val alibabaMcpEnabled: Boolean = false,
+    val alibabaMcpServerUrl: String = "",
+    val alibabaMcpServerName: String = ProviderCatalog.alibabaMcpDefaultServerName,
+    val alibabaMcpAllowedTools: String = "",
 
     // Codex Auth (OpenAI Responses API) reasoning settings
     val codexUserAgentPreset: String = "ANDROID",
@@ -466,6 +473,22 @@ data class Settings(
                 enabledOverride = overrides?.enabled,
                 budgetOverride = overrides?.budget
             )
+            "OPENCODE_GO" -> when (OpenCodeGoModelCatalog.modelFor(model)?.endpointKind) {
+                OpenCodeGoEndpointKind.MESSAGES -> buildAnthropicThinkingConfig(
+                    enabledOverride = overrides?.enabled,
+                    budgetOverride = overrides?.budget
+                )
+                OpenCodeGoEndpointKind.CHAT_COMPLETIONS -> buildOpenAiThinkingConfig(
+                    model,
+                    enabledOverride = overrides?.enabled,
+                    budgetOverride = overrides?.budget
+                )
+                null -> null
+            }
+            "ALIBABA_CODING_PLAN" -> buildAnthropicThinkingConfig(
+                enabledOverride = overrides?.enabled,
+                budgetOverride = overrides?.budget
+            )
             "CODEX_AUTH" -> buildCodexThinkingConfig(
                 enabledOverride = overrides?.enabled,
                 effortOverride = overrides?.codexEffort
@@ -599,6 +622,20 @@ data class Settings(
         )
     }
 
+    private fun buildAnthropicThinkingConfig(
+        enabledOverride: Boolean? = null,
+        budgetOverride: Int? = null
+    ): ThinkingConfig? {
+        val enabled = enabledOverride ?: geminiThinkingEnabled
+        val budget = budgetOverride ?: geminiThinkingBudget
+        if (!enabled) return null
+        return ThinkingConfig(
+            thinkingBudget = budget,
+            includeThoughts = true,
+            enabled = true
+        )
+    }
+
     private fun buildCodexThinkingConfig(
         enabledOverride: Boolean? = null,
         effortOverride: String? = null
@@ -663,7 +700,17 @@ data class Settings(
         val models = getProviderModels()
         if (models.isEmpty()) return emptyList()
 
-        val preferredOrder = listOf("GEMINI", "OPENROUTER", "ZAI", "MINIMAX", "OPENAI", "CODEX_AUTH", "OPENAI_COMPAT")
+        val preferredOrder = listOf(
+            "GEMINI",
+            "OPENROUTER",
+            "OPENCODE_GO",
+            "ALIBABA_CODING_PLAN",
+            "ZAI",
+            "MINIMAX",
+            "OPENAI",
+            "CODEX_AUTH",
+            "OPENAI_COMPAT"
+        )
         val orderedProviders = preferredOrder.filter { models.containsKey(it) } +
             models.keys.filterNot { preferredOrder.contains(it) }.sorted()
 
@@ -687,7 +734,7 @@ data class Settings(
             val normalizedCodexCacheType = codexPromptCacheType.ifBlank { "ephemeral" }
             ModelPreset(
                 id = -(index + 1).toLong(),
-                name = "グローバル: ${providerDisplayName(provider)}",
+                name = "グローバル: ${ProviderCatalog.displayName(provider)}",
                 model = modelName,
                 systemPrompt = resolvedPrompt,
                 systemPromptPresetName = if (includeSystemPrompt) selectedSystemPromptPreset else null,
@@ -901,19 +948,6 @@ data class Settings(
         }
     }
 
-    private fun providerDisplayName(provider: String): String {
-        return when (provider.uppercase()) {
-            "GEMINI" -> "Google Gemini"
-            "OPENROUTER" -> "OpenRouter"
-            "MINIMAX" -> "MiniMax"
-            "OPENAI" -> "OpenAI"
-            "CODEX_AUTH" -> "Codex Auth"
-            "OPENAI_COMPAT" -> "OpenAI (Custom)"
-            "ZAI" -> "Z.ai"
-            else -> provider
-        }
-    }
-    
     fun getSelectedQuantizationsList(): List<String> {
         return if (selectedQuantizations.isBlank()) {
             emptyList()
@@ -991,6 +1025,28 @@ data class Settings(
         val sel = selectedOpenAiCompatPreset ?: return null
         return getOpenAiCompatPresetsList().firstOrNull { it.name.equals(sel, ignoreCase = true) }?.baseUrl
     }
+
+    fun resolvedAlibabaMcpServerUrl(): String? {
+        val raw = alibabaMcpServerUrl.trim()
+        if (raw.isBlank()) return null
+        val uri = runCatching { java.net.URI(raw) }.getOrNull() ?: return null
+        if (!uri.scheme.equals("https", ignoreCase = true)) return null
+        if (uri.host.isNullOrBlank()) return null
+        if (!uri.userInfo.isNullOrBlank()) return null
+        return uri.toString()
+    }
+
+    fun resolvedAlibabaMcpServerName(): String =
+        alibabaMcpServerName.trim().ifBlank { ProviderCatalog.alibabaMcpDefaultServerName }
+
+    fun alibabaMcpAllowedToolsList(): List<String> =
+        alibabaMcpAllowedTools
+            .lineSequence()
+            .flatMap { it.split(",").asSequence() }
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinctBy { it.lowercase() }
+            .toList()
 
     enum class ReasoningContext {
         DEFAULT,

@@ -125,7 +125,8 @@ class LiteLlmPricingRepository(
                     values.add("openrouter/${base.substringAfter("/", base)}")
                 }
             }
-            "OPENAI", "CODEX_AUTH", "OPENAI_COMPAT", "MINIMAX", "ZAI" -> {
+            "OPENAI", "CODEX_AUTH", "OPENAI_COMPAT", "OPENCODE_GO",
+            "ALIBABA_CODING_PLAN", "MINIMAX", "ZAI" -> {
                 values.add(canonical.removePrefix("openai/"))
                 values.add(canonical.removePrefix("google/"))
                 values.add(canonical.removePrefix("anthropic/"))

@@ -16,6 +16,7 @@ import com.porarri.yamabikochat.data.local.Settings
 import com.porarri.yamabikochat.data.local.SystemPromptPreset
 import com.porarri.yamabikochat.data.remote.ModelEndpoint
 import com.porarri.yamabikochat.data.remote.OpenAiCompatPreset
+import com.porarri.yamabikochat.data.remote.ProviderCatalog
 import com.porarri.yamabikochat.data.remote.ProviderDirectory
 import com.porarri.yamabikochat.data.remote.SimpleModel
 import com.porarri.yamabikochat.ui.settings.sections.ModelPresetDialogState
@@ -73,6 +74,9 @@ class SettingsScreenState(
     var miniMaxApiKeyInput by mutableStateOf("")
     var openAiCompatApiKeyInput by mutableStateOf("")
     var zaiApiKeyInput by mutableStateOf("")
+    var openCodeGoApiKeyInput by mutableStateOf("")
+    var alibabaCodingPlanApiKeyInput by mutableStateOf("")
+    var alibabaMcpAuthorizationTokenInput by mutableStateOf("")
 
     var geminiKeyVisible by mutableStateOf(false)
     var openRouterKeyVisible by mutableStateOf(false)
@@ -80,6 +84,9 @@ class SettingsScreenState(
     var miniMaxKeyVisible by mutableStateOf(false)
     var openAiCompatKeyVisible by mutableStateOf(false)
     var zaiKeyVisible by mutableStateOf(false)
+    var openCodeGoKeyVisible by mutableStateOf(false)
+    var alibabaCodingPlanKeyVisible by mutableStateOf(false)
+    var alibabaMcpTokenVisible by mutableStateOf(false)
 
     var geminiKeyLoadedFromStorage by mutableStateOf(false)
     var openRouterKeyLoadedFromStorage by mutableStateOf(false)
@@ -87,6 +94,9 @@ class SettingsScreenState(
     var miniMaxKeyLoadedFromStorage by mutableStateOf(false)
     var openAiCompatKeyLoadedFromStorage by mutableStateOf(false)
     var zaiKeyLoadedFromStorage by mutableStateOf(false)
+    var openCodeGoKeyLoadedFromStorage by mutableStateOf(false)
+    var alibabaCodingPlanKeyLoadedFromStorage by mutableStateOf(false)
+    var alibabaMcpTokenLoadedFromStorage by mutableStateOf(false)
 
     var geminiKeyDirty by mutableStateOf(false)
     var openRouterKeyDirty by mutableStateOf(false)
@@ -94,6 +104,9 @@ class SettingsScreenState(
     var miniMaxKeyDirty by mutableStateOf(false)
     var openAiCompatKeyDirty by mutableStateOf(false)
     var zaiKeyDirty by mutableStateOf(false)
+    var openCodeGoKeyDirty by mutableStateOf(false)
+    var alibabaCodingPlanKeyDirty by mutableStateOf(false)
+    var alibabaMcpTokenDirty by mutableStateOf(false)
 
     // OpenAI base URL & OpenAI-compatible preset editing
     var openAiBaseUrl by mutableStateOf("https://api.openai.com/v1/")
@@ -102,6 +115,10 @@ class SettingsScreenState(
     var compatPresetBaseUrl by mutableStateOf("")
     val openAiCompatPresetsLocal = mutableStateListOf<OpenAiCompatPreset>()     
     var selectedOpenAiCompatPresetLocal by mutableStateOf<String?>(null)
+    var alibabaMcpEnabled by mutableStateOf(false)
+    var alibabaMcpServerUrl by mutableStateOf("")
+    var alibabaMcpServerName by mutableStateOf(ProviderCatalog.alibabaMcpDefaultServerName)
+    var alibabaMcpAllowedTools by mutableStateOf("")
 
     // プロバイダー選択状態
     var selectedProvider by mutableStateOf<String?>(null)
@@ -294,6 +311,9 @@ class SettingsScreenState(
         if (nextProviderKey == "CODEX_AUTH" && model.isBlank()) {
             model = com.porarri.yamabikochat.utils.CodexModelPresets.defaultModel()
         }
+        if (model.isBlank()) {
+            model = ProviderCatalog.defaultModel(nextProviderKey)
+        }
     }
 
     private fun resolveGlobalReasoningDefaults(source: Settings? = latestSettings): ReasoningBaseline {
@@ -482,24 +502,36 @@ class SettingsScreenState(
             miniMaxApiKeyInput = ""
             openAiCompatApiKeyInput = ""
             zaiApiKeyInput = ""
+            openCodeGoApiKeyInput = ""
+            alibabaCodingPlanApiKeyInput = ""
+            alibabaMcpAuthorizationTokenInput = ""
             geminiKeyDirty = false
             openRouterKeyDirty = false
             openAiKeyDirty = false
             miniMaxKeyDirty = false
             openAiCompatKeyDirty = false
             zaiKeyDirty = false
+            openCodeGoKeyDirty = false
+            alibabaCodingPlanKeyDirty = false
+            alibabaMcpTokenDirty = false
             geminiKeyVisible = false
             openRouterKeyVisible = false
             openAiKeyVisible = false
             miniMaxKeyVisible = false
             openAiCompatKeyVisible = false
             zaiKeyVisible = false
+            openCodeGoKeyVisible = false
+            alibabaCodingPlanKeyVisible = false
+            alibabaMcpTokenVisible = false
             geminiKeyLoadedFromStorage = false
             openRouterKeyLoadedFromStorage = false
             openAiKeyLoadedFromStorage = false
             miniMaxKeyLoadedFromStorage = false
             openAiCompatKeyLoadedFromStorage = false
             zaiKeyLoadedFromStorage = false
+            openCodeGoKeyLoadedFromStorage = false
+            alibabaCodingPlanKeyLoadedFromStorage = false
+            alibabaMcpTokenLoadedFromStorage = false
 
             // APIプロバイダーに基づいて適切な設定を読み込み
             googleSearchEnabled = settingsState.getCurrentGoogleSearchEnabled()
@@ -561,6 +593,12 @@ class SettingsScreenState(
             providerSort = settingsState.providerSort
             openAiBaseUrl = settingsState.openAiBaseUrl.ifBlank { "https://api.openai.com/v1/" }
             miniMaxBaseUrl = settingsState.miniMaxBaseUrl.ifBlank { MiniMaxUtils.INTERNATIONAL_BASE_URL }
+            alibabaMcpEnabled = settingsState.alibabaMcpEnabled
+            alibabaMcpServerUrl = settingsState.alibabaMcpServerUrl
+            alibabaMcpServerName = settingsState.alibabaMcpServerName.ifBlank {
+                ProviderCatalog.alibabaMcpDefaultServerName
+            }
+            alibabaMcpAllowedTools = settingsState.alibabaMcpAllowedTools
             openRouterPinnedModels = settingsState.getOpenRouterPinnedModelsList()
             openRouterRecentModels = settingsState.getOpenRouterRecentModelsList()
 
@@ -856,6 +894,21 @@ class SettingsScreenState(
             openAiCompatKeyDirty && openAiCompatApiKeyInput.isBlank() -> ApiKeyAction.Clear
             else -> ApiKeyAction.NoChange
         }
+        val openCodeGoApiKeyAction = when {
+            openCodeGoKeyDirty && openCodeGoApiKeyInput.isNotBlank() -> ApiKeyAction.Update
+            openCodeGoKeyDirty && openCodeGoApiKeyInput.isBlank() -> ApiKeyAction.Clear
+            else -> ApiKeyAction.NoChange
+        }
+        val alibabaCodingPlanApiKeyAction = when {
+            alibabaCodingPlanKeyDirty && alibabaCodingPlanApiKeyInput.isNotBlank() -> ApiKeyAction.Update
+            alibabaCodingPlanKeyDirty && alibabaCodingPlanApiKeyInput.isBlank() -> ApiKeyAction.Clear
+            else -> ApiKeyAction.NoChange
+        }
+        val alibabaMcpAuthorizationTokenAction = when {
+            alibabaMcpTokenDirty && alibabaMcpAuthorizationTokenInput.isNotBlank() -> ApiKeyAction.Update
+            alibabaMcpTokenDirty && alibabaMcpAuthorizationTokenInput.isBlank() -> ApiKeyAction.Clear
+            else -> ApiKeyAction.NoChange
+        }
 
         val normalizedSelectedPreset = selectedSystemPromptPresetLocal
             ?.takeIf { name -> systemPromptPresetsLocal.any { it.name.equals(name, ignoreCase = true) } }
@@ -884,12 +937,16 @@ class SettingsScreenState(
             openAiApiKey = openAiApiKeyInput,
             miniMaxApiKey = miniMaxApiKeyInput,
             zaiApiKey = zaiApiKeyInput,
+            openCodeGoApiKey = openCodeGoApiKeyInput,
+            alibabaCodingPlanApiKey = alibabaCodingPlanApiKeyInput,
             openAiCompatApiKey = openAiCompatApiKeyInput,
             geminiApiKeyAction = geminiApiKeyAction,
             openRouterApiKeyAction = openRouterApiKeyAction,
             openAiApiKeyAction = openAiApiKeyAction,
             miniMaxApiKeyAction = miniMaxApiKeyAction,
             zaiApiKeyAction = zaiApiKeyAction,
+            openCodeGoApiKeyAction = openCodeGoApiKeyAction,
+            alibabaCodingPlanApiKeyAction = alibabaCodingPlanApiKeyAction,
             openAiCompatApiKeyAction = openAiCompatApiKeyAction,
             isDualModeEnabled = isDualModeEnabled,
             dualModelA = dualModelA,
@@ -927,6 +984,12 @@ class SettingsScreenState(
             miniMaxBaseUrl = miniMaxBaseUrl,
             openAiCompatPresets = openAiCompatPresetsLocal.toList(),
             selectedOpenAiCompatPreset = selectedOpenAiCompatPresetLocal,
+            alibabaMcpEnabled = alibabaMcpEnabled,
+            alibabaMcpServerUrl = alibabaMcpServerUrl,
+            alibabaMcpServerName = alibabaMcpServerName,
+            alibabaMcpAllowedTools = alibabaMcpAllowedTools,
+            alibabaMcpAuthorizationToken = alibabaMcpAuthorizationTokenInput,
+            alibabaMcpAuthorizationTokenAction = alibabaMcpAuthorizationTokenAction,
             openRouterReasoningMode = reasoningMode,
             openRouterReasoningEffort = reasoningEffort,
             openRouterReasoningExclude = reasoningExclude,
@@ -1005,24 +1068,36 @@ class SettingsScreenState(
         geminiKeyDirty = false
         openRouterKeyDirty = false
         zaiKeyDirty = false
+        openCodeGoKeyDirty = false
+        alibabaCodingPlanKeyDirty = false
+        alibabaMcpTokenDirty = false
         openAiKeyDirty = false
         miniMaxKeyDirty = false
         openAiCompatKeyDirty = false
         geminiKeyVisible = false
         openRouterKeyVisible = false
         zaiKeyVisible = false
+        openCodeGoKeyVisible = false
+        alibabaCodingPlanKeyVisible = false
+        alibabaMcpTokenVisible = false
         openAiKeyVisible = false
         miniMaxKeyVisible = false
         openAiCompatKeyVisible = false
         geminiKeyLoadedFromStorage = false
         openRouterKeyLoadedFromStorage = false
         zaiKeyLoadedFromStorage = false
+        openCodeGoKeyLoadedFromStorage = false
+        alibabaCodingPlanKeyLoadedFromStorage = false
+        alibabaMcpTokenLoadedFromStorage = false
         openAiKeyLoadedFromStorage = false
         miniMaxKeyLoadedFromStorage = false
         openAiCompatKeyLoadedFromStorage = false
         apiKeyInput = ""
         openRouterApiKeyInput = ""
         zaiApiKeyInput = ""
+        openCodeGoApiKeyInput = ""
+        alibabaCodingPlanApiKeyInput = ""
+        alibabaMcpAuthorizationTokenInput = ""
         openAiApiKeyInput = ""
         miniMaxApiKeyInput = ""
         openAiCompatApiKeyInput = ""
@@ -1841,93 +1916,40 @@ fun rememberSettingsScreenState(
 
     // APIプロバイダー切り替え時の表示制御
     LaunchedEffect(state.apiProvider) {
-        when (state.apiProvider) {
-            "GEMINI" -> {
-                state.openRouterKeyVisible = false
-                state.openRouterKeyLoadedFromStorage = false
-                state.openAiKeyVisible = false
-                state.openAiKeyLoadedFromStorage = false
-                state.miniMaxKeyVisible = false
-                state.miniMaxKeyLoadedFromStorage = false
-                state.openAiCompatKeyVisible = false
-                state.openAiCompatKeyLoadedFromStorage = false
-                state.zaiKeyVisible = false
-                state.zaiKeyLoadedFromStorage = false
-            }
-            "OPENROUTER" -> {
-                state.geminiKeyVisible = false
-                state.geminiKeyLoadedFromStorage = false
-                state.openAiKeyVisible = false
-                state.openAiKeyLoadedFromStorage = false
-                state.miniMaxKeyVisible = false
-                state.miniMaxKeyLoadedFromStorage = false
-                state.openAiCompatKeyVisible = false
-                state.openAiCompatKeyLoadedFromStorage = false
-                state.zaiKeyVisible = false
-                state.zaiKeyLoadedFromStorage = false
-            }
-            "OPENAI" -> {
-                state.geminiKeyVisible = false
-                state.geminiKeyLoadedFromStorage = false
-                state.openRouterKeyVisible = false
-                state.openRouterKeyLoadedFromStorage = false
-                state.miniMaxKeyVisible = false
-                state.miniMaxKeyLoadedFromStorage = false
-                state.openAiCompatKeyVisible = false
-                state.openAiCompatKeyLoadedFromStorage = false
-                state.zaiKeyVisible = false
-                state.zaiKeyLoadedFromStorage = false
-            }
-            "MINIMAX" -> {
-                state.geminiKeyVisible = false
-                state.geminiKeyLoadedFromStorage = false
-                state.openRouterKeyVisible = false
-                state.openRouterKeyLoadedFromStorage = false
-                state.openAiKeyVisible = false
-                state.openAiKeyLoadedFromStorage = false
-                state.openAiCompatKeyVisible = false
-                state.openAiCompatKeyLoadedFromStorage = false
-                state.zaiKeyVisible = false
-                state.zaiKeyLoadedFromStorage = false
-            }
-            "OPENAI_COMPAT" -> {
-                state.geminiKeyVisible = false
-                state.geminiKeyLoadedFromStorage = false
-                state.openRouterKeyVisible = false
-                state.openRouterKeyLoadedFromStorage = false
-                state.openAiKeyVisible = false
-                state.openAiKeyLoadedFromStorage = false
-                state.miniMaxKeyVisible = false
-                state.miniMaxKeyLoadedFromStorage = false
-                state.zaiKeyVisible = false
-                state.zaiKeyLoadedFromStorage = false
-            }
-            "CODEX_AUTH" -> {
-                state.geminiKeyVisible = false
-                state.geminiKeyLoadedFromStorage = false
-                state.openRouterKeyVisible = false
-                state.openRouterKeyLoadedFromStorage = false
-                state.openAiKeyVisible = false
-                state.openAiKeyLoadedFromStorage = false
-                state.miniMaxKeyVisible = false
-                state.miniMaxKeyLoadedFromStorage = false
-                state.openAiCompatKeyVisible = false
-                state.openAiCompatKeyLoadedFromStorage = false
-                state.zaiKeyVisible = false
-                state.zaiKeyLoadedFromStorage = false
-            }
-            "ZAI" -> {
-                state.geminiKeyVisible = false
-                state.geminiKeyLoadedFromStorage = false
-                state.openRouterKeyVisible = false
-                state.openRouterKeyLoadedFromStorage = false
-                state.openAiKeyVisible = false
-                state.openAiKeyLoadedFromStorage = false
-                state.miniMaxKeyVisible = false
-                state.miniMaxKeyLoadedFromStorage = false
-                state.openAiCompatKeyVisible = false
-                state.openAiCompatKeyLoadedFromStorage = false
-            }
+        val selected = state.apiProvider.uppercase()
+        if (selected != "GEMINI") {
+            state.geminiKeyVisible = false
+            state.geminiKeyLoadedFromStorage = false
+        }
+        if (selected != "OPENROUTER") {
+            state.openRouterKeyVisible = false
+            state.openRouterKeyLoadedFromStorage = false
+        }
+        if (selected != "OPENAI") {
+            state.openAiKeyVisible = false
+            state.openAiKeyLoadedFromStorage = false
+        }
+        if (selected != "MINIMAX") {
+            state.miniMaxKeyVisible = false
+            state.miniMaxKeyLoadedFromStorage = false
+        }
+        if (selected != "OPENAI_COMPAT") {
+            state.openAiCompatKeyVisible = false
+            state.openAiCompatKeyLoadedFromStorage = false
+        }
+        if (selected != "ZAI") {
+            state.zaiKeyVisible = false
+            state.zaiKeyLoadedFromStorage = false
+        }
+        if (selected != "OPENCODE_GO") {
+            state.openCodeGoKeyVisible = false
+            state.openCodeGoKeyLoadedFromStorage = false
+        }
+        if (selected != "ALIBABA_CODING_PLAN") {
+            state.alibabaCodingPlanKeyVisible = false
+            state.alibabaCodingPlanKeyLoadedFromStorage = false
+            state.alibabaMcpTokenVisible = false
+            state.alibabaMcpTokenLoadedFromStorage = false
         }
     }
 

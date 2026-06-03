@@ -33,7 +33,8 @@ class OpenAiProvider(
         apiKey: String,
         model: String,
         request: GenerateContentRequest,
-        baseUrl: String
+        baseUrl: String,
+        promptCacheKeyOverride: String? = null
     ): Response<GenerateContentResponse> = withContext(Dispatchers.IO) {
         try {
             val cleanedKey = apiKey.trim()
@@ -56,7 +57,7 @@ class OpenAiProvider(
                         cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
                         max_tokens = budget ?: payload.max_tokens,
-                        promptCacheKey = promptCacheKeyForOfficialOpenAi(request, baseUrl)
+                        promptCacheKey = promptCacheKeyOverride ?: promptCacheKeyForOfficialOpenAi(request, baseUrl)
                     )
                 )
                 is OpenRouterMultiModalRequest -> service.createChatCompletionMultiModal(
@@ -68,7 +69,7 @@ class OpenAiProvider(
                         cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
                         max_tokens = budget ?: payload.max_tokens,
-                        promptCacheKey = promptCacheKeyForOfficialOpenAi(request, baseUrl)
+                        promptCacheKey = promptCacheKeyOverride ?: promptCacheKeyForOfficialOpenAi(request, baseUrl)
                     )
                 )
                 else -> throw IllegalArgumentException("Unsupported request type")
@@ -91,7 +92,8 @@ class OpenAiProvider(
         apiKey: String,
         model: String,
         request: GenerateContentRequest,
-        baseUrl: String
+        baseUrl: String,
+        promptCacheKeyOverride: String? = null
     ): Response<ResponseBody> = withContext(Dispatchers.IO) {
         try {
             val cleanedKey = apiKey.trim()
@@ -114,7 +116,7 @@ class OpenAiProvider(
                         cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
                         max_tokens = budget ?: payload.max_tokens,
-                        promptCacheKey = promptCacheKeyForOfficialOpenAi(request, baseUrl)
+                        promptCacheKey = promptCacheKeyOverride ?: promptCacheKeyForOfficialOpenAi(request, baseUrl)
                     )
                 )
                 is OpenRouterMultiModalRequest -> service.createChatCompletionMultiModalStream(
@@ -127,7 +129,7 @@ class OpenAiProvider(
                         cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
                         max_tokens = budget ?: payload.max_tokens,
-                        promptCacheKey = promptCacheKeyForOfficialOpenAi(request, baseUrl)
+                        promptCacheKey = promptCacheKeyOverride ?: promptCacheKeyForOfficialOpenAi(request, baseUrl)
                     )
                 )
                 else -> throw IllegalArgumentException("Unsupported request type")

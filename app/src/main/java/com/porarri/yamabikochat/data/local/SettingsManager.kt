@@ -36,6 +36,8 @@ class SettingsManager private constructor(
             "OPENAI" -> securePrefs.storeOpenAiApiKey(apiKey)
             "MINIMAX" -> securePrefs.storeMiniMaxApiKey(apiKey)
             "ZAI" -> securePrefs.storeZaiApiKey(apiKey)
+            "OPENCODE_GO" -> securePrefs.storeOpenCodeGoApiKey(apiKey)
+            "ALIBABA_CODING_PLAN" -> securePrefs.storeAlibabaCodingPlanApiKey(apiKey)
             else -> false
         }
     }
@@ -49,6 +51,8 @@ class SettingsManager private constructor(
                 ?: getOpenAiCompatApiKey("MiniMax")
                 ?: getOpenAiCompatApiKey("MiniMax (CN)")
             "ZAI" -> securePrefs.getZaiApiKey()
+            "OPENCODE_GO" -> securePrefs.getOpenCodeGoApiKey()
+            "ALIBABA_CODING_PLAN" -> securePrefs.getAlibabaCodingPlanApiKey()
             else -> null
         }
     }
@@ -62,6 +66,8 @@ class SettingsManager private constructor(
                 hasOpenAiCompatApiKey("MiniMax") ||
                 hasOpenAiCompatApiKey("MiniMax (CN)")
             "ZAI" -> securePrefs.hasZaiApiKey()
+            "OPENCODE_GO" -> securePrefs.hasOpenCodeGoApiKey()
+            "ALIBABA_CODING_PLAN" -> securePrefs.hasAlibabaCodingPlanApiKey()
             else -> false
         }
     }
@@ -77,8 +83,19 @@ class SettingsManager private constructor(
                 clearOpenAiCompatApiKey("MiniMax (CN)")
             }
             "ZAI" -> securePrefs.clearZaiApiKey()
+            "OPENCODE_GO" -> securePrefs.clearOpenCodeGoApiKey()
+            "ALIBABA_CODING_PLAN" -> securePrefs.clearAlibabaCodingPlanApiKey()
         }
     }
+
+    suspend fun saveAlibabaMcpAuthorizationToken(token: String?): Boolean =
+        securePrefs.storeAlibabaMcpAuthorizationToken(token)
+
+    fun getAlibabaMcpAuthorizationToken(): String? =
+        securePrefs.getAlibabaMcpAuthorizationToken()
+
+    suspend fun clearAlibabaMcpAuthorizationToken() =
+        securePrefs.clearAlibabaMcpAuthorizationToken()
 
     // --- OpenAI-compatible dynamic key helpers ---
     private fun compatAliasFor(name: String): String {

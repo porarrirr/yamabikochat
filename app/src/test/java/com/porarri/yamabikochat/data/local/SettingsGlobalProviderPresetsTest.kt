@@ -1,5 +1,6 @@
 package com.porarri.yamabikochat.data.local
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -43,5 +44,32 @@ class SettingsGlobalProviderPresetsTest {
         assertTrue(presets.isNotEmpty())
         assertTrue(presets.all { it.systemPrompt == "GLOBAL" })
     }
-}
 
+    @Test
+    fun buildGlobalProviderPresets_ordersNewProvidersLikeCatalog() {
+        val settings = Settings(
+            providerDefaultModels = """
+                {
+                  "OPENAI": "gpt-4.1-mini",
+                  "ALIBABA_CODING_PLAN": "qwen3.5-plus",
+                  "GEMINI": "gemini-2.5-flash",
+                  "OPENCODE_GO": "glm-5.1",
+                  "OPENROUTER": "deepseek/deepseek-chat"
+                }
+            """.trimIndent()
+        )
+
+        val providers = settings.buildGlobalProviderPresets().map { it.apiProvider }
+
+        assertEquals(
+            listOf(
+                "GEMINI",
+                "OPENROUTER",
+                "OPENCODE_GO",
+                "ALIBABA_CODING_PLAN",
+                "OPENAI"
+            ),
+            providers
+        )
+    }
+}

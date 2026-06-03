@@ -97,6 +97,16 @@ object RetrofitClient {
         return retrofit.create(OpenAiApiService::class.java)
     }
 
+    fun makeAnthropicCompatibleInstance(baseUrl: String): AnthropicCompatibleApiService {
+        val normalized = if (baseUrl.endsWith('/')) baseUrl else "$baseUrl/"
+        val retrofit = Retrofit.Builder()
+            .baseUrl(normalized)
+            .client(okHttpClient)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+        return retrofit.create(AnthropicCompatibleApiService::class.java)
+    }
+
     // 互換性のために古いinstanceプロパティを保持
     @Deprecated("Use geminiInstance instead")
     val instance: GeminiApiService = geminiInstance

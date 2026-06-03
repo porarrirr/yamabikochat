@@ -105,4 +105,61 @@ class SettingsReasoningTest {
         assertNull(config.exclude)
         assertTrue(config.includeThoughts)
     }
+
+    @Test
+    fun buildThinkingConfigFor_alibabaUsesAnthropicBudget() {
+        val settings = Settings().copy(
+            geminiThinkingEnabled = true,
+            geminiThinkingBudget = 2048
+        )
+
+        val config = settings.buildThinkingConfigFor(
+            provider = "ALIBABA_CODING_PLAN",
+            model = "qwen3.5-plus"
+        )
+
+        assertNotNull(config)
+        config!!
+        assertEquals(true, config.enabled)
+        assertEquals(2048, config.thinkingBudget)
+        assertTrue(config.includeThoughts)
+    }
+
+    @Test
+    fun buildThinkingConfigFor_openCodeGoMessagesUsesAnthropicBudget() {
+        val settings = Settings().copy(
+            geminiThinkingEnabled = true,
+            geminiThinkingBudget = 2048
+        )
+
+        val config = settings.buildThinkingConfigFor(
+            provider = "OPENCODE_GO",
+            model = "qwen3.5-plus"
+        )
+
+        assertNotNull(config)
+        config!!
+        assertEquals(true, config.enabled)
+        assertEquals(2048, config.thinkingBudget)
+        assertTrue(config.includeThoughts)
+    }
+
+    @Test
+    fun buildThinkingConfigFor_openCodeGoChatCompletionsUsesOpenAiBudget() {
+        val settings = Settings().copy(
+            geminiThinkingEnabled = true,
+            geminiThinkingBudget = 4096
+        )
+
+        val config = settings.buildThinkingConfigFor(
+            provider = "OPENCODE_GO",
+            model = "glm-5.1"
+        )
+
+        assertNotNull(config)
+        config!!
+        assertNull(config.enabled)
+        assertEquals(4096, config.thinkingBudget)
+        assertTrue(config.includeThoughts)
+    }
 }

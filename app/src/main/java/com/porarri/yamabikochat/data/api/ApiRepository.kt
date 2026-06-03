@@ -14,6 +14,8 @@ import com.porarri.yamabikochat.data.remote.GenerationConfig
 import com.porarri.yamabikochat.data.remote.GeminiProvider
 import com.porarri.yamabikochat.data.remote.OpenRouterProvider
 import com.porarri.yamabikochat.data.remote.OpenAiProvider
+import com.porarri.yamabikochat.data.remote.OpenCodeGoProvider
+import com.porarri.yamabikochat.data.remote.AlibabaCodingPlanProvider
 import com.porarri.yamabikochat.data.remote.CodexResponsesProvider
 import com.porarri.yamabikochat.data.remote.ZaiProvider
 import com.porarri.yamabikochat.data.remote.Part
@@ -33,6 +35,8 @@ class ApiRepository(
     private val geminiProvider: GeminiProvider,
     private val openRouterProvider: OpenRouterProvider,
     private val openAiProvider: OpenAiProvider,
+    private val openCodeGoProvider: OpenCodeGoProvider,
+    private val alibabaCodingPlanProvider: AlibabaCodingPlanProvider,
     private val codexResponsesProvider: CodexResponsesProvider,
     private val zaiProvider: ZaiProvider,
     private val settingsManager: SettingsManager,
@@ -90,6 +94,8 @@ class ApiRepository(
 
         val apiProvider = when (resolvedProvider) {
             "OPENROUTER" -> openRouterProvider
+            "OPENCODE_GO" -> openCodeGoProvider
+            "ALIBABA_CODING_PLAN" -> alibabaCodingPlanProvider
             "OPENAI", "OPENAI_COMPAT", "MINIMAX" -> openAiProvider
             "CODEX_AUTH" -> codexResponsesProvider
             "ZAI" -> zaiProvider
@@ -102,6 +108,8 @@ class ApiRepository(
                 resolvedProvider,
                 when (resolvedProvider) {
                     "OPENROUTER" -> settingsManager.getApiKey("OPENROUTER")
+                    "OPENCODE_GO" -> settingsManager.getApiKey("OPENCODE_GO")
+                    "ALIBABA_CODING_PLAN" -> settingsManager.getApiKey("ALIBABA_CODING_PLAN")
                     "OPENAI" -> settingsManager.getApiKey("OPENAI")
                     "MINIMAX" -> settingsManager.getApiKey("MINIMAX")
                     "OPENAI_COMPAT" -> settingsManager.getOpenAiCompatApiKey(settings?.selectedOpenAiCompatPreset)
@@ -243,6 +251,12 @@ class ApiRepository(
                         val baseUrl = settings?.resolveSelectedCompatBaseUrl() ?: "https://api.openai.com/v1/"
                         openAiProvider.generateContent(actualApiKey, model, request, baseUrl)
                     }
+                    "ALIBABA_CODING_PLAN" -> alibabaCodingPlanProvider.generateContent(
+                        actualApiKey,
+                        model,
+                        request,
+                        settingsManager.getAlibabaMcpAuthorizationToken()
+                    )
                     "CODEX_AUTH" -> {
                         val baseUrl = context.baseUrlOverride ?: codexResponsesProvider.baseUrl
                         callCodexAuthWithRetry(
@@ -299,6 +313,12 @@ class ApiRepository(
                         val baseUrl = settings?.resolveSelectedCompatBaseUrl() ?: "https://api.openai.com/v1/"
                         openAiProvider.streamGenerateContent(actualApiKey, model, request, baseUrl)
                     }
+                    "ALIBABA_CODING_PLAN" -> alibabaCodingPlanProvider.streamGenerateContent(
+                        actualApiKey,
+                        model,
+                        request,
+                        settingsManager.getAlibabaMcpAuthorizationToken()
+                    )
                     "CODEX_AUTH" -> {
                         val baseUrl = context.baseUrlOverride ?: codexResponsesProvider.baseUrl
                         callCodexAuthWithRetry(
@@ -340,6 +360,8 @@ class ApiRepository(
                 providerA,
                 when (providerA) {
                     "OPENROUTER" -> settingsManager.getApiKey("OPENROUTER")
+                    "OPENCODE_GO" -> settingsManager.getApiKey("OPENCODE_GO")
+                    "ALIBABA_CODING_PLAN" -> settingsManager.getApiKey("ALIBABA_CODING_PLAN")
                     "OPENAI" -> settingsManager.getApiKey("OPENAI")
                     "MINIMAX" -> settingsManager.getApiKey("MINIMAX")
                     "OPENAI_COMPAT" -> settingsManager.getOpenAiCompatApiKey(settings?.selectedOpenAiCompatPreset)
@@ -355,6 +377,8 @@ class ApiRepository(
                 providerB,
                 when (providerB) {
                     "OPENROUTER" -> settingsManager.getApiKey("OPENROUTER")
+                    "OPENCODE_GO" -> settingsManager.getApiKey("OPENCODE_GO")
+                    "ALIBABA_CODING_PLAN" -> settingsManager.getApiKey("ALIBABA_CODING_PLAN")
                     "OPENAI" -> settingsManager.getApiKey("OPENAI")
                     "MINIMAX" -> settingsManager.getApiKey("MINIMAX")
                     "OPENAI_COMPAT" -> settingsManager.getOpenAiCompatApiKey(settings?.selectedOpenAiCompatPreset)
@@ -395,6 +419,13 @@ class ApiRepository(
                         }
                     }
                     "ZAI" -> zaiProvider.generateContent(apiKeyResultA.apiKey, modelA, requestA)
+                    "OPENCODE_GO" -> openCodeGoProvider.generateContent(apiKeyResultA.apiKey, modelA, requestA)
+                    "ALIBABA_CODING_PLAN" -> alibabaCodingPlanProvider.generateContent(
+                        apiKeyResultA.apiKey,
+                        modelA,
+                        requestA,
+                        settingsManager.getAlibabaMcpAuthorizationToken()
+                    )
                     else -> geminiProvider.generateContent(apiKeyResultA.apiKey, modelA, requestA)
                 }
                 is ApiKeyResult.Missing -> missingKeyResponse(apiKeyResultA.providerId)
@@ -426,6 +457,13 @@ class ApiRepository(
                         }
                     }
                     "ZAI" -> zaiProvider.generateContent(apiKeyResultB.apiKey, modelB, requestB)
+                    "OPENCODE_GO" -> openCodeGoProvider.generateContent(apiKeyResultB.apiKey, modelB, requestB)
+                    "ALIBABA_CODING_PLAN" -> alibabaCodingPlanProvider.generateContent(
+                        apiKeyResultB.apiKey,
+                        modelB,
+                        requestB,
+                        settingsManager.getAlibabaMcpAuthorizationToken()
+                    )
                     else -> geminiProvider.generateContent(apiKeyResultB.apiKey, modelB, requestB)
                 }
                 is ApiKeyResult.Missing -> missingKeyResponse(apiKeyResultB.providerId)
@@ -451,6 +489,8 @@ class ApiRepository(
                 providerA,
                 when (providerA) {
                     "OPENROUTER" -> settingsManager.getApiKey("OPENROUTER")
+                    "OPENCODE_GO" -> settingsManager.getApiKey("OPENCODE_GO")
+                    "ALIBABA_CODING_PLAN" -> settingsManager.getApiKey("ALIBABA_CODING_PLAN")
                     "OPENAI" -> settingsManager.getApiKey("OPENAI")
                     "MINIMAX" -> settingsManager.getApiKey("MINIMAX")
                     "OPENAI_COMPAT" -> settingsManager.getOpenAiCompatApiKey(settings?.selectedOpenAiCompatPreset)
@@ -466,6 +506,8 @@ class ApiRepository(
                 providerB,
                 when (providerB) {
                     "OPENROUTER" -> settingsManager.getApiKey("OPENROUTER")
+                    "OPENCODE_GO" -> settingsManager.getApiKey("OPENCODE_GO")
+                    "ALIBABA_CODING_PLAN" -> settingsManager.getApiKey("ALIBABA_CODING_PLAN")
                     "OPENAI" -> settingsManager.getApiKey("OPENAI")
                     "MINIMAX" -> settingsManager.getApiKey("MINIMAX")
                     "OPENAI_COMPAT" -> settingsManager.getOpenAiCompatApiKey(settings?.selectedOpenAiCompatPreset)
@@ -506,6 +548,13 @@ class ApiRepository(
                         }
                     }
                     "ZAI" -> zaiProvider.streamGenerateContent(apiKeyResultA.apiKey, modelA, requestA)
+                    "OPENCODE_GO" -> openCodeGoProvider.streamGenerateContent(apiKeyResultA.apiKey, modelA, requestA)
+                    "ALIBABA_CODING_PLAN" -> alibabaCodingPlanProvider.streamGenerateContent(
+                        apiKeyResultA.apiKey,
+                        modelA,
+                        requestA,
+                        settingsManager.getAlibabaMcpAuthorizationToken()
+                    )
                     else -> geminiProvider.streamGenerateContent(apiKeyResultA.apiKey, modelA, requestA)
                 }
                 is ApiKeyResult.Missing -> missingKeyStreamResponse(apiKeyResultA.providerId)
@@ -537,6 +586,13 @@ class ApiRepository(
                         }
                     }
                     "ZAI" -> zaiProvider.streamGenerateContent(apiKeyResultB.apiKey, modelB, requestB)
+                    "OPENCODE_GO" -> openCodeGoProvider.streamGenerateContent(apiKeyResultB.apiKey, modelB, requestB)
+                    "ALIBABA_CODING_PLAN" -> alibabaCodingPlanProvider.streamGenerateContent(
+                        apiKeyResultB.apiKey,
+                        modelB,
+                        requestB,
+                        settingsManager.getAlibabaMcpAuthorizationToken()
+                    )
                     else -> geminiProvider.streamGenerateContent(apiKeyResultB.apiKey, modelB, requestB)
                 }
                 is ApiKeyResult.Missing -> missingKeyStreamResponse(apiKeyResultB.providerId)
@@ -560,6 +616,8 @@ class ApiRepository(
                 provider,
                 when (provider) {
                     "OPENROUTER" -> settingsManager.getApiKey("OPENROUTER")
+                    "OPENCODE_GO" -> settingsManager.getApiKey("OPENCODE_GO")
+                    "ALIBABA_CODING_PLAN" -> settingsManager.getApiKey("ALIBABA_CODING_PLAN")
                     "OPENAI" -> settingsManager.getApiKey("OPENAI")
                     "MINIMAX" -> settingsManager.getApiKey("MINIMAX")
                     "OPENAI_COMPAT" -> settingsManager.getOpenAiCompatApiKey(settings?.selectedOpenAiCompatPreset)
@@ -612,6 +670,13 @@ class ApiRepository(
                 }
             }
             "ZAI" -> zaiProvider.generateContent(apiKey, model, request)
+            "OPENCODE_GO" -> openCodeGoProvider.generateContent(apiKey, model, request)
+            "ALIBABA_CODING_PLAN" -> alibabaCodingPlanProvider.generateContent(
+                apiKey,
+                model,
+                request,
+                settingsManager.getAlibabaMcpAuthorizationToken()
+            )
             else -> geminiProvider.generateContent(apiKey, model, request)
         }
     }
@@ -655,4 +720,10 @@ class ApiRepository(
     fun hasOpenAiCompatApiKey(name: String?): Boolean = settingsManager.hasOpenAiCompatApiKey(name)
 
     suspend fun clearOpenAiCompatApiKey(name: String) = settingsManager.clearOpenAiCompatApiKey(name)
+
+    suspend fun saveAlibabaMcpAuthorizationToken(token: String?): Boolean =
+        settingsManager.saveAlibabaMcpAuthorizationToken(token)
+
+    fun peekAlibabaMcpAuthorizationToken(): String? =
+        settingsManager.getAlibabaMcpAuthorizationToken()
 }

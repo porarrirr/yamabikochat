@@ -86,7 +86,8 @@ data class Tool(
     val url_context: UrlContext? = null,
     val google_maps: GoogleMaps? = null,
     val computer_use: ComputerUse? = null,
-    val function_declarations: List<FunctionDeclaration>? = null
+    val function_declarations: List<FunctionDeclaration>? = null,
+    val mcp_toolset: McpToolset? = null
 )
 
 @Serializable
@@ -122,6 +123,13 @@ data class FunctionDeclaration(
     val name: String,
     val description: String? = null,
     val parameters: JsonElement? = null
+)
+
+@Serializable
+data class McpToolset(
+    val serverUrl: String,
+    val serverName: String,
+    val allowedTools: List<String> = emptyList()
 )
 
 @Serializable

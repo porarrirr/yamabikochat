@@ -5,7 +5,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 object AppDatabaseMigrations {
     private const val LEGACY_TARGET_VERSION = 27
-    private const val LATEST_VERSION = 51
+    private const val LATEST_VERSION = 52
 
     private val legacyRebuildMigrations: List<Migration> = (1 until LEGACY_TARGET_VERSION).map { startVersion ->
         object : Migration(startVersion, LEGACY_TARGET_VERSION) {
@@ -366,6 +366,19 @@ object AppDatabaseMigrations {
         }
     }
 
+    private val migration51To52 = object : Migration(51, 52) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            ensureColumn(db, "settings", Column("alibabaMcpEnabled", "INTEGER", notNull = true, defaultValue = "0"))
+            ensureColumn(db, "settings", Column("alibabaMcpServerUrl", "TEXT", notNull = true, defaultValue = "''"))
+            ensureColumn(
+                db,
+                "settings",
+                Column("alibabaMcpServerName", "TEXT", notNull = true, defaultValue = "'firecrawl'")
+            )
+            ensureColumn(db, "settings", Column("alibabaMcpAllowedTools", "TEXT", notNull = true, defaultValue = "''"))
+        }
+    }
+
     val ALL_MIGRATIONS: Array<Migration> =
         (legacyRebuildMigrations + listOf(
             migration27To28,
@@ -391,7 +404,8 @@ object AppDatabaseMigrations {
             migration47To48,
             migration48To49,
             migration49To50,
-            migration50To51
+            migration50To51,
+            migration51To52
         )).toTypedArray()
 
     private fun rebuildSchema(db: SupportSQLiteDatabase) {
@@ -626,7 +640,11 @@ object AppDatabaseMigrations {
                 `openAiBaseUrl` TEXT NOT NULL DEFAULT 'https://api.openai.com/v1/',
                 `miniMaxBaseUrl` TEXT NOT NULL DEFAULT 'https://api.minimax.io/v1/',
                 `openAiCompatPresets` TEXT NOT NULL DEFAULT '',
-                `selectedOpenAiCompatPreset` TEXT
+                `selectedOpenAiCompatPreset` TEXT,
+                `alibabaMcpEnabled` INTEGER NOT NULL DEFAULT 0,
+                `alibabaMcpServerUrl` TEXT NOT NULL DEFAULT '',
+                `alibabaMcpServerName` TEXT NOT NULL DEFAULT 'firecrawl',
+                `alibabaMcpAllowedTools` TEXT NOT NULL DEFAULT ''
             )
             """.trimIndent()
         )
@@ -776,6 +794,10 @@ object AppDatabaseMigrations {
             Column("miniMaxBaseUrl", "TEXT", notNull = true, defaultValue = "'https://api.minimax.io/v1/'"),
             Column("openAiCompatPresets", "TEXT", notNull = true, defaultValue = "''"),
             Column("selectedOpenAiCompatPreset", "TEXT"),
+            Column("alibabaMcpEnabled", "INTEGER", notNull = true, defaultValue = "0"),
+            Column("alibabaMcpServerUrl", "TEXT", notNull = true, defaultValue = "''"),
+            Column("alibabaMcpServerName", "TEXT", notNull = true, defaultValue = "'firecrawl'"),
+            Column("alibabaMcpAllowedTools", "TEXT", notNull = true, defaultValue = "''"),
         )
         columns.forEach { ensureColumn(db, "settings", it) }
     }

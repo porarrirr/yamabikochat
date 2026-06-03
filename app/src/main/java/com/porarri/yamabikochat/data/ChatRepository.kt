@@ -310,6 +310,12 @@ class ChatRepository(
     suspend fun clearOpenAiCompatApiKey(name: String) = apiRepository.clearOpenAiCompatApiKey(name)
     // endregion
 
+    suspend fun saveAlibabaMcpAuthorizationToken(token: String?): Boolean =
+        apiRepository.saveAlibabaMcpAuthorizationToken(token)
+
+    fun peekAlibabaMcpAuthorizationToken(): String? =
+        apiRepository.peekAlibabaMcpAuthorizationToken()
+
     // region File processing delegation
     suspend fun validateFile(uri: Uri): FileValidationUtils.FileValidationResult =
         fileProcessingRepository.validateFile(uri)

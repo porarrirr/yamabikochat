@@ -29,7 +29,11 @@ import com.porarri.yamabikochat.data.auth.CodexRateLimitWindow
 import com.porarri.yamabikochat.data.auth.CodexUsageStatus
 import com.porarri.yamabikochat.data.local.ModelPreset
 import com.porarri.yamabikochat.data.local.SystemPromptPreset
+import com.porarri.yamabikochat.data.remote.AlibabaCodingPlanModelCatalog
+import com.porarri.yamabikochat.data.remote.OpenCodeGoEndpointKind
+import com.porarri.yamabikochat.data.remote.OpenCodeGoModelCatalog
 import com.porarri.yamabikochat.data.remote.OpenAiCompatPreset
+import com.porarri.yamabikochat.data.remote.ProviderCatalog
 import com.porarri.yamabikochat.data.remote.SimpleModel
 import com.porarri.yamabikochat.ui.components.YamabikoOption
 import com.porarri.yamabikochat.ui.components.YamabikoOptionBottomSheet
@@ -247,15 +251,9 @@ fun SettingsScreen(
                 SettingsSheet.ApiProvider -> {
                     YamabikoOptionBottomSheet(
                         title = "API Provider",
-                        options = listOf(
-                            YamabikoOption(key = "GEMINI", title = "Google Gemini"),
-                            YamabikoOption(key = "OPENROUTER", title = "OpenRouter"),
-                            YamabikoOption(key = "ZAI", title = "Z.ai"),
-                            YamabikoOption(key = "MINIMAX", title = "MiniMax"),
-                            YamabikoOption(key = "OPENAI", title = "OpenAI"),
-                            YamabikoOption(key = "CODEX_AUTH", title = "Codex Auth"),
-                            YamabikoOption(key = "OPENAI_COMPAT", title = "OpenAI (Custom)")
-                        ),
+                        options = ProviderCatalog.options.map {
+                            YamabikoOption(key = it.key, title = it.title)
+                        },
                         selectedKey = apiProvider,
                         onOptionSelected = { switchApiProvider(it.key) },
                         onDismissRequest = { activeSheet = null }
@@ -819,16 +817,7 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
-                    val providerLabel = when (apiProvider) {
-                        "GEMINI" -> "Google Gemini"
-                        "OPENROUTER" -> "OpenRouter"
-                        "MINIMAX" -> "MiniMax"
-                        "ZAI" -> "Z.ai"
-                        "OPENAI" -> "OpenAI"
-                        "CODEX_AUTH" -> "Codex Auth"
-                        "OPENAI_COMPAT" -> "OpenAI (Custom)"
-                        else -> "\u30B7\u30B9\u30C6\u30E0\u306B\u5F93\u3046"
-                    }
+                    val providerLabel = ProviderCatalog.displayName(apiProvider)
                     YamabikoSelectRow(
                         title = "API Provider",
                         value = providerLabel,
@@ -841,24 +830,24 @@ fun SettingsScreen(
         if (apiProvider != "CODEX_AUTH") {
             item {
                 Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Text(
-                        text = "APIキー",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                            text = "APIキー",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                        text = "APIキーは端末内の暗号化ストレージに保存されます。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = "APIキーは端末内の暗号化ストレージに保存されます。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         val isGeminiProvider = apiProvider == "GEMINI"
                         val isOpenRouterProvider = apiProvider == "OPENROUTER"
@@ -866,6 +855,8 @@ fun SettingsScreen(
                         val isMiniMaxProvider = apiProvider == "MINIMAX"
                         val isOpenAiCompatProvider = apiProvider == "OPENAI_COMPAT"
                         val isZaiProvider = apiProvider == "ZAI"
+                        val isOpenCodeGoProvider = apiProvider == "OPENCODE_GO"
+                        val isAlibabaCodingPlanProvider = apiProvider == "ALIBABA_CODING_PLAN"
                         val selectedCompatPreset = selectedOpenAiCompatPresetLocal
                         val hasStoredKey = when {
                             isGeminiProvider -> apiKeyStatus.hasGeminiKey
@@ -873,218 +864,308 @@ fun SettingsScreen(
                             isOpenAiProvider -> apiKeyStatus.hasOpenAiKey
                             isMiniMaxProvider -> apiKeyStatus.hasMiniMaxKey
                             isOpenAiCompatProvider -> viewModel.hasOpenAiCompatApiKey(selectedCompatPreset)
+                            isOpenCodeGoProvider -> apiKeyStatus.hasOpenCodeGoKey
+                            isAlibabaCodingPlanProvider -> apiKeyStatus.hasAlibabaCodingPlanKey
                             else -> apiKeyStatus.hasZaiKey
                         }
-                    val keyValue = when {
-                        isGeminiProvider -> apiKeyInput
-                        isOpenRouterProvider -> openRouterApiKeyInput
-                        isOpenAiProvider -> openAiApiKeyInput
-                        isMiniMaxProvider -> miniMaxApiKeyInput
-                        isOpenAiCompatProvider -> openAiCompatApiKeyInput
-                        else -> zaiApiKeyInput
-                    }
-                val keyVisible = when {
-                    isGeminiProvider -> geminiKeyVisible
-                    isOpenRouterProvider -> openRouterKeyVisible
-                    isOpenAiProvider -> openAiKeyVisible
-                    isMiniMaxProvider -> miniMaxKeyVisible
-                    isOpenAiCompatProvider -> openAiCompatKeyVisible
-                    else -> zaiKeyVisible
-                }
+                        val keyValue = when {
+                            isGeminiProvider -> apiKeyInput
+                            isOpenRouterProvider -> openRouterApiKeyInput
+                            isOpenAiProvider -> openAiApiKeyInput
+                            isMiniMaxProvider -> miniMaxApiKeyInput
+                            isOpenAiCompatProvider -> openAiCompatApiKeyInput
+                            isOpenCodeGoProvider -> openCodeGoApiKeyInput
+                            isAlibabaCodingPlanProvider -> alibabaCodingPlanApiKeyInput
+                            else -> zaiApiKeyInput
+                        }
+                        val keyVisible = when {
+                            isGeminiProvider -> geminiKeyVisible
+                            isOpenRouterProvider -> openRouterKeyVisible
+                            isOpenAiProvider -> openAiKeyVisible
+                            isMiniMaxProvider -> miniMaxKeyVisible
+                            isOpenAiCompatProvider -> openAiCompatKeyVisible
+                            isOpenCodeGoProvider -> openCodeGoKeyVisible
+                            isAlibabaCodingPlanProvider -> alibabaCodingPlanKeyVisible
+                            else -> zaiKeyVisible
+                        }
+                        val keyLabel = when {
+                            isGeminiProvider -> "Gemini API Key"
+                            isOpenRouterProvider -> "OpenRouter API Key"
+                            isOpenAiProvider -> "OpenAI API Key"
+                            isMiniMaxProvider -> "MiniMax API Key"
+                            isOpenAiCompatProvider -> "OpenAI (Custom) API Key"
+                            isOpenCodeGoProvider -> "OpenCode Go API Key"
+                            isAlibabaCodingPlanProvider -> "Alibaba Coding Plan API Key"
+                            else -> "Z.ai API Key"
+                        }
+                        val savedKeyPlaceholder = when {
+                            isGeminiProvider -> "保存済みのGemini APIキーを使用中（表示するにはアイコンをタップ）"
+                            isOpenRouterProvider -> "保存済みのOpenRouter APIキーを使用中（表示するにはアイコンをタップ）"
+                            isOpenAiProvider -> "保存済みのOpenAI APIキーを使用中（表示するにはアイコンをタップ）"
+                            isMiniMaxProvider -> "保存済みのMiniMax APIキーを使用中（表示するにはアイコンをタップ）"
+                            isOpenAiCompatProvider -> "保存済みのOpenAI (Custom) APIキーを使用中（表示するにはアイコンをタップ）"
+                            isOpenCodeGoProvider -> "保存済みのOpenCode Go APIキーを使用中（表示するにはアイコンをタップ）"
+                            isAlibabaCodingPlanProvider -> "保存済みのAlibaba Coding Plan APIキーを使用中（表示するにはアイコンをタップ）"
+                            else -> "保存済みのZ.ai APIキーを使用中（表示するにはアイコンをタップ）"
+                        }
 
-            YamabikoTextField(
-            value = keyValue,
-            onValueChange = {
-                when {
-                    isGeminiProvider -> { apiKeyInput = it; geminiKeyDirty = true; geminiKeyLoadedFromStorage = false; geminiKeyVisible = true }
-                    isOpenRouterProvider -> { openRouterApiKeyInput = it; openRouterKeyDirty = true; openRouterKeyLoadedFromStorage = false; openRouterKeyVisible = true }
-                    isOpenAiProvider -> { openAiApiKeyInput = it; openAiKeyDirty = true; openAiKeyLoadedFromStorage = false; openAiKeyVisible = true }
-                    isMiniMaxProvider -> { miniMaxApiKeyInput = it; miniMaxKeyDirty = true; miniMaxKeyLoadedFromStorage = false; miniMaxKeyVisible = true }
-                    isOpenAiCompatProvider -> { openAiCompatApiKeyInput = it; openAiCompatKeyDirty = true; openAiCompatKeyLoadedFromStorage = false; openAiCompatKeyVisible = true }
-                    else -> { zaiApiKeyInput = it; zaiKeyDirty = true; zaiKeyLoadedFromStorage = false; zaiKeyVisible = true }
-                }
-        },
-        label = {
-            Text(
-            when {
-                isGeminiProvider -> "Gemini API Key"
-                isOpenRouterProvider -> "OpenRouter API Key"
-                isOpenAiProvider -> "OpenAI API Key"
-                isMiniMaxProvider -> "MiniMax API Key"
-                isOpenAiCompatProvider -> "OpenAI (Custom) API Key"
-                else -> "\u30B7\u30B9\u30C6\u30E0\u306B\u5F93\u3046"
-            }
-        )
-        },
-        placeholder = {
-            if (hasStoredKey && keyValue.isEmpty()) {
-                Text(
-                when {
-                    isGeminiProvider -> "保存済みのGemini APIキーを使用中（表示するにはアイコンをタップ）"
-                    isOpenRouterProvider -> "保存済みのOpenRouter APIキーを使用中（表示するにはアイコンをタップ）"
-                    isOpenAiProvider -> "保存済みのOpenAI APIキーを使用中（表示するにはアイコンをタップ）"
-                    isMiniMaxProvider -> "保存済みのMiniMax APIキーを使用中（表示するにはアイコンをタップ）"
-                    isOpenAiCompatProvider -> "保存済みのOpenAI (Custom) APIキーを使用中（表示するにはアイコンをタップ）"
-                    else -> "\u30B7\u30B9\u30C6\u30E0\u306B\u5F93\u3046"
-                }
-            )
-        } else {
-        Text("APIキーを入力")
-        }
-        },
-        singleLine = true,
-        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            if (hasStoredKey || keyValue.isNotEmpty()) {
-                IconButton(onClick = {
-                    coroutineScope.launch {
-                        when {
-                            isGeminiProvider -> {
-                                if (geminiKeyVisible) {
-                                    if (geminiKeyLoadedFromStorage) {
-                                        apiKeyInput = ""
+                        YamabikoTextField(
+                            value = keyValue,
+                            onValueChange = {
+                                when {
+                                    isGeminiProvider -> {
+                                        apiKeyInput = it
+                                        geminiKeyDirty = true
                                         geminiKeyLoadedFromStorage = false
-                                        geminiKeyDirty = false
+                                        geminiKeyVisible = true
                                     }
-                                geminiKeyVisible = false
-                            } else {
-                            if (hasStoredKey && apiKeyInput.isBlank()) {
-                                val revealed = viewModel.revealApiKey("GEMINI")
-                                apiKeyInput = revealed.orEmpty()
-                                geminiKeyLoadedFromStorage = !revealed.isNullOrEmpty()
-                                geminiKeyDirty = false
-                            }
-                        geminiKeyVisible = true
-                    }
-            }
-        isOpenRouterProvider -> {
-            if (openRouterKeyVisible) {
-                if (openRouterKeyLoadedFromStorage) {
-                    openRouterApiKeyInput = ""
-                    openRouterKeyLoadedFromStorage = false
-                    openRouterKeyDirty = false
-                }
-            openRouterKeyVisible = false
-        } else {
-        if (hasStoredKey && openRouterApiKeyInput.isBlank()) {
-            val revealed = viewModel.revealApiKey("OPENROUTER")
-            openRouterApiKeyInput = revealed.orEmpty()
-            openRouterKeyLoadedFromStorage = !revealed.isNullOrEmpty()
-            openRouterKeyDirty = false
-        }
-        openRouterKeyVisible = true
-        }
-        }
-        isOpenAiProvider -> {
-            if (openAiKeyVisible) {
-                if (openAiKeyLoadedFromStorage) {
-                    openAiApiKeyInput = ""
-                    openAiKeyLoadedFromStorage = false
-                    openAiKeyDirty = false
-                }
-            openAiKeyVisible = false
-        } else {
-        if (hasStoredKey && openAiApiKeyInput.isBlank()) {
-            val revealed = viewModel.revealApiKey("OPENAI")
-            openAiApiKeyInput = revealed.orEmpty()
-            openAiKeyLoadedFromStorage = !revealed.isNullOrEmpty()
-            openAiKeyDirty = false
-        }
-        openAiKeyVisible = true
-        }
-        }
-        isMiniMaxProvider -> {
-            if (miniMaxKeyVisible) {
-                if (miniMaxKeyLoadedFromStorage) {
-                    miniMaxApiKeyInput = ""
-                    miniMaxKeyLoadedFromStorage = false
-                    miniMaxKeyDirty = false
-                }
-            miniMaxKeyVisible = false
-        } else {
-        if (hasStoredKey && miniMaxApiKeyInput.isBlank()) {
-            val revealed = viewModel.revealApiKey("MINIMAX")
-            miniMaxApiKeyInput = revealed.orEmpty()
-            miniMaxKeyLoadedFromStorage = !revealed.isNullOrEmpty()
-            miniMaxKeyDirty = false
-        }
-        miniMaxKeyVisible = true
-        }
-        }
-        isOpenAiCompatProvider -> {
-            val presetName = selectedCompatPreset
-            if (presetName.isNullOrBlank()) return@launch
-            if (openAiCompatKeyVisible) {
-                if (openAiCompatKeyLoadedFromStorage) {
-                    openAiCompatApiKeyInput = ""
-                    openAiCompatKeyLoadedFromStorage = false
-                    openAiCompatKeyDirty = false
-                }
-            openAiCompatKeyVisible = false
-        } else {
-        if (hasStoredKey && openAiCompatApiKeyInput.isBlank()) {
-            val revealed = viewModel.revealOpenAiCompatApiKey(presetName)
-            openAiCompatApiKeyInput = revealed.orEmpty()
-            openAiCompatKeyLoadedFromStorage = !revealed.isNullOrEmpty()
-            openAiCompatKeyDirty = false
-        }
-        openAiCompatKeyVisible = true
-        }
-        }
-        else -> {
-            if (zaiKeyVisible) {
-                if (zaiKeyLoadedFromStorage) {
-                    zaiApiKeyInput = ""
-                    zaiKeyLoadedFromStorage = false
-                    zaiKeyDirty = false
-                }
-            zaiKeyVisible = false
-        } else {
-        if (hasStoredKey && zaiApiKeyInput.isBlank()) {
-            val revealed = viewModel.revealApiKey("ZAI")
-            zaiApiKeyInput = revealed.orEmpty()
-            zaiKeyLoadedFromStorage = !revealed.isNullOrEmpty()
-            zaiKeyDirty = false
-        }
-        zaiKeyVisible = true
-        }
-        }
-        }
-        }
-        }) {
-        Icon(
-        imageVector = if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-        contentDescription = null
-        )
-        }
-        }
-        },
-        modifier = Modifier.fillMaxWidth()
-        )
+                                    isOpenRouterProvider -> {
+                                        openRouterApiKeyInput = it
+                                        openRouterKeyDirty = true
+                                        openRouterKeyLoadedFromStorage = false
+                                        openRouterKeyVisible = true
+                                    }
+                                    isOpenAiProvider -> {
+                                        openAiApiKeyInput = it
+                                        openAiKeyDirty = true
+                                        openAiKeyLoadedFromStorage = false
+                                        openAiKeyVisible = true
+                                    }
+                                    isMiniMaxProvider -> {
+                                        miniMaxApiKeyInput = it
+                                        miniMaxKeyDirty = true
+                                        miniMaxKeyLoadedFromStorage = false
+                                        miniMaxKeyVisible = true
+                                    }
+                                    isOpenAiCompatProvider -> {
+                                        openAiCompatApiKeyInput = it
+                                        openAiCompatKeyDirty = true
+                                        openAiCompatKeyLoadedFromStorage = false
+                                        openAiCompatKeyVisible = true
+                                    }
+                                    isOpenCodeGoProvider -> {
+                                        openCodeGoApiKeyInput = it
+                                        openCodeGoKeyDirty = true
+                                        openCodeGoKeyLoadedFromStorage = false
+                                        openCodeGoKeyVisible = true
+                                    }
+                                    isAlibabaCodingPlanProvider -> {
+                                        alibabaCodingPlanApiKeyInput = it
+                                        alibabaCodingPlanKeyDirty = true
+                                        alibabaCodingPlanKeyLoadedFromStorage = false
+                                        alibabaCodingPlanKeyVisible = true
+                                    }
+                                    else -> {
+                                        zaiApiKeyInput = it
+                                        zaiKeyDirty = true
+                                        zaiKeyLoadedFromStorage = false
+                                        zaiKeyVisible = true
+                                    }
+                                }
+                            },
+                            label = { Text(keyLabel) },
+                            placeholder = {
+                                Text(
+                                    if (hasStoredKey && keyValue.isEmpty()) {
+                                        savedKeyPlaceholder
+                                    } else {
+                                        "APIキーを入力"
+                                    }
+                                )
+                            },
+                            singleLine = true,
+                            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                if (hasStoredKey || keyValue.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                when {
+                                                    isGeminiProvider -> {
+                                                        if (geminiKeyVisible) {
+                                                            if (geminiKeyLoadedFromStorage) {
+                                                                apiKeyInput = ""
+                                                                geminiKeyLoadedFromStorage = false
+                                                                geminiKeyDirty = false
+                                                            }
+                                                            geminiKeyVisible = false
+                                                        } else {
+                                                            if (hasStoredKey && apiKeyInput.isBlank()) {
+                                                                val revealed = viewModel.revealApiKey("GEMINI")
+                                                                apiKeyInput = revealed.orEmpty()
+                                                                geminiKeyLoadedFromStorage = !revealed.isNullOrEmpty()
+                                                                geminiKeyDirty = false
+                                                            }
+                                                            geminiKeyVisible = true
+                                                        }
+                                                    }
+                                                    isOpenRouterProvider -> {
+                                                        if (openRouterKeyVisible) {
+                                                            if (openRouterKeyLoadedFromStorage) {
+                                                                openRouterApiKeyInput = ""
+                                                                openRouterKeyLoadedFromStorage = false
+                                                                openRouterKeyDirty = false
+                                                            }
+                                                            openRouterKeyVisible = false
+                                                        } else {
+                                                            if (hasStoredKey && openRouterApiKeyInput.isBlank()) {
+                                                                val revealed = viewModel.revealApiKey("OPENROUTER")
+                                                                openRouterApiKeyInput = revealed.orEmpty()
+                                                                openRouterKeyLoadedFromStorage = !revealed.isNullOrEmpty()
+                                                                openRouterKeyDirty = false
+                                                            }
+                                                            openRouterKeyVisible = true
+                                                        }
+                                                    }
+                                                    isOpenAiProvider -> {
+                                                        if (openAiKeyVisible) {
+                                                            if (openAiKeyLoadedFromStorage) {
+                                                                openAiApiKeyInput = ""
+                                                                openAiKeyLoadedFromStorage = false
+                                                                openAiKeyDirty = false
+                                                            }
+                                                            openAiKeyVisible = false
+                                                        } else {
+                                                            if (hasStoredKey && openAiApiKeyInput.isBlank()) {
+                                                                val revealed = viewModel.revealApiKey("OPENAI")
+                                                                openAiApiKeyInput = revealed.orEmpty()
+                                                                openAiKeyLoadedFromStorage = !revealed.isNullOrEmpty()
+                                                                openAiKeyDirty = false
+                                                            }
+                                                            openAiKeyVisible = true
+                                                        }
+                                                    }
+                                                    isMiniMaxProvider -> {
+                                                        if (miniMaxKeyVisible) {
+                                                            if (miniMaxKeyLoadedFromStorage) {
+                                                                miniMaxApiKeyInput = ""
+                                                                miniMaxKeyLoadedFromStorage = false
+                                                                miniMaxKeyDirty = false
+                                                            }
+                                                            miniMaxKeyVisible = false
+                                                        } else {
+                                                            if (hasStoredKey && miniMaxApiKeyInput.isBlank()) {
+                                                                val revealed = viewModel.revealApiKey("MINIMAX")
+                                                                miniMaxApiKeyInput = revealed.orEmpty()
+                                                                miniMaxKeyLoadedFromStorage = !revealed.isNullOrEmpty()
+                                                                miniMaxKeyDirty = false
+                                                            }
+                                                            miniMaxKeyVisible = true
+                                                        }
+                                                    }
+                                                    isOpenAiCompatProvider -> {
+                                                        val presetName = selectedCompatPreset
+                                                        if (presetName.isNullOrBlank()) return@launch
+                                                        if (openAiCompatKeyVisible) {
+                                                            if (openAiCompatKeyLoadedFromStorage) {
+                                                                openAiCompatApiKeyInput = ""
+                                                                openAiCompatKeyLoadedFromStorage = false
+                                                                openAiCompatKeyDirty = false
+                                                            }
+                                                            openAiCompatKeyVisible = false
+                                                        } else {
+                                                            if (hasStoredKey && openAiCompatApiKeyInput.isBlank()) {
+                                                                val revealed = viewModel.revealOpenAiCompatApiKey(presetName)
+                                                                openAiCompatApiKeyInput = revealed.orEmpty()
+                                                                openAiCompatKeyLoadedFromStorage = !revealed.isNullOrEmpty()
+                                                                openAiCompatKeyDirty = false
+                                                            }
+                                                            openAiCompatKeyVisible = true
+                                                        }
+                                                    }
+                                                    isOpenCodeGoProvider -> {
+                                                        if (openCodeGoKeyVisible) {
+                                                            if (openCodeGoKeyLoadedFromStorage) {
+                                                                openCodeGoApiKeyInput = ""
+                                                                openCodeGoKeyLoadedFromStorage = false
+                                                                openCodeGoKeyDirty = false
+                                                            }
+                                                            openCodeGoKeyVisible = false
+                                                        } else {
+                                                            if (hasStoredKey && openCodeGoApiKeyInput.isBlank()) {
+                                                                val revealed = viewModel.revealApiKey("OPENCODE_GO")
+                                                                openCodeGoApiKeyInput = revealed.orEmpty()
+                                                                openCodeGoKeyLoadedFromStorage = !revealed.isNullOrEmpty()
+                                                                openCodeGoKeyDirty = false
+                                                            }
+                                                            openCodeGoKeyVisible = true
+                                                        }
+                                                    }
+                                                    isAlibabaCodingPlanProvider -> {
+                                                        if (alibabaCodingPlanKeyVisible) {
+                                                            if (alibabaCodingPlanKeyLoadedFromStorage) {
+                                                                alibabaCodingPlanApiKeyInput = ""
+                                                                alibabaCodingPlanKeyLoadedFromStorage = false
+                                                                alibabaCodingPlanKeyDirty = false
+                                                            }
+                                                            alibabaCodingPlanKeyVisible = false
+                                                        } else {
+                                                            if (hasStoredKey && alibabaCodingPlanApiKeyInput.isBlank()) {
+                                                                val revealed = viewModel.revealApiKey("ALIBABA_CODING_PLAN")
+                                                                alibabaCodingPlanApiKeyInput = revealed.orEmpty()
+                                                                alibabaCodingPlanKeyLoadedFromStorage = !revealed.isNullOrEmpty()
+                                                                alibabaCodingPlanKeyDirty = false
+                                                            }
+                                                            alibabaCodingPlanKeyVisible = true
+                                                        }
+                                                    }
+                                                    else -> {
+                                                        if (zaiKeyVisible) {
+                                                            if (zaiKeyLoadedFromStorage) {
+                                                                zaiApiKeyInput = ""
+                                                                zaiKeyLoadedFromStorage = false
+                                                                zaiKeyDirty = false
+                                                            }
+                                                            zaiKeyVisible = false
+                                                        } else {
+                                                            if (hasStoredKey && zaiApiKeyInput.isBlank()) {
+                                                                val revealed = viewModel.revealApiKey("ZAI")
+                                                                zaiApiKeyInput = revealed.orEmpty()
+                                                                zaiKeyLoadedFromStorage = !revealed.isNullOrEmpty()
+                                                                zaiKeyDirty = false
+                                                            }
+                                                            zaiKeyVisible = true
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = null
+                                        )
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
 
-        if (hasStoredKey) {
-            TextButton(
-            onClick = {
-                when {
-                    isGeminiProvider -> viewModel.clearApiKey("GEMINI")
-                    isOpenRouterProvider -> viewModel.clearApiKey("OPENROUTER")
-                    isOpenAiProvider -> viewModel.clearApiKey("OPENAI")
-                    isMiniMaxProvider -> viewModel.clearApiKey("MINIMAX")
-                    isOpenAiCompatProvider -> {
-                        val presetName = selectedCompatPreset
-                        if (presetName != null) viewModel.clearOpenAiCompatApiKey(presetName)
+                        if (hasStoredKey) {
+                            TextButton(
+                                onClick = {
+                                    when {
+                                        isGeminiProvider -> viewModel.clearApiKey("GEMINI")
+                                        isOpenRouterProvider -> viewModel.clearApiKey("OPENROUTER")
+                                        isOpenAiProvider -> viewModel.clearApiKey("OPENAI")
+                                        isMiniMaxProvider -> viewModel.clearApiKey("MINIMAX")
+                                        isOpenAiCompatProvider -> {
+                                            val presetName = selectedCompatPreset
+                                            if (presetName != null) viewModel.clearOpenAiCompatApiKey(presetName)
+                                        }
+                                        isOpenCodeGoProvider -> viewModel.clearApiKey("OPENCODE_GO")
+                                        isAlibabaCodingPlanProvider -> viewModel.clearApiKey("ALIBABA_CODING_PLAN")
+                                        else -> viewModel.clearApiKey("ZAI")
+                                    }
+                                },
+                                modifier = Modifier.align(Alignment.End)
+                            ) {
+                                Text("保存済みキーを削除")
+                            }
+                        }
                     }
-                else -> viewModel.clearApiKey("ZAI")
+                }
             }
-        },
-        modifier = Modifier.align(Alignment.End)
-        ) {
-            Text("保存済みキーを削除")
-        }
-        }
-        }
-        }
-        }
         }
         if (apiProvider == "OPENAI") {
             item {
@@ -1236,6 +1317,186 @@ fun SettingsScreen(
                 }
             }
         }
+        if (apiProvider == "OPENCODE_GO") {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "OpenCode Go",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        LabeledValueBlock(
+                            label = "Endpoint",
+                            value = ProviderCatalog.defaultOpenCodeGoBaseUrl
+                        )
+                        Text(
+                            text = "MiniMax M2.7/M2.5 と Qwen3.5/3.6 Plus、Qwen3.7 Max は /messages、それ以外の公式 Go モデルは /chat/completions に送信します。未掲載モデルは endpoint を安全に判定できないため、実行時に明示エラーで停止します。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+        if (apiProvider == "ALIBABA_CODING_PLAN") {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "Alibaba Coding Plan",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        LabeledValueBlock(
+                            label = "Base URL",
+                            value = ProviderCatalog.defaultAlibabaCodingPlanBaseUrl
+                        )
+                        Text(
+                            text = "Coding Plan 専用キーは sk-sp- で始まります。Android版は Anthropic 互換の /v1/messages を固定 URL で使います。MCP は remote HTTPS server のみ対応し、stdio MCP はアプリ内では利用できません。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        SettingsToggleRow(
+                            title = "Remote MCP",
+                            description = "Alibaba Coding Plan に remote MCP server を渡します",
+                            checked = alibabaMcpEnabled,
+                            onCheckedChange = { alibabaMcpEnabled = it },
+                            leadingContent = { Icon(Icons.Default.Extension, contentDescription = null) }
+                        )
+                        if (alibabaMcpEnabled) {
+                            YamabikoTextField(
+                                value = alibabaMcpServerUrl,
+                                onValueChange = { alibabaMcpServerUrl = it },
+                                label = { Text("MCP Server URL") },
+                                placeholder = { Text("https://...") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                            YamabikoTextField(
+                                value = alibabaMcpServerName,
+                                onValueChange = { alibabaMcpServerName = it },
+                                label = { Text("MCP Server Name") },
+                                placeholder = { Text(ProviderCatalog.alibabaMcpDefaultServerName) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                            YamabikoTextField(
+                                value = alibabaMcpAuthorizationTokenInput,
+                                onValueChange = {
+                                    alibabaMcpAuthorizationTokenInput = it
+                                    alibabaMcpTokenDirty = true
+                                    alibabaMcpTokenLoadedFromStorage = false
+                                    alibabaMcpTokenVisible = true
+                                },
+                                label = { Text("Authorization Token (optional)") },
+                                placeholder = {
+                                    if (apiKeyStatus.hasAlibabaMcpAuthorizationToken &&
+                                        alibabaMcpAuthorizationTokenInput.isEmpty()
+                                    ) {
+                                        Text("保存済みトークンを使用中（表示するにはアイコンをタップ）")
+                                    } else {
+                                        Text("Bearer token if required")
+                                    }
+                                },
+                                singleLine = true,
+                                visualTransformation = if (alibabaMcpTokenVisible) {
+                                    VisualTransformation.None
+                                } else {
+                                    PasswordVisualTransformation()
+                                },
+                                trailingIcon = {
+                                    if (apiKeyStatus.hasAlibabaMcpAuthorizationToken ||
+                                        alibabaMcpAuthorizationTokenInput.isNotEmpty()
+                                    ) {
+                                        IconButton(onClick = {
+                                            coroutineScope.launch {
+                                                if (alibabaMcpTokenVisible) {
+                                                    if (alibabaMcpTokenLoadedFromStorage) {
+                                                        alibabaMcpAuthorizationTokenInput = ""
+                                                        alibabaMcpTokenLoadedFromStorage = false
+                                                        alibabaMcpTokenDirty = false
+                                                    }
+                                                    alibabaMcpTokenVisible = false
+                                                } else {
+                                                    if (apiKeyStatus.hasAlibabaMcpAuthorizationToken &&
+                                                        alibabaMcpAuthorizationTokenInput.isBlank()
+                                                    ) {
+                                                        val revealed = viewModel.revealAlibabaMcpAuthorizationToken()
+                                                        alibabaMcpAuthorizationTokenInput = revealed.orEmpty()
+                                                        alibabaMcpTokenLoadedFromStorage = !revealed.isNullOrEmpty()
+                                                        alibabaMcpTokenDirty = false
+                                                    }
+                                                    alibabaMcpTokenVisible = true
+                                                }
+                                            }
+                                        }) {
+                                            Icon(
+                                                imageVector = if (alibabaMcpTokenVisible) {
+                                                    Icons.Default.VisibilityOff
+                                                } else {
+                                                    Icons.Default.Visibility
+                                                },
+                                                contentDescription = null
+                                            )
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            YamabikoTextField(
+                                value = alibabaMcpAllowedTools,
+                                onValueChange = { alibabaMcpAllowedTools = it },
+                                label = { Text("Allowed tools (optional)") },
+                                placeholder = { Text("search, scrape") },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 2,
+                                maxLines = 4
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = {
+                                    alibabaMcpServerName = ProviderCatalog.alibabaMcpDefaultServerName
+                                    if (alibabaMcpServerUrl.isBlank()) {
+                                        alibabaMcpServerUrl = ProviderCatalog.firecrawlRemoteMcpUrlTemplate
+                                    }
+                                }) {
+                                    Text("Firecrawl テンプレート")
+                                }
+                                TextButton(onClick = {
+                                    alibabaMcpAuthorizationTokenInput = ""
+                                    alibabaMcpTokenDirty = true
+                                    alibabaMcpTokenLoadedFromStorage = false
+                                    alibabaMcpTokenVisible = false
+                                }) {
+                                    Text("保存済みトークンを削除")
+                                }
+                            }
+                            Text(
+                                text = "ツール名を空欄にするとサーバーが公開する全ツールを許可し、指定するとそのツールだけ有効化します。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1290,6 +1551,84 @@ fun SettingsScreen(
                                 label = { Text("Custom Model ID") },
                                 placeholder = { Text(CodexModelPresets.defaultModel()) },
                                 supportingText = { Text("Type a model id to use a custom Codex model.") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
+                        "ALIBABA_CODING_PLAN" -> {
+                            val selectedModel = model.ifBlank { AlibabaCodingPlanModelCatalog.defaultModel }
+                            var showAlibabaModelSheet by remember { mutableStateOf(false) }
+                            YamabikoSelectRow(
+                                title = "Alibaba Model",
+                                value = selectedModel,
+                                onClick = { showAlibabaModelSheet = true }
+                            )
+                            if (showAlibabaModelSheet) {
+                                YamabikoOptionBottomSheet(
+                                    title = "Alibaba Model",
+                                    options = AlibabaCodingPlanModelCatalog.supportedModels.map {
+                                        YamabikoOption(key = it, title = it)
+                                    },
+                                    selectedKey = selectedModel,
+                                    onOptionSelected = { option -> model = option.key },
+                                    onDismissRequest = { showAlibabaModelSheet = false }
+                                )
+                            }
+                            YamabikoTextField(
+                                value = model,
+                                onValueChange = { model = it },
+                                label = { Text("Model") },
+                                placeholder = { Text(AlibabaCodingPlanModelCatalog.defaultModel) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
+                        "OPENCODE_GO" -> {
+                            val selectedModel = OpenCodeGoModelCatalog.modelFor(model)
+                            var showOpenCodeGoModelSheet by remember { mutableStateOf(false) }
+                            YamabikoSelectRow(
+                                title = "OpenCode Go Model",
+                                value = selectedModel?.displayName ?: model.ifBlank { OpenCodeGoModelCatalog.defaultModel },
+                                onClick = { showOpenCodeGoModelSheet = true }
+                            )
+                            if (showOpenCodeGoModelSheet) {
+                                YamabikoOptionBottomSheet(
+                                    title = "OpenCode Go Model",
+                                    options = OpenCodeGoModelCatalog.supportedModels.map { option ->
+                                        val endpoint = when (option.endpointKind) {
+                                            OpenCodeGoEndpointKind.CHAT_COMPLETIONS -> "chat/completions"
+                                            OpenCodeGoEndpointKind.MESSAGES -> "messages"
+                                        }
+                                        YamabikoOption(
+                                            key = option.id,
+                                            title = option.displayName,
+                                            subtitle = endpoint
+                                        )
+                                    },
+                                    selectedKey = selectedModel?.id ?: model,
+                                    onOptionSelected = { option -> model = option.key },
+                                    onDismissRequest = { showOpenCodeGoModelSheet = false }
+                                )
+                            }
+                            selectedModel?.let { selected ->
+                                val endpoint = when (selected.endpointKind) {
+                                    OpenCodeGoEndpointKind.CHAT_COMPLETIONS -> "/chat/completions"
+                                    OpenCodeGoEndpointKind.MESSAGES -> "/messages"
+                                }
+                                Text(
+                                    text = "Endpoint: $endpoint",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            YamabikoTextField(
+                                value = model,
+                                onValueChange = { model = it },
+                                label = { Text("Model") },
+                                placeholder = { Text(OpenCodeGoModelCatalog.defaultModel) },
+                                supportingText = {
+                                    Text("未掲載モデルは endpoint を安全に判定できないため、実行時に明示エラーで停止します。")
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true
                             )
@@ -1651,8 +1990,7 @@ fun SettingsScreen(
                 val thinkingLabel = when (apiProvider) {
                     "OPENROUTER" -> "Reasoning"
                     "ZAI" -> "Deep Thinking"
-                    "GEMINI" -> "Thinking"
-                    else -> "\u30B7\u30B9\u30C6\u30E0\u306B\u5F93\u3046"
+                    else -> "Thinking"
                 }
                 val isGeminiThinkingLevel = (apiProvider == "GEMINI") &&
                     ModelUtils.isThinkingLevelSupported(model)
@@ -1801,16 +2139,7 @@ fun SettingsScreen(
                         checked = isStreamingEnabled,
                         onCheckedChange = { isStreamingEnabled = it }
                     )
-                    val providerLabel = when (apiProvider) {
-                        "GEMINI" -> "Google Gemini"
-                        "OPENROUTER" -> "OpenRouter"
-                        "MINIMAX" -> "MiniMax"
-                        "ZAI" -> "Z.ai"
-                        "OPENAI" -> "OpenAI"
-                        "CODEX_AUTH" -> "Codex Auth"
-                        "OPENAI_COMPAT" -> "OpenAI (Custom)"
-                        else -> apiProvider
-                    }
+                    val providerLabel = ProviderCatalog.displayName(apiProvider)
                     val providerKey = apiProvider.uppercase()
                     val showGlobalPresetsForProvider =
                         showGlobalProviderPresetsInChatByProvider[providerKey] ?: showGlobalProviderPresetsInChat

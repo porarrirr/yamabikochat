@@ -69,6 +69,7 @@ import com.porarri.yamabikochat.MyApplication
 import com.porarri.yamabikochat.data.local.ConversationListEntry
 import com.porarri.yamabikochat.data.local.ConversationSearchResult
 import com.porarri.yamabikochat.data.local.ProjectListEntry
+import com.porarri.yamabikochat.data.remote.ProviderCatalog
 import com.porarri.yamabikochat.ui.components.YamabikoTextField
 import com.porarri.yamabikochat.ui.preview.YamabikoPreview
 import kotlinx.coroutines.launch
@@ -934,16 +935,7 @@ private fun formatProviderModel(provider: String?, model: String?): String {
 }
 
 private fun providerDisplayName(provider: String?): String {
-    return when (provider?.uppercase()) {
-        "GEMINI" -> "Google Gemini"
-        "OPENROUTER" -> "OpenRouter"
-        "MINIMAX" -> "MiniMax"
-        "OPENAI" -> "OpenAI"
-        "CODEX_AUTH" -> "Codex Auth"
-        "OPENAI_COMPAT" -> "OpenAI (Custom)"
-        "ZAI" -> "Z.ai"
-        else -> provider?.uppercase().orEmpty()
-    }
+    return ProviderCatalog.displayName(provider)
 }
 
 private fun formatRelativeTime(timestamp: Long, now: Long = System.currentTimeMillis()): String {

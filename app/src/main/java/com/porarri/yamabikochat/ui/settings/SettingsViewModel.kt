@@ -27,6 +27,14 @@ private const val OPENROUTER_RECENT_LIMIT = 5
 private const val TOKEN_STATS_RANGE_DAYS = 30L
 private const val TOKEN_STATS_MODEL_LIMIT = 12
 
+private fun normalizeCsvLines(raw: String): String =
+    raw.lineSequence()
+        .flatMap { it.split(",").asSequence() }
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinctBy { it.lowercase() }
+        .joinToString(", ")
+
 class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
 
     val settings: StateFlow<Settings?> = repository.getSettings()
@@ -153,6 +161,10 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
         repository.peekApiKey(provider)
     }
 
+    suspend fun revealAlibabaMcpAuthorizationToken(): String? = withContext(Dispatchers.IO) {
+        repository.peekAlibabaMcpAuthorizationToken()
+    }
+
     fun clearApiKey(provider: String) {
         viewModelScope.launch {
             val success = repository.saveApiKey(provider, null)
@@ -170,6 +182,9 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
             hasOpenAiKey = repository.hasApiKey("OPENAI"),
             hasMiniMaxKey = repository.hasApiKey("MINIMAX"),
             hasZaiKey = repository.hasApiKey("ZAI"),
+            hasOpenCodeGoKey = repository.hasApiKey("OPENCODE_GO"),
+            hasAlibabaCodingPlanKey = repository.hasApiKey("ALIBABA_CODING_PLAN"),
+            hasAlibabaMcpAuthorizationToken = !repository.peekAlibabaMcpAuthorizationToken().isNullOrBlank(),
             hasCodexAuth = repository.hasCodexAuth()
         )
     }
@@ -228,9 +243,17 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
                 openAiCompatPresets = compatJson,
                 selectedOpenAiCompatPreset = request.selectedOpenAiCompatPreset
                     ?: updatedSettingsBase.selectedOpenAiCompatPreset,
+                alibabaMcpEnabled = request.alibabaMcpEnabled,
+                alibabaMcpServerUrl = request.alibabaMcpServerUrl.trim(),
+                alibabaMcpServerName = request.alibabaMcpServerName.trim().ifBlank { "firecrawl" },
+                alibabaMcpAllowedTools = normalizeCsvLines(request.alibabaMcpAllowedTools),
                 systemPromptPresets = systemPromptPresetsJson,
                 selectedSystemPromptPreset = selectedSystemPromptPreset
             )
+            if (updatedSettings.alibabaMcpEnabled && updatedSettings.resolvedAlibabaMcpServerUrl() == null) {
+                _secureStorageError.value = "Alibaba MCP の URL には有効な https:// URL を入力してください。"
+                return@launch
+            }
 
             val previousProvider = currentSettings.apiProvider
             val previousProviderModel = currentSettings.getModelForProvider(previousProvider)
@@ -263,6 +286,21 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
                 ApiKeyAction.NoChange -> true
             }
 
+            val openCodeGoSaveResult = when (request.openCodeGoApiKeyAction) {
+                ApiKeyAction.Update -> repository.saveApiKey("OPENCODE_GO", request.openCodeGoApiKey.ifBlank { null })
+                ApiKeyAction.Clear -> repository.saveApiKey("OPENCODE_GO", null)
+                ApiKeyAction.NoChange -> true
+            }
+
+            val alibabaCodingPlanSaveResult = when (request.alibabaCodingPlanApiKeyAction) {
+                ApiKeyAction.Update -> repository.saveApiKey(
+                    "ALIBABA_CODING_PLAN",
+                    request.alibabaCodingPlanApiKey.ifBlank { null }
+                )
+                ApiKeyAction.Clear -> repository.saveApiKey("ALIBABA_CODING_PLAN", null)
+                ApiKeyAction.NoChange -> true
+            }
+
             val openAiSaveResult = when (request.openAiApiKeyAction) {
                 ApiKeyAction.Update -> repository.saveApiKey("OPENAI", request.openAiApiKey.ifBlank { null })
                 ApiKeyAction.Clear -> repository.saveApiKey("OPENAI", null)
@@ -288,11 +326,20 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
                 ApiKeyAction.NoChange -> true
             }
 
+            val alibabaMcpTokenSaveResult = when (request.alibabaMcpAuthorizationTokenAction) {
+                ApiKeyAction.Update -> repository.saveAlibabaMcpAuthorizationToken(
+                    request.alibabaMcpAuthorizationToken.ifBlank { null }
+                )
+                ApiKeyAction.Clear -> repository.saveAlibabaMcpAuthorizationToken(null)
+                ApiKeyAction.NoChange -> true
+            }
+
             _secureStorageError.value = when {
                 request.openAiCompatApiKeyAction != ApiKeyAction.NoChange && compatPresetName == null ->
                     "OpenAI (Custom) のプリセットを選択してください。"
                 !geminiSaveResult || !openRouterSaveResult || !zaiSaveResult || !openAiSaveResult ||
-                    !miniMaxSaveResult || !openAiCompatSaveResult || !codexUaPresetSaved ->
+                    !miniMaxSaveResult || !openAiCompatSaveResult || !openCodeGoSaveResult ||
+                    !alibabaCodingPlanSaveResult || !alibabaMcpTokenSaveResult || !codexUaPresetSaved ->
                     "暗号化ストレージを初期化できなかったため、APIキーを保存できませんでした。"
                 else -> null
             }
@@ -642,6 +689,9 @@ data class ApiKeyStatus(
     val hasOpenAiKey: Boolean = false,
     val hasMiniMaxKey: Boolean = false,
     val hasZaiKey: Boolean = false,
+    val hasOpenCodeGoKey: Boolean = false,
+    val hasAlibabaCodingPlanKey: Boolean = false,
+    val hasAlibabaMcpAuthorizationToken: Boolean = false,
     val hasCodexAuth: Boolean = false
 )
 

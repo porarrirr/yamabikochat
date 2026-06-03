@@ -53,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.porarri.yamabikochat.data.local.ModelPreset
 import com.porarri.yamabikochat.data.local.SystemPromptPreset
 import com.porarri.yamabikochat.data.remote.OpenAiCompatPreset
+import com.porarri.yamabikochat.data.remote.ProviderCatalog
 import com.porarri.yamabikochat.data.remote.SimpleModel
 import com.porarri.yamabikochat.ui.settings.components.SettingsToggleRow    
 import com.porarri.yamabikochat.ui.settings.components.OpenRouterModelSelector
@@ -305,16 +306,7 @@ private fun PresetProviderCard(
             }
 
             var showProviderSheet by remember { mutableStateOf(false) }
-            val providerLabel = when (state.apiProvider) {
-                "GEMINI" -> "Google Gemini"
-                "OPENROUTER" -> "OpenRouter"
-                "MINIMAX" -> "MiniMax"
-                "OPENAI" -> "OpenAI"
-                "CODEX_AUTH" -> "Codex Auth"
-                "OPENAI_COMPAT" -> "OpenAI (Custom)"
-                "ZAI" -> "Z.ai"
-                else -> "Google Gemini"
-            }
+            val providerLabel = ProviderCatalog.displayName(state.apiProvider)
             YamabikoSelectRow(
                 title = "Provider",
                 value = providerLabel,
@@ -323,15 +315,9 @@ private fun PresetProviderCard(
             if (showProviderSheet) {
                 YamabikoOptionBottomSheet(
                     title = "Provider",
-                    options = listOf(
-                        YamabikoOption(key = "GEMINI", title = "Google Gemini"),
-                        YamabikoOption(key = "OPENROUTER", title = "OpenRouter"),
-                        YamabikoOption(key = "MINIMAX", title = "MiniMax"),
-                        YamabikoOption(key = "OPENAI", title = "OpenAI"),
-                        YamabikoOption(key = "CODEX_AUTH", title = "Codex Auth"),
-                        YamabikoOption(key = "OPENAI_COMPAT", title = "OpenAI (Custom)"),
-                        YamabikoOption(key = "ZAI", title = "Z.ai")
-                    ),
+                    options = ProviderCatalog.dualAutoConversationOptions.map {
+                        YamabikoOption(key = it.key, title = it.title)
+                    },
                     selectedKey = state.apiProvider,
                     onOptionSelected = { state.onApiProviderChange(it.key) },
                     onDismissRequest = { showProviderSheet = false }
@@ -393,6 +379,8 @@ private fun PresetProviderCard(
                                 "OPENROUTER" -> "OpenRouter API Key (Optional)"
                                 "MINIMAX" -> "MiniMax API Key (Optional)"
                                 "ZAI" -> "Z.ai API Key (Optional)"
+                                "OPENCODE_GO" -> "OpenCode Go API Key (Optional)"
+                                "ALIBABA_CODING_PLAN" -> "Alibaba Coding Plan API Key (Optional)"
                                 else -> "API Key (Optional)"
                             }
                         )
@@ -890,18 +878,10 @@ fun LazyListScope.modelPresetsSection(
                         AssistChip(
                             onClick = { },
                             label = {
-                    Text(
-                        when (preset.apiProvider) {
-                            "OPENROUTER" -> "OpenRouter"
-                            "MINIMAX" -> "MiniMax"
-                            "OPENAI" -> "OpenAI"
-                            "CODEX_AUTH" -> "Codex Auth"
-                            "OPENAI_COMPAT" -> "OpenAI (Custom)"
-                            "ZAI" -> "Z.ai"
-                            else -> "Gemini"
-                        },
-                        style = MaterialTheme.typography.labelSmall
-                    )
+                                Text(
+                                    ProviderCatalog.displayName(preset.apiProvider),
+                                    style = MaterialTheme.typography.labelSmall
+                                )
                             },
                             leadingIcon = {
                                 Icon(Icons.Filled.Cloud, contentDescription = null, modifier = Modifier.size(16.dp))

@@ -8,6 +8,8 @@ import com.porarri.yamabikochat.data.remote.GenerateContentRequest
 import com.porarri.yamabikochat.data.remote.GenerateContentResponse
 import com.porarri.yamabikochat.data.remote.FunctionCall
 import com.porarri.yamabikochat.data.remote.FunctionResponse
+import com.porarri.yamabikochat.data.remote.OpenCodeGoEndpointKind
+import com.porarri.yamabikochat.data.remote.OpenCodeGoModelCatalog
 import com.porarri.yamabikochat.data.remote.Part
 import com.porarri.yamabikochat.data.remote.ResponsePart
 import com.porarri.yamabikochat.data.remote.TokenUsageSnapshot
@@ -215,6 +217,18 @@ class ChatResponseStreamer(
                 var parseErrorCount = 0
                 val nonDataLines = mutableListOf<String>()
                 var sawAnyLine = false
+                val normalizedProvider = provider.uppercase()
+                val isOpenCodeGoMessagesModel =
+                    normalizedProvider == "OPENCODE_GO" &&
+                        OpenCodeGoModelCatalog.modelFor(model)?.endpointKind == OpenCodeGoEndpointKind.MESSAGES
+                val isAnthropicCompatibleStream =
+                    normalizedProvider == "ALIBABA_CODING_PLAN" || isOpenCodeGoMessagesModel
+                val isOpenAiCompatibleStream = normalizedProvider == "OPENROUTER" ||
+                    normalizedProvider == "ZAI" ||
+                    normalizedProvider == "OPENAI" ||
+                    normalizedProvider == "MINIMAX" ||
+                    normalizedProvider == "OPENAI_COMPAT" ||
+                    (normalizedProvider == "OPENCODE_GO" && !isOpenCodeGoMessagesModel)
 
                 val reader = body.byteStream().bufferedReader(Charsets.UTF_8)   
                 try {
@@ -246,7 +260,7 @@ class ChatResponseStreamer(
 
                         try {
                             val parsedChunk = if (
-                                provider.uppercase() == "CODEX_AUTH"
+                                normalizedProvider == "CODEX_AUTH"
                             ) {
                                 val delta = parseCodexResponsesDelta(payload, currentText)
                                 val usage = parseCodexResponsesUsage(payload)
@@ -256,13 +270,9 @@ class ChatResponseStreamer(
                                     deltaSummary = delta.third,
                                     usage = usage
                                 )
-                            } else if (
-                                provider.uppercase() == "OPENROUTER" ||
-                                provider.uppercase() == "ZAI" ||
-                                provider.uppercase() == "OPENAI" ||
-                                provider.uppercase() == "MINIMAX" ||
-                                provider.uppercase() == "OPENAI_COMPAT"
-                            ) {
+                            } else if (isAnthropicCompatibleStream) {
+                                parseAnthropicCompatibleDelta(payload)
+                            } else if (isOpenAiCompatibleStream) {
                                 val streamResponse = json.decodeFromString<com.porarri.yamabikochat.data.remote.ChatCompletionStreamResponse>(payload)
                                 val delta = streamResponse.choices.firstOrNull()?.delta
                                 val fullText = delta?.content.orEmpty()
@@ -309,7 +319,7 @@ class ChatResponseStreamer(
                                 hasData = true
                                 currentText += deltaText
                                 val summaryForMessage = if (
-                                    provider.uppercase() == "CODEX_AUTH" && currentSummary.isNotBlank()
+                                    normalizedProvider == "CODEX_AUTH" && currentSummary.isNotBlank()
                                 ) {
                                     currentSummary
                                 } else {
@@ -344,21 +354,30 @@ class ChatResponseStreamer(
                     while (true) {
                         val rawLine = reader.readLine() ?: break
                         sawAnyLine = true
-                        if (rawLine.startsWith(":")) continue
-                        if (rawLine.isEmpty()) {
+                        val trimmedLine = rawLine.trim()
+                        if (trimmedLine.startsWith(":")) continue
+                        if (trimmedLine.isEmpty()) {
                             if (eventBuffer.isNotEmpty()) flushEvent()
                             continue
                         }
-                        if (rawLine.startsWith("data:")) {
-                            val payload = rawLine.substringAfter("data:").trimStart()
+                        if (trimmedLine.startsWith("{") || trimmedLine.startsWith("[")) {
+                            if (eventBuffer.isNotEmpty()) flushEvent()
+                            eventBuffer.append(trimmedLine)
+                            flushEvent()
+                        } else if (trimmedLine.startsWith("data:")) {
+                            val payload = trimmedLine.substringAfter("data:").trimStart()
                             if (eventBuffer.isNotEmpty()) {
-                                eventBuffer.append('\n')
+                                val pending = eventBuffer.toString().trim()
+                                if (looksLikeCompleteJsonEvent(pending)) {
+                                    flushEvent()
+                                } else {
+                                    eventBuffer.append('\n')
+                                }
                             }
                             eventBuffer.append(payload)
                         } else if (nonDataLines.size < 8) {
-                            val trimmed = rawLine.trim()
-                            if (trimmed.isNotEmpty()) {
-                                nonDataLines.add(trimmed.take(256))
+                            if (trimmedLine.isNotEmpty()) {
+                                nonDataLines.add(trimmedLine.take(256))
                             }
                         }
                     }
@@ -530,6 +549,10 @@ class ChatResponseStreamer(
 
     private fun networkFailureMessage(provider: String, throwable: Throwable): String {
         val p = provider.uppercase()
+        if (throwable is IllegalArgumentException) {
+            val detail = throwable.message?.takeIf { it.isNotBlank() } ?: throwable::class.java.simpleName
+            return "設定またはモデルが不正です（$p, $detail）"
+        }
         val kind = throwable::class.java.simpleName
         return "通信に失敗しました（$p, $kind）"
     }
@@ -674,6 +697,50 @@ class ChatResponseStreamer(
             }
         }
         return builder.toString()
+    }
+
+    private fun parseAnthropicCompatibleDelta(payload: String): StreamChunkParse {
+        val element = json.parseToJsonElement(payload)
+        val obj = element.jsonObject
+        val type = obj["type"]?.jsonPrimitive?.contentOrNull?.lowercase() ?: return StreamChunkParse("", "")
+        return when (type) {
+            "content_block_delta" -> {
+                val delta = obj["delta"]?.jsonObject ?: return StreamChunkParse("", "")
+                when (delta["type"]?.jsonPrimitive?.contentOrNull?.lowercase()) {
+                    "text_delta" -> StreamChunkParse(
+                        deltaText = delta["text"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                        deltaThinking = ""
+                    )
+                    "thinking_delta" -> StreamChunkParse(
+                        deltaText = "",
+                        deltaThinking = delta["thinking"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                    )
+                    else -> StreamChunkParse("", "")
+                }
+            }
+            "content_block_start" -> {
+                val block = obj["content_block"]?.jsonObject ?: return StreamChunkParse("", "")
+                when (block["type"]?.jsonPrimitive?.contentOrNull?.lowercase()) {
+                    "text" -> StreamChunkParse(
+                        deltaText = block["text"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                        deltaThinking = ""
+                    )
+                    "thinking" -> StreamChunkParse(
+                        deltaText = "",
+                        deltaThinking = block["thinking"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                    )
+                    else -> StreamChunkParse("", "")
+                }
+            }
+            "message_stop", "message_delta", "message_start", "ping" -> StreamChunkParse("", "")
+            else -> StreamChunkParse("", "")
+        }
+    }
+
+    private fun looksLikeCompleteJsonEvent(raw: String): Boolean {
+        if (!raw.startsWith("{")) return false
+        val obj = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return false
+        return obj.containsKey("choices") || obj.containsKey("type") || obj.containsKey("candidates")
     }
 
     private data class StreamChunkParse(

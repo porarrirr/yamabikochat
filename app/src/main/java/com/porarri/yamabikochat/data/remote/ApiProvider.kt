@@ -27,5 +27,7 @@ enum class ProviderType {
     GEMINI,
     OPENROUTER,
     OPENAI,
+    OPENCODE_GO,
+    ALIBABA_CODING_PLAN,
     ZAI
 }

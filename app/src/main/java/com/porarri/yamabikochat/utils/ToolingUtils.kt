@@ -5,6 +5,7 @@ import com.porarri.yamabikochat.data.local.Settings
 import com.porarri.yamabikochat.data.remote.CodeExecution
 import com.porarri.yamabikochat.data.remote.FunctionDeclaration
 import com.porarri.yamabikochat.data.remote.GoogleSearch
+import com.porarri.yamabikochat.data.remote.McpToolset
 import com.porarri.yamabikochat.data.remote.Tool
 import com.porarri.yamabikochat.data.remote.UrlContext
 import com.porarri.yamabikochat.data.remote.GoogleMaps
@@ -42,6 +43,19 @@ object ToolingUtils {
             parseFunctionDeclarations(settings.geminiFunctionDeclarations)?.let { declarations ->
                 providerTools.add(Tool(function_declarations = declarations))
             }
+        }
+        if (provider.uppercase() == "ALIBABA_CODING_PLAN" && settings.alibabaMcpEnabled) {
+            val serverUrl = settings.resolvedAlibabaMcpServerUrl()
+                ?: throw IllegalArgumentException("Invalid Alibaba MCP server URL: ${settings.alibabaMcpServerUrl}")
+            providerTools.add(
+                Tool(
+                    mcp_toolset = McpToolset(
+                        serverUrl = serverUrl,
+                        serverName = settings.resolvedAlibabaMcpServerName(),
+                        allowedTools = settings.alibabaMcpAllowedToolsList()
+                    )
+                )
+            )
         }
         return providerTools
     }

@@ -27,6 +27,9 @@ class SecurePreferencesManager private constructor(private val context: Context)
         private const val KEY_OPENAI_API_KEY = "openai_api_key"
         private const val KEY_MINIMAX_API_KEY = "minimax_api_key"
         private const val KEY_ZAI_API_KEY = "zai_api_key"
+        private const val KEY_OPENCODE_GO_API_KEY = "opencode_go_api_key"
+        private const val KEY_ALIBABA_CODING_PLAN_API_KEY = "alibaba_coding_plan_api_key"
+        private const val KEY_ALIBABA_MCP_AUTH_TOKEN = "alibaba_mcp_authorization_token"
         private const val KEY_CODEX_AUTH_JSON = "codex_auth_json"
         private const val KEY_CODEX_USER_AGENT_PRESET = "codex_user_agent_preset"
         private const val KEY_CODEX_USER_AGENT_CLI_VERSION = "codex_user_agent_cli_version"
@@ -216,6 +219,42 @@ class SecurePreferencesManager private constructor(private val context: Context)
     fun clearZaiApiKey() =
         clearKey(KEY_ZAI_API_KEY, "Z.ai APIキー")
 
+    fun storeOpenCodeGoApiKey(apiKey: String?): Boolean =
+        storeString(KEY_OPENCODE_GO_API_KEY, apiKey, "OpenCode Go APIキー")
+
+    fun hasOpenCodeGoApiKey(): Boolean =
+        hasString(KEY_OPENCODE_GO_API_KEY, "OpenCode Go APIキー")
+
+    fun getOpenCodeGoApiKey(): String? =
+        readString(KEY_OPENCODE_GO_API_KEY, "OpenCode Go APIキー")
+
+    fun clearOpenCodeGoApiKey() =
+        clearKey(KEY_OPENCODE_GO_API_KEY, "OpenCode Go APIキー")
+
+    fun storeAlibabaCodingPlanApiKey(apiKey: String?): Boolean =
+        storeString(KEY_ALIBABA_CODING_PLAN_API_KEY, apiKey, "Alibaba Coding Plan APIキー")
+
+    fun hasAlibabaCodingPlanApiKey(): Boolean =
+        hasString(KEY_ALIBABA_CODING_PLAN_API_KEY, "Alibaba Coding Plan APIキー")
+
+    fun getAlibabaCodingPlanApiKey(): String? =
+        readString(KEY_ALIBABA_CODING_PLAN_API_KEY, "Alibaba Coding Plan APIキー")
+
+    fun clearAlibabaCodingPlanApiKey() =
+        clearKey(KEY_ALIBABA_CODING_PLAN_API_KEY, "Alibaba Coding Plan APIキー")
+
+    fun storeAlibabaMcpAuthorizationToken(token: String?): Boolean =
+        storeString(KEY_ALIBABA_MCP_AUTH_TOKEN, token, "Alibaba MCP authorization token")
+
+    fun getAlibabaMcpAuthorizationToken(): String? =
+        readString(KEY_ALIBABA_MCP_AUTH_TOKEN, "Alibaba MCP authorization token")
+
+    fun hasAlibabaMcpAuthorizationToken(): Boolean =
+        hasString(KEY_ALIBABA_MCP_AUTH_TOKEN, "Alibaba MCP authorization token")
+
+    fun clearAlibabaMcpAuthorizationToken() =
+        clearKey(KEY_ALIBABA_MCP_AUTH_TOKEN, "Alibaba MCP authorization token")
+
     fun storeCodexAuthJson(payload: String?): Boolean =
         storeString(KEY_CODEX_AUTH_JSON, payload, "Codex Auth")
 
@@ -264,4 +303,3 @@ class SecurePreferencesManager private constructor(private val context: Context)
         }
     }
 }
-

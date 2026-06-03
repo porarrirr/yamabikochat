@@ -14,6 +14,9 @@ import com.porarri.yamabikochat.data.remote.GeminiProvider
 import com.porarri.yamabikochat.data.remote.LiteLlmPricingRepository
 import com.porarri.yamabikochat.data.remote.OpenRouterModelService
 import com.porarri.yamabikochat.data.remote.OpenRouterProvider
+import com.porarri.yamabikochat.data.remote.OpenCodeGoProvider
+import com.porarri.yamabikochat.data.remote.AlibabaCodingPlanProvider
+import com.porarri.yamabikochat.data.remote.AnthropicCompatibleProvider
 import com.porarri.yamabikochat.data.remote.RetrofitClient
 import com.porarri.yamabikochat.data.remote.ZaiProvider
 import com.porarri.yamabikochat.data.remote.OpenAiProvider
@@ -45,11 +48,19 @@ class MyApplication : Application() {
     private val pricingRepository by lazy { LiteLlmPricingRepository(RetrofitClient.liteLlmPricingInstance) }
     private val settingsManager by lazy { SettingsManager.getInstance(applicationContext, chatDao) }
     private val codexAuthRepository by lazy { CodexAuthRepository(applicationContext) }
+    private val openAiProvider by lazy {
+        OpenAiProvider { baseUrl -> RetrofitClient.makeOpenAiInstance(baseUrl) }
+    }
+    private val anthropicCompatibleProvider by lazy {
+        AnthropicCompatibleProvider { baseUrl -> RetrofitClient.makeAnthropicCompatibleInstance(baseUrl) }
+    }
     private val apiRepository by lazy {
         ApiRepository(
             geminiProvider = GeminiProvider(geminiApiService),
             openRouterProvider = OpenRouterProvider(openRouterApiService),
-            openAiProvider = OpenAiProvider { baseUrl -> RetrofitClient.makeOpenAiInstance(baseUrl) },
+            openAiProvider = openAiProvider,
+            openCodeGoProvider = OpenCodeGoProvider(openAiProvider, anthropicCompatibleProvider),
+            alibabaCodingPlanProvider = AlibabaCodingPlanProvider(anthropicCompatibleProvider),
             codexResponsesProvider = CodexResponsesProvider(applicationContext),
             zaiProvider = ZaiProvider(zaiApiService),
             settingsManager = settingsManager,
