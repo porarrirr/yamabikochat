@@ -67,7 +67,7 @@ struct ChatScreen: View {
             ScrollViewReader { proxy in
                 GeometryReader { scrollGeometry in
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 24) {
                             if timeline.isEmpty {
                                 ContentUnavailableView(
                                     emptyStateTitle,
@@ -124,8 +124,8 @@ struct ChatScreen: View {
                                 }
                         }
                         .scrollTargetLayout()
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 18)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 24)
                     }
                     .coordinateSpace(name: scrollCoordinateSpace)
                     .background(Color.chatScreenBackground)
@@ -184,10 +184,10 @@ struct ChatScreen: View {
                 .padding(.bottom, 10)
                 .background {
                     Rectangle()
-                        .fill(.ultraThinMaterial)
+                        .fill(.regularMaterial)
                         .overlay(alignment: .top) {
                             Divider()
-                                .opacity(0.35)
+                                .opacity(0.14)
                         }
                 }
         }
@@ -259,82 +259,74 @@ struct ChatScreen: View {
     }
 
     private var composerBar: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 5) {
-                if viewModel.isSecretConversation {
+        VStack(alignment: .leading, spacing: 8) {
+            if viewModel.isSecretConversation {
+                HStack(spacing: 5) {
                     Image(systemName: "lock.fill")
                         .font(.system(size: 10, weight: .semibold))
+                    Text(viewModel.composerContextLabel)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
-                Text(viewModel.composerContextLabel)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                .font(.caption)
+                .foregroundStyle(Color.chatAccent)
+                .padding(.horizontal, 10)
             }
-            .font(.caption)
-            .foregroundStyle(viewModel.isSecretConversation ? Color.chatAccent : .secondary)
-            .padding(.horizontal, 8)
 
             if viewModel.showsAutoConversationStatusBanner,
                let status = viewModel.autoConversationStatus,
                !status.isEmpty {
-                Text(status)
-                    .font(.caption)
-                    .foregroundStyle(viewModel.isAutoConversationRunning ? .secondary : .tertiary)
-                    .lineLimit(2)
-                    .padding(.horizontal, 8)
-            }
-
-            if let contextUsage = viewModel.contextUsageLabel {
-                Text(contextUsage)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .padding(.horizontal, 8)
+                HStack(spacing: 5) {
+                    Image(systemName: viewModel.isAutoConversationRunning ? "arrow.triangle.2.circlepath" : "pause.circle")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(status)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
             }
 
             if viewModel.canAttachImages, isAttachmentPanelVisible {
                 attachmentPanel
             }
 
-            HStack(alignment: .bottom, spacing: 10) {
+            HStack(alignment: .bottom, spacing: 8) {
                 if viewModel.canAttachImages {
                     Button {
                         toggleAttachmentPanel()
                     } label: {
                         Image(systemName: isAttachmentPanelVisible ? "xmark" : "plus")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: 20, weight: .regular))
                             .foregroundStyle(Color.chatComposerIcon)
-                            .frame(width: 34, height: 34)
+                            .frame(width: 42, height: 42)
                             .background(Color.chatInputChipBackground)
-                            .overlay {
-                                Circle()
-                                    .stroke(Color.chatBubbleBorder.opacity(0.5), lineWidth: 1)
-                            }
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(Text(isAttachmentPanelVisible ? "添付を閉じる" : "添付を追加"))
                 }
 
                 TextField(viewModel.composerPlaceholder, text: $viewModel.inputText, axis: .vertical)
                     .lineLimit(1 ... 6)
                     .focused($isComposerFocused)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
+                    .padding(.vertical, 11)
                     .foregroundStyle(Color.chatComposerText)
                     .tint(Color.chatAccent)
-                    .background(Color.chatInputBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
                 Button {
                     viewModel.toggleSpeechRecognition()
                 } label: {
                     Image(systemName: viewModel.isSpeechRecording ? "mic.fill" : "mic")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(viewModel.isSpeechRecording ? Color.red : .secondary)
+                        .font(.system(size: 22, weight: .regular))
+                        .foregroundStyle(viewModel.isSpeechRecording ? Color.red : Color.chatComposerIcon)
                         .symbolEffect(.pulse, isActive: viewModel.isSpeechRecording)
+                        .frame(width: 38, height: 42)
                 }
                 .buttonStyle(.plain)
                 .disabled(viewModel.isSending)
+                .accessibilityLabel(Text("音声入力"))
 
                 Button {
                     if canSend {
@@ -346,17 +338,27 @@ struct ChatScreen: View {
                         ProgressView()
                             .tint(.white)
                             .controlSize(.small)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 42, height: 42)
                     } else {
-                        Image(systemName: canSend ? "arrow.up" : "waveform")
-                            .font(.system(size: 15, weight: .semibold))
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(.white)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 42, height: 42)
                     }
                 }
-                .background(canSend ? Color.chatAccent : Color.chatAccent.opacity(0.42))
+                .background(canSend ? Color.chatAccent : Color.chatSendDisabled)
                 .clipShape(Circle())
                 .disabled(viewModel.isSending || !canSend)
+                .accessibilityLabel(Text("送信"))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(Color.chatInputBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .shadow(color: .black.opacity(0.08), radius: 18, x: 0, y: 6)
+            .overlay {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(Color.chatBubbleBorder.opacity(0.16), lineWidth: 1)
             }
         }
     }
@@ -1062,10 +1064,13 @@ private struct MessageBubble: View {
                     Text(responseText)
                         .textSelection(.enabled)
                         .foregroundStyle(Color.chatUserText)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
+                        .font(.body)
+                        .lineSpacing(2)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
                         .background(Color.chatUserBubble)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .frame(maxWidth: 300, alignment: .leading)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             } else {
@@ -1095,35 +1100,39 @@ private struct MessageBubble: View {
                     || !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
                 if hasAssistantBubbleContent {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if !attachmentItems.isEmpty {
-                            MessageAttachmentList(
-                                attachments: attachmentItems,
-                                isOutgoing: false
-                            )
-                        }
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Color.chatAssistantMark)
+                            .frame(width: 32, height: 32)
+                            .background(Color.chatInputChipBackground)
+                            .clipShape(Circle())
+                            .padding(.top, 2)
 
-                        if !svgBlocks.isEmpty {
-                            ForEach(svgBlocks) { block in
-                                SvgPreviewCard(block: block)
+                        VStack(alignment: .leading, spacing: 10) {
+                            if !attachmentItems.isEmpty {
+                                MessageAttachmentList(
+                                    attachments: attachmentItems,
+                                    isOutgoing: false
+                                )
+                            }
+
+                            if !svgBlocks.isEmpty {
+                                ForEach(svgBlocks) { block in
+                                    SvgPreviewCard(block: block)
+                                }
+                            }
+
+                            if !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                MathMarkdownView(
+                                    markdownText: markdownText,
+                                    mathRenderingEnabled: mathRenderingEnabled,
+                                    isStreaming: isActivelyStreaming
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
-
-                        if !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            MathMarkdownView(
-                                markdownText: markdownText,
-                                mathRenderingEnabled: mathRenderingEnabled,
-                                isStreaming: isActivelyStreaming
-                            )
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .padding(12)
-                    .background(Color.chatAssistantBubble)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.chatBubbleBorder.opacity(0.45), lineWidth: 1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
 
@@ -1156,35 +1165,24 @@ private struct MessageBubble: View {
                     .foregroundStyle(.secondary)
                 }
             }
-
-            HStack(spacing: 14) {
-                Button {
-                    onCopy()
-                } label: {
-                    Label("コピー", systemImage: "doc.on.doc")
-                }
-                .buttonStyle(.plain)
-
-                Menu {
-                    Button("ここからブランチ") {
-                        onBranch()
-                    }
-                    Button("再生成") {
-                        onRegenerate()
-                    }
-                    .disabled(!canRegenerate)
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.caption)
-                }
-                .menuStyle(.button)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 4)
-            .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+        .contextMenu {
+            Button {
+                onCopy()
+            } label: {
+                Label("コピー", systemImage: "doc.on.doc")
+            }
+
+            Button("ここからブランチ") {
+                onBranch()
+            }
+
+            Button("再生成") {
+                onRegenerate()
+            }
+            .disabled(!canRegenerate)
+        }
         .sheet(isPresented: $isThinkingSheetPresented) {
             if let thinkingText {
                 ThinkingSheet(thinkingText: thinkingText)
@@ -1401,15 +1399,17 @@ private struct DualResponsePane: View {
 }
 
 private extension Color {
-    static let chatScreenBackground = Color(uiColor: .systemGroupedBackground)
-    static let chatInputBackground = Color(uiColor: .secondarySystemBackground)
+    static let chatScreenBackground = Color(uiColor: .systemBackground)
+    static let chatInputBackground = Color(uiColor: .systemBackground)
     static let chatInputChipBackground = Color(uiColor: .tertiarySystemFill)
-    static let chatUserBubble = Color(uiColor: .systemBlue)
-    static let chatUserText = Color(uiColor: .white)
+    static let chatUserBubble = Color(uiColor: .secondarySystemFill)
+    static let chatUserText = Color(uiColor: .label)
     static let chatAccent = Color(uiColor: .systemBlue)
     static let chatDualCard = Color(uiColor: .secondarySystemBackground)
     static let chatComposerText = Color(uiColor: .label)
     static let chatComposerIcon = Color(uiColor: .label)
     static let chatAssistantBubble = Color(uiColor: .systemBackground)
+    static let chatAssistantMark = Color(uiColor: .secondaryLabel)
     static let chatBubbleBorder = Color(uiColor: .separator)
+    static let chatSendDisabled = Color(uiColor: .systemGray3)
 }

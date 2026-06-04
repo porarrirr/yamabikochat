@@ -34,6 +34,7 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var canAttachImages: Bool = false
     @Published private(set) var streamingSnapshots: [Int64: ChatStreamingSnapshot] = [:]
     @Published private(set) var isSecretConversation: Bool = false
+    @Published private(set) var conversationTitle: String = "New Chat"
 
     let speechService = SpeechRecognitionService()
 
@@ -145,6 +146,7 @@ final class ChatViewModel: ObservableObject {
                 activeConversationProvider = conversation.apiProvider
                 activeConversationModel = conversation.model
                 isSecretConversation = conversation.isSecret
+                conversationTitle = conversation.title
                 updateActiveChatPresetName()
                 updateActiveSystemPromptPresetName()
                 Task { [weak self] in
@@ -309,6 +311,7 @@ final class ChatViewModel: ObservableObject {
                         }
                     )
                 }
+                refreshConversationTitle()
             } catch {
                 errorMessage = error.localizedDescription
                 attachments = attachmentDrafts
@@ -510,6 +513,14 @@ final class ChatViewModel: ObservableObject {
         return model.isEmpty ? L10n.text("Chat") : model
     }
 
+    var workspaceConversationTitleLabel: String {
+        let title = conversationTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title != "New Chat" else {
+            return L10n.text("新しいチャット")
+        }
+        return title
+    }
+
     var workspaceSubtitleLabel: String? {
         if isSecretConversation {
             let provider = activeConversationProvider.isEmpty
@@ -610,6 +621,21 @@ final class ChatViewModel: ObservableObject {
             return L10n.text("Prompt: Custom")
         }
         return L10n.text("Prompt: なし")
+    }
+
+    private func refreshConversationTitle() {
+        guard let repository else { return }
+        do {
+            if let conversation = try repository.conversation(id: conversationID) {
+                conversationTitle = conversation.title
+            }
+        } catch {
+            DiagnosticsLogger.log(
+                "Refresh conversation title failed conversation=\(conversationID)",
+                category: .chat,
+                error: error
+            )
+        }
     }
 
     func availableChatPresets() -> [ModelPreset] {

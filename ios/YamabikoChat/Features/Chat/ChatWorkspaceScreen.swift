@@ -48,7 +48,7 @@ struct ChatWorkspaceScreen: View {
     }
 
     private var workspaceBackground: Color {
-        Color(uiColor: .systemGroupedBackground)
+        Color(uiColor: .systemBackground)
     }
 
     private var currentProvider: String {
@@ -57,6 +57,35 @@ struct ChatWorkspaceScreen: View {
 
     private var currentModel: String {
         viewModel.settings.currentModel().trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSwitchChatModel: Bool {
+        !viewModel.settings.isDualModeEnabled &&
+            !viewModel.settings.isAutoConversationEnabled
+    }
+
+    private var modelSwitcherTitle: String {
+        if viewModel.settings.isDualModeEnabled {
+            return L10n.text("デュアルモード")
+        }
+        if viewModel.settings.isAutoConversationEnabled {
+            return L10n.text("自動会話")
+        }
+        let model = currentModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !model.isEmpty {
+            return ChatViewModel.shortModelLabel(model)
+        }
+        let provider = currentProvider.trimmingCharacters(in: .whitespacesAndNewlines)
+        return provider.isEmpty ? L10n.text("Chat") : ProviderCatalog.displayName(for: provider)
+    }
+
+    private var workspaceContextTitle: String {
+        let title = viewModel.workspaceConversationTitleLabel
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if viewModel.isSecretConversation {
+            return L10n.format("シークレット · %@", title)
+        }
+        return title
     }
 
     private func isActiveChatPreset(_ preset: ModelPreset) -> Bool {
@@ -87,26 +116,57 @@ struct ChatWorkspaceScreen: View {
     }
 
     private var topBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Button {
                 openConversationHistory()
             } label: {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 16, weight: .medium))
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(Color(uiColor: .label))
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle()
-                            .fill(Color(uiColor: .tertiarySystemBackground))
-                    )
-                    .overlay {
-                        Circle()
-                            .stroke(Color(uiColor: .separator).opacity(0.35), lineWidth: 1)
-                    }
+                    .frame(width: 40, height: 40)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("チャット履歴"))
 
+            Spacer(minLength: 0)
+
+            Button {
+                createConversation()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 36, height: 36)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .stroke(Color(uiColor: .label), lineWidth: 1.7)
+                    }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("新規チャット"))
+
+            moreMenu
+        }
+        .overlay {
+            modelTitleControl
+                .frame(maxWidth: 240)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 7)
+        .background(
+            Rectangle()
+                .fill(Color(uiColor: .systemBackground).opacity(0.98))
+                .overlay(alignment: .bottom) {
+                    Divider()
+                        .opacity(0.18)
+                }
+        )
+    }
+
+    @ViewBuilder
+    private var modelTitleControl: some View {
+        if canSwitchChatModel {
             Menu {
                 let chatPresets = viewModel.availableChatPresets()
                 if chatPresets.isEmpty {
@@ -126,45 +186,16 @@ struct ChatWorkspaceScreen: View {
                     }
                 }
             } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        if viewModel.isSecretConversation {
-                            Image(systemName: "lock.fill")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(Color.accentColor)
-                        }
-                        Text(viewModel.workspaceTitleLabel)
-                            .font(.system(size: 19, weight: .semibold))
-                            .lineLimit(1)
-                        if !viewModel.settings.isDualModeEnabled,
-                           !viewModel.settings.isAutoConversationEnabled {
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    if let subtitle = viewModel.workspaceSubtitleLabel {
-                        Text(subtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .disabled(viewModel.settings.isDualModeEnabled || viewModel.settings.isAutoConversationEnabled)
-
-            Button {
-                createConversation()
-            } label: {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .frame(width: 32, height: 32)
+                modelTitleLabel(showsChevron: true)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(Text("モデルを切り替え"))
+        } else {
+            modelTitleLabel(showsChevron: false)
+        }
+    }
 
+    private var moreMenu: some View {
             Menu {
                 Button("再生成") {
                     viewModel.regenerateLastAssistantVariant()
@@ -238,19 +269,34 @@ struct ChatWorkspaceScreen: View {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(.primary)
-                    .frame(width: 32, height: 32)
+                    .frame(width: 36, height: 36)
             }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            Rectangle()
-                .fill(Color(uiColor: .systemBackground).opacity(0.96))
-                .overlay(alignment: .bottom) {
-                    Divider()
-                        .opacity(0.45)
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("その他"))
+    }
+
+    private func modelTitleLabel(showsChevron: Bool) -> some View {
+        VStack(spacing: 1) {
+            HStack(spacing: 5) {
+                Text(modelSwitcherTitle)
+                    .font(.system(size: 17, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
+                if showsChevron {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
                 }
-        )
+            }
+            .foregroundStyle(.primary)
+
+            Text(workspaceContextTitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .multilineTextAlignment(.center)
     }
 
     private func createConversation() {
