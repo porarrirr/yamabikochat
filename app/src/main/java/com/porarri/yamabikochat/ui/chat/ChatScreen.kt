@@ -125,6 +125,9 @@ private sealed interface ChatTimelineItem {
     }
 }
 
+private val ChatUserBubbleMaxWidth = 420.dp
+private val ChatUserBubbleStartInset = 48.dp
+
 private fun buildTimeline(
     chatMessages: List<ChatMessageSummary>,
     dualMessages: List<DualChatMessage>
@@ -739,6 +742,20 @@ private fun ThinkingBottomSheet(
 }
 
 @Composable
+private fun UserMessageLane(
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = ChatUserBubbleStartInset),
+        contentAlignment = Alignment.CenterEnd,
+        content = content
+    )
+}
+
+@Composable
 fun DualChatMessageItem(
     dualMessage: DualChatMessage,
     dualChatSettings: com.porarri.yamabikochat.data.local.DualChatSettings,
@@ -827,12 +844,9 @@ fun DualChatMessageItem(
     ) {
         if (dualMessage.role == "user") {
             // ユーザーメッセージ
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
+            UserMessageLane {
                 Surface(
-                    modifier = Modifier.widthIn(max = 420.dp),
+                    modifier = Modifier.widthIn(max = ChatUserBubbleMaxWidth),
                     shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 6.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
                 ) {
@@ -886,12 +900,9 @@ private fun ChatMessageSummaryItem(
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         if (isUserMessage) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
+            UserMessageLane {
                 Surface(
-                    modifier = Modifier.widthIn(max = 420.dp),
+                    modifier = Modifier.widthIn(max = ChatUserBubbleMaxWidth),
                     shape = userBubbleShape,
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                     border = highlightBorder,
@@ -1304,23 +1315,17 @@ fun ChatMessageItem(
 
             isUserMessage -> {
                 if (displayAttachments.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        Box(modifier = Modifier.widthIn(max = 420.dp)) {
+                    UserMessageLane {
+                        Box(modifier = Modifier.widthIn(max = ChatUserBubbleMaxWidth)) {
                             MessageAttachmentList(attachments = displayAttachments)
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
+                UserMessageLane {
                     Box(
-                        modifier = Modifier.widthIn(max = 420.dp)
+                        modifier = Modifier.widthIn(max = ChatUserBubbleMaxWidth)
                     ) {
                         Surface(
                             modifier = Modifier.combinedClickable(

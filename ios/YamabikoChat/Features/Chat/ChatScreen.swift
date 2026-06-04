@@ -36,6 +36,8 @@ private struct ChatBottomAnchorMaxYPreferenceKey: PreferenceKey {
     }
 }
 
+private let chatTimelineHorizontalPadding: CGFloat = 20
+
 struct ChatScreen: View {
     @ObservedObject var viewModel: ChatViewModel
     var onNavigateToConversation: ((Int64) -> Void)? = nil
@@ -123,8 +125,12 @@ struct ChatScreen: View {
                                     }
                                 }
                         }
+                        .frame(
+                            width: max(scrollGeometry.size.width - chatTimelineHorizontalPadding * 2, 0),
+                            alignment: .topLeading
+                        )
                         .scrollTargetLayout()
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, chatTimelineHorizontalPadding)
                         .padding(.vertical, 24)
                     }
                     .coordinateSpace(name: scrollCoordinateSpace)
@@ -1242,11 +1248,12 @@ private struct DualMessageCard: View {
                             .textSelection(.enabled)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(12)
                 .background(Color.chatUserBubble)
                 .foregroundStyle(Color.chatUserText)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .frame(maxWidth: 300, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             case .dualModel:
                 VStack(alignment: .leading, spacing: 10) {
                     DualSplitContainer(
