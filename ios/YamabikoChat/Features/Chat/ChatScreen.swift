@@ -37,6 +37,7 @@ private struct ChatBottomAnchorMaxYPreferenceKey: PreferenceKey {
 }
 
 private let chatTimelineHorizontalPadding: CGFloat = 20
+private let chatTimelineVerticalPadding: CGFloat = 24
 
 struct ChatScreen: View {
     @ObservedObject var viewModel: ChatViewModel
@@ -65,137 +66,153 @@ struct ChatScreen: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollViewReader { proxy in
-                GeometryReader { scrollGeometry in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 24) {
-                            if timeline.isEmpty {
-                                ContentUnavailableView(
-                                    emptyStateTitle,
-                                    systemImage: emptyStateSystemImage,
-                                    description: Text(emptyStateDescription)
-                                )
-                                .frame(maxWidth: .infinity)
-                                .padding(.top, 56)
-                            } else {
-                                ForEach(timeline) { item in
-                                    switch item {
-                                    case let .message(message):
-                                        MessageBubble(
-                                            message: message,
-                                            mathRenderingEnabled: viewModel.settings.mathRenderingEnabled,
-                                            streamingSnapshot: viewModel.streamingSnapshot(for: message.id),
-                                            isActivelyStreaming: viewModel.isMessageStreaming(message.id),
-                                            canRegenerate: viewModel.canRegenerateLastAssistant && message.id == viewModel.fullMessages.last?.id,
-                                            onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
-                                            onNextVariant: { viewModel.showNextVariant(messageId: message.id) },
-                                            onCopy: {
-                                                UIPasteboard.general.string = message.displayText
-                                            },
-                                            onBranch: {
-                                                guard let newConversationId = viewModel.branchConversation(from: message.id) else { return }
-                                                onNavigateToConversation?(newConversationId)
-                                            },
-                                            onRegenerate: {
-                                                viewModel.regenerateLastAssistantVariant()
-                                            }
-                                        )
+        GeometryReader { rootGeometry in
+            VStack(spacing: 0) {
+                ScrollViewReader { proxy in
+                    GeometryReader { scrollGeometry in
+                        let measuredWidth = rootGeometry.size.width
+                        let viewportWidth = measuredWidth < 300
+                            ? UIScreen.main.bounds.width
+                            : measuredWidth
+                        let timelineWidth = max(viewportWidth - chatTimelineHorizontalPadding * 2, 0)
+                        let timelineMinHeight = max(scrollGeometry.size.height - chatTimelineVerticalPadding * 2, 0)
+                        let timelineAlignment: Alignment = timeline.isEmpty ? .topLeading : .bottomLeading
+
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 24) {
+                                if timeline.isEmpty {
+                                    ContentUnavailableView(
+                                        emptyStateTitle,
+                                        systemImage: emptyStateSystemImage,
+                                        description: Text(emptyStateDescription)
+                                    )
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.top, 56)
+                                } else {
+                                    ForEach(timeline) { item in
+                                        switch item {
+                                        case let .message(message):
+                                            MessageBubble(
+                                                message: message,
+                                                rowWidth: timelineWidth,
+                                                mathRenderingEnabled: viewModel.settings.mathRenderingEnabled,
+                                                streamingSnapshot: viewModel.streamingSnapshot(for: message.id),
+                                                isActivelyStreaming: viewModel.isMessageStreaming(message.id),
+                                                canRegenerate: viewModel.canRegenerateLastAssistant && message.id == viewModel.fullMessages.last?.id,
+                                                onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
+                                                onNextVariant: { viewModel.showNextVariant(messageId: message.id) },
+                                                onCopy: {
+                                                    UIPasteboard.general.string = message.displayText
+                                                },
+                                                onBranch: {
+                                                    guard let newConversationId = viewModel.branchConversation(from: message.id) else { return }
+                                                    onNavigateToConversation?(newConversationId)
+                                                },
+                                                onRegenerate: {
+                                                    viewModel.regenerateLastAssistantVariant()
+                                                }
+                                            )
                                             .id(item.id)
-                                    case let .dual(message):
-                                        DualMessageCard(
-                                            message: message,
-                                            settings: viewModel.settings,
-                                            mathRenderingEnabled: viewModel.settings.mathRenderingEnabled
-                                        )
+                                        case let .dual(message):
+                                            DualMessageCard(
+                                                message: message,
+                                                rowWidth: timelineWidth,
+                                                settings: viewModel.settings,
+                                                mathRenderingEnabled: viewModel.settings.mathRenderingEnabled
+                                            )
                                             .id(item.id)
+                                        }
                                     }
                                 }
-                            }
 
-                            Color.clear
-                                .frame(height: 1)
-                                .id(bottomAnchorID)
-                                .background {
-                                    GeometryReader { anchorGeometry in
-                                        Color.clear.preference(
-                                            key: ChatBottomAnchorMaxYPreferenceKey.self,
-                                            value: anchorGeometry.frame(in: .named(scrollCoordinateSpace)).maxY
-                                        )
+                                Color.clear
+                                    .frame(height: 1)
+                                    .id(bottomAnchorID)
+                                    .background {
+                                        GeometryReader { anchorGeometry in
+                                            Color.clear.preference(
+                                                key: ChatBottomAnchorMaxYPreferenceKey.self,
+                                                value: anchorGeometry.frame(in: .named(scrollCoordinateSpace)).maxY
+                                            )
+                                        }
                                     }
+                            }
+                            .frame(width: timelineWidth, alignment: .topLeading)
+                            .frame(
+                                minHeight: timeline.isEmpty ? nil : timelineMinHeight,
+                                alignment: timelineAlignment
+                            )
+                            .scrollTargetLayout()
+                            .padding(.horizontal, chatTimelineHorizontalPadding)
+                            .padding(.vertical, chatTimelineVerticalPadding)
+                        }
+                        .coordinateSpace(name: scrollCoordinateSpace)
+                        .background(Color.chatScreenBackground)
+                        .scrollDismissesKeyboard(.interactively)
+                        .simultaneousGesture(
+                            TapGesture().onEnded {
+                                dismissComposerChrome()
+                            }
+                        )
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 8)
+                                .onChanged { _ in
+                                    beginScrollInteraction()
                                 }
-                        }
-                        .frame(
-                            width: max(scrollGeometry.size.width - chatTimelineHorizontalPadding * 2, 0),
-                            alignment: .topLeading
+                                .onEnded { _ in
+                                    endScrollInteraction()
+                                }
                         )
-                        .scrollTargetLayout()
-                        .padding(.horizontal, chatTimelineHorizontalPadding)
-                        .padding(.vertical, 24)
-                    }
-                    .coordinateSpace(name: scrollCoordinateSpace)
-                    .background(Color.chatScreenBackground)
-                    .scrollDismissesKeyboard(.interactively)
-                    .simultaneousGesture(
-                        TapGesture().onEnded {
-                            dismissComposerChrome()
+                        .onPreferenceChange(ChatBottomAnchorMaxYPreferenceKey.self) { maxY in
+                            handleBottomAnchorChange(
+                                maxY: maxY,
+                                viewportHeight: scrollGeometry.size.height,
+                                proxy: proxy
+                            )
                         }
-                    )
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 8)
-                            .onChanged { _ in
-                                beginScrollInteraction()
-                            }
-                            .onEnded { _ in
-                                endScrollInteraction()
-                            }
-                    )
-                    .onPreferenceChange(ChatBottomAnchorMaxYPreferenceKey.self) { maxY in
-                        handleBottomAnchorChange(
-                            maxY: maxY,
-                            viewportHeight: scrollGeometry.size.height,
-                            proxy: proxy
-                        )
-                    }
-                    .onAppear {
-                        isUserNearBottom = true
-                        scrollToBottom(proxy: proxy, animated: false)
-                    }
-                    .onChange(of: timeline.count) { _, _ in
-                        scrollToBottomIfNeeded(proxy: proxy)
-                    }
-                    .onChange(of: isComposerFocused) { _, focused in
-                        guard !focused else { return }
-                        scrollToBottomIfNeeded(proxy: proxy)
-                    }
-                    .onChange(of: viewModel.isSending) { oldValue, newValue in
-                        guard !oldValue, newValue else { return }
-                        scrollToBottom(proxy: proxy, animated: true)
+                        .onAppear {
+                            isUserNearBottom = true
+                            scrollToBottom(proxy: proxy, animated: false)
+                        }
+                        .onChange(of: timeline.count) { _, _ in
+                            scrollToBottomIfNeeded(proxy: proxy)
+                        }
+                        .onChange(of: isComposerFocused) { _, focused in
+                            guard !focused else { return }
+                            scrollToBottomIfNeeded(proxy: proxy)
+                        }
+                        .onChange(of: viewModel.isSending) { oldValue, newValue in
+                            guard !oldValue, newValue else { return }
+                            scrollToBottom(proxy: proxy, animated: true)
+                        }
                     }
                 }
-            }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if !viewModel.attachments.isEmpty {
-                AttachmentPreviewRow(
-                    attachments: viewModel.attachments,
-                    onRemove: { id in viewModel.removeAttachment(id: id) }
-                )
-                .padding(.horizontal, 14)
-                .padding(.bottom, 4)
-            }
-
-            composerBar
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-                .padding(.bottom, 10)
-                .background {
-                    Rectangle()
-                        .fill(.regularMaterial)
-                        .overlay(alignment: .top) {
-                            Divider()
-                                .opacity(0.14)
-                        }
+                if !viewModel.attachments.isEmpty {
+                    AttachmentPreviewRow(
+                        attachments: viewModel.attachments,
+                        onRemove: { id in viewModel.removeAttachment(id: id) }
+                    )
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 4)
                 }
+
+                composerBar
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .padding(.bottom, 10)
+                    .background {
+                        Rectangle()
+                            .fill(.regularMaterial)
+                            .overlay(alignment: .top) {
+                                Divider()
+                                    .opacity(0.14)
+                            }
+                    }
+            }
+            .frame(width: rootGeometry.size.width, height: rootGeometry.size.height)
+            .background(Color.chatScreenBackground)
         }
         .background(Color.chatScreenBackground)
         .task {
@@ -1011,6 +1028,7 @@ private extension URL {
 
 private struct MessageBubble: View {
     let message: FullChatMessage
+    let rowWidth: CGFloat
     let mathRenderingEnabled: Bool
     let streamingSnapshot: ChatStreamingSnapshot?
     let isActivelyStreaming: Bool
@@ -1057,122 +1075,135 @@ private struct MessageBubble: View {
     }
 
     var body: some View {
-        VStack(alignment: isUser ? .trailing : .leading, spacing: 8) {
+        let userContentWidth = min(300, rowWidth)
+        let userLeadingWidth = max(rowWidth - userContentWidth, 0)
+
+        HStack(alignment: .top, spacing: 0) {
             if isUser {
-                if !attachmentItems.isEmpty {
-                    MessageAttachmentList(
-                        attachments: attachmentItems,
-                        isOutgoing: true
-                    )
-                }
+                Color.clear
+                    .frame(width: userLeadingWidth, height: 0)
+            }
 
-                if !responseText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(responseText)
-                        .textSelection(.enabled)
-                        .foregroundStyle(Color.chatUserText)
-                        .font(.body)
-                        .lineSpacing(2)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(Color.chatUserBubble)
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        .frame(maxWidth: 300, alignment: .leading)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-            } else {
-                if thinkingText != nil {
-                    Button {
-                        isThinkingSheetPresented = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "brain.head.profile")
-                                .font(.caption)
-                            Text("Thinking")
-                                .font(.caption)
-                            Spacer()
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.caption2)
-                        }
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 4)
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 8) {
+                if isUser {
+                    if !attachmentItems.isEmpty {
+                        MessageAttachmentList(
+                            attachments: attachmentItems,
+                            isOutgoing: true
+                        )
                     }
-                    .buttonStyle(.plain)
-                }
 
-                let svgBlocks = SvgCodeExtractor.extract(from: responseText)
-                let markdownText = SvgCodeExtractor.removeExtractedBlocks(from: responseText, blocks: svgBlocks)
-                let hasAssistantBubbleContent = !attachmentItems.isEmpty
-                    || !svgBlocks.isEmpty
-                    || !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-
-                if hasAssistantBubbleContent {
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(Color.chatAssistantMark)
-                            .frame(width: 32, height: 32)
-                            .background(Color.chatInputChipBackground)
-                            .clipShape(Circle())
-                            .padding(.top, 2)
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            if !attachmentItems.isEmpty {
-                                MessageAttachmentList(
-                                    attachments: attachmentItems,
-                                    isOutgoing: false
-                                )
+                    if !responseText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(responseText)
+                            .textSelection(.enabled)
+                            .foregroundStyle(Color.chatUserText)
+                            .font(.body)
+                            .lineSpacing(2)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(Color.chatUserBubble)
+                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    }
+                } else {
+                    if thinkingText != nil {
+                        Button {
+                            isThinkingSheetPresented = true
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "brain.head.profile")
+                                    .font(.caption)
+                                Text("Thinking")
+                                    .font(.caption)
+                                Spacer()
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.caption2)
                             }
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                    }
 
-                            if !svgBlocks.isEmpty {
-                                ForEach(svgBlocks) { block in
-                                    SvgPreviewCard(block: block)
+                    let svgBlocks = SvgCodeExtractor.extract(from: responseText)
+                    let markdownText = SvgCodeExtractor.removeExtractedBlocks(from: responseText, blocks: svgBlocks)
+                    let hasAssistantBubbleContent = !attachmentItems.isEmpty
+                        || !svgBlocks.isEmpty
+                        || !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+                    if hasAssistantBubbleContent {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(Color.chatAssistantMark)
+                                .frame(width: 32, height: 32)
+                                .background(Color.chatInputChipBackground)
+                                .clipShape(Circle())
+                                .padding(.top, 2)
+
+                            VStack(alignment: .leading, spacing: 10) {
+                                if !attachmentItems.isEmpty {
+                                    MessageAttachmentList(
+                                        attachments: attachmentItems,
+                                        isOutgoing: false
+                                    )
+                                }
+
+                                if !svgBlocks.isEmpty {
+                                    ForEach(svgBlocks) { block in
+                                        SvgPreviewCard(block: block)
+                                    }
+                                }
+
+                                if !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    MathMarkdownView(
+                                        markdownText: markdownText,
+                                        mathRenderingEnabled: mathRenderingEnabled,
+                                        isStreaming: isActivelyStreaming
+                                    )
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
 
-                            if !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                MathMarkdownView(
-                                    markdownText: markdownText,
-                                    mathRenderingEnabled: mathRenderingEnabled,
-                                    isStreaming: isActivelyStreaming
-                                )
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                    if message.variantCount > 1 {
+                        HStack(spacing: 10) {
+                            Button {
+                                onPrevVariant()
+                            } label: {
+                                Image(systemName: "chevron.left")
+                                    .font(.caption.weight(.semibold))
                             }
+                            .buttonStyle(.plain)
+                            .disabled(!message.canSelectPreviousVariant)
+
+                            Text("\(message.selectedVariantOrdinal)/\(message.variantCount)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+
+                            Button {
+                                onNextVariant()
+                            } label: {
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!message.canSelectNextVariant)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 4)
+                        .foregroundStyle(.secondary)
                     }
-                }
-
-                if message.variantCount > 1 {
-                    HStack(spacing: 10) {
-                        Button {
-                            onPrevVariant()
-                        } label: {
-                            Image(systemName: "chevron.left")
-                                .font(.caption.weight(.semibold))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!message.canSelectPreviousVariant)
-
-                        Text("\(message.selectedVariantOrdinal)/\(message.variantCount)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-
-                        Button {
-                            onNextVariant()
-                        } label: {
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!message.canSelectNextVariant)
-                    }
-                    .padding(.horizontal, 4)
-                    .foregroundStyle(.secondary)
                 }
             }
+            .frame(width: isUser ? userContentWidth : rowWidth, alignment: isUser ? .trailing : .leading)
+
+            if !isUser {
+                Spacer(minLength: 0)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+        .frame(width: rowWidth, alignment: isUser ? .trailing : .leading)
         .contextMenu {
             Button {
                 onCopy()
@@ -1199,6 +1230,7 @@ private struct MessageBubble: View {
 
 private struct DualMessageCard: View {
     let message: DualChatMessage
+    let rowWidth: CGFloat
     let settings: AppSettings
     let mathRenderingEnabled: Bool
     @State private var showThinkingA = false
@@ -1233,27 +1265,35 @@ private struct DualMessageCard: View {
     }
 
     var body: some View {
+        let userContentWidth = min(300, rowWidth)
+        let userLeadingWidth = max(rowWidth - userContentWidth, 0)
+
         Group {
             switch message.parsedRole {
             case .user:
-                VStack(alignment: .trailing, spacing: 8) {
-                    if !attachmentItems.isEmpty {
-                        MessageAttachmentList(
-                            attachments: attachmentItems,
-                            isOutgoing: true
-                        )
+                HStack(alignment: .top, spacing: 0) {
+                    Color.clear
+                        .frame(width: userLeadingWidth, height: 0)
+
+                    VStack(alignment: .trailing, spacing: 8) {
+                        if !attachmentItems.isEmpty {
+                            MessageAttachmentList(
+                                attachments: attachmentItems,
+                                isOutgoing: true
+                            )
+                        }
+                        if !userText.isEmpty {
+                            Text(userText)
+                                .textSelection(.enabled)
+                        }
                     }
-                    if !userText.isEmpty {
-                        Text(userText)
-                            .textSelection(.enabled)
-                    }
+                    .padding(12)
+                    .background(Color.chatUserBubble)
+                    .foregroundStyle(Color.chatUserText)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .frame(width: userContentWidth, alignment: .trailing)
                 }
-                .padding(12)
-                .background(Color.chatUserBubble)
-                .foregroundStyle(Color.chatUserText)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .frame(maxWidth: 300, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .frame(width: rowWidth, alignment: .trailing)
             case .dualModel:
                 VStack(alignment: .leading, spacing: 10) {
                     DualSplitContainer(
@@ -1281,6 +1321,7 @@ private struct DualMessageCard: View {
                 .padding(12)
                 .background(Color.chatDualCard)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .frame(width: rowWidth, alignment: .leading)
             case .legacy:
                 VStack(alignment: .leading, spacing: 10) {
                     if !userText.isEmpty {
@@ -1303,6 +1344,7 @@ private struct DualMessageCard: View {
                 .padding(12)
                 .background(Color.chatDualCard)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .frame(width: rowWidth, alignment: .leading)
             }
         }
     }
