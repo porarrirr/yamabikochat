@@ -162,4 +162,18 @@ class SettingsReasoningTest {
         assertEquals(4096, config.thinkingBudget)
         assertTrue(config.includeThoughts)
     }
+
+    @Test
+    fun buildCodexRequestConfig_carriesPromptCacheDisabledState() {
+        val settings = Settings().copy(
+            codexReasoningEnabled = false,
+            codexPromptCacheEnabled = false
+        )
+
+        val config = settings.buildCodexRequestConfig("unsupported-model")
+
+        assertNotNull(config)
+        config!!
+        assertEquals(false, config.promptCacheEnabled)
+    }
 }

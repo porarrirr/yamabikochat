@@ -92,4 +92,40 @@ class RequestConverterTest {
         assertTrue(converted is OpenRouterMultiModalRequest)
         assertEquals("ephemeral", (converted as OpenRouterMultiModalRequest).cacheControl?.type)
     }
+
+    @Test
+    fun geminiToResponses_prefersRequestPromptCacheKeyOverSessionFallback() {
+        val request = GenerateContentRequest(
+            contents = listOf(Content(role = "user", parts = listOf(Part(text = "hello")))),
+            codexConfig = CodexRequestConfig(promptCacheEnabled = true),
+            promptCacheKey = " conversation-42 "
+        )
+
+        val converted = RequestConverter.geminiToResponses(
+            geminiRequest = request,
+            model = "openai/gpt-5-codex",
+            stream = false,
+            promptCacheKey = "session-123"
+        )
+
+        assertEquals("conversation-42", converted.promptCacheKey)
+    }
+
+    @Test
+    fun geminiToResponses_omitsPromptCacheKeyWhenCodexPromptCacheDisabled() {
+        val request = GenerateContentRequest(
+            contents = listOf(Content(role = "user", parts = listOf(Part(text = "hello")))),
+            codexConfig = CodexRequestConfig(promptCacheEnabled = false),
+            promptCacheKey = "conversation-42"
+        )
+
+        val converted = RequestConverter.geminiToResponses(
+            geminiRequest = request,
+            model = "gpt-5-codex",
+            stream = false,
+            promptCacheKey = "session-123"
+        )
+
+        assertNull(converted.promptCacheKey)
+    }
 }

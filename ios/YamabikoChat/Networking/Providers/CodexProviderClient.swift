@@ -330,8 +330,14 @@ struct CodexProviderClient: ProviderClient {
         if let reasoning {
             root["reasoning"] = reasoning
         }
-        if let sessionID, !sessionID.isEmpty {
-            root["prompt_cache_key"] = sessionID
+        let promptCacheEnabled = request.metadata["codexPromptCacheEnabled"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() != "false"
+        if promptCacheEnabled {
+            let promptCacheKey = request.metadata["promptCacheKey"]?.trimmedNonEmpty ?? sessionID?.trimmedNonEmpty
+            if let promptCacheKey {
+                root["prompt_cache_key"] = promptCacheKey
+            }
         }
 
         return try JSONSerialization.data(withJSONObject: root)

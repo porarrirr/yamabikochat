@@ -676,7 +676,6 @@ data class Settings(
         val promptCacheMinLength = codexPromptCacheMinLength.takeIf { it > 0 }
         val promptCacheType = codexPromptCacheType.trim().lowercase().ifBlank { "ephemeral" }
 
-        if (summaryToSend == null && verbosityToSend == null && !webSearchEnabled && !promptCacheEnabled) return null
         return CodexRequestConfig(
             reasoningSummary = summaryToSend,
             verbosity = verbosityToSend,

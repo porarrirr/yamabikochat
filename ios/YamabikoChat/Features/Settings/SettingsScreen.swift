@@ -8,10 +8,10 @@ struct SettingsScreen: View {
 
     @ObservedObject var viewModel: SettingsViewModel
     var initialTab: SettingsTab? = nil
-    @State private var selectedTab: SettingsTab = .api
+    @State private var navigationPath: [SettingsCategory] = []
     @State private var showDiagnosticsSheet = false
 
-    enum SettingsTab: String, CaseIterable, Identifiable {
+    enum SettingsTab: String, Identifiable {
         case api
         case systemPrompt
         case dual
@@ -20,52 +20,65 @@ struct SettingsScreen: View {
 
         var id: String { rawValue }
 
-        var titleKey: String {
+        var category: SettingsCategory {
             switch self {
             case .api:
-                return "API設定"
-            case .systemPrompt:
-                return "システムプロンプト"
-            case .dual:
-                return "デュアル"
-            case .auto:
-                return "自動会話"
+                return .connection
+            case .systemPrompt, .dual, .auto:
+                return .conversation
             case .appearance:
-                return "外観/診断"
+                return .management
+            }
+        }
+    }
+
+    enum SettingsCategory: String, CaseIterable, Hashable, Identifiable {
+        case connection
+        case conversation
+        case display
+        case management
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .connection:
+                return "接続"
+            case .conversation:
+                return "会話"
+            case .display:
+                return "表示"
+            case .management:
+                return "管理"
+            }
+        }
+
+        var subtitle: String {
+            switch self {
+            case .connection:
+                return "API・モデル"
+            case .conversation:
+                return "プロンプト・モード"
+            case .display:
+                return "テーマ・数式"
+            case .management:
+                return "使用状況・診断"
             }
         }
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                Picker("Settings tab", selection: $selectedTab) {
-                    ForEach(SettingsTab.allCases) { tab in
-                        Text(LocalizedStringKey(tab.titleKey)).tag(tab)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding([.horizontal, .top], 12)
-
-                Form {
-                    switch selectedTab {
-                    case .api:
-                        apiTabContent
-                    case .systemPrompt:
-                        systemPromptTabContent
-                    case .dual:
-                        dualTabContent
-                    case .auto:
-                        autoTabContent
-                    case .appearance:
-                        appearanceTabContent
-                    }
-                }
-            }
+        NavigationStack(path: $navigationPath) {
+            settingsIndex
             .navigationTitle("設定")
+            .navigationDestination(for: SettingsCategory.self) { category in
+                settingsDetail(for: category)
+            }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("閉じる") { dismiss() }
+                if navigationPath.isEmpty {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("閉じる") { dismiss() }
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("保存") { viewModel.saveSettings() }
@@ -91,10 +104,47 @@ struct SettingsScreen: View {
             }
             .onAppear {
                 if let initialTab {
-                    selectedTab = initialTab
+                    navigationPath = [initialTab.category]
                 }
             }
         }
+    }
+
+    private var settingsIndex: some View {
+        Form {
+            Section {
+                ForEach(SettingsCategory.allCases) { category in
+                    NavigationLink(value: category) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(category.title)
+                            Text(category.subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            } footer: {
+                Text("詳細は各項目で設定できます")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func settingsDetail(for category: SettingsCategory) -> some View {
+        Form {
+            switch category {
+            case .connection:
+                connectionCategoryContent
+            case .conversation:
+                conversationCategoryContent
+            case .display:
+                displayCategoryContent
+            case .management:
+                managementCategoryContent
+            }
+        }
+        .navigationTitle(category.title)
     }
 
     private var apiTabContent: some View {
@@ -191,64 +241,81 @@ struct SettingsScreen: View {
         DualModeSettingsSection(viewModel: viewModel)
     }
 
-    private var autoTabContent: some View {
-        Group {
-            AutoConversationSettingsSection(viewModel: viewModel)
+    private var connectionCategoryContent: some View {
+        apiTabContent
+    }
 
-            Section("数式") {
-                Toggle("数式レンダリング", isOn: Binding(
-                    get: { viewModel.settings.mathRenderingEnabled },
-                    set: { viewModel.settings.mathRenderingEnabled = $0 }
-                ))
-            }
+    private var conversationCategoryContent: some View {
+        Group {
+            systemPromptTabContent
+            dualTabContent
+            AutoConversationSettingsSection(viewModel: viewModel)
         }
     }
 
-    private var appearanceTabContent: some View {
+    private var displayCategoryContent: some View {
         Group {
-            Section("外観") {
-                Toggle("システムカラーを使用 (iOS)", isOn: Binding(
-                    get: { viewModel.settings.dynamicColorEnabled },
-                    set: { viewModel.settings.dynamicColorEnabled = $0 }
-                ))
+            appearanceSection
+            mathRenderingSection
+        }
+    }
 
-                Picker("表示モード", selection: Binding(
+    private var managementCategoryContent: some View {
+        Group {
+            tokenUsageSection
+            diagnosticsSection
+            legalSection
+        }
+    }
+
+    private var appearanceSection: some View {
+        Section("外観") {
+            Toggle("システムカラーを使用 (iOS)", isOn: Binding(
+                get: { viewModel.settings.dynamicColorEnabled },
+                set: { viewModel.settings.dynamicColorEnabled = $0 }
+            ))
+
+            Picker("表示モード", selection: Binding(
+                get: {
+                    let normalized = viewModel.settings.themeMode.uppercased()
+                    return ["SYSTEM", "LIGHT", "DARK"].contains(normalized) ? normalized : "SYSTEM"
+                },
+                set: { viewModel.settings.themeMode = $0.uppercased() }
+            )) {
+                ForEach(themeModeOptions) { option in
+                    Text(option.title).tag(option.key)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if !viewModel.settings.dynamicColorEnabled {
+                Picker("アクセントカラー", selection: Binding(
                     get: {
-                        let normalized = viewModel.settings.themeMode.uppercased()
-                        return ["SYSTEM", "LIGHT", "DARK"].contains(normalized) ? normalized : "SYSTEM"
+                        let normalized = viewModel.settings.themeColor.uppercased()
+                        return themeColorOptions.contains(where: { $0.key == normalized })
+                            ? normalized
+                            : "BLUE_PURPLE"
                     },
-                    set: { viewModel.settings.themeMode = $0.uppercased() }
+                    set: { viewModel.settings.themeColor = $0.uppercased() }
                 )) {
-                    ForEach(themeModeOptions) { option in
+                    ForEach(themeColorOptions) { option in
                         Text(option.title).tag(option.key)
                     }
                 }
-                .pickerStyle(.segmented)
-
-                if !viewModel.settings.dynamicColorEnabled {
-                    Picker("アクセントカラー", selection: Binding(
-                        get: {
-                            let normalized = viewModel.settings.themeColor.uppercased()
-                            return themeColorOptions.contains(where: { $0.key == normalized })
-                                ? normalized
-                                : "BLUE_PURPLE"
-                        },
-                        set: { viewModel.settings.themeColor = $0.uppercased() }
-                    )) {
-                        ForEach(themeColorOptions) { option in
-                            Text(option.title).tag(option.key)
-                        }
-                    }
-                }
-
-                Text("iOSでは表示モード（自動/ライト/ダーク）とアクセントカラーを反映します。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
 
-            legalSection
-            tokenUsageSection
-            diagnosticsSection
+            Text("iOSでは表示モード（自動/ライト/ダーク）とアクセントカラーを反映します。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var mathRenderingSection: some View {
+        Section("数式") {
+            Toggle("数式レンダリング", isOn: Binding(
+                get: { viewModel.settings.mathRenderingEnabled },
+                set: { viewModel.settings.mathRenderingEnabled = $0 }
+            ))
         }
     }
 

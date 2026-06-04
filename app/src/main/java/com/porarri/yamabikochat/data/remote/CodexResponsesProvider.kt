@@ -177,7 +177,7 @@ class CodexResponsesProvider(
         accountId: String?,
         sessionId: String?
     ): ResponsesStreamResult {
-        val requestBody = buildRequestBody(request, model, stream, sessionId)
+        val requestBody = buildRequestBody(request, model, stream)
         val httpRequest = buildHttpRequest(baseUrl, apiKey, requestBody, accountId, sessionId, stream)
         logRequestHeaders(httpRequest)
         val response = streamClient.newCall(httpRequest).execute()
@@ -198,7 +198,7 @@ class CodexResponsesProvider(
         accountId: String?,
         sessionId: String?
     ): ResponsesRequestResult {
-        val requestBody = buildRequestBody(request, model, false, sessionId)
+        val requestBody = buildRequestBody(request, model, false)
         val httpRequest = buildHttpRequest(baseUrl, apiKey, requestBody, accountId, sessionId, false)
         logRequestHeaders(httpRequest)
         val response = requestClient.newCall(httpRequest).execute()
@@ -215,16 +215,14 @@ class CodexResponsesProvider(
     private fun buildRequestBody(
         request: GenerateContentRequest,
         model: String,
-        stream: Boolean,
-        promptCacheKey: String?
+        stream: Boolean
     ): okhttp3.RequestBody {
         val payload = json.encodeToString(
             ResponsesRequest.serializer(),
             RequestConverter.geminiToResponses(
                 geminiRequest = request,
                 model = model,
-                stream = stream,
-                promptCacheKey = promptCacheKey
+                stream = stream
             )
         )
         logRequestPayload(payload)

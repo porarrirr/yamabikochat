@@ -72,7 +72,8 @@ final class ProviderClientParityTests: XCTestCase {
                 "codexVerbosity": "medium",
                 "codexWebSearchEnabled": "true",
                 "codexWebSearchContextSize": "medium",
-                "codexSessionId": "session-123"
+                "codexSessionId": "session-123",
+                "promptCacheKey": "conversation-42"
             ]
         )
 
@@ -93,7 +94,7 @@ final class ProviderClientParityTests: XCTestCase {
         let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
         XCTAssertEqual(root["model"] as? String, "gpt-5-codex")
         XCTAssertEqual(root["store"] as? Bool, false)
-        XCTAssertEqual(root["prompt_cache_key"] as? String, "session-123")
+        XCTAssertEqual(root["prompt_cache_key"] as? String, "conversation-42")
 
         let include = (root["include"] as? [String]) ?? []
         XCTAssertTrue(include.contains("reasoning.encrypted_content"))
@@ -106,6 +107,46 @@ final class ProviderClientParityTests: XCTestCase {
         let first = try XCTUnwrap(input.first)
         let content = try XCTUnwrap(first["content"] as? [[String: Any]])
         XCTAssertEqual(content.first?["type"] as? String, "input_text")
+    }
+
+    func testCodexGenerateOmitsPromptCacheKeyWhenDisabledButKeepsSessionHeader() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCodexAccessToken("codex-access-token")
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"output_text":"ok"}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = CodexProviderClient()
+        let request = ProviderRequest(
+            model: "gpt-5-codex",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: [
+                "provider": "CODEX_AUTH",
+                "codexSessionId": "session-123",
+                "promptCacheKey": "conversation-42",
+                "codexPromptCacheEnabled": "false"
+            ]
+        )
+
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(captured.headers["session_id"], "session-123")
+
+        let bodyData = try XCTUnwrap(captured.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertNil(root["prompt_cache_key"])
     }
 
     func testCodexStreamParsesReasoningTextAndOutputItemDone() async throws {

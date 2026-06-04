@@ -307,6 +307,13 @@ object RequestConverter {
             ?.takeIf { it.isNotBlank() }
 
         val codexConfig = geminiRequest.codexConfig
+        val promptCacheKeyToSend = if (codexConfig?.promptCacheEnabled == false) {
+            null
+        } else {
+            (geminiRequest.promptCacheKey ?: promptCacheKey)
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+        }
         val summary = codexConfig?.reasoningSummary?.takeIf { it.isNotBlank() }
         val reasoning = if (thinkingEffort != null || summary != null) {
             ResponsesReasoning(effort = thinkingEffort, summary = summary)
@@ -339,7 +346,7 @@ object RequestConverter {
             include = include,
             tools = tools,
             text = textConfig,
-            promptCacheKey = promptCacheKey?.trim()?.takeIf { it.isNotBlank() },
+            promptCacheKey = promptCacheKeyToSend,
             reasoning = reasoning
         )
     }
