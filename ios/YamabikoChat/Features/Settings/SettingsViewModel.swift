@@ -65,8 +65,12 @@ final class SettingsViewModel: ObservableObject {
 
         repository.getOpenRouterModelsPublisher()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in
-                self?.openRouterModels = $0
+            .sink { [weak self] models in
+                guard let self else { return }
+                openRouterModels = models
+                if let modelId = settings.defaultModel.trimmedNonEmpty {
+                    reconcileOpenRouterPreferredProviders(forModelId: modelId)
+                }
             }
             .store(in: &cancellables)
 
@@ -322,6 +326,34 @@ final class SettingsViewModel: ObservableObject {
         if let data = try? JSONEncoder().encode(map), let json = String(data: data, encoding: .utf8) {
             settings.providerDefaultModelsJSON = json
         }
+        reconcileOpenRouterPreferredProviders(forModelId: modelId)
+    }
+
+    func reconcileOpenRouterPreferredProviders(forModelId modelId: String) {
+        guard settings.apiProvider.uppercased() == "OPENROUTER" else { return }
+        guard let modelInfo = openRouterModels.first(where: { $0.id == modelId }) else { return }
+
+        let available = openRouterProviderSlugs(for: modelInfo)
+        guard !available.isEmpty else { return }
+
+        let availableSet = Set(available)
+        var selected = settings.preferredProvidersList().filter { availableSet.contains($0.lowercased()) }
+
+        if selected.isEmpty, let fallback = available.first {
+            selected = [fallback]
+        }
+
+        let current = settings.preferredProvidersList()
+        guard selected != current else { return }
+        settings.setPreferredProvidersList(selected)
+    }
+
+    private func openRouterProviderSlugs(for model: SimpleModel) -> [String] {
+        let raw = model.availableProviders.isEmpty ? [model.provider] : model.availableProviders
+        var seen: Set<String> = []
+        return raw
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
     func setDualModeEnabled(_ enabled: Bool) {

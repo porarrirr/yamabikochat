@@ -50,6 +50,12 @@ struct URLSessionHTTPClient: HTTPClientProtocol {
             throw ProviderClientError.invalidResponse
         }
 
+        if !(200 ... 299).contains(http.statusCode) {
+            let errorBody = await Self.readResponseBody(from: bytes)
+            let message = errorBody.isEmpty ? "HTTP \(http.statusCode)" : errorBody
+            throw ProviderClientError.httpStatus(http.statusCode, message)
+        }
+
         let stream = AsyncThrowingStream<String, Error> { continuation in
             let task = Task {
                 do {
@@ -64,5 +70,22 @@ struct URLSessionHTTPClient: HTTPClientProtocol {
             continuation.onTermination = { _ in task.cancel() }
         }
         return (stream, http)
+    }
+
+    private static func readResponseBody(from bytes: URLSession.AsyncBytes, maxBytes: Int = 16_384) async -> String {
+        var chunks: [String] = []
+        var total = 0
+        do {
+            for try await line in bytes.lines {
+                chunks.append(line)
+                total += line.utf8.count + 1
+                if total >= maxBytes {
+                    break
+                }
+            }
+        } catch {
+            return chunks.joined(separator: "\n")
+        }
+        return chunks.joined(separator: "\n")
     }
 }

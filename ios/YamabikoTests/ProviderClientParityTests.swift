@@ -1055,6 +1055,50 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(usage.cachedInputTokens, 16)
     }
 
+    func testOpenRouterStreamIncludesErrorBodyOnHTTP404() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("openrouter-key", for: .openRouter)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(
+                    #"{"error":{"message":"No allowed providers are available for the selected model."}}"#
+                )
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 404))
+        }
+
+        let client = OpenAICompatibleProviderClient()
+        let request = ProviderRequest(
+            model: "liquid/lfm-2.5-1.2b-thinking:free",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "OPENROUTER"]
+        )
+
+        let stream = client.stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        do {
+            for try await _ in stream {}
+            XCTFail("Expected stream to fail with HTTP 404")
+        } catch let error as ProviderClientError {
+            guard case let .httpStatus(code, body) = error else {
+                return XCTFail("Unexpected ProviderClientError: \(error)")
+            }
+            XCTAssertEqual(code, 404)
+            XCTAssertTrue(body.contains("No allowed providers are available for the selected model."))
+        }
+    }
+
     func testOpenRouterGenerateParsesUsageWithMixedCaseKeys() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("openrouter-key", for: .openRouter)

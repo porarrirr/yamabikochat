@@ -196,6 +196,12 @@ final class OpenRouterModelService {
         errorSubject.send(nil)
     }
 
+    func replaceCachedModels(_ models: [SimpleModel]) {
+        cachedModels = models
+        lastFetch = Date()
+        modelsSubject.send(models)
+    }
+
     func getAvailableProviders(for modelId: String) async -> [String] {
         let endpoints = await getModelEndpoints(modelId: modelId)
         let directory = await getProvidersDirectory()

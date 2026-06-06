@@ -101,7 +101,11 @@ struct OpenAICompatibleProviderClient: ProviderClient {
 
                     let (lineStream, response) = try await httpClient.stream(httpRequest)
                     guard (200 ... 299).contains(response.statusCode) else {
-                        throw ProviderClientError.httpStatus(response.statusCode, "Streaming endpoint returned \(response.statusCode)")
+                        let errorBody = await Self.readStreamErrorBody(lineStream)
+                        let message = errorBody.isEmpty
+                            ? "Streaming endpoint returned \(response.statusCode)"
+                            : errorBody
+                        throw ProviderClientError.httpStatus(response.statusCode, message)
                     }
 
                     try await ProviderSSEStreamRunner.pump(
@@ -416,5 +420,25 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             return Int(value)
         }
         return nil
+    }
+
+    private static func readStreamErrorBody(
+        _ stream: AsyncThrowingStream<String, Error>,
+        maxBytes: Int = 16_384
+    ) async -> String {
+        var chunks: [String] = []
+        var total = 0
+        do {
+            for try await line in stream {
+                chunks.append(line)
+                total += line.utf8.count + 1
+                if total >= maxBytes {
+                    break
+                }
+            }
+        } catch {
+            return chunks.joined(separator: "\n")
+        }
+        return chunks.joined(separator: "\n")
     }
 }

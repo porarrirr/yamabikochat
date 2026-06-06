@@ -91,6 +91,7 @@
 		8647CA0CCFA82D5C469B4853 /* tex-svg.js in Resources */ = {isa = PBXBuildFile; fileRef = 68417249749E064D56E23ACE /* tex-svg.js */; };
 		8F212E3FE830E6095D057FE1 /* ThinkingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3C59B2791747A64D7889D5C /* ThinkingViews.swift */; };
 		922866C08D7F9507A748D15E /* ChatRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81BEFD60BAA4BF4DA1A9286B /* ChatRepository.swift */; };
+		92F3FF4AEE8C134A7DC83453 /* OpenRouterRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8090A935C0BB2117BC04547F /* OpenRouterRoutingTests.swift */; };
 		9621F9E7E3AD0FA8C8261E37 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7CB427210D89DB2E91F4D299 /* PrivacyInfo.xcprivacy */; };
 		962D63DC04F87D3F8083C055 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */; };
 		98749CFF168F962BDDDD037B /* SettingsStringHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D9D7267F7551E4A0918A48 /* SettingsStringHelpers.swift */; };
@@ -279,8 +280,9 @@
 		7824746250F630294D76127F /* GeminiModelUtilsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiModelUtilsTests.swift; sourceTree = "<group>"; };
 		7AFADAD85FDF09DED54072D8 /* GeminiModelUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiModelUtils.swift; sourceTree = "<group>"; };
 		7BE885E298CFD7325CE27F89 /* HTTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPClient.swift; sourceTree = "<group>"; };
-		7CB427210D89DB2E91F4D299 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		7CB427210D89DB2E91F4D299 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		7CCB6D4DB2A9801E56AAC85B /* YamabikoUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = YamabikoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8090A935C0BB2117BC04547F /* OpenRouterRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterRoutingTests.swift; sourceTree = "<group>"; };
 		81BEFD60BAA4BF4DA1A9286B /* ChatRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepository.swift; sourceTree = "<group>"; };
 		844CFBDF021226E3F2BCA7D6 /* ChatStreamSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStreamSessionTests.swift; sourceTree = "<group>"; };
 		84A73C52D0DE4C504F3BA2DC /* YamabikoTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = YamabikoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -311,7 +313,7 @@
 		A830A97218DEF74E9FA3C2AF /* AppConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConstants.swift; sourceTree = "<group>"; };
 		AAAE60022019121E086B1627 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		AAFB800375481AE013AF9773 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
-		AB8DAEE8D6609BEE6A100480 /* YamabikoChat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YamabikoChat.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB8DAEE8D6609BEE6A100480 /* YamabikoChat.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = YamabikoChat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B0CE95A107E6CAC3E8A4BC48 /* ChatRepositoryDualTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepositoryDualTests.swift; sourceTree = "<group>"; };
 		B0D9D7267F7551E4A0918A48 /* SettingsStringHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStringHelpers.swift; sourceTree = "<group>"; };
 		B3470CFFE969A9B32DA280E0 /* ProviderClientParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderClientParityTests.swift; sourceTree = "<group>"; };
@@ -354,7 +356,7 @@
 		F5E76571802BD1DCDB737AD8 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		F9196309A73916FCCD1FD7B0 /* StreamDeltaAccumulator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDeltaAccumulator.swift; sourceTree = "<group>"; };
 		FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
-		FDFB9E3E80818460DA5CDA5A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		FDFB9E3E80818460DA5CDA5A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		FE20918FD9A56B9EEF503973 /* ProviderSSEStreamRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderSSEStreamRunner.swift; sourceTree = "<group>"; };
 		FF047B35C735D75B50DB5BAD /* ProviderRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderRequest.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -663,6 +665,7 @@
 				59D76AC83FA6381A252F9360 /* LocalAuthCallbackServerTests.swift */,
 				961BCEE0B9725B362F606EA0 /* MathMarkdownViewTests.swift */,
 				4C3E31EC64A965F4851AE80A /* OpenRouterModelTests.swift */,
+				8090A935C0BB2117BC04547F /* OpenRouterRoutingTests.swift */,
 				9E7DA902C4E31F43AC67F6DE /* ProjectFeatureTests.swift */,
 				B3470CFFE969A9B32DA280E0 /* ProviderClientParityTests.swift */,
 				DF7CF673D03C83995B954FE0 /* ProviderEnumTests.swift */,
@@ -916,6 +919,7 @@
 				49E4DCE20748F2F22FB31465 /* LocalAuthCallbackServerTests.swift in Sources */,
 				D63F06CADBC32DCDED7D808E /* MathMarkdownViewTests.swift in Sources */,
 				615791B4B229DB6A6AD8D4C5 /* OpenRouterModelTests.swift in Sources */,
+				92F3FF4AEE8C134A7DC83453 /* OpenRouterRoutingTests.swift in Sources */,
 				D3F24BA15CE46220C3494CF3 /* ProjectFeatureTests.swift in Sources */,
 				5D27722FA0D489EB470653FB /* ProviderClientParityTests.swift in Sources */,
 				E00E1BEED00E37AA48679DBC /* ProviderEnumTests.swift in Sources */,
@@ -1236,7 +1240,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.porarri.yamabikochat.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1388,7 +1391,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.porarri.yamabikochat.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

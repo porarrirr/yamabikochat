@@ -586,7 +586,11 @@ final class ChatRepository {
                 provider: conversation.apiProvider,
                 model: conversation.model
             ),
-            provider: providerPreferencesForProvider(settings: settings, provider: conversation.apiProvider),
+            provider: await providerPreferencesForProvider(
+                settings: settings,
+                provider: conversation.apiProvider,
+                model: conversation.model
+            ),
             metadata: metadata
         )
     }
@@ -1447,7 +1451,11 @@ final class ChatRepository {
             stream: stream ?? settings.isStreamingEnabled,
             tools: toolsForProvider(settings: settings, provider: provider, context: context),
             thinking: thinkingConfigForProvider(settings: settings, provider: provider, model: model, context: context),
-            provider: providerPreferencesForProvider(settings: settings, provider: provider),
+            provider: await providerPreferencesForProvider(
+                settings: settings,
+                provider: provider,
+                model: model
+            ),
             metadata: metadata
         )
     }
@@ -1675,13 +1683,28 @@ final class ChatRepository {
         )
     }
 
-    private func providerPreferencesForProvider(settings: AppSettings, provider: String) -> ProviderRoutingConfig? {
+    private func providerPreferencesForProvider(
+        settings: AppSettings,
+        provider: String,
+        model: String
+    ) async -> ProviderRoutingConfig? {
         guard provider.uppercased() == "OPENROUTER" else { return nil }
 
-        let providers = settings.preferredProvidersList()
-        let quantizations = settings.selectedQuantizationsList()
+        let catalogModel = modelService.getModelById(model)
+        let availableProviders = await openRouterAvailableProviderSlugs(for: model, catalogModel: catalogModel)
+        let availableQuantizations = openRouterAvailableQuantizations(catalogModel: catalogModel)
 
-        if providers.isEmpty, quantizations.isEmpty, settings.maxPricePerMillionTokens <= 0 {
+        let providers = filterCompatibleOpenRouterSlugs(
+            settings.preferredProvidersList(),
+            available: availableProviders
+        )
+        let quantizations = filterCompatibleOpenRouterSlugs(
+            settings.selectedQuantizationsList(),
+            available: availableQuantizations
+        )
+
+        let hasRoutingProviders = !providers.isEmpty
+        if !hasRoutingProviders, quantizations.isEmpty, settings.maxPricePerMillionTokens <= 0 {
             return nil
         }
 
@@ -1691,7 +1714,7 @@ final class ChatRepository {
         } else {
             onlyProviders = nil
         }
-        let orderProviders = onlyProviders == nil ? (providers.isEmpty ? nil : providers) : nil
+        let orderProviders = onlyProviders == nil ? (hasRoutingProviders ? providers : nil) : nil
 
         let maxPrice: ProviderMaxPriceConfig?
         if settings.maxPricePerMillionTokens > 0 {
@@ -1710,7 +1733,7 @@ final class ChatRepository {
 
         return ProviderRoutingConfig(
             order: orderProviders,
-            allowFallbacks: providers.isEmpty ? nil : settings.allowFallbacks,
+            allowFallbacks: hasRoutingProviders ? settings.allowFallbacks : nil,
             requireParameters: settings.requireParameters ? true : nil,
             dataCollection: nil,
             quantizations: quantizations.isEmpty ? nil : quantizations,
@@ -1719,6 +1742,37 @@ final class ChatRepository {
             ignore: nil,
             sort: trimmedSort.isEmpty ? nil : trimmedSort
         )
+    }
+
+    private func openRouterAvailableProviderSlugs(
+        for model: String,
+        catalogModel: SimpleModel?
+    ) async -> [String] {
+        if let catalogModel, !catalogModel.availableProviders.isEmpty {
+            return normalizedOpenRouterSlugs(catalogModel.availableProviders)
+        }
+        let fromEndpoints = await modelService.getAvailableProviders(for: model)
+        return normalizedOpenRouterSlugs(fromEndpoints)
+    }
+
+    private func openRouterAvailableQuantizations(catalogModel: SimpleModel?) -> [String] {
+        guard let catalogModel, !catalogModel.availableQuantizations.isEmpty else {
+            return []
+        }
+        return normalizedOpenRouterSlugs(catalogModel.availableQuantizations)
+    }
+
+    private func normalizedOpenRouterSlugs(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        return values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
+    private func filterCompatibleOpenRouterSlugs(_ preferred: [String], available: [String]) -> [String] {
+        guard !available.isEmpty else { return preferred }
+        let availableSet = Set(available.map { $0.lowercased() })
+        return preferred.filter { availableSet.contains($0.lowercased()) }
     }
 
     private func effectiveGeminiThinkingLevel(settings: AppSettings, model: String) -> String? {
