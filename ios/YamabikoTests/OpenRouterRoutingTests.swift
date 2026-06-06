@@ -61,6 +61,19 @@ final class OpenRouterRoutingTests: XCTestCase {
         availableQuantizations: []
     )
 
+    private let unknownAvailabilityModel = SimpleModel(
+        id: "openrouter/free",
+        name: "Free Models Router",
+        provider: "openrouter",
+        topProvider: nil,
+        contextLength: 32_768,
+        promptPricePerMillion: 0,
+        completionPricePerMillion: 0,
+        isFree: true,
+        availableProviders: [],
+        availableQuantizations: []
+    )
+
     func testSendMessageOmitsProviderRoutingWhenPreferredProvidersMismatchModel() async throws {
         let model = liquidModel
         let httpClient = OpenRouterRoutingHTTPClient()
@@ -112,6 +125,32 @@ final class OpenRouterRoutingTests: XCTestCase {
         let provider = try XCTUnwrap(root["provider"] as? [String: Any])
         XCTAssertEqual(provider["order"] as? [String], ["liquid"])
         XCTAssertNil(provider["only"])
+    }
+
+    func testSendMessageOmitsStalePreferredProviderWhenModelAvailabilityUnknown() async throws {
+        let model = unknownAvailabilityModel
+        let httpClient = OpenRouterRoutingHTTPClient()
+        let fixture = try makeFixture(httpClient: httpClient) { settings in
+            settings.apiProvider = "OPENROUTER"
+            settings.defaultModel = model.id
+            settings.preferredProvidersJSON = #"["deepseek"]"#
+            settings.allowFallbacks = false
+            settings.isStreamingEnabled = true
+        }
+        try fixture.credentials.setCredential("openrouter-key", for: .openRouter)
+        fixture.modelService.replaceCachedModels([model])
+
+        let conversationID = try fixture.repository.createConversation(title: "Routing")
+        _ = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "hello",
+            attachments: []
+        )
+
+        let request = try XCTUnwrap(httpClient.streamedRequests.first)
+        let body = try XCTUnwrap(request.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertNil(root["provider"])
     }
 
     func testSendMessageUsesOnlyProviderWhenFallbacksDisabledAndSingleMatch() async throws {
@@ -171,7 +210,7 @@ final class OpenRouterRoutingTests: XCTestCase {
         let settings = SettingsRepository(dbQueue: dbQueue)
         let conversations = ConversationRepository(dbQueue: dbQueue)
         let credentials = TestCredentialStore()
-        let modelService = OpenRouterModelService(credentialStore: credentials)
+        let modelService = OpenRouterModelService(credentialStore: credentials, httpClient: httpClient)
         let providers = ProviderGateway(
             settingsRepository: settings,
             credentialStore: credentials,

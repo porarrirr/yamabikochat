@@ -1770,7 +1770,7 @@ final class ChatRepository {
     }
 
     private func filterCompatibleOpenRouterSlugs(_ preferred: [String], available: [String]) -> [String] {
-        guard !available.isEmpty else { return preferred }
+        guard !available.isEmpty else { return [] }
         let availableSet = Set(available.map { $0.lowercased() })
         return preferred.filter { availableSet.contains($0.lowercased()) }
     }
