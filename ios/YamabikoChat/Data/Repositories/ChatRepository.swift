@@ -1694,10 +1694,24 @@ final class ChatRepository {
         let availableProviders = await openRouterAvailableProviderSlugs(for: model, catalogModel: catalogModel)
         let availableQuantizations = openRouterAvailableQuantizations(catalogModel: catalogModel)
 
-        let providers = filterCompatibleOpenRouterSlugs(
-            settings.preferredProvidersList(),
+        let preferredProviders = settings.preferredProvidersList()
+        var providers = filterCompatibleOpenRouterSlugs(
+            preferredProviders,
             available: availableProviders
         )
+        let usingEndpointFallback = providers.isEmpty && !availableProviders.isEmpty
+        if usingEndpointFallback {
+            providers = availableProviders
+            DiagnosticsLogger.log(
+                "OpenRouter provider routing fell back to model endpoints",
+                category: .network,
+                metadata: [
+                    "model": model,
+                    "preferred": preferredProviders.joined(separator: ","),
+                    "endpoints": availableProviders.joined(separator: ",")
+                ]
+            )
+        }
         let quantizations = filterCompatibleOpenRouterSlugs(
             settings.selectedQuantizationsList(),
             available: availableQuantizations
@@ -1705,6 +1719,16 @@ final class ChatRepository {
 
         let hasRoutingProviders = !providers.isEmpty
         if !hasRoutingProviders, quantizations.isEmpty, settings.maxPricePerMillionTokens <= 0 {
+            if !preferredProviders.isEmpty {
+                DiagnosticsLogger.log(
+                    "OpenRouter provider routing omitted with no compatible endpoints",
+                    category: .network,
+                    metadata: [
+                        "model": model,
+                        "preferred": preferredProviders.joined(separator: ",")
+                    ]
+                )
+            }
             return nil
         }
 
@@ -1731,6 +1755,17 @@ final class ChatRepository {
 
         let trimmedSort = settings.providerSort.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
+        DiagnosticsLogger.log(
+            "OpenRouter provider routing applied",
+            category: .network,
+            metadata: [
+                "model": model,
+                "providers": providers.joined(separator: ","),
+                "only": (onlyProviders ?? []).joined(separator: ","),
+                "allow_fallbacks": String(settings.allowFallbacks)
+            ]
+        )
+
         return ProviderRoutingConfig(
             order: orderProviders,
             allowFallbacks: hasRoutingProviders ? settings.allowFallbacks : nil,
@@ -1748,11 +1783,15 @@ final class ChatRepository {
         for model: String,
         catalogModel: SimpleModel?
     ) async -> [String] {
+        let fromEndpoints = await modelService.getAvailableProviders(for: model)
+        let endpointSlugs = normalizedOpenRouterSlugs(fromEndpoints)
+        if !endpointSlugs.isEmpty {
+            return endpointSlugs
+        }
         if let catalogModel, !catalogModel.availableProviders.isEmpty {
             return normalizedOpenRouterSlugs(catalogModel.availableProviders)
         }
-        let fromEndpoints = await modelService.getAvailableProviders(for: model)
-        return normalizedOpenRouterSlugs(fromEndpoints)
+        return []
     }
 
     private func openRouterAvailableQuantizations(catalogModel: SimpleModel?) -> [String] {

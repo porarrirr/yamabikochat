@@ -21,6 +21,37 @@ private final class OpenRouterTestCredentialStore: SecureCredentialStore {
     }
 }
 
+private final class OpenRouterRecordingHTTPClient: HTTPClientProtocol {
+    private(set) var sentURLs: [URL] = []
+    let data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
+        sentURLs.append(request.url)
+        let response = HTTPURLResponse(
+            url: request.url,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        return (data, response)
+    }
+
+    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
+        sentURLs.append(request.url)
+        let response = HTTPURLResponse(
+            url: request.url,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        return (AsyncThrowingStream { continuation in continuation.finish() }, response)
+    }
+}
+
 private struct OpenRouterStubHTTPClient: HTTPClientProtocol {
     var data: Data
     var statusCode: Int
@@ -126,5 +157,33 @@ final class OpenRouterModelTests: XCTestCase {
         let free = models.first { $0.id == "meta-llama/llama-3.1-8b-instruct:free" }
         XCTAssertEqual(free?.name, "meta-llama/llama-3.1-8b-instruct:free")
         XCTAssertTrue(free?.isFree ?? false)
+    }
+
+    func testModelEndpointsRequestKeepsVariantSuffix() async {
+        let payload = """
+        {
+          "data": {
+            "endpoints": [
+              {
+                "name": "Google AI Studio | google/gemma-4-31b-it:free",
+                "provider_name": "Google AI Studio"
+              }
+            ]
+          }
+        }
+        """.data(using: .utf8)!
+        let httpClient = OpenRouterRecordingHTTPClient(data: payload)
+        let service = OpenRouterModelService(
+            credentialStore: OpenRouterTestCredentialStore(),
+            httpClient: httpClient
+        )
+
+        let endpoints = await service.getModelEndpoints(modelId: "google/gemma-4-31b-it:free")
+
+        XCTAssertEqual(
+            httpClient.sentURLs.first?.absoluteString,
+            "https://openrouter.ai/api/v1/models/google/gemma-4-31b-it:free/endpoints"
+        )
+        XCTAssertEqual(endpoints.map(\.providerName), ["Google AI Studio"])
     }
 }

@@ -148,9 +148,12 @@ final class OpenRouterModelService {
         guard parts.count >= 2 else { return [] }
 
         let author = String(parts[0])
-        let rawSlug = parts.dropFirst().joined(separator: "/")
-        let canonicalSlug = rawSlug.split(separator: ":").first.map(String.init) ?? rawSlug
-        let url = URL(string: "https://openrouter.ai/api/v1/models/\(author)/\(canonicalSlug)/endpoints")!
+        let slug = parts.dropFirst().joined(separator: "/")
+        // Variants like ":free" have their own endpoint listings whose providers
+        // differ from the base model, so the suffix must stay in the slug.
+        guard let url = URL(string: "https://openrouter.ai/api/v1/models/\(author)/\(slug)/endpoints") else {
+            return []
+        }
 
         do {
             let request = HTTPRequest(
