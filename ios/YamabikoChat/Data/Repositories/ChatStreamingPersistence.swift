@@ -90,6 +90,7 @@ struct ChatStreamSessionResult {
     var text: String
     var reasoningText: String
     var usage: ProviderUsage?
+    var toolCalls: [ToolCall]
 }
 
 enum ChatStreamSession {
@@ -104,6 +105,7 @@ enum ChatStreamSession {
         var fullText = ""
         var reasoningText = ""
         var finalUsage: ProviderUsage?
+        var finalToolCalls: [ToolCall] = []
         var coordinator = ChatStreamingPersistenceCoordinator()
         do {
             for try await event in stream {
@@ -113,6 +115,7 @@ enum ChatStreamSession {
                     fullText: &fullText,
                     reasoningText: &reasoningText,
                     finalUsage: &finalUsage,
+                    finalToolCalls: &finalToolCalls,
                     coordinator: &coordinator,
                     onStreamEvent: onStreamEvent,
                     onStreamingSnapshot: onStreamingSnapshot
@@ -142,7 +145,8 @@ enum ChatStreamSession {
         return ChatStreamSessionResult(
             text: fullText,
             reasoningText: reasoningText,
-            usage: finalUsage
+            usage: finalUsage,
+            toolCalls: finalToolCalls
         )
     }
 
@@ -152,6 +156,7 @@ enum ChatStreamSession {
         fullText: inout String,
         reasoningText: inout String,
         finalUsage: inout ProviderUsage?,
+        finalToolCalls: inout [ToolCall],
         coordinator: inout ChatStreamingPersistenceCoordinator,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
@@ -182,6 +187,7 @@ enum ChatStreamSession {
             break
         case let .completed(response):
             finalUsage = response.usage ?? finalUsage
+            finalToolCalls = response.toolCalls
             if fullText.isEmpty, !response.text.isEmpty {
                 fullText = response.text
             }

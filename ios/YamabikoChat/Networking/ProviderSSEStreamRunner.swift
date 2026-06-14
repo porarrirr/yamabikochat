@@ -12,7 +12,8 @@ enum ProviderSSEStreamRunner {
                 text: response.text,
                 reasoningSummary: response.reasoningSummary,
                 raw: response.raw,
-                usage: response.usage ?? latestUsage
+                usage: response.usage ?? latestUsage,
+                toolCalls: response.toolCalls
             )
         }
     }
@@ -25,6 +26,7 @@ enum ProviderSSEStreamRunner {
         var fullText = ""
         var fullReasoning = ""
         var latestUsage: ProviderUsage?
+        var toolCallAccumulator = ToolCallAccumulator()
 
         func yieldStreamCompleted(andFinish: Bool) {
             continuation.yield(
@@ -33,7 +35,8 @@ enum ProviderSSEStreamRunner {
                         text: fullText,
                         reasoningSummary: options.streamEndReasoningSummary(fullReasoning),
                         raw: nil,
-                        usage: latestUsage
+                        usage: latestUsage,
+                        toolCalls: toolCallAccumulator.toolCalls
                     )
                 )
             )
@@ -54,8 +57,14 @@ enum ProviderSSEStreamRunner {
                 latestUsage = usage
             }
             for event in options.eventsFromRoot(root, &fullText, &fullReasoning) {
+                if case let .toolCallDelta(delta) = event {
+                    toolCallAccumulator.append(delta)
+                }
                 if case let .completed(response) = event {
-                    let final = options.mergeInlineCompleted(response, latestUsage)
+                    var final = options.mergeInlineCompleted(response, latestUsage)
+                    if final.toolCalls.isEmpty {
+                        final.toolCalls = toolCallAccumulator.toolCalls
+                    }
                     continuation.yield(.completed(final))
                     continuation.finish()
                     return

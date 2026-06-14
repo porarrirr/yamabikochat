@@ -69,12 +69,14 @@ struct GeminiProviderClient: ProviderClient {
     private struct ParsedGeminiParts {
         var text: String
         var reasoning: String
+        var toolCalls: [ToolCall]
     }
 
     private struct ParsedGeminiChunk {
         var text: String
         var reasoning: String
         var usage: ProviderUsage?
+        var toolCalls: [ToolCall]
     }
 
     private struct ParsedGeminiError {
@@ -99,6 +101,7 @@ struct GeminiProviderClient: ProviderClient {
         var flushCount = 0
         var flushTrace: [String] = []
         var invalidPayloadSnippets: [String] = []
+        var toolCallAccumulator = ToolCallAccumulator()
         let maxSnippets = 6
         let snippetLimit = 256
 
@@ -151,7 +154,8 @@ struct GeminiProviderClient: ProviderClient {
                     text: fullText,
                     reasoningSummary: fullReasoning.trimmedNonEmpty,
                     raw: nil,
-                    usage: latestUsage
+                    usage: latestUsage,
+                    toolCalls: toolCallAccumulator.toolCalls
                 )
                 continuation.yield(.completed(final))
                 continuation.finish()
@@ -187,6 +191,18 @@ struct GeminiProviderClient: ProviderClient {
                     continuation.yield(.textDelta(textDelta))
                 }
             }
+            for (index, call) in parsed.toolCalls.enumerated() {
+                let delta = ToolCallDelta(
+                    index: index,
+                    id: call.id,
+                    name: call.name,
+                    argumentsFragment: call.argumentsJSON,
+                    providerMetadata: call.providerMetadata
+                )
+                toolCallAccumulator.append(delta)
+                hasUsableData = true
+                continuation.yield(.toolCallDelta(delta))
+            }
         }
 
         for try await chunk in SSEPayloadAssembly.payloads(from: lineStream) {
@@ -205,7 +221,8 @@ struct GeminiProviderClient: ProviderClient {
             text: fullText,
             reasoningSummary: fullReasoning.trimmedNonEmpty,
             raw: nil,
-            usage: latestUsage
+            usage: latestUsage,
+            toolCalls: toolCallAccumulator.toolCalls
         )
         continuation.yield(.completed(final))
         continuation.finish()
@@ -388,23 +405,92 @@ struct GeminiProviderClient: ProviderClient {
     }
 
     private func buildGeminiParts(for message: ProviderRequestMessage, embedImages: Bool) -> [[String: Any]] {
-        ProviderAttachmentEncoder.buildGeminiParts(
-            text: message.content,
-            attachments: message.attachments,
-            embedImages: embedImages
-        )
+        if message.role == "tool" {
+            let responseValue: Any
+            if let data = message.content.data(using: .utf8),
+               let object = try? JSONSerialization.jsonObject(with: data) {
+                responseValue = object
+            } else {
+                responseValue = ["result": message.content]
+            }
+            var functionResponse: [String: Any] = [
+                "name": message.toolName ?? "",
+                "response": responseValue
+            ]
+            if let id = message.toolCallId?.trimmedNonEmpty {
+                functionResponse["id"] = id
+            }
+            return [["functionResponse": functionResponse]]
+        }
+
+        var parts: [[String: Any]] = []
+        if !message.content.isEmpty || !message.attachments.isEmpty {
+            parts = ProviderAttachmentEncoder.buildGeminiParts(
+                text: message.content,
+                attachments: message.attachments,
+                embedImages: embedImages
+            )
+        }
+        if message.role == "assistant" {
+            for call in message.toolCalls ?? [] {
+                let arguments: Any
+                if let data = call.argumentsJSON.data(using: .utf8),
+                   let object = try? JSONSerialization.jsonObject(with: data) {
+                    arguments = object
+                } else {
+                    arguments = [:]
+                }
+                var functionCall: [String: Any] = [
+                    "name": call.name,
+                    "args": arguments
+                ]
+                functionCall["id"] = call.id
+                var part: [String: Any] = ["functionCall": functionCall]
+                if let signature = call.providerMetadata?["thoughtSignature"]?.trimmedNonEmpty {
+                    part["thoughtSignature"] = signature
+                }
+                parts.append(part)
+            }
+        }
+        if parts.isEmpty {
+            parts.append(["text": ""])
+        }
+        return parts
     }
 
     private func parseGeminiParts(_ parts: [[String: Any]], payloadText: String? = nil) -> ParsedGeminiParts {
         var text = ""
         var reasoning = ""
+        var toolCalls: [ToolCall] = []
 
-        for part in parts {
-            guard let value = part["text"] as? String, !value.isEmpty else { continue }
-            if (part["thought"] as? Bool) == true {
-                reasoning += value
-            } else {
-                text += value
+        for (index, part) in parts.enumerated() {
+            if let value = part["text"] as? String, !value.isEmpty {
+                if (part["thought"] as? Bool) == true {
+                    reasoning += value
+                } else {
+                    text += value
+                }
+            }
+            if let functionCall = part["functionCall"] as? [String: Any],
+               let name = (functionCall["name"] as? String)?.trimmedNonEmpty {
+                let argumentsJSON: String
+                if let args = functionCall["args"],
+                   JSONSerialization.isValidJSONObject(args),
+                   let data = try? JSONSerialization.data(withJSONObject: args, options: [.sortedKeys]) {
+                    argumentsJSON = String(decoding: data, as: UTF8.self)
+                } else {
+                    argumentsJSON = "{}"
+                }
+                let signature = (part["thoughtSignature"] as? String)?.trimmedNonEmpty
+                    ?? (part["thought_signature"] as? String)?.trimmedNonEmpty
+                toolCalls.append(
+                    ToolCall(
+                        id: (functionCall["id"] as? String)?.trimmedNonEmpty ?? "gemini-tool-call-\(index)",
+                        name: name,
+                        argumentsJSON: argumentsJSON,
+                        providerMetadata: signature.map { ["thoughtSignature": $0] }
+                    )
+                )
             }
         }
 
@@ -412,7 +498,7 @@ struct GeminiProviderClient: ProviderClient {
             text += payloadText
         }
 
-        return ParsedGeminiParts(text: text, reasoning: reasoning)
+        return ParsedGeminiParts(text: text, reasoning: reasoning, toolCalls: toolCalls)
     }
 
     private func parseGeminiPartsFromPayload(_ payload: [String: Any]) -> ParsedGeminiParts? {
@@ -428,7 +514,7 @@ struct GeminiProviderClient: ProviderClient {
 
         let payloadText = payload["text"] as? String
         let parsed = parseGeminiParts(parts, payloadText: payloadText)
-        guard !parsed.text.isEmpty || !parsed.reasoning.isEmpty else {
+        guard !parsed.text.isEmpty || !parsed.reasoning.isEmpty || !parsed.toolCalls.isEmpty else {
             return nil
         }
         return parsed
@@ -444,7 +530,8 @@ struct GeminiProviderClient: ProviderClient {
         return ParsedGeminiChunk(
             text: parsedParts?.text ?? "",
             reasoning: parsedParts?.reasoning ?? "",
-            usage: usage
+            usage: usage,
+            toolCalls: parsedParts?.toolCalls ?? []
         )
     }
 
@@ -455,15 +542,16 @@ struct GeminiProviderClient: ProviderClient {
 
         let text = parsed.text
         let reasoning = parsed.reasoning.trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.isEmpty && reasoning.isEmpty {
-            throw ProviderClientError.parseFailure("Gemini response text is empty")
+        if text.isEmpty && reasoning.isEmpty && parsed.toolCalls.isEmpty {
+            throw ProviderClientError.parseFailure("Gemini response text and tool calls are empty")
         }
 
         return ProviderResponse(
             text: text,
             reasoningSummary: reasoning.isEmpty ? nil : reasoning,
             raw: String(data: rawData, encoding: .utf8),
-            usage: parseGeminiUsage(payload: payload)
+            usage: parseGeminiUsage(payload: payload),
+            toolCalls: parsed.toolCalls
         )
     }
 
@@ -486,8 +574,24 @@ struct GeminiProviderClient: ProviderClient {
                    let data = json.data(using: .utf8),
                    let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
                    !list.isEmpty {
-                    mapped.append(["function_declarations": list])
+                    mapped.append(["functionDeclarations": list])
                 }
+            case "function":
+                guard let name = tool.payload["name"]?.trimmedNonEmpty,
+                      let parametersJSON = tool.payload["parameters"]?.trimmedNonEmpty,
+                      let data = parametersJSON.data(using: .utf8),
+                      let parameters = try? JSONSerialization.jsonObject(with: data)
+                else {
+                    continue
+                }
+                var declaration: [String: Any] = [
+                    "name": name,
+                    "parameters": parameters
+                ]
+                if let description = tool.payload["description"]?.trimmedNonEmpty {
+                    declaration["description"] = description
+                }
+                mapped.append(["functionDeclarations": [declaration]])
             default:
                 break
             }

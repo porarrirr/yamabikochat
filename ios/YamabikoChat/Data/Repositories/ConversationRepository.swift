@@ -363,14 +363,52 @@ final class ConversationRepository {
                     .fetchAll(db)
             }
             let thinkingByMessageID = Dictionary(uniqueKeysWithValues: thinkingRows.map { ($0.messageId, $0.thinkingStream) })
+            let variantIds = variantsByMessageID.values.flatMap { $0 }.compactMap(\.id)
+            let activityRows: [ChatMessageToolActivity]
+            if messageIds.isEmpty {
+                activityRows = []
+            } else {
+                activityRows = try ChatMessageToolActivity
+                    .filter(messageIds.contains(Column("messageId")))
+                    .filter(Column("variantId") == nil)
+                    .fetchAll(db)
+            }
+            let variantActivityRows: [ChatMessageToolActivity]
+            if variantIds.isEmpty {
+                variantActivityRows = []
+            } else {
+                variantActivityRows = try ChatMessageToolActivity
+                    .filter(variantIds.contains(Column("variantId")))
+                    .fetchAll(db)
+            }
+            let activityByMessageID = Dictionary(
+                uniqueKeysWithValues: activityRows.compactMap { activity in
+                    activity.messageId.map { ($0, activity) }
+                }
+            )
+            let activityByVariantID = Dictionary(
+                uniqueKeysWithValues: variantActivityRows.compactMap { activity in
+                    activity.variantId.map { ($0, activity) }
+                }
+            )
 
             return messages.compactMap { message in
                 guard let id = message.id else { return nil }
+                let variants = variantsByMessageID[id] ?? []
+                let variantActivities = Dictionary(
+                    uniqueKeysWithValues: variants.compactMap { variant in
+                        variant.id.flatMap { variantId in
+                            activityByVariantID[variantId].map { (variantId, $0) }
+                        }
+                    }
+                )
                 return FullChatMessage(
                     id: id,
                     message: message,
                     thinkingStream: thinkingByMessageID[id],
-                    variants: variantsByMessageID[id] ?? []
+                    variants: variants,
+                    toolActivity: activityByMessageID[id],
+                    variantToolActivities: variantActivities
                 )
             }
         }
@@ -438,7 +476,32 @@ final class ConversationRepository {
                 .filter(Column("baseMessageId") == messageId)
                 .order(Column("variantIndex").asc)
                 .fetchAll(db)
-            return FullChatMessage(id: messageId, message: message, thinkingStream: thinking, variants: variants)
+            let activity = try ChatMessageToolActivity
+                .filter(Column("messageId") == messageId)
+                .filter(Column("variantId") == nil)
+                .fetchOne(db)
+            let variantIds = variants.compactMap(\.id)
+            let variantActivityRows: [ChatMessageToolActivity]
+            if variantIds.isEmpty {
+                variantActivityRows = []
+            } else {
+                variantActivityRows = try ChatMessageToolActivity
+                    .filter(variantIds.contains(Column("variantId")))
+                    .fetchAll(db)
+            }
+            let activityByVariantID = Dictionary(
+                uniqueKeysWithValues: variantActivityRows.compactMap { activity in
+                    activity.variantId.map { ($0, activity) }
+                }
+            )
+            return FullChatMessage(
+                id: messageId,
+                message: message,
+                thinkingStream: thinking,
+                variants: variants,
+                toolActivity: activity,
+                variantToolActivities: activityByVariantID
+            )
         }
     }
 
@@ -544,6 +607,47 @@ final class ConversationRepository {
             guard var variant = try ChatMessageVariant.fetchOne(db, key: variantId) else { return }
             variant.thinkingStream = stream
             try variant.update(db)
+        }
+    }
+
+    func saveToolActivities(messageId: Int64, steps: [ToolActivityStep]) throws {
+        try saveToolActivities(messageId: messageId, variantId: nil, steps: steps)
+    }
+
+    func saveToolActivities(variantId: Int64, steps: [ToolActivityStep]) throws {
+        try saveToolActivities(messageId: nil, variantId: variantId, steps: steps)
+    }
+
+    private func saveToolActivities(messageId: Int64?, variantId: Int64?, steps: [ToolActivityStep]) throws {
+        let data = try JSONEncoder().encode(steps)
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw ProviderClientError.parseFailure("Tool activity JSON encoding failed")
+        }
+        try dbQueue.write { db in
+            let request: QueryInterfaceRequest<ChatMessageToolActivity>
+            if let messageId {
+                request = ChatMessageToolActivity
+                    .filter(Column("messageId") == messageId)
+                    .filter(Column("variantId") == nil)
+            } else if let variantId {
+                request = ChatMessageToolActivity
+                    .filter(Column("variantId") == variantId)
+                    .filter(Column("messageId") == nil)
+            } else {
+                throw ProviderClientError.parseFailure("Tool activity requires a message or variant id")
+            }
+
+            if var existing = try request.fetchOne(db) {
+                existing.stepsJSON = json
+                try existing.update(db)
+            } else {
+                var activity = ChatMessageToolActivity(
+                    messageId: messageId,
+                    variantId: variantId,
+                    stepsJSON: json
+                )
+                try activity.insert(db)
+            }
         }
     }
 

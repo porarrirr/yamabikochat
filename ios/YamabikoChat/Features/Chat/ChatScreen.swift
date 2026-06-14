@@ -1074,6 +1074,17 @@ private struct MessageBubble: View {
         return values.map { ChatAttachmentItem(rawValue: $0) }
     }
 
+    private var toolActivitySteps: [ToolActivityStep] {
+        message.displayToolActivity?.steps ?? []
+    }
+
+    private var toolSources: [ToolSource] {
+        var seen: Set<String> = []
+        return toolActivitySteps
+            .flatMap(\.sources)
+            .filter { seen.insert($0.url).inserted }
+    }
+
     var body: some View {
         let userContentWidth = min(300, rowWidth)
         let userLeadingWidth = max(rowWidth - userContentWidth, 0)
@@ -1105,6 +1116,10 @@ private struct MessageBubble: View {
                             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     }
                 } else {
+                    if !toolActivitySteps.isEmpty {
+                        ToolActivityDisclosure(steps: toolActivitySteps)
+                    }
+
                     if thinkingText != nil {
                         Button {
                             isThinkingSheetPresented = true
@@ -1165,6 +1180,10 @@ private struct MessageBubble: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                    }
+
+                    if !toolSources.isEmpty {
+                        ToolSourcesView(sources: toolSources)
                     }
 
                     if message.variantCount > 1 {

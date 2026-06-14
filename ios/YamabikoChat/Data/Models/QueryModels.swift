@@ -40,6 +40,8 @@ struct FullChatMessage: Identifiable, Equatable {
     var message: ChatMessage
     var thinkingStream: String?
     var variants: [ChatMessageVariant]
+    var toolActivity: ChatMessageToolActivity? = nil
+    var variantToolActivities: [Int64: ChatMessageToolActivity] = [:]
 
     var variantCount: Int {
         1 + variants.count
@@ -78,6 +80,13 @@ struct FullChatMessage: Identifiable, Equatable {
 
     var displayThinkingStream: String? {
         displayContent.thinking
+    }
+
+    var displayToolActivity: ChatMessageToolActivity? {
+        guard let variantId = selectedVariant?.id else {
+            return toolActivity
+        }
+        return variantToolActivities[variantId]
     }
 
     private var displayContent: (text: String, thinking: String?) {

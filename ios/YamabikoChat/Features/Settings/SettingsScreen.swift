@@ -187,6 +187,22 @@ struct SettingsScreen: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(L10n.text("クライアントツール")) {
+                Toggle(
+                    L10n.text("クライアント側Web検索"),
+                    isOn: $viewModel.settings.clientWebSearchToolEnabled
+                )
+                Text(L10n.text("LLMが必要に応じてWeb検索とページ取得を実行します。外部検索APIキーは不要です。"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                if !LLMProvider(rawOrDefault: viewModel.settings.apiProvider).supportsClientWebSearchTool {
+                    Text(L10n.text("現在のプロバイダーではこのツールは使用されません。"))
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+            }
+
             if currentProviderKey != "CODEX_AUTH", currentProviderKey != "APPLE_INTELLIGENCE" {
                 Section("APIキー") {
                     SecureField(currentProviderAPIKeyLabel, text: $viewModel.apiKeyDraft)

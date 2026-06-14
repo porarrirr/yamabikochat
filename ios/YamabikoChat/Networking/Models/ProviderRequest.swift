@@ -51,12 +51,29 @@ struct ProviderRequestMessage: Codable, Sendable, Equatable, Identifiable {
     var content: String
     var attachments: [String]
     var reasoningContent: String?
+    var toolCalls: [ToolCall]?
+    var toolCallId: String?
+    var toolName: String?
+    var toolResultIsError: Bool?
 
-    init(role: String, content: String, attachments: [String] = [], reasoningContent: String? = nil) {
+    init(
+        role: String,
+        content: String,
+        attachments: [String] = [],
+        reasoningContent: String? = nil,
+        toolCalls: [ToolCall]? = nil,
+        toolCallId: String? = nil,
+        toolName: String? = nil,
+        toolResultIsError: Bool? = nil
+    ) {
         self.role = role
         self.content = content
         self.attachments = attachments
         self.reasoningContent = reasoningContent
+        self.toolCalls = toolCalls
+        self.toolCallId = toolCallId
+        self.toolName = toolName
+        self.toolResultIsError = toolResultIsError
     }
 }
 

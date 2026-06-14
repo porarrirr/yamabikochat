@@ -97,7 +97,8 @@ final class ProviderGateway {
                                     text: fallback.text,
                                     reasoningSummary: fallback.reasoningSummary,
                                     raw: fallback.raw,
-                                    usage: fallback.usage
+                                    usage: fallback.usage,
+                                    toolCalls: fallback.toolCalls
                                 )
                             )
                         )

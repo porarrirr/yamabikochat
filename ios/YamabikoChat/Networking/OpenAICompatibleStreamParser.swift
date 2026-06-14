@@ -58,10 +58,21 @@ enum OpenAICompatibleStreamParser {
             events.append(contentsOf: appendTextDelta(incomingContent, buffer: &fullText))
         }
         if let toolCalls = object["tool_calls"] as? [[String: Any]],
-           let data = try? JSONSerialization.data(withJSONObject: toolCalls),
-           let raw = String(data: data, encoding: .utf8),
-           !raw.isEmpty {
-            events.append(.toolCallDelta(raw))
+           !toolCalls.isEmpty {
+            for (fallbackIndex, toolCall) in toolCalls.enumerated() {
+                let function = toolCall["function"] as? [String: Any]
+                let index = (toolCall["index"] as? NSNumber)?.intValue ?? fallbackIndex
+                events.append(
+                    .toolCallDelta(
+                        ToolCallDelta(
+                            index: index,
+                            id: toolCall["id"] as? String,
+                            name: function?["name"] as? String,
+                            argumentsFragment: function?["arguments"] as? String ?? ""
+                        )
+                    )
+                )
+            }
         }
         return events
     }

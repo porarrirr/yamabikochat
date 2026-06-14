@@ -24,6 +24,7 @@ final class ChatRepository {
     private let modelService: OpenRouterModelService
     private let codexAuthRepository: CodexAuthRepository
     private let pricingRepository: any LiteLlmPricingEstimating
+    private let localToolRegistry: LocalToolRegistry
 
     init(
         conversations: ConversationRepository,
@@ -32,7 +33,13 @@ final class ChatRepository {
         credentialStore: SecureCredentialStore,
         modelService: OpenRouterModelService,
         codexAuthRepository: CodexAuthRepository,
-        pricingRepository: any LiteLlmPricingEstimating = LiteLlmPricingRepository()
+        pricingRepository: any LiteLlmPricingEstimating = LiteLlmPricingRepository(),
+        localToolRegistry: LocalToolRegistry = LocalToolRegistry(
+            executors: [
+                WebSearchTool(),
+                FetchUrlTool()
+            ]
+        )
     ) {
         self.conversations = conversations
         self.settings = settings
@@ -41,6 +48,7 @@ final class ChatRepository {
         self.modelService = modelService
         self.codexAuthRepository = codexAuthRepository
         self.pricingRepository = pricingRepository
+        self.localToolRegistry = localToolRegistry
     }
 
     // MARK: - Conversations
@@ -360,7 +368,22 @@ final class ChatRepository {
             )
         }
 
-        let response = try await providers.generate(request: request, provider: provider)
+        let assistantMessageId = try conversations.insertMessage(
+            ChatMessage(
+                conversationId: conversationId,
+                role: "model",
+                text: ""
+            )
+        )
+        let response = try await runToolCallingTurn(
+            request: request,
+            provider: provider,
+            conversationId: conversationId,
+            persistenceKind: .message(messageId: assistantMessageId),
+            streamEnabled: false,
+            onStreamEvent: onStreamEvent,
+            onStreamingSnapshot: onStreamingSnapshot
+        )
         await recordTokenUsageIfAvailable(
             provider: conversation.apiProvider,
             model: conversation.model,
@@ -368,18 +391,6 @@ final class ChatRepository {
             conversationId: conversationId,
             requestType: "chat_non_stream"
         )
-
-        let assistantMessageId = try conversations.insertMessage(
-            ChatMessage(
-                conversationId: conversationId,
-                role: "model",
-                text: response.text
-            )
-        )
-
-        if let reasoning = response.reasoningSummary, !reasoning.isEmpty {
-            try conversations.saveThinking(messageId: assistantMessageId, stream: reasoning)
-        }
 
         return SendMessageResult(
             userMessageId: userMessageId,
@@ -433,19 +444,30 @@ final class ChatRepository {
             return targetMessageID
         }
 
-        let response = try await providers.generate(request: request, provider: provider)
+        let variant = try conversations.insertMessageVariant(
+            baseMessageId: targetMessageID,
+            text: "",
+            attachmentsJSON: "[]",
+            thinkingStream: nil
+        )
+        guard let variantId = variant.id else {
+            throw ProviderClientError.parseFailure("Variant creation failed")
+        }
+        let response = try await runToolCallingTurn(
+            request: request,
+            provider: provider,
+            conversationId: conversationId,
+            persistenceKind: .variant(variantId: variantId, snapshotMessageId: targetMessageID),
+            streamEnabled: false,
+            onStreamEvent: onStreamEvent,
+            onStreamingSnapshot: onStreamingSnapshot
+        )
         await recordTokenUsageIfAvailable(
             provider: conversation.apiProvider,
             model: conversation.model,
             usage: response.usage,
             conversationId: conversationId,
             requestType: "regenerate_non_stream"
-        )
-        _ = try conversations.insertMessageVariant(
-            baseMessageId: targetMessageID,
-            text: response.text,
-            attachmentsJSON: "[]",
-            thinkingStream: response.reasoningSummary
         )
         return targetMessageID
     }
@@ -470,11 +492,12 @@ final class ChatRepository {
             )
         )
 
-        let stream = try await providers.stream(request: request, provider: provider)
-        let session = try await ChatStreamSession.run(
-            stream: stream,
-            conversations: conversations,
-            kind: .message(messageId: assistantMessageId),
+        let response = try await runToolCallingTurn(
+            request: request,
+            provider: provider,
+            conversationId: conversationId,
+            persistenceKind: .message(messageId: assistantMessageId),
+            streamEnabled: true,
             onStreamEvent: onStreamEvent,
             onStreamingSnapshot: onStreamingSnapshot
         )
@@ -482,16 +505,9 @@ final class ChatRepository {
         await recordTokenUsageIfAvailable(
             provider: provider.rawValue,
             model: request.model,
-            usage: session.usage,
+            usage: response.usage,
             conversationId: conversationId,
             requestType: "chat_stream"
-        )
-
-        let response = ProviderResponse(
-            text: session.text,
-            reasoningSummary: session.reasoningText.isEmpty ? nil : session.reasoningText,
-            raw: nil,
-            usage: session.usage
         )
 
         return SendMessageResult(
@@ -519,11 +535,12 @@ final class ChatRepository {
             throw ProviderClientError.parseFailure("Variant creation failed")
         }
 
-        let stream = try await providers.stream(request: request, provider: provider)
-        let session = try await ChatStreamSession.run(
-            stream: stream,
-            conversations: conversations,
-            kind: .variant(variantId: variantId, snapshotMessageId: baseMessageId),
+        let response = try await runToolCallingTurn(
+            request: request,
+            provider: provider,
+            conversationId: conversationId,
+            persistenceKind: .variant(variantId: variantId, snapshotMessageId: baseMessageId),
+            streamEnabled: true,
             onStreamEvent: onStreamEvent,
             onStreamingSnapshot: onStreamingSnapshot
         )
@@ -531,7 +548,7 @@ final class ChatRepository {
         await recordTokenUsageIfAvailable(
             provider: provider.rawValue,
             model: request.model,
-            usage: session.usage,
+            usage: response.usage,
             conversationId: conversationId,
             requestType: "regenerate_stream"
         )
@@ -593,6 +610,145 @@ final class ChatRepository {
             ),
             metadata: metadata
         )
+    }
+
+    private func runToolCallingTurn(
+        request: ProviderRequest,
+        provider: LLMProvider,
+        conversationId: Int64,
+        persistenceKind: ChatStreamPersistenceKind,
+        streamEnabled: Bool,
+        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
+        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
+    ) async throws -> ProviderResponse {
+        let orchestrator = ToolCallingOrchestrator(registry: localToolRegistry)
+        do {
+            let outcome = try await orchestrator.run(
+                request: request,
+                invoke: { [self] roundRequest, round in
+                    do {
+                        return try await executeProviderRound(
+                            request: roundRequest,
+                            provider: provider,
+                            persistenceKind: persistenceKind,
+                            streamEnabled: streamEnabled,
+                            onStreamEvent: onStreamEvent,
+                            onStreamingSnapshot: onStreamingSnapshot
+                        )
+                    } catch {
+                        guard ClientToolFallbackPolicy.shouldRetryWithoutClientTools(
+                            error: error,
+                            request: roundRequest,
+                            round: round
+                        ) else {
+                            throw error
+                        }
+                        DiagnosticsLogger.log(
+                            "Model rejected client tools; retrying without local functions",
+                            level: .warning,
+                            category: .network,
+                            metadata: [
+                                "provider": provider.rawValue,
+                                "model": roundRequest.model
+                            ],
+                            error: error
+                        )
+                        return try await executeProviderRound(
+                            request: ClientToolFallbackPolicy.removingClientTools(from: roundRequest),
+                            provider: provider,
+                            persistenceKind: persistenceKind,
+                            streamEnabled: streamEnabled,
+                            onStreamEvent: onStreamEvent,
+                            onStreamingSnapshot: onStreamingSnapshot
+                        )
+                    }
+                },
+                onActivitiesChanged: { [self] activities in
+                    do {
+                        try saveToolActivities(kind: persistenceKind, steps: activities)
+                    } catch {
+                        DiagnosticsLogger.log(
+                            "Tool activity persistence failed",
+                            category: .chat,
+                            metadata: [
+                                "conversation": String(conversationId),
+                                "target": toolActivityTargetDescription(kind: persistenceKind)
+                            ],
+                            error: error
+                        )
+                    }
+                }
+            )
+            try persistProviderResponse(outcome.response, kind: persistenceKind)
+            return outcome.response
+        } catch {
+            let target = ChatStreamSessionTarget(conversations: conversations, kind: persistenceKind)
+            try? target.writeErrorPlaceholder(error)
+            throw error
+        }
+    }
+
+    private func executeProviderRound(
+        request: ProviderRequest,
+        provider: LLMProvider,
+        persistenceKind: ChatStreamPersistenceKind,
+        streamEnabled: Bool,
+        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
+        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
+    ) async throws -> ProviderResponse {
+        if streamEnabled {
+            let stream = try await providers.stream(request: request, provider: provider)
+            let session = try await ChatStreamSession.run(
+                stream: stream,
+                conversations: conversations,
+                kind: persistenceKind,
+                onStreamEvent: onStreamEvent,
+                onStreamingSnapshot: onStreamingSnapshot
+            )
+            return ProviderResponse(
+                text: session.text,
+                reasoningSummary: session.reasoningText.trimmedNonEmpty,
+                raw: nil,
+                usage: session.usage,
+                toolCalls: session.toolCalls
+            )
+        }
+
+        let response = try await providers.generate(request: request, provider: provider)
+        try persistProviderResponse(response, kind: persistenceKind)
+        return response
+    }
+
+    private func persistProviderResponse(
+        _ response: ProviderResponse,
+        kind: ChatStreamPersistenceKind
+    ) throws {
+        let target = ChatStreamSessionTarget(conversations: conversations, kind: kind)
+        try target.persist(
+            text: response.text,
+            thinking: response.reasoningSummary ?? ""
+        )
+    }
+
+    private func saveToolActivities(
+        kind: ChatStreamPersistenceKind,
+        steps: [ToolActivityStep]
+    ) throws {
+        switch kind {
+        case let .message(messageId):
+            try conversations.saveToolActivities(messageId: messageId, steps: steps)
+        case let .variant(variantId, _):
+            try conversations.saveToolActivities(variantId: variantId, steps: steps)
+        }
+    }
+
+    private func toolActivityTargetDescription(kind: ChatStreamPersistenceKind) -> String {
+        switch kind {
+        case let .message(messageId):
+            return "message:\(messageId)"
+        case let .variant(variantId, _):
+            return "variant:\(variantId)"
+        }
     }
 
     func sendDualMessage(conversationId: Int64, text: String, attachments: [String] = []) async throws -> DualChatMessage {
@@ -1466,9 +1622,11 @@ final class ChatRepository {
         context: AppSettings.ReasoningContext = .default
     ) -> [ProviderTool] {
         let overrides = settings.toolOverride(for: context)
+        let resolvedProvider = LLMProvider(rawOrDefault: provider)
+        var tools: [ProviderTool]
         switch provider.uppercased() {
         case "GEMINI":
-            var tools: [ProviderTool] = []
+            tools = []
             if overrides.googleSearch ?? settings.geminiGoogleSearchEnabled {
                 tools.append(ProviderTool(type: "google_search", payload: [:]))
             }
@@ -1488,40 +1646,45 @@ final class ChatRepository {
             if !declarations.isEmpty {
                 tools.append(ProviderTool(type: "function_declarations", payload: ["json": declarations]))
             }
-            return tools
         case "OPENROUTER":
-            var tools: [ProviderTool] = []
+            tools = []
             if overrides.googleSearch ?? settings.openRouterGoogleSearchEnabled {
                 tools.append(ProviderTool(type: "google_search", payload: [:]))
             }
             if overrides.codeExecution ?? settings.openRouterCodeExecutionEnabled {
                 tools.append(ProviderTool(type: "code_execution", payload: [:]))
             }
-            return tools
         case "ALIBABA_CODING_PLAN":
-            guard settings.alibabaMCPEnabled else {
-                return []
+            tools = []
+            if settings.alibabaMCPEnabled {
+                if let serverURL = settings.resolvedAlibabaMCPServerURL() {
+                    var payload: [String: String] = [
+                        "server_url": serverURL,
+                        "server_name": settings.resolvedAlibabaMCPServerName()
+                    ]
+                    let allowedTools = settings.alibabaMCPAllowedToolsList()
+                    if !allowedTools.isEmpty {
+                        payload["allowed_tools"] = allowedTools.joined(separator: ",")
+                    }
+                    tools.append(ProviderTool(type: "mcp_toolset", payload: payload))
+                } else {
+                    DiagnosticsLogger.log(
+                        "Alibaba MCP enabled but server URL is invalid; skipping MCP toolset",
+                        level: .warning,
+                        category: .settings
+                    )
+                }
             }
-            guard let serverURL = settings.resolvedAlibabaMCPServerURL() else {
-                DiagnosticsLogger.log(
-                    "Alibaba MCP enabled but server URL is invalid; skipping MCP toolset",
-                    level: .warning,
-                    category: .settings
-                )
-                return []
-            }
-            var payload: [String: String] = [
-                "server_url": serverURL,
-                "server_name": settings.resolvedAlibabaMCPServerName()
-            ]
-            let allowedTools = settings.alibabaMCPAllowedToolsList()
-            if !allowedTools.isEmpty {
-                payload["allowed_tools"] = allowedTools.joined(separator: ",")
-            }
-            return [ProviderTool(type: "mcp_toolset", payload: payload)]
         default:
-            return []
+            tools = []
         }
+
+        if case .default = context,
+           settings.clientWebSearchToolEnabled,
+           resolvedProvider.supportsClientWebSearchTool {
+            tools.append(contentsOf: localToolRegistry.definitions.map(\.providerTool))
+        }
+        return tools
     }
 
     private func metadataForProvider(

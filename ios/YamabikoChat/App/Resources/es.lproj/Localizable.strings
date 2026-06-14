@@ -386,3 +386,14 @@
 "シークレットチャット" = "Chat secreto";
 "閉じると破棄 · %@" = "Se descarta al cerrar · %@";
 "このチャットは閉じると破棄されます。" = "Este chat se descartará al cerrarlo.";
+"クライアントツール" = "Herramientas del cliente";
+"クライアント側Web検索" = "Búsqueda web del cliente";
+"LLMが必要に応じてWeb検索とページ取得を実行します。外部検索APIキーは不要です。" = "Permite que el LLM busque en la web y obtenga páginas cuando sea necesario. No requiere una clave de API de búsqueda externa.";
+"現在のプロバイダーではこのツールは使用されません。" = "Esta herramienta no se usa con el proveedor actual.";
+"Web検索" = "Búsqueda web";
+"Webを検索" = "Buscar en la web";
+"ページを取得" = "Obtener página";
+"出典" = "Fuentes";
+"%d件の結果" = "%d resultados";
+"%dステップ" = "%d pasos";
+"Web検索ツールは最大ラウンド数に達したため停止しました。" = "La búsqueda web se detuvo al alcanzar el máximo de rondas.";

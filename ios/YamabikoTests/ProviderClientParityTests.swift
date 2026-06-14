@@ -562,6 +562,225 @@ final class ProviderClientParityTests: XCTestCase {
         }
     }
 
+    func testOpenAICompatibleEncodesFunctionLoopAndParsesToolCall() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("openai-key", for: .openAI)
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"""
+            {
+              "choices":[{
+                "message":{
+                  "content":null,
+                  "tool_calls":[{
+                    "id":"call_2",
+                    "type":"function",
+                    "function":{"name":"fetch_url","arguments":"{\"url\":\"https://example.com\"}"}
+                  }]
+                }
+              }]
+            }
+            """#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+        let priorCall = ToolCall(
+            id: "call_1",
+            name: "web_search",
+            argumentsJSON: #"{"query":"swift"}"#,
+            providerMetadata: nil
+        )
+        let request = ProviderRequest(
+            model: "gpt-4o-mini",
+            messages: [
+                ProviderRequestMessage(role: "user", content: "search"),
+                ProviderRequestMessage(role: "assistant", content: "", toolCalls: [priorCall]),
+                ProviderRequestMessage(
+                    role: "tool",
+                    content: #"{"results":[]}"#,
+                    toolCallId: "call_1",
+                    toolName: "web_search"
+                )
+            ],
+            stream: false,
+            tools: [
+                ToolDefinition(
+                    name: "web_search",
+                    description: "Search",
+                    parametersJSON: #"{"type":"object","properties":{"query":{"type":"string"}}}"#
+                )
+                .providerTool
+            ],
+            metadata: ["provider": "OPENAI"]
+        )
+
+        let response = try await OpenAICompatibleProviderClient().generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(response.toolCalls.first?.name, "fetch_url")
+        let root = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: XCTUnwrap(httpClient.lastRequest?.body)) as? [String: Any]
+        )
+        let tools = try XCTUnwrap(root["tools"] as? [[String: Any]])
+        XCTAssertEqual(tools.first?["type"] as? String, "function")
+        let function = try XCTUnwrap(tools.first?["function"] as? [String: Any])
+        XCTAssertEqual(function["name"] as? String, "web_search")
+        XCTAssertNotNil(function["parameters"] as? [String: Any])
+
+        let messages = try XCTUnwrap(root["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages[1]["role"] as? String, "assistant")
+        XCTAssertEqual((messages[1]["tool_calls"] as? [[String: Any]])?.first?["id"] as? String, "call_1")
+        XCTAssertEqual(messages[2]["role"] as? String, "tool")
+        XCTAssertEqual(messages[2]["tool_call_id"] as? String, "call_1")
+    }
+
+    func testAnthropicCompatibleEncodesFunctionLoopAndParsesToolUse() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("alibaba-key", for: .alibabaCodingPlan)
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"""
+            {
+              "content":[{
+                "type":"tool_use",
+                "id":"toolu_2",
+                "name":"fetch_url",
+                "input":{"url":"https://example.com"}
+              }]
+            }
+            """#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+        let priorCall = ToolCall(
+            id: "toolu_1",
+            name: "web_search",
+            argumentsJSON: #"{"query":"swift"}"#,
+            providerMetadata: nil
+        )
+        let request = ProviderRequest(
+            model: "qwen3.5-plus",
+            messages: [
+                ProviderRequestMessage(role: "user", content: "search"),
+                ProviderRequestMessage(role: "assistant", content: "", toolCalls: [priorCall]),
+                ProviderRequestMessage(
+                    role: "tool",
+                    content: #"{"results":[]}"#,
+                    toolCallId: "toolu_1",
+                    toolName: "web_search"
+                )
+            ],
+            stream: false,
+            tools: [
+                ToolDefinition(
+                    name: "web_search",
+                    description: "Search",
+                    parametersJSON: #"{"type":"object","properties":{"query":{"type":"string"}}}"#
+                )
+                .providerTool
+            ],
+            metadata: ["provider": "ALIBABA_CODING_PLAN"]
+        )
+
+        let response = try await AnthropicCompatibleProviderClient().generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(response.toolCalls.first?.id, "toolu_2")
+        let root = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: XCTUnwrap(httpClient.lastRequest?.body)) as? [String: Any]
+        )
+        let tools = try XCTUnwrap(root["tools"] as? [[String: Any]])
+        XCTAssertEqual(tools.first?["name"] as? String, "web_search")
+        XCTAssertNotNil(tools.first?["input_schema"] as? [String: Any])
+        let messages = try XCTUnwrap(root["messages"] as? [[String: Any]])
+        let assistantContent = try XCTUnwrap(messages[1]["content"] as? [[String: Any]])
+        XCTAssertEqual(assistantContent.first?["type"] as? String, "tool_use")
+        let resultContent = try XCTUnwrap(messages[2]["content"] as? [[String: Any]])
+        XCTAssertEqual(resultContent.first?["type"] as? String, "tool_result")
+        XCTAssertEqual(resultContent.first?["tool_use_id"] as? String, "toolu_1")
+    }
+
+    func testGeminiEncodesFunctionLoopAndParsesFunctionCall() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("gemini-key", for: .gemini)
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"""
+            {
+              "candidates":[{
+                "content":{
+                  "parts":[{
+                    "functionCall":{
+                      "id":"gemini_2",
+                      "name":"fetch_url",
+                      "args":{"url":"https://example.com"}
+                    },
+                    "thoughtSignature":"signature-2"
+                  }]
+                }
+              }]
+            }
+            """#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+        let priorCall = ToolCall(
+            id: "gemini_1",
+            name: "web_search",
+            argumentsJSON: #"{"query":"swift"}"#,
+            providerMetadata: ["thoughtSignature": "signature-1"]
+        )
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [
+                ProviderRequestMessage(role: "user", content: "search"),
+                ProviderRequestMessage(role: "assistant", content: "", toolCalls: [priorCall]),
+                ProviderRequestMessage(
+                    role: "tool",
+                    content: #"{"results":[]}"#,
+                    toolCallId: "gemini_1",
+                    toolName: "web_search"
+                )
+            ],
+            stream: false,
+            tools: [
+                ToolDefinition(
+                    name: "web_search",
+                    description: "Search",
+                    parametersJSON: #"{"type":"object","properties":{"query":{"type":"string"}}}"#
+                )
+                .providerTool
+            ],
+            metadata: ["provider": "GEMINI"]
+        )
+
+        let response = try await GeminiProviderClient().generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(response.toolCalls.first?.name, "fetch_url")
+        XCTAssertEqual(response.toolCalls.first?.providerMetadata?["thoughtSignature"], "signature-2")
+        let root = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: XCTUnwrap(httpClient.lastRequest?.body)) as? [String: Any]
+        )
+        let tools = try XCTUnwrap(root["tools"] as? [[String: Any]])
+        let declarations = try XCTUnwrap(tools.last?["functionDeclarations"] as? [[String: Any]])
+        XCTAssertEqual(declarations.first?["name"] as? String, "web_search")
+        let contents = try XCTUnwrap(root["contents"] as? [[String: Any]])
+        let assistantParts = try XCTUnwrap(contents[1]["parts"] as? [[String: Any]])
+        XCTAssertEqual(assistantParts.first?["thoughtSignature"] as? String, "signature-1")
+        let resultParts = try XCTUnwrap(contents[2]["parts"] as? [[String: Any]])
+        XCTAssertNotNil(resultParts.first?["functionResponse"] as? [String: Any])
+    }
+
 
 
 

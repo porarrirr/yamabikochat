@@ -118,6 +118,7 @@ enum AppDatabase {
 
                 t.column("isStreamingEnabled", .boolean).notNull().defaults(to: true)
                 t.column("mathRenderingEnabled", .boolean).notNull().defaults(to: true)
+                t.column("clientWebSearchToolEnabled", .boolean).notNull().defaults(to: false)
 
                 t.column("dynamicColorEnabled", .boolean).notNull().defaults(to: true)
                 t.column("themeColor", .text).notNull().defaults(to: "BLUE_PURPLE")
@@ -571,6 +572,70 @@ enum AppDatabase {
             }
         }
 
+        migrator.registerMigration("v9_client_web_search_tool") { db in
+            let settingsRows = try Row.fetchAll(db, sql: "PRAGMA table_info(settings)")
+            let settingsColumns = Set(settingsRows.compactMap { ($0["name"] as String?)?.lowercased() })
+            if !settingsColumns.contains("clientwebsearchtoolenabled") {
+                try db.alter(table: "settings") { t in
+                    t.add(column: "clientWebSearchToolEnabled", .boolean).notNull().defaults(to: false)
+                }
+            }
+
+            try Self.createToolActivityTable(db)
+        }
+
+        migrator.registerMigration("v10_tool_activity_variants") { db in
+            let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(chat_message_tool_activity)")
+            let columns = Set(rows.compactMap { ($0["name"] as String?)?.lowercased() })
+            guard !columns.isEmpty else {
+                try Self.createToolActivityTable(db)
+                return
+            }
+            guard !columns.contains("variantid") else {
+                try Self.createToolActivityIndexes(db)
+                return
+            }
+
+            try db.execute(sql: "ALTER TABLE chat_message_tool_activity RENAME TO chat_message_tool_activity_legacy")
+            try Self.createToolActivityTable(db)
+            try db.execute(sql: """
+                INSERT INTO chat_message_tool_activity (id, messageId, stepsJSON)
+                SELECT id, messageId, stepsJSON
+                FROM chat_message_tool_activity_legacy
+                WHERE messageId IS NOT NULL
+                """)
+            try db.execute(sql: "DROP TABLE chat_message_tool_activity_legacy")
+        }
+
         return migrator
+    }
+
+    private static func createToolActivityTable(_ db: Database) throws {
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS chat_message_tool_activity (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                messageId INTEGER REFERENCES chat_messages(id) ON DELETE CASCADE,
+                variantId INTEGER REFERENCES chat_message_variants(id) ON DELETE CASCADE,
+                stepsJSON TEXT NOT NULL DEFAULT '[]',
+                CHECK (
+                    (messageId IS NOT NULL AND variantId IS NULL)
+                    OR (messageId IS NULL AND variantId IS NOT NULL)
+                )
+            )
+            """)
+        try createToolActivityIndexes(db)
+    }
+
+    private static func createToolActivityIndexes(_ db: Database) throws {
+        try db.execute(sql: """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_activity_message
+            ON chat_message_tool_activity(messageId)
+            WHERE messageId IS NOT NULL
+            """)
+        try db.execute(sql: """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_activity_variant
+            ON chat_message_tool_activity(variantId)
+            WHERE variantId IS NOT NULL
+            """)
     }
 }

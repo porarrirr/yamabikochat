@@ -41,12 +41,13 @@ struct ProviderResponse: Codable, Sendable, Equatable {
     var reasoningSummary: String?
     var raw: String?
     var usage: ProviderUsage?
+    var toolCalls: [ToolCall] = []
 }
 
 enum ProviderStreamEvent: Sendable, Equatable {
     case textDelta(String)
     case reasoningDelta(String)
-    case toolCallDelta(String)
+    case toolCallDelta(ToolCallDelta)
     case completed(ProviderResponse)
 }
 

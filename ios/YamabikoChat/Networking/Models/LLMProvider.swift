@@ -27,4 +27,13 @@ enum LLMProvider: String, Codable, CaseIterable, Sendable {
     var retriesNonStreamingWhenStreamReturnsNoText: Bool {
         self == .openCodeGo
     }
+
+    var supportsClientWebSearchTool: Bool {
+        switch self {
+        case .openRouter, .openAI, .openAICompat, .miniMax, .zai, .alibabaCodingPlan, .gemini:
+            return true
+        case .openCodeGo, .codexAuth, .appleIntelligence:
+            return false
+        }
+    }
 }

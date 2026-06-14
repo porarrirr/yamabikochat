@@ -184,7 +184,13 @@ struct CodexProviderClient: ProviderClient {
                 }
             case "response.output_tool_call.delta":
                 if let delta = root["delta"] as? String, !delta.isEmpty {
-                    return .toolCallDelta(delta)
+                    return .toolCallDelta(
+                        ToolCallDelta(
+                            index: 0,
+                            name: "hosted_tool",
+                            argumentsFragment: delta
+                        )
+                    )
                 }
             case "response.completed":
                 return .completed(

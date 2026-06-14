@@ -3,9 +3,31 @@ import Foundation
 struct OpenAICompatibleProviderClient: ProviderClient {
     let provider: LLMProvider = .openAI
 
+    private struct OpenAIFunctionCall: Encodable {
+        var name: String
+        var arguments: String
+    }
+
+    private struct OpenAIToolCall: Encodable {
+        var id: String
+        var type: String = "function"
+        var function: OpenAIFunctionCall
+    }
+
     private struct OpenAIMessage: Encodable {
         var role: String
-        var content: ProviderAttachmentEncoder.OpenAIMessageContent
+        var content: ProviderAttachmentEncoder.OpenAIMessageContent?
+        var toolCalls: [OpenAIToolCall]?
+        var toolCallId: String?
+        var name: String?
+
+        enum CodingKeys: String, CodingKey {
+            case role
+            case content
+            case toolCalls = "tool_calls"
+            case toolCallId = "tool_call_id"
+            case name
+        }
     }
 
     private struct PromptCacheControl: Encodable {
@@ -136,12 +158,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
     }
 
     private func buildPayload(for request: ProviderRequest, stream: Bool, provider: LLMProvider) throws -> Data {
-        let toolsPayload = request.tools.isEmpty ? nil : request.tools.map { tool in
-            [
-                "type": AnyEncodable(tool.type),
-                "payload": AnyEncodable(tool.payload)
-            ]
-        }
+        let toolsPayload = request.tools.isEmpty ? nil : request.tools.compactMap(openAIToolPayload)
 
         let providerPayload: [String: AnyEncodable]? = {
             guard provider == .openRouter, let config = request.provider else { return nil }
@@ -314,15 +331,41 @@ struct OpenAICompatibleProviderClient: ProviderClient {
     ) -> [OpenAIMessage] {
         var mapped: [OpenAIMessage] = []
         if let systemPrompt, !systemPrompt.isEmpty {
-            mapped.append(OpenAIMessage(role: "system", content: .plain(systemPrompt)))
+            mapped.append(
+                OpenAIMessage(
+                    role: "system",
+                    content: .plain(systemPrompt),
+                    toolCalls: nil,
+                    toolCallId: nil,
+                    name: nil
+                )
+            )
         }
 
         for message in messages {
+            if message.role == "tool" {
+                mapped.append(
+                    OpenAIMessage(
+                        role: "tool",
+                        content: .plain(message.content),
+                        toolCalls: nil,
+                        toolCallId: message.toolCallId,
+                        name: message.toolName
+                    )
+                )
+                continue
+            }
             ProviderAttachmentEncoder.logSkippedAttachmentsIfNeeded(
                 message.attachments,
                 providerLabel: "OpenAI compatible",
                 embedImages: embedImages
             )
+            let toolCalls = message.toolCalls?.map {
+                OpenAIToolCall(
+                    id: $0.id,
+                    function: OpenAIFunctionCall(name: $0.name, arguments: $0.argumentsJSON)
+                )
+            }
             mapped.append(
                 OpenAIMessage(
                     role: message.role,
@@ -330,11 +373,47 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                         text: message.content,
                         attachments: message.attachments,
                         embedImages: embedImages
-                    )
+                    ),
+                    toolCalls: toolCalls?.isEmpty == true ? nil : toolCalls,
+                    toolCallId: nil,
+                    name: nil
                 )
             )
         }
         return mapped
+    }
+
+    private func openAIToolPayload(_ tool: ProviderTool) -> [String: AnyEncodable]? {
+        guard tool.type == "function" else {
+            return [
+                "type": AnyEncodable(tool.type),
+                "payload": AnyEncodable(tool.payload)
+            ]
+        }
+        guard let name = tool.payload["name"]?.trimmedNonEmpty,
+              let parametersJSON = tool.payload["parameters"]?.trimmedNonEmpty,
+              let data = parametersJSON.data(using: .utf8),
+              let parameters = try? JSONDecoder().decode(JSONValue.self, from: data)
+        else {
+            DiagnosticsLogger.log(
+                "Invalid local function definition skipped",
+                level: .warning,
+                category: .network,
+                metadata: ["name": tool.payload["name"] ?? ""]
+            )
+            return nil
+        }
+        var function: [String: AnyEncodable] = [
+            "name": AnyEncodable(name),
+            "parameters": AnyEncodable(parameters)
+        ]
+        if let description = tool.payload["description"]?.trimmedNonEmpty {
+            function["description"] = AnyEncodable(description)
+        }
+        return [
+            "type": AnyEncodable("function"),
+            "function": AnyEncodable(function)
+        ]
     }
 
     private func parseResponse(data: Data) throws -> ProviderResponse {
@@ -347,15 +426,34 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             let content = (message["content"] as? String) ?? ""
             let reasoningSummary = (message["reasoning_content"] as? String)?.trimmedNonEmpty
             let usage = parseUsage(root["usage"] as? [String: Any])
+            let toolCalls = parseToolCalls(message["tool_calls"])
             return ProviderResponse(
                 text: content,
                 reasoningSummary: reasoningSummary,
                 raw: String(data: data, encoding: .utf8),
-                usage: usage
+                usage: usage,
+                toolCalls: toolCalls
             )
         }
 
-        throw ProviderClientError.parseFailure("OpenAI-style response does not contain choices[0].message.content")
+        throw ProviderClientError.parseFailure("OpenAI-style response does not contain choices[0].message")
+    }
+
+    private func parseToolCalls(_ rawValue: Any?) -> [ToolCall] {
+        guard let values = rawValue as? [[String: Any]] else { return [] }
+        return values.enumerated().compactMap { index, value in
+            guard let function = value["function"] as? [String: Any],
+                  let name = (function["name"] as? String)?.trimmedNonEmpty
+            else {
+                return nil
+            }
+            return ToolCall(
+                id: (value["id"] as? String)?.trimmedNonEmpty ?? "tool-call-\(index)",
+                name: name,
+                argumentsJSON: (function["arguments"] as? String)?.trimmedNonEmpty ?? "{}",
+                providerMetadata: nil
+            )
+        }
     }
 
     private func parseUsage(_ object: [String: Any]?) -> ProviderUsage? {

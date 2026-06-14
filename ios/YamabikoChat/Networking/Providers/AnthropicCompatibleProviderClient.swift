@@ -10,7 +10,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
 
     private struct AnthropicMessage: Encodable {
         var role: String
-        var content: [ProviderAttachmentEncoder.AnthropicContentBlock]
+        var content: [AnyEncodable]
     }
 
     private struct AnthropicThinking: Encodable {
@@ -72,7 +72,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         var stream: Bool
         var thinking: AnthropicThinking?
         var mcpServers: [AnthropicMCPServer]?
-        var tools: [AnthropicMCPToolset]?
+        var tools: [AnyEncodable]?
 
         enum CodingKeys: String, CodingKey {
             case model
@@ -153,6 +153,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
                     var fullText = ""
                     var fullReasoning = ""
                     var latestUsage: ProviderUsage?
+                    var toolCallAccumulator = ToolCallAccumulator()
 
                     for try await dataChunk in SSEPayloadAssembly.payloads(from: lineStream) {
                         if dataChunk == "[DONE]" {
@@ -160,7 +161,8 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
                                 text: fullText,
                                 reasoningSummary: optionalNonEmpty(fullReasoning),
                                 raw: nil,
-                                usage: latestUsage
+                                usage: latestUsage,
+                                toolCalls: toolCallAccumulator.toolCalls
                             )
                             continuation.yield(.completed(final))
                             continuation.finish()
@@ -181,8 +183,15 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
                             fullReasoning: &fullReasoning,
                             latestUsage: &latestUsage
                         ) {
+                            if case let .toolCallDelta(delta) = event {
+                                toolCallAccumulator.append(delta)
+                            }
                             if case let .completed(response) = event {
-                                continuation.yield(.completed(response))
+                                var completed = response
+                                if completed.toolCalls.isEmpty {
+                                    completed.toolCalls = toolCallAccumulator.toolCalls
+                                }
+                                continuation.yield(.completed(completed))
                                 continuation.finish()
                                 return
                             }
@@ -194,7 +203,8 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
                         text: fullText,
                         reasoningSummary: optionalNonEmpty(fullReasoning),
                         raw: nil,
-                        usage: latestUsage
+                        usage: latestUsage,
+                        toolCalls: toolCallAccumulator.toolCalls
                     )
                     continuation.yield(.completed(final))
                     continuation.finish()
@@ -262,7 +272,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
             stream: stream,
             thinking: thinking,
             mcpServers: mcpConfiguration?.servers,
-            tools: mcpConfiguration?.toolsets
+            tools: buildAnthropicTools(request.tools, mcpConfiguration: mcpConfiguration)
         )
         return try JSONEncoder().encode(body)
     }
@@ -334,21 +344,83 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
 
     private func mapMessages(_ messages: [ProviderRequestMessage], embedImages: Bool) -> [AnthropicMessage] {
         messages.map { message in
+            if message.role == "tool" {
+                var result: [String: AnyEncodable] = [
+                    "type": AnyEncodable("tool_result"),
+                    "tool_use_id": AnyEncodable(message.toolCallId ?? ""),
+                    "content": AnyEncodable(message.content)
+                ]
+                if let isError = message.toolResultIsError {
+                    result["is_error"] = AnyEncodable(isError)
+                }
+                return AnthropicMessage(role: "user", content: [AnyEncodable(result)])
+            }
             ProviderAttachmentEncoder.logSkippedAttachmentsIfNeeded(
                 message.attachments,
                 providerLabel: "Anthropic compatible",
                 embedImages: embedImages
             )
             let normalizedRole = normalizeRole(message.role)
-            return AnthropicMessage(
-                role: normalizedRole,
-                content: ProviderAttachmentEncoder.buildAnthropicContentBlocks(
+            var blocks: [AnyEncodable] = []
+            if !message.content.isEmpty || !message.attachments.isEmpty {
+                blocks = ProviderAttachmentEncoder.buildAnthropicContentBlocks(
                     text: message.content,
                     attachments: message.attachments,
                     embedImages: embedImages
                 )
+                .map(AnyEncodable.init)
+            }
+            if normalizedRole == "assistant" {
+                for call in message.toolCalls ?? [] {
+                    let input = Self.jsonValue(from: call.argumentsJSON) ?? .object([:])
+                    let block: [String: AnyEncodable] = [
+                        "type": AnyEncodable("tool_use"),
+                        "id": AnyEncodable(call.id),
+                        "name": AnyEncodable(call.name),
+                        "input": AnyEncodable(input)
+                    ]
+                    blocks.append(AnyEncodable(block))
+                }
+            }
+            if blocks.isEmpty {
+                blocks.append(AnyEncodable(ProviderAttachmentEncoder.AnthropicContentBlock.textBlock("")))
+            }
+            return AnthropicMessage(
+                role: normalizedRole,
+                content: blocks
             )
         }
+    }
+
+    private func buildAnthropicTools(
+        _ tools: [ProviderTool],
+        mcpConfiguration: AnthropicMCPConfiguration?
+    ) -> [AnyEncodable]? {
+        var mapped: [AnyEncodable] = []
+        for tool in tools where tool.type == "function" {
+            guard let name = tool.payload["name"]?.trimmedNonEmpty,
+                  let parameters = tool.payload["parameters"].flatMap(Self.jsonValue(from:))
+            else {
+                continue
+            }
+            var definition: [String: AnyEncodable] = [
+                "name": AnyEncodable(name),
+                "input_schema": AnyEncodable(parameters)
+            ]
+            if let description = tool.payload["description"]?.trimmedNonEmpty {
+                definition["description"] = AnyEncodable(description)
+            }
+            mapped.append(AnyEncodable(definition))
+        }
+        for toolset in mcpConfiguration?.toolsets ?? [] {
+            mapped.append(AnyEncodable(toolset))
+        }
+        return mapped.isEmpty ? nil : mapped
+    }
+
+    private static func jsonValue(from raw: String) -> JSONValue? {
+        guard let data = raw.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(JSONValue.self, from: data)
     }
 
     private func normalizeRole(_ value: String) -> String {
@@ -367,16 +439,18 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
 
         let text = extractText(from: root["content"]).joined()
         let reasoning = extractReasoning(from: root["content"]).joined()
+        let toolCalls = extractToolCalls(from: root["content"])
         let usage = parseUsage(root["usage"] as? [String: Any])
-        if text.isEmpty && reasoning.isEmpty {
-            throw ProviderClientError.parseFailure("Anthropic response does not contain text content")
+        if text.isEmpty && reasoning.isEmpty && toolCalls.isEmpty {
+            throw ProviderClientError.parseFailure("Anthropic response does not contain text or tool use content")
         }
 
         return ProviderResponse(
             text: text,
             reasoningSummary: optionalNonEmpty(reasoning),
             raw: String(data: data, encoding: .utf8),
-            usage: usage
+            usage: usage,
+            toolCalls: toolCalls
         )
     }
 
@@ -386,13 +460,6 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         fullReasoning: inout String,
         latestUsage: inout ProviderUsage?
     ) -> ProviderStreamEvent? {
-        let type = (root["type"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if type == "content_block_start",
-           let block = root["content_block"] as? [String: Any],
-           (block["type"] as? String)?.lowercased() == "mcp_tool_use" {
-            let name = (block["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return .toolCallDelta(name?.ifBlank("mcp_tool_use") ?? "mcp_tool_use")
-        }
         guard let event = AnthropicMessagesStreamParser.event(
             from: root,
             fullText: &fullText,
@@ -406,7 +473,8 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
                     text: response.text,
                     reasoningSummary: response.reasoningSummary,
                     raw: response.raw,
-                    usage: response.usage ?? latestUsage
+                    usage: response.usage ?? latestUsage,
+                    toolCalls: response.toolCalls
                 )
             )
         }
@@ -473,6 +541,32 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
             guard (block["type"] as? String)?.lowercased() == "thinking" else { return nil }
             let text = (block["thinking"] as? String)?.trimmingCharacters(in: .newlines)
             return text?.isEmpty == false ? text : nil
+        }
+    }
+
+    private func extractToolCalls(from rawContent: Any?) -> [ToolCall] {
+        guard let blocks = rawContent as? [[String: Any]] else { return [] }
+        return blocks.enumerated().compactMap { index, block in
+            let type = (block["type"] as? String)?.lowercased()
+            guard type == "tool_use",
+                  let name = (block["name"] as? String)?.trimmedNonEmpty
+            else {
+                return nil
+            }
+            let argumentsJSON: String
+            if let input = block["input"],
+               JSONSerialization.isValidJSONObject(input),
+               let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]) {
+                argumentsJSON = String(decoding: data, as: UTF8.self)
+            } else {
+                argumentsJSON = "{}"
+            }
+            return ToolCall(
+                id: (block["id"] as? String)?.trimmedNonEmpty ?? "tool-call-\(index)",
+                name: name,
+                argumentsJSON: argumentsJSON,
+                providerMetadata: nil
+            )
         }
     }
 

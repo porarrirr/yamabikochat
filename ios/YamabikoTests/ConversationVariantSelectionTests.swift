@@ -108,6 +108,48 @@ final class ConversationVariantSelectionTests: XCTestCase {
         XCTAssertEqual(try repository.fetchMessageSummaries(conversationId: conversationId).last?.textPreview, "base answer")
     }
 
+    func testSelectedVariantUsesVariantToolActivity() throws {
+        let repository = try makeRepository()
+        let conversationId = try repository.createConversation(
+            title: "New Chat",
+            model: "gpt-4o-mini",
+            provider: "OPENAI"
+        )
+        let assistantId = try repository.insertMessage(
+            ChatMessage(
+                conversationId: conversationId,
+                role: "model",
+                text: "base answer"
+            )
+        )
+        let variant = try repository.insertMessageVariant(
+            baseMessageId: assistantId,
+            text: "variant answer"
+        )
+        let variantId = try XCTUnwrap(variant.id)
+
+        try repository.saveToolActivities(
+            messageId: assistantId,
+            steps: [toolActivityStep(id: "base", detail: "base search")]
+        )
+        try repository.saveToolActivities(
+            variantId: variantId,
+            steps: [toolActivityStep(id: "variant", detail: "variant search")]
+        )
+
+        try repository.updateMessageSelectedVariantIndex(messageId: assistantId, variantIndex: variant.variantIndex)
+        XCTAssertEqual(
+            try repository.fetchFullMessage(id: assistantId)?.displayToolActivity?.steps.first?.detail,
+            "variant search"
+        )
+
+        try repository.updateMessageSelectedVariantIndex(messageId: assistantId, variantIndex: 0)
+        XCTAssertEqual(
+            try repository.fetchFullMessage(id: assistantId)?.displayToolActivity?.steps.first?.detail,
+            "base search"
+        )
+    }
+
     func testFetchLatestEmptyConversationSkipsConversationWithDualMessages() throws {
         let repository = try makeRepository()
         let conversationId = try repository.createConversation(
@@ -300,5 +342,20 @@ final class ConversationVariantSelectionTests: XCTestCase {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)
         return ConversationRepository(dbQueue: dbQueue)
+    }
+
+    private func toolActivityStep(id: String, detail: String) -> ToolActivityStep {
+        ToolActivityStep(
+            id: id,
+            round: 1,
+            toolName: WebSearchTool.name,
+            title: "Web",
+            detail: detail,
+            status: .completed,
+            resultCount: 1,
+            sources: [ToolSource(title: detail, url: "https://example.com/\(id)")],
+            errorMessage: nil,
+            createdAtMs: 1
+        )
     }
 }
