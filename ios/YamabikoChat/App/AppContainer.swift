@@ -16,39 +16,17 @@ final class AppContainer: ObservableObject {
     let chatRepository: ChatRepository
     let sharePayloadStore: SharePayloadStore
 
-    init() {
-        DiagnosticsLogger.initialize()
-        do {
-            dbQueue = try AppDatabase.makeDatabaseQueue()
-        } catch {
-            fatalError("Database initialization failed: \(error)")
-        }
-
-        credentialStore = KeychainStore()
-        settingsRepository = SettingsRepository(dbQueue: dbQueue)
-        conversationRepository = ConversationRepository(dbQueue: dbQueue)
-        attachmentRepository = AttachmentRepository()
-        openRouterModelService = OpenRouterModelService(credentialStore: credentialStore)
-        codexAuthRepository = CodexAuthRepository(credentialStore: credentialStore)
-        providerGateway = ProviderGateway(
-            settingsRepository: settingsRepository,
-            credentialStore: credentialStore
-        )
-        chatRepository = ChatRepository(
-            conversations: conversationRepository,
-            settings: settingsRepository,
-            providers: providerGateway,
-            credentialStore: credentialStore,
-            modelService: openRouterModelService,
-            codexAuthRepository: codexAuthRepository
-        )
-        sharePayloadStore = SharePayloadStore()
-
-        do {
-            try chatRepository.purgeSecretConversations()
-        } catch {
-            DiagnosticsLogger.log("Purge secret conversations failed", category: .app, error: error)
-        }
+    init(services: AppServices = .shared) {
+        dbQueue = services.dbQueue
+        credentialStore = services.credentialStore
+        settingsRepository = services.settingsRepository
+        conversationRepository = services.conversationRepository
+        attachmentRepository = services.attachmentRepository
+        openRouterModelService = services.openRouterModelService
+        codexAuthRepository = services.codexAuthRepository
+        providerGateway = services.providerGateway
+        chatRepository = services.chatRepository
+        sharePayloadStore = services.sharePayloadStore
 
         AppStoreScreenshotDemoSeeder.seedIfNeeded(
             chatRepository: chatRepository,

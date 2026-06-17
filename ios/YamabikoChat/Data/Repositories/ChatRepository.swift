@@ -7,6 +7,13 @@ struct SendMessageResult {
     var response: ProviderResponse
 }
 
+struct ShortcutRunResult: Sendable {
+    var text: String
+    var conversationId: Int64?
+    var userMessageId: Int64?
+    var assistantMessageId: Int64?
+}
+
 enum ProjectDeletionMode {
     case projectOnly
     case withConversations
@@ -618,6 +625,7 @@ final class ChatRepository {
         conversationId: Int64,
         persistenceKind: ChatStreamPersistenceKind,
         streamEnabled: Bool,
+        persistResults: Bool = true,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
     ) async throws -> ProviderResponse {
@@ -632,6 +640,7 @@ final class ChatRepository {
                             provider: provider,
                             persistenceKind: persistenceKind,
                             streamEnabled: streamEnabled,
+                            persistResults: persistResults,
                             onStreamEvent: onStreamEvent,
                             onStreamingSnapshot: onStreamingSnapshot
                         )
@@ -658,12 +667,14 @@ final class ChatRepository {
                             provider: provider,
                             persistenceKind: persistenceKind,
                             streamEnabled: streamEnabled,
+                            persistResults: persistResults,
                             onStreamEvent: onStreamEvent,
                             onStreamingSnapshot: onStreamingSnapshot
                         )
                     }
                 },
                 onActivitiesChanged: { [self] activities in
+                    guard persistResults else { return }
                     do {
                         try saveToolActivities(kind: persistenceKind, steps: activities)
                     } catch {
@@ -679,11 +690,15 @@ final class ChatRepository {
                     }
                 }
             )
-            try persistProviderResponse(outcome.response, kind: persistenceKind)
+            if persistResults {
+                try persistProviderResponse(outcome.response, kind: persistenceKind)
+            }
             return outcome.response
         } catch {
-            let target = ChatStreamSessionTarget(conversations: conversations, kind: persistenceKind)
-            try? target.writeErrorPlaceholder(error)
+            if persistResults {
+                let target = ChatStreamSessionTarget(conversations: conversations, kind: persistenceKind)
+                try? target.writeErrorPlaceholder(error)
+            }
             throw error
         }
     }
@@ -693,6 +708,7 @@ final class ChatRepository {
         provider: LLMProvider,
         persistenceKind: ChatStreamPersistenceKind,
         streamEnabled: Bool,
+        persistResults: Bool = true,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
     ) async throws -> ProviderResponse {
@@ -715,7 +731,9 @@ final class ChatRepository {
         }
 
         let response = try await providers.generate(request: request, provider: provider)
-        try persistProviderResponse(response, kind: persistenceKind)
+        if persistResults {
+            try persistProviderResponse(response, kind: persistenceKind)
+        }
         return response
     }
 
@@ -924,6 +942,153 @@ final class ChatRepository {
             firstPrompt: normalized.isEmpty ? normalizedAttachments.first ?? "" : normalized,
             isFirstMessage: isFirstMessage
         )
+    }
+
+    // MARK: - Shortcuts
+
+    func runShortcut(
+        prompt: String,
+        provider: String,
+        model: String,
+        systemPromptOverride: String? = nil,
+        saveToNewConversation: Bool
+    ) async throws -> ShortcutRunResult {
+        let bgGuard = BackgroundTaskGuard()
+        bgGuard.begin(name: "YamabikoChatShortcut")
+        defer { bgGuard.end() }
+
+        let normalizedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedPrompt.isEmpty else {
+            let error = ProviderClientError.parseFailure(L10n.text("Shortcuts: プロンプトを入力してください。"))
+            DiagnosticsLogger.log("Shortcut rejected empty prompt", category: .chat, error: error)
+            throw error
+        }
+
+        let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedModel.isEmpty else {
+            let error = ProviderClientError.parseFailure(L10n.text("Shortcuts: モデル ID を入力してください。"))
+            DiagnosticsLogger.log("Shortcut rejected empty model", category: .chat, error: error)
+            throw error
+        }
+
+        let normalizedProvider = try validateShortcutProvider(provider)
+        let resolvedProvider = LLMProvider(rawOrDefault: normalizedProvider)
+
+        let settings = try self.settings.load()
+        let trimmedOverride = systemPromptOverride?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedSystemPrompt: String?
+        if let trimmedOverride, !trimmedOverride.isEmpty {
+            resolvedSystemPrompt = trimmedOverride
+        } else {
+            resolvedSystemPrompt = settings.systemPrompt
+        }
+
+        let request = await buildSingleTurnRequest(
+            model: normalizedModel,
+            text: normalizedPrompt,
+            systemPrompt: resolvedSystemPrompt,
+            provider: normalizedProvider,
+            settings: settings,
+            stream: false
+        )
+
+        if saveToNewConversation {
+            _ = try settingsForNewConversation()
+            let conversationId = try conversations.createConversation(
+                title: "New Chat",
+                model: normalizedModel,
+                provider: normalizedProvider,
+                systemPrompt: resolvedSystemPrompt
+            )
+            guard var conversation = try conversations.fetchConversation(id: conversationId) else {
+                throw ProviderClientError.parseFailure("Conversation not found")
+            }
+
+            let userMessageId = try conversations.insertMessage(
+                ChatMessage(
+                    conversationId: conversationId,
+                    role: "user",
+                    text: normalizedPrompt
+                )
+            )
+            try updateConversationTitleIfNeeded(
+                conversation: &conversation,
+                firstPrompt: normalizedPrompt,
+                isFirstMessage: true
+            )
+
+            let assistantMessageId = try conversations.insertMessage(
+                ChatMessage(
+                    conversationId: conversationId,
+                    role: "model",
+                    text: ""
+                )
+            )
+
+            do {
+                let response = try await runToolCallingTurn(
+                    request: request,
+                    provider: resolvedProvider,
+                    conversationId: conversationId,
+                    persistenceKind: .message(messageId: assistantMessageId),
+                    streamEnabled: false,
+                    persistResults: true,
+                    onStreamEvent: nil,
+                    onStreamingSnapshot: nil
+                )
+                await recordTokenUsageIfAvailable(
+                    provider: normalizedProvider,
+                    model: normalizedModel,
+                    usage: response.usage,
+                    conversationId: conversationId,
+                    requestType: "shortcut"
+                )
+                return ShortcutRunResult(
+                    text: response.text,
+                    conversationId: conversationId,
+                    userMessageId: userMessageId,
+                    assistantMessageId: assistantMessageId
+                )
+            } catch {
+                DiagnosticsLogger.log(
+                    "Shortcut save run failed",
+                    category: .chat,
+                    metadata: [
+                        "provider": normalizedProvider,
+                        "model": normalizedModel,
+                        "conversationId": String(conversationId)
+                    ],
+                    error: error
+                )
+                throw error
+            }
+        }
+
+        do {
+            let response = try await runToolCallingTurn(
+                request: request,
+                provider: resolvedProvider,
+                conversationId: 0,
+                persistenceKind: .message(messageId: -1),
+                streamEnabled: false,
+                persistResults: false,
+                onStreamEvent: nil,
+                onStreamingSnapshot: nil
+            )
+            return ShortcutRunResult(text: response.text)
+        } catch {
+            DiagnosticsLogger.log(
+                "Shortcut run failed",
+                category: .chat,
+                metadata: [
+                    "provider": normalizedProvider,
+                    "model": normalizedModel
+                ],
+                error: error
+            )
+            throw error
+        }
     }
 
     func prepareAutoConversationSeedMessage(conversationId: Int64, text: String) throws {
@@ -2175,6 +2340,21 @@ final class ChatRepository {
         currentSettings.isAutoConversationEnabled = false
         try saveSettings(currentSettings)
         return currentSettings
+    }
+
+    private func validateShortcutProvider(_ provider: String) throws -> String {
+        let normalized = provider.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard ProviderCatalog.options.contains(where: { $0.key == normalized }) else {
+            let error = ProviderClientError.parseFailure(L10n.text("Shortcuts: 不明なプロバイダです。"))
+            DiagnosticsLogger.log(
+                "Shortcut rejected unknown provider",
+                category: .chat,
+                metadata: ["provider": provider],
+                error: error
+            )
+            throw error
+        }
+        return normalized
     }
 
     private func resolveSystemPromptForProject(projectId: Int64?, fallbackPrompt: String?) throws -> String? {
