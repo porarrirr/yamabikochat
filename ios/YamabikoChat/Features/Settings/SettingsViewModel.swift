@@ -337,11 +337,7 @@ final class SettingsViewModel: ObservableObject {
         guard !available.isEmpty else { return }
 
         let availableSet = Set(available)
-        var selected = settings.preferredProvidersList().filter { availableSet.contains($0.lowercased()) }
-
-        if selected.isEmpty, let fallback = available.first {
-            selected = [fallback]
-        }
+        let selected = settings.preferredProvidersList().filter { availableSet.contains($0.lowercased()) }
 
         let current = settings.preferredProvidersList()
         guard selected != current else { return }

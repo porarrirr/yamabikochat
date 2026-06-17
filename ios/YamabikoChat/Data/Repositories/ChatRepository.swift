@@ -2023,25 +2023,10 @@ final class ChatRepository {
         let availableQuantizations = openRouterAvailableQuantizations(catalogModel: catalogModel)
 
         let preferredProviders = settings.preferredProvidersList()
-        var providers = resolveCompatibleOpenRouterProviderSlugs(
+        let providers = resolveCompatibleOpenRouterProviderSlugs(
             preferredProviders,
-            available: availableProviders,
-            catalogModel: catalogModel,
-            model: model
+            available: availableProviders
         )
-        let usingEndpointFallback = providers.isEmpty && !availableProviders.isEmpty
-        if usingEndpointFallback {
-            providers = availableProviders
-            DiagnosticsLogger.log(
-                "OpenRouter provider routing fell back to model endpoints",
-                category: .network,
-                metadata: [
-                    "model": model,
-                    "preferred": preferredProviders.joined(separator: ","),
-                    "endpoints": availableProviders.joined(separator: ",")
-                ]
-            )
-        }
         let quantizations = filterCompatibleOpenRouterSlugs(
             settings.selectedQuantizationsList(),
             available: availableQuantizations
@@ -2051,7 +2036,7 @@ final class ChatRepository {
         if !hasRoutingProviders, quantizations.isEmpty, settings.maxPricePerMillionTokens <= 0 {
             if !preferredProviders.isEmpty {
                 DiagnosticsLogger.log(
-                    "OpenRouter provider routing omitted with no compatible endpoints",
+                    "OpenRouter provider routing omitted with incompatible preferred provider",
                     category: .network,
                     metadata: [
                         "model": model,
@@ -2146,33 +2131,9 @@ final class ChatRepository {
 
     private func resolveCompatibleOpenRouterProviderSlugs(
         _ preferred: [String],
-        available: [String],
-        catalogModel: SimpleModel?,
-        model: String
+        available: [String]
     ) -> [String] {
-        let exactMatches = filterCompatibleOpenRouterSlugs(preferred, available: available)
-        if !exactMatches.isEmpty { return exactMatches }
-
-        guard
-            let catalogModel,
-            let topProvider = catalogModel.topProvider?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-            !topProvider.isEmpty,
-            Set(available.map { $0.lowercased() }).contains(topProvider),
-            preferred.contains(catalogModel.provider.lowercased())
-        else {
-            return []
-        }
-
-        DiagnosticsLogger.log(
-            "OpenRouter provider routing resolved model provider to top endpoint",
-            category: .network,
-            metadata: [
-                "model": model,
-                "preferred": preferred.joined(separator: ","),
-                "endpoint": topProvider
-            ]
-        )
-        return [topProvider]
+        filterCompatibleOpenRouterSlugs(preferred, available: available)
     }
 
     private func effectiveGeminiThinkingLevel(settings: AppSettings, model: String) -> String? {

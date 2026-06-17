@@ -74,7 +74,20 @@ final class OpenRouterRoutingTests: XCTestCase {
         availableQuantizations: []
     )
 
-    func testSendMessageFallsBackToModelEndpointsWhenPreferredProvidersMismatchModel() async throws {
+    private let gemmaModel = SimpleModel(
+        id: "google/gemma-4-31b-it:free",
+        name: "Gemma 4 31B",
+        provider: "google",
+        topProvider: "google-ai-studio",
+        contextLength: 32_768,
+        promptPricePerMillion: 0,
+        completionPricePerMillion: 0,
+        isFree: true,
+        availableProviders: ["google-ai-studio", "open-inference"],
+        availableQuantizations: []
+    )
+
+    func testSendMessageOmitsProviderRoutingWhenPreferredProvidersMismatchModel() async throws {
         let model = liquidModel
         let httpClient = OpenRouterRoutingHTTPClient()
         let fixture = try makeFixture(httpClient: httpClient) { settings in
@@ -96,12 +109,10 @@ final class OpenRouterRoutingTests: XCTestCase {
         let request = try XCTUnwrap(httpClient.streamedRequests.first)
         let body = try XCTUnwrap(request.body)
         let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        let provider = try XCTUnwrap(root["provider"] as? [String: Any])
-        XCTAssertEqual(provider["order"] as? [String], ["liquid"])
-        XCTAssertNil(provider["only"])
+        XCTAssertNil(root["provider"])
     }
 
-    func testSendMessageFallsBackToEndpointProvidersForStalePreferredSlug() async throws {
+    func testSendMessageOmitsProviderRoutingForStalePreferredSlug() async throws {
         let model = SimpleModel(
             id: "google/gemma-4-26b-a4b-it:free",
             name: "Gemma 4 26B",
@@ -135,29 +146,68 @@ final class OpenRouterRoutingTests: XCTestCase {
         let request = try XCTUnwrap(httpClient.streamedRequests.first)
         let body = try XCTUnwrap(request.body)
         let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        let provider = try XCTUnwrap(root["provider"] as? [String: Any])
-        XCTAssertEqual(provider["only"] as? [String], ["google-ai-studio"])
-        XCTAssertNil(provider["order"])
+        XCTAssertNil(root["provider"])
     }
 
-    func testSendMessageResolvesModelProviderPreferenceToTopEndpointWhenFallbacksDisabled() async throws {
-        let model = SimpleModel(
-            id: "google/gemma-4-31b-it:free",
-            name: "Gemma 4 31B",
-            provider: "google",
-            topProvider: "google-ai-studio",
-            contextLength: 32_768,
-            promptPricePerMillion: 0,
-            completionPricePerMillion: 0,
-            isFree: true,
-            availableProviders: ["google-ai-studio", "open-inference"],
-            availableQuantizations: []
-        )
+    func testSendMessageOmitsProviderRoutingForStaleGoogleSlugWhenFallbacksDisabled() async throws {
+        let model = gemmaModel
         let httpClient = OpenRouterRoutingHTTPClient()
         let fixture = try makeFixture(httpClient: httpClient) { settings in
             settings.apiProvider = "OPENROUTER"
             settings.defaultModel = model.id
             settings.preferredProvidersJSON = #"["google"]"#
+            settings.allowFallbacks = false
+            settings.isStreamingEnabled = true
+        }
+        try fixture.credentials.setCredential("openrouter-key", for: .openRouter)
+        fixture.modelService.replaceCachedModels([model])
+
+        let conversationID = try fixture.repository.createConversation(title: "Routing")
+        _ = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "hello",
+            attachments: []
+        )
+
+        let request = try XCTUnwrap(httpClient.streamedRequests.first)
+        let body = try XCTUnwrap(request.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertNil(root["provider"])
+    }
+
+    func testSendMessageOmitsProviderRoutingWhenPreferredProvidersEmpty() async throws {
+        let model = gemmaModel
+        let httpClient = OpenRouterRoutingHTTPClient()
+        let fixture = try makeFixture(httpClient: httpClient) { settings in
+            settings.apiProvider = "OPENROUTER"
+            settings.defaultModel = model.id
+            settings.preferredProvidersJSON = "[]"
+            settings.allowFallbacks = false
+            settings.isStreamingEnabled = true
+        }
+        try fixture.credentials.setCredential("openrouter-key", for: .openRouter)
+        fixture.modelService.replaceCachedModels([model])
+
+        let conversationID = try fixture.repository.createConversation(title: "Routing")
+        _ = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "hello",
+            attachments: []
+        )
+
+        let request = try XCTUnwrap(httpClient.streamedRequests.first)
+        let body = try XCTUnwrap(request.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertNil(root["provider"])
+    }
+
+    func testSendMessageUsesOnlyWhenExplicitCompatibleProviderSelected() async throws {
+        let model = gemmaModel
+        let httpClient = OpenRouterRoutingHTTPClient()
+        let fixture = try makeFixture(httpClient: httpClient) { settings in
+            settings.apiProvider = "OPENROUTER"
+            settings.defaultModel = model.id
+            settings.preferredProvidersJSON = #"["google-ai-studio"]"#
             settings.allowFallbacks = false
             settings.isStreamingEnabled = true
         }
@@ -263,7 +313,7 @@ final class OpenRouterRoutingTests: XCTestCase {
     }
 
     @MainActor
-    func testReconcileOpenRouterPreferredProvidersReplacesIncompatibleSlug() throws {
+    func testReconcileOpenRouterPreferredProvidersClearsIncompatibleSlugWithoutAutoSelecting() throws {
         let fixture = try makeFixture()
         let viewModel = SettingsViewModel()
         viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
@@ -274,7 +324,7 @@ final class OpenRouterRoutingTests: XCTestCase {
 
         viewModel.reconcileOpenRouterPreferredProviders(forModelId: liquidModel.id)
 
-        XCTAssertEqual(viewModel.settings.preferredProvidersList(), ["liquid"])
+        XCTAssertEqual(viewModel.settings.preferredProvidersList(), [])
     }
 
     private func makeFixture(
