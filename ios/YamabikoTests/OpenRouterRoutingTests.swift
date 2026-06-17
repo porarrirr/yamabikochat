@@ -140,6 +140,46 @@ final class OpenRouterRoutingTests: XCTestCase {
         XCTAssertNil(provider["order"])
     }
 
+    func testSendMessageResolvesModelProviderPreferenceToTopEndpointWhenFallbacksDisabled() async throws {
+        let model = SimpleModel(
+            id: "google/gemma-4-31b-it:free",
+            name: "Gemma 4 31B",
+            provider: "google",
+            topProvider: "google-ai-studio",
+            contextLength: 32_768,
+            promptPricePerMillion: 0,
+            completionPricePerMillion: 0,
+            isFree: true,
+            availableProviders: ["google-ai-studio", "open-inference"],
+            availableQuantizations: []
+        )
+        let httpClient = OpenRouterRoutingHTTPClient()
+        let fixture = try makeFixture(httpClient: httpClient) { settings in
+            settings.apiProvider = "OPENROUTER"
+            settings.defaultModel = model.id
+            settings.preferredProvidersJSON = #"["google"]"#
+            settings.allowFallbacks = false
+            settings.isStreamingEnabled = true
+        }
+        try fixture.credentials.setCredential("openrouter-key", for: .openRouter)
+        fixture.modelService.replaceCachedModels([model])
+
+        let conversationID = try fixture.repository.createConversation(title: "Routing")
+        _ = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "hello",
+            attachments: []
+        )
+
+        let request = try XCTUnwrap(httpClient.streamedRequests.first)
+        let body = try XCTUnwrap(request.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let provider = try XCTUnwrap(root["provider"] as? [String: Any])
+        XCTAssertEqual(provider["only"] as? [String], ["google-ai-studio"])
+        XCTAssertNil(provider["order"])
+        XCTAssertEqual(provider["allow_fallbacks"] as? Bool, false)
+    }
+
     func testSendMessageKeepsCompatiblePreferredProviderInRoutingOrder() async throws {
         let model = liquidModel
         let httpClient = OpenRouterRoutingHTTPClient()

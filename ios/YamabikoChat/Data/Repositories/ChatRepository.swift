@@ -2023,9 +2023,11 @@ final class ChatRepository {
         let availableQuantizations = openRouterAvailableQuantizations(catalogModel: catalogModel)
 
         let preferredProviders = settings.preferredProvidersList()
-        var providers = filterCompatibleOpenRouterSlugs(
+        var providers = resolveCompatibleOpenRouterProviderSlugs(
             preferredProviders,
-            available: availableProviders
+            available: availableProviders,
+            catalogModel: catalogModel,
+            model: model
         )
         let usingEndpointFallback = providers.isEmpty && !availableProviders.isEmpty
         if usingEndpointFallback {
@@ -2061,7 +2063,7 @@ final class ChatRepository {
         }
 
         let onlyProviders: [String]?
-        if !settings.allowFallbacks, providers.count == 1 {
+        if !settings.allowFallbacks, hasRoutingProviders {
             onlyProviders = providers
         } else {
             onlyProviders = nil
@@ -2140,6 +2142,37 @@ final class ChatRepository {
         guard !available.isEmpty else { return [] }
         let availableSet = Set(available.map { $0.lowercased() })
         return preferred.filter { availableSet.contains($0.lowercased()) }
+    }
+
+    private func resolveCompatibleOpenRouterProviderSlugs(
+        _ preferred: [String],
+        available: [String],
+        catalogModel: SimpleModel?,
+        model: String
+    ) -> [String] {
+        let exactMatches = filterCompatibleOpenRouterSlugs(preferred, available: available)
+        if !exactMatches.isEmpty { return exactMatches }
+
+        guard
+            let catalogModel,
+            let topProvider = catalogModel.topProvider?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            !topProvider.isEmpty,
+            Set(available.map { $0.lowercased() }).contains(topProvider),
+            preferred.contains(catalogModel.provider.lowercased())
+        else {
+            return []
+        }
+
+        DiagnosticsLogger.log(
+            "OpenRouter provider routing resolved model provider to top endpoint",
+            category: .network,
+            metadata: [
+                "model": model,
+                "preferred": preferred.joined(separator: ","),
+                "endpoint": topProvider
+            ]
+        )
+        return [topProvider]
     }
 
     private func effectiveGeminiThinkingLevel(settings: AppSettings, model: String) -> String? {
