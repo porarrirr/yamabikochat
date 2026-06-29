@@ -602,7 +602,7 @@ final class ChatRepository {
         return ProviderRequest(
             model: conversation.model,
             messages: resolvedMessages,
-            systemPrompt: conversation.systemPrompt,
+            systemPrompt: SystemPromptComposer.composeForAPI(conversation.systemPrompt),
             stream: settings.isStreamingEnabled,
             tools: tools,
             thinking: thinkingConfigForProvider(
@@ -1768,7 +1768,7 @@ final class ChatRepository {
         return ProviderRequest(
             model: model,
             messages: messages ?? [ProviderRequestMessage(role: "user", content: text)],
-            systemPrompt: systemPrompt,
+            systemPrompt: SystemPromptComposer.composeForAPI(systemPrompt),
             stream: stream ?? settings.isStreamingEnabled,
             tools: toolsForProvider(settings: settings, provider: provider, context: context),
             thinking: thinkingConfigForProvider(settings: settings, provider: provider, model: model, context: context),
