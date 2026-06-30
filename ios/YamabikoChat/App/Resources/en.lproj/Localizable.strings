@@ -21,6 +21,11 @@
 "Codexログインを開始しました" = "Started Codex login";
 "Codex使用量を更新しました" = "Updated Codex usage";
 "Codex認証処理中..." = "Authenticating Codex...";
+"Codexのアクセストークンを更新できませんでした。ログアウトして再度サインインしてください。" = "Your Codex access token could not be refreshed. Please log out and sign in again.";
+"Codexのリフレッシュトークンの有効期限が切れました。ログアウトして再度サインインしてください。" = "Your Codex refresh token has expired. Please log out and sign in again.";
+"Codexのリフレッシュトークンは既に使用済みです。ログアウトして再度サインインしてください。" = "Your Codex refresh token was already used. Please log out and sign in again.";
+"Codexのリフレッシュトークンは無効化されました。ログアウトして再度サインインしてください。" = "Your Codex refresh token was revoked. Please log out and sign in again.";
+"Codexのリフレッシュトークンがありません。ブラウザで再度サインインしてください。" = "No Codex refresh token is available. Please sign in again with the browser.";
 "FilesからGeminiAuthInfo.plistを選択すると、アプリ内にOAuth設定を保存します。" = "Select GeminiAuthInfo.plist from Files to save OAuth settings in the app.";
 "Gemini 3 Flashはthinkingレベル（minimal〜high）を調整できます" = "Gemini 3 Flash supports thinking level adjustment (minimal to high).";
 "Gemini OAuth client ID/secret が未設定です。GeminiAuthInfo.plist（または Info.plist）を設定するか、下の「設定ファイルを取り込む」を実行してください。" = "Gemini OAuth client ID/secret is not set. Configure GeminiAuthInfo.plist (or Info.plist), or tap \"Import settings file\" below.";

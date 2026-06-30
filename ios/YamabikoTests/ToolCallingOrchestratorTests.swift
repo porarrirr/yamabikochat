@@ -196,12 +196,16 @@ final class ToolCallingOrchestratorTests: XCTestCase {
         XCTAssertEqual(executionCount, 1)
     }
 
+    func testDefaultMaxRoundsIsFifteen() {
+        XCTAssertEqual(ToolCallingOrchestrator.defaultMaxRounds, 15)
+    }
+
     func testMaximumRoundLimitStopsAdditionalInvocations() async throws {
         let counter = TestToolCounter()
         let recorder = TestInvocationRecorder()
         let orchestrator = ToolCallingOrchestrator(
             registry: LocalToolRegistry(executors: [TestToolExecutor(counter: counter)]),
-            maxRounds: 5
+            maxRounds: 15
         )
 
         let outcome = try await orchestrator.run(
@@ -224,11 +228,11 @@ final class ToolCallingOrchestratorTests: XCTestCase {
             )
         }
 
-        XCTAssertEqual(outcome.rounds, 5)
+        XCTAssertEqual(outcome.rounds, 15)
         let requestCount = await recorder.requests.count
         let executionCount = await counter.count
-        XCTAssertEqual(requestCount, 5)
-        XCTAssertEqual(executionCount, 5)
+        XCTAssertEqual(requestCount, 15)
+        XCTAssertEqual(executionCount, 15)
         XCTAssertTrue(outcome.response.toolCalls.isEmpty)
         XCTAssertFalse(outcome.response.text.isEmpty)
     }

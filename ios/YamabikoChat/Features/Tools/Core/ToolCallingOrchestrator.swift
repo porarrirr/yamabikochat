@@ -8,7 +8,7 @@ struct ToolCallingOutcome: Sendable, Equatable {
 }
 
 struct ToolCallingOrchestrator: Sendable {
-    static let defaultMaxRounds = 5
+    static let defaultMaxRounds = 15
 
     let registry: LocalToolRegistry
     var maxRounds: Int = Self.defaultMaxRounds

@@ -147,6 +147,7 @@ struct RootView: View {
         .sheet(isPresented: $appState.isConversationHistoryPresented) {
             ConversationHistorySheet(
                 viewModel: listViewModel,
+                settingsViewModel: settingsViewModel,
                 selection: $appState.selectedConversationID,
                 onSelect: { id in
                     selectConversation(id: id, closeHistory: true)
@@ -330,7 +331,7 @@ private struct ConversationHistorySheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @ObservedObject var viewModel: ConversationListViewModel
-    @StateObject private var settingsViewModel = SettingsViewModel()
+    @ObservedObject var settingsViewModel: SettingsViewModel
     @Binding var selection: Int64?
 
     let onSelect: (Int64) -> Void

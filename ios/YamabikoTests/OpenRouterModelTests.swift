@@ -159,6 +159,35 @@ final class OpenRouterModelTests: XCTestCase {
         XCTAssertTrue(free?.isFree ?? false)
     }
 
+    func testConcurrentModelFetchUsesSingleHTTPRequest() async {
+        let payload = """
+        {
+          "data": [
+            {
+              "id": "openai/gpt-4o",
+              "name": "GPT-4o",
+              "pricing": { "prompt": "0.00001", "completion": "0.00002" },
+              "context_length": 128000
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let httpClient = OpenRouterRecordingHTTPClient(data: payload)
+        let service = OpenRouterModelService(
+            credentialStore: OpenRouterTestCredentialStore(),
+            httpClient: httpClient
+        )
+
+        async let first = service.getAvailableModels(forceRefresh: true)
+        async let second = service.getAvailableModels(forceRefresh: false)
+        let models = await (first, second)
+
+        XCTAssertEqual(models.0.count, 1)
+        XCTAssertEqual(models.1.count, 1)
+        XCTAssertEqual(httpClient.sentURLs.count, 1)
+    }
+
     func testModelEndpointsRequestKeepsVariantSuffix() async {
         let payload = """
         {

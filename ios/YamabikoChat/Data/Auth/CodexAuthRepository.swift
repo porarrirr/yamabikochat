@@ -263,11 +263,16 @@ final class CodexAuthRepository {
             }
 
             guard var auth = readAuthJSON(),
-                  var tokens = auth.tokens,
-                  !tokens.refreshToken.isEmpty
+                  var tokens = auth.tokens
             else {
+                let updated = Self.readState(credentialStore: credentialStore)
+                subject.send(updated)
+                return .success(updated)
+            }
+
+            guard !tokens.refreshToken.isEmpty else {
                 if force || shouldRefresh() {
-                    try credentialStore.saveSecret(Self.nowISO8601(), key: "codex_last_refresh")
+                    throw CodexAuthRefreshError.missingRefreshToken
                 }
                 let updated = Self.readState(credentialStore: credentialStore)
                 subject.send(updated)
@@ -275,22 +280,36 @@ final class CodexAuthRepository {
             }
 
             if force || shouldRefresh() {
-                let refreshed = try await refreshTokens(refreshToken: tokens.refreshToken)
-                tokens.idToken = refreshed.idToken ?? tokens.idToken
-                tokens.accessToken = refreshed.accessToken ?? tokens.accessToken
-                tokens.refreshToken = refreshed.refreshToken ?? tokens.refreshToken
-                auth.tokens = tokens
-                auth.lastRefresh = Self.nowISO8601()
-                try persistAuth(
-                    apiKey: auth.openAIAPIKey,
-                    tokens: tokens,
-                    idInfo: CodexJWTParser.parseIDToken(tokens.idToken)
-                )
+                do {
+                    let refreshed = try await refreshTokens(refreshToken: tokens.refreshToken)
+                    tokens.idToken = refreshed.idToken ?? tokens.idToken
+                    tokens.accessToken = refreshed.accessToken ?? tokens.accessToken
+                    tokens.refreshToken = refreshed.refreshToken ?? tokens.refreshToken
+                    auth.tokens = tokens
+                    auth.lastRefresh = Self.nowISO8601()
+                    try persistAuth(
+                        apiKey: auth.openAIAPIKey,
+                        tokens: tokens,
+                        idInfo: CodexJWTParser.parseIDToken(tokens.idToken)
+                    )
+                } catch let error as CodexAuthRefreshError where error.isUnrecoverable {
+                    try clearOAuthTokensKeepingApiKey(from: auth)
+                    let updated = Self.readState(credentialStore: credentialStore)
+                    subject.send(updated)
+                    return .failure(error)
+                }
             }
 
             let updated = Self.readState(credentialStore: credentialStore)
             subject.send(updated)
             return .success(updated)
+        } catch let error as CodexAuthRefreshError {
+            DiagnosticsLogger.log(
+                "Codex auth refresh failed message=\(error.localizedDescription ?? "")",
+                level: .error,
+                category: .auth
+            )
+            return .failure(error)
         } catch {
             return .failure(error)
         }
@@ -575,9 +594,38 @@ final class CodexAuthRepository {
         )
         let (data, response) = try await httpClient.send(request)
         guard (200 ... 299).contains(response.statusCode) else {
-            throw ProviderClientError.httpStatus(response.statusCode, String(data: data, encoding: .utf8) ?? "")
+            let body = String(data: data, encoding: .utf8) ?? ""
+            if response.statusCode == 401 {
+                let classified = CodexAuthRefreshError.classified(from: body)
+                let code = CodexAuthRefreshError.extractErrorCode(from: body) ?? "unknown"
+                DiagnosticsLogger.log(
+                    "Codex auth refresh failed code=\(code) message=\(classified.localizedDescription ?? "")",
+                    level: .error,
+                    category: .auth
+                )
+                throw classified
+            }
+            throw ProviderClientError.httpStatus(response.statusCode, body)
         }
         return try JSONDecoder().decode(RefreshResponse.self, from: data)
+    }
+
+    private func clearOAuthTokensKeepingApiKey(from auth: CodexAuthJSON) throws {
+        let apiKey = auth.openAIAPIKey?.nilIfBlank
+        if let apiKey {
+            let payload = CodexAuthJSON(
+                openAIAPIKey: apiKey,
+                tokens: nil,
+                lastRefresh: Self.nowISO8601()
+            )
+            try saveAuthJSON(payload)
+            try credentialStore.setCredential(apiKey, for: .codexAuth)
+        } else {
+            try credentialStore.deleteSecret(key: Constants.authStorageKey)
+            try credentialStore.setCredential(nil, for: .codexAuth)
+        }
+        try credentialStore.setCodexAccessToken(nil)
+        try credentialStore.saveSecret(Self.nowISO8601(), key: "codex_last_refresh")
     }
 
     private static func readState(credentialStore: SecureCredentialStore) -> CodexAuthState {

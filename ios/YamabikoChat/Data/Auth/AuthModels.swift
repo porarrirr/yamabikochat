@@ -70,6 +70,69 @@ enum CodexJWTParser {
     }
 }
 
+enum CodexAuthRefreshError: LocalizedError, Equatable, Sendable {
+    case expired
+    case reused
+    case invalidated
+    case missingRefreshToken
+    case unknown
+
+    var isUnrecoverable: Bool {
+        switch self {
+        case .expired, .reused, .invalidated:
+            return true
+        case .missingRefreshToken, .unknown:
+            return false
+        }
+    }
+
+    var errorDescription: String? {
+        switch self {
+        case .expired:
+            return L10n.text("Codexのリフレッシュトークンの有効期限が切れました。ログアウトして再度サインインしてください。")
+        case .reused:
+            return L10n.text("Codexのリフレッシュトークンは既に使用済みです。ログアウトして再度サインインしてください。")
+        case .invalidated:
+            return L10n.text("Codexのリフレッシュトークンは無効化されました。ログアウトして再度サインインしてください。")
+        case .missingRefreshToken:
+            return L10n.text("Codexのリフレッシュトークンがありません。ブラウザで再度サインインしてください。")
+        case .unknown:
+            return L10n.text("Codexのアクセストークンを更新できませんでした。ログアウトして再度サインインしてください。")
+        }
+    }
+
+    static func classified(from body: String) -> CodexAuthRefreshError {
+        switch extractErrorCode(from: body)?.lowercased() {
+        case "refresh_token_expired":
+            return .expired
+        case "refresh_token_reused":
+            return .reused
+        case "refresh_token_invalidated":
+            return .invalidated
+        default:
+            return .unknown
+        }
+    }
+
+    static func extractErrorCode(from body: String) -> String? {
+        guard body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
+              let data = body.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return nil
+        }
+
+        switch object["error"] {
+        case let nested as [String: Any]:
+            return (nested["code"] as? String)?.trimmedNonEmpty
+        case let code as String:
+            return code.trimmedNonEmpty
+        default:
+            return (object["code"] as? String)?.trimmedNonEmpty
+        }
+    }
+}
+
 struct CodexAuthState: Equatable, Sendable {
     var isLoggedIn: Bool = false
     var email: String? = nil

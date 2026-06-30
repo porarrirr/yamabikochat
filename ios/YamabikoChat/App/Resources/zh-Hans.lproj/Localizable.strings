@@ -21,6 +21,11 @@
 "Codexログインを開始しました" = "已开始 Codex 登录";
 "Codex使用量を更新しました" = "已更新 Codex 用量";
 "Codex認証処理中..." = "Codex認証処理中...";
+"Codexのアクセストークンを更新できませんでした。ログアウトして再度サインインしてください。" = "无法刷新 Codex 访问令牌。请退出后重新登录。";
+"Codexのリフレッシュトークンの有効期限が切れました。ログアウトして再度サインインしてください。" = "Codex 刷新令牌已过期。请退出后重新登录。";
+"Codexのリフレッシュトークンは既に使用済みです。ログアウトして再度サインインしてください。" = "Codex 刷新令牌已被使用。请退出后重新登录。";
+"Codexのリフレッシュトークンは無効化されました。ログアウトして再度サインインしてください。" = "Codex 刷新令牌已失效。请退出后重新登录。";
+"Codexのリフレッシュトークンがありません。ブラウザで再度サインインしてください。" = "没有可用的 Codex 刷新令牌。请通过浏览器重新登录。";
 "FilesからGeminiAuthInfo.plistを選択すると、アプリ内にOAuth設定を保存します。" = "FilesからGeminiAuthInfo.plistを選択すると、アプリ内にOAuth設定を保存します。";
 "Gemini 3 Flashはthinkingレベル（minimal〜high）を調整できます" = "Gemini 3 Flashはthinkingレベル（minimal〜high）を調整できます";
 "Gemini OAuth client ID/secret が未設定です。GeminiAuthInfo.plist（または Info.plist）を設定するか、下の「設定ファイルを取り込む」を実行してください。" = "Gemini OAuth client ID/secret が未設定です。GeminiAuthInfo.plist（または Info.plist）を設定するか、下の「設定ファイルを取り込む」を実行してください。";

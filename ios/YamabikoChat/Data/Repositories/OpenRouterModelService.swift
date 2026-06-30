@@ -1,6 +1,33 @@
 import Foundation
 import Combine
 
+private actor OpenRouterModelsFetchCoordinator {
+    private var inFlight: Task<[SimpleModel], Never>?
+    private var activeFetchID = UUID()
+
+    func resolve(
+        forceRefresh: Bool,
+        perform: @Sendable @escaping () async -> [SimpleModel]
+    ) async -> [SimpleModel] {
+        if forceRefresh {
+            inFlight?.cancel()
+            inFlight = nil
+        } else if let inFlight, !inFlight.isCancelled {
+            return await inFlight.value
+        }
+
+        let fetchID = UUID()
+        activeFetchID = fetchID
+        let task = Task { await perform() }
+        inFlight = task
+        let result = await task.value
+        if activeFetchID == fetchID {
+            inFlight = nil
+        }
+        return result
+    }
+}
+
 final class OpenRouterModelService {
     private let credentialStore: SecureCredentialStore
     private let httpClient: HTTPClientProtocol
@@ -16,6 +43,7 @@ final class OpenRouterModelService {
     private var cachedProviders: ProviderDirectory = .empty
     private var lastProvidersFetch: Date?
     private let providersCacheTTL: TimeInterval = 24 * 60 * 60
+    private let modelsFetchCoordinator = OpenRouterModelsFetchCoordinator()
 
     private let fallbackModels: [SimpleModel] = [
         .init(
@@ -78,6 +106,12 @@ final class OpenRouterModelService {
             return cachedModels
         }
 
+        return await modelsFetchCoordinator.resolve(forceRefresh: forceRefresh) { [self] in
+            await fetchAvailableModels(forceRefresh: forceRefresh)
+        }
+    }
+
+    private func fetchAvailableModels(forceRefresh: Bool) async -> [SimpleModel] {
         loadingSubject.send(true)
         errorSubject.send(nil)
         defer { loadingSubject.send(false) }
