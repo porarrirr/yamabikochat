@@ -99,6 +99,8 @@ struct ChatScreen: View {
                                                 streamingSnapshot: viewModel.streamingSnapshot(for: message.id),
                                                 isActivelyStreaming: viewModel.isMessageStreaming(message.id),
                                                 canRegenerate: viewModel.canRegenerateLastAssistant && message.id == viewModel.fullMessages.last?.id,
+                                                fusionDebugEnabled: viewModel.settings.fusionDebugModeEnabled,
+                                                fusionTrace: viewModel.fusionTrace(for: message.message),
                                                 onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
                                                 onNextVariant: { viewModel.showNextVariant(messageId: message.id) },
                                                 onCopy: {
@@ -303,6 +305,19 @@ struct ChatScreen: View {
                     Image(systemName: viewModel.isAutoConversationRunning ? "arrow.triangle.2.circlepath" : "pause.circle")
                         .font(.system(size: 10, weight: .semibold))
                     Text(status)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+            }
+
+            if let fusionStatus = viewModel.fusionAnalyzingStatus {
+                HStack(spacing: 5) {
+                    ProgressView()
+                        .controlSize(.mini)
+                    Text(fusionStatus)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -1033,12 +1048,15 @@ private struct MessageBubble: View {
     let streamingSnapshot: ChatStreamingSnapshot?
     let isActivelyStreaming: Bool
     let canRegenerate: Bool
+    let fusionDebugEnabled: Bool
+    let fusionTrace: FusionTrace?
     let onPrevVariant: () -> Void
     let onNextVariant: () -> Void
     let onCopy: () -> Void
     let onBranch: () -> Void
     let onRegenerate: () -> Void
     @State private var isThinkingSheetPresented = false
+    @State private var isFusionDebugPresented = false
 
     private var isUser: Bool {
         message.message.role == "user"
@@ -1238,10 +1256,23 @@ private struct MessageBubble: View {
                 onRegenerate()
             }
             .disabled(!canRegenerate)
+
+            if fusionDebugEnabled, fusionTrace != nil {
+                Button {
+                    isFusionDebugPresented = true
+                } label: {
+                    Label(L10n.text("Fusion Debug"), systemImage: "arrow.triangle.merge")
+                }
+            }
         }
         .sheet(isPresented: $isThinkingSheetPresented) {
             if let thinkingText {
                 ThinkingSheet(thinkingText: thinkingText)
+            }
+        }
+        .sheet(isPresented: $isFusionDebugPresented) {
+            if let fusionTrace {
+                FusionDebugSheet(trace: fusionTrace)
             }
         }
     }

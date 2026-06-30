@@ -356,13 +356,130 @@ final class SettingsViewModel: ObservableObject {
         settings.isDualModeEnabled = enabled
         if enabled {
             settings.isAutoConversationEnabled = false
+            settings.isFusionModeEnabled = false
         }
+    }
+
+    func setFusionModeEnabled(_ enabled: Bool) {
+        settings.isFusionModeEnabled = enabled
+        if enabled {
+            settings.isDualModeEnabled = false
+            settings.isAutoConversationEnabled = false
+        }
+        guard let repository else { return }
+        do {
+            let normalized = settings.normalizedForPersistence()
+            try repository.saveSettings(normalized)
+            settings = normalized
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log("Fusion mode setting save failed", error: error)
+        }
+    }
+
+    var fusionCustomPreset: FusionPresetDefinition {
+        settings.decodeFusionCustomPreset() ?? AppSettings.defaultFusionCustomPreset()
+    }
+
+    func setFusionPresetName(_ name: String) {
+        settings.fusionPresetName = name
+        if name == FusionPresetLoader.customPresetName {
+            ensureFusionCustomPresetInitialized()
+        }
+    }
+
+    func ensureFusionCustomPresetInitialized() {
+        if settings.decodeFusionCustomPreset() == nil {
+            settings.fusionCustomPresetJSON = settings.encodeFusionCustomPreset(AppSettings.defaultFusionCustomPreset())
+        }
+    }
+
+    func importFusionPresetIntoCustom(_ name: String) {
+        guard let preset = try? FusionPresetLoader.loadPreset(named: name) else { return }
+        settings.fusionCustomPresetJSON = settings.encodeFusionCustomPreset(preset)
+    }
+
+    private func saveFusionCustomPreset(_ preset: FusionPresetDefinition) {
+        settings.fusionCustomPresetJSON = settings.encodeFusionCustomPreset(
+            AppSettings.normalizedFusionPresetDefinition(preset)
+        )
+    }
+
+    func updateFusionPanelModel(at index: Int, provider: String, modelId: String) {
+        guard index >= 0 else { return }
+        var preset = fusionCustomPreset
+        guard index < preset.panelModels.count else { return }
+        preset.panelModels[index].provider = provider.uppercased()
+        preset.panelModels[index].modelId = modelId
+        saveFusionCustomPreset(preset)
+    }
+
+    func addFusionPanel() {
+        var preset = fusionCustomPreset
+        guard preset.panelModels.count < FusionPresetLoader.maxPanelModelCount else { return }
+        let template = preset.panelModels.last ?? PanelModelConfig(
+            modelId: "gemini-2.5-flash",
+            provider: "GEMINI",
+            temperature: nil,
+            maxTokens: nil,
+            timeoutMs: nil,
+            role: "panel"
+        )
+        preset.panelModels.append(template)
+        saveFusionCustomPreset(preset)
+    }
+
+    func removeFusionPanel(at index: Int) {
+        var preset = fusionCustomPreset
+        guard preset.panelModels.count > 1, index >= 0, index < preset.panelModels.count else { return }
+        preset.panelModels.remove(at: index)
+        saveFusionCustomPreset(preset)
+    }
+
+    func updateFusionJudgeModel(provider: String, modelId: String) {
+        var preset = fusionCustomPreset
+        preset.judgeModel.provider = provider.uppercased()
+        preset.judgeModel.modelId = modelId
+        saveFusionCustomPreset(preset)
+    }
+
+    func updateFusionSynthesizerModel(provider: String, modelId: String) {
+        var preset = fusionCustomPreset
+        preset.synthesizerModel.provider = provider.uppercased()
+        preset.synthesizerModel.modelId = modelId
+        saveFusionCustomPreset(preset)
+    }
+
+    func updateFusionFallbackModel(provider: String, modelId: String) {
+        var preset = fusionCustomPreset
+        preset.fallbackModel = PanelModelConfig(
+            modelId: modelId,
+            provider: provider.uppercased(),
+            temperature: preset.fallbackModel?.temperature ?? preset.synthesizerModel.temperature,
+            maxTokens: preset.fallbackModel?.maxTokens ?? preset.synthesizerModel.maxTokens,
+            timeoutMs: preset.fallbackModel?.timeoutMs ?? preset.synthesizerModel.timeoutMs,
+            role: preset.fallbackModel?.role
+        )
+        saveFusionCustomPreset(preset)
+    }
+
+    func bundledFusionPresetSummary(for presetName: String) -> String? {
+        guard let preset = try? FusionPresetLoader.loadPreset(named: presetName) else { return nil }
+        let panelSummary = preset.panelModels.map(\.modelId).joined(separator: ", ")
+        return L10n.format(
+            "Panel: %@ · Judge: %@ · Synth: %@",
+            panelSummary,
+            preset.judgeModel.modelId,
+            preset.synthesizerModel.modelId
+        )
     }
 
     func setAutoConversationEnabled(_ enabled: Bool) {
         settings.isAutoConversationEnabled = enabled
         if enabled {
             settings.isDualModeEnabled = false
+            settings.isFusionModeEnabled = false
         }
     }
 

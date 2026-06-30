@@ -410,13 +410,12 @@ final class ChatRepositorySyncTests: XCTestCase {
             try settings.save(current)
         }
 
-        let repository = ChatRepository(
-            conversations: conversations,
+        let repository = ChatRepositoryTestSupport.makeRepository(
+            dbQueue: dbQueue,
             settings: settings,
-            providers: providers,
-            credentialStore: credentials,
-            modelService: modelService,
-            codexAuthRepository: codexAuth,
+            conversations: conversations,
+            credentials: credentials,
+            httpClient: httpClient,
             pricingRepository: pricingRepository
         )
         return (repository, conversations, credentials)

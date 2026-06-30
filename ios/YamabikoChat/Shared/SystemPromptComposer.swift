@@ -13,6 +13,14 @@ enum SystemPromptComposer {
         return trimmed + dateSuffixSeparator + dateSuffix
     }
 
+    static func mergeForAPI(_ systemPrompts: String?..., now: Date = Date()) -> String? {
+        let merged = systemPrompts
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: dateSuffixSeparator)
+        return composeForAPI(merged.isEmpty ? nil : merged, now: now)
+    }
+
     private static func formattedDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)

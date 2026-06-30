@@ -32,21 +32,25 @@ struct AutoConversationSettingsSection: View {
                     get: { viewModel.settings.isAutoConversationEnabled },
                     set: { viewModel.setAutoConversationEnabled($0) }
                 ))
-                .disabled(viewModel.settings.isDualModeEnabled && !viewModel.settings.isAutoConversationEnabled)
+                .disabled(
+                    (viewModel.settings.isDualModeEnabled || viewModel.settings.isFusionModeEnabled)
+                        && !viewModel.settings.isAutoConversationEnabled
+                )
 
                 Text(L10n.text("自動会話はモデルA/Bの応答を交互に実行します。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if viewModel.settings.isDualModeEnabled && !viewModel.settings.isAutoConversationEnabled {
-                    Text(L10n.text("デュアルモードが有効な間は自動会話をONにできません。"))
+                if (viewModel.settings.isDualModeEnabled || viewModel.settings.isFusionModeEnabled)
+                    && !viewModel.settings.isAutoConversationEnabled {
+                    Text(L10n.text("Fusion またはデュアルモードが有効な間は自動会話をONにできません。"))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             } header: {
                 Text(L10n.text("自動会話"))
             } footer: {
-                Text(L10n.text("デュアルモードと自動会話は同時に有効化できません。"))
+                Text(L10n.text("Fusion・デュアル・自動会話は同時に有効化できません。"))
             }
 
             if viewModel.settings.isAutoConversationEnabled {

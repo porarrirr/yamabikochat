@@ -22,5 +22,15 @@ struct YamabikoShortcutsProvider: AppShortcutsProvider {
             shortTitle: LocalizedStringResource("モデルに聞いて保存"),
             systemImageName: "square.and.arrow.down"
         )
+        AppShortcut(
+            intent: RunFusionIntent(),
+            phrases: [
+                "Shortcuts: \(.applicationName) で Fusion に聞く",
+                "\(.applicationName) Fusion に聞く",
+                "\(.applicationName) fusion test"
+            ],
+            shortTitle: "Fusion に聞く",
+            systemImageName: "arrow.triangle.merge"
+        )
     }
 }

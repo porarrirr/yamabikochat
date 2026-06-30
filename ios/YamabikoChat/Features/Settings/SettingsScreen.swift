@@ -265,6 +265,7 @@ struct SettingsScreen: View {
         Group {
             systemPromptTabContent
             dualTabContent
+            FusionModeSettingsSection(viewModel: viewModel)
             AutoConversationSettingsSection(viewModel: viewModel)
         }
     }

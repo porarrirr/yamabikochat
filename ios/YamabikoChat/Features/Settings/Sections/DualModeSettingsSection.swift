@@ -30,21 +30,25 @@ struct DualModeSettingsSection: View {
                     get: { viewModel.settings.isDualModeEnabled },
                     set: { viewModel.setDualModeEnabled($0) }
                 ))
-                .disabled(viewModel.settings.isAutoConversationEnabled && !viewModel.settings.isDualModeEnabled)
+                .disabled(
+                    (viewModel.settings.isAutoConversationEnabled || viewModel.settings.isFusionModeEnabled)
+                        && !viewModel.settings.isDualModeEnabled
+                )
 
                 Text(L10n.text("デュアルモードで2つのモデル応答を同時比較します。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if viewModel.settings.isAutoConversationEnabled && !viewModel.settings.isDualModeEnabled {
-                    Text(L10n.text("自動会話が有効な間はデュアルモードをONにできません。"))
+                if (viewModel.settings.isAutoConversationEnabled || viewModel.settings.isFusionModeEnabled)
+                    && !viewModel.settings.isDualModeEnabled {
+                    Text(L10n.text("Fusion または自動会話が有効な間はデュアルモードをONにできません。"))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             } header: {
                 Text(L10n.text("デュアルモード"))
             } footer: {
-                Text(L10n.text("デュアルモードと自動会話は同時に有効化できません。"))
+                Text(L10n.text("Fusion・デュアル・自動会話は同時に有効化できません。"))
             }
 
             if viewModel.settings.isDualModeEnabled {

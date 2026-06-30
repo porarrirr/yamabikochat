@@ -359,6 +359,12 @@ struct GeminiProviderClient: ProviderClient {
         }
 
         var generationConfig: [String: Any] = [:]
+        if let maxTokens = Int(request.metadata["max_output_tokens"] ?? ""), maxTokens > 0 {
+            generationConfig["maxOutputTokens"] = maxTokens
+        }
+        if let temperature = Double(request.metadata["temperature"] ?? "") {
+            generationConfig["temperature"] = temperature
+        }
         if let mime = request.metadata["geminiResponseMimeType"]?.trimmedNonEmpty {
             generationConfig["responseMimeType"] = mime
         }

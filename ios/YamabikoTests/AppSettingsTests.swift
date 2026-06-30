@@ -55,6 +55,64 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertFalse(normalized.isAutoConversationEnabled)
     }
 
+    func testNormalizedForPersistenceEnforcesSingleModeAmongDualAutoFusion() {
+        var settings = AppSettings()
+        settings.isFusionModeEnabled = true
+        settings.isDualModeEnabled = true
+        settings.isAutoConversationEnabled = true
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertTrue(normalized.isDualModeEnabled)
+        XCTAssertFalse(normalized.isAutoConversationEnabled)
+        XCTAssertFalse(normalized.isFusionModeEnabled)
+    }
+
+    func testNormalizedForPersistenceDisablesFusionWhenAutoIsEnabled() {
+        var settings = AppSettings()
+        settings.isFusionModeEnabled = true
+        settings.isAutoConversationEnabled = true
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertTrue(normalized.isAutoConversationEnabled)
+        XCTAssertFalse(normalized.isFusionModeEnabled)
+    }
+
+    func testNormalizedForPersistenceKeepsFusionWhenOnlyFusionEnabled() {
+        var settings = AppSettings()
+        settings.isFusionModeEnabled = true
+        settings.fusionPresetName = "unknown"
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertTrue(normalized.isFusionModeEnabled)
+        XCTAssertEqual(normalized.fusionPresetName, FusionPresetLoader.defaultPresetName)
+    }
+
+    func testNormalizedForPersistenceKeepsCustomFusionPreset() {
+        var settings = AppSettings()
+        settings.fusionPresetName = FusionPresetLoader.customPresetName
+        settings.fusionCustomPresetJSON = ""
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertEqual(normalized.fusionPresetName, FusionPresetLoader.customPresetName)
+        XCTAssertFalse(normalized.fusionCustomPresetJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        XCTAssertNotNil(normalized.decodeFusionCustomPreset())
+    }
+
+    func testNormalizedForPersistenceReplacesInvalidCustomFusionJSON() {
+        var settings = AppSettings()
+        settings.fusionPresetName = FusionPresetLoader.customPresetName
+        settings.fusionCustomPresetJSON = "{not-json"
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertEqual(normalized.fusionPresetName, FusionPresetLoader.customPresetName)
+        XCTAssertNotNil(normalized.decodeFusionCustomPreset())
+    }
+
     func testResolvedOpenAIBaseURLFallsBackWhenInvalid() {
         var settings = AppSettings()
         settings.openAIBaseURL = "   "

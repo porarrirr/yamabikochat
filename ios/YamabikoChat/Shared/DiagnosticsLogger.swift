@@ -11,6 +11,7 @@ enum DiagnosticsLogCategory: String {
     case app = "APP"
     case auth = "AUTH"
     case chat = "CHAT"
+    case fusion = "FUSION"
     case network = "NETWORK"
     case settings = "SETTINGS"
 }

@@ -123,6 +123,13 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var dualThinkingLevelB: String?
     var dualCodexReasoningEffortB: String?
 
+    var isFusionModeEnabled: Bool
+    var fusionPresetName: String
+    var fusionTaskType: String
+    var fusionDebugModeEnabled: Bool
+    var fusionLogPromptsEnabled: Bool
+    var fusionCustomPresetJSON: String
+
     var isAutoConversationEnabled: Bool
     var autoModelA: String
     var autoModelB: String
@@ -270,6 +277,13 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         dualThinkingLevelB = nil
         dualCodexReasoningEffortB = nil
 
+        isFusionModeEnabled = false
+        fusionPresetName = "quality"
+        fusionTaskType = "auto"
+        fusionDebugModeEnabled = false
+        fusionLogPromptsEnabled = false
+        fusionCustomPresetJSON = ""
+
         isAutoConversationEnabled = false
         autoModelA = "gemini-2.5-flash"
         autoModelB = "deepseek/deepseek-chat"
@@ -354,9 +368,29 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
 
     func normalizedForPersistence() -> AppSettings {
         var normalized = self
-        if normalized.isDualModeEnabled && normalized.isAutoConversationEnabled {
+        if normalized.isDualModeEnabled {
+            normalized.isAutoConversationEnabled = false
+            normalized.isFusionModeEnabled = false
+        } else if normalized.isAutoConversationEnabled {
+            normalized.isDualModeEnabled = false
+            normalized.isFusionModeEnabled = false
+        } else if normalized.isFusionModeEnabled {
+            normalized.isDualModeEnabled = false
             normalized.isAutoConversationEnabled = false
         }
+        let fusionPreset = normalized.fusionPresetName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        normalized.fusionPresetName = FusionPresetLoader.availablePresetNames.contains(fusionPreset)
+            ? fusionPreset
+            : FusionPresetLoader.defaultPresetName
+        if normalized.fusionPresetName == FusionPresetLoader.customPresetName {
+            normalized.fusionCustomPresetJSON = normalized.normalizedFusionCustomPresetJSON()
+        }
+        let fusionTask = normalized.fusionTaskType
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        normalized.fusionTaskType = FusionTaskType(rawValue: fusionTask)?.rawValue ?? "auto"
         let layout = normalized.dualSplitLayout
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased()

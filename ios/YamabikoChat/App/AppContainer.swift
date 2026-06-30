@@ -13,6 +13,7 @@ final class AppContainer: ObservableObject {
     let openRouterModelService: OpenRouterModelService
     let codexAuthRepository: CodexAuthRepository
     let providerGateway: ProviderGateway
+    let fusionService: FusionService
     let chatRepository: ChatRepository
     let sharePayloadStore: SharePayloadStore
 
@@ -25,6 +26,7 @@ final class AppContainer: ObservableObject {
         openRouterModelService = services.openRouterModelService
         codexAuthRepository = services.codexAuthRepository
         providerGateway = services.providerGateway
+        fusionService = services.fusionService
         chatRepository = services.chatRepository
         sharePayloadStore = services.sharePayloadStore
 

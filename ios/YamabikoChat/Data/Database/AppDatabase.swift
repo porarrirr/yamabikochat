@@ -44,6 +44,7 @@ enum AppDatabase {
                 t.column("role", .text).notNull()
                 t.column("text", .text).notNull()
                 t.column("attachmentsJSON", .text).notNull().defaults(to: "[]")
+                t.column("fusionTraceId", .text)
                 t.column("createdAtMs", .integer).notNull()
             }
             try db.create(index: "idx_messages_conversation_time", on: "chat_messages", columns: ["conversationId", "createdAtMs"])
@@ -182,6 +183,13 @@ enum AppDatabase {
                 t.column("dualThinkingLevelB", .text)
                 t.column("dualCodexReasoningEffortB", .text)
 
+                t.column("isFusionModeEnabled", .boolean).notNull().defaults(to: false)
+                t.column("fusionPresetName", .text).notNull().defaults(to: "quality")
+                t.column("fusionTaskType", .text).notNull().defaults(to: "auto")
+                t.column("fusionDebugModeEnabled", .boolean).notNull().defaults(to: false)
+                t.column("fusionLogPromptsEnabled", .boolean).notNull().defaults(to: false)
+                t.column("fusionCustomPresetJSON", .text).notNull().defaults(to: "")
+
                 t.column("isAutoConversationEnabled", .boolean).notNull().defaults(to: false)
                 t.column("autoModelA", .text).notNull()
                 t.column("autoModelB", .text).notNull()
@@ -255,6 +263,24 @@ enum AppDatabase {
 
                 t.column("extraJSON", .text).notNull().defaults(to: "{}")
             }
+
+            try db.create(table: "fusion_traces") { t in
+                t.column("id", .text).primaryKey()
+                t.column("conversationId", .integer).references("conversations", onDelete: .setNull)
+                t.column("preset", .text).notNull()
+                t.column("startedAtMs", .integer).notNull()
+                t.column("completedAtMs", .integer)
+                t.column("totalLatencyMs", .integer)
+                t.column("totalCostUsd", .double)
+                t.column("failedModelsJSON", .text).notNull().defaults(to: "[]")
+                t.column("traceJSON", .text).notNull()
+                t.column("status", .text).notNull()
+            }
+            try db.create(
+                index: "idx_fusion_traces_conversation",
+                on: "fusion_traces",
+                columns: ["conversationId", "startedAtMs"]
+            )
 
             var defaultSettings = AppSettings()
             try defaultSettings.insert(db)
@@ -605,6 +631,65 @@ enum AppDatabase {
                 WHERE messageId IS NOT NULL
                 """)
             try db.execute(sql: "DROP TABLE chat_message_tool_activity_legacy")
+        }
+
+        migrator.registerMigration("v11_fusion_mode") { db in
+            let settingsRows = try Row.fetchAll(db, sql: "PRAGMA table_info(settings)")
+            let settingsColumns = Set(settingsRows.compactMap { ($0["name"] as String?)?.lowercased() })
+            try db.alter(table: "settings") { t in
+                if !settingsColumns.contains("isfusionmodeenabled") {
+                    t.add(column: "isFusionModeEnabled", .boolean).notNull().defaults(to: false)
+                }
+                if !settingsColumns.contains("fusionpresetname") {
+                    t.add(column: "fusionPresetName", .text).notNull().defaults(to: "quality")
+                }
+                if !settingsColumns.contains("fusiontasktype") {
+                    t.add(column: "fusionTaskType", .text).notNull().defaults(to: "auto")
+                }
+                if !settingsColumns.contains("fusiondebugmodeenabled") {
+                    t.add(column: "fusionDebugModeEnabled", .boolean).notNull().defaults(to: false)
+                }
+                if !settingsColumns.contains("fusionlogpromptsenabled") {
+                    t.add(column: "fusionLogPromptsEnabled", .boolean).notNull().defaults(to: false)
+                }
+            }
+
+            let messageRows = try Row.fetchAll(db, sql: "PRAGMA table_info(chat_messages)")
+            let messageColumns = Set(messageRows.compactMap { ($0["name"] as String?)?.lowercased() })
+            if !messageColumns.contains("fusiontraceid") {
+                try db.alter(table: "chat_messages") { t in
+                    t.add(column: "fusionTraceId", .text)
+                }
+            }
+
+            try db.create(table: "fusion_traces", ifNotExists: true) { t in
+                t.column("id", .text).primaryKey()
+                t.column("conversationId", .integer).references("conversations", onDelete: .setNull)
+                t.column("preset", .text).notNull()
+                t.column("startedAtMs", .integer).notNull()
+                t.column("completedAtMs", .integer)
+                t.column("totalLatencyMs", .integer)
+                t.column("totalCostUsd", .double)
+                t.column("failedModelsJSON", .text).notNull().defaults(to: "[]")
+                t.column("traceJSON", .text).notNull()
+                t.column("status", .text).notNull()
+            }
+            try db.create(
+                index: "idx_fusion_traces_conversation",
+                on: "fusion_traces",
+                columns: ["conversationId", "startedAtMs"],
+                ifNotExists: true
+            )
+        }
+
+        migrator.registerMigration("v12_fusion_custom_preset") { db in
+            let settingsRows = try Row.fetchAll(db, sql: "PRAGMA table_info(settings)")
+            let settingsColumns = Set(settingsRows.compactMap { ($0["name"] as String?)?.lowercased() })
+            if !settingsColumns.contains("fusioncustompresetjson") {
+                try db.alter(table: "settings") { t in
+                    t.add(column: "fusionCustomPresetJSON", .text).notNull().defaults(to: "")
+                }
+            }
         }
 
         return migrator

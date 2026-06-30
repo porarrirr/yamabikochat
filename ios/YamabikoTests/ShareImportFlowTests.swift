@@ -57,17 +57,12 @@ final class ShareImportFlowTests: XCTestCase {
         let settings = SettingsRepository(dbQueue: dbQueue)
         let conversations = ConversationRepository(dbQueue: dbQueue)
         let credentials = ShareImportTestCredentialStore()
-        let providers = ProviderGateway(settingsRepository: settings, credentialStore: credentials)
-        let modelService = OpenRouterModelService(credentialStore: credentials)
-        let codexAuth = CodexAuthRepository(credentialStore: credentials)
-
-        return ChatRepository(
-            conversations: conversations,
+        return ChatRepositoryTestSupport.makeRepository(
+            dbQueue: dbQueue,
             settings: settings,
-            providers: providers,
-            credentialStore: credentials,
-            modelService: modelService,
-            codexAuthRepository: codexAuth
+            conversations: conversations,
+            credentials: credentials,
+            httpClient: URLSessionHTTPClient()
         )
     }
 }

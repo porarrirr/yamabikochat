@@ -25,6 +25,7 @@ final class ChatViewModel: ObservableObject {
     @Published var isAutoConversationRunning: Bool = false
     @Published var isAutoConversationPaused: Bool = false
     @Published var autoConversationStatus: String?
+    @Published var fusionStreamingStatus: String?
     @Published var errorMessage: String?
     @Published var attachments: [AttachmentDraft] = []
     @Published private(set) var isSpeechRecording: Bool = false
@@ -273,7 +274,32 @@ final class ChatViewModel: ObservableObject {
             do {
                 let attachmentPaths = attachmentDrafts.map { $0.url.absoluteString }
 
-                if settings.isDualModeEnabled {
+                if settings.isFusionModeEnabled {
+                    guard !text.isEmpty || !attachmentPaths.isEmpty else {
+                        errorMessage = L10n.text("Fusion モードでは本文または添付を入力してください。")
+                        attachments = attachmentDrafts
+                        return
+                    }
+                    _ = try await repository.sendFusionMessage(
+                        conversationId: conversationID,
+                        text: text,
+                        attachments: attachmentPaths,
+                        onStreamEvent: { [weak self] event in
+                            guard case let .reasoningDelta(delta) = event else { return }
+                            Task { @MainActor in
+                                self?.fusionStreamingStatus = delta.isEmpty
+                                    ? self?.fusionStreamingStatus
+                                    : L10n.text("推論中...")
+                            }
+                        },
+                        onStreamingSnapshot: { [weak self] snapshot in
+                            Task { @MainActor in
+                                self?.handleStreamingSnapshot(snapshot)
+                            }
+                        }
+                    )
+                    fusionStreamingStatus = nil
+                } else if settings.isDualModeEnabled {
                     guard !text.isEmpty || !attachmentPaths.isEmpty else {
                         errorMessage = L10n.text("デュアルモードでは本文または添付を入力してください。")
                         attachments = attachmentDrafts
@@ -343,6 +369,7 @@ final class ChatViewModel: ObservableObject {
 
     var canRegenerateLastAssistant: Bool {
         !settings.isDualModeEnabled &&
+            !settings.isFusionModeEnabled &&
             !isSending &&
             fullMessages.last(where: { $0.message.role == "model" })?.id ==
             fullMessages.last?.id
@@ -355,6 +382,10 @@ final class ChatViewModel: ObservableObject {
         }
         guard !settings.isDualModeEnabled else {
             errorMessage = L10n.text("デュアルモードでは再生成できません。")
+            return
+        }
+        guard !settings.isFusionModeEnabled else {
+            errorMessage = L10n.text("Fusion モードでは再生成できません。")
             return
         }
         guard let lastAssistant = fullMessages.last(where: { $0.message.role == "model" }),
@@ -458,12 +489,71 @@ final class ChatViewModel: ObservableObject {
                     stopAutoConversation()
                 }
                 updated.isAutoConversationEnabled = false
+                updated.isFusionModeEnabled = false
             }
             try repository.saveSettings(updated)
         } catch {
             errorMessage = error.localizedDescription
             DiagnosticsLogger.log("Toggle dual mode failed", category: .chat, error: error)
         }
+    }
+
+    func toggleFusionMode() {
+        guard let repository else {
+            errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
+            return
+        }
+        do {
+            var updated = settings
+            let enablingFusion = !updated.isFusionModeEnabled
+            updated.isFusionModeEnabled.toggle()
+            if updated.isFusionModeEnabled, enablingFusion {
+                if isAutoConversationRunning || isAutoConversationPaused {
+                    stopAutoConversation()
+                }
+                updated.isDualModeEnabled = false
+                updated.isAutoConversationEnabled = false
+            }
+            try repository.saveSettings(updated)
+        } catch {
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log("Toggle fusion mode failed", category: .chat, error: error)
+        }
+    }
+
+    func fetchFusionTrace(id: String) -> FusionTrace? {
+        try? repository?.fetchFusionTrace(id: id)
+    }
+
+    func fusionTrace(for message: ChatMessage) -> FusionTrace? {
+        guard let traceId = message.fusionTraceId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !traceId.isEmpty else {
+            return nil
+        }
+        return fetchFusionTrace(id: traceId)
+    }
+
+    var isFusionAnalyzing: Bool {
+        settings.isFusionModeEnabled && isSending && streamingSnapshots.isEmpty
+    }
+
+    var fusionAnalyzingStatus: String? {
+        if let fusionStreamingStatus, !fusionStreamingStatus.isEmpty {
+            return fusionStreamingStatus
+        }
+        return isFusionAnalyzing ? L10n.text("Fusion 分析中…") : nil
+    }
+
+    var fusionStatusLabel: String {
+        let preset = settings.fusionPresetName
+        let panelCount = FusionPresetLoader.panelCount(
+            for: preset,
+            customPresetJSON: settings.fusionCustomPresetJSON
+        )
+        if panelCount > 0 {
+            return L10n.format("FUSION · %@ · %d panels", preset, panelCount)
+        }
+        return L10n.format("FUSION · %@", preset)
     }
 
     func toggleAutoConversation() {
@@ -477,6 +567,7 @@ final class ChatViewModel: ObservableObject {
             updated.isAutoConversationEnabled.toggle()
             if updated.isAutoConversationEnabled, enablingAuto {
                 updated.isDualModeEnabled = false
+                updated.isFusionModeEnabled = false
             } else if !updated.isAutoConversationEnabled,
                       isAutoConversationRunning || isAutoConversationPaused {
                 stopAutoConversation()
@@ -502,6 +593,9 @@ final class ChatViewModel: ObservableObject {
     var workspaceTitleLabel: String {
         if isSecretConversation {
             return L10n.text("シークレット")
+        }
+        if settings.isFusionModeEnabled {
+            return L10n.text("Fusion")
         }
         if settings.isDualModeEnabled {
             return L10n.text("デュアル")
@@ -531,6 +625,12 @@ final class ChatViewModel: ObservableObject {
                 : activeConversationModel
             let base = model.isEmpty ? provider : "\(provider) · \(Self.shortModelLabel(model))"
             return L10n.format("閉じると破棄 · %@", base)
+        }
+        if settings.isFusionModeEnabled {
+            if isFusionAnalyzing {
+                return L10n.format("%@ · analyzing", fusionStatusLabel)
+            }
+            return fusionStatusLabel
         }
         if settings.isDualModeEnabled {
             return L10n.format(
@@ -562,6 +662,12 @@ final class ChatViewModel: ObservableObject {
 
     var composerContextLabel: String {
         let secretPrefix = L10n.text("シークレット")
+        if settings.isFusionModeEnabled {
+            let label = isFusionAnalyzing
+                ? L10n.format("%@ · analyzing", fusionStatusLabel)
+                : fusionStatusLabel
+            return isSecretConversation ? "\(secretPrefix) · \(label)" : label
+        }
         if settings.isDualModeEnabled {
             let label = L10n.format(
                 "DUAL · %@ %@ vs %@ %@",

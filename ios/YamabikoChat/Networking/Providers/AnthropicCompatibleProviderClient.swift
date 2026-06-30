@@ -260,7 +260,11 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         mcpConfiguration: AnthropicMCPConfiguration?
     ) throws -> Data {
         let thinking = buildThinking(request.thinking)
-        let maxTokens = max(Self.defaultMaxTokens, (thinking?.budgetTokens ?? 0) + 1024)
+        let configuredMaxTokens = Int(request.metadata["max_output_tokens"] ?? "")
+        let maxTokens = max(
+            configuredMaxTokens ?? Self.defaultMaxTokens,
+            (thinking?.budgetTokens ?? 0) + 1024
+        )
         let body = AnthropicRequestBody(
             model: request.model.trimmingCharacters(in: .whitespacesAndNewlines),
             messages: mapMessages(

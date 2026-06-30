@@ -43,6 +43,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         var reasoning: [String: AnyEncodable]?
         var cacheControl: PromptCacheControl?
         var promptCacheKey: String?
+        var maxTokens: Int?
+        var temperature: Double?
 
         enum CodingKeys: String, CodingKey {
             case model
@@ -53,6 +55,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             case reasoning
             case cacheControl = "cache_control"
             case promptCacheKey = "prompt_cache_key"
+            case maxTokens = "max_tokens"
+            case temperature
         }
 
         func encode(to encoder: Encoder) throws {
@@ -65,6 +69,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             try container.encodeIfPresent(reasoning, forKey: .reasoning)
             try container.encodeIfPresent(cacheControl, forKey: .cacheControl)
             try container.encodeIfPresent(promptCacheKey, forKey: .promptCacheKey)
+            try container.encodeIfPresent(maxTokens, forKey: .maxTokens)
+            try container.encodeIfPresent(temperature, forKey: .temperature)
         }
     }
 
@@ -206,7 +212,9 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             provider: providerPayload,
             reasoning: reasoningPayload,
             cacheControl: cacheControl(for: request, provider: provider),
-            promptCacheKey: promptCacheKey(for: request, provider: provider)
+            promptCacheKey: promptCacheKey(for: request, provider: provider),
+            maxTokens: Int(request.metadata["max_output_tokens"] ?? ""),
+            temperature: Double(request.metadata["temperature"] ?? "")
         )
         return try JSONEncoder().encode(body)
     }

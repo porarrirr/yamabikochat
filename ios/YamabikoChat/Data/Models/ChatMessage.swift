@@ -10,6 +10,7 @@ struct ChatMessage: Codable, FetchableRecord, MutablePersistableRecord, Identifi
     var text: String
     var attachmentsJSON: String
     var selectedVariantIndex: Int
+    var fusionTraceId: String?
     var createdAtMs: Int64
 
     init(
@@ -19,6 +20,7 @@ struct ChatMessage: Codable, FetchableRecord, MutablePersistableRecord, Identifi
         text: String,
         attachmentsJSON: String = "[]",
         selectedVariantIndex: Int = 0,
+        fusionTraceId: String? = nil,
         createdAtMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
     ) {
         self.id = id
@@ -27,6 +29,7 @@ struct ChatMessage: Codable, FetchableRecord, MutablePersistableRecord, Identifi
         self.text = text
         self.attachmentsJSON = attachmentsJSON
         self.selectedVariantIndex = selectedVariantIndex
+        self.fusionTraceId = fusionTraceId
         self.createdAtMs = createdAtMs
     }
 

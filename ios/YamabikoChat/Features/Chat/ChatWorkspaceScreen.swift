@@ -61,10 +61,14 @@ struct ChatWorkspaceScreen: View {
 
     private var canSwitchChatModel: Bool {
         !viewModel.settings.isDualModeEnabled &&
-            !viewModel.settings.isAutoConversationEnabled
+            !viewModel.settings.isAutoConversationEnabled &&
+            !viewModel.settings.isFusionModeEnabled
     }
 
     private var modelSwitcherTitle: String {
+        if viewModel.settings.isFusionModeEnabled {
+            return L10n.text("Fusion")
+        }
         if viewModel.settings.isDualModeEnabled {
             return L10n.text("デュアルモード")
         }
@@ -90,7 +94,8 @@ struct ChatWorkspaceScreen: View {
 
     private func isActiveChatPreset(_ preset: ModelPreset) -> Bool {
         guard !viewModel.settings.isDualModeEnabled,
-              !viewModel.settings.isAutoConversationEnabled
+              !viewModel.settings.isAutoConversationEnabled,
+              !viewModel.settings.isFusionModeEnabled
         else {
             return false
         }
@@ -212,7 +217,22 @@ struct ChatWorkspaceScreen: View {
                     }
                 }
                 .disabled(
-                    viewModel.settings.isAutoConversationEnabled && !viewModel.settings.isDualModeEnabled
+                    (viewModel.settings.isAutoConversationEnabled || viewModel.settings.isFusionModeEnabled)
+                        && !viewModel.settings.isDualModeEnabled
+                )
+
+                Button {
+                    viewModel.toggleFusionMode()
+                } label: {
+                    if viewModel.settings.isFusionModeEnabled {
+                        Label(L10n.text("Fusion モード"), systemImage: "checkmark")
+                    } else {
+                        Text(L10n.text("Fusion モード"))
+                    }
+                }
+                .disabled(
+                    (viewModel.settings.isDualModeEnabled || viewModel.settings.isAutoConversationEnabled)
+                        && !viewModel.settings.isFusionModeEnabled
                 )
 
                 Button {
@@ -225,7 +245,8 @@ struct ChatWorkspaceScreen: View {
                     }
                 }
                 .disabled(
-                    viewModel.settings.isDualModeEnabled && !viewModel.settings.isAutoConversationEnabled
+                    (viewModel.settings.isDualModeEnabled || viewModel.settings.isFusionModeEnabled)
+                        && !viewModel.settings.isAutoConversationEnabled
                 )
 
                 if viewModel.isAutoConversationRunning {

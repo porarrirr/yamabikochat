@@ -132,13 +132,12 @@ final class ConversationListViewModelTests: XCTestCase {
         let modelService = OpenRouterModelService(credentialStore: credentials)
         let codexAuth = CodexAuthRepository(credentialStore: credentials)
 
-        let repository = ChatRepository(
-            conversations: conversations,
+        let repository = ChatRepositoryTestSupport.makeRepository(
+            dbQueue: dbQueue,
             settings: settings,
-            providers: providers,
-            credentialStore: credentials,
-            modelService: modelService,
-            codexAuthRepository: codexAuth
+            conversations: conversations,
+            credentials: credentials,
+            httpClient: URLSessionHTTPClient()
         )
 
         return repository

@@ -13,6 +13,8 @@ final class AppServices {
     let openRouterModelService: OpenRouterModelService
     let codexAuthRepository: CodexAuthRepository
     let providerGateway: ProviderGateway
+    let fusionTraceStore: FusionTraceStore
+    let fusionService: FusionService
     let chatRepository: ChatRepository
     let sharePayloadStore: SharePayloadStore
 
@@ -34,13 +36,22 @@ final class AppServices {
             settingsRepository: settingsRepository,
             credentialStore: credentialStore
         )
+        fusionTraceStore = FusionTraceStore(dbQueue: dbQueue)
+        fusionService = FusionService(
+            settingsRepository: settingsRepository,
+            providerGateway: providerGateway,
+            pricingRepository: LiteLlmPricingRepository(),
+            traceStore: fusionTraceStore
+        )
         chatRepository = ChatRepository(
             conversations: conversationRepository,
             settings: settingsRepository,
             providers: providerGateway,
             credentialStore: credentialStore,
             modelService: openRouterModelService,
-            codexAuthRepository: codexAuthRepository
+            codexAuthRepository: codexAuthRepository,
+            fusionService: fusionService,
+            fusionTraceStore: fusionTraceStore
         )
         sharePayloadStore = SharePayloadStore()
 

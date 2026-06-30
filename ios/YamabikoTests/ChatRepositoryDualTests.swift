@@ -176,27 +176,18 @@ final class ChatRepositoryDualTests: XCTestCase {
         let settings = SettingsRepository(dbQueue: dbQueue)
         let conversations = ConversationRepository(dbQueue: dbQueue)
         let credentials = DualTestCredentialStore()
-        let providers = ProviderGateway(
-            settingsRepository: settings,
-            credentialStore: credentials,
-            httpClient: httpClient
-        )
-        let modelService = OpenRouterModelService(credentialStore: credentials)
-        let codexAuth = CodexAuthRepository(credentialStore: credentials)
-
         if configureSettings != nil {
             var current = try settings.load()
             configureSettings?(&current)
             try settings.save(current)
         }
 
-        let repository = ChatRepository(
-            conversations: conversations,
+        let repository = ChatRepositoryTestSupport.makeRepository(
+            dbQueue: dbQueue,
             settings: settings,
-            providers: providers,
-            credentialStore: credentials,
-            modelService: modelService,
-            codexAuthRepository: codexAuth
+            conversations: conversations,
+            credentials: credentials,
+            httpClient: httpClient
         )
         return (repository, conversations, credentials)
     }
