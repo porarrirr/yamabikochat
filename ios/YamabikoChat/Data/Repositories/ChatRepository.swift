@@ -965,7 +965,6 @@ final class ChatRepository {
         do {
             fusionRequest = try FusionPresetLoader.buildRequest(
                 userPrompt: text,
-                presetName: settings.fusionPresetName,
                 systemPrompt: conversation.systemPrompt,
                 taskTypeOverride: taskType,
                 allowWebSearchOverride: allowWebSearchOverride,
@@ -1648,7 +1647,6 @@ final class ChatRepository {
         }
         if settings.isFusionModeEnabled {
             if let preset = try? FusionPresetLoader.resolveDefinition(
-                presetName: settings.fusionPresetName,
                 customPresetJSON: settings.fusionCustomPresetJSON
             ) {
                 var allSupport = true

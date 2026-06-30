@@ -1,19 +1,6 @@
 import AppIntents
 import Foundation
 
-enum FusionPresetAppEnum: String, AppEnum {
-    case quality
-    case budget
-    case fast
-
-    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Fusion Preset")
-    static var caseDisplayRepresentations: [FusionPresetAppEnum: DisplayRepresentation] = [
-        .quality: "Quality",
-        .budget: "Budget",
-        .fast: "Fast"
-    ]
-}
-
 struct RunFusionIntent: AppIntent {
     static var title: LocalizedStringResource = "Fusion に聞く"
     static var description = IntentDescription("Run Fusion multi-model orchestration")
@@ -22,14 +9,11 @@ struct RunFusionIntent: AppIntent {
     @Parameter(title: "Prompt")
     var prompt: String
 
-    @Parameter(title: "Preset", default: .quality)
-    var preset: FusionPresetAppEnum
-
     @Parameter(title: "Debug", default: false)
     var debug: Bool
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Fusion: \(\.$prompt) preset \(\.$preset)")
+        Summary("Fusion: \(\.$prompt)")
     }
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
@@ -40,7 +24,6 @@ struct RunFusionIntent: AppIntent {
 
         let result = try await AppServices.shared.fusionService.runFusion(
             userPrompt: trimmedPrompt,
-            preset: preset.rawValue,
             options: FusionRunOptions(
                 debugMode: debug,
                 logPrompts: debug

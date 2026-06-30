@@ -87,29 +87,28 @@ final class AppSettingsTests: XCTestCase {
         let normalized = settings.normalizedForPersistence()
 
         XCTAssertTrue(normalized.isFusionModeEnabled)
-        XCTAssertEqual(normalized.fusionPresetName, FusionPresetLoader.defaultPresetName)
+        XCTAssertEqual(normalized.fusionPresetName, FusionPresetLoader.presetLabel)
     }
 
     func testNormalizedForPersistenceKeepsCustomFusionPreset() {
         var settings = AppSettings()
-        settings.fusionPresetName = FusionPresetLoader.customPresetName
+        settings.fusionPresetName = "quality"
         settings.fusionCustomPresetJSON = ""
 
         let normalized = settings.normalizedForPersistence()
 
-        XCTAssertEqual(normalized.fusionPresetName, FusionPresetLoader.customPresetName)
+        XCTAssertEqual(normalized.fusionPresetName, FusionPresetLoader.presetLabel)
         XCTAssertFalse(normalized.fusionCustomPresetJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         XCTAssertNotNil(normalized.decodeFusionCustomPreset())
     }
 
     func testNormalizedForPersistenceReplacesInvalidCustomFusionJSON() {
         var settings = AppSettings()
-        settings.fusionPresetName = FusionPresetLoader.customPresetName
         settings.fusionCustomPresetJSON = "{not-json"
 
         let normalized = settings.normalizedForPersistence()
 
-        XCTAssertEqual(normalized.fusionPresetName, FusionPresetLoader.customPresetName)
+        XCTAssertEqual(normalized.fusionPresetName, FusionPresetLoader.presetLabel)
         XCTAssertNotNil(normalized.decodeFusionCustomPreset())
     }
 

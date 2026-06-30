@@ -278,7 +278,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         dualCodexReasoningEffortB = nil
 
         isFusionModeEnabled = false
-        fusionPresetName = "quality"
+        fusionPresetName = "custom"
         fusionTaskType = "auto"
         fusionDebugModeEnabled = false
         fusionLogPromptsEnabled = false
@@ -378,15 +378,8 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             normalized.isDualModeEnabled = false
             normalized.isAutoConversationEnabled = false
         }
-        let fusionPreset = normalized.fusionPresetName
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        normalized.fusionPresetName = FusionPresetLoader.availablePresetNames.contains(fusionPreset)
-            ? fusionPreset
-            : FusionPresetLoader.defaultPresetName
-        if normalized.fusionPresetName == FusionPresetLoader.customPresetName {
-            normalized.fusionCustomPresetJSON = normalized.normalizedFusionCustomPresetJSON()
-        }
+        normalized.fusionPresetName = FusionPresetLoader.presetLabel
+        normalized.fusionCustomPresetJSON = normalized.normalizedFusionCustomPresetJSON()
         let fusionTask = normalized.fusionTaskType
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()

@@ -160,7 +160,6 @@ struct FusionContext: Sendable, Equatable {
 }
 
 struct FusionRunOptions: Sendable, Equatable {
-    var preset: String
     var taskType: FusionTaskType
     var systemPrompt: String?
     var debugMode: Bool
@@ -170,7 +169,6 @@ struct FusionRunOptions: Sendable, Equatable {
     var allowWebSearch: Bool?
 
     init(
-        preset: String = "quality",
         taskType: FusionTaskType = .auto,
         systemPrompt: String? = nil,
         debugMode: Bool = false,
@@ -179,7 +177,6 @@ struct FusionRunOptions: Sendable, Equatable {
         conversationId: Int64? = nil,
         allowWebSearch: Bool? = nil
     ) {
-        self.preset = preset
         self.taskType = taskType
         self.systemPrompt = systemPrompt
         self.debugMode = debugMode

@@ -217,46 +217,27 @@ final class FusionOrchestratorTests: XCTestCase {
         XCTAssertTrue(outcome.trace.panelResults.isEmpty)
     }
 
-    func testPresetLoaderLoadsBundledPresets() throws {
-        let quality = try FusionPresetLoader.loadPreset(named: "quality")
-        XCTAssertGreaterThanOrEqual(quality.panelModels.count, 2)
-        let budget = try FusionPresetLoader.loadPreset(named: "budget")
-        XCTAssertGreaterThanOrEqual(budget.panelModels.count, 2)
-        let fast = try FusionPresetLoader.loadPreset(named: "fast")
-        XCTAssertEqual(fast.panelModels.count, 2)
-        XCTAssertTrue(FusionPresetLoader.availablePresetNames.contains("quality"))
-        XCTAssertTrue(FusionPresetLoader.availablePresetNames.contains("fast"))
-        XCTAssertTrue(FusionPresetLoader.availablePresetNames.contains(FusionPresetLoader.customPresetName))
+    func testPresetLoaderResolvesDefaultWhenJSONEmpty() throws {
+        let resolved = try FusionPresetLoader.resolveDefinition(customPresetJSON: "")
+        XCTAssertGreaterThanOrEqual(resolved.panelModels.count, 1)
     }
 
     func testPresetLoaderResolvesCustomPresetJSON() throws {
-        let quality = try FusionPresetLoader.loadPreset(named: "quality")
-        var custom = quality
-        custom.panelModels = [quality.panelModels[0]]
+        let defaultPreset = AppSettings.defaultFusionCustomPreset()
+        var custom = defaultPreset
+        custom.panelModels = [defaultPreset.panelModels[0]]
         let json = AppSettings().encodeFusionCustomPreset(custom)
 
-        let resolved = try FusionPresetLoader.resolveDefinition(
-            presetName: FusionPresetLoader.customPresetName,
-            customPresetJSON: json
-        )
+        let resolved = try FusionPresetLoader.resolveDefinition(customPresetJSON: json)
         XCTAssertEqual(resolved.panelModels.count, 1)
-        XCTAssertEqual(resolved.panelModels[0].modelId, quality.panelModels[0].modelId)
+        XCTAssertEqual(resolved.panelModels[0].modelId, defaultPreset.panelModels[0].modelId)
 
         let request = try FusionPresetLoader.buildRequest(
             userPrompt: "hello",
-            presetName: FusionPresetLoader.customPresetName,
             customPresetJSON: json
         )
-        XCTAssertEqual(request.preset, FusionPresetLoader.customPresetName)
+        XCTAssertEqual(request.preset, FusionPresetLoader.presetLabel)
         XCTAssertEqual(request.panelModels.count, 1)
-    }
-
-    func testPresetLoaderCustomPresetFallsBackWhenJSONEmpty() throws {
-        let resolved = try FusionPresetLoader.resolveDefinition(
-            presetName: FusionPresetLoader.customPresetName,
-            customPresetJSON: ""
-        )
-        XCTAssertGreaterThanOrEqual(resolved.panelModels.count, 1)
     }
 
     func testTraceCostAggregation() {

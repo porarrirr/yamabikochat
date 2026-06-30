@@ -545,15 +545,11 @@ final class ChatViewModel: ObservableObject {
     }
 
     var fusionStatusLabel: String {
-        let preset = settings.fusionPresetName
-        let panelCount = FusionPresetLoader.panelCount(
-            for: preset,
-            customPresetJSON: settings.fusionCustomPresetJSON
-        )
+        let panelCount = FusionPresetLoader.panelCount(customPresetJSON: settings.fusionCustomPresetJSON)
         if panelCount > 0 {
-            return L10n.format("FUSION · %@ · %d panels", preset, panelCount)
+            return L10n.format("FUSION · %d panels", panelCount)
         }
-        return L10n.format("FUSION · %@", preset)
+        return "FUSION"
     }
 
     func toggleAutoConversation() {

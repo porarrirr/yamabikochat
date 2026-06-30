@@ -30,55 +30,78 @@ extension AppSettings {
     }
 
     static func defaultFusionCustomPreset() -> FusionPresetDefinition {
-        (try? FusionPresetLoader.loadPreset(named: FusionPresetLoader.defaultPresetName))
-            ?? FusionPresetDefinition(
-                taskType: .research,
-                maxPanelTokens: 4096,
-                maxJudgeTokens: 2048,
-                maxSynthesizerTokens: 4096,
-                timeoutMs: 120_000,
-                allowWebSearch: true,
-                panelModels: [
-                    PanelModelConfig(
-                        modelId: "gemini-2.5-pro",
-                        provider: "GEMINI",
-                        temperature: 0.3,
-                        maxTokens: 4096,
-                        timeoutMs: 120_000,
-                        role: "researcher"
-                    )
-                ],
-                judgeModel: PanelModelConfig(
-                    modelId: "anthropic/claude-sonnet-4",
-                    provider: "OPENROUTER",
-                    temperature: 0.1,
-                    maxTokens: 2048,
-                    timeoutMs: 90_000,
-                    role: nil
-                ),
-                synthesizerModel: PanelModelConfig(
+        FusionPresetDefinition(
+            taskType: .research,
+            maxPanelTokens: 4096,
+            maxJudgeTokens: 2048,
+            maxSynthesizerTokens: 4096,
+            timeoutMs: 120_000,
+            allowWebSearch: true,
+            panelModels: [
+                PanelModelConfig(
                     modelId: "gemini-2.5-pro",
                     provider: "GEMINI",
+                    temperature: 0.3,
+                    maxTokens: 4096,
+                    timeoutMs: 120_000,
+                    role: "researcher"
+                ),
+                PanelModelConfig(
+                    modelId: "anthropic/claude-sonnet-4",
+                    provider: "OPENROUTER",
+                    temperature: 0.3,
+                    maxTokens: 4096,
+                    timeoutMs: 120_000,
+                    role: "analyst"
+                ),
+                PanelModelConfig(
+                    modelId: "openai/gpt-4.1",
+                    provider: "OPENROUTER",
+                    temperature: 0.3,
+                    maxTokens: 4096,
+                    timeoutMs: 120_000,
+                    role: "critic"
+                ),
+                PanelModelConfig(
+                    modelId: "deepseek/deepseek-chat",
+                    provider: "OPENROUTER",
                     temperature: 0.4,
                     maxTokens: 4096,
                     timeoutMs: 120_000,
-                    role: nil
-                ),
-                fallbackModel: PanelModelConfig(
-                    modelId: "gemini-2.5-flash",
-                    provider: "GEMINI",
-                    temperature: 0.5,
-                    maxTokens: 4096,
-                    timeoutMs: 60_000,
-                    role: nil
+                    role: "synthesizer_candidate"
                 )
+            ],
+            judgeModel: PanelModelConfig(
+                modelId: "anthropic/claude-sonnet-4",
+                provider: "OPENROUTER",
+                temperature: 0.1,
+                maxTokens: 2048,
+                timeoutMs: 90_000,
+                role: nil
+            ),
+            synthesizerModel: PanelModelConfig(
+                modelId: "gemini-2.5-pro",
+                provider: "GEMINI",
+                temperature: 0.4,
+                maxTokens: 4096,
+                timeoutMs: 120_000,
+                role: nil
+            ),
+            fallbackModel: PanelModelConfig(
+                modelId: "gemini-2.5-flash",
+                provider: "GEMINI",
+                temperature: 0.5,
+                maxTokens: 4096,
+                timeoutMs: 60_000,
+                role: nil
             )
+        )
     }
 
     func normalizedFusionCustomPresetJSON() -> String {
         var preset = decodeFusionCustomPreset() ?? Self.defaultFusionCustomPreset()
         preset = Self.normalizedFusionPresetDefinition(preset)
-        if (try? FusionPresetLoader.validatePreset(preset, name: FusionPresetLoader.customPresetName)) == nil {
+        if (try? FusionPresetLoader.validatePreset(preset)) == nil {
             preset = Self.defaultFusionCustomPreset()
         }
         return encodeFusionCustomPreset(preset)

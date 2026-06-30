@@ -45,7 +45,6 @@
 		325EEB8EC09D854B3651A4C2 /* FusionPrompts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B80C49D629250890536FF4E7 /* FusionPrompts.swift */; };
 		327128F66F2B0EDC0FADD90D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FDFB9E3E80818460DA5CDA5A /* PrivacyInfo.xcprivacy */; };
 		32F463C0B0EC07720ADFD314 /* FusionModeSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D859CCB049B009414F17CDF /* FusionModeSettingsSection.swift */; };
-		A1B2C3D4E5F60718293A4B5C /* FusionModelSlotForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718293A4B5C6D /* FusionModelSlotForm.swift */; };
 		34A0432A76484628739B77F7 /* ProviderGatewayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7750E5527AF38A1C22312B /* ProviderGatewayTests.swift */; };
 		353AB5AA99651B0E3EB882F9 /* AnthropicMessagesStreamParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B58CAC4F6C3257E317CD02 /* AnthropicMessagesStreamParser.swift */; };
 		3841881EDF31F3A3A8ABE6CD /* AutoConversationTriggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F78E25D8F74B8F031620DD9 /* AutoConversationTriggerTests.swift */; };
@@ -119,6 +118,7 @@
 		9163AC419115028A5AA03DF9 /* FusionTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B73E0977D7F7F3F60BC9831B /* FusionTypes.swift */; };
 		922866C08D7F9507A748D15E /* ChatRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81BEFD60BAA4BF4DA1A9286B /* ChatRepository.swift */; };
 		92F3FF4AEE8C134A7DC83453 /* OpenRouterRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8090A935C0BB2117BC04547F /* OpenRouterRoutingTests.swift */; };
+		936E785E91BD6F30140A482A /* FusionModelSlotForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92AD8EA4D8A79FAA26B52BE9 /* FusionModelSlotForm.swift */; };
 		9621F9E7E3AD0FA8C8261E37 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7CB427210D89DB2E91F4D299 /* PrivacyInfo.xcprivacy */; };
 		962D63DC04F87D3F8083C055 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */; };
 		98749CFF168F962BDDDD037B /* SettingsStringHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D9D7267F7551E4A0918A48 /* SettingsStringHelpers.swift */; };
@@ -126,7 +126,6 @@
 		99791EE4C7176591B3EDD74D /* ToolCallingOrchestratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FE1CBA9B6AD7523C5684AE3 /* ToolCallingOrchestratorTests.swift */; };
 		9A4643F98030A10AB665492D /* SettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0034572985CEC32177512AA8 /* SettingsViewModelTests.swift */; };
 		9B7C6CCA982CA1EE8E0230D0 /* Conversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DB849BCF850C7043309A152 /* Conversation.swift */; };
-		9B94DEBDC8EE01B2A0322F47 /* FusionPresets.json in Resources */ = {isa = PBXBuildFile; fileRef = B8AA5302634ED8256852B38D /* FusionPresets.json */; };
 		9BD4FAE526CE71050BECC62F /* AutoConversationScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 083B2E8ED266219AFBEA0E3F /* AutoConversationScreen.swift */; };
 		9BD931169E39B228157F7725 /* MathMarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E24B2D0E1B8B5D9D45FF6161 /* MathMarkdownView.swift */; };
 		9C8DF35292A9094BBC4AC80B /* DualChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AC5A236291207F4B1999405 /* DualChatScreen.swift */; };
@@ -355,13 +354,13 @@
 		8A8AAD9C976A025E68725D68 /* YamabikoChat.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YamabikoChat.entitlements; sourceTree = "<group>"; };
 		8B5936D9B9C6967F14740D01 /* DualChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualChatMessage.swift; sourceTree = "<group>"; };
 		8D859CCB049B009414F17CDF /* FusionModeSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionModeSettingsSection.swift; sourceTree = "<group>"; };
-		B2C3D4E5F60718293A4B5C6D /* FusionModelSlotForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionModelSlotForm.swift; sourceTree = "<group>"; };
 		8DC2326E949464E12375DC82 /* ChatViewModelBranchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModelBranchTests.swift; sourceTree = "<group>"; };
 		8E1669165723BD89D5FC791F /* ShareImportViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareImportViewController.swift; sourceTree = "<group>"; };
 		8F19C0624B1D761F882F6EBB /* AttachmentRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentRepository.swift; sourceTree = "<group>"; };
 		8F78E25D8F74B8F031620DD9 /* AutoConversationTriggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversationTriggerTests.swift; sourceTree = "<group>"; };
 		903D911B87492EC0CA257EC5 /* ShortcutModelOptionsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutModelOptionsProvider.swift; sourceTree = "<group>"; };
 		9289A5E87008C89F9D936F2A /* SearchEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchEngine.swift; sourceTree = "<group>"; };
+		92AD8EA4D8A79FAA26B52BE9 /* FusionModelSlotForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionModelSlotForm.swift; sourceTree = "<group>"; };
 		957F74093A344F2E0FCCA1A0 /* SSEPayloadAssembler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSEPayloadAssembler.swift; sourceTree = "<group>"; };
 		961BCEE0B9725B362F606EA0 /* MathMarkdownViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathMarkdownViewTests.swift; sourceTree = "<group>"; };
 		9640B4B2BAEBA68E8C24CC6D /* OpenRouterModelService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterModelService.swift; sourceTree = "<group>"; };
@@ -394,7 +393,6 @@
 		B660E8DACB6DDA3ECAC45423 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
 		B73E0977D7F7F3F60BC9831B /* FusionTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionTypes.swift; sourceTree = "<group>"; };
 		B80C49D629250890536FF4E7 /* FusionPrompts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionPrompts.swift; sourceTree = "<group>"; };
-		B8AA5302634ED8256852B38D /* FusionPresets.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FusionPresets.json; sourceTree = "<group>"; };
 		BAB5DB55D3CE8664531EC01E /* ChatMessageVariant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageVariant.swift; sourceTree = "<group>"; };
 		BB55024341507549B0165D92 /* ProviderDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderDisplay.swift; sourceTree = "<group>"; };
 		BC763DA5C2E9F9656E06CA07 /* AutoConversationFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversationFormatter.swift; sourceTree = "<group>"; };
@@ -468,8 +466,8 @@
 				6116B1ECB916D417EE404728 /* DualAutoModelSideForm.swift */,
 				59A2630B4697497BBF8955FB /* DualModeOverridesForm.swift */,
 				4896B18C01C7F5988DF13828 /* DualModeSettingsSection.swift */,
+				92AD8EA4D8A79FAA26B52BE9 /* FusionModelSlotForm.swift */,
 				8D859CCB049B009414F17CDF /* FusionModeSettingsSection.swift */,
-				B2C3D4E5F60718293A4B5C6D /* FusionModelSlotForm.swift */,
 				652A626C556E53B0EB120BFD /* SettingsFormHelpers.swift */,
 				B0D9D7267F7551E4A0918A48 /* SettingsStringHelpers.swift */,
 			);
@@ -554,7 +552,6 @@
 			isa = PBXGroup;
 			children = (
 				2559F5CDE33F1C6606E7C9D0 /* Assets.xcassets */,
-				B8AA5302634ED8256852B38D /* FusionPresets.json */,
 				734FF62164855B98A15ECE62 /* Info.plist */,
 				FDFB9E3E80818460DA5CDA5A /* PrivacyInfo.xcprivacy */,
 				8A8AAD9C976A025E68725D68 /* YamabikoChat.entitlements */,
@@ -1046,7 +1043,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				A6FD4DD0049C2696FF7EA66B /* Assets.xcassets in Resources */,
-				9B94DEBDC8EE01B2A0322F47 /* FusionPresets.json in Resources */,
 				E2A1B28A639545AE6CCE732B /* InfoPlist.strings in Resources */,
 				2AB5391EDBA3C46611B33496 /* Localizable.strings in Resources */,
 				327128F66F2B0EDC0FADD90D /* PrivacyInfo.xcprivacy in Resources */,
@@ -1194,7 +1190,7 @@
 				3B9C7C3D5ACAB1D2B894E255 /* FusionExtensions.swift in Sources */,
 				8D7DEC742B1C461DD8469A44 /* FusionJudgeParser.swift in Sources */,
 				32F463C0B0EC07720ADFD314 /* FusionModeSettingsSection.swift in Sources */,
-				A1B2C3D4E5F60718293A4B5C /* FusionModelSlotForm.swift in Sources */,
+				936E785E91BD6F30140A482A /* FusionModelSlotForm.swift in Sources */,
 				FF318330D50F4CAE535C0466 /* FusionOrchestrator.swift in Sources */,
 				5A7693FE453861B697D3969D /* FusionPanelRunner.swift in Sources */,
 				DA65E68D418F45D007039F53 /* FusionPresetLoader.swift in Sources */,

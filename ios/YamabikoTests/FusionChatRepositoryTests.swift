@@ -91,16 +91,17 @@ private final class FusionChatHTTPClient: HTTPClientProtocol {
 }
 
 private final class FusionFailingPanelHTTPClient: HTTPClientProtocol {
+    static let failingPanelCount = 2
+
     private let counterLock = NSLock()
     private(set) var generateCallCount = 0
-    private let failingPanelCount = 2
 
     func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
         let callIndex = counterLock.withLock {
             generateCallCount += 1
             return generateCallCount
         }
-        if callIndex <= failingPanelCount {
+        if callIndex <= Self.failingPanelCount {
             throw ProviderClientError.httpStatus(503, "panel failed")
         }
 
@@ -127,7 +128,6 @@ final class FusionChatRepositoryTests: XCTestCase {
         let httpClient = FusionChatHTTPClient()
         let fixture = try makeFixture(httpClient: httpClient) { settings in
             settings.isFusionModeEnabled = true
-            settings.fusionPresetName = "fast"
             settings.isStreamingEnabled = true
             settings.fusionDebugModeEnabled = true
         }
@@ -156,7 +156,7 @@ final class FusionChatRepositoryTests: XCTestCase {
             XCTAssertNotNil(trace)
             XCTAssertEqual(trace?.status, "completed")
             XCTAssertFalse(trace?.panelResults.isEmpty ?? true)
-            XCTAssertEqual(trace?.preset, "fast")
+            XCTAssertEqual(trace?.preset, FusionPresetLoader.presetLabel)
         }
 
         XCTAssertEqual(result.assistantMessageId, messages[1].id)
@@ -166,8 +166,10 @@ final class FusionChatRepositoryTests: XCTestCase {
         let httpClient = FusionFailingPanelHTTPClient()
         let fixture = try makeFixture(httpClient: httpClient) { settings in
             settings.isFusionModeEnabled = true
-            settings.fusionPresetName = "fast"
             settings.isStreamingEnabled = false
+            var preset = AppSettings.defaultFusionCustomPreset()
+            preset.panelModels = Array(preset.panelModels.prefix(FusionFailingPanelHTTPClient.failingPanelCount))
+            settings.fusionCustomPresetJSON = settings.encodeFusionCustomPreset(preset)
         }
         try fixture.credentials.setCredential("test-gemini-key", for: .gemini)
         try fixture.credentials.setCredential("test-openrouter-key", for: .openRouter)

@@ -365,6 +365,7 @@ final class SettingsViewModel: ObservableObject {
         if enabled {
             settings.isDualModeEnabled = false
             settings.isAutoConversationEnabled = false
+            ensureFusionCustomPresetInitialized()
         }
         guard let repository else { return }
         do {
@@ -382,22 +383,10 @@ final class SettingsViewModel: ObservableObject {
         settings.decodeFusionCustomPreset() ?? AppSettings.defaultFusionCustomPreset()
     }
 
-    func setFusionPresetName(_ name: String) {
-        settings.fusionPresetName = name
-        if name == FusionPresetLoader.customPresetName {
-            ensureFusionCustomPresetInitialized()
-        }
-    }
-
     func ensureFusionCustomPresetInitialized() {
         if settings.decodeFusionCustomPreset() == nil {
             settings.fusionCustomPresetJSON = settings.encodeFusionCustomPreset(AppSettings.defaultFusionCustomPreset())
         }
-    }
-
-    func importFusionPresetIntoCustom(_ name: String) {
-        guard let preset = try? FusionPresetLoader.loadPreset(named: name) else { return }
-        settings.fusionCustomPresetJSON = settings.encodeFusionCustomPreset(preset)
     }
 
     private func saveFusionCustomPreset(_ preset: FusionPresetDefinition) {
@@ -462,17 +451,6 @@ final class SettingsViewModel: ObservableObject {
             role: preset.fallbackModel?.role
         )
         saveFusionCustomPreset(preset)
-    }
-
-    func bundledFusionPresetSummary(for presetName: String) -> String? {
-        guard let preset = try? FusionPresetLoader.loadPreset(named: presetName) else { return nil }
-        let panelSummary = preset.panelModels.map(\.modelId).joined(separator: ", ")
-        return L10n.format(
-            "Panel: %@ · Judge: %@ · Synth: %@",
-            panelSummary,
-            preset.judgeModel.modelId,
-            preset.synthesizerModel.modelId
-        )
     }
 
     func setAutoConversationEnabled(_ enabled: Bool) {

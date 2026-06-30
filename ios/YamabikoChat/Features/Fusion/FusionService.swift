@@ -28,14 +28,12 @@ final class FusionService {
 
     func runFusion(
         userPrompt: String,
-        preset: String = FusionPresetLoader.defaultPresetName,
         options: FusionRunOptions = FusionRunOptions()
     ) async throws -> FusionRunResult {
         let settings = try settingsRepository.load()
         let allowWebSearch = options.allowWebSearch ?? settings.clientWebSearchToolEnabled
         let request = try FusionPresetLoader.buildRequest(
             userPrompt: userPrompt,
-            presetName: options.preset.isEmpty ? preset : options.preset,
             systemPrompt: options.systemPrompt,
             taskTypeOverride: options.taskType,
             allowWebSearchOverride: allowWebSearch ? nil : false,

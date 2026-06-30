@@ -3,10 +3,6 @@ import SwiftUI
 struct FusionModeSettingsSection: View {
     @ObservedObject var viewModel: SettingsViewModel
 
-    private var isCustomPreset: Bool {
-        viewModel.settings.fusionPresetName == FusionPresetLoader.customPresetName
-    }
-
     var body: some View {
         Group {
             Section {
@@ -37,15 +33,6 @@ struct FusionModeSettingsSection: View {
 
             if viewModel.settings.isFusionModeEnabled {
                 Section(L10n.text("Fusion 設定")) {
-                    Picker(L10n.text("Preset"), selection: Binding(
-                        get: { viewModel.settings.fusionPresetName },
-                        set: { viewModel.setFusionPresetName($0) }
-                    )) {
-                        ForEach(FusionPresetLoader.availablePresetNames, id: \.self) { name in
-                            Text(name).tag(name)
-                        }
-                    }
-
                     Picker(L10n.text("Task type"), selection: $viewModel.settings.fusionTaskType) {
                         Text(L10n.text("Auto")).tag("auto")
                         Text(L10n.text("Research")).tag("research")
@@ -54,34 +41,15 @@ struct FusionModeSettingsSection: View {
 
                     Toggle(L10n.text("Debug mode"), isOn: $viewModel.settings.fusionDebugModeEnabled)
                     Toggle(L10n.text("Log prompts in trace"), isOn: $viewModel.settings.fusionLogPromptsEnabled)
-
-                    if !isCustomPreset,
-                       let summary = viewModel.bundledFusionPresetSummary(for: viewModel.settings.fusionPresetName) {
-                        Text(summary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                 }
 
-                if isCustomPreset {
-                    customPresetSections
-                }
+                modelSections
             }
         }
     }
 
     @ViewBuilder
-    private var customPresetSections: some View {
-        Section(L10n.text("カスタムプリセット")) {
-            Menu(L10n.text("プリセットから読み込み")) {
-                ForEach(FusionPresetLoader.bundledPresetNames, id: \.self) { name in
-                    Button(name) {
-                        viewModel.importFusionPresetIntoCustom(name)
-                    }
-                }
-            }
-        }
-
+    private var modelSections: some View {
         Section(L10n.text("Panel models")) {
             ForEach(Array(viewModel.fusionCustomPreset.panelModels.enumerated()), id: \.offset) { index, panel in
                 VStack(alignment: .leading, spacing: 8) {
