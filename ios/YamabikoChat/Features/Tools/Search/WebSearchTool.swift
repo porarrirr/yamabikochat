@@ -39,41 +39,84 @@ struct WebSearchTool: LocalToolExecutor {
     }
 
     func execute(call: ToolCall) async throws -> ToolResult {
-        let arguments = try ToolArguments.object(from: call.argumentsJSON)
-        guard let query = (arguments["query"] as? String)?.trimmedNonEmpty else {
-            throw ProviderClientError.parseFailure("web_search requires a non-empty query")
-        }
-        let requestedLimit = ToolArguments.int(arguments["max_results"]) ?? DuckDuckGoHTMLEngine.resultLimit
-        let limit = min(max(1, requestedLimit), DuckDuckGoHTMLEngine.resultLimit)
-        let results = try await engine.search(query: query, locale: locale, maxResults: limit)
-        let object: [String: Any] = [
-            "query": query,
-            "results": results.map {
-                [
-                    "title": $0.title,
-                    "snippet": $0.snippet,
-                    "url": $0.url
-                ]
+        do {
+            let arguments = try ToolArguments.object(from: call.argumentsJSON)
+            guard let query = (arguments["query"] as? String)?.trimmedNonEmpty else {
+                throw ProviderClientError.parseFailure("web_search requires a non-empty query")
             }
-        ]
-        let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
-        let content = String(decoding: data, as: UTF8.self)
-        let sources = results.map { ToolSource(title: $0.title, url: $0.url) }
-
-        DiagnosticsLogger.log(
-            "Client web search completed",
-            category: .network,
-            metadata: [
+            let requestedLimit = ToolArguments.int(arguments["max_results"]) ?? DuckDuckGoHTMLEngine.resultLimit
+            let limit = min(max(1, requestedLimit), DuckDuckGoHTMLEngine.resultLimit)
+            let results = try await engine.search(query: query, locale: locale, maxResults: limit)
+            let object: [String: Any] = [
                 "query": query,
-                "result_count": String(results.count)
+                "results": results.map {
+                    [
+                        "title": $0.title,
+                        "snippet": $0.snippet,
+                        "url": $0.url
+                    ]
+                }
             ]
-        )
-        return ToolResult(
-            callId: call.id,
-            name: call.name,
-            content: content,
-            sources: sources
-        )
+            let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+            let content = String(decoding: data, as: UTF8.self)
+            let sources = results.map { ToolSource(title: $0.title, url: $0.url) }
+
+            DiagnosticsLogger.log(
+                "Client web search completed",
+                category: .network,
+                metadata: [
+                    "query": query,
+                    "result_count": String(results.count)
+                ]
+            )
+            return ToolResult(
+                callId: call.id,
+                name: call.name,
+                content: content,
+                sources: sources
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            let query = Self.query(from: call.argumentsJSON) ?? "-"
+            let limit = Self.limit(from: call.argumentsJSON)
+            DiagnosticsLogger.log(
+                "Client web search failed",
+                level: .error,
+                category: .network,
+                metadata: [
+                    "query": query,
+                    "max_results": String(limit)
+                ],
+                error: error
+            )
+            return ToolResult(
+                callId: call.id,
+                name: call.name,
+                content: LocalToolRegistry.errorContent(error.localizedDescription),
+                isError: true
+            )
+        }
+    }
+
+    private static func query(from argumentsJSON: String) -> String? {
+        guard let data = argumentsJSON.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let query = (object["query"] as? String)?.trimmedNonEmpty
+        else {
+            return nil
+        }
+        return query
+    }
+
+    private static func limit(from argumentsJSON: String) -> Int {
+        guard let data = argumentsJSON.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return DuckDuckGoHTMLEngine.resultLimit
+        }
+        let requestedLimit = ToolArguments.int(object["max_results"]) ?? DuckDuckGoHTMLEngine.resultLimit
+        return min(max(1, requestedLimit), DuckDuckGoHTMLEngine.resultLimit)
     }
 }
 

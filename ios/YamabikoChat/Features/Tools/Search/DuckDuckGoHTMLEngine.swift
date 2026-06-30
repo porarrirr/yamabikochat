@@ -39,16 +39,50 @@ struct DuckDuckGoHTMLEngine: SearchEngine {
                 metadata: ["query": normalizedQuery],
                 error: error
             )
-            let fallback = try await fetch(
-                endpoint: "https://lite.duckduckgo.com/lite/",
-                query: normalizedQuery,
-                region: region
-            )
-            let results = Self.parseResults(html: fallback, maxResults: limit)
-            guard !results.isEmpty else {
-                throw ProviderClientError.parseFailure("DuckDuckGo Lite returned no results")
+            do {
+                let fallback = try await fetch(
+                    endpoint: "https://lite.duckduckgo.com/lite/",
+                    query: normalizedQuery,
+                    region: region
+                )
+                let results = Self.parseResults(html: fallback, maxResults: limit)
+                guard !results.isEmpty else {
+                    let noResultsError = ProviderClientError.parseFailure("DuckDuckGo Lite returned no results")
+                    DiagnosticsLogger.log(
+                        "DuckDuckGo Lite returned no results",
+                        level: .error,
+                        category: .network,
+                        metadata: ["query": normalizedQuery],
+                        error: noResultsError
+                    )
+                    throw noResultsError
+                }
+                return results
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error as ProviderClientError {
+                if case let .parseFailure(message) = error,
+                   message == "DuckDuckGo Lite returned no results" {
+                    throw error
+                }
+                DiagnosticsLogger.log(
+                    "DuckDuckGo Lite search failed",
+                    level: .error,
+                    category: .network,
+                    metadata: ["query": normalizedQuery],
+                    error: error
+                )
+                throw error
+            } catch {
+                DiagnosticsLogger.log(
+                    "DuckDuckGo Lite search failed",
+                    level: .error,
+                    category: .network,
+                    metadata: ["query": normalizedQuery],
+                    error: error
+                )
+                throw error
             }
-            return results
         }
     }
 
@@ -148,7 +182,21 @@ struct DuckDuckGoHTMLEngine: SearchEngine {
         }
         let (data, response) = try await httpClient.get(url: url, timeout: Self.requestTimeout)
         guard (200 ... 299).contains(response.statusCode) else {
-            throw ProviderClientError.httpStatus(response.statusCode, String(data: data, encoding: .utf8) ?? "")
+            let httpError = ProviderClientError.httpStatus(
+                response.statusCode,
+                String(data: data, encoding: .utf8) ?? ""
+            )
+            DiagnosticsLogger.log(
+                "DuckDuckGo search HTTP error",
+                level: .error,
+                category: .network,
+                metadata: [
+                    "endpoint": endpoint,
+                    "status_code": String(response.statusCode)
+                ],
+                error: httpError
+            )
+            throw httpError
         }
         guard let html = String(data: data, encoding: .utf8) ??
             String(data: data, encoding: .isoLatin1)

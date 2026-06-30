@@ -16,6 +16,24 @@ private actor RecordingWebToolHTTPClient: WebToolHTTPClient {
     }
 }
 
+private actor FailingWebToolHTTPClient: WebToolHTTPClient {
+    let statusCode: Int
+
+    init(statusCode: Int = 500) {
+        self.statusCode = statusCode
+    }
+
+    func get(url: URL, timeout: TimeInterval) async throws -> (Data, HTTPURLResponse) {
+        let response = HTTPURLResponse(
+            url: url,
+            statusCode: statusCode,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "text/plain"]
+        )!
+        return (Data("server error".utf8), response)
+    }
+}
+
 final class WebSearchToolTests: XCTestCase {
     func testDuckDuckGoHTMLParserExtractsResultsAndDecodesRedirectURL() throws {
         let html = """
@@ -83,6 +101,30 @@ final class WebSearchToolTests: XCTestCase {
             DuckDuckGoHTMLEngine.regionParameter(for: Locale(identifier: "ja_JP")),
             "jp-jp"
         )
+    }
+
+    func testWebSearchFailureWritesDiagnosticsLog() async throws {
+        DiagnosticsLogger.clear()
+        defer { DiagnosticsLogger.clear() }
+
+        let tool = WebSearchTool(
+            engine: DuckDuckGoHTMLEngine(httpClient: FailingWebToolHTTPClient())
+        )
+        let result = try await tool.execute(
+            call: ToolCall(
+                id: "call-search-1",
+                name: WebSearchTool.name,
+                argumentsJSON: #"{"query":"swift concurrency"}"#,
+                providerMetadata: nil
+            )
+        )
+
+        XCTAssertTrue(result.isError)
+        let log = DiagnosticsLogger.read()
+        XCTAssertTrue(log.contains("Client web search failed"))
+        XCTAssertTrue(log.contains("DuckDuckGo search HTTP error"))
+        XCTAssertTrue(log.contains("query=swift concurrency"))
+        XCTAssertFalse(log.contains("Local tool execution failed"))
     }
 
     func testFetchURLRejectsLoopbackBeforeNetworkRequest() async throws {

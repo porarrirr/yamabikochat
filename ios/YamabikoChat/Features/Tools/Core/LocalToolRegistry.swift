@@ -32,12 +32,14 @@ struct LocalToolRegistry: Sendable {
         do {
             return try await executor.execute(call: call)
         } catch {
-            DiagnosticsLogger.log(
-                "Local tool execution failed",
-                category: .network,
-                metadata: ["tool": call.name],
-                error: error
-            )
+            if call.name != WebSearchTool.name {
+                DiagnosticsLogger.log(
+                    "Local tool execution failed",
+                    category: .network,
+                    metadata: ["tool": call.name],
+                    error: error
+                )
+            }
             return ToolResult(
                 callId: call.id,
                 name: call.name,
@@ -47,7 +49,7 @@ struct LocalToolRegistry: Sendable {
         }
     }
 
-    private static func errorContent(_ message: String) -> String {
+    static func errorContent(_ message: String) -> String {
         let object = ["error": message]
         guard let data = try? JSONSerialization.data(withJSONObject: object),
               let json = String(data: data, encoding: .utf8)
