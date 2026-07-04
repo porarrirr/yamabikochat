@@ -24,15 +24,8 @@ enum YamabikoWebKitSupport {
             return false
         }
 
-        let htmlURL = resourceDirectory.appendingPathComponent("message-\(UUID().uuidString).html")
-        do {
-            try html.write(to: htmlURL, atomically: true, encoding: .utf8)
-            webView.loadFileURL(htmlURL, allowingReadAccessTo: resourceDirectory)
-            return true
-        } catch {
-            webView.loadHTMLString(html, baseURL: resourceDirectory)
-            return false
-        }
+        webView.loadHTMLString(html, baseURL: resourceDirectory)
+        return true
     }
 }
 
@@ -43,12 +36,22 @@ enum MathMarkdownWebResourceLoader {
         bundle: Bundle = .main,
         fileManager: FileManager = .default
     ) -> URL? {
-        guard
-            let sourceDirectory = MathMarkdownResourceResolver.mathJaxScriptURL(in: bundle)?
-                .deletingLastPathComponent(),
-            let cacheRoot = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+        guard let sourceDirectory = MathMarkdownResourceResolver.mathJaxScriptURL(in: bundle)?
+            .deletingLastPathComponent()
         else {
+            DiagnosticsLogger.log(
+                "MathJax resource directory not found in bundle",
+                category: .app
+            )
             return nil
+        }
+
+        guard let cacheRoot = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            DiagnosticsLogger.log(
+                "MathJax cache root unavailable; using bundle directory",
+                category: .app
+            )
+            return sourceDirectory
         }
 
         let cacheDirectory = cacheRoot.appendingPathComponent(cacheDirectoryName, isDirectory: true)
@@ -70,7 +73,12 @@ enum MathMarkdownWebResourceLoader {
             }
             return cacheDirectory
         } catch {
-            return nil
+            DiagnosticsLogger.log(
+                "MathJax cache preparation failed; using bundle directory",
+                category: .app,
+                error: error
+            )
+            return sourceDirectory
         }
     }
 }
