@@ -23,7 +23,9 @@ enum ClientToolFallbackPolicy {
             "unknown field",
             "unrecognized field",
             "unknown parameter",
-            "unrecognized parameter"
+            "unrecognized parameter",
+            "cannot find field",
+            "unknown name"
         ]
         .contains(where: normalized.contains)
         return mentionsTools && explicitlyUnsupported

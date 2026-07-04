@@ -561,8 +561,64 @@ struct GeminiProviderClient: ProviderClient {
         )
     }
 
+    /// Keys that JSON Schema supports but Gemini's (OpenAPI subset) Schema does not.
+    /// Stripping these at the Gemini boundary keeps the shared tool definitions valid for
+    /// OpenAI/Anthropic while preventing HTTP 400 "Cannot find field" rejections.
+    private static let geminiUnsupportedSchemaKeys: Set<String> = [
+        "additionalProperties",
+        "patternProperties",
+        "$schema",
+        "$ref",
+        "$id",
+        "$defs",
+        "$comment",
+        "definitions",
+        "dependencies",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "oneOf",
+        "anyOf",
+        "allOf",
+        "not",
+        "const",
+        "if",
+        "then",
+        "else",
+        "examples"
+    ]
+
+    /// Recursively removes JSON Schema keys that Gemini's Schema does not accept, walking
+    /// `properties` and `items` so nested fields are cleaned as well.
+    private func sanitizeGeminiSchema(_ value: Any) -> Any {
+        if let dict = value as? [String: Any] {
+            var cleaned: [String: Any] = [:]
+            for (key, child) in dict {
+                guard !Self.geminiUnsupportedSchemaKeys.contains(key) else { continue }
+                cleaned[key] = sanitizeGeminiSchema(child)
+            }
+            return cleaned
+        }
+        if let array = value as? [Any] {
+            return array.map(sanitizeGeminiSchema)
+        }
+        return value
+    }
+
+    /// Sanitizes a parsed function declaration's `parameters` schema in place.
+    private func sanitizeFunctionDeclarations(_ declarations: [[String: Any]]) -> [[String: Any]] {
+        declarations.map { declaration in
+            var sanitized = declaration
+            if let parameters = sanitized["parameters"] {
+                sanitized["parameters"] = sanitizeGeminiSchema(parameters)
+            }
+            return sanitized
+        }
+    }
+
     private func geminiToolObjects(from tools: [ProviderTool]) -> [[String: Any]] {
         var mapped: [[String: Any]] = []
+        var functionDeclarations: [[String: Any]] = []
         for tool in tools {
             switch tool.type {
             case "google_search":
@@ -580,7 +636,7 @@ struct GeminiProviderClient: ProviderClient {
                    let data = json.data(using: .utf8),
                    let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
                    !list.isEmpty {
-                    mapped.append(["functionDeclarations": list])
+                    functionDeclarations.append(contentsOf: sanitizeFunctionDeclarations(list))
                 }
             case "function":
                 guard let name = tool.payload["name"]?.trimmedNonEmpty,
@@ -592,15 +648,20 @@ struct GeminiProviderClient: ProviderClient {
                 }
                 var declaration: [String: Any] = [
                     "name": name,
-                    "parameters": parameters
+                    "parameters": sanitizeGeminiSchema(parameters)
                 ]
                 if let description = tool.payload["description"]?.trimmedNonEmpty {
                     declaration["description"] = description
                 }
-                mapped.append(["functionDeclarations": [declaration]])
+                functionDeclarations.append(declaration)
             default:
                 break
             }
+        }
+        if !functionDeclarations.isEmpty {
+            // Gemini expects all function declarations consolidated under a single
+            // `functionDeclarations` array (matching Android's Tool(function_declarations=[...])).
+            mapped.append(["functionDeclarations": functionDeclarations])
         }
         return mapped
     }
