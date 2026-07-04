@@ -781,6 +781,98 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertNotNil(resultParts.first?["functionResponse"] as? [String: Any])
     }
 
+    /// Gemini's Schema does not accept JSON Schema's `additionalProperties` field. The Gemini
+    /// provider must strip it (and consolidate all function declarations into one array) so the
+    /// client web tools do not trigger HTTP 400 "Cannot find field" rejections.
+    func testGeminiStripsAdditionalPropertiesFromFunctionSchema() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("gemini-key", for: .gemini)
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            // Minimal Gemini non-stream response with no function calls.
+            let data = #"""
+            {
+              "candidates": [{
+                "content": {
+                  "parts": [{ "text": "ok" }]
+                }
+              }]
+            }
+            """#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hi")],
+            stream: false,
+            tools: [
+                ToolDefinition(
+                    name: "web_search",
+                    description: "Search",
+                    parametersJSON: """
+                    {
+                      "type": "object",
+                      "properties": {
+                        "query": { "type": "string", "description": "The search query." },
+                        "max_results": { "type": "integer", "minimum": 1, "maximum": 8, "default": 8 }
+                      },
+                      "required": ["query"],
+                      "additionalProperties": false
+                    }
+                    """
+                ).providerTool,
+                ToolDefinition(
+                    name: "fetch_url",
+                    description: "Fetch",
+                    parametersJSON: """
+                    {
+                      "type": "object",
+                      "properties": {
+                        "url": { "type": "string", "description": "The URL to fetch." }
+                      },
+                      "required": ["url"],
+                      "additionalProperties": false
+                    }
+                    """
+                ).providerTool
+            ],
+            metadata: ["provider": "GEMINI"]
+        )
+
+        _ = try await GeminiProviderClient().generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let root = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: XCTUnwrap(httpClient.lastRequest?.body)) as? [String: Any]
+        )
+        let tools = try XCTUnwrap(root["tools"] as? [[String: Any]])
+
+        // All function declarations must be consolidated into a single functionDeclarations array.
+        let declarationEntries = tools.filter { $0["functionDeclarations"] != nil }
+        XCTAssertEqual(declarationEntries.count, 1, "function declarations should be consolidated into one tools entry")
+
+        let declarations = try XCTUnwrap(declarationEntries.first?["functionDeclarations"] as? [[String: Any]])
+        XCTAssertEqual(declarations.count, 2)
+        let names = declarations.compactMap { $0["name"] as? String }
+        XCTAssertEqual(Set(names), Set(["web_search", "fetch_url"]))
+
+        // No serialized payload may mention additionalProperties anywhere in the request body.
+        let bodyString = String(data: try XCTUnwrap(httpClient.lastRequest?.body), encoding: .utf8) ?? ""
+        XCTAssertFalse(
+            bodyString.contains("additionalProperties"),
+            "Gemini request must not include additionalProperties in tool schemas"
+        )
+
+        // The supported schema fields should still be present.
+        let webSearchParams = try XCTUnwrap(declarations.first { $0["name"] as? String == "web_search" }?["parameters"] as? [String: Any])
+        XCTAssertNotNil(webSearchParams["properties"])
+        XCTAssertEqual(webSearchParams["required"] as? [String], ["query"])
+    }
 
 
 

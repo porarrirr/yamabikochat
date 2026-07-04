@@ -29,7 +29,7 @@ struct ProviderRegistry {
             return openCodeGo
         case .alibabaCodingPlan:
             return anthropicCompatible
-        case .openRouter, .openAI, .openAICompat, .miniMax, .zai:
+        case .openRouter, .openAI, .openAICompat, .miniMax, .zai, .clinePass:
             return openAICompatible
         }
     }

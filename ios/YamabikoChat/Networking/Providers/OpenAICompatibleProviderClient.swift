@@ -258,6 +258,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             return .openRouter
         case .openCodeGo:
             return .openCodeGo
+        case .clinePass:
+            return .clinePass
         case .openAI:
             return .openAI
         case .alibabaCodingPlan:
@@ -311,6 +313,11 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         case .zai:
             guard let url = URL(string: "https://api.z.ai/v1/chat/completions") else {
                 throw ProviderClientError.invalidBaseURL("https://api.z.ai/v1/chat/completions")
+            }
+            return url
+        case .clinePass:
+            guard let url = URL(string: "https://api.cline.bot/api/v1/chat/completions") else {
+                throw ProviderClientError.invalidBaseURL("https://api.cline.bot/api/v1/chat/completions")
             }
             return url
         case .codexAuth, .gemini, .appleIntelligence:

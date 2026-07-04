@@ -197,6 +197,19 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertFalse(settings.shouldShowGlobalProviderPresetInChat(provider: "OPENAI"))
     }
 
+    func testChatVisibleGlobalProviderPresetsForDualAutoRespectsVisibilityAndSupportedProviders() {
+        var settings = AppSettings()
+        settings.providerDefaultModelsJSON =
+            #"{"OPENAI":"gpt-4o-mini","GEMINI":"gemini-2.5-flash","OPENROUTER":"deepseek/deepseek-chat","APPLE_INTELLIGENCE":"default"}"#
+        settings.showGlobalProviderPresetsInChat = false
+        settings.setShowGlobalProviderPresetInChat(provider: "GEMINI", visible: true)
+        settings.setShowGlobalProviderPresetInChat(provider: "OPENROUTER", visible: true)
+
+        let presets = settings.chatVisibleGlobalProviderPresetsForDualAuto()
+
+        XCTAssertEqual(presets.map(\.apiProvider), ["GEMINI", "OPENROUTER"])
+    }
+
     func testNormalizedForPersistenceNormalizesDualLayoutAndRatio() {
         var settings = AppSettings()
         settings.dualSplitLayout = "invalid"

@@ -468,7 +468,7 @@ data class Settings(
                 )
                 buildOpenRouterThinkingConfig(profile)
             }
-            "OPENAI", "OPENAI_COMPAT", "MINIMAX" -> buildOpenAiThinkingConfig(
+            "OPENAI", "OPENAI_COMPAT", "MINIMAX", "CLINEPASS" -> buildOpenAiThinkingConfig(
                 model,
                 enabledOverride = overrides?.enabled,
                 budgetOverride = overrides?.budget
@@ -703,6 +703,7 @@ data class Settings(
             "GEMINI",
             "OPENROUTER",
             "OPENCODE_GO",
+            "CLINEPASS",
             "ALIBABA_CODING_PLAN",
             "ZAI",
             "MINIMAX",

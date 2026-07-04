@@ -37,6 +37,7 @@ class SettingsManager private constructor(
             "MINIMAX" -> securePrefs.storeMiniMaxApiKey(apiKey)
             "ZAI" -> securePrefs.storeZaiApiKey(apiKey)
             "OPENCODE_GO" -> securePrefs.storeOpenCodeGoApiKey(apiKey)
+            "CLINEPASS" -> securePrefs.storeClinePassApiKey(apiKey)
             "ALIBABA_CODING_PLAN" -> securePrefs.storeAlibabaCodingPlanApiKey(apiKey)
             else -> false
         }
@@ -52,6 +53,7 @@ class SettingsManager private constructor(
                 ?: getOpenAiCompatApiKey("MiniMax (CN)")
             "ZAI" -> securePrefs.getZaiApiKey()
             "OPENCODE_GO" -> securePrefs.getOpenCodeGoApiKey()
+            "CLINEPASS" -> securePrefs.getClinePassApiKey()
             "ALIBABA_CODING_PLAN" -> securePrefs.getAlibabaCodingPlanApiKey()
             else -> null
         }
@@ -67,6 +69,7 @@ class SettingsManager private constructor(
                 hasOpenAiCompatApiKey("MiniMax (CN)")
             "ZAI" -> securePrefs.hasZaiApiKey()
             "OPENCODE_GO" -> securePrefs.hasOpenCodeGoApiKey()
+            "CLINEPASS" -> securePrefs.hasClinePassApiKey()
             "ALIBABA_CODING_PLAN" -> securePrefs.hasAlibabaCodingPlanApiKey()
             else -> false
         }
@@ -84,6 +87,7 @@ class SettingsManager private constructor(
             }
             "ZAI" -> securePrefs.clearZaiApiKey()
             "OPENCODE_GO" -> securePrefs.clearOpenCodeGoApiKey()
+            "CLINEPASS" -> securePrefs.clearClinePassApiKey()
             "ALIBABA_CODING_PLAN" -> securePrefs.clearAlibabaCodingPlanApiKey()
         }
     }

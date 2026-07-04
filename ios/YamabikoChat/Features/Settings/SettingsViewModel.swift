@@ -37,6 +37,11 @@ final class SettingsViewModel: ObservableObject {
     private var repository: ChatRepository?
     private var credentialStore: SecureCredentialStore?
     private var cancellables: Set<AnyCancellable> = []
+    private var autoSaveWorkItem: DispatchWorkItem?
+    private var isHydratingFromPersistence = false
+    private var isPersistingSettings = false
+
+    private static let autoSaveDebounceInterval: TimeInterval = 0.5
 
     func bind(repository: ChatRepository, credentialStore: SecureCredentialStore) {
         guard self.repository == nil else { return }
@@ -45,11 +50,15 @@ final class SettingsViewModel: ObservableObject {
 
         repository.settingsPublisher()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in
-                self?.settings = $0
-                self?.syncSystemPromptPresetName()
-                self?.loadCurrentProviderAPIKey()
-                self?.loadAlibabaMCPAuthorizationToken()
+            .sink { [weak self] newSettings in
+                guard let self else { return }
+                guard !self.isPersistingSettings else { return }
+                self.isHydratingFromPersistence = true
+                self.settings = newSettings
+                self.syncSystemPromptPresetName()
+                self.loadCurrentProviderAPIKey()
+                self.loadAlibabaMCPAuthorizationToken()
+                self.isHydratingFromPersistence = false
             }
             .store(in: &cancellables)
 
@@ -118,11 +127,62 @@ final class SettingsViewModel: ObservableObject {
             DiagnosticsLogger.log("Settings load failed", error: error)
         }
 
+        setupAutoSave()
+
         Task {
             await refreshOpenRouterModels(force: false)
             await refreshCodexAuth(force: false)
             refreshDiagnosticsLog()
         }
+    }
+
+    func flushPendingSettingsSave() {
+        autoSaveWorkItem?.cancel()
+        autoSaveWorkItem = nil
+        persistSettings(showSuccessMessage: false)
+    }
+
+    private func setupAutoSave() {
+        $settings
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.scheduleAutoSave()
+            }
+            .store(in: &cancellables)
+
+        $alibabaMCPAuthorizationTokenInput
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.scheduleAutoSave()
+            }
+            .store(in: &cancellables)
+
+        $apiKeyDraft
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.scheduleAutoSave()
+            }
+            .store(in: &cancellables)
+
+        $openAICompatApiKeyInput
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.scheduleAutoSave()
+            }
+            .store(in: &cancellables)
+    }
+
+    private func scheduleAutoSave() {
+        guard !isHydratingFromPersistence, !isPersistingSettings else { return }
+        autoSaveWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.persistSettings(showSuccessMessage: false)
+        }
+        autoSaveWorkItem = work
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Self.autoSaveDebounceInterval,
+            execute: work
+        )
     }
 
     var filteredOpenRouterModels: [SimpleModel] {
@@ -138,20 +198,17 @@ final class SettingsViewModel: ObservableObject {
 
     func setStreamingEnabled(_ enabled: Bool) {
         settings.isStreamingEnabled = enabled
-        guard let repository else { return }
-        do {
-            let normalized = settings.normalizedForPersistence()
-            try repository.saveSettings(normalized)
-            settings = normalized
-            errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
-            DiagnosticsLogger.log("Streaming setting save failed", error: error)
-        }
     }
 
     func saveSettings() {
+        persistSettings(showSuccessMessage: true)
+    }
+
+    private func persistSettings(showSuccessMessage: Bool) {
         guard let repository else { return }
+        isPersistingSettings = true
+        defer { isPersistingSettings = false }
+
         do {
             let previousPersistedSettings = try repository.loadSettings()
             let previousMCPToken = try credentialStore.flatMap {
@@ -160,7 +217,9 @@ final class SettingsViewModel: ObservableObject {
             var normalized = settings.normalizedForPersistence()
             if normalized.alibabaMCPEnabled && normalized.resolvedAlibabaMCPServerURL() == nil {
                 errorMessage = L10n.text("Remote MCP URL に有効な https:// URL を入力してください。")
-                statusMessage = nil
+                if showSuccessMessage {
+                    statusMessage = nil
+                }
                 DiagnosticsLogger.log(
                     "Alibaba MCP settings validation failed because URL is invalid",
                     level: .warning,
@@ -174,10 +233,7 @@ final class SettingsViewModel: ObservableObject {
             }
             try repository.saveSettings(normalized)
             do {
-                try credentialStore?.saveSecret(
-                    alibabaMCPAuthorizationTokenInput.nilIfBlank,
-                    key: AppConstants.alibabaMCPAuthorizationTokenKey
-                )
+                try persistCredentialDrafts()
             } catch {
                 try? repository.saveSettings(previousPersistedSettings)
                 try? credentialStore?.saveSecret(
@@ -187,12 +243,45 @@ final class SettingsViewModel: ObservableObject {
                 throw error
             }
             settings = normalized
-            statusMessage = L10n.text("保存しました")
+            if showSuccessMessage {
+                statusMessage = L10n.text("保存しました")
+            }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
-            statusMessage = nil
+            if showSuccessMessage {
+                statusMessage = nil
+            }
             DiagnosticsLogger.log("Settings save failed", error: error)
+        }
+    }
+
+    private func persistCredentialDrafts() throws {
+        try credentialStore?.saveSecret(
+            alibabaMCPAuthorizationTokenInput.nilIfBlank,
+            key: AppConstants.alibabaMCPAuthorizationTokenKey
+        )
+
+        let providerKey = settings.apiProvider.uppercased()
+        if providerKey != "CODEX_AUTH", providerKey != "APPLE_INTELLIGENCE",
+           let provider = credentialProvider(for: providerKey) {
+            try credentialStore?.setCredential(apiKeyDraft.nilIfBlank, for: provider)
+        }
+
+        if providerKey == "OPENAI_COMPAT",
+           let repository,
+           let preset = settings.selectedOpenAICompatPreset?.nilIfBlank {
+            let ok = repository.saveOpenAiCompatApiKey(
+                name: preset,
+                apiKey: openAICompatApiKeyInput.nilIfBlank
+            )
+            if !ok {
+                throw NSError(
+                    domain: "SettingsViewModel",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: L10n.text("OPENAI_COMPAT APIキー保存に失敗しました")]
+                )
+            }
         }
     }
 
@@ -316,7 +405,9 @@ final class SettingsViewModel: ObservableObject {
     func loadSelectedOpenAICompatApiKey() {
         guard let repository else { return }
         guard let preset = settings.selectedOpenAICompatPreset?.nilIfBlank else { return }
+        isHydratingFromPersistence = true
         openAICompatApiKeyInput = repository.peekOpenAiCompatApiKey(name: preset) ?? ""
+        isHydratingFromPersistence = false
     }
 
     func setDefaultModel(_ modelId: String) {
@@ -366,16 +457,6 @@ final class SettingsViewModel: ObservableObject {
             settings.isDualModeEnabled = false
             settings.isAutoConversationEnabled = false
             ensureFusionCustomPresetInitialized()
-        }
-        guard let repository else { return }
-        do {
-            let normalized = settings.normalizedForPersistence()
-            try repository.saveSettings(normalized)
-            settings = normalized
-            errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
-            DiagnosticsLogger.log("Fusion mode setting save failed", error: error)
         }
     }
 
@@ -638,6 +719,8 @@ final class SettingsViewModel: ObservableObject {
             return AlibabaCodingPlanModelCatalog.defaultModel
         case "OPENCODE_GO":
             return OpenCodeGoModelCatalog.defaultModel
+        case "CLINEPASS":
+            return ClinePassModelCatalog.defaultModel
         case "MINIMAX":
             return "MiniMax-M2.1"
         case "CODEX_AUTH":
@@ -662,12 +745,17 @@ final class SettingsViewModel: ObservableObject {
     private func loadCurrentProviderAPIKey() {
         guard let credentialStore else { return }
         guard let provider = credentialProvider(for: settings.apiProvider) else {
+            isHydratingFromPersistence = true
             apiKeyDraft = ""
+            isHydratingFromPersistence = false
             return
         }
         do {
+            isHydratingFromPersistence = true
             apiKeyDraft = try credentialStore.credential(for: provider) ?? ""
+            isHydratingFromPersistence = false
         } catch {
+            isHydratingFromPersistence = false
             errorMessage = error.localizedDescription
             DiagnosticsLogger.log("API key load failed provider=\(settings.apiProvider)", error: error)
         }
@@ -675,14 +763,19 @@ final class SettingsViewModel: ObservableObject {
 
     private func loadAlibabaMCPAuthorizationToken() {
         guard let credentialStore else {
+            isHydratingFromPersistence = true
             alibabaMCPAuthorizationTokenInput = ""
+            isHydratingFromPersistence = false
             return
         }
         do {
+            isHydratingFromPersistence = true
             alibabaMCPAuthorizationTokenInput = try credentialStore.readSecret(
                 key: AppConstants.alibabaMCPAuthorizationTokenKey
             ) ?? ""
+            isHydratingFromPersistence = false
         } catch {
+            isHydratingFromPersistence = false
             errorMessage = error.localizedDescription
             DiagnosticsLogger.log("Alibaba MCP authorization token load failed", error: error)
         }

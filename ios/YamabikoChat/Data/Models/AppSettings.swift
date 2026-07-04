@@ -765,6 +765,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             "GEMINI",
             "OPENROUTER",
             "OPENCODE_GO",
+            "CLINEPASS",
             "ALIBABA_CODING_PLAN",
             "ZAI",
             "MINIMAX",
@@ -820,6 +821,14 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         var overrides = showGlobalProviderPresetsInChatByProviderMap()
         overrides[normalized] = visible
         showGlobalProviderPresetsInChatByProviderJSON = Self.encodeStringKeyedBooleanMap(overrides)
+    }
+
+    func chatVisibleGlobalProviderPresetsForDualAuto() -> [ModelPreset] {
+        let supportedProviders = Set(ProviderCatalog.dualAutoConversationOptions.map(\.key))
+        return buildGlobalProviderPresets().filter { preset in
+            supportedProviders.contains(preset.apiProvider.uppercased()) &&
+                shouldShowGlobalProviderPresetInChat(provider: preset.apiProvider)
+        }
     }
 
     func selectedCompatBaseURL() -> URL? {

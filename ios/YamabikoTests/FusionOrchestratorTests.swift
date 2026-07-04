@@ -91,6 +91,31 @@ final class FusionOrchestratorTests: XCTestCase {
         XCTAssertEqual(outcome.synthesisRequest.model, "synth-model")
     }
 
+    func testProgressCallbackReportsPanelJudgeAndSynthesizerPhases() async throws {
+        let request = sampleRequest(panelModels: [
+            PanelModelConfig(modelId: "panel-a", provider: "OPENAI", timeoutMs: 5_000),
+            PanelModelConfig(modelId: "panel-b", provider: "OPENAI", timeoutMs: 5_000)
+        ])
+        var progressSnapshots: [FusionProgressSnapshot] = []
+
+        _ = try await orchestrator.runThroughJudge(
+            request: request,
+            context: FusionContext(),
+            buildRequest: buildRequest,
+            invoke: mockInvoke,
+            estimateCost: { _, _, _ in nil },
+            onProgress: { snapshot in
+                progressSnapshots.append(snapshot)
+            }
+        )
+
+        XCTAssertFalse(progressSnapshots.isEmpty)
+        XCTAssertEqual(progressSnapshots.first?.phase, .panel)
+        XCTAssertTrue(progressSnapshots.contains(where: { $0.phase == .judge }))
+        XCTAssertEqual(progressSnapshots.last?.phase, .synthesizer)
+        XCTAssertEqual(progressSnapshots.last?.completedPanelCount, 2)
+    }
+
     func testOnePanelModelFails() async throws {
         let request = sampleRequest(panelModels: [
             PanelModelConfig(modelId: "panel-ok", provider: "OPENAI", timeoutMs: 5_000),

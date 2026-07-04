@@ -133,28 +133,30 @@ struct ChatWorkspaceScreen: View {
             .buttonStyle(.plain)
             .accessibilityLabel(Text("チャット履歴"))
 
-            Spacer(minLength: 0)
-
-            Button {
-                createConversation()
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 36, height: 36)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .stroke(Color(uiColor: .label), lineWidth: 1.7)
-                    }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text("新規チャット"))
-
-            moreMenu
-        }
-        .overlay {
             modelTitleControl
-                .frame(maxWidth: 240)
+                .frame(minWidth: 0, maxWidth: .infinity)
+                .layoutPriority(-1)
+                .clipped()
+
+            HStack(spacing: 8) {
+                Button {
+                    createConversation()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 36, height: 36)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .stroke(Color(uiColor: .label), lineWidth: 1.7)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("新規チャット"))
+
+                moreMenu
+            }
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 12)
         .padding(.top, 8)
@@ -302,7 +304,7 @@ struct ChatWorkspaceScreen: View {
                 Text(modelSwitcherTitle)
                     .font(.system(size: 17, weight: .semibold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.76)
+                    .truncationMode(.tail)
                 if showsChevron {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 12, weight: .semibold))
@@ -315,8 +317,9 @@ struct ChatWorkspaceScreen: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.82)
+                .truncationMode(.tail)
         }
+        .frame(maxWidth: .infinity)
         .multilineTextAlignment(.center)
     }
 

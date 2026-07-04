@@ -144,6 +144,49 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testFlushPendingSettingsSavePersistsSettingsImmediately() throws {
+        let fixture = try makeFixture()
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.settings.themeMode = "DARK"
+
+        viewModel.flushPendingSettingsSave()
+
+        XCTAssertEqual(try fixture.repository.loadSettings().themeMode, "DARK")
+    }
+
+    @MainActor
+    func testAutoSavePersistsSettingsAfterDebounce() async throws {
+        let fixture = try makeFixture()
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.settings.mathRenderingEnabled.toggle()
+
+        try await Task.sleep(nanoseconds: 900_000_000)
+
+        XCTAssertEqual(
+            try fixture.repository.loadSettings().mathRenderingEnabled,
+            viewModel.settings.mathRenderingEnabled
+        )
+    }
+
+    @MainActor
+    func testAutoSavePersistsApiKeyDraftAfterDebounce() async throws {
+        let fixture = try makeFixture()
+        var settings = try fixture.repository.loadSettings()
+        settings.apiProvider = "OPENROUTER"
+        try fixture.repository.saveSettings(settings)
+
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.apiKeyDraft = "auto-saved-key"
+
+        try await Task.sleep(nanoseconds: 900_000_000)
+
+        XCTAssertEqual(try fixture.credentials.credential(for: .openRouter), "auto-saved-key")
+    }
+
+    @MainActor
     func testSaveSettingsRejectsInvalidAlibabaMCPURLWhenEnabled() throws {
         let fixture = try makeFixture()
         let viewModel = SettingsViewModel()

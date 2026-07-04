@@ -26,6 +26,7 @@ final class ChatViewModel: ObservableObject {
     @Published var isAutoConversationPaused: Bool = false
     @Published var autoConversationStatus: String?
     @Published var fusionStreamingStatus: String?
+    @Published var fusionProgress: FusionProgressSnapshot?
     @Published var errorMessage: String?
     @Published var attachments: [AttachmentDraft] = []
     @Published private(set) var isSpeechRecording: Bool = false
@@ -52,6 +53,10 @@ final class ChatViewModel: ObservableObject {
     private var resolvedContextLimit: Int?
     private var activeConversationProvider: String = ""
     private var activeConversationModel: String = ""
+    private var pendingStreamingSnapshots: [Int64: ChatStreamingSnapshot] = [:]
+    private var lastStreamingPublishAt: [Int64: Date] = [:]
+    private var streamingFlushTasks: [Int64: Task<Void, Never>] = [:]
+    private let streamingThrottleInterval: TimeInterval = 0.1
 
     init(conversationID: Int64) {
         self.conversationID = conversationID
@@ -280,16 +285,26 @@ final class ChatViewModel: ObservableObject {
                         attachments = attachmentDrafts
                         return
                     }
+                    fusionProgress = nil
                     _ = try await repository.sendFusionMessage(
                         conversationId: conversationID,
                         text: text,
                         attachments: attachmentPaths,
+                        onFusionProgress: { [weak self] snapshot in
+                            Task { @MainActor in
+                                self?.fusionProgress = snapshot
+                            }
+                        },
                         onStreamEvent: { [weak self] event in
                             guard case let .reasoningDelta(delta) = event else { return }
                             Task { @MainActor in
-                                self?.fusionStreamingStatus = delta.isEmpty
-                                    ? self?.fusionStreamingStatus
-                                    : L10n.text("推論中...")
+                                guard let self else { return }
+                                let reasoningStatus = delta.isEmpty ? nil : L10n.text("推論中...")
+                                self.fusionStreamingStatus = reasoningStatus
+                                if var progress = self.fusionProgress {
+                                    progress.substatus = reasoningStatus
+                                    self.fusionProgress = progress
+                                }
                             }
                         },
                         onStreamingSnapshot: { [weak self] snapshot in
@@ -299,6 +314,7 @@ final class ChatViewModel: ObservableObject {
                         }
                     )
                     fusionStreamingStatus = nil
+                    fusionProgress = nil
                 } else if settings.isDualModeEnabled {
                     guard !text.isEmpty || !attachmentPaths.isEmpty else {
                         errorMessage = L10n.text("デュアルモードでは本文または添付を入力してください。")
@@ -360,11 +376,38 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func handleStreamingSnapshot(_ snapshot: ChatStreamingSnapshot) {
+        let targetId = snapshot.targetId
         if snapshot.isFinal {
-            streamingSnapshots.removeValue(forKey: snapshot.targetId)
-        } else {
-            streamingSnapshots[snapshot.targetId] = snapshot
+            streamingFlushTasks[targetId]?.cancel()
+            streamingFlushTasks.removeValue(forKey: targetId)
+            pendingStreamingSnapshots.removeValue(forKey: targetId)
+            lastStreamingPublishAt.removeValue(forKey: targetId)
+            streamingSnapshots.removeValue(forKey: targetId)
+            return
         }
+
+        pendingStreamingSnapshots[targetId] = snapshot
+        let elapsed = Date().timeIntervalSince(lastStreamingPublishAt[targetId] ?? .distantPast)
+        if elapsed >= streamingThrottleInterval {
+            publishPendingStreamingSnapshot(targetId: targetId)
+            return
+        }
+
+        guard streamingFlushTasks[targetId] == nil else { return }
+        let delay = streamingThrottleInterval - elapsed
+        streamingFlushTasks[targetId] = Task { @MainActor [weak self] in
+            let nanoseconds = UInt64(max(delay, 0) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard !Task.isCancelled, let self else { return }
+            self.publishPendingStreamingSnapshot(targetId: targetId)
+            self.streamingFlushTasks.removeValue(forKey: targetId)
+        }
+    }
+
+    private func publishPendingStreamingSnapshot(targetId: Int64) {
+        guard let snapshot = pendingStreamingSnapshots[targetId] else { return }
+        lastStreamingPublishAt[targetId] = Date()
+        streamingSnapshots[targetId] = snapshot
     }
 
     var canRegenerateLastAssistant: Bool {
@@ -537,7 +580,28 @@ final class ChatViewModel: ObservableObject {
         settings.isFusionModeEnabled && isSending && streamingSnapshots.isEmpty
     }
 
+    var fusionActivePhaseLabel: String? {
+        guard let fusionProgress else { return nil }
+        switch fusionProgress.phase {
+        case .panel:
+            return L10n.format(
+                "panels %d/%d",
+                fusionProgress.completedPanelCount,
+                fusionProgress.totalPanelCount
+            )
+        case .judge:
+            return L10n.text("judging")
+        case .synthesizer:
+            return L10n.text("synthesizing")
+        case .fallback:
+            return L10n.text("fallback")
+        }
+    }
+
     var fusionAnalyzingStatus: String? {
+        if fusionProgress != nil {
+            return nil
+        }
         if let fusionStreamingStatus, !fusionStreamingStatus.isEmpty {
             return fusionStreamingStatus
         }
@@ -550,6 +614,18 @@ final class ChatViewModel: ObservableObject {
             return L10n.format("FUSION · %d panels", panelCount)
         }
         return "FUSION"
+    }
+
+    var fusionModelSummaryLabel: String? {
+        guard settings.isFusionModeEnabled else { return nil }
+        guard let definition = try? FusionPresetLoader.resolveDefinition(
+            customPresetJSON: settings.fusionCustomPresetJSON
+        ) else {
+            return nil
+        }
+        let judge = Self.shortModelLabel(definition.judgeModel.modelId)
+        let synth = Self.shortModelLabel(definition.synthesizerModel.modelId)
+        return L10n.format("judge: %@ · synth: %@", judge, synth)
     }
 
     func toggleAutoConversation() {
@@ -623,10 +699,16 @@ final class ChatViewModel: ObservableObject {
             return L10n.format("閉じると破棄 · %@", base)
         }
         if settings.isFusionModeEnabled {
-            if isFusionAnalyzing {
-                return L10n.format("%@ · analyzing", fusionStatusLabel)
+            var parts = [fusionStatusLabel]
+            if let modelSummary = fusionModelSummaryLabel {
+                parts.append(modelSummary)
             }
-            return fusionStatusLabel
+            if let phaseLabel = fusionActivePhaseLabel {
+                parts.append(phaseLabel)
+            } else if isFusionAnalyzing {
+                parts.append(L10n.text("analyzing"))
+            }
+            return parts.joined(separator: " · ")
         }
         if settings.isDualModeEnabled {
             return L10n.format(
@@ -659,9 +741,16 @@ final class ChatViewModel: ObservableObject {
     var composerContextLabel: String {
         let secretPrefix = L10n.text("シークレット")
         if settings.isFusionModeEnabled {
-            let label = isFusionAnalyzing
-                ? L10n.format("%@ · analyzing", fusionStatusLabel)
-                : fusionStatusLabel
+            var parts = [fusionStatusLabel]
+            if let modelSummary = fusionModelSummaryLabel {
+                parts.append(modelSummary)
+            }
+            if let phaseLabel = fusionActivePhaseLabel {
+                parts.append(phaseLabel)
+            } else if isFusionAnalyzing {
+                parts.append(L10n.text("analyzing"))
+            }
+            let label = parts.joined(separator: " · ")
             return isSecretConversation ? "\(secretPrefix) · \(label)" : label
         }
         if settings.isDualModeEnabled {

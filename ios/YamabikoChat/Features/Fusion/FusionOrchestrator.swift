@@ -11,12 +11,15 @@ struct FusionOrchestrator: Sendable {
         Int
     ) throws -> ProviderRequest
 
+    typealias ProgressHandler = @Sendable (FusionProgressSnapshot) -> Void
+
     func runThroughJudge(
         request: FusionRequest,
         context: FusionContext,
         buildRequest: @escaping RequestBuilder,
         invoke: @escaping Invoke,
-        estimateCost: @escaping CostEstimator
+        estimateCost: @escaping CostEstimator,
+        onProgress: ProgressHandler? = nil
     ) async throws -> FusionJudgeOutcome {
         let requestId = UUID().uuidString
         let startedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
@@ -40,7 +43,8 @@ struct FusionOrchestrator: Sendable {
                 try buildRequest(panel, systemPrompt, .panel, request.allowWebSearch, request.maxPanelTokens)
             },
             invoke: invoke,
-            estimateCost: estimateCost
+            estimateCost: estimateCost,
+            onProgress: onProgress
         )
 
         let successfulPanels = panelResults.filter { $0.success }
@@ -49,6 +53,17 @@ struct FusionOrchestrator: Sendable {
         guard !successfulPanels.isEmpty else {
             throw FusionError.allPanelsFailed(panelResults: panelResults)
         }
+
+        let finalPanelChips = panelResults.map { result in
+            FusionPanelChipStatus(
+                modelId: result.modelId,
+                provider: result.provider,
+                state: result.success ? .succeeded : .failed
+            )
+        }
+        onProgress?(
+            FusionProgressSnapshot.phaseOnly(.judge, panels: finalPanelChips)
+        )
 
         let judgeOutcome = await runJudge(
             request: request,
@@ -129,6 +144,10 @@ struct FusionOrchestrator: Sendable {
             ).normalizedNonEmpty()
             return (request.judgeModel.provider.uppercased(), request.judgeModel.modelId, usage)
         }()
+
+        onProgress?(
+            FusionProgressSnapshot.phaseOnly(.synthesizer, panels: finalPanelChips)
+        )
 
         return FusionJudgeOutcome(
             trace: trace,

@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fusion モード — YamabikoChat 内部構造</title>
+    <meta
+      name="description"
+      content="YamabikoChat の Fusion モード（複数 LLM 並列実行 → ジャッジ → 合成）の仕組みとコード構造の解説。"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      .flow {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin: 1.25rem 0;
+      }
+      .flow-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .flow-box {
+        background: var(--code);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 0.65rem 0.9rem;
+        font-size: 0.92rem;
+        min-width: 7rem;
+        text-align: center;
+      }
+      .flow-box.phase-panel { border-color: #3b82f6; }
+      .flow-box.phase-judge { border-color: #8b5cf6; }
+      .flow-box.phase-synth { border-color: #10b981; }
+      .flow-box.phase-fallback { border-color: #f59e0b; }
+      .flow-arrow {
+        color: var(--muted);
+        font-size: 1.1rem;
+        flex-shrink: 0;
+      }
+      .flow-parallel {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 0.5rem;
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px dashed var(--border);
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--code) 60%, transparent);
+      }
+      .flow-parallel .flow-box { font-size: 0.82rem; padding: 0.5rem 0.6rem; }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+        margin: 1rem 0;
+      }
+      th, td {
+        border: 1px solid var(--border);
+        padding: 0.5rem 0.65rem;
+        text-align: left;
+        vertical-align: top;
+      }
+      th { background: var(--code); }
+      code, .file-path {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.85em;
+        background: var(--code);
+        padding: 0.1em 0.35em;
+        border-radius: 4px;
+      }
+      .file-path { display: inline-block; margin: 0.15rem 0; }
+      .toc { font-size: 0.95rem; }
+      .toc li { margin-top: 0.25rem; }
+      .status-pill {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-family: ui-monospace, monospace;
+        background: var(--code);
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin-top: 0.75rem;
+      }
+      .legend span::before {
+        content: "";
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        margin-right: 0.35rem;
+        vertical-align: middle;
+      }
+      .legend .l-panel::before { background: #3b82f6; }
+      .legend .l-judge::before { background: #8b5cf6; }
+      .legend .l-synth::before { background: #10b981; }
+      .legend .l-fallback::before { background: #f59e0b; }
+      .module-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.75rem;
+        margin: 1rem 0;
+      }
+      .module-card {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 0.85rem 1rem;
+        background: var(--code);
+      }
+      .module-card h3 {
+        margin: 0 0 0.35rem;
+        font-size: 0.95rem;
+      }
+      .module-card p {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      pre {
+        background: var(--code);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1rem;
+        overflow-x: auto;
+        font-size: 0.82rem;
+        line-height: 1.5;
+      }
+      .note {
+        border-left: 3px solid var(--accent);
+        padding: 0.75rem 1rem;
+        background: color-mix(in srgb, var(--accent) 8%, var(--card));
+        border-radius: 0 8px 8px 0;
+        font-size: 0.92rem;
+        margin: 1rem 0;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <nav class="site-nav" aria-label="Site">
+        <a href="index.html">ホーム</a>
+        <a href="fusion.html" aria-current="page">Fusion 解説</a>
+        <a href="privacy.html">プライバシー</a>
+        <a href="support.html">サポート</a>
+      </nav>
+      <h1>Fusion モードの仕組み</h1>
+      <p class="lead">
+        YamabikoChat iOS 版に実装されている <strong>Fusion</strong> は、複数の LLM を並列実行し、
+        専用の「ジャッジ」モデルで回答を比較・分析したうえで、最終回答を合成するマルチモデル・オーケストレーションです。
+      </p>
+      <div class="badge-row">
+        <span class="badge">iOS のみ</span>
+        <span class="badge">Panel → Judge → Synthesizer</span>
+        <span class="badge">プリセット: quality / budget / fast / custom</span>
+        <span class="badge">トレース保存</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>目次</h2>
+        <ol class="toc">
+          <li><a href="#overview">概要 — Fusion とは何か</a></li>
+          <li><a href="#pipeline">処理パイプライン（3 フェーズ）</a></li>
+          <li><a href="#architecture">アーキテクチャとモジュール構成</a></li>
+          <li><a href="#presets">プリセットとモデル構成</a></li>
+          <li><a href="#dataflow">チャット送信時のデータフロー</a></li>
+          <li><a href="#judge">ジャッジの JSON 分析</a></li>
+          <li><a href="#fallback">フォールバックとエラー処理</a></li>
+          <li><a href="#settings">設定・UI・排他制御</a></li>
+          <li><a href="#trace">トレースとデバッグ</a></li>
+          <li><a href="#types">主要な型一覧</a></li>
+        </ol>
+      </section>
+
+      <section class="card" id="overview">
+        <h2>1. 概要 — Fusion とは何か</h2>
+        <p>
+          通常のチャットは 1 つのモデルがユーザーに直接答えます。Fusion モードでは、
+          同じ質問を <strong>複数のパネルモデル</strong> に独立して投げ、それぞれの回答を
+          <strong>ジャッジモデル</strong> が構造化 JSON で比較し、最後に
+          <strong>シンセサイザー（合成）モデル</strong> がユーザー向けの最終回答を書き上げます。
+        </p>
+        <p>設計上の狙い:</p>
+        <ul>
+          <li>単一モデルの盲点やハルシネーションを、複数視点の比較で緩和する</li>
+          <li>合意点・矛盾点・独自の洞察を明示的に整理してから最終回答を作る</li>
+          <li>各フェーズのレイテンシ・コスト・成否を <code>FusionTrace</code> として記録する</li>
+        </ul>
+        <div class="note">
+          <strong>プラットフォーム:</strong> Fusion は現時点で <code>ios/YamabikoChat/Features/Fusion/</code> にのみ実装されています。Android モジュールには同名の実装はありません。
+        </div>
+      </section>
+
+      <section class="card" id="pipeline">
+        <h2>2. 処理パイプライン（3 フェーズ）</h2>
+        <p>1 回の Fusion 実行は、概ね次の順序で進みます。</p>
+
+        <div class="flow">
+          <div class="flow-row">
+            <span class="flow-box">ユーザー入力</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-box phase-panel">Phase 1: Panel（並列）</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-box phase-judge">Phase 2: Judge</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-box phase-synth">Phase 3: Synthesizer（ストリーム）</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-box">最終回答</span>
+          </div>
+
+          <div class="flow-parallel" aria-label="Panel 並列実行の例（quality プリセット）">
+            <div class="flow-box phase-panel">gemini-2.5-pro<br /><small>researcher</small></div>
+            <div class="flow-box phase-panel">claude-sonnet-4<br /><small>analyst</small></div>
+            <div class="flow-box phase-panel">gpt-4.1<br /><small>critic</small></div>
+            <div class="flow-box phase-panel">deepseek-chat<br /><small>synthesizer_candidate</small></div>
+          </div>
+        </div>
+
+        <div class="legend">
+          <span class="l-panel">Panel — 独立回答（並列・Web 検索ツール可）</span>
+          <span class="l-judge">Judge — 構造化比較（JSON のみ）</span>
+          <span class="l-synth">Synthesizer — ユーザー向け最終文（ストリーミング）</span>
+          <span class="l-fallback">Fallback — 障害時の単一モデル応答</span>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>フェーズ</th>
+              <th>役割</th>
+              <th>実行方式</th>
+              <th>主な実装</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>panel</code></td>
+              <td>各モデルが独立に回答。他モデルへの言及禁止。タスク種別（research / coding）に応じたプロンプト付与。</td>
+              <td><code>TaskGroup</code> で全パネルを並列実行。個別タイムアウトあり。Web 検索ツール利用可（設定・プリセット依存）。</td>
+              <td><span class="file-path">FusionPanelRunner.swift</span></td>
+            </tr>
+            <tr>
+              <td><code>judge</code></td>
+              <td>成功したパネル出力を比較。合意・矛盾・独自洞察・疑わしい誤りなどを JSON で返す。最終回答は書かない。</td>
+              <td>非ストリーム。JSON パース失敗時は修復プロンプトで再試行。</td>
+              <td><span class="file-path">FusionOrchestrator.swift</span> + <span class="file-path">FusionJudgeParser.swift</span></td>
+            </tr>
+            <tr>
+              <td><code>synthesizer</code></td>
+              <td>ジャッジ分析 + 生パネル出力を材料に、ユーザー向け最終回答を生成。</td>
+              <td>チャット UI ではストリーミング表示。App Intent 経由の単発実行では非ストリーム。</td>
+              <td><span class="file-path">ChatRepository.sendFusionMessage</span></td>
+            </tr>
+            <tr>
+              <td><code>fallback</code></td>
+              <td>全パネル失敗時や再帰深度超過時に、単一モデルへ切り替え。</td>
+              <td>プリセットの <code>fallbackModel</code>（未設定時は synthesizer と同じ）。</td>
+              <td><span class="file-path">FusionOrchestrator.runRecursionFallback</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card" id="architecture">
+        <h2>3. アーキテクチャとモジュール構成</h2>
+        <p>レイヤーは大きく「UI → リポジトリ → サービス → オーケストレーター → プロバイダー」です。</p>
+
+        <pre>
+┌─────────────────────────────────────────────────────────────────┐
+│  UI 層                                                          │
+│  ChatViewModel / ChatScreen / FusionModeSettingsSection         │
+│  FusionDebugSheet / RunFusionIntent (Siri・ショートカット)       │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ sendFusionMessage()
+┌────────────────────────────▼────────────────────────────────────┐
+│  ChatRepository                                                 │
+│  ・メッセージ保存、履歴構築、ストリーム表示、トークン記録         │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ runThroughJudge() / buildProviderRequest()
+┌────────────────────────────▼────────────────────────────────────┐
+│  FusionService                                                  │
+│  ・プリセット解決、ProviderRequest 構築、ツール呼び出し、コスト推定 │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ runThroughJudge()
+┌────────────────────────────▼────────────────────────────────────┐
+│  FusionOrchestrator                                             │
+│  Panel 並列 → Judge → Synthesis 用リクエスト組み立て              │
+└───────┬─────────────────────┬───────────────────────────────────┘
+        │                     │
+        ▼                     ▼
+ FusionPanelRunner      ProviderGateway (+ ToolCallingOrchestrator)
+        │                     │
+        └─────────┬───────────┘
+                  ▼
+           各 LLM プロバイダ API
+
+永続化: FusionTraceStore → SQLite <code>fusion_traces</code> テーブル
+        ChatMessage.fusionTraceId でメッセージとトレースを紐付け
+        </pre>
+
+        <div class="module-grid">
+          <div class="module-card">
+            <h3><span class="file-path">FusionTypes.swift</span></h3>
+            <p>フェーズ・リクエスト・パネル結果・ジャッジ分析・トレースなど全データ型。</p>
+          </div>
+          <div class="module-card">
+            <h3><span class="file-path">FusionPresetLoader.swift</span></h3>
+            <p><code>FusionPresets.json</code> の読み込み、カスタム JSON 解決、<code>FusionRequest</code> 生成。</p>
+          </div>
+          <div class="module-card">
+            <h3><span class="file-path">FusionPrompts.swift</span></h3>
+            <p>Panel / Judge / Synthesizer 各フェーズのシステム・ユーザープロンプト。</p>
+          </div>
+          <div class="module-card">
+            <h3><span class="file-path">FusionOrchestrator.swift</span></h3>
+            <p>パイプラインの中核。Judge 完了までを担当し、合成用リクエストを返す。</p>
+          </div>
+          <div class="module-card">
+            <h3><span class="file-path">FusionPanelRunner.swift</span></h3>
+            <p>パネルモデルの並列実行と個別タイムアウト。</p>
+          </div>
+          <div class="module-card">
+            <h3><span class="file-path">FusionService.swift</span></h3>
+            <p>設定・ゲートウェイ・ツール・コスト推定を束ねるファサード。</p>
+          </div>
+          <div class="module-card">
+            <h3><span class="file-path">FusionTraceStore.swift</span></h3>
+            <p>実行トレースの SQLite 保存と Diagnostics ログ。</p>
+          </div>
+          <div class="module-card">
+            <h3><span class="file-path">FusionJudgeParser.swift</span></h3>
+            <p>ジャッジ出力から JSON を抽出・パース（snake_case 対応）。</p>
+          </div>
+          <div class="module-card">
+            <h3><span class="file-path">FusionTimeout.swift</span></h3>
+            <p>各 API 呼び出しにミリ秒単位のタイムアウトを適用。</p>
+          </div>
+          <div class="module-card">
+            <h3><span class="file-path">FusionExtensions.swift</span></h3>
+            <p>カスタムプリセットの正規化。v2+ 用の <code>FusionRoutingPolicy</code> 等の拡張ポイント。</p>
+          </div>
+        </div>
+
+        <p><strong>依存関係の注入:</strong> <code>AppServices</code> が <code>FusionService</code> と <code>FusionTraceStore</code> を生成し、<code>ChatRepository</code> に渡します。</p>
+      </section>
+
+      <section class="card" id="presets">
+        <h2>4. プリセットとモデル構成</h2>
+        <p>
+          プリセットは <span class="file-path">ios/YamabikoChat/App/Resources/FusionPresets.json</span> にバンドルされています。
+          設定画面で <code>custom</code> を選ぶと、ユーザー定義の JSON（最大 4 パネル）を使えます。
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>プリセット</th>
+              <th>用途</th>
+              <th>パネル数</th>
+              <th>タイムアウト</th>
+              <th>Web 検索</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>quality</code></td>
+              <td>高精度リサーチ（デフォルト）</td>
+              <td>4（Gemini Pro, Claude, GPT-4.1, DeepSeek）</td>
+              <td>120s</td>
+              <td>可</td>
+            </tr>
+            <tr>
+              <td><code>budget</code></td>
+              <td>コスト抑制</td>
+              <td>3（Flash 系中心）</td>
+              <td>60s</td>
+              <td>不可</td>
+            </tr>
+            <tr>
+              <td><code>fast</code></td>
+              <td>コーディング向け高速</td>
+              <td>2（Flash + DeepSeek）</td>
+              <td>30s</td>
+              <td>不可</td>
+            </tr>
+            <tr>
+              <td><code>custom</code></td>
+              <td>ユーザー編集</td>
+              <td>1〜4</td>
+              <td>プリセット定義に依存</td>
+              <td>設定に依存</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>各プリセットは次のスロットを持ちます:</p>
+        <ul>
+          <li><code>panelModels[]</code> — 並列実行する分析パネル（<code>role</code> はジャッジ用ラベル）</li>
+          <li><code>judgeModel</code> — 比較・構造化分析</li>
+          <li><code>synthesizerModel</code> — 最終回答の執筆</li>
+          <li><code>fallbackModel</code> — 障害時の単一モデル（省略時は synthesizer と同値に正規化）</li>
+        </ul>
+
+        <p>
+          <strong>タスク種別</strong>（<code>FusionTaskType</code>）は <code>research</code> / <code>coding</code> / <code>auto</code>。
+          <code>auto</code> のときはプリセット内の <code>taskType</code> をそのまま使い、パネル用システムプロンプトの付録が切り替わります。
+        </p>
+      </section>
+
+      <section class="card" id="dataflow">
+        <h2>5. チャット送信時のデータフロー</h2>
+        <p>ユーザーが Fusion モードでメッセージを送ったときの流れ（<code>ChatRepository.sendFusionMessage</code>）:</p>
+        <ol>
+          <li><strong>前提チェック</strong> — <code>isFusionModeEnabled</code> が true であること。</li>
+          <li><strong>ユーザーメッセージ保存</strong> — DB に role=<code>user</code> で挿入。</li>
+          <li><strong>リクエスト構築</strong> — <code>FusionPresetLoader.buildRequest</code> で会話の system prompt・設定・カスタム JSON を反映。</li>
+          <li><strong>会話履歴取得</strong> — パネルフェーズでは履歴 + 今回のユーザー入力（添付ファイル含む）を渡す。</li>
+          <li><strong>Judge まで実行</strong> — <code>fusionService.runThroughJudge</code>（Panel 並列 → Judge）。この間 UI は「Fusion 分析中…」表示。</li>
+          <li><strong>トークン記録</strong> — 各パネル・ジャッジの usage を <code>fusion_panel_*</code> / <code>fusion_judge</code> として記録。</li>
+          <li><strong>アシスタントメッセージ枠作成</strong> — 空テキストで挿入し、<code>fusionTraceId</code> を紐付け。</li>
+          <li><strong>シンセサイザーをストリーム</strong> — <code>ChatStreamSession</code> で逐次表示・DB 更新。</li>
+          <li><strong>トレース確定</strong> — <code>finalizeTrace</code> 後、<code>FusionTraceStore.save</code>。</li>
+        </ol>
+
+        <div class="note">
+          <strong>再生成不可:</strong> Fusion モード有効時は <code>canRegenerateLastAssistant</code> が false になり、最後のアシスタント応答の再生成はできません。
+        </div>
+      </section>
+
+      <section class="card" id="judge">
+        <h2>6. ジャッジの JSON 分析</h2>
+        <p>ジャッジモデルは次のスキーマに沿った JSON のみを返すよう指示されます（<code>FusionPrompts.judgeJSONSchema</code>）:</p>
+        <ul>
+          <li><code>consensus</code> — 複数パネルで一致した点</li>
+          <li><code>contradictions</code> — トピックごとの対立と解決の見込み</li>
+          <li><code>unique_insights</code> — 特定モデルだけが持つ洞察（最終回答に使うかフラグ付き）</li>
+          <li><code>coverage_gaps</code> — どの観点が欠けているか</li>
+          <li><code>suspected_errors</code> — 疑わしい主張と理由</li>
+          <li><code>strongest_answer_parts</code> — 特に質の高い部分</li>
+          <li><code>recommended_final_position</code> — 推奨する最終立場（ユーザー向け文ではない）</li>
+          <li><code>confidence</code> — low / medium / high</li>
+        </ul>
+
+        <p>パース処理:</p>
+        <ol>
+          <li>モデル出力から <code>{ ... }</code> 部分を抽出（markdown フェンス除去）</li>
+          <li><code>JudgeAnalysisDTO</code> として snake_case デコード</li>
+          <li>失敗時は <code>jsonRepairPrompt</code> で修復リクエストを 1 回送信</li>
+          <li>それでも失敗した場合、シンセサイザーはジャッジなしプロンプト（生パネルのみ）で動作</li>
+        </ol>
+
+        <p>
+          シンセサイザーのシステムプロンプトは <code>fusionDebugModeEnabled</code> で切り替わります。
+          デバッグ ON ではモデル名の参照が許可され、OFF では内部実装をユーザーに見せない文体が求められます。
+        </p>
+      </section>
+
+      <section class="card" id="fallback">
+        <h2>7. フォールバックとエラー処理</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>状況</th>
+              <th>挙動</th>
+              <th>トレース status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>一部パネルのみ成功</td>
+              <td>成功分だけでジャッジ・合成を続行。失敗モデル ID は <code>failedModels</code> に記録。</td>
+              <td><span class="status-pill">completed</span> または <span class="status-pill">synthesis_fallback</span></td>
+            </tr>
+            <tr>
+              <td>全パネル失敗</td>
+              <td><code>FusionError.allPanelsFailed</code> → <code>fallbackModel</code> で通常のツール付き単一ターン。</td>
+              <td><span class="status-pill">all_panels_failed</span></td>
+            </tr>
+            <tr>
+              <td>シンセサイザーのストリーム失敗</td>
+              <td><code>staticFallbackAnswer</code>（ジャッジ推奨位置 or 合意 or 最速パネル出力）を DB に書き込み。</td>
+              <td><span class="status-pill">synthesis_fallback</span></td>
+            </tr>
+            <tr>
+              <td><code>fusionDepth &gt;= 1</code>（再帰防止）</td>
+              <td>フル Fusion をスキップし fallback モデルへ直接（無限ネスト防止）。</td>
+              <td><span class="status-pill">recursion_fallback</span></td>
+            </tr>
+            <tr>
+              <td>個別 API タイムアウト</td>
+              <td>該当パネル／ジャッジを失敗扱い（<code>FusionTimeout</code>）。</td>
+              <td>（上記いずれかに帰着）</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>
+          <code>staticFallbackAnswer</code> の組み立て優先順位:
+          (1) ジャッジの <code>recommendedFinalPosition</code>
+          → (2) <code>consensus</code> の結合
+          → (3) 生のジャッジ JSON
+          → (4) レイテンシ最小の成功パネル全文
+        </p>
+      </section>
+
+      <section class="card" id="settings">
+        <h2>8. 設定・UI・排他制御</h2>
+
+        <h3>AppSettings の Fusion 関連フィールド</h3>
+        <table>
+          <thead>
+            <tr><th>フィールド</th><th>意味</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>isFusionModeEnabled</code></td><td>Fusion モード ON/OFF</td></tr>
+            <tr><td><code>fusionPresetName</code></td><td>quality / budget / fast / custom</td></tr>
+            <tr><td><code>fusionTaskType</code></td><td>auto / research / coding</td></tr>
+            <tr><td><code>fusionDebugModeEnabled</code></td><td>デバッグ UI・シンセサイザープロンプト切替</td></tr>
+            <tr><td><code>fusionLogPromptsEnabled</code></td><td>トレースに userPrompt / finalAnswer を保存</td></tr>
+            <tr><td><code>fusionCustomPresetJSON</code></td><td>custom プリセットの JSON 本体</td></tr>
+          </tbody>
+        </table>
+
+        <h3>モード排他（normalizedForPersistence）</h3>
+        <p>
+          <strong>Dual モード</strong>・<strong>自動会話</strong>・<strong>Fusion</strong> は同時に有効化できません。
+          いずれかを ON にすると他は自動で OFF になります。設定 UI でも相互にトグルが無効化されます。
+        </p>
+
+        <h3>UI の触れ方</h3>
+        <ul>
+          <li>設定 → 「Fusion モード」セクション（<code>FusionModeSettingsSection</code>）</li>
+          <li>チャット画面のコンポーザーにプリセット名・パネル数・分析中ステータス表示</li>
+          <li>デバッグ ON 時、Fusion 応答メッセージから <code>FusionDebugSheet</code> でトレース閲覧</li>
+          <li>Siri / ショートカット: <code>RunFusionIntent</code>（アプリ外から単発実行、debug パラメータあり）</li>
+        </ul>
+      </section>
+
+      <section class="card" id="trace">
+        <h2>9. トレースとデバッグ</h2>
+        <p>
+          各 Fusion 実行は UUID の <code>requestId</code> を持ち、SQLite の <code>fusion_traces</code> テーブルに JSON 全文として保存されます。
+          アシスタントメッセージの <code>fusionTraceId</code> から参照できます。
+        </p>
+
+        <p><code>FusionTrace</code> に含まれる主な情報:</p>
+        <ul>
+          <li>全 <code>panelResults</code>（成功/失敗、本文、レイテンシ、トークン、コスト）</li>
+          <li><code>judgeResult</code>（解析 JSON、パース成否、修復の有無）</li>
+          <li><code>synthesisResult</code>（最終合成、フォールバック使用フラグ）</li>
+          <li>合計レイテンシ・コスト、<code>failedModels</code>、<code>status</code></li>
+        </ul>
+
+        <p>
+          保存時に <code>DiagnosticsLogger</code>（category: <code>fusion</code>）へサマリも出力されるため、
+          アプリ内診断画面から問題調査がしやすくなっています。
+        </p>
+      </section>
+
+      <section class="card" id="types">
+        <h2>10. 主要な型一覧（クイックリファレンス）</h2>
+        <table>
+          <thead>
+            <tr><th>型</th><th>役割</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>FusionRequest</code></td><td>1 回の実行に必要なプロンプト・モデル群・上限・メタデータ</td></tr>
+            <tr><td><code>FusionContext</code></td><td>実行時コンテキスト（深度、デバッグ、会話 ID）</td></tr>
+            <tr><td><code>PanelResult</code></td><td>単一パネルの応答と計測値</td></tr>
+            <tr><td><code>JudgeAnalysis</code></td><td>構造化された比較結果</td></tr>
+            <tr><td><code>FusionJudgeOutcome</code></td><td>Judge 完了時点のトレース + 合成リクエスト + 静的フォールバック文</td></tr>
+            <tr><td><code>FusionTrace</code></td><td>実行全体の監査ログ</td></tr>
+            <tr><td><code>FusionRunResult</code></td><td>App Intent 等向けの簡易戻り値</td></tr>
+            <tr><td><code>FusionPhase</code></td><td>panel / judge / synthesizer / fallback</td></tr>
+          </tbody>
+        </table>
+
+        <h3>将来の拡張ポイント（v2+）</h3>
+        <p><code>FusionExtensions.swift</code> にプロトコルが定義されていますが、現行実装では未使用です:</p>
+        <ul>
+          <li><code>FusionRoutingPolicy</code> — 学習ベースのパネルモデル選択</li>
+          <li><code>FusionPromptEvolver</code> — パネルプロンプトの自動進化</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>まとめ</h2>
+        <p>
+          Fusion は「<em>複数の専門家が並列で意見を出し、審判が整理し、編集者がユーザー向けにまとめる</em>」という
+          人間のレビュー会議に近いパターンを LLM パイプラインで実装した機能です。
+          コード上は <code>FusionOrchestrator</code> がフェーズ制御の中心となり、
+          <code>ChatRepository</code> がチャット UX（ストリーム・永続化）と接続しています。
+        </p>
+        <p>
+          ソースの起点: <span class="file-path">ios/YamabikoChat/Features/Fusion/</span>
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <p>YamabikoChat — Fusion 内部構造ドキュメント（コードベース調査に基づく）</p>
+      <p><a href="index.html">ホームに戻る</a></p>
+    </footer>
+  </body>
+</html>

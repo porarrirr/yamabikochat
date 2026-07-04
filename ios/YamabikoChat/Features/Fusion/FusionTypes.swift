@@ -7,6 +7,78 @@ enum FusionPhase: String, Codable, Sendable {
     case fallback
 }
 
+enum FusionPanelChipState: String, Sendable, Equatable {
+    case pending
+    case running
+    case succeeded
+    case failed
+}
+
+struct FusionPanelChipStatus: Sendable, Equatable {
+    var modelId: String
+    var provider: String
+    var state: FusionPanelChipState
+}
+
+struct FusionProgressSnapshot: Sendable, Equatable {
+    var phase: FusionPhase
+    var panels: [FusionPanelChipStatus]
+    var completedPanelCount: Int
+    var totalPanelCount: Int
+    var substatus: String?
+
+    static func panelPhase(
+        panels: [FusionPanelChipStatus],
+        substatus: String? = nil
+    ) -> FusionProgressSnapshot {
+        let completed = panels.filter {
+            $0.state == .succeeded || $0.state == .failed
+        }.count
+        return FusionProgressSnapshot(
+            phase: .panel,
+            panels: panels,
+            completedPanelCount: completed,
+            totalPanelCount: panels.count,
+            substatus: substatus
+        )
+    }
+
+    static func initialPanels(from request: FusionRequest) -> [FusionPanelChipStatus] {
+        request.panelModels.map { panel in
+            FusionPanelChipStatus(
+                modelId: panel.modelId,
+                provider: panel.provider.uppercased(),
+                state: .running
+            )
+        }
+    }
+
+    static func phaseOnly(
+        _ phase: FusionPhase,
+        panels: [FusionPanelChipStatus],
+        substatus: String? = nil
+    ) -> FusionProgressSnapshot {
+        let completed = panels.filter {
+            $0.state == .succeeded || $0.state == .failed
+        }.count
+        return FusionProgressSnapshot(
+            phase: phase,
+            panels: panels,
+            completedPanelCount: completed,
+            totalPanelCount: panels.count,
+            substatus: substatus
+        )
+    }
+
+    func applyingPanelResult(_ result: PanelResult) -> FusionProgressSnapshot {
+        var updatedPanels = panels
+        if let index = updatedPanels.firstIndex(where: { $0.modelId == result.modelId }) {
+            updatedPanels[index].state = result.success ? .succeeded : .failed
+        }
+        return Self.panelPhase(panels: updatedPanels, substatus: substatus)
+    }
+}
+
 enum FusionTaskType: String, Codable, Sendable, CaseIterable {
     case research
     case coding

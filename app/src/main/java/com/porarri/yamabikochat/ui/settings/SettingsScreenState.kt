@@ -75,6 +75,7 @@ class SettingsScreenState(
     var openAiCompatApiKeyInput by mutableStateOf("")
     var zaiApiKeyInput by mutableStateOf("")
     var openCodeGoApiKeyInput by mutableStateOf("")
+    var clinePassApiKeyInput by mutableStateOf("")
     var alibabaCodingPlanApiKeyInput by mutableStateOf("")
     var alibabaMcpAuthorizationTokenInput by mutableStateOf("")
 
@@ -85,6 +86,7 @@ class SettingsScreenState(
     var openAiCompatKeyVisible by mutableStateOf(false)
     var zaiKeyVisible by mutableStateOf(false)
     var openCodeGoKeyVisible by mutableStateOf(false)
+    var clinePassKeyVisible by mutableStateOf(false)
     var alibabaCodingPlanKeyVisible by mutableStateOf(false)
     var alibabaMcpTokenVisible by mutableStateOf(false)
 
@@ -95,6 +97,7 @@ class SettingsScreenState(
     var openAiCompatKeyLoadedFromStorage by mutableStateOf(false)
     var zaiKeyLoadedFromStorage by mutableStateOf(false)
     var openCodeGoKeyLoadedFromStorage by mutableStateOf(false)
+    var clinePassKeyLoadedFromStorage by mutableStateOf(false)
     var alibabaCodingPlanKeyLoadedFromStorage by mutableStateOf(false)
     var alibabaMcpTokenLoadedFromStorage by mutableStateOf(false)
 
@@ -105,6 +108,7 @@ class SettingsScreenState(
     var openAiCompatKeyDirty by mutableStateOf(false)
     var zaiKeyDirty by mutableStateOf(false)
     var openCodeGoKeyDirty by mutableStateOf(false)
+    var clinePassKeyDirty by mutableStateOf(false)
     var alibabaCodingPlanKeyDirty by mutableStateOf(false)
     var alibabaMcpTokenDirty by mutableStateOf(false)
 
@@ -503,6 +507,7 @@ class SettingsScreenState(
             openAiCompatApiKeyInput = ""
             zaiApiKeyInput = ""
             openCodeGoApiKeyInput = ""
+            clinePassApiKeyInput = ""
             alibabaCodingPlanApiKeyInput = ""
             alibabaMcpAuthorizationTokenInput = ""
             geminiKeyDirty = false
@@ -512,6 +517,7 @@ class SettingsScreenState(
             openAiCompatKeyDirty = false
             zaiKeyDirty = false
             openCodeGoKeyDirty = false
+            clinePassKeyDirty = false
             alibabaCodingPlanKeyDirty = false
             alibabaMcpTokenDirty = false
             geminiKeyVisible = false
@@ -521,6 +527,7 @@ class SettingsScreenState(
             openAiCompatKeyVisible = false
             zaiKeyVisible = false
             openCodeGoKeyVisible = false
+            clinePassKeyVisible = false
             alibabaCodingPlanKeyVisible = false
             alibabaMcpTokenVisible = false
             geminiKeyLoadedFromStorage = false
@@ -530,6 +537,7 @@ class SettingsScreenState(
             openAiCompatKeyLoadedFromStorage = false
             zaiKeyLoadedFromStorage = false
             openCodeGoKeyLoadedFromStorage = false
+            clinePassKeyLoadedFromStorage = false
             alibabaCodingPlanKeyLoadedFromStorage = false
             alibabaMcpTokenLoadedFromStorage = false
 
@@ -899,6 +907,11 @@ class SettingsScreenState(
             openCodeGoKeyDirty && openCodeGoApiKeyInput.isBlank() -> ApiKeyAction.Clear
             else -> ApiKeyAction.NoChange
         }
+        val clinePassApiKeyAction = when {
+            clinePassKeyDirty && clinePassApiKeyInput.isNotBlank() -> ApiKeyAction.Update
+            clinePassKeyDirty && clinePassApiKeyInput.isBlank() -> ApiKeyAction.Clear
+            else -> ApiKeyAction.NoChange
+        }
         val alibabaCodingPlanApiKeyAction = when {
             alibabaCodingPlanKeyDirty && alibabaCodingPlanApiKeyInput.isNotBlank() -> ApiKeyAction.Update
             alibabaCodingPlanKeyDirty && alibabaCodingPlanApiKeyInput.isBlank() -> ApiKeyAction.Clear
@@ -938,6 +951,7 @@ class SettingsScreenState(
             miniMaxApiKey = miniMaxApiKeyInput,
             zaiApiKey = zaiApiKeyInput,
             openCodeGoApiKey = openCodeGoApiKeyInput,
+            clinePassApiKey = clinePassApiKeyInput,
             alibabaCodingPlanApiKey = alibabaCodingPlanApiKeyInput,
             openAiCompatApiKey = openAiCompatApiKeyInput,
             geminiApiKeyAction = geminiApiKeyAction,
@@ -946,6 +960,7 @@ class SettingsScreenState(
             miniMaxApiKeyAction = miniMaxApiKeyAction,
             zaiApiKeyAction = zaiApiKeyAction,
             openCodeGoApiKeyAction = openCodeGoApiKeyAction,
+            clinePassApiKeyAction = clinePassApiKeyAction,
             alibabaCodingPlanApiKeyAction = alibabaCodingPlanApiKeyAction,
             openAiCompatApiKeyAction = openAiCompatApiKeyAction,
             isDualModeEnabled = isDualModeEnabled,
@@ -1069,6 +1084,7 @@ class SettingsScreenState(
         openRouterKeyDirty = false
         zaiKeyDirty = false
         openCodeGoKeyDirty = false
+        clinePassKeyDirty = false
         alibabaCodingPlanKeyDirty = false
         alibabaMcpTokenDirty = false
         openAiKeyDirty = false
@@ -1078,6 +1094,7 @@ class SettingsScreenState(
         openRouterKeyVisible = false
         zaiKeyVisible = false
         openCodeGoKeyVisible = false
+        clinePassKeyVisible = false
         alibabaCodingPlanKeyVisible = false
         alibabaMcpTokenVisible = false
         openAiKeyVisible = false
@@ -1087,6 +1104,7 @@ class SettingsScreenState(
         openRouterKeyLoadedFromStorage = false
         zaiKeyLoadedFromStorage = false
         openCodeGoKeyLoadedFromStorage = false
+        clinePassKeyLoadedFromStorage = false
         alibabaCodingPlanKeyLoadedFromStorage = false
         alibabaMcpTokenLoadedFromStorage = false
         openAiKeyLoadedFromStorage = false
@@ -1096,6 +1114,7 @@ class SettingsScreenState(
         openRouterApiKeyInput = ""
         zaiApiKeyInput = ""
         openCodeGoApiKeyInput = ""
+        clinePassApiKeyInput = ""
         alibabaCodingPlanApiKeyInput = ""
         alibabaMcpAuthorizationTokenInput = ""
         openAiApiKeyInput = ""
@@ -1944,6 +1963,10 @@ fun rememberSettingsScreenState(
         if (selected != "OPENCODE_GO") {
             state.openCodeGoKeyVisible = false
             state.openCodeGoKeyLoadedFromStorage = false
+        }
+        if (selected != "CLINEPASS") {
+            state.clinePassKeyVisible = false
+            state.clinePassKeyLoadedFromStorage = false
         }
         if (selected != "ALIBABA_CODING_PLAN") {
             state.alibabaCodingPlanKeyVisible = false

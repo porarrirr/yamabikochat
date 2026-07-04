@@ -5,6 +5,7 @@ enum ShortcutProviderAppEnum: String, AppEnum {
     case gemini = "GEMINI"
     case openRouter = "OPENROUTER"
     case openCodeGo = "OPENCODE_GO"
+    case clinePass = "CLINEPASS"
     case alibabaCodingPlan = "ALIBABA_CODING_PLAN"
     case zai = "ZAI"
     case miniMax = "MINIMAX"
@@ -19,6 +20,7 @@ enum ShortcutProviderAppEnum: String, AppEnum {
         .gemini: DisplayRepresentation(title: "Google Gemini"),
         .openRouter: DisplayRepresentation(title: "OpenRouter"),
         .openCodeGo: DisplayRepresentation(title: "OpenCode Go"),
+        .clinePass: DisplayRepresentation(title: "Cline Pass"),
         .alibabaCodingPlan: DisplayRepresentation(title: "Alibaba Coding Plan"),
         .zai: DisplayRepresentation(title: "Z.ai"),
         .miniMax: DisplayRepresentation(title: "MiniMax"),

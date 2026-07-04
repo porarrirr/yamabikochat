@@ -99,7 +99,7 @@ struct ChatScreen: View {
                                                 streamingSnapshot: viewModel.streamingSnapshot(for: message.id),
                                                 isActivelyStreaming: viewModel.isMessageStreaming(message.id),
                                                 canRegenerate: viewModel.canRegenerateLastAssistant && message.id == viewModel.fullMessages.last?.id,
-                                                fusionDebugEnabled: viewModel.settings.fusionDebugModeEnabled,
+                                                fusionDebugModeEnabled: viewModel.settings.fusionDebugModeEnabled,
                                                 fusionTrace: viewModel.fusionTrace(for: message.message),
                                                 onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
                                                 onNextVariant: { viewModel.showNextVariant(messageId: message.id) },
@@ -206,7 +206,7 @@ struct ChatScreen: View {
                     .padding(.bottom, 10)
                     .background {
                         Rectangle()
-                            .fill(.regularMaterial)
+                            .fill(Color.chatInputBackground)
                             .overlay(alignment: .top) {
                                 Divider()
                                     .opacity(0.14)
@@ -313,7 +313,9 @@ struct ChatScreen: View {
                 .padding(.horizontal, 10)
             }
 
-            if let fusionStatus = viewModel.fusionAnalyzingStatus {
+            if let fusionProgress = viewModel.fusionProgress {
+                FusionProgressView(snapshot: fusionProgress)
+            } else if let fusionStatus = viewModel.fusionAnalyzingStatus {
                 HStack(spacing: 5) {
                     ProgressView()
                         .controlSize(.mini)
@@ -1048,7 +1050,7 @@ private struct MessageBubble: View {
     let streamingSnapshot: ChatStreamingSnapshot?
     let isActivelyStreaming: Bool
     let canRegenerate: Bool
-    let fusionDebugEnabled: Bool
+    let fusionDebugModeEnabled: Bool
     let fusionTrace: FusionTrace?
     let onPrevVariant: () -> Void
     let onNextVariant: () -> Void
@@ -1056,7 +1058,7 @@ private struct MessageBubble: View {
     let onBranch: () -> Void
     let onRegenerate: () -> Void
     @State private var isThinkingSheetPresented = false
-    @State private var isFusionDebugPresented = false
+    @State private var isFusionDetailPresented = false
 
     private var isUser: Bool {
         message.message.role == "user"
@@ -1109,8 +1111,7 @@ private struct MessageBubble: View {
 
         HStack(alignment: .top, spacing: 0) {
             if isUser {
-                Color.clear
-                    .frame(width: userLeadingWidth, height: 0)
+                Spacer(minLength: userLeadingWidth)
             }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 8) {
@@ -1204,6 +1205,12 @@ private struct MessageBubble: View {
                         ToolSourcesView(sources: toolSources)
                     }
 
+                    if let fusionTrace, !isActivelyStreaming {
+                        FusionMessageSummary(trace: fusionTrace) {
+                            isFusionDetailPresented = true
+                        }
+                    }
+
                     if message.variantCount > 1 {
                         HStack(spacing: 10) {
                             Button {
@@ -1241,38 +1248,26 @@ private struct MessageBubble: View {
             }
         }
         .frame(width: rowWidth, alignment: isUser ? .trailing : .leading)
-        .contextMenu {
-            Button {
-                onCopy()
-            } label: {
-                Label("コピー", systemImage: "doc.on.doc")
-            }
-
-            Button("ここからブランチ") {
-                onBranch()
-            }
-
-            Button("再生成") {
-                onRegenerate()
-            }
-            .disabled(!canRegenerate)
-
-            if fusionDebugEnabled, fusionTrace != nil {
-                Button {
-                    isFusionDebugPresented = true
-                } label: {
-                    Label(L10n.text("Fusion Debug"), systemImage: "arrow.triangle.merge")
-                }
-            }
-        }
+        .modifier(MessageBubbleContextMenuModifier(
+            isEnabled: !isActivelyStreaming,
+            canRegenerate: canRegenerate,
+            showsFusionDetail: fusionTrace != nil,
+            onCopy: onCopy,
+            onBranch: onBranch,
+            onRegenerate: onRegenerate,
+            onShowFusionDetail: { isFusionDetailPresented = true }
+        ))
         .sheet(isPresented: $isThinkingSheetPresented) {
             if let thinkingText {
                 ThinkingSheet(thinkingText: thinkingText)
             }
         }
-        .sheet(isPresented: $isFusionDebugPresented) {
+        .sheet(isPresented: $isFusionDetailPresented) {
             if let fusionTrace {
-                FusionDebugSheet(trace: fusionTrace)
+                FusionDetailSheet(
+                    trace: fusionTrace,
+                    debugModeEnabled: fusionDebugModeEnabled
+                )
             }
         }
     }
@@ -1322,8 +1317,7 @@ private struct DualMessageCard: View {
             switch message.parsedRole {
             case .user:
                 HStack(alignment: .top, spacing: 0) {
-                    Color.clear
-                        .frame(width: userLeadingWidth, height: 0)
+                    Spacer(minLength: userLeadingWidth)
 
                     VStack(alignment: .trailing, spacing: 8) {
                         if !attachmentItems.isEmpty {
@@ -1493,6 +1487,47 @@ private struct DualResponsePane: View {
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.chatBubbleBorder.opacity(0.4), lineWidth: 1)
+        }
+    }
+}
+
+private struct MessageBubbleContextMenuModifier: ViewModifier {
+    let isEnabled: Bool
+    let canRegenerate: Bool
+    let showsFusionDetail: Bool
+    let onCopy: () -> Void
+    let onBranch: () -> Void
+    let onRegenerate: () -> Void
+    let onShowFusionDetail: () -> Void
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.contextMenu {
+                Button {
+                    onCopy()
+                } label: {
+                    Label("コピー", systemImage: "doc.on.doc")
+                }
+
+                Button("ここからブランチ") {
+                    onBranch()
+                }
+
+                Button("再生成") {
+                    onRegenerate()
+                }
+                .disabled(!canRegenerate)
+
+                if showsFusionDetail {
+                    Button {
+                        onShowFusionDetail()
+                    } label: {
+                        Label(L10n.text("Fusion 詳細"), systemImage: "arrow.triangle.merge")
+                    }
+                }
+            }
+        } else {
+            content
         }
     }
 }

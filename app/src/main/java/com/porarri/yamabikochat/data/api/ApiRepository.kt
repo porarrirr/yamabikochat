@@ -19,6 +19,7 @@ import com.porarri.yamabikochat.data.remote.AlibabaCodingPlanProvider
 import com.porarri.yamabikochat.data.remote.CodexResponsesProvider
 import com.porarri.yamabikochat.data.remote.ZaiProvider
 import com.porarri.yamabikochat.data.remote.Part
+import com.porarri.yamabikochat.data.remote.ProviderCatalog
 import com.porarri.yamabikochat.data.remote.ProviderPreferences
 import com.porarri.yamabikochat.data.remote.ThinkingConfig
 import com.porarri.yamabikochat.utils.MiniMaxUtils
@@ -96,7 +97,7 @@ class ApiRepository(
             "OPENROUTER" -> openRouterProvider
             "OPENCODE_GO" -> openCodeGoProvider
             "ALIBABA_CODING_PLAN" -> alibabaCodingPlanProvider
-            "OPENAI", "OPENAI_COMPAT", "MINIMAX" -> openAiProvider
+            "OPENAI", "OPENAI_COMPAT", "MINIMAX", "CLINEPASS" -> openAiProvider
             "CODEX_AUTH" -> codexResponsesProvider
             "ZAI" -> zaiProvider
             else -> geminiProvider
@@ -112,6 +113,7 @@ class ApiRepository(
                     "ALIBABA_CODING_PLAN" -> settingsManager.getApiKey("ALIBABA_CODING_PLAN")
                     "OPENAI" -> settingsManager.getApiKey("OPENAI")
                     "MINIMAX" -> settingsManager.getApiKey("MINIMAX")
+                    "CLINEPASS" -> settingsManager.getApiKey("CLINEPASS")
                     "OPENAI_COMPAT" -> settingsManager.getOpenAiCompatApiKey(settings?.selectedOpenAiCompatPreset)
                     "ZAI" -> settingsManager.getApiKey("ZAI")
                     else -> settingsManager.getApiKey("GEMINI")
@@ -247,6 +249,12 @@ class ApiRepository(
                             ?: MiniMaxUtils.INTERNATIONAL_BASE_URL
                         openAiProvider.generateContent(actualApiKey, model, request, baseUrl)
                     }
+                    "CLINEPASS" -> openAiProvider.generateContent(
+                        actualApiKey,
+                        model,
+                        request,
+                        ProviderCatalog.defaultClinePassBaseUrl
+                    )
                     "OPENAI_COMPAT" -> {
                         val baseUrl = settings?.resolveSelectedCompatBaseUrl() ?: "https://api.openai.com/v1/"
                         openAiProvider.generateContent(actualApiKey, model, request, baseUrl)
@@ -309,6 +317,12 @@ class ApiRepository(
                             ?: MiniMaxUtils.INTERNATIONAL_BASE_URL
                         openAiProvider.streamGenerateContent(actualApiKey, model, request, baseUrl)
                     }
+                    "CLINEPASS" -> openAiProvider.streamGenerateContent(
+                        actualApiKey,
+                        model,
+                        request,
+                        ProviderCatalog.defaultClinePassBaseUrl
+                    )
                     "OPENAI_COMPAT" -> {
                         val baseUrl = settings?.resolveSelectedCompatBaseUrl() ?: "https://api.openai.com/v1/"
                         openAiProvider.streamGenerateContent(actualApiKey, model, request, baseUrl)
@@ -364,6 +378,7 @@ class ApiRepository(
                     "ALIBABA_CODING_PLAN" -> settingsManager.getApiKey("ALIBABA_CODING_PLAN")
                     "OPENAI" -> settingsManager.getApiKey("OPENAI")
                     "MINIMAX" -> settingsManager.getApiKey("MINIMAX")
+                    "CLINEPASS" -> settingsManager.getApiKey("CLINEPASS")
                     "OPENAI_COMPAT" -> settingsManager.getOpenAiCompatApiKey(settings?.selectedOpenAiCompatPreset)
                     "ZAI" -> settingsManager.getApiKey("ZAI")
                     else -> settingsManager.getApiKey("GEMINI")
@@ -381,6 +396,7 @@ class ApiRepository(
                     "ALIBABA_CODING_PLAN" -> settingsManager.getApiKey("ALIBABA_CODING_PLAN")
                     "OPENAI" -> settingsManager.getApiKey("OPENAI")
                     "MINIMAX" -> settingsManager.getApiKey("MINIMAX")
+                    "CLINEPASS" -> settingsManager.getApiKey("CLINEPASS")
                     "OPENAI_COMPAT" -> settingsManager.getOpenAiCompatApiKey(settings?.selectedOpenAiCompatPreset)
                     "ZAI" -> settingsManager.getApiKey("ZAI")
                     else -> settingsManager.getApiKey("GEMINI")
@@ -400,6 +416,7 @@ class ApiRepository(
                     "OPENROUTER" -> openRouterProvider.generateContent(apiKeyResultA.apiKey, modelA, requestA, normalizedPrefs)
                     "OPENAI" -> openAiProvider.generateContent(apiKeyResultA.apiKey, modelA, requestA, settings?.openAiBaseUrl ?: "https://api.openai.com/v1/")
                     "MINIMAX" -> openAiProvider.generateContent(apiKeyResultA.apiKey, modelA, requestA, settings?.miniMaxBaseUrl ?: MiniMaxUtils.INTERNATIONAL_BASE_URL)
+                    "CLINEPASS" -> openAiProvider.generateContent(apiKeyResultA.apiKey, modelA, requestA, ProviderCatalog.defaultClinePassBaseUrl)
                     "OPENAI_COMPAT" -> openAiProvider.generateContent(apiKeyResultA.apiKey, modelA, requestA, settings?.resolveSelectedCompatBaseUrl() ?: "https://api.openai.com/v1/")
                     "CODEX_AUTH" -> {
                         val baseUrl = codexAuthBaseUrl(apiKeyResultA.tokenKind, settings)
@@ -438,6 +455,7 @@ class ApiRepository(
                     "OPENROUTER" -> openRouterProvider.generateContent(apiKeyResultB.apiKey, modelB, requestB, normalizedPrefs)
                     "OPENAI" -> openAiProvider.generateContent(apiKeyResultB.apiKey, modelB, requestB, settings?.openAiBaseUrl ?: "https://api.openai.com/v1/")
                     "MINIMAX" -> openAiProvider.generateContent(apiKeyResultB.apiKey, modelB, requestB, settings?.miniMaxBaseUrl ?: MiniMaxUtils.INTERNATIONAL_BASE_URL)
+                    "CLINEPASS" -> openAiProvider.generateContent(apiKeyResultB.apiKey, modelB, requestB, ProviderCatalog.defaultClinePassBaseUrl)
                     "OPENAI_COMPAT" -> openAiProvider.generateContent(apiKeyResultB.apiKey, modelB, requestB, settings?.resolveSelectedCompatBaseUrl() ?: "https://api.openai.com/v1/")
                     "CODEX_AUTH" -> {
                         val baseUrl = codexAuthBaseUrl(apiKeyResultB.tokenKind, settings)
@@ -493,6 +511,7 @@ class ApiRepository(
                     "ALIBABA_CODING_PLAN" -> settingsManager.getApiKey("ALIBABA_CODING_PLAN")
                     "OPENAI" -> settingsManager.getApiKey("OPENAI")
                     "MINIMAX" -> settingsManager.getApiKey("MINIMAX")
+                    "CLINEPASS" -> settingsManager.getApiKey("CLINEPASS")
                     "OPENAI_COMPAT" -> settingsManager.getOpenAiCompatApiKey(settings?.selectedOpenAiCompatPreset)
                     "ZAI" -> settingsManager.getApiKey("ZAI")
                     else -> settingsManager.getApiKey("GEMINI")
@@ -510,6 +529,7 @@ class ApiRepository(
                     "ALIBABA_CODING_PLAN" -> settingsManager.getApiKey("ALIBABA_CODING_PLAN")
                     "OPENAI" -> settingsManager.getApiKey("OPENAI")
                     "MINIMAX" -> settingsManager.getApiKey("MINIMAX")
+                    "CLINEPASS" -> settingsManager.getApiKey("CLINEPASS")
                     "OPENAI_COMPAT" -> settingsManager.getOpenAiCompatApiKey(settings?.selectedOpenAiCompatPreset)
                     "ZAI" -> settingsManager.getApiKey("ZAI")
                     else -> settingsManager.getApiKey("GEMINI")
@@ -529,6 +549,7 @@ class ApiRepository(
                     "OPENROUTER" -> openRouterProvider.streamGenerateContent(apiKeyResultA.apiKey, modelA, requestA, normalizedPrefs)
                     "OPENAI" -> openAiProvider.streamGenerateContent(apiKeyResultA.apiKey, modelA, requestA, settings?.openAiBaseUrl ?: "https://api.openai.com/v1/")
                     "MINIMAX" -> openAiProvider.streamGenerateContent(apiKeyResultA.apiKey, modelA, requestA, settings?.miniMaxBaseUrl ?: MiniMaxUtils.INTERNATIONAL_BASE_URL)
+                    "CLINEPASS" -> openAiProvider.streamGenerateContent(apiKeyResultA.apiKey, modelA, requestA, ProviderCatalog.defaultClinePassBaseUrl)
                     "OPENAI_COMPAT" -> openAiProvider.streamGenerateContent(apiKeyResultA.apiKey, modelA, requestA, settings?.resolveSelectedCompatBaseUrl() ?: "https://api.openai.com/v1/")
                     "CODEX_AUTH" -> {
                         val baseUrl = codexAuthBaseUrl(apiKeyResultA.tokenKind, settings)
@@ -567,6 +588,7 @@ class ApiRepository(
                     "OPENROUTER" -> openRouterProvider.streamGenerateContent(apiKeyResultB.apiKey, modelB, requestB, normalizedPrefs)
                     "OPENAI" -> openAiProvider.streamGenerateContent(apiKeyResultB.apiKey, modelB, requestB, settings?.openAiBaseUrl ?: "https://api.openai.com/v1/")
                     "MINIMAX" -> openAiProvider.streamGenerateContent(apiKeyResultB.apiKey, modelB, requestB, settings?.miniMaxBaseUrl ?: MiniMaxUtils.INTERNATIONAL_BASE_URL)
+                    "CLINEPASS" -> openAiProvider.streamGenerateContent(apiKeyResultB.apiKey, modelB, requestB, ProviderCatalog.defaultClinePassBaseUrl)
                     "OPENAI_COMPAT" -> openAiProvider.streamGenerateContent(apiKeyResultB.apiKey, modelB, requestB, settings?.resolveSelectedCompatBaseUrl() ?: "https://api.openai.com/v1/")
                     "CODEX_AUTH" -> {
                         val baseUrl = codexAuthBaseUrl(apiKeyResultB.tokenKind, settings)
@@ -620,6 +642,7 @@ class ApiRepository(
                     "ALIBABA_CODING_PLAN" -> settingsManager.getApiKey("ALIBABA_CODING_PLAN")
                     "OPENAI" -> settingsManager.getApiKey("OPENAI")
                     "MINIMAX" -> settingsManager.getApiKey("MINIMAX")
+                    "CLINEPASS" -> settingsManager.getApiKey("CLINEPASS")
                     "OPENAI_COMPAT" -> settingsManager.getOpenAiCompatApiKey(settings?.selectedOpenAiCompatPreset)
                     "ZAI" -> settingsManager.getApiKey("ZAI")
                     else -> settingsManager.getApiKey("GEMINI")
@@ -657,6 +680,7 @@ class ApiRepository(
             "OPENROUTER" -> openRouterProvider.generateContent(apiKey, model, request, normalizedOpenRouterPreferences(settings))
             "OPENAI" -> openAiProvider.generateContent(apiKey, model, request, settings?.openAiBaseUrl ?: "https://api.openai.com/v1/")
             "MINIMAX" -> openAiProvider.generateContent(apiKey, model, request, settings?.miniMaxBaseUrl ?: MiniMaxUtils.INTERNATIONAL_BASE_URL)
+            "CLINEPASS" -> openAiProvider.generateContent(apiKey, model, request, ProviderCatalog.defaultClinePassBaseUrl)
             "OPENAI_COMPAT" -> openAiProvider.generateContent(apiKey, model, request, settings?.resolveSelectedCompatBaseUrl() ?: "https://api.openai.com/v1/")
             "CODEX_AUTH" -> {
                 val baseUrl = codexAuthBaseUrl(apiKeySuccess.tokenKind, settings)

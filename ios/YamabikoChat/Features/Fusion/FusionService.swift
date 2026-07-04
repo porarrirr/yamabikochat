@@ -133,7 +133,8 @@ final class FusionService {
         request: FusionRequest,
         context: FusionContext,
         conversationHistory: [ProviderRequestMessage],
-        userAttachments: [String] = []
+        userAttachments: [String] = [],
+        onProgress: FusionOrchestrator.ProgressHandler? = nil
     ) async throws -> FusionJudgeOutcome {
         let settings = try settingsRepository.load()
         var visionSupportByModel: [String: Bool] = [:]
@@ -179,7 +180,8 @@ final class FusionService {
             },
             estimateCost: { [weak self] provider, model, usage in
                 await self?.estimateCost(provider: provider, model: model, usage: usage)
-            }
+            },
+            onProgress: onProgress
         )
     }
 

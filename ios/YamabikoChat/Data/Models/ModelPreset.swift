@@ -34,3 +34,9 @@ struct ModelPreset: Codable, FetchableRecord, MutablePersistableRecord, Identifi
         id = inserted.rowID
     }
 }
+
+extension ModelPreset {
+    var dualAutoPresetKey: String {
+        "\(apiProvider.uppercased())|\(model.trimmingCharacters(in: .whitespacesAndNewlines))"
+    }
+}

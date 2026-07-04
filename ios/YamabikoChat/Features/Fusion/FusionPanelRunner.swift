@@ -3,15 +3,20 @@ import Foundation
 enum FusionPanelRunner {
     typealias Invoke = @Sendable (ProviderRequest, LLMProvider, FusionPhase) async throws -> ProviderResponse
     typealias CostEstimator = @Sendable (String, String, ProviderUsage?) async -> Double?
+    typealias ProgressHandler = @Sendable (FusionProgressSnapshot) -> Void
 
     static func runAll(
         request: FusionRequest,
         panelSystemPrompt: String,
         buildPanelRequest: @escaping @Sendable (PanelModelConfig, String) throws -> ProviderRequest,
         invoke: @escaping Invoke,
-        estimateCost: @escaping CostEstimator
+        estimateCost: @escaping CostEstimator,
+        onProgress: ProgressHandler? = nil
     ) async -> [PanelResult] {
-        await withTaskGroup(of: PanelResult.self) { group in
+        var chipPanels = FusionProgressSnapshot.initialPanels(from: request)
+        onProgress?(FusionProgressSnapshot.panelPhase(panels: chipPanels))
+
+        return await withTaskGroup(of: PanelResult.self) { group in
             for panel in request.panelModels {
                 group.addTask {
                     await runSingle(
@@ -26,6 +31,10 @@ enum FusionPanelRunner {
             }
             var results: [PanelResult] = []
             for await result in group {
+                let snapshot = FusionProgressSnapshot.panelPhase(panels: chipPanels)
+                    .applyingPanelResult(result)
+                chipPanels = snapshot.panels
+                onProgress?(snapshot)
                 results.append(result)
             }
             return results

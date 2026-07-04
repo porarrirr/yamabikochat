@@ -30,6 +30,7 @@ import com.porarri.yamabikochat.data.auth.CodexUsageStatus
 import com.porarri.yamabikochat.data.local.ModelPreset
 import com.porarri.yamabikochat.data.local.SystemPromptPreset
 import com.porarri.yamabikochat.data.remote.AlibabaCodingPlanModelCatalog
+import com.porarri.yamabikochat.data.remote.ClinePassModelCatalog
 import com.porarri.yamabikochat.data.remote.OpenCodeGoEndpointKind
 import com.porarri.yamabikochat.data.remote.OpenCodeGoModelCatalog
 import com.porarri.yamabikochat.data.remote.OpenAiCompatPreset
@@ -578,6 +579,12 @@ fun SettingsScreen(
                         .padding(padding)
                         .padding(horizontal = 16.dp, vertical = 16.dp)
                 ) {
+            Text(
+                "変更は自動で保存されます。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
             ScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 0.dp) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
@@ -856,6 +863,7 @@ fun SettingsScreen(
                         val isOpenAiCompatProvider = apiProvider == "OPENAI_COMPAT"
                         val isZaiProvider = apiProvider == "ZAI"
                         val isOpenCodeGoProvider = apiProvider == "OPENCODE_GO"
+                        val isClinePassProvider = apiProvider == "CLINEPASS"
                         val isAlibabaCodingPlanProvider = apiProvider == "ALIBABA_CODING_PLAN"
                         val selectedCompatPreset = selectedOpenAiCompatPresetLocal
                         val hasStoredKey = when {
@@ -865,6 +873,7 @@ fun SettingsScreen(
                             isMiniMaxProvider -> apiKeyStatus.hasMiniMaxKey
                             isOpenAiCompatProvider -> viewModel.hasOpenAiCompatApiKey(selectedCompatPreset)
                             isOpenCodeGoProvider -> apiKeyStatus.hasOpenCodeGoKey
+                            isClinePassProvider -> apiKeyStatus.hasClinePassKey
                             isAlibabaCodingPlanProvider -> apiKeyStatus.hasAlibabaCodingPlanKey
                             else -> apiKeyStatus.hasZaiKey
                         }
@@ -875,6 +884,7 @@ fun SettingsScreen(
                             isMiniMaxProvider -> miniMaxApiKeyInput
                             isOpenAiCompatProvider -> openAiCompatApiKeyInput
                             isOpenCodeGoProvider -> openCodeGoApiKeyInput
+                            isClinePassProvider -> clinePassApiKeyInput
                             isAlibabaCodingPlanProvider -> alibabaCodingPlanApiKeyInput
                             else -> zaiApiKeyInput
                         }
@@ -885,6 +895,7 @@ fun SettingsScreen(
                             isMiniMaxProvider -> miniMaxKeyVisible
                             isOpenAiCompatProvider -> openAiCompatKeyVisible
                             isOpenCodeGoProvider -> openCodeGoKeyVisible
+                            isClinePassProvider -> clinePassKeyVisible
                             isAlibabaCodingPlanProvider -> alibabaCodingPlanKeyVisible
                             else -> zaiKeyVisible
                         }
@@ -895,6 +906,7 @@ fun SettingsScreen(
                             isMiniMaxProvider -> "MiniMax API Key"
                             isOpenAiCompatProvider -> "OpenAI (Custom) API Key"
                             isOpenCodeGoProvider -> "OpenCode Go API Key"
+                            isClinePassProvider -> "Cline Pass API Key"
                             isAlibabaCodingPlanProvider -> "Alibaba Coding Plan API Key"
                             else -> "Z.ai API Key"
                         }
@@ -905,6 +917,7 @@ fun SettingsScreen(
                             isMiniMaxProvider -> "保存済みのMiniMax APIキーを使用中（表示するにはアイコンをタップ）"
                             isOpenAiCompatProvider -> "保存済みのOpenAI (Custom) APIキーを使用中（表示するにはアイコンをタップ）"
                             isOpenCodeGoProvider -> "保存済みのOpenCode Go APIキーを使用中（表示するにはアイコンをタップ）"
+                            isClinePassProvider -> "保存済みのCline Pass APIキーを使用中（表示するにはアイコンをタップ）"
                             isAlibabaCodingPlanProvider -> "保存済みのAlibaba Coding Plan APIキーを使用中（表示するにはアイコンをタップ）"
                             else -> "保存済みのZ.ai APIキーを使用中（表示するにはアイコンをタップ）"
                         }
@@ -948,6 +961,12 @@ fun SettingsScreen(
                                         openCodeGoKeyDirty = true
                                         openCodeGoKeyLoadedFromStorage = false
                                         openCodeGoKeyVisible = true
+                                    }
+                                    isClinePassProvider -> {
+                                        clinePassApiKeyInput = it
+                                        clinePassKeyDirty = true
+                                        clinePassKeyLoadedFromStorage = false
+                                        clinePassKeyVisible = true
                                     }
                                     isAlibabaCodingPlanProvider -> {
                                         alibabaCodingPlanApiKeyInput = it
@@ -1091,6 +1110,24 @@ fun SettingsScreen(
                                                             openCodeGoKeyVisible = true
                                                         }
                                                     }
+                                                    isClinePassProvider -> {
+                                                        if (clinePassKeyVisible) {
+                                                            if (clinePassKeyLoadedFromStorage) {
+                                                                clinePassApiKeyInput = ""
+                                                                clinePassKeyLoadedFromStorage = false
+                                                                clinePassKeyDirty = false
+                                                            }
+                                                            clinePassKeyVisible = false
+                                                        } else {
+                                                            if (hasStoredKey && clinePassApiKeyInput.isBlank()) {
+                                                                val revealed = viewModel.revealApiKey("CLINEPASS")
+                                                                clinePassApiKeyInput = revealed.orEmpty()
+                                                                clinePassKeyLoadedFromStorage = !revealed.isNullOrEmpty()
+                                                                clinePassKeyDirty = false
+                                                            }
+                                                            clinePassKeyVisible = true
+                                                        }
+                                                    }
                                                     isAlibabaCodingPlanProvider -> {
                                                         if (alibabaCodingPlanKeyVisible) {
                                                             if (alibabaCodingPlanKeyLoadedFromStorage) {
@@ -1154,6 +1191,7 @@ fun SettingsScreen(
                                             if (presetName != null) viewModel.clearOpenAiCompatApiKey(presetName)
                                         }
                                         isOpenCodeGoProvider -> viewModel.clearApiKey("OPENCODE_GO")
+                                        isClinePassProvider -> viewModel.clearApiKey("CLINEPASS")
                                         isAlibabaCodingPlanProvider -> viewModel.clearApiKey("ALIBABA_CODING_PLAN")
                                         else -> viewModel.clearApiKey("ZAI")
                                     }
@@ -1340,6 +1378,36 @@ fun SettingsScreen(
                         )
                         Text(
                             text = "MiniMax M2.7/M2.5 と Qwen3.5/3.6 Plus、Qwen3.7 Max は /messages、それ以外の公式 Go モデルは /chat/completions に送信します。未掲載モデルは endpoint を安全に判定できないため、実行時に明示エラーで停止します。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+        if (apiProvider == "CLINEPASS") {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "Cline Pass",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        LabeledValueBlock(
+                            label = "Endpoint",
+                            value = ProviderCatalog.defaultClinePassBaseUrl
+                        )
+                        Text(
+                            text = "Cline dashboard の Settings > API Keys で発行したキーを使用します。すべてのモデルは /chat/completions に送信します。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1633,6 +1701,38 @@ fun SettingsScreen(
                                 singleLine = true
                             )
                         }
+                        "CLINEPASS" -> {
+                            val selectedModel = ClinePassModelCatalog.modelFor(model)
+                            var showClinePassModelSheet by remember { mutableStateOf(false) }
+                            YamabikoSelectRow(
+                                title = "Cline Pass Model",
+                                value = selectedModel?.displayName ?: model.ifBlank { ClinePassModelCatalog.defaultModel },
+                                onClick = { showClinePassModelSheet = true }
+                            )
+                            if (showClinePassModelSheet) {
+                                YamabikoOptionBottomSheet(
+                                    title = "Cline Pass Model",
+                                    options = ClinePassModelCatalog.supportedModels.map { option ->
+                                        YamabikoOption(
+                                            key = option.id,
+                                            title = option.displayName,
+                                            subtitle = "chat/completions"
+                                        )
+                                    },
+                                    selectedKey = selectedModel?.id ?: model,
+                                    onOptionSelected = { option -> model = option.key },
+                                    onDismissRequest = { showClinePassModelSheet = false }
+                                )
+                            }
+                            YamabikoTextField(
+                                value = model,
+                                onValueChange = { model = it },
+                                label = { Text("Model") },
+                                placeholder = { Text(ClinePassModelCatalog.defaultModel) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
                         else -> {
                             YamabikoTextField(
                                 value = model,
@@ -1739,11 +1839,6 @@ fun SettingsScreen(
                             }) { Text("Remove Selected") }
                         }
                     }
-                    Text(
-                        "変更は自動で保存されます。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
         }
@@ -2277,6 +2372,14 @@ private fun SettingsHomeContent(
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         item { SettingsProfileHeader() }
+
+        item {
+            Text(
+                "変更は自動で保存されます。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
         item {
             SettingsHomeSection(title = "My Yamabiko") {

@@ -80,9 +80,6 @@ struct SettingsScreen: View {
                         Button("閉じる") { dismiss() }
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("保存") { viewModel.saveSettings() }
-                }
             }
             .overlay(alignment: .bottom) {
                 VStack(spacing: 4) {
@@ -102,6 +99,9 @@ struct SettingsScreen: View {
             .task {
                 viewModel.bind(repository: container.chatRepository, credentialStore: container.credentialStore)
             }
+            .onDisappear {
+                viewModel.flushPendingSettingsSave()
+            }
             .onAppear {
                 if let initialTab {
                     navigationPath = [initialTab.category]
@@ -112,6 +112,12 @@ struct SettingsScreen: View {
 
     private var settingsIndex: some View {
         Form {
+            Section {
+                Text("変更は自動で保存されます。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 ForEach(SettingsCategory.allCases) { category in
                     NavigationLink(value: category) {
@@ -206,10 +212,6 @@ struct SettingsScreen: View {
             if currentProviderKey != "CODEX_AUTH", currentProviderKey != "APPLE_INTELLIGENCE" {
                 Section("APIキー") {
                     SecureField(currentProviderAPIKeyLabel, text: $viewModel.apiKeyDraft)
-                    Button("Save API key") {
-                        viewModel.saveAPIKey()
-                    }
-                    .buttonStyle(.bordered)
                 }
             }
 
@@ -221,6 +223,9 @@ struct SettingsScreen: View {
             }
             if currentProviderKey == "OPENCODE_GO" {
                 openCodeGoSection
+            }
+            if currentProviderKey == "CLINEPASS" {
+                clinePassSection
             }
             if currentProviderKey == "OPENAI" {
                 openAIEndpointSection
@@ -374,10 +379,6 @@ struct SettingsScreen: View {
                 }
 
                 SecureField("Selected preset API key", text: $viewModel.openAICompatApiKeyInput)
-                Button("選択プリセットのAPIキー保存") {
-                    viewModel.saveSelectedOpenAICompatApiKey()
-                }
-                .buttonStyle(.bordered)
 
                 ForEach(viewModel.openAICompatPresets) { preset in
                     HStack {
@@ -714,6 +715,18 @@ struct SettingsScreen: View {
                 .textSelection(.enabled)
 
             Text("OpenCode Go の API key を保存してください。MiniMax M2.7/M2.5 と Qwen3.5/3.6 Plus、Qwen3.7 Max は `/messages`、それ以外の公式 Go モデルは `/chat/completions` に送信します。Chat Completions 系には会話単位の prompt cache key を付けて、同じ長い prefix が同じ cache route に乗りやすいようにします。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var clinePassSection: some View {
+        Section("Cline Pass") {
+            Text("Endpoint: \(AppConstants.defaultClinePassBaseURL.absoluteString)chat/completions")
+                .font(.caption)
+                .textSelection(.enabled)
+
+            Text("Cline dashboard の Settings > API Keys で発行したキーを保存してください。すべてのモデルは `/chat/completions` に送信します。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -1108,6 +1121,26 @@ struct SettingsScreen: View {
                 Text("未掲載モデルは endpoint を安全に判定できないため、実行時に明示エラーで停止します。新しい Go モデルを使う場合は catalog 更新が必要です。")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+            } else if isClinePassProvider {
+                Picker("Cline Pass Model", selection: Binding(
+                    get: { viewModel.settings.defaultModel },
+                    set: { viewModel.setDefaultModel($0) }
+                )) {
+                    ForEach(clinePassModelOptions) { model in
+                        Text(model.displayName).tag(model.id)
+                    }
+                }
+
+                if let model = ClinePassModelCatalog.model(for: viewModel.settings.defaultModel) {
+                    Text(model.description)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                TextField("Model", text: Binding(
+                    get: { viewModel.settings.defaultModel },
+                    set: { viewModel.setDefaultModel($0) }
+                ))
             } else if isAppleIntelligenceProvider {
                 Text(AppleIntelligenceModelCatalog.displayModel)
             } else {
@@ -1324,6 +1357,10 @@ struct SettingsScreen: View {
         currentProviderKey == "OPENCODE_GO"
     }
 
+    private var isClinePassProvider: Bool {
+        currentProviderKey == "CLINEPASS"
+    }
+
     private var isAppleIntelligenceProvider: Bool {
         currentProviderKey == "APPLE_INTELLIGENCE"
     }
@@ -1354,6 +1391,10 @@ struct SettingsScreen: View {
 
     private var openCodeGoModelOptions: [OpenCodeGoModel] {
         OpenCodeGoModelCatalog.supportedModels
+    }
+
+    private var clinePassModelOptions: [ClinePassModel] {
+        ClinePassModelCatalog.supportedModels
     }
 
     private var codexReasoningEffortOptions: [CodexReasoningEffortPreset] {

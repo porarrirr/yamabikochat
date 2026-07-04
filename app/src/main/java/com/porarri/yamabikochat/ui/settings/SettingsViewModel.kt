@@ -183,6 +183,7 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
             hasMiniMaxKey = repository.hasApiKey("MINIMAX"),
             hasZaiKey = repository.hasApiKey("ZAI"),
             hasOpenCodeGoKey = repository.hasApiKey("OPENCODE_GO"),
+            hasClinePassKey = repository.hasApiKey("CLINEPASS"),
             hasAlibabaCodingPlanKey = repository.hasApiKey("ALIBABA_CODING_PLAN"),
             hasAlibabaMcpAuthorizationToken = !repository.peekAlibabaMcpAuthorizationToken().isNullOrBlank(),
             hasCodexAuth = repository.hasCodexAuth()
@@ -292,6 +293,12 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
                 ApiKeyAction.NoChange -> true
             }
 
+            val clinePassSaveResult = when (request.clinePassApiKeyAction) {
+                ApiKeyAction.Update -> repository.saveApiKey("CLINEPASS", request.clinePassApiKey.ifBlank { null })
+                ApiKeyAction.Clear -> repository.saveApiKey("CLINEPASS", null)
+                ApiKeyAction.NoChange -> true
+            }
+
             val alibabaCodingPlanSaveResult = when (request.alibabaCodingPlanApiKeyAction) {
                 ApiKeyAction.Update -> repository.saveApiKey(
                     "ALIBABA_CODING_PLAN",
@@ -339,7 +346,8 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
                     "OpenAI (Custom) のプリセットを選択してください。"
                 !geminiSaveResult || !openRouterSaveResult || !zaiSaveResult || !openAiSaveResult ||
                     !miniMaxSaveResult || !openAiCompatSaveResult || !openCodeGoSaveResult ||
-                    !alibabaCodingPlanSaveResult || !alibabaMcpTokenSaveResult || !codexUaPresetSaved ->
+                    !clinePassSaveResult || !alibabaCodingPlanSaveResult || !alibabaMcpTokenSaveResult ||
+                    !codexUaPresetSaved ->
                     "暗号化ストレージを初期化できなかったため、APIキーを保存できませんでした。"
                 else -> null
             }
@@ -690,6 +698,7 @@ data class ApiKeyStatus(
     val hasMiniMaxKey: Boolean = false,
     val hasZaiKey: Boolean = false,
     val hasOpenCodeGoKey: Boolean = false,
+    val hasClinePassKey: Boolean = false,
     val hasAlibabaCodingPlanKey: Boolean = false,
     val hasAlibabaMcpAuthorizationToken: Boolean = false,
     val hasCodexAuth: Boolean = false

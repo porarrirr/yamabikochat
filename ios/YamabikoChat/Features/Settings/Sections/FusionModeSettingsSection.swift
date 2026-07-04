@@ -3,6 +3,10 @@ import SwiftUI
 struct FusionModeSettingsSection: View {
     @ObservedObject var viewModel: SettingsViewModel
 
+    private var chatVisibleProviderPresets: [ModelPreset] {
+        viewModel.settings.chatVisibleGlobalProviderPresetsForDualAuto()
+    }
+
     var body: some View {
         Group {
             Section {
@@ -50,33 +54,45 @@ struct FusionModeSettingsSection: View {
 
     @ViewBuilder
     private var modelSections: some View {
-        Section(L10n.text("Panel models")) {
-            ForEach(Array(viewModel.fusionCustomPreset.panelModels.enumerated()), id: \.offset) { index, panel in
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text(L10n.format("Panel %d", index + 1))
-                            .font(.subheadline.weight(.semibold))
-                        Spacer()
-                        if viewModel.fusionCustomPreset.panelModels.count > 1 {
-                            Button(role: .destructive) {
-                                viewModel.removeFusionPanel(at: index)
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .buttonStyle(.borderless)
+        ForEach(Array(viewModel.fusionCustomPreset.panelModels.enumerated()), id: \.offset) { index, panel in
+            Section {
+                FusionModelSlotForm(
+                    providerTitleKey: "Provider",
+                    provider: panelProviderBinding(at: index, fallback: panel.provider),
+                    modelTitleKey: "Model",
+                    model: panelModelBinding(at: index, fallback: panel.modelId),
+                    providerPresets: chatVisibleProviderPresets,
+                    onProviderPresetSelected: { preset in
+                        viewModel.updateFusionPanelModel(
+                            at: index,
+                            provider: preset.apiProvider,
+                            modelId: preset.model
+                        )
+                    },
+                    openRouterModels: viewModel.openRouterModels,
+                    openRouterModelsLoading: viewModel.openRouterModelsLoading,
+                    openRouterModelsError: viewModel.openRouterModelsError,
+                    onRefreshOpenRouterModels: refreshOpenRouterModels,
+                    onProviderChanged: handleProviderChanged
+                )
+            } header: {
+                HStack {
+                    Text(L10n.format("Panel %d", index + 1))
+                    Spacer()
+                    if viewModel.fusionCustomPreset.panelModels.count > 1 {
+                        Button(role: .destructive) {
+                            viewModel.removeFusionPanel(at: index)
+                        } label: {
+                            Image(systemName: "trash")
                         }
+                        .buttonStyle(.borderless)
                     }
-
-                    FusionModelSlotForm(
-                        providerTitleKey: "Provider",
-                        provider: panelProviderBinding(at: index, fallback: panel.provider),
-                        modelTitleKey: "Model",
-                        model: panelModelBinding(at: index, fallback: panel.modelId)
-                    )
                 }
             }
+        }
 
-            if viewModel.fusionCustomPreset.panelModels.count < FusionPresetLoader.maxPanelModelCount {
+        if viewModel.fusionCustomPreset.panelModels.count < FusionPresetLoader.maxPanelModelCount {
+            Section {
                 Button(L10n.text("パネルを追加")) {
                     viewModel.addFusionPanel()
                 }
@@ -88,7 +104,16 @@ struct FusionModeSettingsSection: View {
                 providerTitleKey: "Provider",
                 provider: judgeProviderBinding,
                 modelTitleKey: "Model",
-                model: judgeModelBinding
+                model: judgeModelBinding,
+                providerPresets: chatVisibleProviderPresets,
+                onProviderPresetSelected: { preset in
+                    viewModel.updateFusionJudgeModel(provider: preset.apiProvider, modelId: preset.model)
+                },
+                openRouterModels: viewModel.openRouterModels,
+                openRouterModelsLoading: viewModel.openRouterModelsLoading,
+                openRouterModelsError: viewModel.openRouterModelsError,
+                onRefreshOpenRouterModels: refreshOpenRouterModels,
+                onProviderChanged: handleProviderChanged
             )
         }
 
@@ -97,7 +122,16 @@ struct FusionModeSettingsSection: View {
                 providerTitleKey: "Provider",
                 provider: synthesizerProviderBinding,
                 modelTitleKey: "Model",
-                model: synthesizerModelBinding
+                model: synthesizerModelBinding,
+                providerPresets: chatVisibleProviderPresets,
+                onProviderPresetSelected: { preset in
+                    viewModel.updateFusionSynthesizerModel(provider: preset.apiProvider, modelId: preset.model)
+                },
+                openRouterModels: viewModel.openRouterModels,
+                openRouterModelsLoading: viewModel.openRouterModelsLoading,
+                openRouterModelsError: viewModel.openRouterModelsError,
+                onRefreshOpenRouterModels: refreshOpenRouterModels,
+                onProviderChanged: handleProviderChanged
             )
         }
 
@@ -106,9 +140,27 @@ struct FusionModeSettingsSection: View {
                 providerTitleKey: "Provider",
                 provider: fallbackProviderBinding,
                 modelTitleKey: "Model",
-                model: fallbackModelBinding
+                model: fallbackModelBinding,
+                providerPresets: chatVisibleProviderPresets,
+                onProviderPresetSelected: { preset in
+                    viewModel.updateFusionFallbackModel(provider: preset.apiProvider, modelId: preset.model)
+                },
+                openRouterModels: viewModel.openRouterModels,
+                openRouterModelsLoading: viewModel.openRouterModelsLoading,
+                openRouterModelsError: viewModel.openRouterModelsError,
+                onRefreshOpenRouterModels: refreshOpenRouterModels,
+                onProviderChanged: handleProviderChanged
             )
         }
+    }
+
+    private func refreshOpenRouterModels() {
+        Task { await viewModel.refreshOpenRouterModels(force: false) }
+    }
+
+    private func handleProviderChanged(_ provider: String) {
+        guard provider == "OPENROUTER", viewModel.openRouterModels.isEmpty else { return }
+        refreshOpenRouterModels()
     }
 
     private func panelProviderBinding(at index: Int, fallback: String) -> Binding<String> {

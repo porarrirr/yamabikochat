@@ -80,6 +80,35 @@ final class ProviderGatewayTests: XCTestCase {
         XCTAssertEqual(root["stream"] as? Bool, false)
     }
 
+    func testClinePassGenerateUsesFixedChatCompletionsEndpoint() async throws {
+        let fixture = try makeFixture()
+        try fixture.credentials.setCredential("clinepass-key", for: .clinePass)
+
+        fixture.httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"cline ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.httpResponse(url: request.url, statusCode: 200))
+        }
+
+        let response = try await fixture.gateway.generate(
+            request: ProviderRequest(
+                model: "cline-pass/glm-5.2",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")],
+                stream: false
+            ),
+            provider: .clinePass
+        )
+
+        XCTAssertEqual(response.text, "cline ok")
+
+        let request = try XCTUnwrap(fixture.httpClient.sentRequests.first)
+        XCTAssertEqual(request.url.absoluteString, "https://api.cline.bot/api/v1/chat/completions")
+        XCTAssertEqual(request.headers["Authorization"], "Bearer clinepass-key")
+
+        let body = try XCTUnwrap(request.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(root["model"] as? String, "cline-pass/glm-5.2")
+    }
+
     func testOpenCodeGoStreamRetriesNonStreamingWhenNoAnswerTextArrives() async throws {
         let fixture = try makeFixture()
         try fixture.credentials.setCredential("opencode-key", for: .openCodeGo)

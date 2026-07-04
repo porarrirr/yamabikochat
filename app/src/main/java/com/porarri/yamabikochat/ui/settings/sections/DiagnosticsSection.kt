@@ -96,6 +96,7 @@ fun LazyListScope.diagnosticsSection(apiKeyStatus: ApiKeyStatus) {
                         append("MINIMAX="); append(if (apiKeyStatus.hasMiniMaxKey) "OK" else "NG"); append(" / ")
                         append("ZAI="); append(if (apiKeyStatus.hasZaiKey) "OK" else "NG"); append(" / ")
                         append("OPENCODE_GO="); append(if (apiKeyStatus.hasOpenCodeGoKey) "OK" else "NG"); append(" / ")
+                        append("CLINEPASS="); append(if (apiKeyStatus.hasClinePassKey) "OK" else "NG"); append(" / ")
                         append("ALIBABA_CODING_PLAN="); append(if (apiKeyStatus.hasAlibabaCodingPlanKey) "OK" else "NG"); append(" / ")
                         append("ALIBABA_MCP_TOKEN="); append(if (apiKeyStatus.hasAlibabaMcpAuthorizationToken) "OK" else "NG")
                     }

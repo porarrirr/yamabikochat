@@ -28,6 +28,7 @@ class SecurePreferencesManager private constructor(private val context: Context)
         private const val KEY_MINIMAX_API_KEY = "minimax_api_key"
         private const val KEY_ZAI_API_KEY = "zai_api_key"
         private const val KEY_OPENCODE_GO_API_KEY = "opencode_go_api_key"
+        private const val KEY_CLINEPASS_API_KEY = "clinepass_api_key"
         private const val KEY_ALIBABA_CODING_PLAN_API_KEY = "alibaba_coding_plan_api_key"
         private const val KEY_ALIBABA_MCP_AUTH_TOKEN = "alibaba_mcp_authorization_token"
         private const val KEY_CODEX_AUTH_JSON = "codex_auth_json"
@@ -230,6 +231,18 @@ class SecurePreferencesManager private constructor(private val context: Context)
 
     fun clearOpenCodeGoApiKey() =
         clearKey(KEY_OPENCODE_GO_API_KEY, "OpenCode Go APIキー")
+
+    fun storeClinePassApiKey(apiKey: String?): Boolean =
+        storeString(KEY_CLINEPASS_API_KEY, apiKey, "Cline Pass APIキー")
+
+    fun hasClinePassApiKey(): Boolean =
+        hasString(KEY_CLINEPASS_API_KEY, "Cline Pass APIキー")
+
+    fun getClinePassApiKey(): String? =
+        readString(KEY_CLINEPASS_API_KEY, "Cline Pass APIキー")
+
+    fun clearClinePassApiKey() =
+        clearKey(KEY_CLINEPASS_API_KEY, "Cline Pass APIキー")
 
     fun storeAlibabaCodingPlanApiKey(apiKey: String?): Boolean =
         storeString(KEY_ALIBABA_CODING_PLAN_API_KEY, apiKey, "Alibaba Coding Plan APIキー")

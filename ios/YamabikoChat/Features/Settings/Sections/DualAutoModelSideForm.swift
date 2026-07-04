@@ -57,9 +57,3 @@ struct DualAutoModelSideForm: View {
             .lineLimit(systemPromptLineLimit)
     }
 }
-
-private extension ModelPreset {
-    var dualAutoPresetKey: String {
-        "\(apiProvider.uppercased())|\(model.trimmingCharacters(in: .whitespacesAndNewlines))"
-    }
-}

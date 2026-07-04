@@ -12,6 +12,7 @@ class ProviderCatalogTest {
                 "GEMINI",
                 "OPENROUTER",
                 "OPENCODE_GO",
+                "CLINEPASS",
                 "ALIBABA_CODING_PLAN",
                 "ZAI",
                 "MINIMAX",
@@ -26,11 +27,13 @@ class ProviderCatalogTest {
     @Test
     fun newProvidersExposeDefaultModels() {
         assertEquals(OpenCodeGoModelCatalog.defaultModel, ProviderCatalog.defaultModel("OPENCODE_GO"))
+        assertEquals(ClinePassModelCatalog.defaultModel, ProviderCatalog.defaultModel("CLINEPASS"))
         assertEquals(
             AlibabaCodingPlanModelCatalog.defaultModel,
             ProviderCatalog.defaultModel("ALIBABA_CODING_PLAN")
         )
         assertTrue(OpenCodeGoModelCatalog.modelFor("opencode-go/qwen3.7-max")?.endpointKind == OpenCodeGoEndpointKind.MESSAGES)
+        assertEquals("cline-pass/glm-5.2", ClinePassModelCatalog.modelFor("glm-5.2")?.id)
     }
 
     @Test

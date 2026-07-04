@@ -928,6 +928,7 @@ final class ChatRepository {
         conversationId: Int64,
         text: String,
         attachments: [String] = [],
+        onFusionProgress: (@Sendable (FusionProgressSnapshot) -> Void)? = nil,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
     ) async throws -> SendMessageResult {
@@ -996,7 +997,8 @@ final class ChatRepository {
                 request: fusionRequest,
                 context: context,
                 conversationHistory: history,
-                userAttachments: normalizedAttachments
+                userAttachments: normalizedAttachments,
+                onProgress: onFusionProgress
             )
         } catch FusionError.allPanelsFailed(let panelResults) {
             DiagnosticsLogger.log(
@@ -1024,6 +1026,17 @@ final class ChatRepository {
                 finalAnswer: nil
             )
             try fusionTraceStore.save(trace: failedTrace, conversationId: conversationId)
+
+            let failedPanelChips = panelResults.map { result in
+                FusionPanelChipStatus(
+                    modelId: result.modelId,
+                    provider: result.provider,
+                    state: result.success ? .succeeded : .failed
+                )
+            }
+            onFusionProgress?(
+                FusionProgressSnapshot.phaseOnly(.fallback, panels: failedPanelChips)
+            )
 
             let fallbackModel = fusionRequest.fallbackModel ?? fusionRequest.synthesizerModel
             let fallbackSupportsVision = await pricingRepository.modelSupportsVision(
@@ -1101,6 +1114,17 @@ final class ChatRepository {
                 text: "",
                 fusionTraceId: judgeOutcome.trace.requestId
             )
+        )
+
+        let synthPanelChips = judgeOutcome.trace.panelResults.map { result in
+            FusionPanelChipStatus(
+                modelId: result.modelId,
+                provider: result.provider,
+                state: result.success ? .succeeded : .failed
+            )
+        }
+        onFusionProgress?(
+            FusionProgressSnapshot.phaseOnly(.synthesizer, panels: synthPanelChips)
         )
 
         let synthStarted = Date()

@@ -4,6 +4,7 @@ enum LLMProvider: String, Codable, CaseIterable, Sendable {
     case gemini = "GEMINI"
     case openRouter = "OPENROUTER"
     case openCodeGo = "OPENCODE_GO"
+    case clinePass = "CLINEPASS"
     case alibabaCodingPlan = "ALIBABA_CODING_PLAN"
     case openAI = "OPENAI"
     case openAICompat = "OPENAI_COMPAT"
@@ -30,7 +31,7 @@ enum LLMProvider: String, Codable, CaseIterable, Sendable {
 
     var supportsClientWebSearchTool: Bool {
         switch self {
-        case .openRouter, .openAI, .openAICompat, .miniMax, .zai, .alibabaCodingPlan, .gemini:
+        case .openRouter, .openAI, .openAICompat, .miniMax, .zai, .clinePass, .alibabaCodingPlan, .gemini:
             return true
         case .openCodeGo, .codexAuth, .appleIntelligence:
             return false
