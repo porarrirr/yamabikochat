@@ -81,21 +81,19 @@ object OpenCodeGoModelCatalog {
     const val defaultModel = "glm-5.1"
 
     val supportedModels = listOf(
+        OpenCodeGoModel("glm-5.2", "GLM-5.2", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("glm-5.1", "GLM-5.1", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
-        OpenCodeGoModel("glm-5", "GLM-5", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("kimi-k2.7-code", "Kimi K2.7 Code", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("kimi-k2.6", "Kimi K2.6", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
-        OpenCodeGoModel("kimi-k2.5", "Kimi K2.5", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("deepseek-v4-pro", "DeepSeek V4 Pro", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("deepseek-v4-flash", "DeepSeek V4 Flash", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
-        OpenCodeGoModel("mimo-v2-pro", "MiMo-V2-Pro", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
-        OpenCodeGoModel("mimo-v2-omni", "MiMo-V2-Omni", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("mimo-v2.5-pro", "MiMo-V2.5-Pro", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("mimo-v2.5", "MiMo-V2.5", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("qwen3.7-max", "Qwen3.7 Max", OpenCodeGoEndpointKind.MESSAGES),
+        OpenCodeGoModel("qwen3.7-plus", "Qwen3.7 Plus", OpenCodeGoEndpointKind.MESSAGES),
         OpenCodeGoModel("qwen3.6-plus", "Qwen3.6 Plus", OpenCodeGoEndpointKind.MESSAGES),
-        OpenCodeGoModel("qwen3.5-plus", "Qwen3.5 Plus", OpenCodeGoEndpointKind.MESSAGES),
-        OpenCodeGoModel("minimax-m2.7", "MiniMax M2.7", OpenCodeGoEndpointKind.MESSAGES),
-        OpenCodeGoModel("minimax-m2.5", "MiniMax M2.5", OpenCodeGoEndpointKind.MESSAGES)
+        OpenCodeGoModel("minimax-m3", "MiniMax M3", OpenCodeGoEndpointKind.MESSAGES),
+        OpenCodeGoModel("minimax-m2.7", "MiniMax M2.7", OpenCodeGoEndpointKind.MESSAGES)
     )
 
     fun normalizedModelId(raw: String): String {

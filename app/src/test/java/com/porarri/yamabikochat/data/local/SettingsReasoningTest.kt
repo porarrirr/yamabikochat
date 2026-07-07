@@ -115,7 +115,7 @@ class SettingsReasoningTest {
 
         val config = settings.buildThinkingConfigFor(
             provider = "ALIBABA_CODING_PLAN",
-            model = "qwen3.5-plus"
+            model = "qwen3.7-plus"
         )
 
         assertNotNull(config)
@@ -134,7 +134,7 @@ class SettingsReasoningTest {
 
         val config = settings.buildThinkingConfigFor(
             provider = "OPENCODE_GO",
-            model = "qwen3.5-plus"
+            model = "qwen3.7-plus"
         )
 
         assertNotNull(config)

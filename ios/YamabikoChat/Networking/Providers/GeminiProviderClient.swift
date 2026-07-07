@@ -1,9 +1,26 @@
 import Foundation
 
+enum GeminiErrorClassification: Equatable {
+    case rateLimited
+    case authFailure
+    case other
+}
+
 struct GeminiProviderClient: ProviderClient {
     let provider: LLMProvider = .gemini
     private let geminiApiBase = "https://generativelanguage.googleapis.com/v1beta"
     static let noUsableStreamDataReason = "Gemini stream produced no usable data"
+
+    /// Classifies whether a failed Gemini request is eligible for key/model rotation.
+    /// The non-streaming path throws the raw JSON error body, while the streaming path
+    /// throws an already-extracted message string - so this checks the HTTP status first
+    /// and falls back to a plain substring search rather than requiring parseable JSON.
+    static func classifyRotationEligibility(_ error: Error) -> GeminiErrorClassification {
+        guard case let ProviderClientError.httpStatus(status, body) = error else { return .other }
+        if status == 401 || status == 403 { return .authFailure }
+        if status == 429 || body.contains("RESOURCE_EXHAUSTED") { return .rateLimited }
+        return .other
+    }
 
     func generate(
         request: ProviderRequest,
@@ -605,10 +622,12 @@ struct GeminiProviderClient: ProviderClient {
         return value
     }
 
-    /// Sanitizes a parsed function declaration's `parameters` schema in place.
+    /// Sanitizes a parsed function declaration's `parameters` schema in place. Also unwraps
+    /// OpenAI's `{"type": "function", "function": {...}}` tool shape so declarations shared
+    /// across providers still reach Gemini in its flat {"name", "parameters"} form.
     private func sanitizeFunctionDeclarations(_ declarations: [[String: Any]]) -> [[String: Any]] {
         declarations.map { declaration in
-            var sanitized = declaration
+            var sanitized = (declaration["function"] as? [String: Any]) ?? declaration
             if let parameters = sanitized["parameters"] {
                 sanitized["parameters"] = sanitizeGeminiSchema(parameters)
             }

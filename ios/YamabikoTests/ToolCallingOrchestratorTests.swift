@@ -86,6 +86,33 @@ final class ToolCallingOrchestratorTests: XCTestCase {
         )
     }
 
+    func testUnsupportedToolFallbackPolicyAlsoCoversCustomFunctionDeclarations() {
+        let request = ProviderRequest(
+            model: "test",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            tools: [
+                ProviderTool(type: "function_declarations", payload: ["json": "[]"]),
+                ProviderTool(type: "google_search", payload: [:])
+            ]
+        )
+        let error = ProviderClientError.httpStatus(
+            400,
+            "Unknown name \"additionalProperties\": Cannot find field."
+        )
+
+        XCTAssertTrue(
+            ClientToolFallbackPolicy.shouldRetryWithoutClientTools(
+                error: error,
+                request: request,
+                round: 1
+            )
+        )
+        XCTAssertEqual(
+            ClientToolFallbackPolicy.removingClientTools(from: request).tools,
+            [ProviderTool(type: "google_search", payload: [:])]
+        )
+    }
+
     func testToolResultIsReturnedToModelBeforeFinalResponse() async throws {
         let counter = TestToolCounter()
         let recorder = TestInvocationRecorder()

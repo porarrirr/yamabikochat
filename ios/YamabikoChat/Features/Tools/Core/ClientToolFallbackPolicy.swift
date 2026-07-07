@@ -7,7 +7,7 @@ enum ClientToolFallbackPolicy {
         round: Int
     ) -> Bool {
         guard round == 1,
-              request.tools.contains(where: { $0.type == "function" }),
+              request.tools.contains(where: { $0.type == "function" || $0.type == "function_declarations" }),
               case let ProviderClientError.httpStatus(status, body) = error,
               [400, 404, 422].contains(status)
         else {
@@ -33,7 +33,7 @@ enum ClientToolFallbackPolicy {
 
     static func removingClientTools(from request: ProviderRequest) -> ProviderRequest {
         var fallback = request
-        fallback.tools.removeAll(where: { $0.type == "function" })
+        fallback.tools.removeAll(where: { $0.type == "function" || $0.type == "function_declarations" })
         return fallback
     }
 }

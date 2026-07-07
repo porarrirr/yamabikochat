@@ -74,3 +74,6 @@ build/
 
 # Accidental local home mirror
 ~/
+
+# Local OpenCode reference clone (not part of this repo)
+opencode/
