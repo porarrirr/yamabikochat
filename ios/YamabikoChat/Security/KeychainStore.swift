@@ -11,6 +11,7 @@ enum CredentialProvider: String, CaseIterable {
     case openAICompat = "OPENAI_COMPAT"
     case miniMax = "MINIMAX"
     case codexAuth = "CODEX_AUTH"
+    case superGrok = "SUPERGROK"
     case zai = "ZAI"
 }
 
@@ -117,6 +118,14 @@ extension SecureCredentialStore {
         try saveSecret(value, key: "codex_access_token")
     }
 
+    func superGrokAccessToken() throws -> String? {
+        try readSecret(key: "supergrok_access_token")
+    }
+
+    func setSuperGrokAccessToken(_ value: String?) throws {
+        try saveSecret(value, key: "supergrok_access_token")
+    }
+
     func setOpenAICompatAPIKey(name: String, value: String?) throws {
         let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }
@@ -133,5 +142,23 @@ extension SecureCredentialStore {
         let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }
         try deleteSecret(key: "openai_compat_key_\(normalized)")
+    }
+
+    func setGeminiAPIKey(name: String, value: String?) throws {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        try saveSecret(value, key: "gemini_key_\(normalized)")
+    }
+
+    func geminiAPIKey(name: String) throws -> String? {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        return try readSecret(key: "gemini_key_\(normalized)")
+    }
+
+    func clearGeminiAPIKey(name: String) throws {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        try deleteSecret(key: "gemini_key_\(normalized)")
     }
 }

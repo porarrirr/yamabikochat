@@ -10,6 +10,7 @@ enum LLMProvider: String, Codable, CaseIterable, Sendable {
     case openAICompat = "OPENAI_COMPAT"
     case miniMax = "MINIMAX"
     case codexAuth = "CODEX_AUTH"
+    case superGrok = "SUPERGROK"
     case zai = "ZAI"
     case appleIntelligence = "APPLE_INTELLIGENCE"
 
@@ -33,7 +34,7 @@ enum LLMProvider: String, Codable, CaseIterable, Sendable {
         switch self {
         case .openRouter, .openAI, .openAICompat, .miniMax, .zai, .clinePass, .alibabaCodingPlan, .gemini:
             return true
-        case .openCodeGo, .codexAuth, .appleIntelligence:
+        case .openCodeGo, .codexAuth, .superGrok, .appleIntelligence:
             return false
         }
     }

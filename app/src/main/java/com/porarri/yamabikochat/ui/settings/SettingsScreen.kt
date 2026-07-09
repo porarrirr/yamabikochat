@@ -83,6 +83,8 @@ private enum class SettingsSheet {
     OpenAiCompatPreset,
     ThinkingLevel,
     CodexModel,
+    SuperGrokModel,
+    SuperGrokReasoningEffort,
     CodexReasoningEffort,
     CodexReasoningSummary,
     CodexVerbosity,
@@ -111,6 +113,9 @@ fun SettingsScreen(
     val secureStorageError by viewModel.secureStorageError.collectAsState()
     val codexAuthState by viewModel.codexAuthState.collectAsState()
     val codexAuthError by viewModel.codexAuthError.collectAsState()
+    val superGrokAuthState by viewModel.superGrokAuthState.collectAsState()
+    val superGrokAuthError by viewModel.superGrokAuthError.collectAsState()
+    val superGrokAuthActionRunning by viewModel.superGrokAuthActionRunning.collectAsState()
     val codexUsageState by viewModel.codexUsageState.collectAsState()
     val tokenUsageState by viewModel.tokenUsageState.collectAsState()
 
@@ -125,6 +130,13 @@ fun SettingsScreen(
         codexAuthError?.let {
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
             viewModel.clearCodexAuthError()
+        }
+    }
+
+    LaunchedEffect(superGrokAuthError) {
+        superGrokAuthError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearSuperGrokAuthError()
         }
     }
 
@@ -342,6 +354,46 @@ fun SettingsScreen(
                             openAiCompatKeyVisible = false
                             openAiCompatKeyLoadedFromStorage = false
                         },
+                        onDismissRequest = { activeSheet = null }
+                    )
+                }
+
+                SettingsSheet.SuperGrokModel -> {
+                    val options = com.porarri.yamabikochat.data.remote.SuperGrokModelCatalog.supportedModels.map { modelOption ->
+                        YamabikoOption(
+                            key = modelOption.id,
+                            title = modelOption.displayName,
+                            subtitle = modelOption.description
+                        )
+                    }
+                    YamabikoOptionBottomSheet(
+                        title = "SuperGrok Model",
+                        options = options,
+                        selectedKey = model,
+                        onOptionSelected = { option ->
+                            model = option.key
+                            val selected = com.porarri.yamabikochat.data.remote.SuperGrokModelCatalog.modelFor(option.key)
+                            if (selected?.supportsReasoning == false) {
+                                superGrokReasoningEnabled = false
+                            } else if (superGrokReasoningEffort.isBlank()) {
+                                superGrokReasoningEffort = "medium"
+                            }
+                        },
+                        onDismissRequest = { activeSheet = null }
+                    )
+                }
+
+                SettingsSheet.SuperGrokReasoningEffort -> {
+                    val options = listOf(
+                        YamabikoOption(key = "low", title = "low"),
+                        YamabikoOption(key = "medium", title = "medium"),
+                        YamabikoOption(key = "high", title = "high")
+                    )
+                    YamabikoOptionBottomSheet(
+                        title = "Reasoning Effort",
+                        options = options,
+                        selectedKey = superGrokReasoningEffort,
+                        onOptionSelected = { option -> superGrokReasoningEffort = option.key },
                         onDismissRequest = { activeSheet = null }
                     )
                 }
@@ -805,6 +857,92 @@ fun SettingsScreen(
                                 }
                             }
                         }
+                        if (apiProvider == "SUPERGROK") {
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
+                                        Text(
+                                            text = "SuperGrok Auth",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = if (superGrokAuthState.isLoggedIn) "Signed in" else "Not signed in",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        superGrokAuthState.email?.let {
+                                            LabeledValueBlock(label = "Email", value = it)
+                                        }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            FilledTonalButton(
+                                                onClick = { viewModel.loginSuperGrokWithBrowser() },
+                                                enabled = !superGrokAuthActionRunning
+                                            ) {
+                                                Text("Sign in (Browser)")
+                                            }
+                                            TextButton(
+                                                onClick = { viewModel.loginSuperGrokWithDeviceCode() },
+                                                enabled = !superGrokAuthActionRunning
+                                            ) {
+                                                Text("Device Code")
+                                            }
+                                        }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            TextButton(
+                                                onClick = { viewModel.refreshSuperGrok(force = true) },
+                                                enabled = !superGrokAuthActionRunning
+                                            ) {
+                                                Text("Refresh")
+                                            }
+                                            TextButton(
+                                                onClick = { viewModel.logoutSuperGrok() },
+                                                enabled = !superGrokAuthActionRunning
+                                            ) {
+                                                Text("Sign out")
+                                            }
+                                        }
+                                        if (superGrokAuthActionRunning) {
+                                            Text(
+                                                text = "SuperGrok認証処理中...",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        superGrokAuthState.pendingDeviceCode?.let { challenge ->
+                                            Text(
+                                                text = "Verification URL: ${challenge.browserUrl}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = "User code: ${challenge.userCode}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Text(
+                                            text = "Connect to xAI API using SuperGrok / X Premium+ OAuth tokens.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = "Browser ログインは ${com.porarri.yamabikochat.data.auth.SuperGrokAuthConstants.REDIRECT_URI} を使います。OpenCode / Grok CLI と同時起動するとポートが競合します。",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         item {
                             TokenUsageStatsCard(state = tokenUsageState)
                         }
@@ -834,7 +972,7 @@ fun SettingsScreen(
             }
         }
 
-        if (apiProvider != "CODEX_AUTH") {
+        if (apiProvider != "CODEX_AUTH" && apiProvider != "SUPERGROK") {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -1623,6 +1761,32 @@ fun SettingsScreen(
                                 singleLine = true
                             )
                         }
+                        "SUPERGROK" -> {
+                            val selectedModel = com.porarri.yamabikochat.data.remote.SuperGrokModelCatalog.modelFor(model)
+                            YamabikoSelectRow(
+                                title = "SuperGrok Model",
+                                value = selectedModel?.displayName ?: model.ifBlank {
+                                    com.porarri.yamabikochat.data.remote.SuperGrokModelCatalog.defaultModel
+                                },
+                                onClick = { activeSheet = SettingsSheet.SuperGrokModel }
+                            )
+                            selectedModel?.description?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            YamabikoTextField(
+                                value = model,
+                                onValueChange = { model = it },
+                                label = { Text("Custom Model ID") },
+                                placeholder = { Text(com.porarri.yamabikochat.data.remote.SuperGrokModelCatalog.defaultModel) },
+                                supportingText = { Text("Type a model id to use a custom SuperGrok model.") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
                         "ALIBABA_CODING_PLAN" -> {
                             val selectedModel = model.ifBlank { AlibabaCodingPlanModelCatalog.defaultModel }
                             var showAlibabaModelSheet by remember { mutableStateOf(false) }
@@ -1992,6 +2156,52 @@ fun SettingsScreen(
                 }
             }
         }
+        if (apiProvider == "SUPERGROK") {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "SuperGrok Settings",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Endpoint: ${com.porarri.yamabikochat.data.remote.ProviderCatalog.defaultSuperGrokBaseUrl}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        SettingsToggleRow(
+                            title = "Reasoning",
+                            checked = superGrokReasoningEnabled,
+                            onCheckedChange = { superGrokReasoningEnabled = it },
+                            leadingContent = {
+                                Icon(Icons.Default.Psychology, contentDescription = "Reasoning")
+                            }
+                        )
+                        val superGrokEffortLabel = superGrokReasoningEffort.ifBlank { "medium" }
+                        YamabikoSelectRow(
+                            title = "Reasoning Effort",
+                            value = superGrokEffortLabel,
+                            enabled = superGrokReasoningEnabled,
+                            onClick = { activeSheet = SettingsSheet.SuperGrokReasoningEffort }
+                        )
+                        Text(
+                            text = "SuperGrok / X Premium+ OAuth tokens connect to the xAI API.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
         if (apiProvider == "CODEX_AUTH") {
             item {
                 Card(
@@ -2097,6 +2307,7 @@ fun SettingsScreen(
                     thinkingEnabled &&
                     apiProvider != "ZAI" &&
                     apiProvider != "CODEX_AUTH" &&
+                    apiProvider != "SUPERGROK" &&
                     (apiProvider != "OPENROUTER" || reasoningMode == "budget")
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -3173,6 +3384,7 @@ private fun SettingsScreenPreviewContent(initialTab: Int) {
                                         "ZAI" -> "Z.ai"
                                         "OPENAI" -> "OpenAI"
                                         "CODEX_AUTH" -> "Codex Auth"
+                                        "SUPERGROK" -> "SuperGrok"
                                         "OPENAI_COMPAT" -> "OpenAI (Custom)"
                                         else -> apiProvider
                                     }

@@ -6,6 +6,7 @@ struct ProviderRegistry {
     private let openCodeGo: OpenCodeGoProviderClient
     private let gemini: GeminiProviderClient
     private let codex: CodexProviderClient
+    private let superGrok: SuperGrokProviderClient
     private let appleIntelligence: AppleIntelligenceProviderClient
 
     init() {
@@ -14,6 +15,7 @@ struct ProviderRegistry {
         openCodeGo = OpenCodeGoProviderClient()
         gemini = GeminiProviderClient()
         codex = CodexProviderClient()
+        superGrok = SuperGrokProviderClient()
         appleIntelligence = AppleIntelligenceProviderClient()
     }
 
@@ -23,6 +25,8 @@ struct ProviderRegistry {
             return gemini
         case .codexAuth:
             return codex
+        case .superGrok:
+            return superGrok
         case .appleIntelligence:
             return appleIntelligence
         case .openCodeGo:

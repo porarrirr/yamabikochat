@@ -5,6 +5,8 @@ import com.porarri.yamabikochat.data.api.ApiRepository
 import com.porarri.yamabikochat.data.auth.CodexAuthRepository
 import com.porarri.yamabikochat.data.auth.CodexAuthState
 import com.porarri.yamabikochat.data.auth.CodexUsageStatus
+import com.porarri.yamabikochat.data.auth.SuperGrokAuthRepository
+import com.porarri.yamabikochat.data.auth.SuperGrokAuthState
 import com.porarri.yamabikochat.data.database.DatabaseRepository
 import com.porarri.yamabikochat.data.files.FileProcessingRepository
 import com.porarri.yamabikochat.data.local.AutoConversation
@@ -50,6 +52,7 @@ class ChatRepository(
     private val fileProcessingRepository: FileProcessingRepository,
     private val modelRepository: ModelRepository,
     private val codexAuthRepository: CodexAuthRepository,
+    private val superGrokAuthRepository: SuperGrokAuthRepository,
     private val pricingRepository: LiteLlmPricingRepository
 ) {
 
@@ -297,6 +300,23 @@ class ChatRepository(
 
     suspend fun retrieveCodexAuthUsage(): Result<CodexUsageStatus> =
         codexAuthRepository.retrieveUsageStatus()
+    // endregion
+
+    // region SuperGrok Auth
+    val superGrokAuthState: StateFlow<SuperGrokAuthState> = superGrokAuthRepository.state
+
+    suspend fun loginSuperGrokWithBrowser(): Result<SuperGrokAuthState> =
+        superGrokAuthRepository.loginWithBrowser()
+
+    suspend fun loginSuperGrokWithDeviceCode(): Result<SuperGrokAuthState> =
+        superGrokAuthRepository.loginWithDeviceCode()
+
+    suspend fun logoutSuperGrok(): Result<SuperGrokAuthState> = superGrokAuthRepository.logout()
+
+    suspend fun refreshSuperGrok(force: Boolean = false): Result<SuperGrokAuthState> =
+        superGrokAuthRepository.refreshIfNeeded(force)
+
+    fun hasSuperGrokAuth(): Boolean = superGrokAuthRepository.hasAuthToken()
     // endregion
 
     // region OpenAI-compatible key helpers

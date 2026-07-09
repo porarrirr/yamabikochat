@@ -31,6 +31,8 @@ enum ShortcutModelOptionsBuilder {
             GeminiModelCatalog.suggestedModels.forEach { appendUnique($0) }
         case "OPENCODE_GO":
             OpenCodeGoModelCatalog.supportedModels.map(\.id).forEach { appendUnique($0) }
+        case "SUPERGROK":
+            SuperGrokModelCatalog.supportedModels.map(\.id).forEach { appendUnique($0) }
         case "CLINEPASS":
             ClinePassModelCatalog.supportedModels.forEach { appendUnique($0.id) }
         case "ALIBABA_CODING_PLAN":

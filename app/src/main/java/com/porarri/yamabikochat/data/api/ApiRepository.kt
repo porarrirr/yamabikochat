@@ -5,6 +5,7 @@ import com.porarri.yamabikochat.data.local.Settings
 import com.porarri.yamabikochat.data.local.Settings.ReasoningContext
 import com.porarri.yamabikochat.data.local.SettingsManager
 import com.porarri.yamabikochat.data.auth.CodexAuthRepository
+import com.porarri.yamabikochat.data.auth.SuperGrokAuthRepository
 import com.porarri.yamabikochat.data.model.ModelRepository
 import com.porarri.yamabikochat.data.remote.ApiProvider
 import com.porarri.yamabikochat.data.remote.Content
@@ -42,6 +43,7 @@ class ApiRepository(
     private val zaiProvider: ZaiProvider,
     private val settingsManager: SettingsManager,
     private val codexAuthRepository: CodexAuthRepository,
+    private val superGrokAuthRepository: SuperGrokAuthRepository,
     private val modelRepository: ModelRepository,
     private val settingsProvider: suspend () -> Settings?
 ) {
@@ -77,6 +79,7 @@ class ApiRepository(
 
     private val missingKeyMediaType = "text/plain".toMediaType()
     private val codexChatGptBaseUrl = "https://chatgpt.com/backend-api/codex"
+    private val superGrokBaseUrl = ProviderCatalog.defaultSuperGrokBaseUrl
 
     private fun missingKeyMessage(providerId: String) =
         "API key for $providerId provider is not configured."
@@ -97,7 +100,7 @@ class ApiRepository(
             "OPENROUTER" -> openRouterProvider
             "OPENCODE_GO" -> openCodeGoProvider
             "ALIBABA_CODING_PLAN" -> alibabaCodingPlanProvider
-            "OPENAI", "OPENAI_COMPAT", "MINIMAX", "CLINEPASS" -> openAiProvider
+            "OPENAI", "OPENAI_COMPAT", "MINIMAX", "CLINEPASS", "SUPERGROK" -> openAiProvider
             "CODEX_AUTH" -> codexResponsesProvider
             "ZAI" -> zaiProvider
             else -> geminiProvider
@@ -105,6 +108,7 @@ class ApiRepository(
 
         val keyResult = when (resolvedProvider) {
             "CODEX_AUTH" -> resolveCodexAuthToken()
+            "SUPERGROK" -> resolveSuperGrokAuthToken()
             else -> resolveApiKey(
                 resolvedProvider,
                 when (resolvedProvider) {
@@ -123,16 +127,16 @@ class ApiRepository(
 
         return when (keyResult) {
             is ApiKeyResult.Success -> {
-                val tokenLabel = if (resolvedProvider == "CODEX_AUTH" && keyResult.tokenKind == TokenKind.AccessToken) {
-                    "Access Token"
-                } else {
-                    "API Key"
+                val tokenLabel = when {
+                    resolvedProvider == "CODEX_AUTH" && keyResult.tokenKind == TokenKind.AccessToken -> "Access Token"
+                    resolvedProvider == "SUPERGROK" -> "Access Token"
+                    else -> "API Key"
                 }
                 Log.d("ApiRepository", "Using $resolvedProvider $tokenLabel")
-                val baseUrlOverride = if (resolvedProvider == "CODEX_AUTH") {
-                    codexAuthBaseUrl(keyResult.tokenKind, settings)
-                } else {
-                    null
+                val baseUrlOverride = when (resolvedProvider) {
+                    "CODEX_AUTH" -> codexAuthBaseUrl(keyResult.tokenKind, settings)
+                    "SUPERGROK" -> superGrokBaseUrl
+                    else -> null
                 }
                 if (resolvedProvider == "CODEX_AUTH") {
                     val rawAccountId = keyResult.accountId?.trim().orEmpty()
@@ -197,6 +201,22 @@ class ApiRepository(
         return ApiKeyResult.Success(bearer.token, kind, bearer.accountId)
     }
 
+    private suspend fun resolveSuperGrokAuthToken(): ApiKeyResult {
+        val bearer = superGrokAuthRepository.getBearerToken()
+        return if (bearer == null || bearer.token.isBlank()) {
+            ApiKeyResult.Missing("SUPERGROK")
+        } else {
+            ApiKeyResult.Success(bearer.token, TokenKind.AccessToken)
+        }
+    }
+
+    private suspend fun refreshSuperGrokAuthToken(): ApiKeyResult.Success? {
+        superGrokAuthRepository.refreshIfNeeded(force = true)
+        val bearer = superGrokAuthRepository.getBearerToken() ?: return null
+        if (bearer.token.isBlank()) return null
+        return ApiKeyResult.Success(bearer.token, TokenKind.AccessToken)
+    }
+
     private fun codexAuthBaseUrl(tokenKind: TokenKind, settings: Settings?): String {
         return if (tokenKind == TokenKind.AccessToken) {
             codexChatGptBaseUrl
@@ -218,6 +238,18 @@ class ApiRepository(
         val refreshed = refreshCodexAuthToken(settings) ?: return first
         val refreshedBaseUrl = codexAuthBaseUrl(refreshed.tokenKind, settings)
         return call(refreshed.apiKey, refreshedBaseUrl, refreshed.accountId)
+    }
+
+    private suspend fun <T> callSuperGrokAuthWithRetry(
+        initialToken: String,
+        initialBaseUrl: String,
+        call: suspend (String, String) -> retrofit2.Response<T>
+    ): retrofit2.Response<T> {
+        val first = call(initialToken, initialBaseUrl)
+        if (first.code() != 401) return first
+
+        val refreshed = refreshSuperGrokAuthToken() ?: return first
+        return call(refreshed.apiKey, superGrokBaseUrl)
     }
 
     suspend fun generateContent(
@@ -281,6 +313,15 @@ class ApiRepository(
                                 accountId = accountId,
                                 sessionId = sessionId
                             )
+                        }
+                    }
+                    "SUPERGROK" -> {
+                        val baseUrl = context.baseUrlOverride ?: superGrokBaseUrl
+                        callSuperGrokAuthWithRetry(
+                            initialToken = actualApiKey,
+                            initialBaseUrl = baseUrl
+                        ) { token, resolvedBaseUrl ->
+                            openAiProvider.generateContent(token, model, request, resolvedBaseUrl)
                         }
                     }
                     else -> provider.generateContent(actualApiKey, model, request)
@@ -351,6 +392,15 @@ class ApiRepository(
                             )
                         }
                     }
+                    "SUPERGROK" -> {
+                        val baseUrl = context.baseUrlOverride ?: superGrokBaseUrl
+                        callSuperGrokAuthWithRetry(
+                            initialToken = actualApiKey,
+                            initialBaseUrl = baseUrl
+                        ) { token, resolvedBaseUrl ->
+                            openAiProvider.streamGenerateContent(token, model, request, resolvedBaseUrl)
+                        }
+                    }
                     else -> provider.streamGenerateContent(actualApiKey, model, request)
                 }
             }
@@ -370,6 +420,7 @@ class ApiRepository(
 
         val apiKeyResultA = when (providerA) {
             "CODEX_AUTH" -> resolveCodexAuthToken()
+            "SUPERGROK" -> resolveSuperGrokAuthToken()
             else -> resolveApiKey(
                 providerA,
                 when (providerA) {
@@ -388,6 +439,7 @@ class ApiRepository(
 
         val apiKeyResultB = when (providerB) {
             "CODEX_AUTH" -> resolveCodexAuthToken()
+            "SUPERGROK" -> resolveSuperGrokAuthToken()
             else -> resolveApiKey(
                 providerB,
                 when (providerB) {
@@ -435,6 +487,12 @@ class ApiRepository(
                             )
                         }
                     }
+                    "SUPERGROK" -> callSuperGrokAuthWithRetry(
+                        initialToken = apiKeyResultA.apiKey,
+                        initialBaseUrl = superGrokBaseUrl
+                    ) { token, resolvedBaseUrl ->
+                        openAiProvider.generateContent(token, modelA, requestA, resolvedBaseUrl)
+                    }
                     "ZAI" -> zaiProvider.generateContent(apiKeyResultA.apiKey, modelA, requestA)
                     "OPENCODE_GO" -> openCodeGoProvider.generateContent(apiKeyResultA.apiKey, modelA, requestA)
                     "ALIBABA_CODING_PLAN" -> alibabaCodingPlanProvider.generateContent(
@@ -474,6 +532,12 @@ class ApiRepository(
                             )
                         }
                     }
+                    "SUPERGROK" -> callSuperGrokAuthWithRetry(
+                        initialToken = apiKeyResultB.apiKey,
+                        initialBaseUrl = superGrokBaseUrl
+                    ) { token, resolvedBaseUrl ->
+                        openAiProvider.generateContent(token, modelB, requestB, resolvedBaseUrl)
+                    }
                     "ZAI" -> zaiProvider.generateContent(apiKeyResultB.apiKey, modelB, requestB)
                     "OPENCODE_GO" -> openCodeGoProvider.generateContent(apiKeyResultB.apiKey, modelB, requestB)
                     "ALIBABA_CODING_PLAN" -> alibabaCodingPlanProvider.generateContent(
@@ -503,6 +567,7 @@ class ApiRepository(
 
         val apiKeyResultA = when (providerA) {
             "CODEX_AUTH" -> resolveCodexAuthToken()
+            "SUPERGROK" -> resolveSuperGrokAuthToken()
             else -> resolveApiKey(
                 providerA,
                 when (providerA) {
@@ -521,6 +586,7 @@ class ApiRepository(
 
         val apiKeyResultB = when (providerB) {
             "CODEX_AUTH" -> resolveCodexAuthToken()
+            "SUPERGROK" -> resolveSuperGrokAuthToken()
             else -> resolveApiKey(
                 providerB,
                 when (providerB) {
@@ -568,6 +634,12 @@ class ApiRepository(
                             )
                         }
                     }
+                    "SUPERGROK" -> callSuperGrokAuthWithRetry(
+                        initialToken = apiKeyResultA.apiKey,
+                        initialBaseUrl = superGrokBaseUrl
+                    ) { token, resolvedBaseUrl ->
+                        openAiProvider.streamGenerateContent(token, modelA, requestA, resolvedBaseUrl)
+                    }
                     "ZAI" -> zaiProvider.streamGenerateContent(apiKeyResultA.apiKey, modelA, requestA)
                     "OPENCODE_GO" -> openCodeGoProvider.streamGenerateContent(apiKeyResultA.apiKey, modelA, requestA)
                     "ALIBABA_CODING_PLAN" -> alibabaCodingPlanProvider.streamGenerateContent(
@@ -607,6 +679,12 @@ class ApiRepository(
                             )
                         }
                     }
+                    "SUPERGROK" -> callSuperGrokAuthWithRetry(
+                        initialToken = apiKeyResultB.apiKey,
+                        initialBaseUrl = superGrokBaseUrl
+                    ) { token, resolvedBaseUrl ->
+                        openAiProvider.streamGenerateContent(token, modelB, requestB, resolvedBaseUrl)
+                    }
                     "ZAI" -> zaiProvider.streamGenerateContent(apiKeyResultB.apiKey, modelB, requestB)
                     "OPENCODE_GO" -> openCodeGoProvider.streamGenerateContent(apiKeyResultB.apiKey, modelB, requestB)
                     "ALIBABA_CODING_PLAN" -> alibabaCodingPlanProvider.streamGenerateContent(
@@ -634,6 +712,7 @@ class ApiRepository(
         val settings = settingsProvider()
         val apiKeyResult = when (provider) {
             "CODEX_AUTH" -> resolveCodexAuthToken()
+            "SUPERGROK" -> resolveSuperGrokAuthToken()
             else -> resolveApiKey(
                 provider,
                 when (provider) {
@@ -692,6 +771,12 @@ class ApiRepository(
                 ) { token, resolvedBaseUrl, accountId ->
                     codexResponsesProvider.generateContent(token, model, request, resolvedBaseUrl, accountId)
                 }
+            }
+            "SUPERGROK" -> callSuperGrokAuthWithRetry(
+                initialToken = apiKey,
+                initialBaseUrl = superGrokBaseUrl
+            ) { token, resolvedBaseUrl ->
+                openAiProvider.generateContent(token, model, request, resolvedBaseUrl)
             }
             "ZAI" -> zaiProvider.generateContent(apiKey, model, request)
             "OPENCODE_GO" -> openCodeGoProvider.generateContent(apiKey, model, request)

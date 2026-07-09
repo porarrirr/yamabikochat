@@ -5,7 +5,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 object AppDatabaseMigrations {
     private const val LEGACY_TARGET_VERSION = 27
-    private const val LATEST_VERSION = 52
+    private const val LATEST_VERSION = 53
 
     private val legacyRebuildMigrations: List<Migration> = (1 until LEGACY_TARGET_VERSION).map { startVersion ->
         object : Migration(startVersion, LEGACY_TARGET_VERSION) {
@@ -379,6 +379,13 @@ object AppDatabaseMigrations {
         }
     }
 
+    private val migration52To53 = object : Migration(52, 53) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            ensureColumn(db, "settings", Column("superGrokReasoningEnabled", "INTEGER", notNull = true, defaultValue = "1"))
+            ensureColumn(db, "settings", Column("superGrokReasoningEffort", "TEXT", notNull = true, defaultValue = "'medium'"))
+        }
+    }
+
     val ALL_MIGRATIONS: Array<Migration> =
         (legacyRebuildMigrations + listOf(
             migration27To28,
@@ -405,7 +412,8 @@ object AppDatabaseMigrations {
             migration48To49,
             migration49To50,
             migration50To51,
-            migration51To52
+            migration51To52,
+            migration52To53
         )).toTypedArray()
 
     private fun rebuildSchema(db: SupportSQLiteDatabase) {

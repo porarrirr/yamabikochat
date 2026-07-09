@@ -367,7 +367,7 @@ private fun PresetProviderCard(
                 }
             }
 
-            val requiresApiKey = state.apiProvider != "CODEX_AUTH"
+            val requiresApiKey = state.apiProvider != "CODEX_AUTH" && state.apiProvider != "SUPERGROK"
             if (requiresApiKey) {
                 YamabikoTextField(
                     value = state.apiKey,
@@ -416,13 +416,13 @@ private fun PresetThinkingCard(state: ModelPresetDialogState) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             val isOpenRouter = state.apiProvider == "OPENROUTER"
-            val isCodex = state.apiProvider == "CODEX_AUTH"
+            val isCodex = state.apiProvider == "CODEX_AUTH" || state.apiProvider == "SUPERGROK"
             val isZai = state.apiProvider == "ZAI"
             val isGeminiProvider = state.apiProvider == "GEMINI"
             val isGeminiThinkingLevel = isGeminiProvider && ModelUtils.isThinkingLevelSupported(state.model)
             val isAlwaysOn = isGeminiProvider && ModelUtils.isThinkingAlwaysOn(state.model)
             val thinkingLabel = when (state.apiProvider) {
-                "OPENROUTER", "CODEX_AUTH" -> "Reasoning"
+                "OPENROUTER", "CODEX_AUTH", "SUPERGROK" -> "Reasoning"
                 "ZAI" -> "Deep Thinking"
                 else -> "Thinking"
             }

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.porarri.yamabikochat.data.ChatRepository
 import com.porarri.yamabikochat.data.auth.CodexAuthState
 import com.porarri.yamabikochat.data.auth.CodexUsageStatus
+import com.porarri.yamabikochat.data.auth.SuperGrokAuthState
 import com.porarri.yamabikochat.data.local.ModelPreset
 import com.porarri.yamabikochat.data.local.Settings
 import com.porarri.yamabikochat.data.local.TokenUsageByModel
@@ -64,6 +65,14 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
     private val _codexAuthError = MutableStateFlow<String?>(null)
     val codexAuthError: StateFlow<String?> = _codexAuthError.asStateFlow()
 
+    val superGrokAuthState: StateFlow<SuperGrokAuthState> = repository.superGrokAuthState
+
+    private val _superGrokAuthError = MutableStateFlow<String?>(null)
+    val superGrokAuthError: StateFlow<String?> = _superGrokAuthError.asStateFlow()
+
+    private val _superGrokAuthActionRunning = MutableStateFlow(false)
+    val superGrokAuthActionRunning: StateFlow<Boolean> = _superGrokAuthActionRunning.asStateFlow()
+
     private val _codexUsageState = MutableStateFlow(CodexUsageUiState())
     val codexUsageState: StateFlow<CodexUsageUiState> = _codexUsageState.asStateFlow()
     private val _tokenUsageState = MutableStateFlow(TokenUsageUiState())
@@ -77,6 +86,8 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
     fun clearSecureStorageError() { _secureStorageError.value = null }
 
     fun clearCodexAuthError() { _codexAuthError.value = null }
+
+    fun clearSuperGrokAuthError() { _superGrokAuthError.value = null }
 
     fun refreshApiKeyStatus() {
         viewModelScope.launch { updateApiKeyStatus() }
@@ -104,6 +115,43 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
             val result = repository.refreshCodexAuth(force)
             _codexAuthError.value = result.exceptionOrNull()?.message
             updateApiKeyStatus()
+        }
+    }
+
+    fun loginSuperGrokWithBrowser() {
+        runSuperGrokAuthAction {
+            repository.loginSuperGrokWithBrowser()
+        }
+    }
+
+    fun loginSuperGrokWithDeviceCode() {
+        runSuperGrokAuthAction {
+            repository.loginSuperGrokWithDeviceCode()
+        }
+    }
+
+    fun logoutSuperGrok() {
+        runSuperGrokAuthAction {
+            repository.logoutSuperGrok()
+        }
+    }
+
+    fun refreshSuperGrok(force: Boolean = false) {
+        runSuperGrokAuthAction {
+            repository.refreshSuperGrok(force)
+        }
+    }
+
+    private fun runSuperGrokAuthAction(block: suspend () -> Result<SuperGrokAuthState>) {
+        if (!_superGrokAuthActionRunning.compareAndSet(expect = false, update = true)) return
+        viewModelScope.launch {
+            try {
+                val result = block()
+                _superGrokAuthError.value = result.exceptionOrNull()?.message
+                updateApiKeyStatus()
+            } finally {
+                _superGrokAuthActionRunning.value = false
+            }
         }
     }
 
@@ -186,7 +234,8 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
             hasClinePassKey = repository.hasApiKey("CLINEPASS"),
             hasAlibabaCodingPlanKey = repository.hasApiKey("ALIBABA_CODING_PLAN"),
             hasAlibabaMcpAuthorizationToken = !repository.peekAlibabaMcpAuthorizationToken().isNullOrBlank(),
-            hasCodexAuth = repository.hasCodexAuth()
+            hasCodexAuth = repository.hasCodexAuth(),
+            hasSuperGrokAuth = repository.hasSuperGrokAuth()
         )
     }
 
@@ -545,6 +594,8 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
         codexPromptCacheMinLength = request.codexPromptCacheMinLength,
         codexPromptCacheType = request.codexPromptCacheType,
         codexUserAgentPreset = request.codexUserAgentPreset,
+        superGrokReasoningEnabled = request.superGrokReasoningEnabled,
+        superGrokReasoningEffort = request.superGrokReasoningEffort,
         dualGoogleSearchEnabledA = request.dualGoogleSearchEnabledA,
         dualCodeExecutionEnabledA = request.dualCodeExecutionEnabledA,
         dualUrlContextEnabledA = request.dualUrlContextEnabledA,
@@ -652,6 +703,8 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
         codexPromptCacheMinLength = request.codexPromptCacheMinLength,
         codexPromptCacheType = request.codexPromptCacheType,
         codexUserAgentPreset = request.codexUserAgentPreset,
+        superGrokReasoningEnabled = request.superGrokReasoningEnabled,
+        superGrokReasoningEffort = request.superGrokReasoningEffort,
         dualGoogleSearchEnabledA = request.dualGoogleSearchEnabledA,
         dualCodeExecutionEnabledA = request.dualCodeExecutionEnabledA,
         dualUrlContextEnabledA = request.dualUrlContextEnabledA,
@@ -701,7 +754,8 @@ data class ApiKeyStatus(
     val hasClinePassKey: Boolean = false,
     val hasAlibabaCodingPlanKey: Boolean = false,
     val hasAlibabaMcpAuthorizationToken: Boolean = false,
-    val hasCodexAuth: Boolean = false
+    val hasCodexAuth: Boolean = false,
+    val hasSuperGrokAuth: Boolean = false
 )
 
 data class CodexUsageUiState(

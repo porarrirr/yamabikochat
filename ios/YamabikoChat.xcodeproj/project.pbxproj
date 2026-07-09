@@ -23,6 +23,7 @@
 		10D322B8F73405F360B85BBE /* OpenCodeGoModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60224F6EBCC6491A82E063D /* OpenCodeGoModelCatalog.swift */; };
 		113F01309D6490BEFE0ADE7A /* FusionProgressSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8494A33B16A90BA7458BE85E /* FusionProgressSnapshotTests.swift */; };
 		11741302C42E0079EDC6E0D4 /* OpenCodeGoProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B17B8FC83DEF587229515B1 /* OpenCodeGoProviderClient.swift */; };
+		12B8B4D43B8F75D3FD566CFF /* SuperGrokAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8C45E0D261C897073432224 /* SuperGrokAuthRepository.swift */; };
 		1496CEA828F2AB0422533262 /* AttachmentRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F19C0624B1D761F882F6EBB /* AttachmentRepository.swift */; };
 		14BF6506C9D8F6C2BE2A7AD8 /* BackgroundTaskGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AD5BFFA938AB90157FB5E3F /* BackgroundTaskGuard.swift */; };
 		15CFB3980DC886A591096370 /* StreamParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A78A10ACBB684978CAFB93EC /* StreamParserTests.swift */; };
@@ -112,6 +113,7 @@
 		7EC42C1157E7CBC0E1DF65C9 /* StringTrimming.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71CD8E4DA7E0A67881EA450 /* StringTrimming.swift */; };
 		7ECFAF36ED62E3488F99484B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5E76571802BD1DCDB737AD8 /* RootView.swift */; };
 		805DF4CF2E89A50E4719DF5D /* OpenAICompatibleProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3547BEA762DAAB71C17AC763 /* OpenAICompatibleProviderClient.swift */; };
+		832FCCCF6904ABFF58E1B4BE /* SuperGrokModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9C0AD156863F07EF13C70BD /* SuperGrokModelCatalog.swift */; };
 		845EF806947869EFB4FD8D8B /* ChatStreamingPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = C34472FD81A9F19E5F21FAC1 /* ChatStreamingPersistence.swift */; };
 		849D27D7F89B502B1F05E424 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B03D691C10949EDBFCACB34 /* L10n.swift */; };
 		84BDEEB0C8B5E9D902F93F87 /* WebSearchToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 250C00C07AEDED8FABE7AE06 /* WebSearchToolTests.swift */; };
@@ -138,6 +140,7 @@
 		9DDD92F6311397EE7798ECBE /* DiagnosticsLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43C7CD5EB5CC05FED3F202A /* DiagnosticsLogger.swift */; };
 		9E7BFE2D1890C97E49D9E2D2 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 2FCAAB02A789F81BADB57372 /* Localizable.strings */; };
 		9EFE66AD7151E071A14BEB4A /* LLMProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E39A438B710CF8BB0B6199 /* LLMProvider.swift */; };
+		9F821BBC03A11DCF2E9CE3E1 /* SuperGrokAuthRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC0B20D5E71F535CE4C00984 /* SuperGrokAuthRepositoryTests.swift */; };
 		A140F54AF36BA28DFD0FFC52 /* SearchEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9289A5E87008C89F9D936F2A /* SearchEngine.swift */; };
 		A258A4BFE2E6449D6D1EC9FE /* ConversationVariantSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 165EBDEB744C9307E8CCF4C7 /* ConversationVariantSelectionTests.swift */; };
 		A5D85978C7B06F2A9BAE739D /* FusionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D940C0C6628F08BF5EAA8CC9 /* FusionServiceTests.swift */; };
@@ -196,8 +199,10 @@
 		EFA22EA04DE8E60D8BB09073 /* ChatMessageToolActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68E251DA917600FC2DF85D85 /* ChatMessageToolActivity.swift */; };
 		F04E2DFCF1423BE5612BDF21 /* DiagnosticsLogSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CA72EEADA1AFB25A6BF0819 /* DiagnosticsLogSanitizer.swift */; };
 		F21ED9977B4C899512D10E80 /* RecentPhotoLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71E38ECB6FCC39AB8BABE949 /* RecentPhotoLibrary.swift */; };
+		F2205DB6281FD1249FBBB994 /* SuperGrokProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65A3222D68EC4E05BB4511FF /* SuperGrokProviderClient.swift */; };
 		F385BC565CFD26EB915C163B /* SvgCodeExtractorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0B056D22F60CAD49BD2587 /* SvgCodeExtractorTests.swift */; };
 		F433C294C36D3EE17D2A09BA /* FusionDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EEDB52857CBB57D89EE2520 /* FusionDetailSheet.swift */; };
+		F59F98D988ECB2F6244F94F8 /* SuperGrokAuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B87B752F42B76EA2490112 /* SuperGrokAuthModels.swift */; };
 		F69F0939F13B693EE461FF79 /* AppStoreScreenshotDemoSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A338F8BAA2B2E3E8F2D0096A /* AppStoreScreenshotDemoSeeder.swift */; };
 		F6E818106835DBDE88EB9479 /* GeminiProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88E60BB6D93FEC509378FC79 /* GeminiProviderClient.swift */; };
 		F83EFAD8650B49B29FD63F50 /* AutoConversationMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E0AF024AFDE4AE3554BA68 /* AutoConversationMessage.swift */; };
@@ -337,6 +342,7 @@
 		649A758B922A87BCDED9F80D /* AppGroupShareStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroupShareStorage.swift; sourceTree = "<group>"; };
 		652A626C556E53B0EB120BFD /* SettingsFormHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsFormHelpers.swift; sourceTree = "<group>"; };
 		65438877F0411D1956AB70FB /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
+		65A3222D68EC4E05BB4511FF /* SuperGrokProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuperGrokProviderClient.swift; sourceTree = "<group>"; };
 		675569E061B2D501C62AC37B /* ChatRepositoryBranchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepositoryBranchTests.swift; sourceTree = "<group>"; };
 		68417249749E064D56E23ACE /* tex-svg.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "tex-svg.js"; sourceTree = "<group>"; };
 		68E251DA917600FC2DF85D85 /* ChatMessageToolActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageToolActivity.swift; sourceTree = "<group>"; };
@@ -346,6 +352,7 @@
 		734FF62164855B98A15ECE62 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		73CDE4D52940A2094E3D289B /* ProviderStreamEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderStreamEventTests.swift; sourceTree = "<group>"; };
 		73FDBC095F0EFC6358C60DC3 /* DuckDuckGoHTMLEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuckDuckGoHTMLEngine.swift; sourceTree = "<group>"; };
+		74B87B752F42B76EA2490112 /* SuperGrokAuthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuperGrokAuthModels.swift; sourceTree = "<group>"; };
 		7824746250F630294D76127F /* GeminiModelUtilsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiModelUtilsTests.swift; sourceTree = "<group>"; };
 		785CD68949277725AACBCB47 /* FusionMessageSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionMessageSummary.swift; sourceTree = "<group>"; };
 		7AFADAD85FDF09DED54072D8 /* GeminiModelUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiModelUtils.swift; sourceTree = "<group>"; };
@@ -393,6 +400,7 @@
 		A78A10ACBB684978CAFB93EC /* StreamParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamParserTests.swift; sourceTree = "<group>"; };
 		A830A97218DEF74E9FA3C2AF /* AppConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConstants.swift; sourceTree = "<group>"; };
 		A838796E06D9802E2EBC5A1A /* FusionOrchestratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionOrchestratorTests.swift; sourceTree = "<group>"; };
+		A9C0AD156863F07EF13C70BD /* SuperGrokModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuperGrokModelCatalog.swift; sourceTree = "<group>"; };
 		AAAE60022019121E086B1627 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		AAFB800375481AE013AF9773 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		AB8DAEE8D6609BEE6A100480 /* YamabikoChat.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = YamabikoChat.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -406,8 +414,10 @@
 		B660E8DACB6DDA3ECAC45423 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
 		B73E0977D7F7F3F60BC9831B /* FusionTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionTypes.swift; sourceTree = "<group>"; };
 		B80C49D629250890536FF4E7 /* FusionPrompts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionPrompts.swift; sourceTree = "<group>"; };
+		B8C45E0D261C897073432224 /* SuperGrokAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuperGrokAuthRepository.swift; sourceTree = "<group>"; };
 		BAB5DB55D3CE8664531EC01E /* ChatMessageVariant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageVariant.swift; sourceTree = "<group>"; };
 		BB55024341507549B0165D92 /* ProviderDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderDisplay.swift; sourceTree = "<group>"; };
+		BC0B20D5E71F535CE4C00984 /* SuperGrokAuthRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuperGrokAuthRepositoryTests.swift; sourceTree = "<group>"; };
 		BC763DA5C2E9F9656E06CA07 /* AutoConversationFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversationFormatter.swift; sourceTree = "<group>"; };
 		BDE99330C07C20D5A185F5F8 /* ClinePassModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinePassModelCatalog.swift; sourceTree = "<group>"; };
 		BF24176365C39342C367D630 /* ProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderClient.swift; sourceTree = "<group>"; };
@@ -514,6 +524,7 @@
 				2B17B8FC83DEF587229515B1 /* OpenCodeGoProviderClient.swift */,
 				BF24176365C39342C367D630 /* ProviderClient.swift */,
 				3DFF46198541856F3786897A /* ProviderRegistry.swift */,
+				65A3222D68EC4E05BB4511FF /* SuperGrokProviderClient.swift */,
 			);
 			path = Providers;
 			sourceTree = "<group>";
@@ -601,6 +612,7 @@
 				C0E5EC327A302F432B8A4083 /* SharePayload.swift */,
 				2ECF80CEF579F07A3B1E23A6 /* ShortcutModelOptionsBuilder.swift */,
 				E71CD8E4DA7E0A67881EA450 /* StringTrimming.swift */,
+				A9C0AD156863F07EF13C70BD /* SuperGrokModelCatalog.swift */,
 				1886F2DB993356F8E685640F /* SystemPromptComposer.swift */,
 				C173F954D959718068C98D5A /* YamabikoWebKitSupport.swift */,
 			);
@@ -856,6 +868,7 @@
 				C999B182C41BD1B53399513E /* SSEPayloadAssemblerTests.swift */,
 				4A12FA9662EE2E9EFA66419C /* StreamDeltaAccumulatorTests.swift */,
 				A78A10ACBB684978CAFB93EC /* StreamParserTests.swift */,
+				BC0B20D5E71F535CE4C00984 /* SuperGrokAuthRepositoryTests.swift */,
 				0F0B056D22F60CAD49BD2587 /* SvgCodeExtractorTests.swift */,
 				51CC989E2C978463E973E22C /* SvgPreviewSanitizerTests.swift */,
 				9B1630BEBD1C1648F035DAA9 /* SystemPromptComposerTests.swift */,
@@ -930,6 +943,8 @@
 				5C80771801FDEE9773008CF0 /* AuthModels.swift */,
 				C470C52136C0F5806543DD92 /* CodexAuthRepository.swift */,
 				D5CFFE9C93FC61F9A3335A21 /* LocalAuthCallbackServer.swift */,
+				74B87B752F42B76EA2490112 /* SuperGrokAuthModels.swift */,
+				B8C45E0D261C897073432224 /* SuperGrokAuthRepository.swift */,
 			);
 			path = Auth;
 			sourceTree = "<group>";
@@ -1138,6 +1153,7 @@
 				309AC42FDD9CC6EFE435D1EA /* ShortcutRunTests.swift in Sources */,
 				A6AEA588DA5A864F7350E68F /* StreamDeltaAccumulatorTests.swift in Sources */,
 				15CFB3980DC886A591096370 /* StreamParserTests.swift in Sources */,
+				9F821BBC03A11DCF2E9CE3E1 /* SuperGrokAuthRepositoryTests.swift in Sources */,
 				F385BC565CFD26EB915C163B /* SvgCodeExtractorTests.swift in Sources */,
 				EF12AD93CA25107FB63F52E2 /* SvgPreviewSanitizerTests.swift in Sources */,
 				D0AD31FBF5FF7FF42A9F8C58 /* SystemPromptComposerTests.swift in Sources */,
@@ -1284,6 +1300,10 @@
 				79A232362351686E2A7742CC /* SpeechRecognitionService.swift in Sources */,
 				4F815472EB660562C18867EC /* StreamDeltaAccumulator.swift in Sources */,
 				7EC42C1157E7CBC0E1DF65C9 /* StringTrimming.swift in Sources */,
+				F59F98D988ECB2F6244F94F8 /* SuperGrokAuthModels.swift in Sources */,
+				12B8B4D43B8F75D3FD566CFF /* SuperGrokAuthRepository.swift in Sources */,
+				832FCCCF6904ABFF58E1B4BE /* SuperGrokModelCatalog.swift in Sources */,
+				F2205DB6281FD1249FBBB994 /* SuperGrokProviderClient.swift in Sources */,
 				2F385FBF449F22A1560291F6 /* SvgCodeExtractor.swift in Sources */,
 				9956FF9B0D965DD8D01BA6BA /* SvgPreviewCard.swift in Sources */,
 				696478CAFDBA3D897D3DE015 /* SvgPreviewWebView.swift in Sources */,

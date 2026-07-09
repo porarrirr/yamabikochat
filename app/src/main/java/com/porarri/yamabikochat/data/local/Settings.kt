@@ -183,7 +183,11 @@ data class Settings(
     val codexWebSearchContextSize: String = "medium",
     val codexPromptCacheEnabled: Boolean = true,
     val codexPromptCacheMinLength: Int = 512,
-    val codexPromptCacheType: String = "ephemeral"
+    val codexPromptCacheType: String = "ephemeral",
+
+    // SuperGrok OAuth reasoning settings
+    val superGrokReasoningEnabled: Boolean = true,
+    val superGrokReasoningEffort: String = "medium"
 ) {
     // 現在のAPIプロバイダーに基づいて設定を取得するヘルパー関数
     fun getCurrentGoogleSearchEnabled(): Boolean {
@@ -330,7 +334,7 @@ data class Settings(
 
     fun isStreamingEnabledFor(provider: String): Boolean {
         return when (provider.uppercase()) {
-            "CODEX_AUTH" -> true
+            "CODEX_AUTH", "SUPERGROK" -> true
             "OPENROUTER" -> openRouterStreamingEnabled
             else -> geminiStreamingEnabled
         }
@@ -493,6 +497,11 @@ data class Settings(
                 enabledOverride = overrides?.enabled,
                 effortOverride = overrides?.codexEffort
             )
+            "SUPERGROK" -> buildSuperGrokThinkingConfig(
+                model = model,
+                enabledOverride = overrides?.enabled,
+                effortOverride = overrides?.codexEffort
+            )
             "ZAI" -> buildZaiThinkingConfig(enabledOverride = overrides?.enabled)
             "GEMINI" -> buildGeminiThinkingConfig(
                 model,
@@ -652,6 +661,30 @@ data class Settings(
         )
     }
 
+    private fun buildSuperGrokThinkingConfig(
+        model: String,
+        enabledOverride: Boolean? = null,
+        effortOverride: String? = null
+    ): ThinkingConfig? {
+        val catalogModel = com.porarri.yamabikochat.data.remote.SuperGrokModelCatalog.modelFor(model)
+        // Catalog miss = custom model ID; treat as reasoning-capable and honor settings.
+        if (catalogModel != null && !catalogModel.supportsReasoning) return null
+        val enabled = enabledOverride ?: superGrokReasoningEnabled
+        val rawEffort = (effortOverride ?: superGrokReasoningEffort).trim().lowercase().ifBlank { "medium" }
+        val effort = if (enabled) {
+            when (rawEffort) {
+                "low", "medium", "high" -> rawEffort
+                else -> "medium"
+            }
+        } else {
+            "none"
+        }
+        return ThinkingConfig(
+            effort = effort,
+            includeThoughts = true
+        )
+    }
+
     private data class ThinkingOverrides(
         val enabled: Boolean?,
         val budget: Int?,
@@ -703,6 +736,7 @@ data class Settings(
             "GEMINI",
             "OPENROUTER",
             "OPENCODE_GO",
+            "SUPERGROK",
             "CLINEPASS",
             "ALIBABA_CODING_PLAN",
             "ZAI",

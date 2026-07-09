@@ -30,6 +30,7 @@ final class ChatRepository {
     private let credentialStore: SecureCredentialStore
     private let modelService: OpenRouterModelService
     private let codexAuthRepository: CodexAuthRepository
+    private let superGrokAuthRepository: SuperGrokAuthRepository
     private let pricingRepository: any LiteLlmPricingEstimating
     private let localToolRegistry: LocalToolRegistry
     private let fusionService: FusionService
@@ -43,6 +44,7 @@ final class ChatRepository {
         credentialStore: SecureCredentialStore,
         modelService: OpenRouterModelService,
         codexAuthRepository: CodexAuthRepository,
+        superGrokAuthRepository: SuperGrokAuthRepository,
         pricingRepository: any LiteLlmPricingEstimating = LiteLlmPricingRepository(),
         localToolRegistry: LocalToolRegistry = LocalToolRegistry(
             executors: [
@@ -60,6 +62,7 @@ final class ChatRepository {
         self.credentialStore = credentialStore
         self.modelService = modelService
         self.codexAuthRepository = codexAuthRepository
+        self.superGrokAuthRepository = superGrokAuthRepository
         self.pricingRepository = pricingRepository
         self.localToolRegistry = localToolRegistry
         self.fusionService = fusionService
@@ -1564,6 +1567,26 @@ final class ChatRepository {
         await codexAuthRepository.retrieveUsageStatus()
     }
 
+    func superGrokAuthStatePublisher() -> AnyPublisher<SuperGrokAuthState, Never> {
+        superGrokAuthRepository.state
+    }
+
+    func loginSuperGrokWithBrowser() async -> Result<SuperGrokAuthState, Error> {
+        await superGrokAuthRepository.loginWithBrowser()
+    }
+
+    func loginSuperGrokWithDeviceCode() async -> Result<SuperGrokAuthState, Error> {
+        await superGrokAuthRepository.loginWithDeviceCode()
+    }
+
+    func logoutSuperGrok() async -> Result<SuperGrokAuthState, Error> {
+        await superGrokAuthRepository.logout()
+    }
+
+    func refreshSuperGrok(force: Bool = false) async -> Result<SuperGrokAuthState, Error> {
+        await superGrokAuthRepository.refreshIfNeeded(force: force)
+    }
+
     func saveOpenAiCompatApiKey(name: String, apiKey: String?) -> Bool {
         do {
             try credentialStore.setOpenAICompatAPIKey(name: name, value: apiKey)
@@ -1580,6 +1603,23 @@ final class ChatRepository {
     func hasOpenAiCompatApiKey(name: String?) -> Bool {
         guard let name = name, let value = try? credentialStore.openAICompatAPIKey(name: name) else { return false }
         return !value.isEmpty
+    }
+
+    func saveGeminiApiKey(name: String, apiKey: String?) -> Bool {
+        do {
+            try credentialStore.setGeminiAPIKey(name: name, value: apiKey)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    func peekGeminiApiKey(name: String) -> String? {
+        try? credentialStore.geminiAPIKey(name: name)
+    }
+
+    func removeGeminiApiKey(name: String) {
+        try? credentialStore.clearGeminiAPIKey(name: name)
     }
 
     func clearOpenAiCompatApiKey(name: String) {
@@ -2252,6 +2292,29 @@ final class ChatRepository {
             let baseEffort = settings.codexReasoningEffort.ifBlank("medium")
             let overrideEffort = overrides.codexEffort?.ifBlank(baseEffort)
             let effort = enabled ? (overrideEffort ?? baseEffort) : "none"
+            return ProviderThinkingConfig(
+                enabled: nil,
+                budget: nil,
+                effort: effort,
+                includeThoughts: true,
+                exclude: nil
+            )
+        case "SUPERGROK":
+            let enabled = overrides.enabled ?? settings.superGrokReasoningEnabled
+            let baseEffort = settings.superGrokReasoningEffort.ifBlank("medium")
+            let overrideEffort = overrides.codexEffort?.ifBlank(baseEffort)
+            let rawEffort = enabled ? (overrideEffort ?? baseEffort) : "none"
+            let effort: String
+            if rawEffort == "none" {
+                effort = "none"
+            } else {
+                let normalized = rawEffort.lowercased()
+                effort = ["low", "medium", "high"].contains(normalized) ? normalized : "medium"
+            }
+            // Catalog miss = custom model; only omit reasoning for known non-reasoning models.
+            if let catalog = SuperGrokModelCatalog.model(for: model), !catalog.supportsReasoning {
+                return nil
+            }
             return ProviderThinkingConfig(
                 enabled: nil,
                 budget: nil,

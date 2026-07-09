@@ -46,6 +46,15 @@ class OpenAiProvider(
             val budget = request.generationConfig?.thinkingConfig?.thinkingBudget?.takeIf { it > 0 }
             val service = makeService(baseUrl)
             val reasoningSplit = MiniMaxUtils.isMiniMaxBaseUrl(baseUrl)
+            val reasoning = if (preserveReasoning(baseUrl)) {
+                when (payload) {
+                    is OpenRouterRequest -> payload.reasoning
+                    is OpenRouterMultiModalRequest -> payload.reasoning
+                    else -> null
+                }
+            } else {
+                null
+            }
 
             val resp = when (payload) {
                 is OpenRouterRequest -> service.createChatCompletion(
@@ -53,7 +62,7 @@ class OpenAiProvider(
                     request = payload.copy(
                         model = normalizeOpenAiModel(payload.model),
                         provider = null,
-                        reasoning = null,
+                        reasoning = reasoning,
                         cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
                         max_tokens = budget ?: payload.max_tokens,
@@ -65,7 +74,7 @@ class OpenAiProvider(
                     request = payload.copy(
                         model = normalizeOpenAiModel(payload.model),
                         provider = null,
-                        reasoning = null,
+                        reasoning = reasoning,
                         cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
                         max_tokens = budget ?: payload.max_tokens,
@@ -104,6 +113,15 @@ class OpenAiProvider(
             val budget = request.generationConfig?.thinkingConfig?.thinkingBudget?.takeIf { it > 0 }
             val service = makeService(baseUrl)
             val reasoningSplit = MiniMaxUtils.isMiniMaxBaseUrl(baseUrl)
+            val reasoning = if (preserveReasoning(baseUrl)) {
+                when (payload) {
+                    is OpenRouterRequest -> payload.reasoning
+                    is OpenRouterMultiModalRequest -> payload.reasoning
+                    else -> null
+                }
+            } else {
+                null
+            }
 
             when (payload) {
                 is OpenRouterRequest -> service.createChatCompletionStream(
@@ -112,7 +130,7 @@ class OpenAiProvider(
                         model = normalizeOpenAiModel(payload.model),
                         stream = true,
                         provider = null,
-                        reasoning = null,
+                        reasoning = reasoning,
                         cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
                         max_tokens = budget ?: payload.max_tokens,
@@ -125,7 +143,7 @@ class OpenAiProvider(
                         model = normalizeOpenAiModel(payload.model),
                         stream = true,
                         provider = null,
-                        reasoning = null,
+                        reasoning = reasoning,
                         cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
                         max_tokens = budget ?: payload.max_tokens,
@@ -143,6 +161,15 @@ class OpenAiProvider(
     private fun normalizeOpenAiModel(model: String): String {
         val trimmed = model.trim()
         return trimmed.removePrefix("openai/")
+    }
+
+    /**
+     * SuperGrok (xAI) accepts OpenRouter-style `reasoning` (effort). Official OpenAI and most
+     * OpenAI-compatible endpoints do not — keep stripping there.
+     */
+    private fun preserveReasoning(baseUrl: String): Boolean {
+        val host = baseUrl.lowercase()
+        return host.contains("api.x.ai") || host.contains("x.ai/")
     }
 
     private fun promptCacheKeyForOfficialOpenAi(

@@ -572,6 +572,12 @@ class ChatViewModel(
                         openRouterGoogleSearchEnabled = preset.googleSearchEnabled,
                         openRouterCodeExecutionEnabled = preset.codeExecutionEnabled
                     )
+                    "SUPERGROK" -> currentSettings.copy(
+                        thinkingEnabled = preset.thinkingEnabled,
+                        thinkingBudget = preset.thinkingBudget,
+                        superGrokReasoningEnabled = preset.thinkingEnabled,
+                        superGrokReasoningEffort = preset.reasoningEffort.ifBlank { currentSettings.superGrokReasoningEffort }
+                    )
                     "CODEX_AUTH" -> currentSettings.copy(
                         thinkingEnabled = preset.thinkingEnabled,
                         thinkingBudget = preset.thinkingBudget,

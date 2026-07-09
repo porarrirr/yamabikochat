@@ -100,6 +100,8 @@ data class SettingsUpdateRequest(
     val codexPromptCacheEnabled: Boolean = true,
     val codexPromptCacheMinLength: Int = 512,
     val codexPromptCacheType: String = "ephemeral",
+    val superGrokReasoningEnabled: Boolean = true,
+    val superGrokReasoningEffort: String = "medium",
     val dualOpenRouterThinkingEnabledA: Boolean? = null,
     val dualOpenRouterThinkingBudgetA: Int? = null,
     val dualOpenRouterReasoningModeA: String? = null,

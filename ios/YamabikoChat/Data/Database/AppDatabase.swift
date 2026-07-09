@@ -136,6 +136,8 @@ enum AppDatabase {
                 t.column("geminiResponseMimeType", .text).notNull().defaults(to: "")
                 t.column("geminiResponseJSONSchema", .text).notNull().defaults(to: "")
                 t.column("geminiFunctionDeclarations", .text).notNull().defaults(to: "")
+                t.column("geminiKeyNamesJSON", .text).notNull().defaults(to: "[]")
+                t.column("geminiRotationModelsJSON", .text).notNull().defaults(to: "[]")
 
                 t.column("openRouterThinkingEnabled", .boolean).notNull().defaults(to: false)
                 t.column("openRouterThinkingBudget", .integer).notNull().defaults(to: 0)
@@ -688,6 +690,32 @@ enum AppDatabase {
             if !settingsColumns.contains("fusioncustompresetjson") {
                 try db.alter(table: "settings") { t in
                     t.add(column: "fusionCustomPresetJSON", .text).notNull().defaults(to: "")
+                }
+            }
+        }
+
+        migrator.registerMigration("v13_gemini_rotation") { db in
+            let settingsRows = try Row.fetchAll(db, sql: "PRAGMA table_info(settings)")
+            let settingsColumns = Set(settingsRows.compactMap { ($0["name"] as String?)?.lowercased() })
+            try db.alter(table: "settings") { t in
+                if !settingsColumns.contains("geminikeynamesjson") {
+                    t.add(column: "geminiKeyNamesJSON", .text).notNull().defaults(to: "[]")
+                }
+                if !settingsColumns.contains("geminirotationmodelsjson") {
+                    t.add(column: "geminiRotationModelsJSON", .text).notNull().defaults(to: "[]")
+                }
+            }
+        }
+
+        migrator.registerMigration("v14_supergrok_reasoning") { db in
+            let settingsRows = try Row.fetchAll(db, sql: "PRAGMA table_info(settings)")
+            let settingsColumns = Set(settingsRows.compactMap { ($0["name"] as String?)?.lowercased() })
+            try db.alter(table: "settings") { t in
+                if !settingsColumns.contains("supergrokreasoningenabled") {
+                    t.add(column: "superGrokReasoningEnabled", .boolean).notNull().defaults(to: true)
+                }
+                if !settingsColumns.contains("supergrokreasoningeffort") {
+                    t.add(column: "superGrokReasoningEffort", .text).notNull().defaults(to: "medium")
                 }
             }
         }

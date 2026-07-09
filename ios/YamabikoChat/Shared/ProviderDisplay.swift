@@ -17,6 +17,7 @@ enum ProviderCatalog {
         ProviderDisplay(key: "GEMINI", title: "Google Gemini"),
         ProviderDisplay(key: "OPENROUTER", title: "OpenRouter"),
         ProviderDisplay(key: "OPENCODE_GO", title: "OpenCode Go"),
+        ProviderDisplay(key: "SUPERGROK", title: "SuperGrok"),
         ProviderDisplay(key: "CLINEPASS", title: "Cline Pass"),
         ProviderDisplay(key: "ALIBABA_CODING_PLAN", title: "Alibaba Coding Plan"),
         ProviderDisplay(key: "ZAI", title: "Z.ai"),

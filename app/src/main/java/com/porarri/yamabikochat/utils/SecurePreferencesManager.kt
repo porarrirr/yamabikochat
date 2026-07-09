@@ -32,6 +32,10 @@ class SecurePreferencesManager private constructor(private val context: Context)
         private const val KEY_ALIBABA_CODING_PLAN_API_KEY = "alibaba_coding_plan_api_key"
         private const val KEY_ALIBABA_MCP_AUTH_TOKEN = "alibaba_mcp_authorization_token"
         private const val KEY_CODEX_AUTH_JSON = "codex_auth_json"
+        private const val KEY_SUPERGROK_AUTH_JSON = "supergrok_auth_json"
+        private const val KEY_SUPERGROK_ACCESS_TOKEN = "supergrok_access_token"
+        private const val KEY_SUPERGROK_EMAIL = "supergrok_email"
+        private const val KEY_SUPERGROK_LAST_REFRESH = "supergrok_last_refresh"
         private const val KEY_CODEX_USER_AGENT_PRESET = "codex_user_agent_preset"
         private const val KEY_CODEX_USER_AGENT_CLI_VERSION = "codex_user_agent_cli_version"
     }
@@ -279,6 +283,43 @@ class SecurePreferencesManager private constructor(private val context: Context)
 
     fun clearCodexAuthJson() =
         clearKey(KEY_CODEX_AUTH_JSON, "Codex Auth")
+
+    fun storeSuperGrokAuthJson(payload: String?): Boolean =
+        storeString(KEY_SUPERGROK_AUTH_JSON, payload, "SuperGrok Auth")
+
+    fun getSuperGrokAuthJson(): String? =
+        readString(KEY_SUPERGROK_AUTH_JSON, "SuperGrok Auth")
+
+    fun hasSuperGrokAuthJson(): Boolean =
+        hasString(KEY_SUPERGROK_AUTH_JSON, "SuperGrok Auth")
+
+    fun clearSuperGrokAuthJsonOnly() =
+        clearKey(KEY_SUPERGROK_AUTH_JSON, "SuperGrok Auth")
+
+    fun storeSuperGrokAccessToken(token: String?): Boolean =
+        storeString(KEY_SUPERGROK_ACCESS_TOKEN, token, "SuperGrok access token")
+
+    fun getSuperGrokAccessToken(): String? =
+        readString(KEY_SUPERGROK_ACCESS_TOKEN, "SuperGrok access token")
+
+    fun storeSuperGrokEmail(email: String?): Boolean =
+        storeString(KEY_SUPERGROK_EMAIL, email, "SuperGrok email")
+
+    fun getSuperGrokEmail(): String? =
+        readString(KEY_SUPERGROK_EMAIL, "SuperGrok email")
+
+    fun storeSuperGrokLastRefresh(value: String?): Boolean =
+        storeString(KEY_SUPERGROK_LAST_REFRESH, value, "SuperGrok last refresh")
+
+    fun getSuperGrokLastRefresh(): String? =
+        readString(KEY_SUPERGROK_LAST_REFRESH, "SuperGrok last refresh")
+
+    fun clearSuperGrokAuth() {
+        clearSuperGrokAuthJsonOnly()
+        storeSuperGrokAccessToken(null)
+        storeSuperGrokEmail(null)
+        clearKey(KEY_SUPERGROK_LAST_REFRESH, "SuperGrok last refresh")
+    }
 
     fun storeCodexUserAgentPreset(preset: String?): Boolean =
         storeString(KEY_CODEX_USER_AGENT_PRESET, preset, "Codex User-Agent preset")

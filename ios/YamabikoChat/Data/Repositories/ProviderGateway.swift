@@ -5,6 +5,7 @@ final class ProviderGateway {
     private let credentialStore: SecureCredentialStore
     private let registry: ProviderRegistry
     private let httpClient: HTTPClientProtocol
+    private let superGrokAuthRepository: SuperGrokAuthRepository?
 
     /// Google's Gemini API intermittently returns a generic HTTP 500 "Internal error
     /// encountered" (status "INTERNAL") for some models regardless of request content -
@@ -20,12 +21,65 @@ final class ProviderGateway {
         settingsRepository: SettingsRepository,
         credentialStore: SecureCredentialStore,
         registry: ProviderRegistry = .init(),
-        httpClient: HTTPClientProtocol = URLSessionHTTPClient()
+        httpClient: HTTPClientProtocol = URLSessionHTTPClient(),
+        superGrokAuthRepository: SuperGrokAuthRepository? = nil
     ) {
         self.settingsRepository = settingsRepository
         self.credentialStore = credentialStore
         self.registry = registry
         self.httpClient = httpClient
+        self.superGrokAuthRepository = superGrokAuthRepository
+    }
+
+    private static func isUnauthorized(_ error: Error) -> Bool {
+        guard case let ProviderClientError.httpStatus(status, _) = error else { return false }
+        return status == 401
+    }
+
+    private func prepareSuperGrokAuth(force: Bool = false) async throws {
+        guard let superGrokAuthRepository else { return }
+        let result = await superGrokAuthRepository.refreshIfNeeded(force: force)
+        if case let .failure(error) = result {
+            throw error
+        }
+    }
+
+    private func generateWithProviderAuth(
+        request: ProviderRequest,
+        provider: LLMProvider,
+        settings: AppSettings,
+        client: ProviderClient,
+        credentialStore: SecureCredentialStore
+    ) async throws -> ProviderResponse {
+        if provider == .superGrok {
+            try await prepareSuperGrokAuth()
+            do {
+                return try await generateOnce(
+                    request: request,
+                    provider: provider,
+                    settings: settings,
+                    client: client,
+                    credentialStore: credentialStore
+                )
+            } catch {
+                guard Self.isUnauthorized(error) else { throw error }
+                try await prepareSuperGrokAuth(force: true)
+                return try await generateOnce(
+                    request: request,
+                    provider: provider,
+                    settings: settings,
+                    client: client,
+                    credentialStore: credentialStore
+                )
+            }
+        }
+        return try await generateOnce(
+            request: request,
+            provider: provider,
+            settings: settings,
+            client: client,
+            credentialStore: credentialStore
+        )
     }
 
     private static func isTransientGeminiServerError(_ error: Error) -> Bool {
@@ -183,7 +237,7 @@ final class ProviderGateway {
         request.metadata["provider"] = provider.rawValue
 
         guard provider == .gemini else {
-            return try await generateOnce(
+            return try await generateWithProviderAuth(
                 request: request,
                 provider: provider,
                 settings: settings,
@@ -194,13 +248,7 @@ final class ProviderGateway {
 
         let candidates = geminiRotationCandidates(for: request, settings: settings)
         guard candidates.count > 1 else {
-            return try await generateOnce(
-                request: request,
-                provider: provider,
-                settings: settings,
-                client: client,
-                credentialStore: credentialStore
-            )
+            return try await generateOnce(request: request, provider: provider, settings: settings, client: client, credentialStore: credentialStore)
         }
 
         let ordered = reorderedForLastGoodGeminiCandidate(candidates)
@@ -270,8 +318,18 @@ final class ProviderGateway {
 
         return AsyncThrowingStream { continuation in
             let task = Task {
+                if provider == .superGrok {
+                    do {
+                        try await prepareSuperGrokAuth()
+                    } catch {
+                        continuation.finish(throwing: error)
+                        return
+                    }
+                }
+
                 var streamHadAnswerText = false
                 var transientAttempt = 0
+                var superGrokAuthRetried = false
                 var candidateIndex = 0
                 var currentRequest = request
                 var currentCredentialStore: SecureCredentialStore = credentialStore
@@ -330,6 +388,19 @@ final class ProviderGateway {
                         continuation.finish()
                         return
                     } catch {
+                        if provider == .superGrok,
+                           !yieldedAnyEventThisAttempt,
+                           !superGrokAuthRetried,
+                           Self.isUnauthorized(error) {
+                            superGrokAuthRetried = true
+                            do {
+                                try await prepareSuperGrokAuth(force: true)
+                                continue
+                            } catch {
+                                continuation.finish(throwing: error)
+                                return
+                            }
+                        }
                         // Only safe to retry when nothing has been yielded yet this attempt -
                         // otherwise a retry would duplicate partial output already shown to the user.
                         if provider == .gemini,

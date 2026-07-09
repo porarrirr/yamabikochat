@@ -209,12 +209,15 @@ struct SettingsScreen: View {
                 }
             }
 
-            if currentProviderKey != "CODEX_AUTH", currentProviderKey != "APPLE_INTELLIGENCE" {
+            if currentProviderKey != "CODEX_AUTH", currentProviderKey != "SUPERGROK", currentProviderKey != "APPLE_INTELLIGENCE" {
                 Section("APIキー") {
                     SecureField(currentProviderAPIKeyLabel, text: $viewModel.apiKeyDraft)
                 }
             }
 
+            if isGeminiProvider {
+                geminiRotationSection
+            }
             if currentProviderKey == "OPENAI_COMPAT" {
                 openAICompatSection
             }
@@ -241,6 +244,10 @@ struct SettingsScreen: View {
             if currentProviderKey == "CODEX_AUTH" {
                 codexAuthSection
             }
+            if currentProviderKey == "SUPERGROK" {
+                superGrokAuthSection
+            }
+            superGrokProviderSettingsSection
         }
     }
 
@@ -351,6 +358,69 @@ struct SettingsScreen: View {
             }
             Link(destination: AppConstants.supportURL) {
                 Label(L10n.text("サポート"), systemImage: "questionmark.circle")
+            }
+        }
+    }
+
+    private var geminiRotationSection: some View {
+        Group {
+            Section("Gemini APIキー一覧（ローテーション）") {
+                Text("複数キーを登録すると、レート制限や認証エラー時に自動で次のキー/モデルへ切り替えます。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                TextField("キー名", text: $viewModel.geminiKeySlotNameInput)
+                SecureField("APIキー", text: $viewModel.geminiKeySlotValueInput)
+                Button("キーを追加") {
+                    viewModel.addGeminiKeySlot()
+                }
+                .buttonStyle(.bordered)
+
+                ForEach(viewModel.geminiKeySlots, id: \.self) { name in
+                    HStack {
+                        Text(name)
+                        Spacer()
+                        Button(role: .destructive) {
+                            viewModel.removeGeminiKeySlot(name: name)
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                    }
+                }
+            }
+
+            Section("ローテーションモデル一覧") {
+                Picker("モデルを追加", selection: Binding(
+                    get: { "" },
+                    set: { newValue in
+                        if !newValue.isEmpty {
+                            viewModel.addGeminiRotationModel(newValue)
+                        }
+                    }
+                )) {
+                    Text("選択...").tag("")
+                    ForEach(GeminiModelCatalog.suggestedModels, id: \.self) { model in
+                        Text(model).tag(model)
+                    }
+                }
+
+                ForEach(viewModel.geminiRotationModels, id: \.self) { model in
+                    HStack {
+                        Text(model)
+                        Spacer()
+                        Button(role: .destructive) {
+                            viewModel.removeGeminiRotationModel(model)
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                    }
+                }
+
+                if viewModel.geminiRotationModels.isEmpty {
+                    Text("未設定の場合は現在選択中のモデルのみを使用します（既存動作と同じ）。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -929,6 +999,97 @@ struct SettingsScreen: View {
         }
     }
 
+    private var superGrokProviderSettingsSection: some View {
+        Group {
+            if currentProviderKey == "SUPERGROK" {
+                Section("SuperGrok Settings") {
+                    Text("Endpoint: \(AppConstants.defaultSuperGrokBaseURL.absoluteString)")
+                        .font(.caption)
+                        .textSelection(.enabled)
+
+                    Toggle("Reasoning", isOn: Binding(
+                        get: { viewModel.settings.superGrokReasoningEnabled },
+                        set: { viewModel.settings.superGrokReasoningEnabled = $0 }
+                    ))
+
+                    Picker("Reasoning Effort", selection: Binding(
+                        get: {
+                            let value = viewModel.settings.superGrokReasoningEffort.ifBlank("medium")
+                            return superGrokReasoningEffortOptions.contains(value) ? value : "medium"
+                        },
+                        set: { viewModel.settings.superGrokReasoningEffort = $0 }
+                    )) {
+                        ForEach(superGrokReasoningEffortOptions, id: \.self) { effort in
+                            Text(effort).tag(effort)
+                        }
+                    }
+                    .disabled(!viewModel.settings.superGrokReasoningEnabled)
+
+                    Text("SuperGrok / X Premium+ サブスクリプションの OAuth トークンで xAI API に接続します。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var superGrokAuthSection: some View {
+        Section("SuperGrok Auth") {
+            Text(superGrokSummary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Button("Sign in (Browser)") {
+                    Task { await viewModel.loginSuperGrokWithBrowser() }
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button("Sign in (Device Code)") {
+                    Task { await viewModel.loginSuperGrokWithDeviceCode() }
+                }
+                .buttonStyle(.bordered)
+            }
+            .disabled(viewModel.isSuperGrokAuthActionRunning)
+
+            HStack {
+                Button("Refresh") {
+                    Task { await viewModel.refreshSuperGrok(force: true) }
+                }
+                .buttonStyle(.bordered)
+
+                Button("Sign out") {
+                    Task { await viewModel.logoutSuperGrok() }
+                }
+                .buttonStyle(.bordered)
+            }
+            .disabled(viewModel.isSuperGrokAuthActionRunning)
+
+            if viewModel.isSuperGrokAuthActionRunning {
+                ProgressView("SuperGrok認証処理中...")
+                    .font(.caption2)
+            }
+
+            if let challenge = viewModel.superGrokAuthState.pendingDeviceCode {
+                Text("Verification URL: \(challenge.browserURL)")
+                    .font(.caption2)
+                    .textSelection(.enabled)
+                Text("User code: \(challenge.userCode)")
+                    .font(.caption2)
+                    .textSelection(.enabled)
+            }
+
+            if !viewModel.superGrokEmailInput.isEmpty {
+                Text("Email: \(viewModel.superGrokEmailInput)")
+                    .font(.caption2)
+            }
+
+            Text("Browser ログインは \(SuperGrokAuthConstants.redirectURI) を使います。OpenCode / Grok CLI と同時起動するとポートが競合します。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private var codexAuthSection: some View {
         Section("Codex Auth") {
             Text(codexSummary)
@@ -999,6 +1160,10 @@ struct SettingsScreen: View {
 
     private var codexSummary: String {
         "loggedIn=\(viewModel.codexAuthState.isLoggedIn ? "yes" : "no"), hasApiKey=\(viewModel.codexAuthState.hasApiKey ? "yes" : "no")"
+    }
+
+    private var superGrokSummary: String {
+        "loggedIn=\(viewModel.superGrokAuthState.isLoggedIn ? "yes" : "no")"
     }
 
     private var systemPromptPresetSection: some View {
@@ -1092,6 +1257,26 @@ struct SettingsScreen: View {
                     ForEach(alibabaCodingPlanModelOptions, id: \.self) { model in
                         Text(model).tag(model)
                     }
+                }
+
+                TextField("Model", text: Binding(
+                    get: { viewModel.settings.defaultModel },
+                    set: { viewModel.setDefaultModel($0) }
+                ))
+            } else if isSuperGrokProvider {
+                Picker("SuperGrok Model", selection: Binding(
+                    get: { viewModel.settings.defaultModel },
+                    set: { viewModel.setDefaultModel($0) }
+                )) {
+                    ForEach(superGrokModelOptions) { model in
+                        Text(model.displayName).tag(model.id)
+                    }
+                }
+
+                if let model = SuperGrokModelCatalog.model(for: viewModel.settings.defaultModel) {
+                    Text(model.description)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
 
                 TextField("Model", text: Binding(
@@ -1357,6 +1542,10 @@ struct SettingsScreen: View {
         currentProviderKey == "OPENCODE_GO"
     }
 
+    private var isSuperGrokProvider: Bool {
+        currentProviderKey == "SUPERGROK"
+    }
+
     private var isClinePassProvider: Bool {
         currentProviderKey == "CLINEPASS"
     }
@@ -1393,6 +1582,10 @@ struct SettingsScreen: View {
         OpenCodeGoModelCatalog.supportedModels
     }
 
+    private var superGrokModelOptions: [SuperGrokModel] {
+        SuperGrokModelCatalog.supportedModels
+    }
+
     private var clinePassModelOptions: [ClinePassModel] {
         ClinePassModelCatalog.supportedModels
     }
@@ -1407,6 +1600,10 @@ struct SettingsScreen: View {
             CodexReasoningEffortPreset(effort: "high", description: ""),
             CodexReasoningEffortPreset(effort: "xhigh", description: "")
         ]
+    }
+
+    private var superGrokReasoningEffortOptions: [String] {
+        ["low", "medium", "high"]
     }
 
     private var selectedOpenRouterModel: SimpleModel? {

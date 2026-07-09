@@ -12,6 +12,7 @@ final class AppServices {
     let attachmentRepository: AttachmentRepository
     let openRouterModelService: OpenRouterModelService
     let codexAuthRepository: CodexAuthRepository
+    let superGrokAuthRepository: SuperGrokAuthRepository
     let providerGateway: ProviderGateway
     let fusionTraceStore: FusionTraceStore
     let fusionService: FusionService
@@ -32,9 +33,11 @@ final class AppServices {
         attachmentRepository = AttachmentRepository()
         openRouterModelService = OpenRouterModelService(credentialStore: credentialStore)
         codexAuthRepository = CodexAuthRepository(credentialStore: credentialStore)
+        superGrokAuthRepository = SuperGrokAuthRepository(credentialStore: credentialStore)
         providerGateway = ProviderGateway(
             settingsRepository: settingsRepository,
-            credentialStore: credentialStore
+            credentialStore: credentialStore,
+            superGrokAuthRepository: superGrokAuthRepository
         )
         fusionTraceStore = FusionTraceStore(dbQueue: dbQueue)
         fusionService = FusionService(
@@ -50,6 +53,7 @@ final class AppServices {
             credentialStore: credentialStore,
             modelService: openRouterModelService,
             codexAuthRepository: codexAuthRepository,
+            superGrokAuthRepository: superGrokAuthRepository,
             fusionService: fusionService,
             fusionTraceStore: fusionTraceStore
         )

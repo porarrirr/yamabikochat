@@ -272,6 +272,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             return .zai
         case .codexAuth:
             return .codexAuth
+        case .superGrok:
+            return .superGrok
         case .gemini, .appleIntelligence:
             return .gemini
         }
@@ -320,7 +322,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                 throw ProviderClientError.invalidBaseURL("https://api.cline.bot/api/v1/chat/completions")
             }
             return url
-        case .codexAuth, .gemini, .appleIntelligence:
+        case .codexAuth, .superGrok, .gemini, .appleIntelligence:
             throw ProviderClientError.invalidBaseURL("Provider not supported by OpenAI compatible client")
         }
     }

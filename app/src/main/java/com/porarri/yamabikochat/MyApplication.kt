@@ -4,6 +4,7 @@ import android.app.Application
 import com.porarri.yamabikochat.data.ChatRepository
 import com.porarri.yamabikochat.data.api.ApiRepository
 import com.porarri.yamabikochat.data.auth.CodexAuthRepository
+import com.porarri.yamabikochat.data.auth.SuperGrokAuthRepository
 import com.porarri.yamabikochat.data.attachments.AttachmentStorage
 import com.porarri.yamabikochat.data.database.DatabaseRepository
 import com.porarri.yamabikochat.data.files.FileProcessingRepository
@@ -48,6 +49,7 @@ class MyApplication : Application() {
     private val pricingRepository by lazy { LiteLlmPricingRepository(RetrofitClient.liteLlmPricingInstance) }
     private val settingsManager by lazy { SettingsManager.getInstance(applicationContext, chatDao) }
     private val codexAuthRepository by lazy { CodexAuthRepository(applicationContext) }
+    private val superGrokAuthRepository by lazy { SuperGrokAuthRepository(applicationContext) }
     private val openAiProvider by lazy {
         OpenAiProvider { baseUrl -> RetrofitClient.makeOpenAiInstance(baseUrl) }
     }
@@ -65,6 +67,7 @@ class MyApplication : Application() {
             zaiProvider = ZaiProvider(zaiApiService),
             settingsManager = settingsManager,
             codexAuthRepository = codexAuthRepository,
+            superGrokAuthRepository = superGrokAuthRepository,
             modelRepository = modelRepository,
             settingsProvider = { databaseRepository.getLatestSettings() }
         )
@@ -79,6 +82,7 @@ class MyApplication : Application() {
             fileProcessingRepository = fileRepository,
             modelRepository = modelRepository,
             codexAuthRepository = codexAuthRepository,
+            superGrokAuthRepository = superGrokAuthRepository,
             pricingRepository = pricingRepository
         )
     }

@@ -61,6 +61,8 @@ class SettingsScreenState(
     var codexPromptCacheEnabled by mutableStateOf(true)
     var codexPromptCacheMinLength by mutableIntStateOf(512)
     var codexPromptCacheType by mutableStateOf("ephemeral")
+    var superGrokReasoningEnabled by mutableStateOf(true)
+    var superGrokReasoningEffort by mutableStateOf("medium")
     var systemPrompt by mutableStateOf("")
     var systemPromptPresetName by mutableStateOf("")
     val systemPromptPresetsLocal = mutableStateListOf<SystemPromptPreset>()
@@ -315,6 +317,9 @@ class SettingsScreenState(
         if (nextProviderKey == "CODEX_AUTH" && model.isBlank()) {
             model = com.porarri.yamabikochat.utils.CodexModelPresets.defaultModel()
         }
+        if (nextProviderKey == "SUPERGROK" && model.isBlank()) {
+            model = com.porarri.yamabikochat.data.remote.SuperGrokModelCatalog.defaultModel
+        }
         if (model.isBlank()) {
             model = ProviderCatalog.defaultModel(nextProviderKey)
         }
@@ -384,6 +389,12 @@ class SettingsScreenState(
                 budget = 0,
                 level = "",
                 codexEffort = defaults.codexReasoningEffort.ifBlank { "medium" }
+            )
+            "SUPERGROK" -> ThinkingDefaults(
+                enabled = defaults.superGrokReasoningEnabled,
+                budget = 0,
+                level = "",
+                codexEffort = defaults.superGrokReasoningEffort.ifBlank { "medium" }
             )
             else -> ThinkingDefaults(
                 enabled = defaults.isThinkingEnabledFor(provider),
@@ -796,7 +807,9 @@ class SettingsScreenState(
         }
 
         fun supportsThinkingBudget(provider: String, model: String): Boolean {
-            if (provider.uppercase() == "CODEX_AUTH" || provider.uppercase() == "ZAI") return false
+            if (provider.uppercase() == "CODEX_AUTH" || provider.uppercase() == "SUPERGROK" || provider.uppercase() == "ZAI") {
+                return false
+            }
             return !supportsThinkingLevel(provider, model)
         }
 
@@ -839,7 +852,9 @@ class SettingsScreenState(
         val dualThinkingLevelOverrideA = if (dualThinkingOverrideAEnabled && supportsThinkingLevel(dualProviderA, dualModelA)) {
             dualThinkingLevelA.takeIf { it.isNotBlank() }
         } else null
-        val dualCodexEffortOverrideA = if (dualThinkingOverrideAEnabled && dualProviderA.uppercase() == "CODEX_AUTH") {
+        val dualCodexEffortOverrideA = if (dualThinkingOverrideAEnabled &&
+            (dualProviderA.uppercase() == "CODEX_AUTH" || dualProviderA.uppercase() == "SUPERGROK")
+        ) {
             dualCodexReasoningEffortA.ifBlank { "medium" }
         } else null
 
@@ -848,7 +863,9 @@ class SettingsScreenState(
         val dualThinkingLevelOverrideB = if (dualThinkingOverrideBEnabled && supportsThinkingLevel(dualProviderB, dualModelB)) {
             dualThinkingLevelB.takeIf { it.isNotBlank() }
         } else null
-        val dualCodexEffortOverrideB = if (dualThinkingOverrideBEnabled && dualProviderB.uppercase() == "CODEX_AUTH") {
+        val dualCodexEffortOverrideB = if (dualThinkingOverrideBEnabled &&
+            (dualProviderB.uppercase() == "CODEX_AUTH" || dualProviderB.uppercase() == "SUPERGROK")
+        ) {
             dualCodexReasoningEffortB.ifBlank { "medium" }
         } else null
 
@@ -857,7 +874,9 @@ class SettingsScreenState(
         val autoThinkingLevelOverrideA = if (autoThinkingOverrideAEnabled && supportsThinkingLevel(autoProviderA, autoModelA)) {
             autoThinkingLevelA.takeIf { it.isNotBlank() }
         } else null
-        val autoCodexEffortOverrideA = if (autoThinkingOverrideAEnabled && autoProviderA.uppercase() == "CODEX_AUTH") {
+        val autoCodexEffortOverrideA = if (autoThinkingOverrideAEnabled &&
+            (autoProviderA.uppercase() == "CODEX_AUTH" || autoProviderA.uppercase() == "SUPERGROK")
+        ) {
             autoCodexReasoningEffortA.ifBlank { "medium" }
         } else null
 
@@ -866,7 +885,9 @@ class SettingsScreenState(
         val autoThinkingLevelOverrideB = if (autoThinkingOverrideBEnabled && supportsThinkingLevel(autoProviderB, autoModelB)) {
             autoThinkingLevelB.takeIf { it.isNotBlank() }
         } else null
-        val autoCodexEffortOverrideB = if (autoThinkingOverrideBEnabled && autoProviderB.uppercase() == "CODEX_AUTH") {
+        val autoCodexEffortOverrideB = if (autoThinkingOverrideBEnabled &&
+            (autoProviderB.uppercase() == "CODEX_AUTH" || autoProviderB.uppercase() == "SUPERGROK")
+        ) {
             autoCodexReasoningEffortB.ifBlank { "medium" }
         } else null
 
@@ -1020,6 +1041,8 @@ class SettingsScreenState(
             codexPromptCacheEnabled = codexPromptCacheEnabled,
             codexPromptCacheMinLength = codexPromptCacheMinLength,
             codexPromptCacheType = codexPromptCacheType,
+            superGrokReasoningEnabled = superGrokReasoningEnabled,
+            superGrokReasoningEffort = superGrokReasoningEffort,
             dualOpenRouterThinkingEnabledA = dualEnabledAOverride,
             dualOpenRouterThinkingBudgetA = dualBudgetAOverride,
             dualOpenRouterReasoningModeA = dualModeAOverride,
@@ -2006,6 +2029,8 @@ fun rememberSettingsScreenState(
             state.codexPromptCacheEnabled = it.codexPromptCacheEnabled
             state.codexPromptCacheMinLength = it.codexPromptCacheMinLength
             state.codexPromptCacheType = it.codexPromptCacheType.ifBlank { "ephemeral" }
+            state.superGrokReasoningEnabled = it.superGrokReasoningEnabled
+            state.superGrokReasoningEffort = it.superGrokReasoningEffort.ifBlank { "medium" }
             if (state.apiProvider == "OPENROUTER") {
                 state.reasoningMode = it.openRouterReasoningMode
                 state.reasoningEffort = it.openRouterReasoningEffort
@@ -2052,6 +2077,15 @@ fun rememberSettingsScreenState(
                 } else if (normalized != state.thinkingLevel) {
                     state.thinkingLevel = normalized
                 }
+            }
+        }
+
+        if (state.apiProvider == "SUPERGROK") {
+            val selected = com.porarri.yamabikochat.data.remote.SuperGrokModelCatalog.modelFor(state.model)
+            if (selected?.supportsReasoning == false && state.superGrokReasoningEnabled) {
+                state.superGrokReasoningEnabled = false
+            } else if (state.superGrokReasoningEffort.isBlank()) {
+                state.superGrokReasoningEffort = "medium"
             }
         }
 

@@ -12,6 +12,41 @@ final class AppSettingsTests: XCTestCase {
         )
     }
 
+    func testModelForProviderReturnsMappedSuperGrokModel() {
+        var settings = AppSettings()
+        settings.providerDefaultModelsJSON = #"{"SUPERGROK":"grok-4.3"}"#
+        settings.defaultModel = "grok-build-0.1"
+
+        XCTAssertEqual(settings.modelForProvider("SUPERGROK"), "grok-4.3")
+    }
+
+    func testModelForProviderFallsBackToDefaultModelForSuperGrok() {
+        var settings = AppSettings()
+        settings.providerDefaultModelsJSON = "{}"
+        settings.defaultModel = "grok-4.3"
+
+        XCTAssertEqual(settings.modelForProvider("SUPERGROK"), "grok-4.3")
+    }
+
+    func testModelForProviderFallsBackToCatalogDefaultWhenSuperGrokBlank() {
+        var settings = AppSettings()
+        settings.providerDefaultModelsJSON = #"{"SUPERGROK":"  "}"#
+        settings.defaultModel = "   "
+
+        XCTAssertEqual(
+            settings.modelForProvider("SUPERGROK"),
+            SuperGrokModelCatalog.defaultModel
+        )
+    }
+
+    func testNormalizedForPersistenceSanitizesSuperGrokReasoningEffort() {
+        var settings = AppSettings()
+        settings.superGrokReasoningEffort = "xhigh"
+
+        let normalized = settings.normalizedForPersistence()
+        XCTAssertEqual(normalized.superGrokReasoningEffort, "medium")
+    }
+
     func testNormalizedForPersistenceAppliesAppleIntelligenceDisplayModel() {
         var settings = AppSettings()
         settings.apiProvider = "APPLE_INTELLIGENCE"
@@ -140,6 +175,20 @@ final class AppSettingsTests: XCTestCase {
         settings.setSelectedQuantizationsList([" int8 ", "fp16", "int8"])
 
         XCTAssertEqual(settings.selectedQuantizationsList(), ["int8", "fp16"])
+    }
+
+    func testGeminiKeyNamesRoundTripsAndDeduplicates() {
+        var settings = AppSettings()
+        settings.setGeminiKeyNames([" slot-a ", "slot-b", "slot-a"])
+
+        XCTAssertEqual(settings.geminiKeyNames(), ["slot-a", "slot-b"])
+    }
+
+    func testGeminiRotationModelsListRoundTripsAndDeduplicates() {
+        var settings = AppSettings()
+        settings.setGeminiRotationModelsList([" gemini-2.5-flash-lite ", "gemini-2.0-flash", "gemini-2.5-flash-lite"])
+
+        XCTAssertEqual(settings.geminiRotationModelsList(), ["gemini-2.5-flash-lite", "gemini-2.0-flash"])
     }
 
     func testBuildGlobalProviderPresetsUsesProviderMapOrder() {

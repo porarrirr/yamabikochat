@@ -164,6 +164,61 @@ class SettingsReasoningTest {
     }
 
     @Test
+    fun buildThinkingConfigFor_superGrok_setsEffortWhenReasoningSupported() {
+        val settings = Settings().copy(
+            superGrokReasoningEnabled = true,
+            superGrokReasoningEffort = "high"
+        )
+
+        val config = settings.buildThinkingConfigFor("SUPERGROK", "grok-build-0.1")
+
+        assertNotNull(config)
+        config!!
+        assertEquals("high", config.effort)
+        assertTrue(config.includeThoughts)
+    }
+
+    @Test
+    fun buildThinkingConfigFor_superGrokNonReasoningModel_returnsNull() {
+        val settings = Settings().copy(
+            superGrokReasoningEnabled = true,
+            superGrokReasoningEffort = "high"
+        )
+
+        val config = settings.buildThinkingConfigFor("SUPERGROK", "grok-4.20-0309-non-reasoning")
+
+        assertNull(config)
+    }
+
+    @Test
+    fun buildThinkingConfigFor_superGrokCustomModel_sendsEffort() {
+        val settings = Settings().copy(
+            superGrokReasoningEnabled = true,
+            superGrokReasoningEffort = "high"
+        )
+
+        val config = settings.buildThinkingConfigFor("SUPERGROK", "custom-grok-model")
+
+        assertNotNull(config)
+        config!!
+        assertEquals("high", config.effort)
+        assertTrue(config.includeThoughts)
+    }
+
+    @Test
+    fun buildThinkingConfigFor_superGrokInvalidEffort_clampsToMedium() {
+        val settings = Settings().copy(
+            superGrokReasoningEnabled = true,
+            superGrokReasoningEffort = "xhigh"
+        )
+
+        val config = settings.buildThinkingConfigFor("SUPERGROK", "grok-build-0.1")
+
+        assertNotNull(config)
+        assertEquals("medium", config!!.effort)
+    }
+
+    @Test
     fun buildCodexRequestConfig_carriesPromptCacheDisabledState() {
         val settings = Settings().copy(
             codexReasoningEnabled = false,

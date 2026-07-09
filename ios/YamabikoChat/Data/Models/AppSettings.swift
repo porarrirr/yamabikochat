@@ -76,6 +76,8 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var geminiResponseMimeType: String
     var geminiResponseJSONSchema: String
     var geminiFunctionDeclarations: String
+    var geminiKeyNamesJSON: String
+    var geminiRotationModelsJSON: String
 
     var openRouterThinkingEnabled: Bool
     var openRouterThinkingBudget: Int
@@ -198,6 +200,9 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var codexPromptCacheMinLength: Int
     var codexPromptCacheType: String
 
+    var superGrokReasoningEnabled: Bool
+    var superGrokReasoningEffort: String
+
     var showGlobalProviderPresetsInChat: Bool
     var showGlobalProviderPresetsInChatByProviderJSON: String
 
@@ -230,6 +235,8 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         geminiResponseMimeType = ""
         geminiResponseJSONSchema = ""
         geminiFunctionDeclarations = ""
+        geminiKeyNamesJSON = "[]"
+        geminiRotationModelsJSON = "[]"
 
         openRouterThinkingEnabled = false
         openRouterThinkingBudget = 0
@@ -352,6 +359,9 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         codexPromptCacheMinLength = 512
         codexPromptCacheType = "ephemeral"
 
+        superGrokReasoningEnabled = true
+        superGrokReasoningEffort = "medium"
+
         showGlobalProviderPresetsInChat = true
         showGlobalProviderPresetsInChatByProviderJSON = "{}"
 
@@ -393,6 +403,13 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         } else {
             normalized.dualSplitRatio = min(max(normalized.dualSplitRatio, 0.1), 0.9)
         }
+
+        let superGrokEffort = normalized.superGrokReasoningEffort
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        normalized.superGrokReasoningEffort = ["low", "medium", "high"].contains(superGrokEffort)
+            ? superGrokEffort
+            : "medium"
 
         func normalizedReasoningMode(_ value: String?) -> String? {
             guard let value else { return nil }
@@ -662,7 +679,12 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             return AppleIntelligenceModelCatalog.displayModel
         }
         let map = providerModelMap()
-        return map[normalizedProvider] ?? defaultModel
+        let resolved = (map[normalizedProvider] ?? defaultModel)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if resolved.isEmpty, normalizedProvider == "SUPERGROK" {
+            return SuperGrokModelCatalog.defaultModel
+        }
+        return resolved.isEmpty ? defaultModel : resolved
     }
 
     mutating func applyAppleIntelligenceModelNormalization() {
@@ -726,6 +748,32 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         preferredProvidersJSON = Self.encodeStringArray(limited)
     }
 
+    func geminiKeyNames() -> [String] {
+        Self.unique(Self.parseStringArray(geminiKeyNamesJSON))
+    }
+
+    mutating func setGeminiKeyNames(_ names: [String]) {
+        let normalized = Self.unique(
+            names
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        )
+        geminiKeyNamesJSON = Self.encodeStringArray(normalized)
+    }
+
+    func geminiRotationModelsList() -> [String] {
+        Self.unique(Self.parseStringArray(geminiRotationModelsJSON))
+    }
+
+    mutating func setGeminiRotationModelsList(_ models: [String]) {
+        let normalized = Self.unique(
+            models
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        )
+        geminiRotationModelsJSON = Self.encodeStringArray(normalized)
+    }
+
     func selectedQuantizationsList() -> [String] {
         let values = Self.parseStringArray(selectedQuantizationsJSON)
         return Self.unique(values)
@@ -765,6 +813,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             "GEMINI",
             "OPENROUTER",
             "OPENCODE_GO",
+            "SUPERGROK",
             "CLINEPASS",
             "ALIBABA_CODING_PLAN",
             "ZAI",

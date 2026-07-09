@@ -9,6 +9,7 @@ object ProviderCatalog {
     const val GEMINI = "GEMINI"
     const val OPENROUTER = "OPENROUTER"
     const val OPENCODE_GO = "OPENCODE_GO"
+    const val SUPERGROK = "SUPERGROK"
     const val CLINEPASS = "CLINEPASS"
     const val ALIBABA_CODING_PLAN = "ALIBABA_CODING_PLAN"
     const val ZAI = "ZAI"
@@ -20,6 +21,7 @@ object ProviderCatalog {
     const val defaultOpenAiBaseUrl = "https://api.openai.com/v1/"
     const val defaultMiniMaxBaseUrl = "https://api.minimax.io/v1/"
     const val defaultOpenCodeGoBaseUrl = "https://opencode.ai/zen/go/v1/"
+    const val defaultSuperGrokBaseUrl = "https://api.x.ai/v1/"
     const val defaultClinePassBaseUrl = "https://api.cline.bot/api/v1/"
     const val defaultAlibabaCodingPlanBaseUrl = "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/v1/"
     const val alibabaMcpDefaultServerName = "firecrawl"
@@ -29,6 +31,7 @@ object ProviderCatalog {
         ProviderDisplay(GEMINI, "Google Gemini"),
         ProviderDisplay(OPENROUTER, "OpenRouter"),
         ProviderDisplay(OPENCODE_GO, "OpenCode Go"),
+        ProviderDisplay(SUPERGROK, "SuperGrok"),
         ProviderDisplay(CLINEPASS, "Cline Pass"),
         ProviderDisplay(ALIBABA_CODING_PLAN, "Alibaba Coding Plan"),
         ProviderDisplay(ZAI, "Z.ai"),
@@ -48,6 +51,7 @@ object ProviderCatalog {
     fun defaultModel(provider: String): String = when (provider.uppercase()) {
         GEMINI -> "gemini-2.5-flash"
         OPENCODE_GO -> OpenCodeGoModelCatalog.defaultModel
+        SUPERGROK -> SuperGrokModelCatalog.defaultModel
         CLINEPASS -> ClinePassModelCatalog.defaultModel
         ALIBABA_CODING_PLAN -> AlibabaCodingPlanModelCatalog.defaultModel
         ZAI -> "glm-4.6"
@@ -76,6 +80,78 @@ data class OpenCodeGoModel(
     val displayName: String,
     val endpointKind: OpenCodeGoEndpointKind
 )
+
+data class SuperGrokModel(
+    val id: String,
+    val displayName: String,
+    val supportsVision: Boolean,
+    val supportsReasoning: Boolean,
+    val description: String
+)
+
+object SuperGrokModelCatalog {
+    const val defaultModel = "grok-4.5"
+
+    val supportedModels = listOf(
+        SuperGrokModel(
+            id = "grok-build-0.1",
+            displayName = "Grok Build 0.1",
+            supportsVision = false,
+            supportsReasoning = true,
+            description = "xAI Grok Build coding model for SuperGrok OAuth."
+        ),
+        SuperGrokModel(
+            id = "grok-4.5",
+            displayName = "Grok 4.5",
+            supportsVision = true,
+            supportsReasoning = true,
+            description = "Flagship Grok for code, chat, and agentic tool calling."
+        ),
+        SuperGrokModel(
+            id = "grok-4.3",
+            displayName = "Grok 4.3",
+            supportsVision = true,
+            supportsReasoning = true,
+            description = "General-purpose Grok model."
+        ),
+        SuperGrokModel(
+            id = "grok-4.20-0309-reasoning",
+            displayName = "Grok 4.20 Reasoning",
+            supportsVision = true,
+            supportsReasoning = true,
+            description = "Reasoning-heavy Grok variant."
+        ),
+        SuperGrokModel(
+            id = "grok-4.20-0309-non-reasoning",
+            displayName = "Grok 4.20 Non-Reasoning",
+            supportsVision = true,
+            supportsReasoning = false,
+            description = "Faster non-reasoning Grok variant."
+        ),
+        SuperGrokModel(
+            id = "grok-4.20-multi-agent-0309",
+            displayName = "Grok 4.20 Multi-Agent",
+            supportsVision = true,
+            supportsReasoning = true,
+            description = "Multi-agent oriented Grok variant."
+        )
+    )
+
+    fun normalizedModelId(raw: String): String {
+        val trimmed = raw.trim()
+        val lower = trimmed.lowercase()
+        return when {
+            lower.startsWith("supergrok/") -> trimmed.drop("supergrok/".length)
+            lower.startsWith("xai/") -> trimmed.drop("xai/".length)
+            else -> trimmed
+        }
+    }
+
+    fun modelFor(raw: String): SuperGrokModel? {
+        val normalized = normalizedModelId(raw).lowercase()
+        return supportedModels.firstOrNull { it.id.lowercase() == normalized }
+    }
+}
 
 object OpenCodeGoModelCatalog {
     const val defaultModel = "glm-5.1"

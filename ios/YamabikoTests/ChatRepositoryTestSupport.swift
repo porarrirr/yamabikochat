@@ -28,13 +28,15 @@ enum ChatRepositoryTestSupport {
         httpClient: HTTPClientProtocol,
         pricingRepository: (any LiteLlmPricingEstimating)? = nil
     ) -> ChatRepository {
+        let modelService = OpenRouterModelService(credentialStore: credentials)
+        let codexAuth = CodexAuthRepository(credentialStore: credentials)
+        let superGrokAuth = SuperGrokAuthRepository(credentialStore: credentials)
         let providers = ProviderGateway(
             settingsRepository: settings,
             credentialStore: credentials,
-            httpClient: httpClient
+            httpClient: httpClient,
+            superGrokAuthRepository: superGrokAuth
         )
-        let modelService = OpenRouterModelService(credentialStore: credentials)
-        let codexAuth = CodexAuthRepository(credentialStore: credentials)
         let fusionTraceStore = FusionTraceStore(dbQueue: dbQueue)
         let fusionService = FusionService(
             settingsRepository: settings,
@@ -49,6 +51,7 @@ enum ChatRepositoryTestSupport {
             credentialStore: credentials,
             modelService: modelService,
             codexAuthRepository: codexAuth,
+            superGrokAuthRepository: superGrokAuth,
             pricingRepository: pricingRepository ?? LiteLlmPricingRepository(),
             fusionService: fusionService,
             fusionTraceStore: fusionTraceStore

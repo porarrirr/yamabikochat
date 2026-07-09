@@ -48,8 +48,8 @@ struct DualModeOverridesForm: View {
             geminiControls
         case "OPENROUTER":
             openRouterControls
-        case "CODEX_AUTH":
-            codexControls
+        case "CODEX_AUTH", "SUPERGROK":
+            reasoningEffortControls
         default:
             EmptyView()
         }
@@ -87,15 +87,32 @@ struct DualModeOverridesForm: View {
     }
 
     @ViewBuilder
-    private var codexControls: some View {
-        Toggle(L10n.format("%@: Codex reasoning enabled", prefix), isOn: thinkingEnabledBinding)
-        TextField(L10n.format("%@: Codex reasoning effort override", prefix), text: codexReasoningEffortBinding)
+    private var reasoningEffortControls: some View {
+        let enabledLabel = provider == "SUPERGROK"
+            ? L10n.format("%@: Reasoning enabled", prefix)
+            : L10n.format("%@: Codex reasoning enabled", prefix)
+        let effortLabel = provider == "SUPERGROK"
+            ? L10n.format("%@: Reasoning effort override", prefix)
+            : L10n.format("%@: Codex reasoning effort override", prefix)
+        Toggle(enabledLabel, isOn: thinkingEnabledBinding)
+        if provider == "SUPERGROK" {
+            Picker(effortLabel, selection: codexReasoningEffortBinding) {
+                Text(L10n.text("inherit")).tag("")
+                ForEach(["low", "medium", "high"], id: \.self) { effort in
+                    Text(effort).tag(effort)
+                }
+            }
+        } else {
+            TextField(effortLabel, text: codexReasoningEffortBinding)
+        }
     }
 
     private var inheritedThinkingEnabled: Bool {
         switch provider {
         case "CODEX_AUTH":
             viewModel.settings.codexReasoningEnabled
+        case "SUPERGROK":
+            viewModel.settings.superGrokReasoningEnabled
         default:
             viewModel.settings.geminiThinkingEnabled
         }

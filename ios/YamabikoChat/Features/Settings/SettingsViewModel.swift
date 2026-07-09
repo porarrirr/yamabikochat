@@ -16,12 +16,19 @@ final class SettingsViewModel: ObservableObject {
     @Published var openAICompatPresetNameInput: String = ""
     @Published var openAICompatPresetBaseURLInput: String = ""
     @Published var openAICompatApiKeyInput: String = ""
+    @Published var geminiKeySlotNameInput: String = ""
+    @Published var geminiKeySlotValueInput: String = ""
+    @Published var geminiRotationModelInput: String = ""
     @Published var systemPromptPresetNameInput: String = ""
     @Published var alibabaMCPAuthorizationTokenInput: String = ""
 
     @Published var codexAuthState: CodexAuthState = .init()
     @Published var codexUsageStatus: CodexUsageStatus?
     @Published var isCodexAuthActionRunning: Bool = false
+
+    @Published var superGrokAuthState: SuperGrokAuthState = .init()
+    @Published var isSuperGrokAuthActionRunning: Bool = false
+    @Published var superGrokEmailInput: String = ""
 
     @Published var codexApiKeyInput: String = ""
     @Published var codexAccessTokenInput: String = ""
@@ -69,6 +76,14 @@ final class SettingsViewModel: ObservableObject {
                 self?.codexAccountIdInput = $0.accountId ?? ""
                 self?.codexEmailInput = $0.email ?? ""
                 self?.codexPlanTypeInput = $0.planType ?? ""
+            }
+            .store(in: &cancellables)
+
+        repository.superGrokAuthStatePublisher()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.superGrokAuthState = $0
+                self?.superGrokEmailInput = $0.email ?? ""
             }
             .store(in: &cancellables)
 
@@ -263,7 +278,7 @@ final class SettingsViewModel: ObservableObject {
         )
 
         let providerKey = settings.apiProvider.uppercased()
-        if providerKey != "CODEX_AUTH", providerKey != "APPLE_INTELLIGENCE",
+        if providerKey != "CODEX_AUTH", providerKey != "SUPERGROK", providerKey != "APPLE_INTELLIGENCE",
            let provider = credentialProvider(for: providerKey) {
             try credentialStore?.setCredential(apiKeyDraft.nilIfBlank, for: provider)
         }
@@ -408,6 +423,61 @@ final class SettingsViewModel: ObservableObject {
         isHydratingFromPersistence = true
         openAICompatApiKeyInput = repository.peekOpenAiCompatApiKey(name: preset) ?? ""
         isHydratingFromPersistence = false
+    }
+
+    var geminiKeySlots: [String] {
+        settings.geminiKeyNames()
+    }
+
+    var geminiRotationModels: [String] {
+        settings.geminiRotationModelsList()
+    }
+
+    func addGeminiKeySlot() {
+        guard let repository else { return }
+        guard let name = geminiKeySlotNameInput.nilIfBlank else {
+            errorMessage = L10n.text("キー名を入力してください")
+            return
+        }
+        guard let value = geminiKeySlotValueInput.nilIfBlank else {
+            errorMessage = L10n.text("APIキーを入力してください")
+            return
+        }
+        guard repository.saveGeminiApiKey(name: name, apiKey: value) else {
+            errorMessage = L10n.text("Gemini APIキー保存に失敗しました")
+            DiagnosticsLogger.log("Gemini rotation key save failed name=\(name)")
+            return
+        }
+        var names = settings.geminiKeyNames()
+        if !names.contains(name) {
+            names.append(name)
+            settings.setGeminiKeyNames(names)
+        }
+        geminiKeySlotNameInput = ""
+        geminiKeySlotValueInput = ""
+        statusMessage = L10n.text("Gemini APIキーを追加しました")
+    }
+
+    func removeGeminiKeySlot(name: String) {
+        var names = settings.geminiKeyNames()
+        names.removeAll { $0 == name }
+        settings.setGeminiKeyNames(names)
+        repository?.removeGeminiApiKey(name: name)
+    }
+
+    func addGeminiRotationModel(_ model: String) {
+        guard let trimmed = model.nilIfBlank else { return }
+        var models = settings.geminiRotationModelsList()
+        guard !models.contains(trimmed) else { return }
+        models.append(trimmed)
+        settings.setGeminiRotationModelsList(models)
+        geminiRotationModelInput = ""
+    }
+
+    func removeGeminiRotationModel(_ model: String) {
+        var models = settings.geminiRotationModelsList()
+        models.removeAll { $0 == model }
+        settings.setGeminiRotationModelsList(models)
     }
 
     func setDefaultModel(_ modelId: String) {
@@ -614,6 +684,71 @@ final class SettingsViewModel: ObservableObject {
         _ = await repository.getOpenRouterModels(forceRefresh: force)
     }
 
+    func loginSuperGrokWithBrowser() async {
+        guard let repository = requireRepository(action: "supergrok_login_browser") else { return }
+        isSuperGrokAuthActionRunning = true
+        statusMessage = L10n.text("SuperGrokログインを開始しました")
+        errorMessage = nil
+        defer { isSuperGrokAuthActionRunning = false }
+        let result = await repository.loginSuperGrokWithBrowser()
+        switch result {
+        case let .success(state):
+            superGrokAuthState = state
+            superGrokEmailInput = state.email ?? ""
+            statusMessage = L10n.text("SuperGrokにログインしました")
+        case let .failure(error):
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func loginSuperGrokWithDeviceCode() async {
+        guard let repository = requireRepository(action: "supergrok_login_device_code") else { return }
+        isSuperGrokAuthActionRunning = true
+        statusMessage = L10n.text("SuperGrok Device Code ログインを開始しました")
+        errorMessage = nil
+        defer { isSuperGrokAuthActionRunning = false }
+        let result = await repository.loginSuperGrokWithDeviceCode()
+        switch result {
+        case let .success(state):
+            superGrokAuthState = state
+            superGrokEmailInput = state.email ?? ""
+            statusMessage = L10n.text("SuperGrokにログインしました")
+        case let .failure(error):
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func logoutSuperGrok() async {
+        guard let repository = requireRepository(action: "supergrok_logout") else { return }
+        isSuperGrokAuthActionRunning = true
+        errorMessage = nil
+        defer { isSuperGrokAuthActionRunning = false }
+        let result = await repository.logoutSuperGrok()
+        switch result {
+        case let .success(state):
+            superGrokAuthState = state
+            superGrokEmailInput = ""
+            statusMessage = L10n.text("SuperGrokからログアウトしました")
+        case let .failure(error):
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func refreshSuperGrok(force: Bool) async {
+        guard let repository = requireRepository(action: "supergrok_refresh") else { return }
+        isSuperGrokAuthActionRunning = true
+        defer { isSuperGrokAuthActionRunning = false }
+        let result = await repository.refreshSuperGrok(force: force)
+        switch result {
+        case let .success(state):
+            superGrokAuthState = state
+            superGrokEmailInput = state.email ?? ""
+            statusMessage = L10n.text("SuperGrokトークンを更新しました")
+        case let .failure(error):
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func loginCodexAuth() async {
         guard let repository = requireRepository(action: "codex_login") else { return }
         isCodexAuthActionRunning = true
@@ -719,6 +854,8 @@ final class SettingsViewModel: ObservableObject {
             return AlibabaCodingPlanModelCatalog.defaultModel
         case "OPENCODE_GO":
             return OpenCodeGoModelCatalog.defaultModel
+        case "SUPERGROK":
+            return SuperGrokModelCatalog.defaultModel
         case "CLINEPASS":
             return ClinePassModelCatalog.defaultModel
         case "MINIMAX":

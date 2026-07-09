@@ -11,6 +11,8 @@ final class ProviderEnumTests: XCTestCase {
         XCTAssertEqual(LLMProvider(rawOrDefault: "gemini_auth"), .gemini)
         XCTAssertEqual(LLMProvider(rawOrDefault: "qwen_code"), .openRouter)
         XCTAssertEqual(LLMProvider(rawOrDefault: "CODEX_AUTH"), .codexAuth)
+        XCTAssertEqual(LLMProvider(rawOrDefault: "SUPERGROK"), .superGrok)
+        XCTAssertEqual(LLMProvider(rawOrDefault: "supergrok"), .superGrok)
         XCTAssertEqual(LLMProvider(rawOrDefault: "apple_intelligence"), .appleIntelligence)
         XCTAssertEqual(LLMProvider(rawOrDefault: "unknown"), .gemini)
     }

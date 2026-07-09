@@ -32,7 +32,7 @@ fun ThinkingOverrideSection(
     if (normalized == "OPENROUTER") return
 
     val isGemini = normalized == "GEMINI"
-    val isCodex = normalized == "CODEX_AUTH"
+    val isCodex = normalized == "CODEX_AUTH" || normalized == "SUPERGROK"
     val isZai = normalized == "ZAI"
     val isGeminiThinkingLevel = isGemini && ModelUtils.isThinkingLevelSupported(model)
     val isAlwaysOn = isGemini && ModelUtils.isThinkingAlwaysOn(model)
@@ -50,7 +50,7 @@ fun ThinkingOverrideSection(
 
         if (thinking.overrideEnabled) {
             val thinkingLabel = when (normalized) {
-                "CODEX_AUTH" -> "Reasoning"
+                "CODEX_AUTH", "SUPERGROK" -> "Reasoning"
                 "ZAI" -> "Deep Thinking"
                 else -> "Thinking"
             }

@@ -12,6 +12,7 @@ class ProviderCatalogTest {
                 "GEMINI",
                 "OPENROUTER",
                 "OPENCODE_GO",
+                "SUPERGROK",
                 "CLINEPASS",
                 "ALIBABA_CODING_PLAN",
                 "ZAI",
@@ -27,6 +28,7 @@ class ProviderCatalogTest {
     @Test
     fun newProvidersExposeDefaultModels() {
         assertEquals(OpenCodeGoModelCatalog.defaultModel, ProviderCatalog.defaultModel("OPENCODE_GO"))
+        assertEquals(SuperGrokModelCatalog.defaultModel, ProviderCatalog.defaultModel("SUPERGROK"))
         assertEquals(ClinePassModelCatalog.defaultModel, ProviderCatalog.defaultModel("CLINEPASS"))
         assertEquals(
             AlibabaCodingPlanModelCatalog.defaultModel,

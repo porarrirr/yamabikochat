@@ -425,6 +425,7 @@ fun ChatScreen(
                                         "MINIMAX" -> "MiniMax"
                                         "OPENAI" -> "OpenAI"
                                         "CODEX_AUTH" -> "Codex Auth"
+                                        "SUPERGROK" -> "SuperGrok"
                                         "OPENAI_COMPAT" -> "OpenAI (Custom)"
                                         "ZAI" -> "Z.ai"
                                         else -> preset.apiProvider

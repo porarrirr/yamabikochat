@@ -71,6 +71,11 @@ actor LiteLlmPricingRepository: LiteLlmPricingEstimating {
             }
         }
 
+        if provider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "SUPERGROK",
+           let catalogModel = SuperGrokModelCatalog.model(for: model) {
+            return catalogModel.supportsVision
+        }
+
         let basename = modelBasename(from: model)
         guard !basename.isEmpty else { return false }
         return visionByBasename[basename] == true
@@ -226,7 +231,7 @@ actor LiteLlmPricingRepository: LiteLlmPricingEstimating {
                 let suffix = suffixAfterFirstSlash(base)
                 append("openrouter/\(suffix.isEmpty ? base : suffix)")
             }
-        case "OPENAI", "CODEX_AUTH", "OPENAI_COMPAT", "OPENCODE_GO", "CLINEPASS", "ALIBABA_CODING_PLAN", "MINIMAX", "ZAI":
+        case "OPENAI", "CODEX_AUTH", "OPENAI_COMPAT", "OPENCODE_GO", "SUPERGROK", "CLINEPASS", "ALIBABA_CODING_PLAN", "MINIMAX", "ZAI":
             append(canonical.replacingOccurrences(of: "openai/", with: ""))
             append(canonical.replacingOccurrences(of: "google/", with: ""))
             append(canonical.replacingOccurrences(of: "anthropic/", with: ""))

@@ -874,7 +874,82 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(webSearchParams["required"] as? [String], ["query"])
     }
 
+    func testGeminiSanitizesCustomFunctionDeclarationsIncludingOpenAIWrapperShape() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("gemini-key", for: .gemini)
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"""
+            {
+              "candidates": [{
+                "content": {
+                  "parts": [{ "text": "ok" }]
+                }
+              }]
+            }
+            """#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
 
+        // Pasted in OpenAI's nested {"type": "function", "function": {...}} shape, as a user
+        // sharing tool definitions across providers might do.
+        let openAIStyleDeclarations = """
+        [
+          {
+            "type": "function",
+            "function": {
+              "name": "custom_tool",
+              "description": "A custom tool",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "query": { "type": "string" }
+                },
+                "required": ["query"],
+                "additionalProperties": false,
+                "oneOf": [{ "required": ["query"] }]
+              }
+            }
+          }
+        ]
+        """
+
+        let request = ProviderRequest(
+            model: "gemini-2.5-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hi")],
+            stream: false,
+            tools: [ProviderTool(type: "function_declarations", payload: ["json": openAIStyleDeclarations])],
+            metadata: ["provider": "GEMINI"]
+        )
+
+        _ = try await GeminiProviderClient().generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let root = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: XCTUnwrap(httpClient.lastRequest?.body)) as? [String: Any]
+        )
+        let tools = try XCTUnwrap(root["tools"] as? [[String: Any]])
+        let declarationEntries = tools.filter { $0["functionDeclarations"] != nil }
+        XCTAssertEqual(declarationEntries.count, 1)
+
+        let declarations = try XCTUnwrap(declarationEntries.first?["functionDeclarations"] as? [[String: Any]])
+        XCTAssertEqual(declarations.count, 1)
+        XCTAssertEqual(declarations.first?["name"] as? String, "custom_tool")
+        XCTAssertNil(declarations.first?["function"], "the OpenAI wrapper key should be unwrapped, not forwarded")
+        XCTAssertNil(declarations.first?["type"], "the OpenAI wrapper's own type field should not leak through")
+
+        let bodyString = String(data: try XCTUnwrap(httpClient.lastRequest?.body), encoding: .utf8) ?? ""
+        XCTAssertFalse(bodyString.contains("additionalProperties"))
+        XCTAssertFalse(bodyString.contains("oneOf"))
+
+        let parameters = try XCTUnwrap(declarations.first?["parameters"] as? [String: Any])
+        XCTAssertNotNil(parameters["properties"])
+        XCTAssertEqual(parameters["required"] as? [String], ["query"])
+    }
 
     func testOpenRouterGenerateIncludesProviderRoutingAndReasoning() async throws {
         let store = ProviderTestCredentialStore()
@@ -2066,6 +2141,125 @@ final class ProviderClientParityTests: XCTestCase {
         }
     }
 
+    func testSuperGrokGenerateUsesChatCompletionsEndpointAndBearerToken() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setSuperGrokAccessToken("supergrok-oauth-token")
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok","reasoning_content":"plan"}}],"usage":{"prompt_tokens":20,"completion_tokens":5,"completion_tokens_details":{"reasoning_tokens":3}}}"#
+                .data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = SuperGrokProviderClient()
+        let request = ProviderRequest(
+            model: "grok-build-0.1",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            systemPrompt: "stable system",
+            stream: false,
+            tools: [],
+            thinking: ProviderThinkingConfig(enabled: true, budget: nil, effort: "medium", exclude: nil),
+            metadata: ["provider": "SUPERGROK"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(response.text, "ok")
+        XCTAssertEqual(response.reasoningSummary, "plan")
+        XCTAssertEqual(response.usage?.reasoningTokens, 3)
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(captured.url.absoluteString, "https://api.x.ai/v1/chat/completions")
+        XCTAssertEqual(captured.headers["Authorization"], "Bearer supergrok-oauth-token")
+
+        let bodyData = try XCTUnwrap(captured.body)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertEqual(body["model"] as? String, "grok-build-0.1")
+        XCTAssertEqual((body["reasoning"] as? [String: Any])?["enabled"] as? Bool, true)
+        XCTAssertEqual((body["reasoning"] as? [String: Any])?["effort"] as? String, "medium")
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages.first?["role"] as? String, "system")
+        XCTAssertEqual(messages.first?["content"] as? String, "stable system")
+    }
+
+    func testSuperGrokPassesBackAssistantReasoningContent() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setSuperGrokAccessToken("supergrok-oauth-token")
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = SuperGrokProviderClient()
+        let request = ProviderRequest(
+            model: "grok-4.3",
+            messages: [
+                ProviderRequestMessage(role: "user", content: "hello"),
+                ProviderRequestMessage(role: "assistant", content: "answer", reasoningContent: "kept reasoning"),
+                ProviderRequestMessage(role: "user", content: "again", reasoningContent: "ignored")
+            ],
+            stream: false,
+            tools: [],
+            thinking: nil,
+            metadata: ["provider": "SUPERGROK"]
+        )
+
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let bodyData = try XCTUnwrap(httpClient.lastRequest?.body)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages[1]["role"] as? String, "assistant")
+        XCTAssertEqual(messages[1]["reasoning_content"] as? String, "kept reasoning")
+        XCTAssertNil(messages[2]["reasoning_content"])
+    }
+
+    func testSuperGrokCustomModelPassesThroughWithoutCatalogLookup() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setSuperGrokAccessToken("supergrok-oauth-token")
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = SuperGrokProviderClient()
+        let request = ProviderRequest(
+            model: "supergrok/custom-experimental",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            thinking: ProviderThinkingConfig(enabled: true, budget: nil, effort: "high", exclude: nil),
+            metadata: ["provider": "SUPERGROK"]
+        )
+
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let bodyData = try XCTUnwrap(httpClient.lastRequest?.body)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertEqual(body["model"] as? String, "custom-experimental")
+        XCTAssertEqual((body["reasoning"] as? [String: Any])?["effort"] as? String, "high")
+    }
+
     func testGeminiGenerateParsesUsageMetadata() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("gemini-key", for: .gemini)
@@ -2211,6 +2405,33 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(usage.cachedInputTokens, 9)
         XCTAssertEqual(usage.reasoningTokens, 8)
         XCTAssertEqual(usage.cacheCreationInputTokens, 4)
+    }
+
+    func testGeminiClassifiesRateLimitOn429() {
+        let error = ProviderClientError.httpStatus(429, "")
+        XCTAssertEqual(GeminiProviderClient.classifyRotationEligibility(error), .rateLimited)
+    }
+
+    func testGeminiClassifiesRateLimitOnResourceExhaustedBodyEvenWithoutStatus429() {
+        let body = #"{"error":{"code":429,"message":"quota","status":"RESOURCE_EXHAUSTED"}}"#
+        let error = ProviderClientError.httpStatus(500, body)
+        XCTAssertEqual(GeminiProviderClient.classifyRotationEligibility(error), .rateLimited)
+    }
+
+    func testGeminiClassifiesAuthFailureOn401And403() {
+        XCTAssertEqual(GeminiProviderClient.classifyRotationEligibility(ProviderClientError.httpStatus(401, "")), .authFailure)
+        XCTAssertEqual(GeminiProviderClient.classifyRotationEligibility(ProviderClientError.httpStatus(403, "")), .authFailure)
+    }
+
+    func testGeminiDoesNotClassifyBadRequestOrServerErrorAsRotationEligible() {
+        let badRequest = ProviderClientError.httpStatus(400, #"{"error":{"status":"INVALID_ARGUMENT"}}"#)
+        let serverError = ProviderClientError.httpStatus(500, #"{"error":{"status":"INTERNAL"}}"#)
+        XCTAssertEqual(GeminiProviderClient.classifyRotationEligibility(badRequest), .other)
+        XCTAssertEqual(GeminiProviderClient.classifyRotationEligibility(serverError), .other)
+    }
+
+    func testGeminiClassifiesNonHTTPStatusErrorAsOther() {
+        XCTAssertEqual(GeminiProviderClient.classifyRotationEligibility(ProviderClientError.parseFailure("x")), .other)
     }
 
     func testCodexGenerateParsesResponsesUsage() async throws {
