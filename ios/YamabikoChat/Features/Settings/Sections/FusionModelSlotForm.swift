@@ -33,6 +33,22 @@ struct FusionModelSlotForm: View {
         provider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "OPENROUTER"
     }
 
+    private var isClinePassProvider: Bool {
+        provider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "CLINEPASS"
+    }
+
+    private var clinePassModelSelection: Binding<String> {
+        Binding(
+            get: {
+                if let match = ClinePassModelCatalog.model(for: model) {
+                    return match.id
+                }
+                return model
+            },
+            set: { model = $0 }
+        )
+    }
+
     var body: some View {
         if !availableProviderPresets.isEmpty {
             Picker(L10n.text("プロバイダープリセット"), selection: Binding(
@@ -71,6 +87,22 @@ struct FusionModelSlotForm: View {
                 error: openRouterModelsError,
                 onRefresh: onRefreshOpenRouterModels
             )
+        } else if isClinePassProvider {
+            Picker(L10n.text(modelTitleKey), selection: clinePassModelSelection) {
+                ForEach(ClinePassModelCatalog.supportedModels) { option in
+                    Text(option.displayName).tag(option.id)
+                }
+            }
+
+            if let selected = ClinePassModelCatalog.model(for: model) {
+                Text(selected.description)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            TextField(L10n.text(modelTitleKey), text: $model)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
         } else {
             TextField(L10n.text(modelTitleKey), text: $model)
         }
