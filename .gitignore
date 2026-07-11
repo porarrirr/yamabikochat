@@ -35,6 +35,14 @@ captures/
 .cxx/
 local.properties
 
+# iOS and Xcode build outputs
+DerivedData/
+.build/
+Pods/
+*.xcarchive
+*.ipa
+*.dSYM/
+
 # IDE files
 .idea/
 *.iml
@@ -60,14 +68,10 @@ Thumbs.db
 api_keys.properties
 secrets.properties
 google-services.json
-local.properties
 
 # Build outputs (do not commit)
 app/build/
 app/release/
-build/
-.gradle/
-.idea/
 
 # Claude Code settings (local only)
 .claude/settings.local.json
@@ -77,3 +81,6 @@ build/
 
 # Local OpenCode reference clone (not part of this repo)
 opencode/
+
+# Local Codex reference clone (not part of this repo)
+codex/
