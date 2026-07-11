@@ -86,7 +86,7 @@ final class ProviderClientParityTests: XCTestCase {
 
         XCTAssertEqual(response.text, "ok")
         let captured = try XCTUnwrap(httpClient.lastRequest)
-        XCTAssertEqual(captured.headers["session_id"], "session-123")
+        XCTAssertEqual(captured.headers["session-id"], "session-123")
         XCTAssertEqual(captured.headers["ChatGPT-Account-ID"], "acc_123")
         XCTAssertTrue(captured.url.absoluteString.contains("/responses"))
 
@@ -142,7 +142,7 @@ final class ProviderClientParityTests: XCTestCase {
         )
 
         let captured = try XCTUnwrap(httpClient.lastRequest)
-        XCTAssertEqual(captured.headers["session_id"], "session-123")
+        XCTAssertEqual(captured.headers["session-id"], "session-123")
 
         let bodyData = try XCTUnwrap(captured.body)
         let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])

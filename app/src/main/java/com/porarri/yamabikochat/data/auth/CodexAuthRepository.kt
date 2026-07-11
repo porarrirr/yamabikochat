@@ -43,7 +43,8 @@ class CodexAuthRepository(
         private const val DEFAULT_ISSUER = "https://auth.openai.com"
         private const val DEFAULT_PORT = 1455
         private const val CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
-        private const val SCOPE = "openid profile email offline_access"
+        private const val SCOPE =
+            "openid profile email offline_access api.connectors.read api.connectors.invoke"
         private const val ORIGINATOR = "codex_cli_rs"
         private const val TOKEN_REFRESH_INTERVAL_DAYS = 8L
         private const val CHATGPT_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"

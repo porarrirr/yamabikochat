@@ -243,7 +243,6 @@ class CodexResponsesProvider(
         .header("Content-Type", "application/json")
         .header("originator", originatorHeader)
         .header("User-Agent", userAgentHeader)
-        .header("x-oai-web-search-eligible", "true")
         .apply {
             if (stream) {
                 header("Accept", "text/event-stream")
@@ -254,7 +253,7 @@ class CodexResponsesProvider(
             }
             val cleanedSession = sessionId?.trim().orEmpty()
             if (cleanedSession.isNotEmpty()) {
-                header("session_id", cleanedSession)
+                header("session-id", cleanedSession)
             }
         }
         .post(requestBody)
@@ -267,9 +266,8 @@ class CodexResponsesProvider(
             "Accept",
             "originator",
             "User-Agent",
-            "x-oai-web-search-eligible",
             "ChatGPT-Account-ID",
-            "session_id"
+            "session-id"
         )
         val headerSummary = headersToLog.joinToString(separator = " ") { name ->
             val value = request.header(name)?.trim().orEmpty().ifBlank { "-" }

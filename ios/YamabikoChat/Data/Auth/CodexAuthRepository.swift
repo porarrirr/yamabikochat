@@ -14,7 +14,7 @@ final class CodexAuthRepository {
     private enum Constants {
         static let issuer = "https://auth.openai.com"
         static let clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
-        static let scope = "openid profile email offline_access"
+        static let scope = "openid profile email offline_access api.connectors.read api.connectors.invoke"
         static let originator = "codex_cli_rs"
         static let loopbackRedirectHost = "localhost"
         static let defaultPort: UInt16 = 1455

@@ -26,14 +26,13 @@ struct CodexProviderClient: ProviderClient {
             "Authorization": "Bearer \(auth.token)",
             "Content-Type": "application/json",
             "originator": originatorHeader,
-            "User-Agent": userAgent,
-            "x-oai-web-search-eligible": "true"
+            "User-Agent": userAgent
         ]
         if !auth.isAPIKey, let accountID = auth.accountID, !accountID.isEmpty {
             headers["ChatGPT-Account-ID"] = accountID
         }
         if let sessionID {
-            headers["session_id"] = sessionID
+            headers["session-id"] = sessionID
         }
         let httpRequest = HTTPRequest(
             url: endpoint,
@@ -72,14 +71,13 @@ struct CodexProviderClient: ProviderClient {
                         "Content-Type": "application/json",
                         "originator": originatorHeader,
                         "User-Agent": userAgent,
-                        "x-oai-web-search-eligible": "true",
                         "Accept": "text/event-stream"
                     ]
                     if !auth.isAPIKey, let accountID = auth.accountID, !accountID.isEmpty {
                         headers["ChatGPT-Account-ID"] = accountID
                     }
                     if let sessionID {
-                        headers["session_id"] = sessionID
+                        headers["session-id"] = sessionID
                     }
                     let httpRequest = HTTPRequest(
                         url: endpoint,
