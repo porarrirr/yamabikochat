@@ -170,7 +170,9 @@ fun DualResponseDisplay(
     modelAContent: String,
     modelBContent: String,
     modelAProvider: String,
-    modelBProvider: String
+    modelBProvider: String,
+    thinkingA: String? = null,
+    thinkingB: String? = null
 ) {
     DualSplitLayout(
         modifier = modifier,
@@ -182,6 +184,7 @@ fun DualResponseDisplay(
                 modelName = modelAName,
                 provider = modelAProvider,
                 content = modelAContent,
+                thinking = thinkingA,
                 isLeft = true
             )
         },
@@ -190,6 +193,7 @@ fun DualResponseDisplay(
                 modelName = modelBName,
                 provider = modelBProvider,
                 content = modelBContent,
+                thinking = thinkingB,
                 isLeft = false
             )
         }
@@ -201,9 +205,13 @@ private fun ResponsePanel(
     modelName: String,
     provider: String,
     content: String,
+    thinking: String?,
     isLeft: Boolean,
     modifier: Modifier = Modifier
 ) {
+    var showThinking by remember { mutableStateOf(false) }
+    val thinkingText = thinking?.takeIf { it.isNotBlank() }
+
     Card(
         modifier = modifier
             .fillMaxSize()
@@ -249,6 +257,30 @@ private fun ResponsePanel(
             }
             
             Spacer(modifier = Modifier.height(8.dp))
+
+            if (thinkingText != null) {
+                TextButton(
+                    onClick = { showThinking = !showThinking },
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+                ) {
+                    Text(
+                        text = if (showThinking) "Thinkingを隠す" else "Thinkingを表示",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (showThinking) {
+                    Text(
+                        text = thinkingText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
             
             // コンテンツ部分（スクロール可能）
             if (content.isEmpty()) {

@@ -5,10 +5,15 @@ package com.porarri.yamabikochat.data.remote
  */
 import android.util.Log
 import java.util.Locale
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
 object RequestConverter {
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
 
     /**
      * GeminiのGenerateContentRequestをOpenRouterRequestに変換
@@ -80,6 +85,7 @@ object RequestConverter {
         } else {
             null
         }
+        val openAiTools = convertGeminiToolsToOpenAi(geminiRequest.tools)
 
         return if (hasMultiModal) {
             // マルチモーダルリクエスト
@@ -115,20 +121,12 @@ object RequestConverter {
                 stop = geminiRequest.generationConfig?.stopSequences,
                 provider = providerPreferences,
                 reasoning = reasoningConfig,
-                cacheControl = cacheControl
+                cacheControl = cacheControl,
+                tools = openAiTools
             )
         } else {
-            // シンプルなテキストリクエスト
-            val messages = geminiRequest.contents.map { content ->
-                OpenRouterMessage(
-                    role = when (content.role) {
-                        "user" -> "user"
-                        "model" -> "assistant"
-                        else -> content.role ?: "user"
-                    },
-                    content = content.parts.mapNotNull { it.text }.joinToString("\n")
-                )
-            }
+            // シンプルなテキストリクエスト（tool call / tool result 含む）
+            val messages = convertContentsToOpenRouterMessages(geminiRequest.contents)
 
             val allMessages = buildList {
                 geminiRequest.system_instruction?.let { systemInstruction ->
@@ -151,9 +149,80 @@ object RequestConverter {
                 stop = geminiRequest.generationConfig?.stopSequences,
                 provider = providerPreferences,
                 reasoning = reasoningConfig,
-                cacheControl = cacheControl
+                cacheControl = cacheControl,
+                tools = openAiTools
             )
         }
+    }
+
+    private fun convertGeminiToolsToOpenAi(tools: List<Tool>?): List<OpenAITool>? {
+        val declarations = tools
+            ?.flatMap { it.function_declarations.orEmpty() }
+            .orEmpty()
+        if (declarations.isEmpty()) return null
+        return declarations.map { declaration ->
+            OpenAITool(
+                function = OpenAIFunctionDef(
+                    name = declaration.name,
+                    description = declaration.description,
+                    parameters = declaration.parameters
+                )
+            )
+        }
+    }
+
+    private fun convertContentsToOpenRouterMessages(contents: List<Content>): List<OpenRouterMessage> {
+        val messages = mutableListOf<OpenRouterMessage>()
+        contents.forEach { content ->
+            val textContent = content.parts.mapNotNull { it.text }.joinToString("\n").ifBlank { null }
+            val toolCalls = content.parts.mapNotNull { it.functionCall }.mapIndexed { index, call ->
+                OpenAIToolCall(
+                    id = "call-$index-${call.name}",
+                    function = OpenAIToolCallFunction(
+                        name = call.name,
+                        arguments = call.args?.toString() ?: "{}"
+                    )
+                )
+            }
+            val functionResponses = content.parts.mapNotNull { it.functionResponse }
+
+            when {
+                functionResponses.isNotEmpty() -> {
+                    functionResponses.forEach { response ->
+                        messages.add(
+                            OpenRouterMessage(
+                                role = "tool",
+                                content = response.response?.toString() ?: "{}",
+                                toolCallId = response.id ?: "call-0-${response.name}",
+                                name = response.name
+                            )
+                        )
+                    }
+                }
+                toolCalls.isNotEmpty() -> {
+                    messages.add(
+                        OpenRouterMessage(
+                            role = "assistant",
+                            content = textContent,
+                            tool_calls = toolCalls
+                        )
+                    )
+                }
+                else -> {
+                    messages.add(
+                        OpenRouterMessage(
+                            role = when (content.role) {
+                                "user" -> "user"
+                                "model" -> "assistant"
+                                else -> content.role ?: "user"
+                            },
+                            content = textContent.orEmpty()
+                        )
+                    )
+                }
+            }
+        }
+        return messages
     }
 
     private fun shouldEnableOpenRouterPromptCache(model: String): Boolean {
@@ -203,8 +272,25 @@ object RequestConverter {
             reasoningText?.let {
                 parts.add(ResponsePart(text = it, thought = true))
             }
-            // Add visible content part
-            parts.add(ResponsePart(text = choice.message.content))
+            choice.message.content?.takeIf { it.isNotEmpty() }?.let { text ->
+                parts.add(ResponsePart(text = text))
+            }
+            choice.message.tool_calls.orEmpty().forEach { toolCall ->
+                val args = runCatching {
+                    json.parseToJsonElement(toolCall.function.arguments)
+                }.getOrNull()
+                parts.add(
+                    ResponsePart(
+                        functionCall = FunctionCall(
+                            name = toolCall.function.name,
+                            args = args
+                        )
+                    )
+                )
+            }
+            if (parts.isEmpty()) {
+                parts.add(ResponsePart(text = ""))
+            }
 
             Candidate(
                 content = ResponseContent(

@@ -386,6 +386,21 @@ object AppDatabaseMigrations {
         }
     }
 
+    private val migration53To54 = object : Migration(53, 54) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            ensureColumn(db, "settings", Column("clientWebSearchToolEnabled", "INTEGER", notNull = true, defaultValue = "0"))
+            ensureColumn(db, "settings", Column("isFusionModeEnabled", "INTEGER", notNull = true, defaultValue = "0"))
+            ensureColumn(db, "settings", Column("fusionPresetName", "TEXT", notNull = true, defaultValue = "'custom'"))
+            ensureColumn(db, "settings", Column("fusionTaskType", "TEXT", notNull = true, defaultValue = "'auto'"))
+            ensureColumn(db, "settings", Column("fusionDebugModeEnabled", "INTEGER", notNull = true, defaultValue = "0"))
+            ensureColumn(db, "settings", Column("fusionLogPromptsEnabled", "INTEGER", notNull = true, defaultValue = "0"))
+            ensureColumn(db, "settings", Column("fusionCustomPresetJSON", "TEXT", notNull = true, defaultValue = "''"))
+            ensureColumn(db, "chat_messages", Column("fusionTraceId", "TEXT"))
+            createChatMessageToolActivity(db)
+            createFusionTraces(db)
+        }
+    }
+
     val ALL_MIGRATIONS: Array<Migration> =
         (legacyRebuildMigrations + listOf(
             migration27To28,
@@ -413,7 +428,8 @@ object AppDatabaseMigrations {
             migration49To50,
             migration50To51,
             migration51To52,
-            migration52To53
+            migration52To53,
+            migration53To54
         )).toTypedArray()
 
     private fun rebuildSchema(db: SupportSQLiteDatabase) {
@@ -424,6 +440,8 @@ object AppDatabaseMigrations {
         createChatMessageVariants(db)
         createSettings(db)
         createChatMessageThinking(db)
+        createChatMessageToolActivity(db)
+        createFusionTraces(db)
         createModelPresets(db)
         createDualChatMessages(db)
         createAutoConversations(db)
@@ -481,7 +499,8 @@ object AppDatabaseMigrations {
                 `attachments` TEXT NOT NULL DEFAULT '[]',
                 `timestamp` INTEGER NOT NULL DEFAULT 0,
                 `thinkingSummary` TEXT,
-                `selectedVariantIndex` INTEGER NOT NULL DEFAULT 0
+                `selectedVariantIndex` INTEGER NOT NULL DEFAULT 0,
+                `fusionTraceId` TEXT
             )
             """.trimIndent()
         )
@@ -489,6 +508,7 @@ object AppDatabaseMigrations {
         ensureColumn(db, "chat_messages", Column("timestamp", "INTEGER", notNull = true, defaultValue = "0"))
         ensureColumn(db, "chat_messages", Column("thinkingSummary", "TEXT"))
         ensureColumn(db, "chat_messages", Column("selectedVariantIndex", "INTEGER", notNull = true, defaultValue = "0"))
+        ensureColumn(db, "chat_messages", Column("fusionTraceId", "TEXT"))
     }
 
     private fun createChatMessageVariants(db: SupportSQLiteDatabase) {
@@ -652,7 +672,16 @@ object AppDatabaseMigrations {
                 `alibabaMcpEnabled` INTEGER NOT NULL DEFAULT 0,
                 `alibabaMcpServerUrl` TEXT NOT NULL DEFAULT '',
                 `alibabaMcpServerName` TEXT NOT NULL DEFAULT 'firecrawl',
-                `alibabaMcpAllowedTools` TEXT NOT NULL DEFAULT ''
+                `alibabaMcpAllowedTools` TEXT NOT NULL DEFAULT '',
+                `superGrokReasoningEnabled` INTEGER NOT NULL DEFAULT 1,
+                `superGrokReasoningEffort` TEXT NOT NULL DEFAULT 'medium',
+                `clientWebSearchToolEnabled` INTEGER NOT NULL DEFAULT 0,
+                `isFusionModeEnabled` INTEGER NOT NULL DEFAULT 0,
+                `fusionPresetName` TEXT NOT NULL DEFAULT 'custom',
+                `fusionTaskType` TEXT NOT NULL DEFAULT 'auto',
+                `fusionDebugModeEnabled` INTEGER NOT NULL DEFAULT 0,
+                `fusionLogPromptsEnabled` INTEGER NOT NULL DEFAULT 0,
+                `fusionCustomPresetJSON` TEXT NOT NULL DEFAULT ''
             )
             """.trimIndent()
         )
@@ -806,8 +835,54 @@ object AppDatabaseMigrations {
             Column("alibabaMcpServerUrl", "TEXT", notNull = true, defaultValue = "''"),
             Column("alibabaMcpServerName", "TEXT", notNull = true, defaultValue = "'firecrawl'"),
             Column("alibabaMcpAllowedTools", "TEXT", notNull = true, defaultValue = "''"),
+            Column("superGrokReasoningEnabled", "INTEGER", notNull = true, defaultValue = "1"),
+            Column("superGrokReasoningEffort", "TEXT", notNull = true, defaultValue = "'medium'"),
+            Column("clientWebSearchToolEnabled", "INTEGER", notNull = true, defaultValue = "0"),
+            Column("isFusionModeEnabled", "INTEGER", notNull = true, defaultValue = "0"),
+            Column("fusionPresetName", "TEXT", notNull = true, defaultValue = "'custom'"),
+            Column("fusionTaskType", "TEXT", notNull = true, defaultValue = "'auto'"),
+            Column("fusionDebugModeEnabled", "INTEGER", notNull = true, defaultValue = "0"),
+            Column("fusionLogPromptsEnabled", "INTEGER", notNull = true, defaultValue = "0"),
+            Column("fusionCustomPresetJSON", "TEXT", notNull = true, defaultValue = "''"),
         )
         columns.forEach { ensureColumn(db, "settings", it) }
+    }
+
+    private fun createChatMessageToolActivity(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `chat_message_tool_activity` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `messageId` INTEGER,
+                `variantId` INTEGER,
+                `stepsJSON` TEXT NOT NULL,
+                FOREIGN KEY(`messageId`) REFERENCES `chat_messages`(`id`) ON DELETE CASCADE,
+                FOREIGN KEY(`variantId`) REFERENCES `chat_message_variants`(`id`) ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_chat_message_tool_activity_messageId` ON `chat_message_tool_activity`(`messageId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_chat_message_tool_activity_variantId` ON `chat_message_tool_activity`(`variantId`)")
+    }
+
+    private fun createFusionTraces(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `fusion_traces` (
+                `id` TEXT NOT NULL PRIMARY KEY,
+                `conversationId` INTEGER,
+                `preset` TEXT NOT NULL,
+                `startedAtMs` INTEGER NOT NULL,
+                `completedAtMs` INTEGER,
+                `totalLatencyMs` INTEGER,
+                `totalCostUsd` REAL,
+                `failedModelsJSON` TEXT NOT NULL,
+                `traceJSON` TEXT NOT NULL,
+                `status` TEXT NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_fusion_traces_conversationId` ON `fusion_traces`(`conversationId`)")
     }
 
     private fun createChatMessageThinking(db: SupportSQLiteDatabase) {

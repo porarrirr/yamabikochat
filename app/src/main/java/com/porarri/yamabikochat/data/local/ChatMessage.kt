@@ -13,5 +13,6 @@ data class ChatMessage(
     val attachments: List<String> = emptyList(),
     val timestamp: Long = System.currentTimeMillis(),
     val thinkingSummary: String? = null,
-    val selectedVariantIndex: Int = 0
+    val selectedVariantIndex: Int = 0,
+    val fusionTraceId: String? = null
 )

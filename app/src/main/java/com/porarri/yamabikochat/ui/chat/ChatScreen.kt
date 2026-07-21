@@ -54,6 +54,10 @@ import com.porarri.yamabikochat.ui.settings.SettingsViewModel
 import com.porarri.yamabikochat.ui.components.DualResponseDisplay
 import com.porarri.yamabikochat.ui.chat.MarkdownText
 import com.porarri.yamabikochat.ui.chat.components.ChatMessageInputBar
+import com.porarri.yamabikochat.ui.fusion.FusionDetailSheet
+import com.porarri.yamabikochat.ui.fusion.FusionMessageSummary
+import com.porarri.yamabikochat.ui.fusion.FusionProgressView
+import com.porarri.yamabikochat.data.fusion.FusionTrace
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -155,6 +159,8 @@ fun ChatScreen(
     val dualMessages by viewModel.dualMessages.collectAsState()
     val dualChatSettings by viewModel.dualChatSettings.collectAsState()
     val isDualModeActive by viewModel.isDualModeActive.collectAsState()
+    val fusionProgress by viewModel.fusionProgress.collectAsState()
+    val isFusionRunning by viewModel.isFusionRunning.collectAsState()
     val editingMessage by viewModel.editingMessage.collectAsState()
     val attachments by viewModel.attachments.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -251,6 +257,7 @@ fun ChatScreen(
                                 text = when {
                                     isSecretChat -> "シークレットチャット"
                                     isDualModeActive -> "Dual Chat"
+                                    settings?.isFusionModeEnabled == true -> "Fusion"
                                     settings?.isAutoConversationEnabled == true -> "Auto Conversation"
                                     else -> "Chat"
                                 },
@@ -260,6 +267,13 @@ fun ChatScreen(
                                 isDualModeActive -> {
                                     Text(
                                         text = "${dualChatSettings.providerA} ${dualChatSettings.modelA} vs ${dualChatSettings.providerB} ${dualChatSettings.modelB}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                settings?.isFusionModeEnabled == true -> {
+                                    Text(
+                                        text = "Multi-model panel → judge → synthesize",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -412,6 +426,23 @@ fun ChatScreen(
                                         showOverflowMenu = false
                                     }
                                 )
+                                DropdownMenuItem(
+                                    text = { Text("Fusion mode") },
+                                    leadingIcon = { Icon(Icons.Default.CallMerge, contentDescription = null) },
+                                    trailingIcon = {
+                                        Switch(
+                                            checked = settings?.isFusionModeEnabled == true,
+                                            onCheckedChange = {
+                                                viewModel.toggleFusionMode()
+                                                showOverflowMenu = false
+                                            }
+                                        )
+                                    },
+                                    onClick = {
+                                        viewModel.toggleFusionMode()
+                                        showOverflowMenu = false
+                                    }
+                                )
                             }
                         }
 
@@ -540,6 +571,8 @@ fun ChatScreen(
         val baseContextLabel = when {
             isDualModeActive ->
                 "DUAL · ${dualChatSettings.providerA} ${shorten(dualChatSettings.modelA)} vs ${dualChatSettings.providerB} ${shorten(dualChatSettings.modelB)}"
+            settings?.isFusionModeEnabled == true ->
+                "FUSION · ${settings?.fusionTaskType ?: "auto"}"
             (settings?.isAutoConversationEnabled == true) -> {
                 val a = settings!!
                 "AUTO · ${a.autoProviderA} ${shorten(a.autoModelA)} ⇄ ${a.autoProviderB} ${shorten(a.autoModelB)}"
@@ -558,6 +591,13 @@ fun ChatScreen(
             } else {
                 baseContextLabel
             }
+
+        if (isFusionRunning && fusionProgress != null) {
+            FusionProgressView(
+                snapshot = fusionProgress!!,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
 
         ChatMessageInputBar(
             value = text,
@@ -873,7 +913,9 @@ fun DualChatMessageItem(
                 modelAContent = dualMessage.modelAText,
                 modelBContent = dualMessage.modelBText,
                 modelAProvider = dualMessage.modelAProvider,
-                modelBProvider = dualMessage.modelBProvider
+                modelBProvider = dualMessage.modelBProvider,
+                thinkingA = dualMessage.modelAThinking,
+                thinkingB = dualMessage.modelBThinking
             )
         }
     }
@@ -1050,6 +1092,11 @@ fun ChatMessageItemLegacy(
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {
+                    val toolSteps = message.displayToolActivity?.steps.orEmpty()
+                    if (toolSteps.isNotEmpty()) {
+                        ToolActivityDisclosure(steps = toolSteps)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                     val thinkingText = resolveThinkingText(message, preferSummary, allowSummary)
                     if (!thinkingText.isNullOrBlank()) {
                         Surface(
@@ -1437,6 +1484,12 @@ fun ChatMessageItem(
                             )
                         }
 
+                        val toolSteps = message.displayToolActivity?.steps.orEmpty()
+                        if (toolSteps.isNotEmpty()) {
+                            ToolActivityDisclosure(steps = toolSteps)
+                            Spacer(modifier = Modifier.height(6.dp))
+                        }
+
                         val thinkingText = resolveThinkingText(message, preferSummary, allowSummary)
                         if (!thinkingText.isNullOrBlank()) {
                             Column {
@@ -1535,6 +1588,30 @@ fun ChatMessageItem(
                                     MarkdownText(
                                         markdown = contentText,
                                         modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+                        }
+
+                        val fusionTraceId = message.chatMessage.fusionTraceId
+                        if (!fusionTraceId.isNullOrBlank() && !isEditing) {
+                            var fusionTrace by remember(fusionTraceId) {
+                                mutableStateOf<FusionTrace?>(null)
+                            }
+                            var showFusionDetail by remember { mutableStateOf(false) }
+                            LaunchedEffect(fusionTraceId) {
+                                fusionTrace = viewModel.fetchFusionTrace(fusionTraceId)
+                            }
+                            fusionTrace?.let { trace ->
+                                Spacer(modifier = Modifier.height(8.dp))
+                                FusionMessageSummary(
+                                    trace = trace,
+                                    onShowDetails = { showFusionDetail = true }
+                                )
+                                if (showFusionDetail) {
+                                    FusionDetailSheet(
+                                        trace = trace,
+                                        onDismiss = { showFusionDetail = false }
                                     )
                                 }
                             }

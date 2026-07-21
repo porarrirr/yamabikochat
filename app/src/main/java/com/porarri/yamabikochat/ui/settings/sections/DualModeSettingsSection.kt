@@ -48,6 +48,7 @@ import com.porarri.yamabikochat.ui.settings.sections.ThinkingOverrideSection
 fun LazyListScope.dualModeSettingsSection(
     isDualModeEnabled: Boolean,
     onDualModeEnabledChange: (Boolean) -> Unit,
+    dualBlockedByFusion: Boolean = false,
     presetOptions: List<ModelPreset>,
     onPresetSelectedA: (ModelPreset) -> Unit,
     onPresetSelectedB: (ModelPreset) -> Unit,
@@ -121,7 +122,15 @@ fun LazyListScope.dualModeSettingsSection(
                     }
                     Switch(
                         checked = isDualModeEnabled,
-                        onCheckedChange = onDualModeEnabledChange
+                        onCheckedChange = onDualModeEnabledChange,
+                        enabled = isDualModeEnabled || !dualBlockedByFusion
+                    )
+                }
+                if (dualBlockedByFusion && !isDualModeEnabled) {
+                    Text(
+                        "Fusion モードが有効なときはデュアルを使えません",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
                     )
                 }
 

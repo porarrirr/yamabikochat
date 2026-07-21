@@ -47,6 +47,7 @@ import com.porarri.yamabikochat.ui.settings.sections.ThinkingOverrideSection
 fun LazyListScope.autoConversationSettingsSection(
     isAutoConversationEnabled: Boolean,
     onAutoConversationEnabledChange: (Boolean) -> Unit,
+    autoBlockedByFusion: Boolean = false,
     presetOptions: List<ModelPreset>,
     onPresetSelectedA: (ModelPreset) -> Unit,
     onPresetSelectedB: (ModelPreset) -> Unit,
@@ -126,7 +127,15 @@ fun LazyListScope.autoConversationSettingsSection(
                     }
                     Switch(
                         checked = isAutoConversationEnabled,
-                        onCheckedChange = onAutoConversationEnabledChange
+                        onCheckedChange = onAutoConversationEnabledChange,
+                        enabled = isAutoConversationEnabled || !autoBlockedByFusion
+                    )
+                }
+                if (autoBlockedByFusion && !isAutoConversationEnabled) {
+                    Text(
+                        "Fusion モードが有効なときは自動会話を使えません",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
                     )
                 }
 

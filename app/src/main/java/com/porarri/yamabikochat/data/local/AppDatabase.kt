@@ -14,13 +14,15 @@ import androidx.room.TypeConverters
         ChatMessageVariant::class,
         Settings::class,
         ChatMessageThinking::class,
+        ChatMessageToolActivity::class,
+        FusionTraceRecord::class,
         ModelPreset::class,
         DualChatMessage::class,
         AutoConversation::class,
         AutoConversationMessage::class,
         TokenUsageRecord::class
     ],
-    version = 53,
+    version = 54,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

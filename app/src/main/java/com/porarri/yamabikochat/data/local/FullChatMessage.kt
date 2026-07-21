@@ -3,7 +3,9 @@ package com.porarri.yamabikochat.data.local
 data class FullChatMessage(
     val chatMessage: ChatMessage,
     val thinkingStream: String? = null,
-    val variants: List<ChatMessageVariant> = emptyList()
+    val variants: List<ChatMessageVariant> = emptyList(),
+    val toolActivity: ChatMessageToolActivity? = null,
+    val variantToolActivities: Map<Long, ChatMessageToolActivity> = emptyMap()
 ) {
     val variantCount: Int
         get() = 1 + variants.size
@@ -22,4 +24,10 @@ data class FullChatMessage(
 
     val displayThinkingStream: String?
         get() = if (normalizedSelectedVariantIndex == 0) thinkingStream else selectedVariant?.thinkingStream
+
+    val displayToolActivity: ChatMessageToolActivity?
+        get() {
+            val variantId = selectedVariant?.id ?: return toolActivity
+            return variantToolActivities[variantId]
+        }
 }

@@ -2,6 +2,7 @@ package com.porarri.yamabikochat.data.remote
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /**
  * OpenRouter API用のリクエスト/レスポンスデータクラス
@@ -32,7 +33,8 @@ data class OpenRouterRequest(
     @SerialName("cache_control")
     val cacheControl: PromptCacheControl? = null,
     @SerialName("prompt_cache_key")
-    val promptCacheKey: String? = null
+    val promptCacheKey: String? = null,
+    val tools: List<OpenAITool>? = null
 ) : OpenRouterPayload
 
 @Serializable
@@ -52,7 +54,8 @@ data class OpenRouterMultiModalRequest(
     @SerialName("cache_control")
     val cacheControl: PromptCacheControl? = null,
     @SerialName("prompt_cache_key")
-    val promptCacheKey: String? = null
+    val promptCacheKey: String? = null,
+    val tools: List<OpenAITool>? = null
 ) : OpenRouterPayload
 
 @Serializable
@@ -63,7 +66,11 @@ data class PromptCacheControl(
 @Serializable
 data class OpenRouterMessage(
     val role: String,
-    val content: String
+    val content: String? = null,
+    val tool_calls: List<OpenAIToolCall>? = null,
+    @SerialName("tool_call_id")
+    val toolCallId: String? = null,
+    val name: String? = null // for tool role
 )
 
 @Serializable
@@ -95,6 +102,46 @@ data class OpenRouterImageUrl(
 )
 
 @Serializable
+data class OpenAITool(
+    val type: String = "function",
+    val function: OpenAIFunctionDef
+)
+
+@Serializable
+data class OpenAIFunctionDef(
+    val name: String,
+    val description: String? = null,
+    val parameters: JsonElement? = null
+)
+
+@Serializable
+data class OpenAIToolCall(
+    val id: String,
+    val type: String = "function",
+    val function: OpenAIToolCallFunction
+)
+
+@Serializable
+data class OpenAIToolCallFunction(
+    val name: String,
+    val arguments: String
+)
+
+@Serializable
+data class OpenAIToolCallDelta(
+    val index: Int = 0,
+    val id: String? = null,
+    val type: String? = null,
+    val function: OpenAIToolCallFunctionDelta? = null
+)
+
+@Serializable
+data class OpenAIToolCallFunctionDelta(
+    val name: String? = null,
+    val arguments: String? = null
+)
+
+@Serializable
 data class OpenRouterResponse(
     val id: String,
     @kotlinx.serialization.SerialName("object")
@@ -115,14 +162,15 @@ data class OpenRouterChoice(
 @Serializable
 data class OpenRouterResponseMessage(
     val role: String,
-    val content: String,
+    val content: String? = null,
     // For reasoning/thinking-enabled models, OpenRouter may return chain-of-thought here
     val reasoning: String? = null,
     // Z.ai returns reasoning under reasoning_content
     @SerialName("reasoning_content")
     val reasoningContent: String? = null,
     @SerialName("reasoning_details")
-    val reasoningDetails: List<ReasoningDetail>? = null
+    val reasoningDetails: List<ReasoningDetail>? = null,
+    val tool_calls: List<OpenAIToolCall>? = null
 )
 
 @Serializable
@@ -180,7 +228,8 @@ data class ChatCompletionDelta(
     @SerialName("reasoning_content")
     val reasoningContent: String? = null,
     @SerialName("reasoning_details")
-    val reasoningDetails: List<ReasoningDetail>? = null
+    val reasoningDetails: List<ReasoningDetail>? = null,
+    val tool_calls: List<OpenAIToolCallDelta>? = null
 )
 
 // Backward-compatible aliases (old names kept to reduce churn)

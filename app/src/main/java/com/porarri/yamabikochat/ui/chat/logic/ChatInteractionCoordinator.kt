@@ -5,6 +5,8 @@ import android.util.Log
 import com.porarri.yamabikochat.data.ChatRepository
 import com.porarri.yamabikochat.data.local.ChatMessage
 import com.porarri.yamabikochat.data.local.ChatMessageSummary
+import com.porarri.yamabikochat.data.local.ChatMessageToolActivity
+import com.porarri.yamabikochat.data.local.ChatMessageVariant
 import com.porarri.yamabikochat.data.local.Conversation
 import com.porarri.yamabikochat.data.local.DualChatMessage
 import com.porarri.yamabikochat.data.local.FullChatMessage
@@ -13,6 +15,9 @@ import com.porarri.yamabikochat.data.remote.GenerateContentRequest
 import com.porarri.yamabikochat.data.remote.GenerationConfig
 import com.porarri.yamabikochat.data.remote.Part
 import com.porarri.yamabikochat.data.remote.SystemInstruction
+import com.porarri.yamabikochat.data.tools.ClientToolCallingRunner
+import com.porarri.yamabikochat.data.tools.ClientTools
+import com.porarri.yamabikochat.data.tools.ToolActivityStep
 import com.porarri.yamabikochat.ui.chat.ConversationHistoryBuilder
 import com.porarri.yamabikochat.utils.MiniMaxUtils
 import com.porarri.yamabikochat.utils.ToolingUtils
@@ -20,6 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 
@@ -27,7 +33,16 @@ class ChatInteractionCoordinator(
     private val repository: ChatRepository,
     private val historyBuilder: ConversationHistoryBuilder,
     private val responseStreamer: ChatResponseStreamer,
-    private val dualChatResponder: DualChatResponder
+    private val dualChatResponder: DualChatResponder,
+    private val toolCallingRunner: ClientToolCallingRunner = ClientToolCallingRunner(
+        generate = { request, model, provider ->
+            repository.generateContent(
+                model = model,
+                request = request,
+                providerOverride = provider
+            )
+        }
+    )
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -130,6 +145,24 @@ class ChatInteractionCoordinator(
             return SingleMessageResult(historyPreparation.newlyFetchedMessages)
         }
 
+        val useClientTools =
+            settings.clientWebSearchToolEnabled && ClientTools.supportsClientWebSearchTool(activeProvider)
+
+        if (useClientTools) {
+            scope.launch(Dispatchers.IO) {
+                runClientToolCallingTurn(
+                    conversationId = conversation.id,
+                    model = activeModel,
+                    provider = activeProvider,
+                    request = request,
+                    fullMessagesState = fullMessagesState,
+                    fetchFullMessage = fetchFullMessage,
+                    existingMessageId = null
+                )
+            }
+            return SingleMessageResult(historyPreparation.newlyFetchedMessages)
+        }
+
         if (settings.isStreamingEnabledFor(activeProvider)) {
             responseStreamer.launchStreamingResponse(
                 scope = scope,
@@ -225,6 +258,24 @@ class ChatInteractionCoordinator(
             promptCacheKey = "conversation-${conversation.id}"
         )
 
+        val useClientTools =
+            settings.clientWebSearchToolEnabled && ClientTools.supportsClientWebSearchTool(activeProvider)
+
+        if (useClientTools) {
+            scope.launch(Dispatchers.IO) {
+                runClientToolCallingTurn(
+                    conversationId = conversation.id,
+                    model = activeModel,
+                    provider = activeProvider,
+                    request = request,
+                    fullMessagesState = fullMessagesState,
+                    fetchFullMessage = fetchFullMessage,
+                    existingMessageId = targetMessageId
+                )
+            }
+            return
+        }
+
         if (settings.isStreamingEnabledFor(activeProvider)) {
             responseStreamer.launchStreamingResponse(
                 scope = scope,
@@ -268,6 +319,167 @@ class ChatInteractionCoordinator(
                 )
                 fetchFullMessage(targetMessageId)
             }
+        }
+    }
+
+    private suspend fun runClientToolCallingTurn(
+        conversationId: Long,
+        model: String,
+        provider: String,
+        request: GenerateContentRequest,
+        fullMessagesState: MutableStateFlow<Map<Long, FullChatMessage>>,
+        fetchFullMessage: (Long) -> Unit,
+        existingMessageId: Long?
+    ) {
+        var activeVariant: ChatMessageVariant? = null
+        val messageId = if (existingMessageId == null) {
+            val id = repository.insertMessage(
+                ChatMessage(conversationId = conversationId, role = "model", text = "")
+            )
+            fullMessagesState.update { currentMap ->
+                currentMap + (
+                    id to FullChatMessage(
+                        chatMessage = ChatMessage(
+                            id = id,
+                            conversationId = conversationId,
+                            role = "model",
+                            text = ""
+                        )
+                    )
+                )
+            }
+            id
+        } else {
+            val existingFull = repository.getFullMessageById(existingMessageId)
+            if (existingFull == null) {
+                Log.e(TAG, "Tool calling regeneration failed: message not found id=$existingMessageId")
+                return
+            }
+            val createdVariant = repository.insertMessageVariant(
+                baseMessageId = existingMessageId,
+                text = "",
+                attachments = emptyList(),
+                thinkingStream = null
+            )
+            activeVariant = createdVariant
+            val selectedBase = existingFull.chatMessage.copy(selectedVariantIndex = createdVariant.variantIndex)
+            fullMessagesState.update { currentMap ->
+                currentMap + (
+                    existingMessageId to existingFull.copy(
+                        chatMessage = selectedBase,
+                        variants = (existingFull.variants.filterNot { it.variantIndex == createdVariant.variantIndex } + createdVariant)
+                            .sortedBy { it.variantIndex }
+                    )
+                )
+            }
+            existingMessageId
+        }
+
+        fun publishActivities(steps: List<ToolActivityStep>) {
+            val activity = ChatMessageToolActivity(
+                messageId = if (activeVariant == null) messageId else null,
+                variantId = activeVariant?.id,
+                stepsJSON = ToolActivityStep.encodeSteps(steps)
+            )
+            fullMessagesState.update { currentMap ->
+                val existing = currentMap[messageId] ?: return@update currentMap
+                if (activeVariant != null) {
+                    val variantId = activeVariant!!.id
+                    existing.copy(
+                        variantToolActivities = existing.variantToolActivities + (variantId to activity)
+                    ).let { currentMap + (messageId to it) }
+                } else {
+                    existing.copy(toolActivity = activity).let { currentMap + (messageId to it) }
+                }
+            }
+        }
+
+        try {
+            val result = toolCallingRunner.run(
+                baseRequest = request,
+                model = model,
+                provider = provider,
+                onActivitiesChanged = { steps ->
+                    if (activeVariant != null) {
+                        repository.saveToolActivitiesForVariant(
+                            variantId = activeVariant!!.id,
+                            stepsJSON = ToolActivityStep.encodeSteps(steps)
+                        )
+                    } else {
+                        repository.saveToolActivities(
+                            messageId = messageId,
+                            stepsJSON = ToolActivityStep.encodeSteps(steps)
+                        )
+                    }
+                    publishActivities(steps)
+                }
+            )
+
+            result.usage?.let { usage ->
+                runCatching {
+                    repository.recordTokenUsage(
+                        provider = provider,
+                        model = model,
+                        usage = usage,
+                        conversationId = conversationId,
+                        requestType = "chat_client_tools"
+                    )
+                }
+            }
+
+            val thinking = result.thinking.trim()
+            val text = result.text
+            val variant = activeVariant
+            if (variant != null) {
+                val updated = variant.copy(
+                    text = text,
+                    thinkingStream = thinking.takeIf { it.isNotBlank() }
+                )
+                repository.updateMessageVariant(updated)
+                if (result.activities.isNotEmpty()) {
+                    repository.saveToolActivitiesForVariant(
+                        variantId = updated.id,
+                        stepsJSON = ToolActivityStep.encodeSteps(result.activities)
+                    )
+                }
+            } else {
+                repository.updateMessage(
+                    ChatMessage(
+                        id = messageId,
+                        conversationId = conversationId,
+                        role = "model",
+                        text = text,
+                        thinkingSummary = thinking.takeIf { it.isNotBlank() }
+                    )
+                )
+                if (thinking.isNotBlank()) {
+                    repository.insertThinking(messageId, thinking)
+                }
+                if (result.activities.isNotEmpty()) {
+                    repository.saveToolActivities(
+                        messageId = messageId,
+                        stepsJSON = ToolActivityStep.encodeSteps(result.activities)
+                    )
+                }
+            }
+            fetchFullMessage(messageId)
+        } catch (e: Exception) {
+            Log.e(TAG, "Client tool calling failed", e)
+            val errorText = e.message?.takeIf { it.isNotBlank() } ?: "ツール呼び出しに失敗しました"
+            val variant = activeVariant
+            if (variant != null) {
+                repository.updateMessageVariant(variant.copy(text = errorText))
+            } else {
+                repository.updateMessage(
+                    ChatMessage(
+                        id = messageId,
+                        conversationId = conversationId,
+                        role = "model",
+                        text = errorText
+                    )
+                )
+            }
+            fetchFullMessage(messageId)
         }
     }
 

@@ -153,11 +153,11 @@
       </nav>
       <h1>Fusion モードの仕組み</h1>
       <p class="lead">
-        YamabikoChat iOS 版に実装されている <strong>Fusion</strong> は、複数の LLM を並列実行し、
+        YamabikoChat（iOS / Android）に実装されている <strong>Fusion</strong> は、複数の LLM を並列実行し、
         専用の「ジャッジ」モデルで回答を比較・分析したうえで、最終回答を合成するマルチモデル・オーケストレーションです。
       </p>
       <div class="badge-row">
-        <span class="badge">iOS のみ</span>
+        <span class="badge">iOS + Android</span>
         <span class="badge">Panel → Judge → Synthesizer</span>
         <span class="badge">プリセット: quality / budget / fast / custom</span>
         <span class="badge">トレース保存</span>
@@ -196,7 +196,7 @@
           <li>各フェーズのレイテンシ・コスト・成否を <code>FusionTrace</code> として記録する</li>
         </ul>
         <div class="note">
-          <strong>プラットフォーム:</strong> Fusion は現時点で <code>ios/YamabikoChat/Features/Fusion/</code> にのみ実装されています。Android モジュールには同名の実装はありません。
+          <strong>プラットフォーム:</strong> Fusion は iOS（<code>ios/YamabikoChat/Features/Fusion/</code>）と Android（<code>app/.../data/fusion/</code> + <code>ui/fusion/</code>）の両方に実装されています。プロンプトとデフォルトプリセットは両プラットフォームで一致させています。
         </div>
       </section>
 
@@ -601,7 +601,8 @@
           <code>ChatRepository</code> がチャット UX（ストリーム・永続化）と接続しています。
         </p>
         <p>
-          ソースの起点: <span class="file-path">ios/YamabikoChat/Features/Fusion/</span>
+          ソースの起点: <span class="file-path">ios/YamabikoChat/Features/Fusion/</span> /
+          <span class="file-path">app/src/main/java/com/porarri/yamabikochat/data/fusion/</span>
         </p>
       </section>
     </main>

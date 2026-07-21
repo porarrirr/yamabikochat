@@ -16,6 +16,8 @@ import com.porarri.yamabikochat.data.local.Conversation
 import com.porarri.yamabikochat.data.local.DualChatMessage
 import com.porarri.yamabikochat.data.local.SplitLayoutType
 import com.porarri.yamabikochat.data.local.DualChatSettings
+import com.porarri.yamabikochat.data.fusion.FusionProgressSnapshot
+import com.porarri.yamabikochat.data.fusion.FusionTrace
 import com.porarri.yamabikochat.data.AutoConversationManager
 import com.porarri.yamabikochat.data.local.AutoConversationConfig
 import com.porarri.yamabikochat.data.local.AutoConversationMessage
@@ -116,6 +118,12 @@ class ChatViewModel(
 
     private val _isDualModeActive = MutableStateFlow(false)
     val isDualModeActive: StateFlow<Boolean> = _isDualModeActive.asStateFlow()
+
+    private val _fusionProgress = MutableStateFlow<FusionProgressSnapshot?>(null)
+    val fusionProgress: StateFlow<FusionProgressSnapshot?> = _fusionProgress.asStateFlow()
+
+    private val _isFusionRunning = MutableStateFlow(false)
+    val isFusionRunning: StateFlow<Boolean> = _isFusionRunning.asStateFlow()
     
     // 自動会話関連のStateFlow
     private val _isAutoConversationRunning = MutableStateFlow(false)
@@ -368,6 +376,34 @@ class ChatViewModel(
             val conversation = withContext(Dispatchers.IO) { repository.getConversationById(conversationId) }
             _conversation.value = conversation
             val currentSettings = settings.value ?: Settings()
+
+            if (currentSettings.isFusionModeEnabled) {
+                clearAttachments()
+                _isFusionRunning.value = true
+                _fusionProgress.value = null
+                try {
+                    val attachmentPaths = withContext(Dispatchers.IO) {
+                        attachmentsToSend.mapNotNull { repository.saveAttachment(it) }
+                    }
+                    withContext(Dispatchers.IO) {
+                        repository.sendFusionMessage(
+                            conversationId = conversationId,
+                            userText = text,
+                            attachments = attachmentPaths,
+                            onProgress = { snapshot ->
+                                _fusionProgress.value = snapshot
+                            }
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e("ChatViewModel", "Fusion send failed", e)
+                    _errorMessage.value = e.message ?: "Fusion の送信に失敗しました"
+                } finally {
+                    _isFusionRunning.value = false
+                    _fusionProgress.value = null
+                }
+                return@launch
+            }
 
             if (currentSettings.isDualModeEnabled) {
                 clearAttachments()
@@ -632,6 +668,10 @@ class ChatViewModel(
             }
 
             val currentSettings = settings.value ?: Settings()
+            if (currentSettings.isFusionModeEnabled) {
+                _errorMessage.value = "Fusion モードでは再生成できません"
+                return@launch
+            }
             if (currentSettings.isDualModeEnabled) {
                 _errorMessage.value = "デュアルモードでは再生成できません"
                 return@launch
@@ -738,25 +778,44 @@ class ChatViewModel(
             val currentSettings = settings.value ?: return@launch
             val newDualModeState = !currentSettings.isDualModeEnabled
             
-            // デュアルモードをオンにする場合、自動会話を無効化
-            if (newDualModeState && currentSettings.isAutoConversationEnabled) {
-                // 実行中の自動会話があれば停止
+            if (newDualModeState) {
                 if (_isAutoConversationRunning.value) {
                     stopAutoConversation()
                 }
-                // 設定を更新（自動会話を無効化）
                 repository.saveSettings(currentSettings.copy(
-                    isDualModeEnabled = newDualModeState,
-                    isAutoConversationEnabled = false
+                    isDualModeEnabled = true,
+                    isAutoConversationEnabled = false,
+                    isFusionModeEnabled = false
                 ))
             } else {
-                // 通常のデュアルモード切り替え
-                repository.saveSettings(currentSettings.copy(isDualModeEnabled = newDualModeState))
+                repository.saveSettings(currentSettings.copy(isDualModeEnabled = false))
             }
             
-            // ローカル状態も更新
             _dualChatSettings.update { it.copy(isDualModeEnabled = newDualModeState) }
             _isDualModeActive.value = newDualModeState
+        }
+    }
+
+    fun toggleFusionMode() {
+        viewModelScope.launch {
+            val currentSettings = settings.value ?: return@launch
+            val enabling = !currentSettings.isFusionModeEnabled
+            if (enabling) {
+                if (_isAutoConversationRunning.value) {
+                    stopAutoConversation()
+                }
+                repository.saveSettings(
+                    currentSettings.copy(
+                        isFusionModeEnabled = true,
+                        isDualModeEnabled = false,
+                        isAutoConversationEnabled = false
+                    )
+                )
+                _dualChatSettings.update { it.copy(isDualModeEnabled = false) }
+                _isDualModeActive.value = false
+            } else {
+                repository.saveSettings(currentSettings.copy(isFusionModeEnabled = false))
+            }
         }
     }
     
@@ -766,29 +825,26 @@ class ChatViewModel(
             val currentSettings = settings.value ?: return@launch
             val newAutoConversationState = !currentSettings.isAutoConversationEnabled
             
-            // 自動会話をオンにする場合、デュアルモードを無効化
-            if (newAutoConversationState && currentSettings.isDualModeEnabled) {
-                // 設定を更新（デュアルモードを無効化）
+            if (newAutoConversationState) {
                 val newSettings = currentSettings.copy(
-                    isAutoConversationEnabled = newAutoConversationState,
-                    isDualModeEnabled = false
+                    isAutoConversationEnabled = true,
+                    isDualModeEnabled = false,
+                    isFusionModeEnabled = false
                 )
                 repository.saveSettings(newSettings)
-                // ローカル状態も更新
                 _dualChatSettings.update { it.copy(isDualModeEnabled = false) }
                 _isDualModeActive.value = false
             } else if (!newAutoConversationState && _isAutoConversationRunning.value) {
-                // 自動会話をオフにする場合、実行中であれば停止
                 stopAutoConversation()
-                val newSettings = currentSettings.copy(isAutoConversationEnabled = newAutoConversationState)
-                repository.saveSettings(newSettings)
+                repository.saveSettings(currentSettings.copy(isAutoConversationEnabled = false))
             } else {
-                // 通常の自動会話切り替え
-                val newSettings = currentSettings.copy(isAutoConversationEnabled = newAutoConversationState)
-                repository.saveSettings(newSettings)
+                repository.saveSettings(currentSettings.copy(isAutoConversationEnabled = newAutoConversationState))
             }
         }
     }
+
+    suspend fun fetchFusionTrace(id: String): FusionTrace? =
+        withContext(Dispatchers.IO) { repository.fetchFusionTrace(id) }
     
     // 自動会話関連のメソッド
     

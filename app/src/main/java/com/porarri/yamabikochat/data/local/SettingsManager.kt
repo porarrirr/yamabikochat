@@ -22,7 +22,7 @@ class SettingsManager private constructor(
     private val securePrefs = SecurePreferencesManager.getInstance(context)
     
     suspend fun saveSettings(settings: Settings) {
-        chatDao.saveSettings(settings)
+        chatDao.saveSettings(settings.normalizedForPersistence())
     }
     
     fun getSettings(): Flow<Settings?> {

@@ -440,6 +440,13 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
         }
     }
 
+    fun updateClientWebSearchToolEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = settings.value ?: Settings()
+            repository.saveSettings(current.copy(clientWebSearchToolEnabled = enabled))
+        }
+    }
+
     fun toggleOpenRouterPinnedModel(modelId: String) {
         if (modelId.isBlank()) return
         viewModelScope.launch {
@@ -550,6 +557,12 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
         autoSystemPromptB = request.autoSystemPromptB,
         autoMaxTurns = request.autoMaxTurns,
         mathRenderingEnabled = request.mathRenderingEnabled,
+        clientWebSearchToolEnabled = request.clientWebSearchToolEnabled,
+        isFusionModeEnabled = request.isFusionModeEnabled,
+        fusionTaskType = request.fusionTaskType,
+        fusionDebugModeEnabled = request.fusionDebugModeEnabled,
+        fusionLogPromptsEnabled = request.fusionLogPromptsEnabled,
+        fusionCustomPresetJSON = request.fusionCustomPresetJSON,
         dynamicColorEnabled = request.dynamicColorEnabled,
         themeColor = request.themeColor,
         themeMode = request.themeMode,
@@ -679,6 +692,12 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
         autoSystemPromptB = request.autoSystemPromptB,
         autoMaxTurns = request.autoMaxTurns,
         mathRenderingEnabled = request.mathRenderingEnabled,
+        clientWebSearchToolEnabled = request.clientWebSearchToolEnabled,
+        isFusionModeEnabled = request.isFusionModeEnabled,
+        fusionTaskType = request.fusionTaskType,
+        fusionDebugModeEnabled = request.fusionDebugModeEnabled,
+        fusionLogPromptsEnabled = request.fusionLogPromptsEnabled,
+        fusionCustomPresetJSON = request.fusionCustomPresetJSON,
         dynamicColorEnabled = request.dynamicColorEnabled,
         themeColor = request.themeColor,
         themeMode = request.themeMode,

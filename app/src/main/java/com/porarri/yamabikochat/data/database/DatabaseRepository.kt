@@ -8,6 +8,7 @@ import com.porarri.yamabikochat.data.local.ChatDao
 import com.porarri.yamabikochat.data.local.ChatMessage
 import com.porarri.yamabikochat.data.local.ChatMessageSummary
 import com.porarri.yamabikochat.data.local.ChatMessageThinking
+import com.porarri.yamabikochat.data.local.ChatMessageToolActivity
 import com.porarri.yamabikochat.data.local.ChatMessageVariant
 import com.porarri.yamabikochat.data.local.ChatProject
 import com.porarri.yamabikochat.data.local.ConversationSearchResult
@@ -16,6 +17,7 @@ import com.porarri.yamabikochat.data.local.ConversationListEntry
 import com.porarri.yamabikochat.data.local.DualChatMessage
 import com.porarri.yamabikochat.data.local.FullAutoConversation
 import com.porarri.yamabikochat.data.local.FullChatMessage
+import com.porarri.yamabikochat.data.local.FusionTraceRecord
 import com.porarri.yamabikochat.data.local.ModelPreset
 import com.porarri.yamabikochat.data.local.ProjectListEntry
 import com.porarri.yamabikochat.data.local.Settings
@@ -90,14 +92,25 @@ class DatabaseRepository(private val chatDao: ChatDao) {
         chatDao.getMessagesForConversation(conversationId)
 
     suspend fun getFullMessageById(id: Long): FullChatMessage? {
-        val chatMessage = chatDao.getFullMessageById(id)
+        val chatMessage = chatDao.getFullMessageById(id) ?: return null
         val thinking = chatDao.getThinkingByMessageId(id)
         val variants = chatDao.getVariantsForMessage(id)
-        return if (chatMessage != null) {
-            FullChatMessage(chatMessage, thinking?.thinkingStream, variants)
+        val toolActivity = chatDao.getToolActivityForMessage(id)
+        val variantIds = variants.map { it.id }.filter { it > 0L }
+        val variantToolActivities = if (variantIds.isEmpty()) {
+            emptyMap()
         } else {
-            null
+            chatDao.getToolActivitiesForVariants(variantIds)
+                .mapNotNull { activity -> activity.variantId?.let { it to activity } }
+                .toMap()
         }
+        return FullChatMessage(
+            chatMessage = chatMessage,
+            thinkingStream = thinking?.thinkingStream,
+            variants = variants,
+            toolActivity = toolActivity,
+            variantToolActivities = variantToolActivities
+        )
     }
 
     suspend fun getFullMessagesByIds(ids: Collection<Long>): Map<Long, FullChatMessage> {
@@ -108,11 +121,26 @@ class DatabaseRepository(private val chatDao: ChatDao) {
         val thinking = chatDao.getThinkingByMessageIds(idList)
         val thinkingMap = thinking.associateBy { it.messageId }
         val variantsByMessageId = chatDao.getVariantsForMessages(idList).groupBy { it.baseMessageId }
+        val toolActivitiesByMessageId = chatDao.getToolActivitiesForMessages(idList)
+            .mapNotNull { activity -> activity.messageId?.let { it to activity } }
+            .toMap()
+        val allVariantIds = variantsByMessageId.values.flatten().map { it.id }.filter { it > 0L }
+        val variantToolActivities = if (allVariantIds.isEmpty()) {
+            emptyMap()
+        } else {
+            chatDao.getToolActivitiesForVariants(allVariantIds)
+                .mapNotNull { activity -> activity.variantId?.let { it to activity } }
+                .toMap()
+        }
         return messages.associate { message ->
+            val variants = variantsByMessageId[message.id].orEmpty()
+            val variantIds = variants.map { it.id }.toSet()
             message.id to FullChatMessage(
-                message,
-                thinkingMap[message.id]?.thinkingStream,
-                variantsByMessageId[message.id].orEmpty()
+                chatMessage = message,
+                thinkingStream = thinkingMap[message.id]?.thinkingStream,
+                variants = variants,
+                toolActivity = toolActivitiesByMessageId[message.id],
+                variantToolActivities = variantToolActivities.filterKeys { it in variantIds }
             )
         }
     }
@@ -182,7 +210,34 @@ class DatabaseRepository(private val chatDao: ChatDao) {
 
     suspend fun getLatestSettings(): Settings? = chatDao.getSettings().first()
 
-    suspend fun saveSettings(settings: Settings) = chatDao.saveSettings(settings)
+    suspend fun saveSettings(settings: Settings) =
+        chatDao.saveSettings(settings.normalizedForPersistence())
+
+    suspend fun saveToolActivities(messageId: Long, stepsJSON: String) {
+        chatDao.deleteToolActivityForMessage(messageId)
+        chatDao.insertToolActivity(
+            ChatMessageToolActivity(messageId = messageId, stepsJSON = stepsJSON)
+        )
+    }
+
+    suspend fun saveToolActivitiesForVariant(variantId: Long, stepsJSON: String) {
+        chatDao.deleteToolActivityForVariant(variantId)
+        chatDao.insertToolActivity(
+            ChatMessageToolActivity(variantId = variantId, stepsJSON = stepsJSON)
+        )
+    }
+
+    suspend fun getToolActivityForMessage(messageId: Long): ChatMessageToolActivity? =
+        chatDao.getToolActivityForMessage(messageId)
+
+    suspend fun getToolActivityForVariant(variantId: Long): ChatMessageToolActivity? =
+        chatDao.getToolActivityForVariant(variantId)
+
+    suspend fun saveFusionTrace(record: FusionTraceRecord) =
+        chatDao.upsertFusionTrace(record)
+
+    suspend fun getFusionTrace(id: String): FusionTraceRecord? =
+        chatDao.getFusionTrace(id)
 
     fun getAllModelPresets(): Flow<List<ModelPreset>> = chatDao.getAllModelPresets()
 

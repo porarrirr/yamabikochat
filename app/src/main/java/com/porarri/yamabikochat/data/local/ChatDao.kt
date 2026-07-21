@@ -430,6 +430,35 @@ interface ChatDao {
     @Query("SELECT * FROM chat_message_thinking WHERE messageId IN (:messageIds)")
     suspend fun getThinkingByMessageIds(messageIds: List<Long>): List<ChatMessageThinking>
 
+    // Tool activity queries
+    @Insert
+    suspend fun insertToolActivity(activity: ChatMessageToolActivity): Long
+
+    @Query("SELECT * FROM chat_message_tool_activity WHERE messageId = :messageId AND variantId IS NULL LIMIT 1")
+    suspend fun getToolActivityForMessage(messageId: Long): ChatMessageToolActivity?
+
+    @Query("SELECT * FROM chat_message_tool_activity WHERE messageId IN (:messageIds) AND variantId IS NULL")
+    suspend fun getToolActivitiesForMessages(messageIds: List<Long>): List<ChatMessageToolActivity>
+
+    @Query("SELECT * FROM chat_message_tool_activity WHERE variantId = :variantId LIMIT 1")
+    suspend fun getToolActivityForVariant(variantId: Long): ChatMessageToolActivity?
+
+    @Query("SELECT * FROM chat_message_tool_activity WHERE variantId IN (:variantIds)")
+    suspend fun getToolActivitiesForVariants(variantIds: List<Long>): List<ChatMessageToolActivity>
+
+    @Query("DELETE FROM chat_message_tool_activity WHERE messageId = :messageId")
+    suspend fun deleteToolActivityForMessage(messageId: Long)
+
+    @Query("DELETE FROM chat_message_tool_activity WHERE variantId = :variantId")
+    suspend fun deleteToolActivityForVariant(variantId: Long)
+
+    // Fusion trace queries
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertFusionTrace(record: FusionTraceRecord)
+
+    @Query("SELECT * FROM fusion_traces WHERE id = :id")
+    suspend fun getFusionTrace(id: String): FusionTraceRecord?
+
     // Settings queries
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveSettings(settings: Settings)

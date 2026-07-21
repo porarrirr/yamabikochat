@@ -187,8 +187,41 @@ data class Settings(
 
     // SuperGrok OAuth reasoning settings
     val superGrokReasoningEnabled: Boolean = true,
-    val superGrokReasoningEffort: String = "medium"
+    val superGrokReasoningEffort: String = "medium",
+
+    // Client-side web search tool (OpenAI-compatible function calling)
+    val clientWebSearchToolEnabled: Boolean = false,
+    // Fusion mode fields (wired for persistence; UI/runtime later)
+    val isFusionModeEnabled: Boolean = false,
+    val fusionPresetName: String = "custom",
+    val fusionTaskType: String = "auto",
+    val fusionDebugModeEnabled: Boolean = false,
+    val fusionLogPromptsEnabled: Boolean = false,
+    val fusionCustomPresetJSON: String = ""
 ) {
+    fun normalizedForPersistence(): Settings {
+        var dual = isDualModeEnabled
+        var auto = isAutoConversationEnabled
+        var fusion = isFusionModeEnabled
+        when {
+            dual -> { auto = false; fusion = false }
+            auto -> { dual = false; fusion = false }
+            fusion -> { dual = false; auto = false }
+        }
+        val task = fusionTaskType.trim().lowercase().let {
+            if (it in setOf("research", "coding", "auto")) it else "auto"
+        }
+        return copy(
+            isDualModeEnabled = dual,
+            isAutoConversationEnabled = auto,
+            isFusionModeEnabled = fusion,
+            fusionPresetName = "custom",
+            fusionTaskType = task,
+            fusionCustomPresetJSON = com.porarri.yamabikochat.data.fusion.FusionPresetLoader
+                .normalizedFusionCustomPresetJSON(fusionCustomPresetJSON)
+        )
+    }
+
     // 現在のAPIプロバイダーに基づいて設定を取得するヘルパー関数
     fun getCurrentGoogleSearchEnabled(): Boolean {
         return when (apiProvider.uppercase()) {

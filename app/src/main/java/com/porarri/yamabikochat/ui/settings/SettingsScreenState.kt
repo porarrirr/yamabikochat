@@ -190,6 +190,14 @@ class SettingsScreenState(
 
     // 自動会話設定
     var isAutoConversationEnabled by mutableStateOf(false)
+
+    // Fusion mode
+    var isFusionModeEnabled by mutableStateOf(false)
+    var fusionTaskType by mutableStateOf("auto")
+    var fusionDebugModeEnabled by mutableStateOf(false)
+    var fusionLogPromptsEnabled by mutableStateOf(false)
+    var fusionCustomPresetJSON by mutableStateOf("")
+
     var autoModelA by mutableStateOf("gemini-2.5-flash")
     var autoModelB by mutableStateOf("deepseek/deepseek-chat")
     var autoProviderA by mutableStateOf("GEMINI")
@@ -244,6 +252,7 @@ class SettingsScreenState(
 
     // 数学表記の改善設定
     var mathRenderingEnabled by mutableStateOf(true)
+    var clientWebSearchToolEnabled by mutableStateOf(false)
     var dynamicColorEnabled by mutableStateOf(true)
     var themeColor by mutableStateOf(ThemeColorPreset.BluePurple.key)
     var themeMode by mutableStateOf("SYSTEM")
@@ -583,6 +592,11 @@ class SettingsScreenState(
 
             // 自動会話設定を読み込み
             isAutoConversationEnabled = settingsState.isAutoConversationEnabled
+            isFusionModeEnabled = settingsState.isFusionModeEnabled
+            fusionTaskType = settingsState.fusionTaskType
+            fusionDebugModeEnabled = settingsState.fusionDebugModeEnabled
+            fusionLogPromptsEnabled = settingsState.fusionLogPromptsEnabled
+            fusionCustomPresetJSON = settingsState.fusionCustomPresetJSON
             autoModelA = settingsState.autoModelA
             autoModelB = settingsState.autoModelB
             autoProviderA = settingsState.autoProviderA
@@ -593,6 +607,7 @@ class SettingsScreenState(
 
             // 数学表記の改善設定を読み込み
             mathRenderingEnabled = settingsState.mathRenderingEnabled
+            clientWebSearchToolEnabled = settingsState.clientWebSearchToolEnabled
             dynamicColorEnabled = settingsState.dynamicColorEnabled
             themeColor = ThemeColorPreset.fromKey(settingsState.themeColor).key
             themeMode = settingsState.themeMode
@@ -994,6 +1009,11 @@ class SettingsScreenState(
             dualSystemPromptA = dualSystemPromptA,
             dualSystemPromptB = dualSystemPromptB,
             isAutoConversationEnabled = isAutoConversationEnabled,
+            isFusionModeEnabled = isFusionModeEnabled,
+            fusionTaskType = fusionTaskType,
+            fusionDebugModeEnabled = fusionDebugModeEnabled,
+            fusionLogPromptsEnabled = fusionLogPromptsEnabled,
+            fusionCustomPresetJSON = fusionCustomPresetJSON,
             autoModelA = autoModelA,
             autoModelB = autoModelB,
             autoProviderA = autoProviderA,
@@ -1002,6 +1022,7 @@ class SettingsScreenState(
             autoSystemPromptB = autoSystemPromptB,
             autoMaxTurns = autoMaxTurns,
             mathRenderingEnabled = mathRenderingEnabled,
+            clientWebSearchToolEnabled = clientWebSearchToolEnabled,
             dynamicColorEnabled = dynamicColorEnabled,
             themeColor = themeColor,
             themeMode = themeMode,

@@ -51,6 +51,7 @@ import com.porarri.yamabikochat.ui.theme.ThemeColorPreset
 import com.porarri.yamabikochat.ui.settings.sections.autoConversationSettingsSection
 import com.porarri.yamabikochat.ui.settings.sections.diagnosticsSection
 import com.porarri.yamabikochat.ui.settings.sections.dualModeSettingsSection
+import com.porarri.yamabikochat.ui.settings.sections.fusionModeSettingsSection
 import com.porarri.yamabikochat.ui.settings.sections.geminiThinkingInfoSection
 import com.porarri.yamabikochat.ui.settings.sections.mathRenderingSettingsSection
 import com.porarri.yamabikochat.ui.settings.sections.modelPresetsSection
@@ -2445,6 +2446,22 @@ fun SettingsScreen(
                         checked = isStreamingEnabled,
                         onCheckedChange = { isStreamingEnabled = it }
                     )
+                    SettingsToggleRow(
+                        title = "クライアント側Web検索",
+                        description = "LLMが必要に応じてWeb検索とページ取得を実行します。外部検索APIキーは不要です。",
+                        checked = clientWebSearchToolEnabled,
+                        onCheckedChange = {
+                            clientWebSearchToolEnabled = it
+                            viewModel.updateClientWebSearchToolEnabled(it)
+                        }
+                    )
+                    if (!com.porarri.yamabikochat.data.tools.ClientTools.supportsClientWebSearchTool(apiProvider)) {
+                        Text(
+                            text = "現在のプロバイダーではこのツールは使用されません。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
                     val providerLabel = ProviderCatalog.displayName(apiProvider)
                     val providerKey = apiProvider.uppercase()
                     val showGlobalPresetsForProvider =
@@ -2469,7 +2486,14 @@ fun SettingsScreen(
                     if (selectedTab == 2) {
         dualModeSettingsSection(
             isDualModeEnabled = isDualModeEnabled,
-            onDualModeEnabledChange = { isDualModeEnabled = it },
+            onDualModeEnabledChange = { enabled ->
+                isDualModeEnabled = enabled
+                if (enabled) {
+                    isAutoConversationEnabled = false
+                    isFusionModeEnabled = false
+                }
+            },
+            dualBlockedByFusion = isFusionModeEnabled,
             presetOptions = presetOptions,
             onPresetSelectedA = { applyPresetToDualA(it) },
             onPresetSelectedB = { applyPresetToDualB(it) },
@@ -2515,7 +2539,14 @@ fun SettingsScreen(
 
         autoConversationSettingsSection(
             isAutoConversationEnabled = isAutoConversationEnabled,
-            onAutoConversationEnabledChange = { isAutoConversationEnabled = it },
+            onAutoConversationEnabledChange = { enabled ->
+                isAutoConversationEnabled = enabled
+                if (enabled) {
+                    isDualModeEnabled = false
+                    isFusionModeEnabled = false
+                }
+            },
+            autoBlockedByFusion = isFusionModeEnabled,
             presetOptions = presetOptions,
             onPresetSelectedA = { applyPresetToAutoA(it) },
             onPresetSelectedB = { applyPresetToAutoB(it) },
@@ -2559,6 +2590,26 @@ fun SettingsScreen(
             recentModelIds = openRouterRecentModels,
             onTogglePinned = { toggleOpenRouterPinnedModel(it) },
             onRecentUsed = { registerOpenRouterRecentModel(it) }
+        )
+
+        fusionModeSettingsSection(
+            isFusionModeEnabled = isFusionModeEnabled,
+            onFusionModeEnabledChange = { enabled ->
+                isFusionModeEnabled = enabled
+                if (enabled) {
+                    isDualModeEnabled = false
+                    isAutoConversationEnabled = false
+                }
+            },
+            fusionBlockedByDualOrAuto = isDualModeEnabled || isAutoConversationEnabled,
+            fusionTaskType = fusionTaskType,
+            onFusionTaskTypeChange = { fusionTaskType = it },
+            fusionDebugModeEnabled = fusionDebugModeEnabled,
+            onFusionDebugModeEnabledChange = { fusionDebugModeEnabled = it },
+            fusionLogPromptsEnabled = fusionLogPromptsEnabled,
+            onFusionLogPromptsEnabledChange = { fusionLogPromptsEnabled = it },
+            fusionCustomPresetJSON = fusionCustomPresetJSON,
+            onFusionCustomPresetJSONChange = { fusionCustomPresetJSON = it }
         )
 
         diagnosticsSection(apiKeyStatus)

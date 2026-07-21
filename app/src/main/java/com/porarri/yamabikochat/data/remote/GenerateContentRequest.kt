@@ -142,7 +142,9 @@ data class FunctionCall(
 data class FunctionResponse(
     val name: String,
     val response: JsonElement? = null,
-    val parts: List<FunctionResponsePart>? = null
+    val parts: List<FunctionResponsePart>? = null,
+    /** Optional OpenAI tool_call_id for OpenRouter/OpenAI conversion. */
+    val id: String? = null
 )
 
 @Serializable
