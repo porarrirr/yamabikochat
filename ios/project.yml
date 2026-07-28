@@ -35,6 +35,10 @@ targets:
       - package: GRDB
       - target: YamabikoShareExtension
         embed: true
+    postBuildScripts:
+      - name: Set build-time version
+        script: scripts/set-build-version.sh read
+        basedOnDependencyAnalysis: false
   YamabikoShareExtension:
     type: app-extension
     platform: iOS
@@ -60,6 +64,10 @@ targets:
       CODE_SIGN_STYLE: Automatic
       DEVELOPMENT_TEAM: 77V64TWCFD
       APPLICATION_EXTENSION_API_ONLY: YES
+    postBuildScripts:
+      - name: Set build-time version
+        script: scripts/set-build-version.sh write
+        basedOnDependencyAnalysis: false
   YamabikoTests:
     type: bundle.unit-test
     platform: iOS

@@ -156,7 +156,10 @@ final class ChatRepositoryDualTests: XCTestCase {
         let result = try await fixture.repository.sendDualMessage(conversationId: conversationID, text: "hello")
 
         XCTAssertEqual(result.modelAText, "response-model-a")
-        XCTAssertTrue(result.modelBText.hasPrefix("エラー:"))
+        XCTAssertEqual(
+            result.modelBText,
+            L10n.format("エラー: %@", #"HTTP 500: {"error":"forced failure"}"#)
+        )
         let rows = try fixture.conversations.fetchDualMessages(conversationId: conversationID)
         XCTAssertEqual(rows.count, 2)
         XCTAssertEqual(rows.last?.parsedRole, .dualModel)

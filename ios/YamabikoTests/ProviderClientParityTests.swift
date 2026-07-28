@@ -1660,7 +1660,7 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertNil(body["prompt_cache_key"])
     }
 
-    func testOpenCodeGoQwenModelUsesMessagesEndpoint() async throws {
+    func testOpenCodeGoQwenPlusModelUsesMessagesEndpoint() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("go-key", for: .openCodeGo)
 
@@ -1673,7 +1673,7 @@ final class ProviderClientParityTests: XCTestCase {
 
         let client = OpenCodeGoProviderClient()
         let request = ProviderRequest(
-            model: "qwen3.5-plus",
+            model: "qwen3.7-plus",
             messages: [ProviderRequestMessage(role: "user", content: "hello")],
             stream: false,
             tools: [],
@@ -1692,7 +1692,7 @@ final class ProviderClientParityTests: XCTestCase {
         let captured = try XCTUnwrap(httpClient.lastRequest)
         XCTAssertEqual(captured.url.absoluteString, "https://opencode.ai/zen/go/v1/messages")
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(captured.body)) as? [String: Any])
-        XCTAssertEqual(body["model"] as? String, "qwen3.5-plus")
+        XCTAssertEqual(body["model"] as? String, "qwen3.7-plus")
     }
 
     func testOpenCodeGoQwenMaxModelUsesMessagesEndpoint() async throws {

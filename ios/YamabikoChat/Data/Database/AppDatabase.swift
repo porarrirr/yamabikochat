@@ -260,6 +260,9 @@ enum AppDatabase {
                 t.column("codexPromptCacheMinLength", .integer).notNull().defaults(to: 512)
                 t.column("codexPromptCacheType", .text).notNull().defaults(to: "ephemeral")
 
+                t.column("superGrokReasoningEnabled", .boolean).notNull().defaults(to: true)
+                t.column("superGrokReasoningEffort", .text).notNull().defaults(to: "medium")
+
                 t.column("showGlobalProviderPresetsInChat", .boolean).notNull().defaults(to: true)
                 t.column("showGlobalProviderPresetsInChatByProviderJSON", .text).notNull().defaults(to: "{}")
 

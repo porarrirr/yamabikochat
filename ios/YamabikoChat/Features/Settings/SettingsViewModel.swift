@@ -56,6 +56,10 @@ final class SettingsViewModel: ObservableObject {
         self.credentialStore = credentialStore
 
         repository.settingsPublisher()
+            // The current value is loaded synchronously below. Ignoring the
+            // observation's initial snapshot prevents it from overwriting edits
+            // made immediately after binding.
+            .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newSettings in
                 guard let self else { return }

@@ -747,7 +747,14 @@ private struct MessageAttachmentList: View {
 
     var body: some View {
         VStack(alignment: horizontalAlignment, spacing: 6) {
-            if !imageAttachments.isEmpty {
+            if imageAttachments.count == 1, let attachment = imageAttachments.first,
+               let url = attachment.url {
+                AttachmentImageCard(
+                    url: url,
+                    displayName: attachment.displayName
+                )
+                .frame(maxWidth: .infinity, alignment: frameAlignment)
+            } else if !imageAttachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(imageAttachments) { attachment in
@@ -759,8 +766,9 @@ private struct MessageAttachmentList: View {
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: frameAlignment)
                 }
+                .defaultScrollAnchor(isOutgoing ? .trailing : .leading)
+                .frame(maxWidth: .infinity, alignment: frameAlignment)
             }
 
             ForEach(fileAttachments) { attachment in

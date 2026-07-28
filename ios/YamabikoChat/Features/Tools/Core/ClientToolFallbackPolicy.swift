@@ -15,7 +15,9 @@ enum ClientToolFallbackPolicy {
         }
 
         let normalized = body.lowercased()
-        let mentionsTools = normalized.contains("tool") || normalized.contains("function")
+        let mentionsTools = normalized.contains("tool")
+            || normalized.contains("function")
+            || normalized.contains("additionalproperties")
         let explicitlyUnsupported = [
             "not support",
             "unsupported",

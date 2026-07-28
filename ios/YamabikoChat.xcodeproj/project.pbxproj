@@ -978,6 +978,7 @@
 				E253B5C8992D434DCF0FBE3E /* Resources */,
 				3BCE835AB20804B68F2E52B2 /* Frameworks */,
 				0C36FB9B5070980568CD2F2D /* Embed Foundation Extensions */,
+				5C713D9F3A7E66A6C621949D /* Set build-time version */,
 			);
 			buildRules = (
 			);
@@ -998,6 +999,7 @@
 			buildPhases = (
 				29481B9788D9648575EFD4A8 /* Sources */,
 				E5BC591AAF3BFD376B3724A9 /* Resources */,
+				ACFBF6EED8FCE02D4D0D2712 /* Set build-time version */,
 			);
 			buildRules = (
 			);
@@ -1103,6 +1105,47 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		5C713D9F3A7E66A6C621949D /* Set build-time version */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Set build-time version";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "scripts/set-build-version.sh read";
+		};
+		ACFBF6EED8FCE02D4D0D2712 /* Set build-time version */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Set build-time version";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "scripts/set-build-version.sh write";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		17537FC54E250558F22276A8 /* Sources */ = {

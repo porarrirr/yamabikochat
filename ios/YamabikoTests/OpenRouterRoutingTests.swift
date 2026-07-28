@@ -361,6 +361,7 @@ final class OpenRouterRoutingTests: XCTestCase {
             conversations: conversations,
             credentials: credentials,
             httpClient: httpClient,
+            modelService: modelService,
             pricingRepository: NoopPricingRepository()
         )
         return (repository, modelService, credentials)

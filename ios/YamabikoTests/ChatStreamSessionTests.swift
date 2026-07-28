@@ -45,8 +45,9 @@ final class ChatStreamSessionTests: XCTestCase {
         )
 
         struct TestStreamError: Error {}
+        let streamError = TestStreamError()
         let stream = AsyncThrowingStream<ProviderStreamEvent, Error> { continuation in
-            continuation.finish(throwing: TestStreamError())
+            continuation.finish(throwing: streamError)
         }
 
         do {
@@ -60,7 +61,10 @@ final class ChatStreamSessionTests: XCTestCase {
             XCTFail("Expected stream error")
         } catch is TestStreamError {
             let messages = try conversations.fetchMessages(conversationId: conversationId)
-            XCTAssertTrue(messages.last?.text.hasPrefix("エラー:") == true)
+            XCTAssertEqual(
+                messages.last?.text,
+                L10n.format("エラー: %@", streamError.localizedDescription)
+            )
         } catch {
             XCTFail("Unexpected error: \(error)")
         }

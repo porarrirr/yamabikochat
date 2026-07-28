@@ -1,7 +1,20 @@
 import XCTest
+import GRDB
 @testable import YamabikoChat
 
 final class AppSettingsTests: XCTestCase {
+    func testFreshDatabaseMigrationPersistsCurrentSettingsSchema() throws {
+        let dbQueue = try DatabaseQueue()
+
+        try AppDatabase.migrator.migrate(dbQueue)
+
+        let settings = try dbQueue.read { db in
+            try AppSettings.fetchOne(db, key: 1)
+        }
+        XCTAssertEqual(settings?.superGrokReasoningEnabled, true)
+        XCTAssertEqual(settings?.superGrokReasoningEffort, "medium")
+    }
+
     func testModelForProviderReturnsAppleIntelligenceDisplayModel() {
         var settings = AppSettings()
         settings.providerDefaultModelsJSON = #"{"APPLE_INTELLIGENCE":"legacy-model-id"}"#
