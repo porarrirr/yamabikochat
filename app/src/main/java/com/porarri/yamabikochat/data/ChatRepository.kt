@@ -46,6 +46,8 @@ import com.porarri.yamabikochat.data.local.TokenUsageDailyPoint
 import com.porarri.yamabikochat.data.local.TokenUsageRecord
 import com.porarri.yamabikochat.data.local.TokenUsageTotals
 import com.porarri.yamabikochat.data.model.ModelRepository
+import com.porarri.yamabikochat.data.modelsdev.CatalogLoadState
+import com.porarri.yamabikochat.data.modelsdev.ModelsDevCatalogRepository
 import com.porarri.yamabikochat.data.remote.Content
 import com.porarri.yamabikochat.data.remote.GenerateContentRequest
 import com.porarri.yamabikochat.data.remote.GenerateContentResponse
@@ -73,7 +75,8 @@ class ChatRepository(
     private val modelRepository: ModelRepository,
     private val codexAuthRepository: CodexAuthRepository,
     private val superGrokAuthRepository: SuperGrokAuthRepository,
-    private val pricingRepository: LiteLlmPricingRepository
+    private val pricingRepository: LiteLlmPricingRepository,
+    private val modelsDevCatalogRepository: ModelsDevCatalogRepository
 ) {
     private val fusionTraceStore = FusionTraceStore(
         saveRecord = { databaseRepository.saveFusionTrace(it) },
@@ -741,6 +744,12 @@ class ChatRepository(
     fun hasOpenAiCompatApiKey(name: String?): Boolean = apiRepository.hasOpenAiCompatApiKey(name)
 
     suspend fun clearOpenAiCompatApiKey(name: String) = apiRepository.clearOpenAiCompatApiKey(name)
+
+    suspend fun saveModelsDevField(providerId: String, fieldName: String, value: String?): Boolean =
+        apiRepository.saveModelsDevField(providerId, fieldName, value)
+
+    fun peekModelsDevField(providerId: String, fieldName: String): String? =
+        apiRepository.peekModelsDevField(providerId, fieldName)
     // endregion
 
     suspend fun saveAlibabaMcpAuthorizationToken(token: String?): Boolean =
@@ -762,6 +771,11 @@ class ChatRepository(
     // endregion
 
     // region Model delegation
+    val modelsDevCatalogState: StateFlow<CatalogLoadState> = modelsDevCatalogRepository.state
+
+    suspend fun refreshModelsDevCatalog(forceRefresh: Boolean = false): CatalogLoadState =
+        modelsDevCatalogRepository.load(forceRefresh)
+
     suspend fun getOpenRouterModels(forceRefresh: Boolean = false): List<SimpleModel> =
         modelRepository.getOpenRouterModels(forceRefresh)
 

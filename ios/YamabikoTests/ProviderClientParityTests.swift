@@ -2578,6 +2578,73 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(usage.cacheCreationInputTokens, 6)
     }
 
+    func testModelsDevAzureUsesApiKeyHeaderWithoutBearerAuthorization() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.saveSecret("azure-secret", key: "models_dev_azure_AZURE_API_KEY")
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+        let request = ProviderRequest(
+            model: "gpt-5",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            metadata: [
+                "modelsDevProviderID": "azure",
+                "modelsDevBaseURL": "https://example.openai.azure.com/openai/v1",
+                "modelsDevCredentialKey": "models_dev_azure_AZURE_API_KEY",
+                "modelsDevAuthHeader": "api-key"
+            ]
+        )
+
+        _ = try await OpenAICompatibleProviderClient().generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(captured.headers["api-key"], "azure-secret")
+        XCTAssertNil(captured.headers["Authorization"])
+        XCTAssertEqual(captured.url.absoluteString, "https://example.openai.azure.com/openai/v1/chat/completions")
+    }
+
+    func testModelsDevCloudflareUsesGatewayAuthorizationHeader() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.saveSecret("cloudflare-secret", key: "models_dev_cloudflare-ai-gateway_CLOUDFLARE_API_TOKEN")
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+        let request = ProviderRequest(
+            model: "openai/gpt-5",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            metadata: [
+                "modelsDevProviderID": "cloudflare-ai-gateway",
+                "modelsDevBaseURL": "https://gateway.ai.cloudflare.com/v1/account/gateway/compat",
+                "modelsDevCredentialKey": "models_dev_cloudflare-ai-gateway_CLOUDFLARE_API_TOKEN",
+                "modelsDevAuthHeader": "cf-aig-authorization"
+            ]
+        )
+
+        _ = try await OpenAICompatibleProviderClient().generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let captured = try XCTUnwrap(httpClient.lastRequest)
+        XCTAssertEqual(captured.headers["cf-aig-authorization"], "Bearer cloudflare-secret")
+        XCTAssertNil(captured.headers["Authorization"])
+    }
+
     private static func makeHTTPResponse(
         url: URL,
         statusCode: Int,

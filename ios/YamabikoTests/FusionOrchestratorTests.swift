@@ -365,7 +365,7 @@ final class FusionOrchestratorTests: XCTestCase {
 
     private func mockInvoke(
         request: ProviderRequest,
-        provider: LLMProvider,
+        provider: String,
         phase: FusionPhase
     ) async throws -> ProviderResponse {
         switch phase {
@@ -383,7 +383,7 @@ final class FusionOrchestratorTests: XCTestCase {
 
     private func slowInvoke(
         request: ProviderRequest,
-        provider: LLMProvider,
+        provider: String,
         phase: FusionPhase
     ) async throws -> ProviderResponse {
         if phase == .panel {
@@ -395,7 +395,7 @@ final class FusionOrchestratorTests: XCTestCase {
 
     private func invalidJudgeInvoke(
         request: ProviderRequest,
-        provider: LLMProvider,
+        provider: String,
         phase: FusionPhase
     ) async throws -> ProviderResponse {
         if phase == .judge {

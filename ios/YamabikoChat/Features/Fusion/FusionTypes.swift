@@ -271,7 +271,7 @@ struct FusionRunResult: Sendable, Equatable {
 struct FusionJudgeOutcome: Sendable {
     var trace: FusionTrace
     var synthesisRequest: ProviderRequest
-    var synthesizerProvider: LLMProvider
+    var synthesizerProvider: String
     var synthesizerModel: PanelModelConfig
     var staticFallbackAnswer: String
     var panelTokenUsages: [(provider: String, model: String, usage: ProviderUsage?, requestType: String)]

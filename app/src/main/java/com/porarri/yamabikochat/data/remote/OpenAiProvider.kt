@@ -34,7 +34,10 @@ class OpenAiProvider(
         model: String,
         request: GenerateContentRequest,
         baseUrl: String,
-        promptCacheKeyOverride: String? = null
+        promptCacheKeyOverride: String? = null,
+        useApiKeyHeader: Boolean = false,
+        useCloudflareGatewayHeader: Boolean = false,
+        stripOpenAiProviderPrefix: Boolean = true
     ): Response<GenerateContentResponse> = withContext(Dispatchers.IO) {
         try {
             val cleanedKey = apiKey.trim()
@@ -58,9 +61,11 @@ class OpenAiProvider(
 
             val resp = when (payload) {
                 is OpenRouterRequest -> service.createChatCompletion(
-                    authorization = "Bearer $cleanedKey",
+                    authorization = if (useApiKeyHeader || useCloudflareGatewayHeader) null else "Bearer $cleanedKey",
+                    apiKey = cleanedKey.takeIf { useApiKeyHeader },
+                    cloudflareAuthorization = "Bearer $cleanedKey".takeIf { useCloudflareGatewayHeader },
                     request = payload.copy(
-                        model = normalizeOpenAiModel(payload.model),
+                        model = normalizeOpenAiModel(payload.model, stripOpenAiProviderPrefix),
                         provider = null,
                         reasoning = reasoning,
                         cacheControl = null,
@@ -70,9 +75,11 @@ class OpenAiProvider(
                     )
                 )
                 is OpenRouterMultiModalRequest -> service.createChatCompletionMultiModal(
-                    authorization = "Bearer $cleanedKey",
+                    authorization = if (useApiKeyHeader || useCloudflareGatewayHeader) null else "Bearer $cleanedKey",
+                    apiKey = cleanedKey.takeIf { useApiKeyHeader },
+                    cloudflareAuthorization = "Bearer $cleanedKey".takeIf { useCloudflareGatewayHeader },
                     request = payload.copy(
-                        model = normalizeOpenAiModel(payload.model),
+                        model = normalizeOpenAiModel(payload.model, stripOpenAiProviderPrefix),
                         provider = null,
                         reasoning = reasoning,
                         cacheControl = null,
@@ -102,7 +109,10 @@ class OpenAiProvider(
         model: String,
         request: GenerateContentRequest,
         baseUrl: String,
-        promptCacheKeyOverride: String? = null
+        promptCacheKeyOverride: String? = null,
+        useApiKeyHeader: Boolean = false,
+        useCloudflareGatewayHeader: Boolean = false,
+        stripOpenAiProviderPrefix: Boolean = true
     ): Response<ResponseBody> = withContext(Dispatchers.IO) {
         try {
             val cleanedKey = apiKey.trim()
@@ -125,9 +135,11 @@ class OpenAiProvider(
 
             when (payload) {
                 is OpenRouterRequest -> service.createChatCompletionStream(
-                    authorization = "Bearer $cleanedKey",
+                    authorization = if (useApiKeyHeader || useCloudflareGatewayHeader) null else "Bearer $cleanedKey",
+                    apiKey = cleanedKey.takeIf { useApiKeyHeader },
+                    cloudflareAuthorization = "Bearer $cleanedKey".takeIf { useCloudflareGatewayHeader },
                     request = payload.copy(
-                        model = normalizeOpenAiModel(payload.model),
+                        model = normalizeOpenAiModel(payload.model, stripOpenAiProviderPrefix),
                         stream = true,
                         provider = null,
                         reasoning = reasoning,
@@ -138,9 +150,11 @@ class OpenAiProvider(
                     )
                 )
                 is OpenRouterMultiModalRequest -> service.createChatCompletionMultiModalStream(
-                    authorization = "Bearer $cleanedKey",
+                    authorization = if (useApiKeyHeader || useCloudflareGatewayHeader) null else "Bearer $cleanedKey",
+                    apiKey = cleanedKey.takeIf { useApiKeyHeader },
+                    cloudflareAuthorization = "Bearer $cleanedKey".takeIf { useCloudflareGatewayHeader },
                     request = payload.copy(
-                        model = normalizeOpenAiModel(payload.model),
+                        model = normalizeOpenAiModel(payload.model, stripOpenAiProviderPrefix),
                         stream = true,
                         provider = null,
                         reasoning = reasoning,
@@ -158,9 +172,9 @@ class OpenAiProvider(
         }
     }
 
-    private fun normalizeOpenAiModel(model: String): String {
+    internal fun normalizeOpenAiModel(model: String, stripProviderPrefix: Boolean): String {
         val trimmed = model.trim()
-        return trimmed.removePrefix("openai/")
+        return if (stripProviderPrefix) trimmed.removePrefix("openai/") else trimmed
     }
 
     /**

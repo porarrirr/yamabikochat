@@ -80,6 +80,13 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         credentialStore: SecureCredentialStore,
         httpClient: HTTPClientProtocol
     ) async throws -> ProviderResponse {
+        if request.metadata["modelsDevProviderID"] != nil {
+            return try await generateModelsDev(
+                request: request,
+                credentialStore: credentialStore,
+                httpClient: httpClient
+            )
+        }
         let resolvedProvider = LLMProvider(rawOrDefault: request.metadata["provider"] ?? settings.apiProvider)
         let apiKey = try resolvedCredential(
             for: resolvedProvider,
@@ -112,6 +119,15 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
+                    if request.metadata["modelsDevProviderID"] != nil {
+                        try await streamModelsDev(
+                            request: request,
+                            credentialStore: credentialStore,
+                            httpClient: httpClient,
+                            continuation: continuation
+                        )
+                        return
+                    }
                     let resolvedProvider = LLMProvider(rawOrDefault: request.metadata["provider"] ?? settings.apiProvider)
                     let apiKey = try resolvedCredential(
                         for: resolvedProvider,
@@ -161,6 +177,84 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    private func modelsDevContext(
+        request: ProviderRequest,
+        credentialStore: SecureCredentialStore
+    ) throws -> (token: String, endpoint: URL, headers: [String: String]) {
+        guard let providerID = request.metadata["modelsDevProviderID"]?.trimmedNonEmpty,
+              let credentialKey = request.metadata["modelsDevCredentialKey"]?.trimmedNonEmpty,
+              let token = try credentialStore.readSecret(key: credentialKey)?.trimmedNonEmpty,
+              let baseURL = request.metadata["modelsDevBaseURL"]?.trimmedNonEmpty,
+              let base = URL(string: baseURL)
+        else { throw ProviderClientError.missingCredential(request.metadata["modelsDevProviderID"] ?? "models.dev") }
+        let endpoint = base.path.hasSuffix("/chat/completions")
+            ? base
+            : base.appendingPathComponent("chat/completions")
+        var headers = ["Content-Type": "application/json"]
+        if request.metadata["modelsDevAuthHeader"] == "api-key" {
+            headers["api-key"] = token
+        } else if request.metadata["modelsDevAuthHeader"] == "cf-aig-authorization" {
+            headers["cf-aig-authorization"] = "Bearer \(token)"
+        } else {
+            headers["Authorization"] = "Bearer \(token)"
+        }
+        DiagnosticsLogger.log("models.dev OpenAI-compatible request", category: .network, metadata: ["provider": providerID, "model": request.model])
+        return (token, endpoint, headers)
+    }
+
+    private func generateModelsDev(
+        request: ProviderRequest,
+        credentialStore: SecureCredentialStore,
+        httpClient: HTTPClientProtocol
+    ) async throws -> ProviderResponse {
+        let context = try modelsDevContext(request: request, credentialStore: credentialStore)
+        let payload = try buildPayload(for: request, stream: false, provider: .openAICompat)
+        let httpRequest = HTTPRequest(
+            url: context.endpoint,
+            headers: context.headers,
+            body: payload
+        )
+        let (data, response) = try await httpClient.send(httpRequest)
+        guard (200 ... 299).contains(response.statusCode) else {
+            throw ProviderClientError.httpStatus(response.statusCode, String(data: data, encoding: .utf8) ?? "")
+        }
+        return try parseResponse(data: data)
+    }
+
+    private func streamModelsDev(
+        request: ProviderRequest,
+        credentialStore: SecureCredentialStore,
+        httpClient: HTTPClientProtocol,
+        continuation: AsyncThrowingStream<ProviderStreamEvent, Error>.Continuation
+    ) async throws {
+        let context = try modelsDevContext(request: request, credentialStore: credentialStore)
+        let payload = try buildPayload(for: request, stream: true, provider: .openAICompat)
+        var headers = context.headers
+        headers["Accept"] = "text/event-stream"
+        let httpRequest = HTTPRequest(
+            url: context.endpoint,
+            headers: headers,
+            body: payload
+        )
+        let (lineStream, response) = try await httpClient.stream(httpRequest)
+        guard (200 ... 299).contains(response.statusCode) else {
+            throw ProviderClientError.httpStatus(response.statusCode, "Streaming endpoint returned \(response.statusCode)")
+        }
+        try await ProviderSSEStreamRunner.pump(
+            lineStream: lineStream,
+            continuation: continuation,
+            options: ProviderSSEStreamRunner.Options(
+                usageFromRoot: { [self] root in
+                    if let usage = parseUsage(root["usage"] as? [String: Any])?.normalizedNonEmpty() { return usage }
+                    return parseUsage(root)?.normalizedNonEmpty()
+                },
+                eventsFromRoot: { root, fullText, fullReasoning in
+                    OpenAICompatibleStreamParser.events(fromRoot: root, fullText: &fullText, fullReasoning: &fullReasoning)
+                }
+            )
+        )
     }
 
     private func buildPayload(for request: ProviderRequest, stream: Bool, provider: LLMProvider) throws -> Data {

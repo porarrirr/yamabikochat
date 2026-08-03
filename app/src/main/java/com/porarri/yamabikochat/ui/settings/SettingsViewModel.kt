@@ -12,6 +12,7 @@ import com.porarri.yamabikochat.data.local.TokenUsageByModel
 import com.porarri.yamabikochat.data.local.TokenUsageDailyPoint
 import com.porarri.yamabikochat.data.local.TokenUsageTotals
 import com.porarri.yamabikochat.data.remote.SimpleModel
+import com.porarri.yamabikochat.data.modelsdev.CatalogLoadState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -57,6 +58,8 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
     val openRouterModelsError: StateFlow<String?> = repository.getOpenRouterModelsError()
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
+    val modelsDevCatalogState: StateFlow<CatalogLoadState> = repository.modelsDevCatalogState
+
     private val _secureStorageError = MutableStateFlow<String?>(null)
     val secureStorageError: StateFlow<String?> = _secureStorageError.asStateFlow()
 
@@ -80,7 +83,33 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
 
     init {
         viewModelScope.launch { updateApiKeyStatus() }
+        viewModelScope.launch { repository.refreshModelsDevCatalog() }
         observeTokenUsageStats()
+    }
+
+    fun refreshModelsDevCatalog() {
+        viewModelScope.launch { repository.refreshModelsDevCatalog(forceRefresh = true) }
+    }
+
+    fun modelsDevField(providerId: String, fieldName: String): String =
+        repository.peekModelsDevField(providerId, fieldName).orEmpty()
+
+    fun saveModelsDevFields(providerId: String, fields: Map<String, String>) {
+        viewModelScope.launch {
+            val baseUrl = fields["YAMABIKO_BASE_URL"]?.trim().orEmpty()
+            if (baseUrl.isNotEmpty()) {
+                val parsed = runCatching { java.net.URI(baseUrl) }.getOrNull()
+                if (parsed?.scheme?.lowercase() != "https" || parsed.host.isNullOrBlank()) {
+                    _secureStorageError.value = "Base URL は有効な HTTPS URL を入力してください"
+                    return@launch
+                }
+            }
+            val failed = fields.any { (name, value) ->
+                !repository.saveModelsDevField(providerId, name, value)
+            }
+            _secureStorageError.value = if (failed) "暗号化ストレージにプロバイダー設定を保存できませんでした" else null
+            updateApiKeyStatus()
+        }
     }
 
     fun clearSecureStorageError() { _secureStorageError.value = null }

@@ -62,6 +62,7 @@ struct FusionModeSettingsSection: View {
                     modelTitleKey: "Model",
                     model: panelModelBinding(at: index, fallback: panel.modelId),
                     providerPresets: chatVisibleProviderPresets,
+                    catalogProviders: viewModel.modelsDevCatalogState.providers,
                     onProviderPresetSelected: { preset in
                         viewModel.updateFusionPanelModel(
                             at: index,
@@ -106,6 +107,7 @@ struct FusionModeSettingsSection: View {
                 modelTitleKey: "Model",
                 model: judgeModelBinding,
                 providerPresets: chatVisibleProviderPresets,
+                catalogProviders: viewModel.modelsDevCatalogState.providers,
                 onProviderPresetSelected: { preset in
                     viewModel.updateFusionJudgeModel(provider: preset.apiProvider, modelId: preset.model)
                 },
@@ -124,6 +126,7 @@ struct FusionModeSettingsSection: View {
                 modelTitleKey: "Model",
                 model: synthesizerModelBinding,
                 providerPresets: chatVisibleProviderPresets,
+                catalogProviders: viewModel.modelsDevCatalogState.providers,
                 onProviderPresetSelected: { preset in
                     viewModel.updateFusionSynthesizerModel(provider: preset.apiProvider, modelId: preset.model)
                 },
@@ -142,6 +145,7 @@ struct FusionModeSettingsSection: View {
                 modelTitleKey: "Model",
                 model: fallbackModelBinding,
                 providerPresets: chatVisibleProviderPresets,
+                catalogProviders: viewModel.modelsDevCatalogState.providers,
                 onProviderPresetSelected: { preset in
                     viewModel.updateFusionFallbackModel(provider: preset.apiProvider, modelId: preset.model)
                 },

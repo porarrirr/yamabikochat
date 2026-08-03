@@ -8,13 +8,14 @@ struct DualAutoModelSideForm: View {
     let systemPromptTitleKey: String
     @Binding var systemPrompt: String
     var providerPresets: [ModelPreset] = []
+    var catalogProviders: [CatalogProvider] = []
     var onProviderPresetSelected: (ModelPreset) -> Void = { _ in }
     var systemPromptLineLimit: ClosedRange<Int> = 2 ... 8
 
     private var availableProviderPresets: [ModelPreset] {
         let supportedProviders = Set(ProviderCatalog.dualAutoConversationOptions.map(\.key))
         return providerPresets.filter {
-            supportedProviders.contains($0.apiProvider.uppercased())
+            supportedProviders.contains($0.apiProvider.uppercased()) || ProviderReference(persistedID: $0.apiProvider).isModelsDev
         }
     }
 
@@ -45,15 +46,30 @@ struct DualAutoModelSideForm: View {
             }
         }
 
-        SettingsFormHelpers.dualAutoProviderPickerRow(
-            title: providerTitleKey,
-            selection: Binding(
-                get: { provider.uppercased() },
-                set: { provider = $0.uppercased() }
-            )
+        CatalogProviderPickerField(
+            providerID: Binding(
+                get: { provider },
+                set: { newValue in
+                    let changed = provider.caseInsensitiveCompare(newValue) != .orderedSame
+                    provider = newValue
+                    if changed && ProviderReference(persistedID: newValue).isModelsDev { model = "" }
+                }
+            ),
+            catalogProviders: catalogProviders,
+            title: providerTitleKey
         )
-        TextField(L10n.text(modelTitleKey), text: $model)
+        if let dynamicProvider = catalogProvider {
+            CatalogModelPickerField(modelID: $model, provider: dynamicProvider, title: modelTitleKey)
+        } else {
+            TextField(L10n.text(modelTitleKey), text: $model)
+        }
         TextField(L10n.text(systemPromptTitleKey), text: $systemPrompt, axis: .vertical)
             .lineLimit(systemPromptLineLimit)
+    }
+
+    private var catalogProvider: CatalogProvider? {
+        guard provider.uppercased() != "OPENROUTER",
+              let id = ModelsDevMergedProvider.catalogID(for: provider) else { return nil }
+        return catalogProviders.first { $0.id == id }
     }
 }

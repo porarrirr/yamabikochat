@@ -20,8 +20,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -40,9 +45,20 @@ fun YamabikoOptionBottomSheet(
     selectedKey: String?,
     onOptionSelected: (YamabikoOption) -> Unit,
     onDismissRequest: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    searchable: Boolean = options.size > 20,
+    searchPlaceholder: String = "検索"
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var searchQuery by remember { mutableStateOf("") }
+    val visibleOptions = remember(options, searchQuery) {
+        val query = searchQuery.trim().lowercase()
+        if (query.isEmpty()) options else options.filter { option ->
+            option.key.lowercase().contains(query) ||
+                option.title.lowercase().contains(query) ||
+                option.subtitle.orEmpty().lowercase().contains(query)
+        }
+    }
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
@@ -62,13 +78,24 @@ fun YamabikoOptionBottomSheet(
                     Icon(Icons.Default.Close, contentDescription = "Close")
                 }
             }
+            if (searchable) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text(searchPlaceholder) },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
             HorizontalDivider()
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 24.dp)
             ) {
-                itemsIndexed(options, key = { _, item -> item.key }) { index, item ->
+                itemsIndexed(visibleOptions, key = { _, item -> item.key }) { index, item ->
                     ListItem(
                         headlineContent = { Text(item.title) },
                         supportingContent = item.subtitle?.let { subtitle -> { Text(subtitle) } },
@@ -85,7 +112,7 @@ fun YamabikoOptionBottomSheet(
                                 onDismissRequest()
                             }
                     )
-                    if (index != options.lastIndex) {
+                    if (index != visibleOptions.lastIndex) {
                         HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
                     }
                 }

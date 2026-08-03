@@ -102,6 +102,33 @@ class SecurePreferencesManager private constructor(private val context: Context)
         }
     }
 
+    /** Dynamic provider credentials must never be written to the legacy plaintext fallback. */
+    private fun storeEncryptedOnly(key: String, value: String?, label: String): Boolean {
+        val encrypted = encryptedPrefs ?: run {
+            DiagnosticsLogger.log("$label store rejected because encrypted storage is unavailable")
+            return false
+        }
+        return try {
+            val editor = encrypted.edit()
+            if (value == null) editor.remove(key) else editor.putString(key, value)
+            editor.apply()
+            true
+        } catch (e: Exception) {
+            DiagnosticsLogger.log("$label encrypted store failed", e)
+            false
+        }
+    }
+
+    private fun readEncryptedOnly(key: String, label: String): String? {
+        val encrypted = encryptedPrefs ?: return null
+        return try {
+            encrypted.getString(key, null)
+        } catch (e: Exception) {
+            DiagnosticsLogger.log("$label encrypted read failed", e)
+            null
+        }
+    }
+
     private fun clearEncryptedKey(key: String) {
         val encrypted = encryptedPrefs ?: return
         runCatching { encrypted.edit().remove(key).apply() }
@@ -345,6 +372,18 @@ class SecurePreferencesManager private constructor(private val context: Context)
 
     fun clearCustomApiKey(alias: String) =
         clearKey(alias, "Custom APIキー($alias)")
+
+    fun storeModelsDevField(providerId: String, fieldName: String, value: String?): Boolean =
+        storeEncryptedOnly(modelsDevFieldKey(providerId, fieldName), value, "models.dev $providerId/$fieldName")
+
+    fun getModelsDevField(providerId: String, fieldName: String): String? =
+        readEncryptedOnly(modelsDevFieldKey(providerId, fieldName), "models.dev $providerId/$fieldName")
+
+    private fun modelsDevFieldKey(providerId: String, fieldName: String): String {
+        val provider = providerId.lowercase().replace(Regex("[^a-z0-9._-]+"), "_")
+        val field = fieldName.uppercase().replace(Regex("[^A-Z0-9_]+"), "_")
+        return "models_dev_${provider}_$field"
+    }
 
     fun clearAllSecureData() {
         runCatching {

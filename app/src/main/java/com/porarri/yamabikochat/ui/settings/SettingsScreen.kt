@@ -36,6 +36,10 @@ import com.porarri.yamabikochat.data.remote.OpenCodeGoModelCatalog
 import com.porarri.yamabikochat.data.remote.OpenAiCompatPreset
 import com.porarri.yamabikochat.data.remote.ProviderCatalog
 import com.porarri.yamabikochat.data.remote.SimpleModel
+import com.porarri.yamabikochat.data.modelsdev.CatalogAvailability
+import com.porarri.yamabikochat.data.modelsdev.ProviderReference
+import com.porarri.yamabikochat.data.modelsdev.ModelsDevMergedProvider
+import com.porarri.yamabikochat.data.modelsdev.ModelsDevProviderAdapterRegistry
 import com.porarri.yamabikochat.ui.components.YamabikoOption
 import com.porarri.yamabikochat.ui.components.YamabikoOptionBottomSheet
 import com.porarri.yamabikochat.ui.components.YamabikoSelectRow
@@ -111,6 +115,7 @@ fun SettingsScreen(
     val openRouterModelsState by viewModel.openRouterModels.collectAsState()
     val openRouterModelsLoadingState by viewModel.openRouterModelsLoading.collectAsState()
     val openRouterModelsErrorState by viewModel.openRouterModelsError.collectAsState()
+    val modelsDevCatalogState by viewModel.modelsDevCatalogState.collectAsState()
     val secureStorageError by viewModel.secureStorageError.collectAsState()
     val codexAuthState by viewModel.codexAuthState.collectAsState()
     val codexAuthError by viewModel.codexAuthError.collectAsState()
@@ -146,7 +151,8 @@ fun SettingsScreen(
         settings = settings,
         openRouterModels = openRouterModelsState,
         openRouterModelsLoading = openRouterModelsLoadingState,
-        openRouterModelsError = openRouterModelsErrorState
+        openRouterModelsError = openRouterModelsErrorState,
+        modelsDevCatalogState = modelsDevCatalogState
     )
     val coroutineScope = rememberCoroutineScope()
 
@@ -189,6 +195,21 @@ fun SettingsScreen(
             showGlobalProviderPresetsInChatByProvider[providerKey] ?: showGlobalProviderPresetsInChat
         }
         val presetOptions = globalPresets + presets
+        val existingProviderKeys = ProviderCatalog.options.map { it.key }.toSet()
+        val modelsDevProviderOptions = modelsDevCatalogState.providers
+            .filterNot { provider ->
+                provider.id in setOf("openrouter", "google", "openai", "opencode", "cline-pass", "alibaba-coding-plan", "zai", "minimax")
+            }
+            .map { provider ->
+                YamabikoOption(
+                    key = provider.reference.persistedId,
+                    title = provider.name,
+                    subtitle = provider.id
+                )
+            }
+        val allProviderOptions = ProviderCatalog.options.map {
+            YamabikoOption(key = it.key, title = it.title)
+        } + modelsDevProviderOptions.filterNot { it.key in existingProviderKeys }
 
         ModelPresetDialog(
             state = presetDialogState,
@@ -265,12 +286,12 @@ fun SettingsScreen(
                 SettingsSheet.ApiProvider -> {
                     YamabikoOptionBottomSheet(
                         title = "API Provider",
-                        options = ProviderCatalog.options.map {
-                            YamabikoOption(key = it.key, title = it.title)
-                        },
+                        options = allProviderOptions,
                         selectedKey = apiProvider,
                         onOptionSelected = { switchApiProvider(it.key) },
-                        onDismissRequest = { activeSheet = null }
+                        onDismissRequest = { activeSheet = null },
+                        searchable = true,
+                        searchPlaceholder = "プロバイダーを検索"
                     )
                 }
 
@@ -963,7 +984,9 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
-                    val providerLabel = ProviderCatalog.displayName(apiProvider)
+                    val providerLabel = modelsDevCatalogState.providers.firstOrNull {
+                        it.id == ProviderReference(apiProvider).modelsDevId
+                    }?.name ?: ProviderCatalog.displayName(apiProvider)
                     YamabikoSelectRow(
                         title = "API Provider",
                         value = providerLabel,
@@ -1898,7 +1921,61 @@ fun SettingsScreen(
                                 singleLine = true
                             )
                         }
-                        else -> {
+                        else -> if (ModelsDevMergedProvider.catalogIdFor(apiProvider) != null &&
+                            !apiProvider.equals("OPENROUTER", ignoreCase = true)
+                        ) {
+                            val catalogId = ModelsDevMergedProvider.catalogIdFor(apiProvider)
+                            val catalogProvider = modelsDevCatalogState.providers.firstOrNull {
+                                it.id == catalogId
+                            }
+                            var showModelsDevModelSheet by remember { mutableStateOf(false) }
+                            val selectedCatalogModel = catalogProvider?.models?.firstOrNull { it.id == model }
+                            YamabikoSelectRow(
+                                title = "Model",
+                                value = selectedCatalogModel?.name ?: model.ifBlank { "モデルを選択" },
+                                onClick = { showModelsDevModelSheet = true }
+                            )
+                            if (showModelsDevModelSheet) {
+                                YamabikoOptionBottomSheet(
+                                    title = catalogProvider?.name ?: "Model",
+                                    options = catalogProvider?.models.orEmpty().map { option ->
+                                        val details = buildList {
+                                            option.limits.context?.let { add("context $it") }
+                                            if (option.reasoning) add("reasoning")
+                                            if (option.toolCall) add("tools")
+                                            option.description?.let { add(it) }
+                                        }.joinToString(" ・ ")
+                                        YamabikoOption(option.id, option.name, details.takeIf { it.isNotBlank() })
+                                    },
+                                    selectedKey = model,
+                                    onOptionSelected = { option -> model = option.key },
+                                    onDismissRequest = { showModelsDevModelSheet = false },
+                                    searchable = true,
+                                    searchPlaceholder = "モデルを検索"
+                                )
+                            }
+                            selectedCatalogModel?.description?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            when (modelsDevCatalogState.availability) {
+                                CatalogAvailability.LOADING -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                CatalogAvailability.STALE -> Text(
+                                    "保存済みのモデル一覧を表示しています。${modelsDevCatalogState.error.orEmpty()}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.tertiary
+                                )
+                                CatalogAvailability.ERROR -> Text(
+                                    modelsDevCatalogState.error ?: "モデル一覧を取得できませんでした",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                else -> Unit
+                            }
+                            TextButton(onClick = { viewModel.refreshModelsDevCatalog() }) { Text("モデル一覧を更新") }
+                            if (model.isNotBlank() && selectedCatalogModel == null) {
+                                Text("このモデルは現在のカタログでは利用できません。自動変更は行いません。", color = MaterialTheme.colorScheme.error)
+                            }
+                        } else {
                             YamabikoTextField(
                                 value = model,
                                 onValueChange = { model = it },
@@ -1906,6 +1983,62 @@ fun SettingsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
+                    }
+                }
+            }
+        }
+        if (apiProvider.startsWith("MODELS_DEV:", ignoreCase = true)) {
+            item {
+                val provider = modelsDevCatalogState.providers.firstOrNull {
+                    it.id == ProviderReference(apiProvider).modelsDevId
+                }
+                val credentialDrafts = remember(provider?.id) { mutableStateMapOf<String, String>() }
+                val requiresManualUrl = provider?.let {
+                    ModelsDevProviderAdapterRegistry.profile(it).requiresManualBaseUrl
+                } ?: false
+                LaunchedEffect(provider?.id) {
+                    credentialDrafts.clear()
+                    provider?.env.orEmpty().forEach { field ->
+                        credentialDrafts[field] = viewModel.modelsDevField(provider!!.id, field)
+                    }
+                    if (requiresManualUrl) {
+                        credentialDrafts["YAMABIKO_BASE_URL"] = viewModel.modelsDevField(provider!!.id, "YAMABIKO_BASE_URL")
+                    }
+                }
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("${provider?.name ?: "models.dev"} 接続設定", style = MaterialTheme.typography.titleMedium)
+                        provider?.env.orEmpty().forEach { field ->
+                            val secret = listOf("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL").any { field.contains(it) }
+                            YamabikoTextField(
+                                value = credentialDrafts[field].orEmpty(),
+                                onValueChange = { credentialDrafts[field] = it },
+                                label = { Text(field) },
+                                visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = field != "GOOGLE_APPLICATION_CREDENTIALS"
+                            )
+                        }
+                        if (requiresManualUrl) {
+                            YamabikoTextField(
+                                value = credentialDrafts["YAMABIKO_BASE_URL"].orEmpty(),
+                                onValueChange = { credentialDrafts["YAMABIKO_BASE_URL"] = it },
+                                label = { Text("完成済み Base URL") },
+                                supportingText = { Text("テンプレート変数を展開したURLを入力してください。localhost/LAN接続は安全性を確認してください。") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        } else {
+                            Text(provider?.api.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Button(
+                            onClick = { provider?.let { viewModel.saveModelsDevFields(it.id, credentialDrafts.toMap()) } },
+                            enabled = provider != null
+                        ) { Text("接続設定を暗号化して保存") }
                     }
                 }
             }
@@ -2462,7 +2595,9 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.tertiary
                         )
                     }
-                    val providerLabel = ProviderCatalog.displayName(apiProvider)
+                    val providerLabel = modelsDevCatalogState.providers.firstOrNull {
+                        it.id == ProviderReference(apiProvider).modelsDevId
+                    }?.name ?: ProviderCatalog.displayName(apiProvider)
                     val providerKey = apiProvider.uppercase()
                     val showGlobalPresetsForProvider =
                         showGlobalProviderPresetsInChatByProvider[providerKey] ?: showGlobalProviderPresetsInChat
@@ -2531,6 +2666,7 @@ fun SettingsScreen(
             recentModelIds = openRouterRecentModels,
             onTogglePinned = { toggleOpenRouterPinnedModel(it) },
             onRecentUsed = { registerOpenRouterRecentModel(it) },
+            catalogProviders = modelsDevCatalogState.providers,
             dualSplitLayout = dualSplitLayout,
             onDualSplitLayoutChange = { dualSplitLayout = it },
             dualSplitRatio = dualSplitRatio,
@@ -2589,7 +2725,8 @@ fun SettingsScreen(
             pinnedModelIds = openRouterPinnedModels,
             recentModelIds = openRouterRecentModels,
             onTogglePinned = { toggleOpenRouterPinnedModel(it) },
-            onRecentUsed = { registerOpenRouterRecentModel(it) }
+            onRecentUsed = { registerOpenRouterRecentModel(it) },
+            catalogProviders = modelsDevCatalogState.providers
         )
 
         fusionModeSettingsSection(

@@ -11,6 +11,7 @@ import com.porarri.yamabikochat.data.files.FileProcessingRepository
 import com.porarri.yamabikochat.data.local.AppDatabase
 import com.porarri.yamabikochat.data.local.SettingsManager
 import com.porarri.yamabikochat.data.model.ModelRepository
+import com.porarri.yamabikochat.data.modelsdev.ModelsDevCatalogRepository
 import com.porarri.yamabikochat.data.remote.GeminiProvider
 import com.porarri.yamabikochat.data.remote.LiteLlmPricingRepository
 import com.porarri.yamabikochat.data.remote.OpenRouterModelService
@@ -46,6 +47,7 @@ class MyApplication : Application() {
     private val databaseRepository by lazy { DatabaseRepository(chatDao) }
     private val modelService by lazy { OpenRouterModelService(openRouterApiService) }
     private val modelRepository by lazy { ModelRepository(modelService) }
+    private val modelsDevCatalogRepository by lazy { ModelsDevCatalogRepository(applicationContext) }
     private val pricingRepository by lazy { LiteLlmPricingRepository(RetrofitClient.liteLlmPricingInstance) }
     private val settingsManager by lazy { SettingsManager.getInstance(applicationContext, chatDao) }
     private val codexAuthRepository by lazy { CodexAuthRepository(applicationContext) }
@@ -63,12 +65,14 @@ class MyApplication : Application() {
             openAiProvider = openAiProvider,
             openCodeGoProvider = OpenCodeGoProvider(openAiProvider, anthropicCompatibleProvider),
             alibabaCodingPlanProvider = AlibabaCodingPlanProvider(anthropicCompatibleProvider),
+            anthropicCompatibleProvider = anthropicCompatibleProvider,
             codexResponsesProvider = CodexResponsesProvider(applicationContext),
             zaiProvider = ZaiProvider(zaiApiService),
             settingsManager = settingsManager,
             codexAuthRepository = codexAuthRepository,
             superGrokAuthRepository = superGrokAuthRepository,
             modelRepository = modelRepository,
+            modelsDevCatalogRepository = modelsDevCatalogRepository,
             settingsProvider = { databaseRepository.getLatestSettings() }
         )
     }
@@ -83,7 +87,8 @@ class MyApplication : Application() {
             modelRepository = modelRepository,
             codexAuthRepository = codexAuthRepository,
             superGrokAuthRepository = superGrokAuthRepository,
-            pricingRepository = pricingRepository
+            pricingRepository = pricingRepository,
+            modelsDevCatalogRepository = modelsDevCatalogRepository
         )
     }
     val viewModelFactory by lazy { ViewModelFactory(repository) }

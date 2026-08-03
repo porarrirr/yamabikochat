@@ -37,6 +37,9 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.Color
 import com.porarri.yamabikochat.data.local.ModelPreset
+import com.porarri.yamabikochat.data.modelsdev.CatalogProvider
+import com.porarri.yamabikochat.data.modelsdev.ProviderReference
+import com.porarri.yamabikochat.data.modelsdev.ModelsDevMergedProvider
 import com.porarri.yamabikochat.data.remote.ProviderCatalog
 import com.porarri.yamabikochat.data.remote.SimpleModel
 import com.porarri.yamabikochat.ui.settings.components.OpenRouterModelSelector
@@ -78,6 +81,7 @@ fun LazyListScope.dualModeSettingsSection(
     recentModelIds: List<String>,
     onTogglePinned: (String) -> Unit,
     onRecentUsed: (String) -> Unit,
+    catalogProviders: List<CatalogProvider> = emptyList(),
     dualSplitLayout: String,
     onDualSplitLayoutChange: (String) -> Unit,
     dualSplitRatio: Float,
@@ -159,6 +163,7 @@ fun LazyListScope.dualModeSettingsSection(
                         recentModelIds = recentModelIds,
                         onTogglePinned = onTogglePinned,
                         onRecentUsed = onRecentUsed,
+                        catalogProviders = catalogProviders,
                         placeholder = "例: gemini-2.5-flash"
                     )
 
@@ -184,6 +189,7 @@ fun LazyListScope.dualModeSettingsSection(
                         recentModelIds = recentModelIds,
                         onTogglePinned = onTogglePinned,
                         onRecentUsed = onRecentUsed,
+                        catalogProviders = catalogProviders,
                         placeholder = "例: deepseek/deepseek-chat"
                     )
 
@@ -255,6 +261,7 @@ private fun DualModelConfiguration(
     recentModelIds: List<String>,
     onTogglePinned: (String) -> Unit,
     onRecentUsed: (String) -> Unit,
+    catalogProviders: List<CatalogProvider>,
     placeholder: String
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -298,7 +305,10 @@ private fun DualModelConfiguration(
         }
 
         var showProviderSheet by remember { mutableStateOf(false) }
-        val providerLabel = ProviderCatalog.displayName(provider)
+        val dynamicProvider = ModelsDevMergedProvider.catalogIdFor(provider)
+            ?.takeUnless { provider.equals("OPENROUTER", ignoreCase = true) }
+            ?.let { id -> catalogProviders.firstOrNull { it.id == id } }
+        val providerLabel = dynamicProvider?.name ?: ProviderCatalog.displayName(provider)
         YamabikoSelectRow(
             title = "プロバイダー",
             value = providerLabel,
@@ -309,9 +319,15 @@ private fun DualModelConfiguration(
                 title = "プロバイダー",
                 options = ProviderCatalog.dualAutoConversationOptions.map {
                     YamabikoOption(key = it.key, title = it.title)
+                } + catalogProviders.filterNot { it.id == "openrouter" }.map {
+                    YamabikoOption(key = it.reference.persistedId, title = it.name, subtitle = it.id)
                 },
                 selectedKey = provider,
-                onOptionSelected = { onProviderChange(it.key) },
+                onOptionSelected = {
+                    val changed = !provider.equals(it.key, ignoreCase = true)
+                    onProviderChange(it.key)
+                    if (changed && ProviderReference(it.key).isModelsDev) onModelChange("")
+                },
                 onDismissRequest = { showProviderSheet = false }
             )
         }
@@ -336,6 +352,31 @@ private fun DualModelConfiguration(
 
             ReasoningOverrideSection(reasoning)
             ToolingOverrideSection(provider = provider, tooling = tools)
+        } else if (dynamicProvider != null) {
+            var showModelSheet by remember { mutableStateOf(false) }
+            YamabikoSelectRow(
+                title = "モデル",
+                value = dynamicProvider.models.firstOrNull { it.id == model }?.name ?: model.ifBlank { "モデルを選択" },
+                onClick = { showModelSheet = true }
+            )
+            if (showModelSheet) {
+                YamabikoOptionBottomSheet(
+                    title = dynamicProvider.name,
+                    options = dynamicProvider.models.map { catalogModel ->
+                        YamabikoOption(
+                            key = catalogModel.id,
+                            title = catalogModel.name,
+                            subtitle = listOfNotNull(catalogModel.family, catalogModel.description).joinToString(" ・ ")
+                        )
+                    },
+                    selectedKey = model,
+                    onOptionSelected = { onModelChange(it.key) },
+                    onDismissRequest = { showModelSheet = false },
+                    searchable = true
+                )
+            }
+            ToolingOverrideSection(provider = provider, tooling = tools)
+            ThinkingOverrideSection(provider = provider, model = model, thinking = thinking)
         } else {
             YamabikoTextField(
                 value = model,

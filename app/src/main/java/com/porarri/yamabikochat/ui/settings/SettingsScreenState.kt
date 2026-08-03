@@ -19,6 +19,7 @@ import com.porarri.yamabikochat.data.remote.OpenAiCompatPreset
 import com.porarri.yamabikochat.data.remote.ProviderCatalog
 import com.porarri.yamabikochat.data.remote.ProviderDirectory
 import com.porarri.yamabikochat.data.remote.SimpleModel
+import com.porarri.yamabikochat.data.modelsdev.CatalogLoadState
 import com.porarri.yamabikochat.ui.settings.sections.ModelPresetDialogState
 import com.porarri.yamabikochat.ui.settings.sections.ReasoningOverrideUiState
 import com.porarri.yamabikochat.ui.settings.sections.ThinkingOverrideUiState
@@ -299,6 +300,7 @@ class SettingsScreenState(
     var openRouterModels by mutableStateOf<List<SimpleModel>>(emptyList())      
     var openRouterModelsLoading by mutableStateOf(false)
     var openRouterModelsError by mutableStateOf<String?>(null)
+    var modelsDevCatalogState by mutableStateOf(CatalogLoadState())
     var openRouterPinnedModels by mutableStateOf<List<String>>(emptyList())
     var openRouterRecentModels by mutableStateOf<List<String>>(emptyList())
 
@@ -1741,7 +1743,8 @@ fun rememberSettingsScreenState(
     settings: Settings?,
     openRouterModels: List<SimpleModel>,
     openRouterModelsLoading: Boolean,
-    openRouterModelsError: String?
+    openRouterModelsError: String?,
+    modelsDevCatalogState: CatalogLoadState
 ): SettingsScreenState {
     val state = remember(viewModel) { SettingsScreenState(viewModel) }
 
@@ -1753,6 +1756,10 @@ fun rememberSettingsScreenState(
         state.openRouterModels = openRouterModels
         state.openRouterModelsLoading = openRouterModelsLoading
         state.openRouterModelsError = openRouterModelsError
+    }
+
+    LaunchedEffect(modelsDevCatalogState) {
+        state.modelsDevCatalogState = modelsDevCatalogState
     }
 
     // OpenRouter選択時は高度設定をデフォルトで開く

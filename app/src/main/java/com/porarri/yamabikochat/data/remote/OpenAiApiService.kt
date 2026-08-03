@@ -14,14 +14,18 @@ import retrofit2.http.Streaming
 interface OpenAiApiService {
     @POST("chat/completions")
     suspend fun createChatCompletion(
-        @Header("Authorization") authorization: String,
+        @Header("Authorization") authorization: String?,
+        @Header("api-key") apiKey: String? = null,
+        @Header("cf-aig-authorization") cloudflareAuthorization: String? = null,
         @Header("Content-Type") contentType: String = "application/json",
         @Body request: OpenRouterRequest
     ): Response<OpenRouterResponse>
 
     @POST("chat/completions")
     suspend fun createChatCompletionMultiModal(
-        @Header("Authorization") authorization: String,
+        @Header("Authorization") authorization: String?,
+        @Header("api-key") apiKey: String? = null,
+        @Header("cf-aig-authorization") cloudflareAuthorization: String? = null,
         @Header("Content-Type") contentType: String = "application/json",
         @Body request: OpenRouterMultiModalRequest
     ): Response<OpenRouterResponse>
@@ -29,7 +33,9 @@ interface OpenAiApiService {
     @Streaming
     @POST("chat/completions")
     suspend fun createChatCompletionStream(
-        @Header("Authorization") authorization: String,
+        @Header("Authorization") authorization: String?,
+        @Header("api-key") apiKey: String? = null,
+        @Header("cf-aig-authorization") cloudflareAuthorization: String? = null,
         @Header("Content-Type") contentType: String = "application/json",
         @Body request: OpenRouterRequest
     ): Response<ResponseBody>
@@ -37,9 +43,10 @@ interface OpenAiApiService {
     @Streaming
     @POST("chat/completions")
     suspend fun createChatCompletionMultiModalStream(
-        @Header("Authorization") authorization: String,
+        @Header("Authorization") authorization: String?,
+        @Header("api-key") apiKey: String? = null,
+        @Header("cf-aig-authorization") cloudflareAuthorization: String? = null,
         @Header("Content-Type") contentType: String = "application/json",
         @Body request: OpenRouterMultiModalRequest
     ): Response<ResponseBody>
 }
-

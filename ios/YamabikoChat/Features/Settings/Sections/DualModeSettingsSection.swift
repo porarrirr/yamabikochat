@@ -61,6 +61,7 @@ struct DualModeSettingsSection: View {
                         systemPromptTitleKey: "Dual system prompt A",
                         systemPrompt: dualSystemPromptABinding,
                         providerPresets: providerPresetOptions,
+                        catalogProviders: viewModel.modelsDevCatalogState.providers,
                         onProviderPresetSelected: applyProviderPresetToDualA
                     )
                 }
@@ -74,6 +75,7 @@ struct DualModeSettingsSection: View {
                         systemPromptTitleKey: "Dual system prompt B",
                         systemPrompt: dualSystemPromptBBinding,
                         providerPresets: providerPresetOptions,
+                        catalogProviders: viewModel.modelsDevCatalogState.providers,
                         onProviderPresetSelected: applyProviderPresetToDualB
                     )
                 }

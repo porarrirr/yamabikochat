@@ -13,6 +13,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var openRouterModelsLoading: Bool = false
     @Published var openRouterModelsError: String?
     @Published var modelSearchQuery: String = ""
+    @Published var modelsDevCatalogState: CatalogLoadState = .init()
     @Published var openAICompatPresetNameInput: String = ""
     @Published var openAICompatPresetBaseURLInput: String = ""
     @Published var openAICompatApiKeyInput: String = ""
@@ -43,6 +44,7 @@ final class SettingsViewModel: ObservableObject {
 
     private var repository: ChatRepository?
     private var credentialStore: SecureCredentialStore?
+    private var modelsDevCatalogRepository: ModelsDevCatalogRepository?
     private var cancellables: Set<AnyCancellable> = []
     private var autoSaveWorkItem: DispatchWorkItem?
     private var isHydratingFromPersistence = false
@@ -50,10 +52,20 @@ final class SettingsViewModel: ObservableObject {
 
     private static let autoSaveDebounceInterval: TimeInterval = 0.5
 
-    func bind(repository: ChatRepository, credentialStore: SecureCredentialStore) {
+    func bind(
+        repository: ChatRepository,
+        credentialStore: SecureCredentialStore,
+        modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil
+    ) {
         guard self.repository == nil else { return }
         self.repository = repository
         self.credentialStore = credentialStore
+        self.modelsDevCatalogRepository = modelsDevCatalogRepository
+
+        modelsDevCatalogRepository?.statePublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in self?.modelsDevCatalogState = state }
+            .store(in: &cancellables)
 
         repository.settingsPublisher()
             // The current value is loaded synchronously below. Ignoring the
@@ -149,10 +161,47 @@ final class SettingsViewModel: ObservableObject {
         setupAutoSave()
 
         Task {
+            _ = await modelsDevCatalogRepository?.load(forceRefresh: false)
             await refreshOpenRouterModels(force: false)
             await refreshCodexAuth(force: false)
             refreshDiagnosticsLog()
         }
+    }
+
+    func refreshModelsDevCatalog() {
+        Task { _ = await modelsDevCatalogRepository?.load(forceRefresh: true) }
+    }
+
+    func modelsDevField(providerID: String, fieldName: String) -> String {
+        guard let credentialStore else { return "" }
+        return (try? credentialStore.readSecret(key: modelsDevFieldKey(providerID: providerID, fieldName: fieldName))) ?? ""
+    }
+
+    func saveModelsDevFields(providerID: String, fields: [String: String]) {
+        if let rawBaseURL = fields["YAMABIKO_BASE_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !rawBaseURL.isEmpty,
+           (URLComponents(string: rawBaseURL)?.scheme?.lowercased() != "https" || URLComponents(string: rawBaseURL)?.host == nil) {
+            errorMessage = L10n.text("Base URL は有効な HTTPS URL を入力してください")
+            return
+        }
+        do {
+            for (name, value) in fields {
+                try credentialStore?.saveSecret(
+                    value.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+                    key: modelsDevFieldKey(providerID: providerID, fieldName: name)
+                )
+            }
+            statusMessage = L10n.text("保存しました")
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func modelsDevFieldKey(providerID: String, fieldName: String) -> String {
+        let provider = providerID.lowercased().replacingOccurrences(of: "[^a-z0-9._-]+", with: "_", options: .regularExpression)
+        let field = fieldName.uppercased().replacingOccurrences(of: "[^A-Z0-9_]+", with: "_", options: .regularExpression)
+        return "models_dev_\(provider)_\(field)"
     }
 
     func flushPendingSettingsSave() {
@@ -344,7 +393,7 @@ final class SettingsViewModel: ObservableObject {
         settings.apiProvider = nextProvider
         let nextModel = nextProvider == "APPLE_INTELLIGENCE"
             ? AppleIntelligenceModelCatalog.displayModel
-            : (providerMap[nextProvider] ?? defaultModelForProvider(nextProvider))
+            : (providerMap[nextProvider] ?? (ProviderReference(persistedID: nextProvider).isModelsDev ? "" : defaultModelForProvider(nextProvider)))
         settings.defaultModel = nextModel
         providerMap[nextProvider] = nextModel
 

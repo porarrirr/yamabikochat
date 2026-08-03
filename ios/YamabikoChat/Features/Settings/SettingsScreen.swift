@@ -10,6 +10,7 @@ struct SettingsScreen: View {
     var initialTab: SettingsTab? = nil
     @State private var navigationPath: [SettingsCategory] = []
     @State private var showDiagnosticsSheet = false
+    @State private var modelsDevFieldDrafts: [String: String] = [:]
 
     enum SettingsTab: String, Identifiable {
         case api
@@ -97,7 +98,11 @@ struct SettingsScreen: View {
                 .padding(.bottom, 8)
             }
             .task {
-                viewModel.bind(repository: container.chatRepository, credentialStore: container.credentialStore)
+                viewModel.bind(
+                    repository: container.chatRepository,
+                    credentialStore: container.credentialStore,
+                    modelsDevCatalogRepository: container.modelsDevCatalogRepository
+                )
             }
             .onDisappear {
                 viewModel.flushPendingSettingsSave()
@@ -156,14 +161,10 @@ struct SettingsScreen: View {
     private var apiTabContent: some View {
         Group {
             Section("API / モデル") {
-                Picker("API Provider", selection: Binding(
+                CatalogProviderPickerField(providerID: Binding(
                     get: { viewModel.settings.apiProvider.uppercased() },
                     set: { value in viewModel.setProvider(value.uppercased()) }
-                )) {
-                    ForEach(ProviderCatalog.options) { provider in
-                        Text(provider.title).tag(provider.key)
-                    }
-                }
+                ), catalogProviders: viewModel.modelsDevCatalogState.providers)
 
                 providerModelEditor
 
@@ -209,10 +210,15 @@ struct SettingsScreen: View {
                 }
             }
 
-            if currentProviderKey != "CODEX_AUTH", currentProviderKey != "SUPERGROK", currentProviderKey != "APPLE_INTELLIGENCE" {
+            if currentModelsDevProvider == nil,
+               currentProviderKey != "CODEX_AUTH", currentProviderKey != "SUPERGROK", currentProviderKey != "APPLE_INTELLIGENCE" {
                 Section("APIキー") {
                     SecureField(currentProviderAPIKeyLabel, text: $viewModel.apiKeyDraft)
                 }
+            }
+
+            if let provider = currentModelsDevProvider {
+                modelsDevConnectionSection(provider)
             }
 
             if isGeminiProvider {
@@ -1205,7 +1211,37 @@ struct SettingsScreen: View {
 
     private var providerModelEditor: some View {
         Group {
-            if isCodexProvider {
+            if let provider = currentCatalogModelProvider {
+                CatalogModelPickerField(
+                    modelID: Binding(
+                        get: { viewModel.settings.defaultModel },
+                        set: { viewModel.setDefaultModel($0) }
+                    ),
+                    provider: provider
+                )
+                if viewModel.settings.defaultModel.isEmpty {
+                    Text("モデルを明示的に選択してください。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else if !provider.models.contains(where: { $0.id == viewModel.settings.defaultModel }) {
+                    Text("このモデルは現在のカタログでは利用できません。自動変更は行いません。")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                }
+                switch viewModel.modelsDevCatalogState.availability {
+                case .loading:
+                    ProgressView("モデル一覧を読み込み中...")
+                case .stale:
+                    Text("保存済み一覧を表示中: \(viewModel.modelsDevCatalogState.error ?? "更新失敗")")
+                        .font(.caption2).foregroundStyle(.orange)
+                case .error:
+                    Text(viewModel.modelsDevCatalogState.error ?? "モデル一覧を取得できませんでした")
+                        .font(.caption2).foregroundStyle(.red)
+                default:
+                    EmptyView()
+                }
+                Button("モデル一覧を更新") { viewModel.refreshModelsDevCatalog() }
+            } else if isCodexProvider {
                 Picker("Codex Model", selection: Binding(
                     get: { viewModel.settings.defaultModel },
                     set: { value in
@@ -1524,6 +1560,73 @@ struct SettingsScreen: View {
 
     private var currentProviderKey: String {
         viewModel.settings.apiProvider.uppercased()
+    }
+
+    private var currentModelsDevProvider: CatalogProvider? {
+        let reference = ProviderReference(persistedID: viewModel.settings.apiProvider)
+        guard let id = reference.modelsDevID else { return nil }
+        return viewModel.modelsDevCatalogState.providers.first { $0.id == id }
+    }
+
+    private var currentCatalogModelProvider: CatalogProvider? {
+        guard currentProviderKey != "OPENROUTER",
+              let id = ModelsDevMergedProvider.catalogID(for: viewModel.settings.apiProvider)
+        else { return nil }
+        return viewModel.modelsDevCatalogState.providers.first { $0.id == id }
+    }
+
+    @ViewBuilder
+    private func modelsDevConnectionSection(_ provider: CatalogProvider) -> some View {
+        let profile = ModelsDevProviderAdapterRegistry.profile(for: provider)
+        Section("\(provider.name) 接続設定") {
+            ForEach(provider.env, id: \.self) { field in
+                let draftKey = modelsDevDraftKey(providerID: provider.id, fieldName: field)
+                let binding = Binding(
+                    get: { modelsDevFieldDrafts[draftKey] ?? viewModel.modelsDevField(providerID: provider.id, fieldName: field) },
+                    set: { modelsDevFieldDrafts[draftKey] = $0 }
+                )
+                if isSecretModelsDevField(field) {
+                    SecureField(field, text: binding)
+                } else {
+                    TextField(field, text: binding, axis: field == "GOOGLE_APPLICATION_CREDENTIALS" ? .vertical : .horizontal)
+                }
+            }
+            if profile.requiresManualBaseURL {
+                let baseURLDraftKey = modelsDevDraftKey(providerID: provider.id, fieldName: "YAMABIKO_BASE_URL")
+                TextField("完成済み Base URL", text: Binding(
+                    get: { modelsDevFieldDrafts[baseURLDraftKey] ?? viewModel.modelsDevField(providerID: provider.id, fieldName: "YAMABIKO_BASE_URL") },
+                    set: { modelsDevFieldDrafts[baseURLDraftKey] = $0 }
+                ))
+                Text("テンプレート変数を展開したURLを入力してください。localhost/LAN接続は安全性を確認してください。")
+                    .font(.caption2).foregroundStyle(.secondary)
+            } else if let api = provider.api {
+                Text(api).font(.caption2).foregroundStyle(.secondary)
+            }
+            if !profile.isVerifiedMapping {
+                Label("未検証・OpenAI互換モード", systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange)
+            }
+            Button("接続設定をKeychainへ保存") {
+                var fields = Dictionary(uniqueKeysWithValues: provider.env.map { field in
+                    let key = modelsDevDraftKey(providerID: provider.id, fieldName: field)
+                    return (field, modelsDevFieldDrafts[key] ?? viewModel.modelsDevField(providerID: provider.id, fieldName: field))
+                })
+                if profile.requiresManualBaseURL {
+                    let key = modelsDevDraftKey(providerID: provider.id, fieldName: "YAMABIKO_BASE_URL")
+                    fields["YAMABIKO_BASE_URL"] = modelsDevFieldDrafts[key]
+                        ?? viewModel.modelsDevField(providerID: provider.id, fieldName: "YAMABIKO_BASE_URL")
+                }
+                viewModel.saveModelsDevFields(providerID: provider.id, fields: fields)
+            }
+        }
+    }
+
+    private func isSecretModelsDevField(_ field: String) -> Bool {
+        ["KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL"].contains { field.contains($0) }
+    }
+
+    private func modelsDevDraftKey(providerID: String, fieldName: String) -> String {
+        "\(providerID)\u{0}\(fieldName)"
     }
 
     private var isGeminiProvider: Bool {

@@ -63,6 +63,7 @@ struct AutoConversationSettingsSection: View {
                         systemPromptTitleKey: "Auto system prompt A",
                         systemPrompt: $viewModel.settings.autoSystemPromptA,
                         providerPresets: providerPresetOptions,
+                        catalogProviders: viewModel.modelsDevCatalogState.providers,
                         onProviderPresetSelected: applyProviderPresetToAutoA,
                         systemPromptLineLimit: 2 ... 6
                     )
@@ -77,6 +78,7 @@ struct AutoConversationSettingsSection: View {
                         systemPromptTitleKey: "Auto system prompt B",
                         systemPrompt: $viewModel.settings.autoSystemPromptB,
                         providerPresets: providerPresetOptions,
+                        catalogProviders: viewModel.modelsDevCatalogState.providers,
                         onProviderPresetSelected: applyProviderPresetToAutoB,
                         systemPromptLineLimit: 2 ... 6
                     )

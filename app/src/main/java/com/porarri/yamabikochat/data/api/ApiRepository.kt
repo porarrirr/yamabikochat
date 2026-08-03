@@ -17,6 +17,7 @@ import com.porarri.yamabikochat.data.remote.OpenRouterProvider
 import com.porarri.yamabikochat.data.remote.OpenAiProvider
 import com.porarri.yamabikochat.data.remote.OpenCodeGoProvider
 import com.porarri.yamabikochat.data.remote.AlibabaCodingPlanProvider
+import com.porarri.yamabikochat.data.remote.AnthropicCompatibleProvider
 import com.porarri.yamabikochat.data.remote.CodexResponsesProvider
 import com.porarri.yamabikochat.data.remote.ZaiProvider
 import com.porarri.yamabikochat.data.remote.Part
@@ -32,6 +33,11 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
 import kotlinx.serialization.json.Json
+import com.porarri.yamabikochat.data.modelsdev.CatalogProvider
+import com.porarri.yamabikochat.data.modelsdev.ModelsDevCatalogRepository
+import com.porarri.yamabikochat.data.modelsdev.ModelsDevProviderAdapterRegistry
+import com.porarri.yamabikochat.data.modelsdev.ProviderAdapterKind
+import com.porarri.yamabikochat.data.modelsdev.ProviderReference
 
 class ApiRepository(
     private val geminiProvider: GeminiProvider,
@@ -39,12 +45,14 @@ class ApiRepository(
     private val openAiProvider: OpenAiProvider,
     private val openCodeGoProvider: OpenCodeGoProvider,
     private val alibabaCodingPlanProvider: AlibabaCodingPlanProvider,
+    private val anthropicCompatibleProvider: AnthropicCompatibleProvider,
     private val codexResponsesProvider: CodexResponsesProvider,
     private val zaiProvider: ZaiProvider,
     private val settingsManager: SettingsManager,
     private val codexAuthRepository: CodexAuthRepository,
     private val superGrokAuthRepository: SuperGrokAuthRepository,
     private val modelRepository: ModelRepository,
+    private val modelsDevCatalogRepository: ModelsDevCatalogRepository,
     private val settingsProvider: suspend () -> Settings?
 ) {
     private val json = Json {
@@ -58,7 +66,8 @@ class ApiRepository(
         val apiKey: String,
         val settings: Settings?,
         val baseUrlOverride: String? = null,
-        val accountId: String? = null
+        val accountId: String? = null,
+        val modelsDevProvider: CatalogProvider? = null
     )
 
     private sealed interface ApiContextResult {
@@ -92,9 +101,19 @@ class ApiRepository(
 
     private suspend fun resolveApiContext(providerOverride: String? = null): ApiContextResult {
         val settings = settingsProvider()
-        val resolvedProvider = providerOverride?.uppercase()
+        val rawProvider = providerOverride
             ?: settings?.apiProvider
             ?: "GEMINI"
+        val dynamicReference = ProviderReference(rawProvider)
+        val dynamicProvider = modelsDevCatalogRepository.providerOrLoad(dynamicReference)
+        if (dynamicReference.isModelsDev && dynamicProvider == null) {
+            return ApiContextResult.MissingApiKey(dynamicReference.persistedId)
+        }
+        val knownProviderIds = ProviderCatalog.options.map { it.key }.toSet() + setOf("GEMINI_AUTH", "QWEN_CODE")
+        if (!dynamicReference.isModelsDev && rawProvider.uppercase() !in knownProviderIds) {
+            return ApiContextResult.MissingApiKey("Unsupported provider: $rawProvider")
+        }
+        val resolvedProvider = if (dynamicReference.isModelsDev) dynamicReference.persistedId else rawProvider.uppercase()
 
         val apiProvider = when (resolvedProvider) {
             "OPENROUTER" -> openRouterProvider
@@ -103,7 +122,7 @@ class ApiRepository(
             "OPENAI", "OPENAI_COMPAT", "MINIMAX", "CLINEPASS", "SUPERGROK" -> openAiProvider
             "CODEX_AUTH" -> codexResponsesProvider
             "ZAI" -> zaiProvider
-            else -> geminiProvider
+            else -> if (dynamicProvider != null) openAiProvider else geminiProvider
         }
 
         val keyResult = when (resolvedProvider) {
@@ -120,7 +139,7 @@ class ApiRepository(
                     "CLINEPASS" -> settingsManager.getApiKey("CLINEPASS")
                     "OPENAI_COMPAT" -> settingsManager.getOpenAiCompatApiKey(settings?.selectedOpenAiCompatPreset)
                     "ZAI" -> settingsManager.getApiKey("ZAI")
-                    else -> settingsManager.getApiKey("GEMINI")
+                    else -> if (dynamicProvider != null) primaryModelsDevCredential(dynamicProvider) else settingsManager.getApiKey("GEMINI")
                 }
             )
         }
@@ -156,12 +175,151 @@ class ApiRepository(
                         apiKey = keyResult.apiKey,
                         settings = settings,
                         baseUrlOverride = baseUrlOverride,
-                        accountId = keyResult.accountId
+                        accountId = keyResult.accountId,
+                        modelsDevProvider = dynamicProvider
                     )
                 )
             }
             is ApiKeyResult.Missing -> ApiContextResult.MissingApiKey(keyResult.providerId)
         }
+    }
+
+    private fun primaryModelsDevCredential(provider: CatalogProvider): String? {
+        val preferred = provider.env.firstOrNull { name ->
+            listOf("API_KEY", "TOKEN", "SECRET", "BEARER").any { name.contains(it) }
+        } ?: provider.env.firstOrNull()
+        return preferred?.let { settingsManager.getModelsDevField(provider.id, it) }
+    }
+
+    private fun modelsDevBaseUrl(provider: CatalogProvider): String? {
+        val catalogUrl = provider.api?.trim()?.takeIf { it.isNotEmpty() && !it.contains("${'$'}{") }
+        val azureResource = settingsManager.getModelsDevField(provider.id, provider.env.firstOrNull { it.contains("RESOURCE_NAME") }.orEmpty())
+            ?.trim()?.takeIf { it.isNotEmpty() }
+        val cloudflareAccount = settingsManager.getModelsDevField(provider.id, "CLOUDFLARE_ACCOUNT_ID")?.trim()?.takeIf { it.isNotEmpty() }
+        val cloudflareGateway = settingsManager.getModelsDevField(provider.id, "CLOUDFLARE_GATEWAY_ID")?.trim()?.takeIf { it.isNotEmpty() }
+        val knownNativeUrl = when (provider.id) {
+            "openai" -> "https://api.openai.com/v1/"
+            "anthropic" -> "https://api.anthropic.com/v1/"
+            "xai" -> "https://api.x.ai/v1/"
+            "groq" -> "https://api.groq.com/openai/v1/"
+            "mistral" -> "https://api.mistral.ai/v1/"
+            "togetherai" -> "https://api.together.xyz/v1/"
+            "cerebras" -> "https://api.cerebras.ai/v1/"
+            "deepinfra" -> "https://api.deepinfra.com/v1/openai/"
+            "perplexity" -> "https://api.perplexity.ai/"
+            "cohere" -> "https://api.cohere.ai/compatibility/v1/"
+            "vercel" -> "https://ai-gateway.vercel.sh/v1/"
+            "v0" -> "https://api.v0.dev/v1/"
+            "venice" -> "https://api.venice.ai/api/v1/"
+            "aihubmix" -> "https://aihubmix.com/v1/"
+            "merge-gateway" -> "https://api-gateway.merge.dev/v1/ai-sdk/"
+            "azure" -> azureResource?.let { "https://$it.openai.azure.com/openai/v1/" }
+            "azure-cognitive-services" -> azureResource?.let { "https://$it.services.ai.azure.com/openai/v1/" }
+            "cloudflare-ai-gateway" -> if (cloudflareAccount != null && cloudflareGateway != null) {
+                "https://gateway.ai.cloudflare.com/v1/$cloudflareAccount/$cloudflareGateway/compat/"
+            } else null
+            else -> null
+        }
+        val resolved = catalogUrl ?: knownNativeUrl
+            ?: settingsManager.getModelsDevField(provider.id, "YAMABIKO_BASE_URL")?.trim()?.takeIf { it.isNotEmpty() }
+        return resolved?.removeSuffix("/chat/completions")
+    }
+
+    private fun unsupportedModelsDevResponse(provider: CatalogProvider, detail: String? = null): retrofit2.Response<GenerateContentResponse> =
+        retrofit2.Response.error(
+            400,
+            (detail ?: "${provider.name} requires the ${ModelsDevProviderAdapterRegistry.profile(provider).adapter} native adapter; no compatible request was sent.")
+                .toResponseBody(missingKeyMediaType)
+        )
+
+    private fun unsupportedModelsDevStreamResponse(provider: CatalogProvider, detail: String? = null): retrofit2.Response<ResponseBody> =
+        retrofit2.Response.error(
+            400,
+            (detail ?: "${provider.name} requires the ${ModelsDevProviderAdapterRegistry.profile(provider).adapter} native adapter; no compatible request was sent.")
+                .toResponseBody(missingKeyMediaType)
+        )
+
+    private suspend fun generateModelsDev(
+        provider: CatalogProvider,
+        apiKey: String,
+        model: String,
+        request: GenerateContentRequest
+    ): retrofit2.Response<GenerateContentResponse> {
+        validateModelsDevRequest(provider, model, request)?.let { return unsupportedModelsDevResponse(provider, it) }
+        val profile = ModelsDevProviderAdapterRegistry.profile(provider)
+        val baseUrl = modelsDevBaseUrl(provider) ?: return retrofit2.Response.error(
+            400, "A completed base URL is required for ${provider.name}.".toResponseBody(missingKeyMediaType)
+        )
+        return when (profile.adapter) {
+            ProviderAdapterKind.OPEN_AI_COMPATIBLE,
+            ProviderAdapterKind.OPEN_AI,
+            ProviderAdapterKind.PROVIDER_SPECIFIC,
+            ProviderAdapterKind.COHERE,
+            ProviderAdapterKind.VERCEL_AI,
+            ProviderAdapterKind.CLOUDFLARE_AI_GATEWAY,
+            ProviderAdapterKind.AZURE_OPEN_AI,
+            ProviderAdapterKind.UNVERIFIED_OPEN_AI_COMPATIBLE -> {
+                if (!profile.isVerifiedMapping) DiagnosticsLogger.log("models.dev unverified OpenAI-compatible mode provider=${provider.id}")
+                openAiProvider.generateContent(
+                    apiKey, model, request, baseUrl,
+                    useApiKeyHeader = profile.adapter == ProviderAdapterKind.AZURE_OPEN_AI,
+                    useCloudflareGatewayHeader = profile.adapter == ProviderAdapterKind.CLOUDFLARE_AI_GATEWAY,
+                    stripOpenAiProviderPrefix = false
+                )
+            }
+            ProviderAdapterKind.ANTHROPIC -> anthropicCompatibleProvider.generateContent(
+                apiKey, model, request, baseUrl, provider.name
+            )
+            else -> unsupportedModelsDevResponse(provider)
+        }
+    }
+
+    private suspend fun streamModelsDev(
+        provider: CatalogProvider,
+        apiKey: String,
+        model: String,
+        request: GenerateContentRequest
+    ): retrofit2.Response<ResponseBody> {
+        validateModelsDevRequest(provider, model, request)?.let { return unsupportedModelsDevStreamResponse(provider, it) }
+        val profile = ModelsDevProviderAdapterRegistry.profile(provider)
+        val baseUrl = modelsDevBaseUrl(provider) ?: return retrofit2.Response.error(
+            400, "A completed base URL is required for ${provider.name}.".toResponseBody(missingKeyMediaType)
+        )
+        return when (profile.adapter) {
+            ProviderAdapterKind.OPEN_AI_COMPATIBLE,
+            ProviderAdapterKind.OPEN_AI,
+            ProviderAdapterKind.PROVIDER_SPECIFIC,
+            ProviderAdapterKind.COHERE,
+            ProviderAdapterKind.VERCEL_AI,
+            ProviderAdapterKind.CLOUDFLARE_AI_GATEWAY,
+            ProviderAdapterKind.AZURE_OPEN_AI,
+            ProviderAdapterKind.UNVERIFIED_OPEN_AI_COMPATIBLE -> {
+                if (!profile.isVerifiedMapping) DiagnosticsLogger.log("models.dev unverified OpenAI-compatible mode provider=${provider.id}")
+                openAiProvider.streamGenerateContent(
+                    apiKey, model, request, baseUrl,
+                    useApiKeyHeader = profile.adapter == ProviderAdapterKind.AZURE_OPEN_AI,
+                    useCloudflareGatewayHeader = profile.adapter == ProviderAdapterKind.CLOUDFLARE_AI_GATEWAY,
+                    stripOpenAiProviderPrefix = false
+                )
+            }
+            ProviderAdapterKind.ANTHROPIC -> anthropicCompatibleProvider.streamGenerateContent(
+                apiKey, model, request, baseUrl, provider.name
+            )
+            else -> unsupportedModelsDevStreamResponse(provider)
+        }
+    }
+
+    private fun validateModelsDevRequest(provider: CatalogProvider, modelId: String, request: GenerateContentRequest): String? {
+        val model = provider.models.firstOrNull { it.id == modelId }
+            ?: return "Model is unavailable in the current models.dev catalog: $modelId"
+        if (!request.tools.isNullOrEmpty() && !model.toolCall) return "${model.name} does not support tool calls"
+        if (request.contents.any { content -> content.parts.any { it.inlineData != null || it.fileData != null } } && !model.attachment) {
+            return "${model.name} does not support attachments"
+        }
+        if (request.generationConfig?.thinkingConfig?.enabled == true && !model.reasoning) {
+            return "${model.name} does not support reasoning"
+        }
+        return null
     }
 
     private suspend fun normalizedOpenRouterPreferences(settings: Settings?): ProviderPreferences? {
@@ -267,6 +425,10 @@ class ApiRepository(
                 val actualApiKey = context.apiKey
                 Log.d("ApiRepository", "About to call provider (${context.providerId}) with model: '$model'")
 
+                context.modelsDevProvider?.let { dynamicProvider ->
+                    return generateModelsDev(dynamicProvider, actualApiKey, model, request)
+                }
+
                 when (context.providerId) {
                     "OPENROUTER" -> {
                         val prefs = normalizedOpenRouterPreferences(settings)
@@ -344,6 +506,10 @@ class ApiRepository(
                 val provider = context.apiProvider
                 val actualApiKey = context.apiKey
 
+                context.modelsDevProvider?.let { dynamicProvider ->
+                    return streamModelsDev(dynamicProvider, actualApiKey, model, request)
+                }
+
                 when (context.providerId) {
                     "OPENROUTER" -> {
                         val prefs = normalizedOpenRouterPreferences(settings)
@@ -416,6 +582,11 @@ class ApiRepository(
         requestA: GenerateContentRequest,
         requestB: GenerateContentRequest
     ): Pair<retrofit2.Response<GenerateContentResponse>, retrofit2.Response<GenerateContentResponse>> = coroutineScope {
+        if (ProviderReference(providerA).isModelsDev || ProviderReference(providerB).isModelsDev) {
+            val responseA = async { generateContent(modelA, requestA, providerA) }
+            val responseB = async { generateContent(modelB, requestB, providerB) }
+            return@coroutineScope responseA.await() to responseB.await()
+        }
         val settings = settingsProvider()
 
         val apiKeyResultA = when (providerA) {
@@ -563,6 +734,11 @@ class ApiRepository(
         requestA: GenerateContentRequest,
         requestB: GenerateContentRequest
     ): Pair<retrofit2.Response<ResponseBody>, retrofit2.Response<ResponseBody>> = coroutineScope {
+        if (ProviderReference(providerA).isModelsDev || ProviderReference(providerB).isModelsDev) {
+            val responseA = async { streamGenerateContent(modelA, requestA, providerA) }
+            val responseB = async { streamGenerateContent(modelB, requestB, providerB) }
+            return@coroutineScope responseA.await() to responseB.await()
+        }
         val settings = settingsProvider()
 
         val apiKeyResultA = when (providerA) {
@@ -710,6 +886,30 @@ class ApiRepository(
         reasoningContext: ReasoningContext
     ): retrofit2.Response<GenerateContentResponse> {
         val settings = settingsProvider()
+
+        val thinkingConfig = settings?.buildThinkingConfigFor(provider, model, reasoningContext)
+        val generationConfig = buildGenerationConfig(settings, provider, model, thinkingConfig)
+        val codexConfig = if (provider.uppercase() == "CODEX_AUTH") {
+            settings?.buildCodexRequestConfig(model)
+        } else {
+            null
+        }
+        val tools = settings?.let { ToolingUtils.buildTools(it, provider, reasoningContext) }.orEmpty()
+
+        val request = GenerateContentRequest(
+            contents = conversationHistory,
+            generationConfig = generationConfig,
+            system_instruction = com.porarri.yamabikochat.data.remote.SystemInstruction(
+                parts = listOf(Part(systemPrompt))
+            ),
+            tools = tools.takeIf { it.isNotEmpty() },
+            codexConfig = codexConfig
+        )
+
+        if (ProviderReference(provider).isModelsDev) {
+            return generateContent(model, request, provider)
+        }
+
         val apiKeyResult = when (provider) {
             "CODEX_AUTH" -> resolveCodexAuthToken()
             "SUPERGROK" -> resolveSuperGrokAuthToken()
@@ -735,25 +935,6 @@ class ApiRepository(
 
         val apiKeySuccess = apiKeyResult as ApiKeyResult.Success
         val apiKey = apiKeySuccess.apiKey
-
-        val thinkingConfig = settings?.buildThinkingConfigFor(provider, model, reasoningContext)
-        val generationConfig = buildGenerationConfig(settings, provider, model, thinkingConfig)
-        val codexConfig = if (provider.uppercase() == "CODEX_AUTH") {
-            settings?.buildCodexRequestConfig(model)
-        } else {
-            null
-        }
-        val tools = settings?.let { ToolingUtils.buildTools(it, provider, reasoningContext) }.orEmpty()
-
-        val request = GenerateContentRequest(
-            contents = conversationHistory,
-            generationConfig = generationConfig,
-            system_instruction = com.porarri.yamabikochat.data.remote.SystemInstruction(
-                parts = listOf(Part(systemPrompt))
-            ),
-            tools = tools.takeIf { it.isNotEmpty() },
-            codexConfig = codexConfig
-        )
 
         return when (provider) {
             "OPENROUTER" -> openRouterProvider.generateContent(apiKey, model, request, normalizedOpenRouterPreferences(settings))
@@ -823,6 +1004,12 @@ class ApiRepository(
     // OpenAI-compatible preset API key helpers
     suspend fun saveOpenAiCompatApiKey(name: String, apiKey: String?): Boolean =
         settingsManager.saveOpenAiCompatApiKey(name, apiKey)
+
+    suspend fun saveModelsDevField(providerId: String, fieldName: String, value: String?): Boolean =
+        settingsManager.saveModelsDevField(providerId, fieldName, value)
+
+    fun peekModelsDevField(providerId: String, fieldName: String): String? =
+        settingsManager.getModelsDevField(providerId, fieldName)
 
     fun peekOpenAiCompatApiKey(name: String): String? = settingsManager.getOpenAiCompatApiKey(name)
 

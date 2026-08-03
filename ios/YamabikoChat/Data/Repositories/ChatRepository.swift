@@ -374,7 +374,7 @@ final class ChatRepository {
             settings: settings,
             conversationId: conversationId
         )
-        let provider = LLMProvider(rawOrDefault: conversation.apiProvider)
+        let provider = conversation.apiProvider
 
         if settings.isStreamingEnabled {
             return try await streamMessage(
@@ -449,7 +449,7 @@ final class ChatRepository {
             conversationId: conversationId,
             providerMessages: requestMessages
         )
-        let provider = LLMProvider(rawOrDefault: conversation.apiProvider)
+        let provider = conversation.apiProvider
 
         if settings.isStreamingEnabled {
             try await streamRegeneratedVariant(
@@ -495,7 +495,7 @@ final class ChatRepository {
         conversationId: Int64,
         userMessageId: Int64,
         request: ProviderRequest,
-        provider: LLMProvider,
+        provider: String,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
     ) async throws -> SendMessageResult {
@@ -522,7 +522,7 @@ final class ChatRepository {
         )
 
         await recordTokenUsageIfAvailable(
-            provider: provider.rawValue,
+            provider: provider,
             model: request.model,
             usage: response.usage,
             conversationId: conversationId,
@@ -538,7 +538,7 @@ final class ChatRepository {
 
     private func streamRegeneratedVariant(
         request: ProviderRequest,
-        provider: LLMProvider,
+        provider: String,
         conversationId: Int64,
         baseMessageId: Int64,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
@@ -565,7 +565,7 @@ final class ChatRepository {
         )
 
         await recordTokenUsageIfAvailable(
-            provider: provider.rawValue,
+            provider: provider,
             model: request.model,
             usage: response.usage,
             conversationId: conversationId,
@@ -633,7 +633,7 @@ final class ChatRepository {
 
     private func runToolCallingTurn(
         request: ProviderRequest,
-        provider: LLMProvider,
+        provider: String,
         conversationId: Int64,
         persistenceKind: ChatStreamPersistenceKind,
         streamEnabled: Bool,
@@ -669,7 +669,7 @@ final class ChatRepository {
                             level: .warning,
                             category: .network,
                             metadata: [
-                                "provider": provider.rawValue,
+                                "provider": provider,
                                 "model": roundRequest.model
                             ],
                             error: error
@@ -717,7 +717,7 @@ final class ChatRepository {
 
     private func executeProviderRound(
         request: ProviderRequest,
-        provider: LLMProvider,
+        provider: String,
         persistenceKind: ChatStreamPersistenceKind,
         streamEnabled: Bool,
         persistResults: Bool = true,
@@ -725,7 +725,7 @@ final class ChatRepository {
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
     ) async throws -> ProviderResponse {
         if streamEnabled {
-            let stream = try await providers.stream(request: request, provider: provider)
+            let stream = try await providers.stream(request: request, providerID: provider)
             let session = try await ChatStreamSession.run(
                 stream: stream,
                 conversations: conversations,
@@ -742,7 +742,7 @@ final class ChatRepository {
             )
         }
 
-        let response = try await providers.generate(request: request, provider: provider)
+        let response = try await providers.generate(request: request, providerID: provider)
         if persistResults {
             try persistProviderResponse(response, kind: persistenceKind)
         }
@@ -1059,7 +1059,7 @@ final class ChatRepository {
                 userAttachments: normalizedAttachments,
                 supportsVision: fallbackSupportsVision
             )
-            let provider = LLMProvider(rawOrDefault: fallbackModel.provider)
+            let provider = fallbackModel.provider
             let assistantMessageId = try conversations.insertMessage(
                 ChatMessage(
                     conversationId: conversationId,
@@ -1138,7 +1138,7 @@ final class ChatRepository {
         do {
             let stream = try await providers.stream(
                 request: judgeOutcome.synthesisRequest,
-                provider: judgeOutcome.synthesizerProvider
+                providerID: judgeOutcome.synthesizerModel.provider
             )
             let session = try await ChatStreamSession.run(
                 stream: stream,
@@ -1287,7 +1287,7 @@ final class ChatRepository {
         }
 
         let normalizedProvider = try validateShortcutProvider(provider)
-        let resolvedProvider = LLMProvider(rawOrDefault: normalizedProvider)
+        let resolvedProvider = normalizedProvider
 
         let settings = try self.settings.load()
         let trimmedOverride = systemPromptOverride?
@@ -1887,10 +1887,7 @@ final class ChatRepository {
 
             let response: ProviderResponse
             do {
-                response = try await providers.generate(
-                    request: request,
-                    provider: LLMProvider(rawOrDefault: turnProvider)
-                )
+                response = try await providers.generate(request: request, providerID: turnProvider)
                 await recordTokenUsageIfAvailable(
                     provider: turnProvider,
                     model: turnModel,
@@ -2157,7 +2154,8 @@ final class ChatRepository {
         context: AppSettings.ReasoningContext = .default
     ) -> [ProviderTool] {
         let overrides = settings.toolOverride(for: context)
-        let resolvedProvider = LLMProvider(rawOrDefault: provider)
+        let supportsClientWebSearch = ProviderReference(persistedID: provider).isModelsDev
+            || LLMProvider(rawOrDefault: provider).supportsClientWebSearchTool
         var tools: [ProviderTool]
         switch provider.uppercased() {
         case "GEMINI":
@@ -2216,7 +2214,7 @@ final class ChatRepository {
 
         if case .default = context,
            settings.clientWebSearchToolEnabled,
-           resolvedProvider.supportsClientWebSearchTool {
+           supportsClientWebSearch {
             tools.append(contentsOf: localToolRegistry.definitions.map(\.providerTool))
         }
         return tools
@@ -2580,10 +2578,7 @@ final class ChatRepository {
         model: String
     ) async -> DualSideResult {
         do {
-            let response = try await providers.generate(
-                request: request,
-                provider: LLMProvider(rawOrDefault: provider)
-            )
+            let response = try await providers.generate(request: request, providerID: provider)
             return DualSideResult(
                 text: response.text,
                 reasoning: response.reasoningSummary,
@@ -2731,7 +2726,8 @@ final class ChatRepository {
 
     private func validateShortcutProvider(_ provider: String) throws -> String {
         let normalized = provider.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard ProviderCatalog.options.contains(where: { $0.key == normalized }) else {
+        guard ProviderReference(persistedID: normalized).isModelsDev
+            || ProviderCatalog.options.contains(where: { $0.key == normalized }) else {
             let error = ProviderClientError.parseFailure(L10n.text("Shortcuts: 不明なプロバイダです。"))
             DiagnosticsLogger.log(
                 "Shortcut rejected unknown provider",

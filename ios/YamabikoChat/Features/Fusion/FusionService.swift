@@ -61,7 +61,7 @@ final class FusionService {
                     req.stream = false
                     return req
                 }(),
-                provider: outcome.synthesizerProvider
+                providerID: outcome.synthesizerProvider
             )
             let latencyMs = Int64(Date().timeIntervalSince(synthStarted) * 1000)
             let usage = response.usage?.normalizedNonEmpty()
@@ -223,8 +223,8 @@ final class FusionService {
 
         var tools: [ProviderTool] = []
         if allowTools, phase == .panel, settings.clientWebSearchToolEnabled {
-            let provider = LLMProvider(rawOrDefault: model.provider)
-            if provider.supportsClientWebSearchTool {
+            let knownProvider = LLMProvider(rawValue: model.provider.uppercased())
+            if ProviderReference(persistedID: model.provider).isModelsDev || knownProvider?.supportsClientWebSearchTool == true {
                 tools = localToolRegistry.definitions.map(\.providerTool)
             }
         }
@@ -289,7 +289,7 @@ final class FusionService {
 
     private func invoke(
         request: ProviderRequest,
-        provider: LLMProvider,
+        provider: String,
         phase: FusionPhase,
         settings: AppSettings
     ) async throws -> ProviderResponse {
@@ -298,11 +298,11 @@ final class FusionService {
             let toolOrchestrator = ToolCallingOrchestrator(registry: localToolRegistry)
             let outcome = try await toolOrchestrator.run(request: request) { req, _ in
                 try Task.checkCancellation()
-                return try await self.providerGateway.generate(request: req, provider: provider)
+                return try await self.providerGateway.generate(request: req, providerID: provider)
             }
             return outcome.response
         }
-        return try await providerGateway.generate(request: request, provider: provider)
+        return try await providerGateway.generate(request: request, providerID: provider)
     }
 
     private func estimateCost(provider: String, model: String, usage: ProviderUsage?) async -> Double? {

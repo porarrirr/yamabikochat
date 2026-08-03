@@ -124,6 +124,12 @@ class SettingsManager private constructor(
     suspend fun clearOpenAiCompatApiKey(name: String) {
         securePrefs.clearCustomApiKey(compatAliasFor(name))
     }
+
+    suspend fun saveModelsDevField(providerId: String, fieldName: String, value: String?): Boolean =
+        securePrefs.storeModelsDevField(providerId, fieldName, value?.trim()?.takeIf { it.isNotEmpty() })
+
+    fun getModelsDevField(providerId: String, fieldName: String): String? =
+        securePrefs.getModelsDevField(providerId, fieldName)
     
     suspend fun clearAllSecureData() {
         securePrefs.clearAllSecureData()

@@ -1,7 +1,7 @@
 import Foundation
 
 struct FusionOrchestrator: Sendable {
-    typealias Invoke = @Sendable (ProviderRequest, LLMProvider, FusionPhase) async throws -> ProviderResponse
+    typealias Invoke = @Sendable (ProviderRequest, String, FusionPhase) async throws -> ProviderResponse
     typealias CostEstimator = @Sendable (String, String, ProviderUsage?) async -> Double?
     typealias RequestBuilder = @Sendable (
         PanelModelConfig,
@@ -152,7 +152,7 @@ struct FusionOrchestrator: Sendable {
         return FusionJudgeOutcome(
             trace: trace,
             synthesisRequest: synthesisRequest,
-            synthesizerProvider: LLMProvider(rawOrDefault: request.synthesizerModel.provider),
+            synthesizerProvider: request.synthesizerModel.provider,
             synthesizerModel: request.synthesizerModel,
             staticFallbackAnswer: staticFallback,
             panelTokenUsages: panelUsages,
@@ -222,7 +222,7 @@ struct FusionOrchestrator: Sendable {
             return providerRequest
         }
 
-        let provider = LLMProvider(rawOrDefault: request.judgeModel.provider)
+        let provider = request.judgeModel.provider
         let timeoutMs = request.judgeModel.timeoutMs ?? request.timeoutMs
 
         do {
@@ -326,7 +326,7 @@ struct FusionOrchestrator: Sendable {
         let response = try await FusionTimeout.run(milliseconds: timeoutMs) {
             try await invoke(
                 providerRequest,
-                LLMProvider(rawOrDefault: fallback.provider),
+                fallback.provider,
                 .fallback
             )
         }
@@ -364,7 +364,7 @@ struct FusionOrchestrator: Sendable {
         return FusionJudgeOutcome(
             trace: trace,
             synthesisRequest: providerRequest,
-            synthesizerProvider: LLMProvider(rawOrDefault: fallback.provider),
+            synthesizerProvider: fallback.provider,
             synthesizerModel: fallback,
             staticFallbackAnswer: response.text,
             panelTokenUsages: [],

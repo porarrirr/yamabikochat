@@ -6,6 +6,7 @@ final class ProviderGateway {
     private let registry: ProviderRegistry
     private let httpClient: HTTPClientProtocol
     private let superGrokAuthRepository: SuperGrokAuthRepository?
+    private let modelsDevCatalogRepository: ModelsDevCatalogRepository?
 
     /// Google's Gemini API intermittently returns a generic HTTP 500 "Internal error
     /// encountered" (status "INTERNAL") for some models regardless of request content -
@@ -22,13 +23,15 @@ final class ProviderGateway {
         credentialStore: SecureCredentialStore,
         registry: ProviderRegistry = .init(),
         httpClient: HTTPClientProtocol = URLSessionHTTPClient(),
-        superGrokAuthRepository: SuperGrokAuthRepository? = nil
+        superGrokAuthRepository: SuperGrokAuthRepository? = nil,
+        modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil
     ) {
         self.settingsRepository = settingsRepository
         self.credentialStore = credentialStore
         self.registry = registry
         self.httpClient = httpClient
         self.superGrokAuthRepository = superGrokAuthRepository
+        self.modelsDevCatalogRepository = modelsDevCatalogRepository
     }
 
     private static func isUnauthorized(_ error: Error) -> Bool {
@@ -301,6 +304,23 @@ final class ProviderGateway {
         throw lastError
     }
 
+    func generate(request: ProviderRequest, providerID: String) async throws -> ProviderResponse {
+        let reference = ProviderReference(persistedID: providerID)
+        guard reference.isModelsDev else {
+            guard let provider = knownProvider(providerID) else {
+                throw ProviderClientError.parseFailure("Unsupported provider: \(providerID)")
+            }
+            return try await generate(request: request, provider: provider)
+        }
+        let resolved = try resolveModelsDevRequest(request, reference: reference)
+        return try await resolved.client.generate(
+            request: resolved.request,
+            settings: settingsRepository.load(),
+            credentialStore: credentialStore,
+            httpClient: httpClient
+        )
+    }
+
     func stream(
         request: ProviderRequest,
         provider: LLMProvider
@@ -466,5 +486,137 @@ final class ProviderGateway {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    func stream(request: ProviderRequest, providerID: String) async throws -> AsyncThrowingStream<ProviderStreamEvent, Error> {
+        let reference = ProviderReference(persistedID: providerID)
+        guard reference.isModelsDev else {
+            guard let provider = knownProvider(providerID) else {
+                throw ProviderClientError.parseFailure("Unsupported provider: \(providerID)")
+            }
+            return try await stream(request: request, provider: provider)
+        }
+        let resolved = try resolveModelsDevRequest(request, reference: reference)
+        let settings = try settingsRepository.load()
+        return resolved.client.stream(
+            request: resolved.request,
+            settings: settings,
+            credentialStore: credentialStore,
+            httpClient: httpClient
+        )
+    }
+
+    private func resolveModelsDevRequest(
+        _ request: ProviderRequest,
+        reference: ProviderReference
+    ) throws -> (request: ProviderRequest, client: ProviderClient) {
+        guard let catalog = modelsDevCatalogRepository?.provider(for: reference) else {
+            throw ProviderClientError.parseFailure("models.dev provider is unavailable: \(reference.persistedID)")
+        }
+        guard let selectedModel = catalog.models.first(where: { $0.id == request.model }) else {
+            throw ProviderClientError.parseFailure("Model is unavailable in the current models.dev catalog: \(request.model)")
+        }
+        if !request.tools.isEmpty, !selectedModel.toolCall {
+            throw ProviderClientError.parseFailure("\(selectedModel.name) does not support tool calls")
+        }
+        if request.messages.contains(where: { !$0.attachments.isEmpty }), !selectedModel.attachment {
+            throw ProviderClientError.parseFailure("\(selectedModel.name) does not support attachments")
+        }
+        if request.thinking?.enabled == true, !selectedModel.reasoning {
+            throw ProviderClientError.parseFailure("\(selectedModel.name) does not support reasoning")
+        }
+        let profile = ModelsDevProviderAdapterRegistry.profile(for: catalog)
+        let credentialField = catalog.env.first(where: {
+            $0.contains("API_KEY") || $0.contains("TOKEN") || $0.contains("SECRET") || $0.contains("BEARER")
+        }) ?? catalog.env.first
+        guard let credentialField else { throw ProviderClientError.missingCredential(catalog.id) }
+        let credentialKey = modelsDevFieldKey(providerID: catalog.id, fieldName: credentialField)
+        guard try credentialStore.readSecret(key: credentialKey)?.trimmedNonEmpty != nil else {
+            throw ProviderClientError.missingCredential(catalog.id)
+        }
+        let manuallyConfiguredBaseURL = try credentialStore.readSecret(
+            key: modelsDevFieldKey(providerID: catalog.id, fieldName: "YAMABIKO_BASE_URL")
+        )?.trimmedNonEmpty
+        let catalogBaseURL = catalog.api?.trimmedNonEmpty.flatMap { $0.contains("${") ? nil : $0 }
+        let knownBaseURL = try knownModelsDevBaseURL(catalog, credentialStore: credentialStore)
+        let baseURL = catalogBaseURL ?? knownBaseURL ?? manuallyConfiguredBaseURL
+        guard let baseURL else { throw ProviderClientError.invalidBaseURL("A completed base URL is required for \(catalog.name)") }
+
+        let client: ProviderClient
+        switch profile.adapter {
+        case .openAICompatible, .openAI, .providerSpecific, .cohere, .vercelAI,
+             .cloudflareAIGateway, .azureOpenAI, .unverifiedOpenAICompatible:
+            client = OpenAICompatibleProviderClient()
+        case .anthropic:
+            client = AnthropicCompatibleProviderClient()
+        default:
+            throw ProviderClientError.parseFailure("\(catalog.name) requires the \(profile.adapter.rawValue) native adapter")
+        }
+        if !profile.isVerifiedMapping {
+            DiagnosticsLogger.log("models.dev unverified OpenAI-compatible mode", level: .warning, category: .network, metadata: ["provider": catalog.id])
+        }
+        var dynamicRequest = request
+        dynamicRequest.metadata["provider"] = reference.persistedID
+        dynamicRequest.metadata["modelsDevProviderID"] = catalog.id
+        dynamicRequest.metadata["modelsDevBaseURL"] = baseURL
+        dynamicRequest.metadata["modelsDevCredentialKey"] = credentialKey
+        dynamicRequest.metadata["modelsDevAuthHeader"] = switch profile.adapter {
+        case .azureOpenAI: "api-key"
+        case .cloudflareAIGateway: "cf-aig-authorization"
+        default: "bearer"
+        }
+        return (dynamicRequest, client)
+    }
+
+    private func modelsDevFieldKey(providerID: String, fieldName: String) -> String {
+        let provider = providerID.lowercased().replacingOccurrences(of: "[^a-z0-9._-]+", with: "_", options: .regularExpression)
+        let field = fieldName.uppercased().replacingOccurrences(of: "[^A-Z0-9_]+", with: "_", options: .regularExpression)
+        return "models_dev_\(provider)_\(field)"
+    }
+
+    private func knownProvider(_ providerID: String) -> LLMProvider? {
+        switch providerID.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
+        case "GEMINI_AUTH": return .gemini
+        case "QWEN_CODE": return .openRouter
+        case let value: return LLMProvider(rawValue: value)
+        }
+    }
+
+    private func knownModelsDevBaseURL(
+        _ provider: CatalogProvider,
+        credentialStore: SecureCredentialStore
+    ) throws -> String? {
+        let fixed = [
+            "openai": "https://api.openai.com/v1", "anthropic": "https://api.anthropic.com",
+            "xai": "https://api.x.ai/v1", "groq": "https://api.groq.com/openai/v1",
+            "mistral": "https://api.mistral.ai/v1", "togetherai": "https://api.together.xyz/v1",
+            "cerebras": "https://api.cerebras.ai/v1", "deepinfra": "https://api.deepinfra.com/v1/openai",
+            "perplexity": "https://api.perplexity.ai", "cohere": "https://api.cohere.ai/compatibility/v1",
+            "vercel": "https://ai-gateway.vercel.sh/v1", "v0": "https://api.v0.dev/v1",
+            "venice": "https://api.venice.ai/api/v1", "aihubmix": "https://aihubmix.com/v1",
+            "merge-gateway": "https://api-gateway.merge.dev/v1/ai-sdk"
+        ][provider.id]
+        if let fixed { return fixed }
+        if provider.id == "azure" || provider.id == "azure-cognitive-services" {
+            guard let field = provider.env.first(where: { $0.contains("RESOURCE_NAME") }),
+                  let resource = try credentialStore.readSecret(
+                    key: modelsDevFieldKey(providerID: provider.id, fieldName: field)
+                  )?.trimmedNonEmpty
+            else { return nil }
+            return provider.id == "azure"
+                ? "https://\(resource).openai.azure.com/openai/v1"
+                : "https://\(resource).services.ai.azure.com/openai/v1"
+        }
+        if provider.id == "cloudflare-ai-gateway" {
+            let account = try credentialStore.readSecret(
+                key: modelsDevFieldKey(providerID: provider.id, fieldName: "CLOUDFLARE_ACCOUNT_ID")
+            )?.trimmedNonEmpty
+            let gateway = try credentialStore.readSecret(
+                key: modelsDevFieldKey(providerID: provider.id, fieldName: "CLOUDFLARE_GATEWAY_ID")
+            )?.trimmedNonEmpty
+            guard let account, let gateway else { return nil }
+            return "https://gateway.ai.cloudflare.com/v1/\(account)/\(gateway)/compat"
+        }
+        return nil
     }
 }

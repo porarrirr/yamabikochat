@@ -1,7 +1,7 @@
 import Foundation
 
 enum FusionPanelRunner {
-    typealias Invoke = @Sendable (ProviderRequest, LLMProvider, FusionPhase) async throws -> ProviderResponse
+    typealias Invoke = @Sendable (ProviderRequest, String, FusionPhase) async throws -> ProviderResponse
     typealias CostEstimator = @Sendable (String, String, ProviderUsage?) async -> Double?
     typealias ProgressHandler = @Sendable (FusionProgressSnapshot) -> Void
 
@@ -50,7 +50,7 @@ enum FusionPanelRunner {
         estimateCost: @escaping CostEstimator
     ) async -> PanelResult {
         let timeoutMs = panel.timeoutMs ?? request.timeoutMs
-        let provider = LLMProvider(rawOrDefault: panel.provider)
+        let provider = panel.provider
         let started = Date()
 
         do {

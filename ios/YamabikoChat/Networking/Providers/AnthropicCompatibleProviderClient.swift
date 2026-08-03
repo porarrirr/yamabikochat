@@ -105,8 +105,8 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         httpClient: HTTPClientProtocol
     ) async throws -> ProviderResponse {
         try ensureAlibabaCodingPlan(request: request, settings: settings)
-        let apiKey = try resolvedCredential(credentialStore: credentialStore)
-        let endpoint = try endpointURL()
+        let apiKey = try resolvedCredential(request: request, credentialStore: credentialStore)
+        let endpoint = try endpointURL(request: request)
         let mcpConfiguration = try buildMCPConfiguration(for: request, credentialStore: credentialStore)
         let payload = try buildPayload(for: request, stream: false, mcpConfiguration: mcpConfiguration)
 
@@ -134,8 +134,8 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
             let task = Task {
                 do {
                     try ensureAlibabaCodingPlan(request: request, settings: settings)
-                    let apiKey = try resolvedCredential(credentialStore: credentialStore)
-                    let endpoint = try endpointURL()
+                    let apiKey = try resolvedCredential(request: request, credentialStore: credentialStore)
+                    let endpoint = try endpointURL(request: request)
                     let mcpConfiguration = try buildMCPConfiguration(for: request, credentialStore: credentialStore)
                     let payload = try buildPayload(for: request, stream: true, mcpConfiguration: mcpConfiguration)
 
@@ -218,20 +218,31 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
     }
 
     private func ensureAlibabaCodingPlan(request: ProviderRequest, settings: AppSettings) throws {
+        if request.metadata["modelsDevProviderID"] != nil { return }
         let resolvedProvider = LLMProvider(rawOrDefault: request.metadata["provider"] ?? settings.apiProvider)
         guard resolvedProvider == .alibabaCodingPlan else {
             throw ProviderClientError.invalidBaseURL("Provider not supported by Anthropic compatible client")
         }
     }
 
-    private func resolvedCredential(credentialStore: SecureCredentialStore) throws -> String {
+    private func resolvedCredential(request: ProviderRequest, credentialStore: SecureCredentialStore) throws -> String {
+        if let key = request.metadata["modelsDevCredentialKey"]?.trimmedNonEmpty,
+           let value = try credentialStore.readSecret(key: key)?.trimmedNonEmpty {
+            return value
+        }
         guard let apiKey = try credentialStore.credential(for: .alibabaCodingPlan), !apiKey.isEmpty else {
             throw ProviderClientError.missingCredential(LLMProvider.alibabaCodingPlan.rawValue)
         }
         return apiKey
     }
 
-    private func endpointURL() throws -> URL {
+    private func endpointURL(request: ProviderRequest) throws -> URL {
+        if let baseURL = request.metadata["modelsDevBaseURL"]?.trimmedNonEmpty,
+           let parsed = URL(string: baseURL) {
+            return parsed.path.hasSuffix("/v1")
+                ? parsed.appendingPathComponent("messages")
+                : parsed.appendingPathComponent("v1/messages")
+        }
         let baseURL = AppConstants.defaultAlibabaCodingPlanBaseURL.absoluteString
         guard let url = URL(string: baseURL)?.appendingPathComponent("v1/messages") else {
             throw ProviderClientError.invalidBaseURL(baseURL)
