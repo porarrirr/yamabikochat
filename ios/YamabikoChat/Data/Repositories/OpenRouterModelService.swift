@@ -2,29 +2,74 @@ import Foundation
 import Combine
 
 private actor OpenRouterModelsFetchCoordinator {
-    private var inFlight: Task<[SimpleModel], Never>?
+    private var inFlight: Task<[SimpleModel], Error>?
     private var activeFetchID = UUID()
 
     func resolve(
         forceRefresh: Bool,
-        perform: @Sendable @escaping () async -> [SimpleModel]
-    ) async -> [SimpleModel] {
+        perform: @Sendable @escaping () async throws -> [SimpleModel]
+    ) async throws -> [SimpleModel] {
         if forceRefresh {
             inFlight?.cancel()
             inFlight = nil
         } else if let inFlight, !inFlight.isCancelled {
-            return await inFlight.value
+            return try await inFlight.value
         }
 
         let fetchID = UUID()
         activeFetchID = fetchID
-        let task = Task { await perform() }
+        let task = Task { try await perform() }
         inFlight = task
-        let result = await task.value
-        if activeFetchID == fetchID {
-            inFlight = nil
+        do {
+            let result = try await task.value
+            if activeFetchID == fetchID {
+                inFlight = nil
+            }
+            return result
+        } catch {
+            if activeFetchID == fetchID {
+                inFlight = nil
+            }
+            throw error
         }
-        return result
+    }
+}
+
+private actor OpenRouterEndpointsFetchCoordinator {
+    private struct InFlight {
+        var id: UUID
+        var task: Task<[ModelEndpoint], Error>
+    }
+
+    private var inFlightByModel: [String: InFlight] = [:]
+
+    func resolve(
+        modelId: String,
+        forceRefresh: Bool,
+        perform: @Sendable @escaping () async throws -> [ModelEndpoint]
+    ) async throws -> [ModelEndpoint] {
+        if forceRefresh {
+            inFlightByModel[modelId]?.task.cancel()
+            inFlightByModel[modelId] = nil
+        } else if let inFlight = inFlightByModel[modelId], !inFlight.task.isCancelled {
+            return try await inFlight.task.value
+        }
+
+        let fetchID = UUID()
+        let task = Task { try await perform() }
+        inFlightByModel[modelId] = InFlight(id: fetchID, task: task)
+        do {
+            let result = try await task.value
+            if inFlightByModel[modelId]?.id == fetchID {
+                inFlightByModel[modelId] = nil
+            }
+            return result
+        } catch {
+            if inFlightByModel[modelId]?.id == fetchID {
+                inFlightByModel[modelId] = nil
+            }
+            throw error
+        }
     }
 }
 
@@ -39,50 +84,22 @@ final class OpenRouterModelService {
     private var cachedModels: [SimpleModel]?
     private var lastFetch: Date?
     private let modelCacheTTL: TimeInterval = 5 * 60
+    private var activeModelsFetchID = UUID()
+
+    private struct EndpointCacheEntry {
+        var options: OpenRouterModelEndpointOptions
+        var fetchedAt: Date
+    }
+
+    private var endpointCache: [String: EndpointCacheEntry] = [:]
+    private var activeEndpointFetchIDs: [String: UUID] = [:]
+    private let endpointCacheTTL: TimeInterval = 5 * 60
 
     private var cachedProviders: ProviderDirectory = .empty
     private var lastProvidersFetch: Date?
     private let providersCacheTTL: TimeInterval = 24 * 60 * 60
     private let modelsFetchCoordinator = OpenRouterModelsFetchCoordinator()
-
-    private let fallbackModels: [SimpleModel] = [
-        .init(
-            id: "openai/gpt-4o",
-            name: "GPT-4o",
-            provider: "openai",
-            topProvider: nil,
-            contextLength: 128_000,
-            promptPricePerMillion: 5.0,
-            completionPricePerMillion: 15.0,
-            isFree: false,
-            availableProviders: [],
-            availableQuantizations: []
-        ),
-        .init(
-            id: "anthropic/claude-3.5-sonnet",
-            name: "Claude 3.5 Sonnet",
-            provider: "anthropic",
-            topProvider: nil,
-            contextLength: 200_000,
-            promptPricePerMillion: 3.0,
-            completionPricePerMillion: 15.0,
-            isFree: false,
-            availableProviders: [],
-            availableQuantizations: []
-        ),
-        .init(
-            id: "meta-llama/llama-3.1-8b-instruct:free",
-            name: "Llama 3.1 8B Instruct (Free)",
-            provider: "meta-llama",
-            topProvider: nil,
-            contextLength: 131_072,
-            promptPricePerMillion: 0.0,
-            completionPricePerMillion: 0.0,
-            isFree: true,
-            availableProviders: [],
-            availableQuantizations: []
-        )
-    ]
+    private let endpointsFetchCoordinator = OpenRouterEndpointsFetchCoordinator()
 
     init(
         credentialStore: SecureCredentialStore,
@@ -106,46 +123,58 @@ final class OpenRouterModelService {
             return cachedModels
         }
 
-        return await modelsFetchCoordinator.resolve(forceRefresh: forceRefresh) { [self] in
-            await fetchAvailableModels(forceRefresh: forceRefresh)
-        }
-    }
-
-    private func fetchAvailableModels(forceRefresh: Bool) async -> [SimpleModel] {
+        let fetchID = UUID()
+        activeModelsFetchID = fetchID
         loadingSubject.send(true)
         errorSubject.send(nil)
-        defer { loadingSubject.send(false) }
 
         do {
-            let request = HTTPRequest(
-                url: URL(string: "https://openrouter.ai/api/v1/models")!,
-                method: "GET",
-                headers: try authHeaders()
-            )
-
-            let (data, response) = try await httpClient.send(request)
-            guard (200 ... 299).contains(response.statusCode) else {
-                throw ProviderClientError.httpStatus(response.statusCode, String(data: data, encoding: .utf8) ?? "")
+            let resolved = try await modelsFetchCoordinator.resolve(forceRefresh: forceRefresh) { [self] in
+                try await requestAvailableModels()
             }
-
-            let mapped = try parseModels(from: data)
-
-            let resolved = mapped.isEmpty ? fallbackModels : mapped
+            guard activeModelsFetchID == fetchID else { return resolved }
             cachedModels = resolved
             lastFetch = Date()
             modelsSubject.send(resolved)
+            loadingSubject.send(false)
             DiagnosticsLogger.log(
                 "OpenRouter models fetched count=\(resolved.count) forceRefresh=\(forceRefresh)",
                 category: .network
             )
             return resolved
+        } catch is CancellationError {
+            guard activeModelsFetchID == fetchID else { return [] }
+            loadingSubject.send(false)
+            return []
         } catch {
+            guard activeModelsFetchID == fetchID else { return [] }
             DiagnosticsLogger.log("OpenRouter models fetch failed", category: .network, error: error)
+            cachedModels = nil
+            lastFetch = nil
             errorSubject.send(error.localizedDescription)
-            let resolved = cachedModels ?? fallbackModels
-            modelsSubject.send(resolved)
-            return resolved
+            modelsSubject.send([])
+            loadingSubject.send(false)
+            return []
         }
+    }
+
+    private func requestAvailableModels() async throws -> [SimpleModel] {
+        let request = HTTPRequest(
+            url: URL(string: "https://openrouter.ai/api/v1/models")!,
+            method: "GET",
+            headers: try authHeaders()
+        )
+
+        let (data, response) = try await httpClient.send(request)
+        guard (200 ... 299).contains(response.statusCode) else {
+            throw ProviderClientError.httpStatus(response.statusCode, String(data: data, encoding: .utf8) ?? "")
+        }
+
+        let models = try parseModels(from: data)
+        guard !models.isEmpty else {
+            throw ProviderClientError.parseFailure("OpenRouter returned an empty model catalog")
+        }
+        return models
     }
 
     func getProvidersDirectory(forceRefresh: Bool = false) async -> ProviderDirectory {
@@ -177,29 +206,139 @@ final class OpenRouterModelService {
         }
     }
 
-    func getModelEndpoints(modelId: String) async -> [ModelEndpoint] {
+    func getModelEndpointOptions(
+        modelId: String,
+        forceRefresh: Bool = false
+    ) async throws -> OpenRouterModelEndpointOptions {
+        let normalizedModelId = modelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !forceRefresh,
+           let cached = endpointCache[normalizedModelId],
+           Date().timeIntervalSince(cached.fetchedAt) < endpointCacheTTL {
+            return cached.options
+        }
+        if forceRefresh {
+            endpointCache[normalizedModelId] = nil
+        }
+
+        let fetchID = UUID()
+        activeEndpointFetchIDs[normalizedModelId] = fetchID
+        let endpoints: [ModelEndpoint]
+        do {
+            endpoints = try await endpointsFetchCoordinator.resolve(
+                modelId: normalizedModelId,
+                forceRefresh: forceRefresh
+            ) { [self] in
+                try await requestModelEndpoints(modelId: normalizedModelId)
+            }
+        } catch {
+            if activeEndpointFetchIDs[normalizedModelId] == fetchID {
+                activeEndpointFetchIDs[normalizedModelId] = nil
+            }
+            throw error
+        }
+
+        var seenTags: Set<String> = []
+        var providerEndpoints: [OpenRouterEndpointOption] = []
+        var seenQuantizations: Set<String> = []
+        var quantizations: [String] = []
+
+        for endpoint in endpoints {
+            guard let tag = endpoint.tag?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased(),
+                !tag.isEmpty
+            else {
+                DiagnosticsLogger.log(
+                    "OpenRouter endpoint ignored because tag is missing",
+                    level: .warning,
+                    category: .network,
+                    metadata: [
+                        "model": normalizedModelId,
+                        "endpoint": endpoint.name
+                    ]
+                )
+                continue
+            }
+            guard seenTags.insert(tag).inserted else { continue }
+
+            let quantization = endpoint.quantization?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .nilIfEmpty
+            if let quantization, seenQuantizations.insert(quantization).inserted {
+                quantizations.append(quantization)
+            }
+
+            let providerName = endpoint.providerName?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty ?? tag
+            providerEndpoints.append(
+                OpenRouterEndpointOption(
+                    tag: tag,
+                    providerName: providerName,
+                    quantization: quantization,
+                    supportedParameters: endpoint.supportedParameters ?? [],
+                    status: endpoint.status
+                )
+            )
+        }
+
+        let options = OpenRouterModelEndpointOptions(
+            modelId: normalizedModelId,
+            endpoints: endpoints,
+            providerEndpoints: providerEndpoints,
+            quantizations: quantizations
+        )
+        if activeEndpointFetchIDs[normalizedModelId] == fetchID {
+            endpointCache[normalizedModelId] = EndpointCacheEntry(options: options, fetchedAt: Date())
+            activeEndpointFetchIDs[normalizedModelId] = nil
+            DiagnosticsLogger.log(
+                "OpenRouter endpoints fetched count=\(providerEndpoints.count)",
+                category: .network,
+                metadata: ["model": normalizedModelId]
+            )
+        }
+        return options
+    }
+
+    private func requestModelEndpoints(modelId: String) async throws -> [ModelEndpoint] {
         let parts = modelId.split(separator: "/")
-        guard parts.count >= 2 else { return [] }
+        guard parts.count >= 2 else {
+            throw ProviderClientError.parseFailure("Invalid OpenRouter model id: \(modelId)")
+        }
 
         let author = String(parts[0])
         let slug = parts.dropFirst().joined(separator: "/")
         // Variants like ":free" have their own endpoint listings whose providers
         // differ from the base model, so the suffix must stay in the slug.
         guard let url = URL(string: "https://openrouter.ai/api/v1/models/\(author)/\(slug)/endpoints") else {
-            return []
+            throw ProviderClientError.parseFailure("Invalid OpenRouter endpoints URL for model: \(modelId)")
         }
 
+        let request = HTTPRequest(
+            url: url,
+            method: "GET",
+            headers: try authHeaders()
+        )
+        let (data, response) = try await httpClient.send(request)
+        guard (200 ... 299).contains(response.statusCode) else {
+            throw ProviderClientError.httpStatus(response.statusCode, String(data: data, encoding: .utf8) ?? "")
+        }
+        return try JSONDecoder().decode(ModelEndpointsEnvelope.self, from: data).data.endpoints
+    }
+
+    func getModelEndpoints(modelId: String) async -> [ModelEndpoint] {
         do {
-            let request = HTTPRequest(
-                url: url,
-                method: "GET",
-                headers: try authHeaders()
-            )
-            let (data, response) = try await httpClient.send(request)
-            guard (200 ... 299).contains(response.statusCode) else { return [] }
-            let envelope = try JSONDecoder().decode(ModelEndpointsEnvelope.self, from: data)
-            return envelope.data.endpoints
+            return try await getModelEndpointOptions(modelId: modelId).endpoints
+        } catch is CancellationError {
+            return []
         } catch {
+            DiagnosticsLogger.log(
+                "OpenRouter endpoints fetch failed",
+                category: .network,
+                metadata: ["model": modelId],
+                error: error
+            )
             return []
         }
     }
@@ -229,6 +368,8 @@ final class OpenRouterModelService {
     func clearCache() {
         cachedModels = nil
         lastFetch = nil
+        endpointCache = [:]
+        activeEndpointFetchIDs = [:]
         modelsSubject.send([])
         errorSubject.send(nil)
     }
@@ -240,16 +381,33 @@ final class OpenRouterModelService {
     }
 
     func getAvailableProviders(for modelId: String) async -> [String] {
-        let endpoints = await getModelEndpoints(modelId: modelId)
-        let directory = await getProvidersDirectory()
-        return Array(Set(endpoints.compactMap { endpoint in
-            directory.slugForName(endpoint.providerName) ?? endpoint.providerName?.lowercased()
-        })).sorted()
+        do {
+            return try await getModelEndpointOptions(modelId: modelId)
+                .providerEndpoints
+                .map(\.tag)
+        } catch {
+            DiagnosticsLogger.log(
+                "OpenRouter provider endpoint lookup failed",
+                category: .network,
+                metadata: ["model": modelId],
+                error: error
+            )
+            return []
+        }
     }
 
     func getAvailableQuantizations(for modelId: String) async -> [String] {
-        let endpoints = await getModelEndpoints(modelId: modelId)
-        return Array(Set(endpoints.compactMap(\.quantization))).sorted()
+        do {
+            return try await getModelEndpointOptions(modelId: modelId).quantizations
+        } catch {
+            DiagnosticsLogger.log(
+                "OpenRouter quantization lookup failed",
+                category: .network,
+                metadata: ["model": modelId],
+                error: error
+            )
+            return []
+        }
     }
 
     private func authHeaders() throws -> [String: String] {
@@ -315,6 +473,7 @@ final class OpenRouterModelService {
         let availableProviders = parseStringArray(topProvider?["available_providers"])
         let availableQuantizations = parseStringArray(topProvider?["available_quantizations"])
         let contextLength = parseInt(object["context_length"]) ?? 0
+        let reasoning = parseReasoningCapabilities(object["reasoning"])
 
         return SimpleModel(
             id: id,
@@ -326,7 +485,31 @@ final class OpenRouterModelService {
             completionPricePerMillion: completionPerToken * 1_000_000,
             isFree: promptPerToken == 0 && completionPerToken == 0,
             availableProviders: availableProviders,
-            availableQuantizations: availableQuantizations
+            availableQuantizations: availableQuantizations,
+            reasoning: reasoning
+        )
+    }
+
+    private func parseReasoningCapabilities(_ value: Any?) -> OpenRouterReasoningCapabilities? {
+        guard let object = value as? [String: Any] else { return nil }
+        let exposesEffortSelection = object.keys.contains("supported_efforts")
+        let supportedEfforts: [String]?
+        if exposesEffortSelection, !(object["supported_efforts"] is NSNull) {
+            supportedEfforts = parseStringArray(object["supported_efforts"])
+        } else {
+            supportedEfforts = nil
+        }
+
+        return OpenRouterReasoningCapabilities(
+            supportedEfforts: supportedEfforts,
+            exposesEffortSelection: exposesEffortSelection,
+            defaultEffort: parseString(object["default_effort"])?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .nilIfEmpty,
+            defaultEnabled: parseBool(object["default_enabled"]),
+            supportsMaxTokens: parseBool(object["supports_max_tokens"]) ?? false,
+            mandatory: parseBool(object["mandatory"]) ?? false
         )
     }
 
@@ -340,6 +523,19 @@ final class OpenRouterModelService {
         if let intValue = value as? Int { return intValue }
         if let number = value as? NSNumber { return number.intValue }
         if let text = value as? String, let parsed = Int(text) { return parsed }
+        return nil
+    }
+
+    private func parseBool(_ value: Any?) -> Bool? {
+        if let bool = value as? Bool { return bool }
+        if let number = value as? NSNumber { return number.boolValue }
+        if let text = value as? String {
+            switch text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "true", "1": return true
+            case "false", "0": return false
+            default: return nil
+            }
+        }
         return nil
     }
 

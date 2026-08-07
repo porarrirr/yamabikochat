@@ -4,8 +4,33 @@ import GRDB
 
 private final class OpenRouterRoutingHTTPClient: HTTPClientProtocol {
     private(set) var streamedRequests: [HTTPRequest] = []
+    private let failingEndpointPathFragments: [String]
+
+    init(failingEndpointPathFragments: [String] = []) {
+        self.failingEndpointPathFragments = failingEndpointPathFragments
+    }
 
     func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
+        if request.url.path.hasSuffix("/endpoints") {
+            if failingEndpointPathFragments.contains(where: { request.url.path.contains($0) }) {
+                let data = #"{"error":"endpoint catalog unavailable"}"#.data(using: .utf8)!
+                return (data, Self.httpResponse(url: request.url, statusCode: 503))
+            }
+            let data = #"""
+            {
+              "data": {
+                "endpoints": [
+                  { "name": "Liquid FP8", "provider_name": "Liquid", "tag": "liquid/fp8", "quantization": "fp8" },
+                  { "name": "Google AI Studio", "provider_name": "Google AI Studio", "tag": "google-ai-studio", "quantization": "fp16" },
+                  { "name": "Open Inference", "provider_name": "Open Inference", "tag": "open-inference", "quantization": "fp16" },
+                  { "name": "Novita FP8", "provider_name": "Novita", "tag": "novita/fp8", "quantization": "fp8" },
+                  { "name": "Z.AI FP8", "provider_name": "Z.AI", "tag": "z-ai/fp8", "quantization": "fp8" }
+                ]
+              }
+            }
+            """#.data(using: .utf8)!
+            return (data, Self.httpResponse(url: request.url, statusCode: 200))
+        }
         let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
         return (data, Self.httpResponse(url: request.url, statusCode: 200))
     }
@@ -24,6 +49,48 @@ private final class OpenRouterRoutingHTTPClient: HTTPClientProtocol {
 
     private static func httpResponse(url: URL, statusCode: Int) -> HTTPURLResponse {
         HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
+    }
+}
+
+private actor OpenRouterEndpointGenerationHTTPClient: HTTPClientProtocol {
+    func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
+        let path = request.url.path
+        let data: Data
+        if path == "/api/v1/models" {
+            data = #"""
+            {"data":[
+              {"id":"example/old","name":"Old","pricing":{"prompt":"0","completion":"0"}},
+              {"id":"example/new","name":"New","pricing":{"prompt":"0","completion":"0"}}
+            ]}
+            """#.data(using: .utf8)!
+        } else if path.hasSuffix("/example/old/endpoints") {
+            await delayIgnoringCancellation(nanoseconds: 200_000_000)
+            data = endpointPayload(tag: "old/fp8", provider: "Old")
+        } else if path.hasSuffix("/example/new/endpoints") {
+            await delayIgnoringCancellation(nanoseconds: 20_000_000)
+            data = endpointPayload(tag: "new/fp8", provider: "New")
+        } else {
+            data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+        }
+        return (data, HTTPURLResponse(url: request.url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+    }
+
+    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
+        let response = HTTPURLResponse(url: request.url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        return (AsyncThrowingStream { $0.finish() }, response)
+    }
+
+    private func endpointPayload(tag: String, provider: String) -> Data {
+        #"{"data":{"endpoints":[{"name":"\#(provider)","provider_name":"\#(provider)","tag":"\#(tag)","quantization":"fp8"}]}}"#
+            .data(using: .utf8)!
+    }
+
+    private func delayIgnoringCancellation(nanoseconds: UInt64) async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global().asyncAfter(deadline: .now() + .nanoseconds(Int(nanoseconds))) {
+                continuation.resume()
+            }
+        }
     }
 }
 
@@ -87,7 +154,7 @@ final class OpenRouterRoutingTests: XCTestCase {
         availableQuantizations: []
     )
 
-    func testSendMessageOmitsProviderRoutingWhenPreferredProvidersMismatchModel() async throws {
+    func testSendMessageFailsWhenPreferredEndpointTagDoesNotExist() async throws {
         let model = liquidModel
         let httpClient = OpenRouterRoutingHTTPClient()
         let fixture = try makeFixture(httpClient: httpClient) { settings in
@@ -100,19 +167,20 @@ final class OpenRouterRoutingTests: XCTestCase {
         fixture.modelService.replaceCachedModels([model])
 
         let conversationID = try fixture.repository.createConversation(title: "Routing")
-        _ = try await fixture.repository.sendMessage(
-            conversationId: conversationID,
-            text: "hello",
-            attachments: []
-        )
-
-        let request = try XCTUnwrap(httpClient.streamedRequests.first)
-        let body = try XCTUnwrap(request.body)
-        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertNil(root["provider"])
+        do {
+            _ = try await fixture.repository.sendMessage(
+                conversationId: conversationID,
+                text: "hello",
+                attachments: []
+            )
+            XCTFail("Expected unavailable endpoint tag to fail explicitly")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("deepseek"))
+        }
+        XCTAssertTrue(httpClient.streamedRequests.isEmpty)
     }
 
-    func testSendMessageOmitsProviderRoutingForStalePreferredSlug() async throws {
+    func testSendMessageFailsForLegacyBaseProviderSlug() async throws {
         let model = SimpleModel(
             id: "google/gemma-4-26b-a4b-it:free",
             name: "Gemma 4 26B",
@@ -137,19 +205,20 @@ final class OpenRouterRoutingTests: XCTestCase {
         fixture.modelService.replaceCachedModels([model])
 
         let conversationID = try fixture.repository.createConversation(title: "Routing")
-        _ = try await fixture.repository.sendMessage(
-            conversationId: conversationID,
-            text: "hello",
-            attachments: []
-        )
-
-        let request = try XCTUnwrap(httpClient.streamedRequests.first)
-        let body = try XCTUnwrap(request.body)
-        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertNil(root["provider"])
+        do {
+            _ = try await fixture.repository.sendMessage(
+                conversationId: conversationID,
+                text: "hello",
+                attachments: []
+            )
+            XCTFail("Expected legacy base provider slug to fail explicitly")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("google"))
+        }
+        XCTAssertTrue(httpClient.streamedRequests.isEmpty)
     }
 
-    func testSendMessageOmitsProviderRoutingForStaleGoogleSlugWhenFallbacksDisabled() async throws {
+    func testSendMessageFailsForStaleGoogleSlugWhenFallbacksDisabled() async throws {
         let model = gemmaModel
         let httpClient = OpenRouterRoutingHTTPClient()
         let fixture = try makeFixture(httpClient: httpClient) { settings in
@@ -163,16 +232,17 @@ final class OpenRouterRoutingTests: XCTestCase {
         fixture.modelService.replaceCachedModels([model])
 
         let conversationID = try fixture.repository.createConversation(title: "Routing")
-        _ = try await fixture.repository.sendMessage(
-            conversationId: conversationID,
-            text: "hello",
-            attachments: []
-        )
-
-        let request = try XCTUnwrap(httpClient.streamedRequests.first)
-        let body = try XCTUnwrap(request.body)
-        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertNil(root["provider"])
+        do {
+            _ = try await fixture.repository.sendMessage(
+                conversationId: conversationID,
+                text: "hello",
+                attachments: []
+            )
+            XCTFail("Expected stale provider slug to fail explicitly")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("google"))
+        }
+        XCTAssertTrue(httpClient.streamedRequests.isEmpty)
     }
 
     func testSendMessageOmitsProviderRoutingWhenPreferredProvidersEmpty() async throws {
@@ -236,7 +306,7 @@ final class OpenRouterRoutingTests: XCTestCase {
         let fixture = try makeFixture(httpClient: httpClient) { settings in
             settings.apiProvider = "OPENROUTER"
             settings.defaultModel = model.id
-            settings.preferredProvidersJSON = #"["liquid"]"#
+            settings.preferredProvidersJSON = #"["liquid/fp8"]"#
             settings.allowFallbacks = true
             settings.isStreamingEnabled = true
         }
@@ -254,13 +324,15 @@ final class OpenRouterRoutingTests: XCTestCase {
         let body = try XCTUnwrap(request.body)
         let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
         let provider = try XCTUnwrap(root["provider"] as? [String: Any])
-        XCTAssertEqual(provider["order"] as? [String], ["liquid"])
+        XCTAssertEqual(provider["order"] as? [String], ["liquid/fp8"])
         XCTAssertNil(provider["only"])
     }
 
-    func testSendMessageOmitsStalePreferredProviderWhenModelAvailabilityUnknown() async throws {
+    func testSendMessageFailsWhenEndpointCapabilitiesCannotBeFetched() async throws {
         let model = unknownAvailabilityModel
-        let httpClient = OpenRouterRoutingHTTPClient()
+        let httpClient = OpenRouterRoutingHTTPClient(
+            failingEndpointPathFragments: ["/models/openrouter/free/endpoints"]
+        )
         let fixture = try makeFixture(httpClient: httpClient) { settings in
             settings.apiProvider = "OPENROUTER"
             settings.defaultModel = model.id
@@ -272,16 +344,17 @@ final class OpenRouterRoutingTests: XCTestCase {
         fixture.modelService.replaceCachedModels([model])
 
         let conversationID = try fixture.repository.createConversation(title: "Routing")
-        _ = try await fixture.repository.sendMessage(
-            conversationId: conversationID,
-            text: "hello",
-            attachments: []
-        )
-
-        let request = try XCTUnwrap(httpClient.streamedRequests.first)
-        let body = try XCTUnwrap(request.body)
-        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertNil(root["provider"])
+        do {
+            _ = try await fixture.repository.sendMessage(
+                conversationId: conversationID,
+                text: "hello",
+                attachments: []
+            )
+            XCTFail("Expected endpoint capability acquisition failure")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("could not be validated"))
+        }
+        XCTAssertTrue(httpClient.streamedRequests.isEmpty)
     }
 
     func testSendMessageUsesOnlyProviderWhenFallbacksDisabledAndSingleMatch() async throws {
@@ -290,7 +363,7 @@ final class OpenRouterRoutingTests: XCTestCase {
         let fixture = try makeFixture(httpClient: httpClient) { settings in
             settings.apiProvider = "OPENROUTER"
             settings.defaultModel = model.id
-            settings.preferredProvidersJSON = #"["liquid"]"#
+            settings.preferredProvidersJSON = #"["liquid/fp8"]"#
             settings.allowFallbacks = false
             settings.isStreamingEnabled = true
         }
@@ -308,8 +381,59 @@ final class OpenRouterRoutingTests: XCTestCase {
         let body = try XCTUnwrap(request.body)
         let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
         let provider = try XCTUnwrap(root["provider"] as? [String: Any])
-        XCTAssertEqual(provider["only"] as? [String], ["liquid"])
+        XCTAssertEqual(provider["only"] as? [String], ["liquid/fp8"])
         XCTAssertNil(provider["order"])
+    }
+
+    func testSendMessagePreservesExactEndpointTagAndXHighEffort() async throws {
+        let model = SimpleModel(
+            id: "z-ai/glm-5.2",
+            name: "GLM 5.2",
+            provider: "z-ai",
+            topProvider: nil,
+            contextLength: 131_072,
+            promptPricePerMillion: 1,
+            completionPricePerMillion: 2,
+            isFree: false,
+            availableProviders: [],
+            availableQuantizations: [],
+            reasoning: OpenRouterReasoningCapabilities(
+                supportedEfforts: ["xhigh", "high"],
+                exposesEffortSelection: true,
+                defaultEffort: "high",
+                defaultEnabled: true,
+                supportsMaxTokens: true,
+                mandatory: false
+            )
+        )
+        let httpClient = OpenRouterRoutingHTTPClient()
+        let fixture = try makeFixture(httpClient: httpClient) { settings in
+            settings.apiProvider = "OPENROUTER"
+            settings.defaultModel = model.id
+            settings.openRouterThinkingEnabled = true
+            settings.openRouterReasoningMode = "effort"
+            settings.openRouterReasoningEffort = "xhigh"
+            settings.preferredProvidersJSON = #"["novita/fp8"]"#
+            settings.allowFallbacks = true
+            settings.isStreamingEnabled = true
+        }
+        try fixture.credentials.setCredential("openrouter-key", for: .openRouter)
+        fixture.modelService.replaceCachedModels([model])
+
+        let conversationID = try fixture.repository.createConversation(title: "Routing")
+        _ = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "hello",
+            attachments: []
+        )
+
+        let request = try XCTUnwrap(httpClient.streamedRequests.first)
+        let body = try XCTUnwrap(request.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let provider = try XCTUnwrap(root["provider"] as? [String: Any])
+        let reasoning = try XCTUnwrap(root["reasoning"] as? [String: Any])
+        XCTAssertEqual(provider["order"] as? [String], ["novita/fp8"])
+        XCTAssertEqual(reasoning["effort"] as? String, "xhigh")
     }
 
     @MainActor
@@ -321,10 +445,93 @@ final class OpenRouterRoutingTests: XCTestCase {
         viewModel.openRouterModels = [liquidModel]
         viewModel.settings.apiProvider = "OPENROUTER"
         viewModel.settings.setPreferredProvidersList(["deepseek"])
+        viewModel.openRouterEndpointModelId = liquidModel.id
+        viewModel.openRouterEndpointOptions = [
+            OpenRouterEndpointOption(
+                tag: "liquid/fp8",
+                providerName: "Liquid",
+                quantization: "fp8",
+                supportedParameters: [],
+                status: 0
+            )
+        ]
 
         viewModel.reconcileOpenRouterPreferredProviders(forModelId: liquidModel.id)
 
         XCTAssertEqual(viewModel.settings.preferredProvidersList(), [])
+    }
+
+    @MainActor
+    func testReconcileGLMReasoningEffortUsesModelDefault() {
+        let model = SimpleModel(
+            id: "z-ai/glm-5.2",
+            name: "GLM 5.2",
+            provider: "z-ai",
+            topProvider: nil,
+            contextLength: 131_072,
+            promptPricePerMillion: 1,
+            completionPricePerMillion: 2,
+            isFree: false,
+            availableProviders: [],
+            availableQuantizations: [],
+            reasoning: OpenRouterReasoningCapabilities(
+                supportedEfforts: ["xhigh", "high"],
+                exposesEffortSelection: true,
+                defaultEffort: "high",
+                defaultEnabled: true,
+                supportsMaxTokens: true,
+                mandatory: false
+            )
+        )
+        let viewModel = SettingsViewModel()
+        viewModel.settings.apiProvider = "OPENROUTER"
+        viewModel.settings.defaultModel = model.id
+        viewModel.settings.openRouterThinkingEnabled = true
+        viewModel.settings.openRouterReasoningMode = "effort"
+        viewModel.settings.openRouterReasoningEffort = "medium"
+        viewModel.openRouterModels = [model]
+
+        viewModel.reconcileOpenRouterReasoning(forModelId: model.id)
+
+        XCTAssertEqual(viewModel.openRouterReasoningEfforts(forModelId: model.id), ["xhigh", "high"])
+        XCTAssertEqual(viewModel.openRouterReasoningModes(forModelId: model.id), ["auto", "effort", "budget"])
+        XCTAssertEqual(viewModel.settings.openRouterReasoningEffort, "high")
+    }
+
+    @MainActor
+    func testStaleEndpointResponseCannotOverwriteLatestModelOptions() async throws {
+        let httpClient = OpenRouterEndpointGenerationHTTPClient()
+        let fixture = try makeFixture(httpClient: httpClient) { settings in
+            settings.apiProvider = "OPENAI"
+            settings.defaultModel = "gpt-4.1-mini"
+        }
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+
+        for _ in 0 ..< 100 where viewModel.openRouterModels.count < 2 {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(viewModel.openRouterModels.count, 2)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        viewModel.settings.apiProvider = "OPENROUTER"
+        viewModel.settings.defaultModel = "example/old"
+        let oldRequest = Task {
+            await viewModel.refreshOpenRouterEndpointOptions(forModelId: "example/old", force: true)
+        }
+        try? await Task.sleep(nanoseconds: 30_000_000)
+        viewModel.settings.defaultModel = "example/new"
+        let latestRequest = Task {
+            await viewModel.refreshOpenRouterEndpointOptions(forModelId: "example/new", force: true)
+        }
+
+        await latestRequest.value
+        await oldRequest.value
+
+        XCTAssertEqual(viewModel.openRouterEndpointModelId, "example/new")
+        XCTAssertEqual(viewModel.openRouterEndpointOptions.map(\.tag), ["new/fp8"])
+        XCTAssertNil(viewModel.openRouterEndpointsError)
+        XCTAssertFalse(viewModel.openRouterEndpointsLoading)
     }
 
     private func makeFixture(

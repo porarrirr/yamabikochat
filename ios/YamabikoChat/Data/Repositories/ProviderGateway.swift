@@ -543,6 +543,10 @@ final class ProviderGateway {
         }) ?? catalog.env.first
         guard let credentialField else { throw ProviderClientError.missingCredential(catalog.id) }
         let credentialKey = modelsDevFieldKey(providerID: catalog.id, fieldName: credentialField)
+        try migrateLegacyCredentialIfNeeded(
+            for: catalog.id,
+            destinationKey: credentialKey
+        )
         guard try credentialStore.readSecret(key: credentialKey)?.trimmedNonEmpty != nil else {
             throw ProviderClientError.missingCredential(catalog.id)
         }
@@ -592,6 +596,25 @@ final class ProviderGateway {
         let provider = providerID.lowercased().replacingOccurrences(of: "[^a-z0-9._-]+", with: "_", options: .regularExpression)
         let field = fieldName.uppercased().replacingOccurrences(of: "[^A-Z0-9_]+", with: "_", options: .regularExpression)
         return "models_dev_\(provider)_\(field)"
+    }
+
+    private func migrateLegacyCredentialIfNeeded(for providerID: String, destinationKey: String) throws {
+        guard try credentialStore.readSecret(key: destinationKey)?.trimmedNonEmpty == nil else { return }
+
+        let legacyProvider: CredentialProvider? = switch providerID.lowercased() {
+        case "opencode-go": .openCodeGo
+        default: nil
+        }
+        guard let legacyProvider,
+              let credential = try credentialStore.credential(for: legacyProvider)?.trimmedNonEmpty
+        else { return }
+
+        try credentialStore.saveSecret(credential, key: destinationKey)
+        DiagnosticsLogger.log(
+            "Migrated legacy provider credential to models.dev",
+            category: .settings,
+            metadata: ["provider": providerID]
+        )
     }
 
     private func knownProvider(_ providerID: String) -> LLMProvider? {

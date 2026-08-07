@@ -64,9 +64,29 @@ final class ModelsDevCatalogTests: XCTestCase {
         XCTAssertNil(ModelsDevMergedProvider.catalogID(for: "ALIBABA_CODING_PLAN"))
         XCTAssertNil(ModelsDevMergedProvider.catalogID(for: "MINIMAX"))
         XCTAssertNil(ModelsDevMergedProvider.catalogID(for: "ZAI"))
+        XCTAssertNil(ModelsDevMergedProvider.catalogID(for: "OPENAI"))
         XCTAssertEqual(ModelsDevMergedProvider.catalogID(for: "MODELS_DEV:alibaba-coding-plan"), "alibaba-coding-plan")
         XCTAssertEqual(ModelsDevMergedProvider.catalogID(for: "MODELS_DEV:minimax"), "minimax")
         XCTAssertEqual(ModelsDevMergedProvider.catalogID(for: "MODELS_DEV:zai"), "zai")
+        XCTAssertEqual(ModelsDevMergedProvider.catalogID(for: "MODELS_DEV:openai"), "openai")
+    }
+
+    func testOnlyDedicatedProvidersRemainBuiltIn() {
+        XCTAssertEqual(
+            ProviderCatalog.options.map(\.key),
+            ["GEMINI", "OPENROUTER", "CODEX_AUTH", "SUPERGROK", "APPLE_INTELLIGENCE"]
+        )
+        XCTAssertEqual(ProviderCatalog.displayName(for: "MODELS_DEV:openai"), "openai")
+    }
+
+    func testFormerBuiltInProvidersAreSelectableFromModelsDev() {
+        let providerIDs = [
+            "openai", "opencode-go", "cline-pass", "alibaba-coding-plan",
+            "zai-coding-plan", "minimax"
+        ]
+        XCTAssertTrue(providerIDs.allSatisfy(ModelsDevMergedProvider.isSelectableCatalogProvider))
+        XCTAssertFalse(ModelsDevMergedProvider.isSelectableCatalogProvider("google"))
+        XCTAssertFalse(ModelsDevMergedProvider.isSelectableCatalogProvider("openrouter"))
     }
 
     private static let currentNpmKinds = [

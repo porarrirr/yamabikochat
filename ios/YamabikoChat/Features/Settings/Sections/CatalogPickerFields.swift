@@ -71,7 +71,7 @@ private struct CatalogProviderListView: View {
 
     private var filteredCatalog: [CatalogProviderOption] {
         catalogProviders.filter { provider in
-            !Self.mergedProviderIDs.contains(provider.id) && provider.matches(query)
+            ModelsDevMergedProvider.isSelectableCatalogProvider(provider.id) && provider.matches(query)
         }
     }
 
@@ -110,10 +110,6 @@ private struct CatalogProviderListView: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("provider-row-\(id)")
     }
-
-    private static let mergedProviderIDs: Set<String> = [
-        "openrouter", "google", "openai", "opencode", "cline-pass", "alibaba-coding-plan", "zai", "minimax"
-    ]
 }
 
 struct CatalogModelPickerField: View {

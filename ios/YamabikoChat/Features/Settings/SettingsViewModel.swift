@@ -12,6 +12,11 @@ final class SettingsViewModel: ObservableObject {
     @Published var openRouterModels: [SimpleModel] = []
     @Published var openRouterModelsLoading: Bool = false
     @Published var openRouterModelsError: String?
+    @Published var openRouterEndpointOptions: [OpenRouterEndpointOption] = []
+    @Published var openRouterEndpointQuantizations: [String] = []
+    @Published var openRouterEndpointsLoading: Bool = false
+    @Published var openRouterEndpointsError: String?
+    @Published var openRouterEndpointModelId: String?
     @Published var modelSearchQuery: String = ""
     @Published var modelsDevCatalogState: CatalogLoadState = .init()
     @Published var openAICompatPresetNameInput: String = ""
@@ -49,6 +54,8 @@ final class SettingsViewModel: ObservableObject {
     private var autoSaveWorkItem: DispatchWorkItem?
     private var isHydratingFromPersistence = false
     private var isPersistingSettings = false
+    private var activeOpenRouterModelsFetchID = UUID()
+    private var activeOpenRouterEndpointsFetchID = UUID()
 
     private static let autoSaveDebounceInterval: TimeInterval = 0.5
 
@@ -109,7 +116,7 @@ final class SettingsViewModel: ObservableObject {
                 guard let self else { return }
                 openRouterModels = models
                 if let modelId = settings.defaultModel.trimmedNonEmpty {
-                    reconcileOpenRouterPreferredProviders(forModelId: modelId)
+                    reconcileOpenRouterReasoning(forModelId: modelId)
                 }
             }
             .store(in: &cancellables)
@@ -434,6 +441,13 @@ final class SettingsViewModel: ObservableObject {
         if let data = try? JSONEncoder().encode(providerMap), let json = String(data: data, encoding: .utf8) {
             settings.providerDefaultModelsJSON = json
         }
+        if nextProvider == "OPENROUTER" {
+            resetOpenRouterEndpointState(forModelId: nextModel)
+            reconcileOpenRouterReasoning(forModelId: nextModel)
+            Task { await refreshOpenRouterEndpointOptions(forModelId: nextModel, force: false) }
+        } else {
+            resetOpenRouterEndpointState(forModelId: nil)
+        }
         scheduleAPIKeyLoad(for: nextProvider)
     }
 
@@ -588,30 +602,136 @@ final class SettingsViewModel: ObservableObject {
         if let data = try? JSONEncoder().encode(map), let json = String(data: data, encoding: .utf8) {
             settings.providerDefaultModelsJSON = json
         }
-        reconcileOpenRouterPreferredProviders(forModelId: modelId)
+        guard settings.apiProvider.uppercased() == "OPENROUTER" else { return }
+        resetOpenRouterEndpointState(forModelId: modelId)
+        reconcileOpenRouterReasoning(forModelId: modelId)
+        Task { await refreshOpenRouterEndpointOptions(forModelId: modelId, force: false) }
     }
 
     func reconcileOpenRouterPreferredProviders(forModelId modelId: String) {
         guard settings.apiProvider.uppercased() == "OPENROUTER" else { return }
-        guard let modelInfo = openRouterModels.first(where: { $0.id == modelId }) else { return }
+        guard openRouterEndpointModelId == modelId else { return }
 
-        let available = openRouterProviderSlugs(for: modelInfo)
-        guard !available.isEmpty else { return }
+        let availableTags = Set(openRouterEndpointOptions.map(\.tag))
+        let currentProviders = settings.preferredProvidersList()
+        let validProviders = currentProviders.filter { availableTags.contains($0.lowercased()) }
+        if validProviders != currentProviders {
+            settings.setPreferredProvidersList(validProviders)
+        }
 
-        let availableSet = Set(available)
-        let selected = settings.preferredProvidersList().filter { availableSet.contains($0.lowercased()) }
-
-        let current = settings.preferredProvidersList()
-        guard selected != current else { return }
-        settings.setPreferredProvidersList(selected)
+        let availableQuantizations = Set(openRouterEndpointQuantizations)
+        let currentQuantizations = settings.selectedQuantizationsList()
+        let validQuantizations = currentQuantizations.compactMap { value -> String? in
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return availableQuantizations.contains(normalized) ? normalized : nil
+        }
+        if validQuantizations != currentQuantizations {
+            settings.setSelectedQuantizationsList(validQuantizations)
+        }
     }
 
-    private func openRouterProviderSlugs(for model: SimpleModel) -> [String] {
-        let raw = model.availableProviders.isEmpty ? [model.provider] : model.availableProviders
-        var seen: Set<String> = []
-        return raw
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    func openRouterReasoningCapabilities(forModelId modelId: String) -> OpenRouterReasoningCapabilities? {
+        openRouterModels.first(where: { $0.id == modelId })?.reasoning
+    }
+
+    func openRouterReasoningModes(forModelId modelId: String) -> [String] {
+        guard let capabilities = openRouterReasoningCapabilities(forModelId: modelId) else { return [] }
+        var modes = ["auto"]
+        if !capabilities.selectableEfforts.isEmpty {
+            modes.append("effort")
+        }
+        if capabilities.supportsMaxTokens {
+            modes.append("budget")
+        }
+        return modes
+    }
+
+    func openRouterReasoningEfforts(forModelId modelId: String) -> [String] {
+        openRouterReasoningCapabilities(forModelId: modelId)?.selectableEfforts ?? []
+    }
+
+    func reconcileOpenRouterReasoning(forModelId modelId: String) {
+        guard settings.apiProvider.uppercased() == "OPENROUTER" else { return }
+        guard let model = openRouterModels.first(where: { $0.id == modelId }) else { return }
+        guard let capabilities = model.reasoning else {
+            settings.openRouterThinkingEnabled = false
+            settings.openRouterReasoningMode = "auto"
+            settings.openRouterReasoningEffort = ""
+            return
+        }
+
+        if capabilities.mandatory {
+            settings.openRouterThinkingEnabled = true
+        }
+
+        let modes = openRouterReasoningModes(forModelId: modelId)
+        let currentMode = settings.openRouterReasoningMode
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        settings.openRouterReasoningMode = modes.contains(currentMode) ? currentMode : "auto"
+
+        let efforts = capabilities.selectableEfforts
+        let currentEffort = settings.openRouterReasoningEffort
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if efforts.isEmpty {
+            settings.openRouterReasoningEffort = ""
+        } else if !efforts.contains(currentEffort) {
+            settings.openRouterReasoningEffort = preferredOpenRouterEffort(
+                capabilities: capabilities,
+                explicitlyEnabled: settings.openRouterThinkingEnabled
+            ) ?? ""
+        }
+    }
+
+    func setOpenRouterThinkingEnabled(_ enabled: Bool, modelId: String) {
+        guard let capabilities = openRouterReasoningCapabilities(forModelId: modelId) else {
+            settings.openRouterThinkingEnabled = false
+            return
+        }
+        settings.openRouterThinkingEnabled = capabilities.mandatory || enabled
+        if settings.openRouterThinkingEnabled,
+           settings.openRouterReasoningMode == "effort",
+           !capabilities.selectableEfforts.contains(settings.openRouterReasoningEffort) {
+            settings.openRouterReasoningEffort = preferredOpenRouterEffort(
+                capabilities: capabilities,
+                explicitlyEnabled: true
+            ) ?? ""
+        }
+    }
+
+    func setOpenRouterReasoningMode(_ mode: String, modelId: String) {
+        let normalized = mode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let modes = openRouterReasoningModes(forModelId: modelId)
+        settings.openRouterReasoningMode = modes.contains(normalized) ? normalized : "auto"
+        guard settings.openRouterReasoningMode == "effort",
+              let capabilities = openRouterReasoningCapabilities(forModelId: modelId),
+              !capabilities.selectableEfforts.contains(settings.openRouterReasoningEffort)
+        else { return }
+        settings.openRouterReasoningEffort = preferredOpenRouterEffort(
+            capabilities: capabilities,
+            explicitlyEnabled: true
+        ) ?? ""
+    }
+
+    func setOpenRouterReasoningEffort(_ effort: String, modelId: String) {
+        let normalized = effort.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let efforts = openRouterReasoningEfforts(forModelId: modelId)
+        guard efforts.contains(normalized) else { return }
+        settings.openRouterReasoningEffort = normalized
+    }
+
+    private func preferredOpenRouterEffort(
+        capabilities: OpenRouterReasoningCapabilities,
+        explicitlyEnabled: Bool
+    ) -> String? {
+        let efforts = capabilities.selectableEfforts
+        if let defaultEffort = capabilities.defaultEffort?.lowercased(),
+           efforts.contains(defaultEffort),
+           !(explicitlyEnabled && defaultEffort == "none") {
+            return defaultEffort
+        }
+        return efforts.first(where: { !explicitlyEnabled || $0 != "none" }) ?? efforts.first
     }
 
     func setDualModeEnabled(_ enabled: Bool) {
@@ -782,7 +902,79 @@ final class SettingsViewModel: ObservableObject {
 
     func refreshOpenRouterModels(force: Bool) async {
         guard let repository else { return }
+        let fetchID = UUID()
+        activeOpenRouterModelsFetchID = fetchID
         _ = await repository.getOpenRouterModels(forceRefresh: force)
+        guard activeOpenRouterModelsFetchID == fetchID else { return }
+        guard settings.apiProvider.uppercased() == "OPENROUTER",
+              let modelId = settings.defaultModel.trimmedNonEmpty
+        else { return }
+        await refreshOpenRouterEndpointOptions(forModelId: modelId, force: force)
+    }
+
+    func refreshOpenRouterEndpointOptions(forModelId modelId: String, force: Bool) async {
+        guard let repository else { return }
+        let normalizedModelId = modelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedModelId.isEmpty else {
+            resetOpenRouterEndpointState(forModelId: nil)
+            return
+        }
+
+        let fetchID = UUID()
+        activeOpenRouterEndpointsFetchID = fetchID
+        if openRouterEndpointModelId != normalizedModelId {
+            openRouterEndpointOptions = []
+            openRouterEndpointQuantizations = []
+            openRouterEndpointModelId = nil
+        }
+        openRouterEndpointsLoading = true
+        openRouterEndpointsError = nil
+
+        do {
+            let options = try await repository.getOpenRouterModelEndpointOptions(
+                normalizedModelId,
+                forceRefresh: force
+            )
+            guard activeOpenRouterEndpointsFetchID == fetchID,
+                  settings.apiProvider.uppercased() == "OPENROUTER",
+                  settings.defaultModel == normalizedModelId
+            else { return }
+
+            openRouterEndpointModelId = normalizedModelId
+            openRouterEndpointOptions = options.providerEndpoints
+            openRouterEndpointQuantizations = options.quantizations
+            openRouterEndpointsLoading = false
+            reconcileOpenRouterPreferredProviders(forModelId: normalizedModelId)
+        } catch is CancellationError {
+            guard activeOpenRouterEndpointsFetchID == fetchID else { return }
+            openRouterEndpointsLoading = false
+        } catch {
+            guard activeOpenRouterEndpointsFetchID == fetchID,
+                  settings.apiProvider.uppercased() == "OPENROUTER",
+                  settings.defaultModel == normalizedModelId
+            else { return }
+
+            openRouterEndpointModelId = normalizedModelId
+            openRouterEndpointOptions = []
+            openRouterEndpointQuantizations = []
+            openRouterEndpointsLoading = false
+            openRouterEndpointsError = error.localizedDescription
+            DiagnosticsLogger.log(
+                "OpenRouter endpoint options refresh failed",
+                category: .network,
+                metadata: ["model": normalizedModelId],
+                error: error
+            )
+        }
+    }
+
+    private func resetOpenRouterEndpointState(forModelId modelId: String?) {
+        activeOpenRouterEndpointsFetchID = UUID()
+        openRouterEndpointOptions = []
+        openRouterEndpointQuantizations = []
+        openRouterEndpointsLoading = false
+        openRouterEndpointsError = nil
+        openRouterEndpointModelId = modelId?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
     }
 
     func loginSuperGrokWithBrowser() async {

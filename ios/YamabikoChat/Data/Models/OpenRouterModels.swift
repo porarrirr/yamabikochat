@@ -1,5 +1,81 @@
 import Foundation
 
+struct OpenRouterReasoningCapabilities: Codable, Sendable, Equatable {
+    static let gatewayEfforts = ["max", "xhigh", "high", "medium", "low", "minimal", "none"]
+
+    var supportedEfforts: [String]?
+    var exposesEffortSelection: Bool
+    var defaultEffort: String?
+    var defaultEnabled: Bool?
+    var supportsMaxTokens: Bool
+    var mandatory: Bool
+
+    init(
+        supportedEfforts: [String]? = nil,
+        exposesEffortSelection: Bool = false,
+        defaultEffort: String? = nil,
+        defaultEnabled: Bool? = nil,
+        supportsMaxTokens: Bool = false,
+        mandatory: Bool = false
+    ) {
+        self.supportedEfforts = supportedEfforts
+        self.exposesEffortSelection = exposesEffortSelection
+        self.defaultEffort = defaultEffort
+        self.defaultEnabled = defaultEnabled
+        self.supportsMaxTokens = supportsMaxTokens
+        self.mandatory = mandatory
+    }
+
+    var selectableEfforts: [String] {
+        guard exposesEffortSelection else { return [] }
+        let source = supportedEfforts ?? Self.gatewayEfforts
+        var seen: Set<String> = []
+        return source
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { effort in
+                guard !effort.isEmpty, seen.insert(effort).inserted else { return false }
+                return !mandatory || effort != "none"
+            }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case supportedEfforts = "supported_efforts"
+        case defaultEffort = "default_effort"
+        case defaultEnabled = "default_enabled"
+        case supportsMaxTokens = "supports_max_tokens"
+        case mandatory
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        exposesEffortSelection = container.contains(.supportedEfforts)
+        supportedEfforts = try container.decodeIfPresent([String].self, forKey: .supportedEfforts)
+        defaultEffort = try container.decodeIfPresent(String.self, forKey: .defaultEffort)
+        defaultEnabled = try container.decodeIfPresent(Bool.self, forKey: .defaultEnabled)
+        supportsMaxTokens = try container.decodeIfPresent(Bool.self, forKey: .supportsMaxTokens) ?? false
+        mandatory = try container.decodeIfPresent(Bool.self, forKey: .mandatory) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        if exposesEffortSelection {
+            if let supportedEfforts {
+                try container.encode(supportedEfforts, forKey: .supportedEfforts)
+            } else {
+                try container.encodeNil(forKey: .supportedEfforts)
+            }
+        }
+        try container.encodeIfPresent(defaultEffort, forKey: .defaultEffort)
+        try container.encodeIfPresent(defaultEnabled, forKey: .defaultEnabled)
+        if supportsMaxTokens {
+            try container.encode(true, forKey: .supportsMaxTokens)
+        }
+        if mandatory {
+            try container.encode(true, forKey: .mandatory)
+        }
+    }
+}
+
 struct OpenRouterModel: Codable, Sendable {
     struct Pricing: Codable, Sendable {
         var prompt: String?
@@ -23,6 +99,7 @@ struct OpenRouterModel: Codable, Sendable {
     var pricing: Pricing
     var contextLength: Int?
     var topProvider: TopProvider?
+    var reasoning: OpenRouterReasoningCapabilities? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -31,6 +108,7 @@ struct OpenRouterModel: Codable, Sendable {
         case pricing
         case contextLength = "context_length"
         case topProvider = "top_provider"
+        case reasoning
     }
 }
 
@@ -49,6 +127,7 @@ struct SimpleModel: Codable, Sendable, Equatable, Identifiable {
     var isFree: Bool
     var availableProviders: [String]
     var availableQuantizations: [String]
+    var reasoning: OpenRouterReasoningCapabilities? = nil
 
     static func fromOpenRouterModel(_ model: OpenRouterModel) -> SimpleModel {
         func parse(_ values: String?...) -> Double {
@@ -68,30 +147,51 @@ struct SimpleModel: Codable, Sendable, Equatable, Identifiable {
             completionPricePerMillion: completionPerToken * 1_000_000,
             isFree: promptPerToken == 0 && completionPerToken == 0,
             availableProviders: model.topProvider?.availableProviders ?? [],
-            availableQuantizations: model.topProvider?.availableQuantizations ?? []
+            availableQuantizations: model.topProvider?.availableQuantizations ?? [],
+            reasoning: model.reasoning
         )
     }
 }
 
 struct ModelEndpoint: Codable, Sendable, Equatable, Identifiable {
-    var id: String { "\(name)_\(providerName ?? "")_\(quantization ?? "")" }
+    var id: String { tag ?? "\(name)_\(providerName ?? "")_\(quantization ?? "")" }
     var name: String
     var contextLength: Double?
     var providerName: String?
+    var tag: String?
     var quantization: String?
     var maxCompletionTokens: Double?
     var maxPromptTokens: Double?
     var supportedParameters: [String]?
+    var status: Int?
 
     enum CodingKeys: String, CodingKey {
         case name
         case contextLength = "context_length"
         case providerName = "provider_name"
+        case tag
         case quantization
         case maxCompletionTokens = "max_completion_tokens"
         case maxPromptTokens = "max_prompt_tokens"
         case supportedParameters = "supported_parameters"
+        case status
     }
+}
+
+struct OpenRouterEndpointOption: Sendable, Equatable, Identifiable {
+    var id: String { tag }
+    var tag: String
+    var providerName: String
+    var quantization: String?
+    var supportedParameters: [String]
+    var status: Int?
+}
+
+struct OpenRouterModelEndpointOptions: Sendable, Equatable {
+    var modelId: String
+    var endpoints: [ModelEndpoint]
+    var providerEndpoints: [OpenRouterEndpointOption]
+    var quantizations: [String]
 }
 
 struct ModelEndpointsEnvelope: Codable, Sendable {

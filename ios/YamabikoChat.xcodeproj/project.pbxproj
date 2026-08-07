@@ -84,6 +84,7 @@
 		615791B4B229DB6A6AD8D4C5 /* OpenRouterModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C3E31EC64A965F4851AE80A /* OpenRouterModelTests.swift */; };
 		621DC67E69EB132C43A0FC7B /* ChatStreamSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 844CFBDF021226E3F2BCA7D6 /* ChatStreamSessionTests.swift */; };
 		62858D753E8FDE9E560BD802 /* AppleIntelligenceProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FF77399450389CF5892A94D /* AppleIntelligenceProviderClient.swift */; };
+		63C9F2743F9BF86C7ECDA389 /* openrouter-glm-5-2-endpoints.json in Resources */ = {isa = PBXBuildFile; fileRef = 41CC56251ECE1833FCA591E2 /* openrouter-glm-5-2-endpoints.json */; };
 		63CF0C65FD8E7E330AA43B05 /* DualModeOverridesForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59A2630B4697497BBF8955FB /* DualModeOverridesForm.swift */; };
 		65AF28C64A1623D30E8D89E1 /* FusionTimeout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3400FF9007BB617185154013 /* FusionTimeout.swift */; };
 		670A0526C3E844BAF3DD048B /* ShortcutIntentSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E93C7AF2F5D471C3BD988B7F /* ShortcutIntentSupport.swift */; };
@@ -312,6 +313,7 @@
 		3C19A7AE41E0E5052471F871 /* AlibabaCodingPlanModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlibabaCodingPlanModelCatalog.swift; sourceTree = "<group>"; };
 		3CADE94861B9B35E0399D0B8 /* FusionPanelRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionPanelRunner.swift; sourceTree = "<group>"; };
 		3DFF46198541856F3786897A /* ProviderRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderRegistry.swift; sourceTree = "<group>"; };
+		41CC56251ECE1833FCA591E2 /* openrouter-glm-5-2-endpoints.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "openrouter-glm-5-2-endpoints.json"; sourceTree = "<group>"; };
 		425C9F974B954BB239A10CA5 /* ChatProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatProject.swift; sourceTree = "<group>"; };
 		46EC372D26102F3D22DE62C6 /* LiteLlmPricingRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteLlmPricingRepository.swift; sourceTree = "<group>"; };
 		47940928BCA24ACBA0867772 /* ConversationListViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListViewModelTests.swift; sourceTree = "<group>"; };
@@ -660,6 +662,14 @@
 			path = Networking;
 			sourceTree = "<group>";
 		};
+		4F7FAE657EDE7D6F6CE203FC /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				41CC56251ECE1833FCA591E2 /* openrouter-glm-5-2-endpoints.json */,
+			);
+			path = Fixtures;
+			sourceTree = "<group>";
+		};
 		6E49D3A7197F793EC96B4724 /* App */ = {
 			isa = PBXGroup;
 			children = (
@@ -885,6 +895,7 @@
 				9B1630BEBD1C1648F035DAA9 /* SystemPromptComposerTests.swift */,
 				6FE1CBA9B6AD7523C5684AE3 /* ToolCallingOrchestratorTests.swift */,
 				250C00C07AEDED8FABE7AE06 /* WebSearchToolTests.swift */,
+				4F7FAE657EDE7D6F6CE203FC /* Fixtures */,
 			);
 			path = YamabikoTests;
 			sourceTree = "<group>";
@@ -969,6 +980,7 @@
 			buildConfigurationList = 4D4D5051E60C05FE3B682D34 /* Build configuration list for PBXNativeTarget "YamabikoTests" */;
 			buildPhases = (
 				17537FC54E250558F22276A8 /* Sources */,
+				80FF28E8A1AD7D959CEEE81D /* Resources */,
 			);
 			buildRules = (
 			);
@@ -1094,6 +1106,14 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		80FF28E8A1AD7D959CEEE81D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				63C9F2743F9BF86C7ECDA389 /* openrouter-glm-5-2-endpoints.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E253B5C8992D434DCF0FBE3E /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;

@@ -531,75 +531,93 @@ struct SettingsScreen: View {
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
-            Toggle("Thinking", isOn: Binding(
-                get: { viewModel.settings.openRouterThinkingEnabled },
-                set: { viewModel.settings.openRouterThinkingEnabled = $0 }
-            ))
-
-            Picker("Reasoning mode", selection: Binding(
-                get: {
-                    let mode = viewModel.settings.openRouterReasoningMode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                    return ["auto", "effort", "budget"].contains(mode) ? mode : "auto"
-                },
-                set: { value in
-                    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                    viewModel.settings.openRouterReasoningMode = ["auto", "effort", "budget"].contains(normalized) ? normalized : "auto"
-                    if viewModel.settings.openRouterReasoningMode == "effort" &&
-                        viewModel.settings.openRouterReasoningEffort.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        viewModel.settings.openRouterReasoningEffort = "medium"
-                    }
-                }
-            )) {
-                Text("auto").tag("auto")
-                Text("effort").tag("effort")
-                Text("budget").tag("budget")
-            }
-            .pickerStyle(.segmented)
-            .disabled(!viewModel.settings.openRouterThinkingEnabled)
-
-            if viewModel.settings.openRouterReasoningMode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "effort" {
-                Picker("Effort", selection: Binding(
-                    get: {
-                        let effort = viewModel.settings.openRouterReasoningEffort.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                        return ["low", "medium", "high"].contains(effort) ? effort : "medium"
-                    },
-                    set: { value in
-                        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                        viewModel.settings.openRouterReasoningEffort = ["low", "medium", "high"].contains(normalized) ? normalized : "medium"
-                    }
-                )) {
-                    Text("low").tag("low")
-                    Text("medium").tag("medium")
-                    Text("high").tag("high")
-                }
-                .disabled(!viewModel.settings.openRouterThinkingEnabled)
-            }
-
-            if viewModel.settings.openRouterReasoningMode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "budget" {
-                TextField("Max reasoning tokens (0=auto)", text: Binding(
-                    get: { String(max(0, viewModel.settings.openRouterThinkingBudget)) },
-                    set: { value in
-                        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if trimmed.isEmpty {
-                            viewModel.settings.openRouterThinkingBudget = 0
-                        } else if let intValue = Int(trimmed) {
-                            viewModel.settings.openRouterThinkingBudget = max(0, intValue)
-                        }
+            if let capabilities = selectedOpenRouterModel?.reasoning {
+                Toggle("Thinking", isOn: Binding(
+                    get: { capabilities.mandatory || viewModel.settings.openRouterThinkingEnabled },
+                    set: {
+                        viewModel.setOpenRouterThinkingEnabled(
+                            $0,
+                            modelId: viewModel.settings.defaultModel
+                        )
                     }
                 ))
-                .keyboardType(.numberPad)
+                .disabled(capabilities.mandatory)
+
+                if capabilities.mandatory {
+                    Text("このモデルではReasoningを無効にできません。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Picker("Reasoning mode", selection: Binding(
+                    get: {
+                        let mode = viewModel.settings.openRouterReasoningMode
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                            .lowercased()
+                        return openRouterReasoningModes.contains(mode) ? mode : "auto"
+                    },
+                    set: {
+                        viewModel.setOpenRouterReasoningMode(
+                            $0,
+                            modelId: viewModel.settings.defaultModel
+                        )
+                    }
+                )) {
+                    ForEach(openRouterReasoningModes, id: \.self) { mode in
+                        Text(verbatim: mode).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
                 .disabled(!viewModel.settings.openRouterThinkingEnabled)
+
+                if viewModel.settings.openRouterReasoningMode == "effort" {
+                    Picker("Effort", selection: Binding(
+                        get: { viewModel.settings.openRouterReasoningEffort },
+                        set: {
+                            viewModel.setOpenRouterReasoningEffort(
+                                $0,
+                                modelId: viewModel.settings.defaultModel
+                            )
+                        }
+                    )) {
+                        ForEach(openRouterReasoningEffortOptions, id: \.self) { effort in
+                            Text(verbatim: effort).tag(effort)
+                        }
+                    }
+                    .disabled(!viewModel.settings.openRouterThinkingEnabled)
+                }
+
+                if viewModel.settings.openRouterReasoningMode == "budget",
+                   capabilities.supportsMaxTokens {
+                    TextField("Max reasoning tokens (0=auto)", text: Binding(
+                        get: { String(max(0, viewModel.settings.openRouterThinkingBudget)) },
+                        set: { value in
+                            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if trimmed.isEmpty {
+                                viewModel.settings.openRouterThinkingBudget = 0
+                            } else if let intValue = Int(trimmed) {
+                                viewModel.settings.openRouterThinkingBudget = max(0, intValue)
+                            }
+                        }
+                    ))
+                    .keyboardType(.numberPad)
+                    .disabled(!viewModel.settings.openRouterThinkingEnabled)
+                }
+
+                Toggle("Exclude reasoning from response", isOn: Binding(
+                    get: { viewModel.settings.openRouterReasoningExclude },
+                    set: { viewModel.settings.openRouterReasoningExclude = $0 }
+                ))
+                .disabled(!viewModel.settings.openRouterThinkingEnabled)
+
+                Text("Reasoning tokens are billed as output tokens.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("このモデルはReasoning effort選択に対応していません。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
-
-            Toggle("Exclude reasoning from response", isOn: Binding(
-                get: { viewModel.settings.openRouterReasoningExclude },
-                set: { viewModel.settings.openRouterReasoningExclude = $0 }
-            ))
-            .disabled(!viewModel.settings.openRouterThinkingEnabled)
-
-            Text("Reasoning tokens are billed as output tokens. Unsupported parameters may be ignored.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
 
             Divider()
 
@@ -638,28 +656,56 @@ struct SettingsScreen: View {
                 Text("30").tag(30)
             }
 
-            if openRouterProviderOptions.isEmpty {
-                Text("このモデルで選択可能なプロバイダー情報は未取得です。")
+            if viewModel.openRouterEndpointsLoading {
+                ProgressView("Endpointを読み込み中...")
+            }
+
+            if let error = viewModel.openRouterEndpointsError, !error.isEmpty {
+                Text(error)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.red)
+            }
+
+            if viewModel.openRouterEndpointOptions.isEmpty {
+                if !viewModel.openRouterEndpointsLoading,
+                   viewModel.openRouterEndpointsError == nil {
+                    Text("このモデルで選択可能なendpoint情報はありません。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             } else {
-                Text("Preferred providers (\(viewModel.settings.preferredProvidersList().count))")
+                Text("Preferred endpoints (\(viewModel.settings.preferredProvidersList().count))")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                ForEach(openRouterProviderOptions, id: \.self) { provider in
-                    Toggle(provider, isOn: preferredProviderBinding(provider))
+                ForEach(viewModel.openRouterEndpointOptions) { endpoint in
+                    Toggle(isOn: preferredProviderBinding(endpoint.tag)) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(endpoint.providerName)
+                            HStack(spacing: 6) {
+                                Text(verbatim: endpoint.tag)
+                                    .font(.caption2.monospaced())
+                                if let quantization = endpoint.quantization {
+                                    Text(verbatim: quantization)
+                                        .font(.caption2.monospaced())
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            if openRouterQuantizationOptions.isEmpty {
+            if viewModel.openRouterEndpointQuantizations.isEmpty,
+               !viewModel.openRouterEndpointsLoading,
+               viewModel.openRouterEndpointsError == nil {
                 Text("選択可能なQuantization情報は未取得です。")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-            } else {
+            } else if !viewModel.openRouterEndpointQuantizations.isEmpty {
                 Text("Quantizations (\(viewModel.settings.selectedQuantizationsList().count))")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                ForEach(openRouterQuantizationOptions, id: \.self) { quantization in
+                ForEach(viewModel.openRouterEndpointQuantizations, id: \.self) { quantization in
                     Toggle(quantization, isOn: quantizationBinding(quantization))
                 }
             }
@@ -1759,23 +1805,12 @@ struct SettingsScreen: View {
         viewModel.openRouterModels.first { $0.id == viewModel.settings.defaultModel }
     }
 
-    private var openRouterProviderOptions: [String] {
-        let fromModel = selectedOpenRouterModel?.availableProviders ?? []
-        let raw = fromModel.isEmpty ? [selectedOpenRouterModel?.provider ?? ""] : fromModel
-        var seen: Set<String> = []
-        return raw
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            .filter { !$0.isEmpty && seen.insert($0).inserted }
-            .sorted()
+    private var openRouterReasoningModes: [String] {
+        viewModel.openRouterReasoningModes(forModelId: viewModel.settings.defaultModel)
     }
 
-    private var openRouterQuantizationOptions: [String] {
-        let raw = selectedOpenRouterModel?.availableQuantizations ?? []
-        var seen: Set<String> = []
-        return raw
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && seen.insert($0).inserted }
-            .sorted()
+    private var openRouterReasoningEffortOptions: [String] {
+        viewModel.openRouterReasoningEfforts(forModelId: viewModel.settings.defaultModel)
     }
 
     private func preferredProviderBinding(_ provider: String) -> Binding<Bool> {

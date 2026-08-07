@@ -617,12 +617,12 @@ final class ChatRepository {
             systemPrompt: SystemPromptComposer.composeForAPI(conversation.systemPrompt),
             stream: settings.isStreamingEnabled,
             tools: tools,
-            thinking: thinkingConfigForProvider(
+            thinking: try thinkingConfigForProvider(
                 settings: settings,
                 provider: conversation.apiProvider,
                 model: conversation.model
             ),
-            provider: await providerPreferencesForProvider(
+            provider: try await providerPreferencesForProvider(
                 settings: settings,
                 provider: conversation.apiProvider,
                 model: conversation.model
@@ -819,7 +819,7 @@ final class ChatRepository {
             modelSide: .b
         )
 
-        let requestA = await buildSingleTurnRequest(
+        let requestA = try await buildSingleTurnRequest(
             model: settings.dualModelA,
             text: text,
             systemPrompt: settings.dualSystemPromptA,
@@ -831,7 +831,7 @@ final class ChatRepository {
             promptCacheKey: "conversation-\(conversationId)-dual-a"
         )
 
-        let requestB = await buildSingleTurnRequest(
+        let requestB = try await buildSingleTurnRequest(
             model: settings.dualModelB,
             text: text,
             systemPrompt: settings.dualSystemPromptB,
@@ -1299,7 +1299,7 @@ final class ChatRepository {
             resolvedSystemPrompt = settings.systemPrompt
         }
 
-        let request = await buildSingleTurnRequest(
+        let request = try await buildSingleTurnRequest(
             model: normalizedModel,
             text: normalizedPrompt,
             systemPrompt: resolvedSystemPrompt,
@@ -1676,6 +1676,16 @@ final class ChatRepository {
         await modelService.getModelEndpoints(modelId: modelId)
     }
 
+    func getOpenRouterModelEndpointOptions(
+        _ modelId: String,
+        forceRefresh: Bool = false
+    ) async throws -> OpenRouterModelEndpointOptions {
+        try await modelService.getModelEndpointOptions(
+            modelId: modelId,
+            forceRefresh: forceRefresh
+        )
+    }
+
     func resolveModelSupportsVision(provider: String, model: String) async -> Bool {
         await pricingRepository.modelSupportsVision(provider: provider, model: model)
     }
@@ -1873,7 +1883,7 @@ final class ChatRepository {
 
             let history = buildAutoConversationHistory(messages: messages, speaker: speaker)
             let currentSettings = try settings.load()
-            let request = await buildSingleTurnRequest(
+            let request = try await buildSingleTurnRequest(
                 model: turnModel,
                 text: "",
                 systemPrompt: turnPrompt,
@@ -2120,7 +2130,7 @@ final class ChatRepository {
         messages: [ProviderRequestMessage]? = nil,
         context: AppSettings.ReasoningContext = .default,
         promptCacheKey: String? = nil
-    ) async -> ProviderRequest {
+    ) async throws -> ProviderRequest {
         var metadata = metadataForProvider(
             settings: settings,
             provider: provider,
@@ -2138,8 +2148,8 @@ final class ChatRepository {
             systemPrompt: SystemPromptComposer.composeForAPI(systemPrompt),
             stream: stream ?? settings.isStreamingEnabled,
             tools: toolsForProvider(settings: settings, provider: provider, context: context),
-            thinking: thinkingConfigForProvider(settings: settings, provider: provider, model: model, context: context),
-            provider: await providerPreferencesForProvider(
+            thinking: try thinkingConfigForProvider(settings: settings, provider: provider, model: model, context: context),
+            provider: try await providerPreferencesForProvider(
                 settings: settings,
                 provider: provider,
                 model: model
@@ -2280,11 +2290,11 @@ final class ChatRepository {
         provider: String,
         model: String,
         context: AppSettings.ReasoningContext = .default
-    ) -> ProviderThinkingConfig? {
+    ) throws -> ProviderThinkingConfig? {
         let overrides = settings.thinkingOverride(for: context)
         switch provider.uppercased() {
         case "OPENROUTER":
-            return buildOpenRouterThinkingConfig(settings: settings, context: context)
+            return try buildOpenRouterThinkingConfig(settings: settings, model: model, context: context)
         case "CODEX_AUTH":
             let enabled = overrides.enabled ?? settings.codexReasoningEnabled
             let baseEffort = settings.codexReasoningEffort.ifBlank("medium")
@@ -2353,11 +2363,29 @@ final class ChatRepository {
 
     private func buildOpenRouterThinkingConfig(
         settings: AppSettings,
+        model: String,
         context: AppSettings.ReasoningContext = .default
-    ) -> ProviderThinkingConfig? {
+    ) throws -> ProviderThinkingConfig? {
         let overrides = settings.openRouterOverride(for: context)
         let reasoningExclude = overrides.exclude ?? settings.openRouterReasoningExclude
-        let thinkingEnabled = overrides.enabled ?? settings.openRouterThinkingEnabled
+        let requestedThinkingEnabled = overrides.enabled ?? settings.openRouterThinkingEnabled
+        guard let modelInfo = modelService.getModelById(model) else {
+            if requestedThinkingEnabled {
+                throw ProviderClientError.parseFailure(
+                    "OpenRouter reasoning capabilities are unavailable for model: \(model)"
+                )
+            }
+            return nil
+        }
+        guard let capabilities = modelInfo.reasoning else {
+            if requestedThinkingEnabled {
+                throw ProviderClientError.parseFailure(
+                    "OpenRouter model does not expose reasoning capabilities: \(model)"
+                )
+            }
+            return nil
+        }
+        let thinkingEnabled = capabilities.mandatory || requestedThinkingEnabled
         let reasoningMode = (overrides.mode ?? settings.openRouterReasoningMode)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
@@ -2377,12 +2405,26 @@ final class ChatRepository {
             )
         }
 
-        let mode = ["auto", "effort", "budget"].contains(reasoningMode) ? reasoningMode : "auto"
+        let supportedModes = ["auto"]
+            + (capabilities.selectableEfforts.isEmpty ? [] : ["effort"])
+            + (capabilities.supportsMaxTokens ? ["budget"] : [])
+        let mode = supportedModes.contains(reasoningMode) ? reasoningMode : "auto"
         let budget = (mode == "budget" && thinkingBudget > 0) ? thinkingBudget : nil
         let effort: String?
         if mode == "effort" {
-            let normalized = reasoningEffort
-            effort = normalized.isEmpty ? nil : normalized
+            let supportedEfforts = capabilities.selectableEfforts
+            if supportedEfforts.contains(reasoningEffort) {
+                effort = reasoningEffort
+            } else if let defaultEffort = capabilities.defaultEffort?.lowercased(),
+                      supportedEfforts.contains(defaultEffort) {
+                effort = defaultEffort
+            } else if let firstEffort = supportedEfforts.first {
+                effort = firstEffort
+            } else {
+                throw ProviderClientError.parseFailure(
+                    "OpenRouter reasoning effort is unavailable for model: \(model)"
+                )
+            }
         } else {
             effort = nil
         }
@@ -2406,35 +2448,53 @@ final class ChatRepository {
         settings: AppSettings,
         provider: String,
         model: String
-    ) async -> ProviderRoutingConfig? {
+    ) async throws -> ProviderRoutingConfig? {
         guard provider.uppercased() == "OPENROUTER" else { return nil }
 
-        let catalogModel = modelService.getModelById(model)
-        let availableProviders = await openRouterAvailableProviderSlugs(for: model, catalogModel: catalogModel)
-        let availableQuantizations = openRouterAvailableQuantizations(catalogModel: catalogModel)
-
         let preferredProviders = settings.preferredProvidersList()
-        let providers = resolveCompatibleOpenRouterProviderSlugs(
-            preferredProviders,
-            available: availableProviders
-        )
-        let quantizations = filterCompatibleOpenRouterSlugs(
-            settings.selectedQuantizationsList(),
-            available: availableQuantizations
-        )
+        let requestedQuantizations = normalizedOpenRouterSlugs(settings.selectedQuantizationsList())
+        var providers: [String] = []
+        var quantizations: [String] = []
+
+        if !preferredProviders.isEmpty || !requestedQuantizations.isEmpty {
+            let endpointOptions: OpenRouterModelEndpointOptions
+            do {
+                endpointOptions = try await modelService.getModelEndpointOptions(modelId: model)
+            } catch {
+                DiagnosticsLogger.log(
+                    "OpenRouter endpoint restriction validation failed",
+                    category: .network,
+                    metadata: ["model": model],
+                    error: error
+                )
+                throw ProviderClientError.parseFailure(
+                    "OpenRouter endpoint restrictions could not be validated for \(model): \(error.localizedDescription)"
+                )
+            }
+
+            let availableProviderSet = Set(endpointOptions.providerEndpoints.map(\.tag))
+            let invalidProviders = preferredProviders.filter { !availableProviderSet.contains($0) }
+            guard invalidProviders.isEmpty else {
+                throw ProviderClientError.parseFailure(
+                    "Unavailable OpenRouter endpoint tag(s) for \(model): \(invalidProviders.joined(separator: ", "))"
+                )
+            }
+            providers = preferredProviders
+
+            let availableQuantizationSet = Set(endpointOptions.quantizations)
+            let invalidQuantizations = requestedQuantizations.filter {
+                !availableQuantizationSet.contains($0)
+            }
+            guard invalidQuantizations.isEmpty else {
+                throw ProviderClientError.parseFailure(
+                    "Unavailable OpenRouter quantization(s) for \(model): \(invalidQuantizations.joined(separator: ", "))"
+                )
+            }
+            quantizations = requestedQuantizations
+        }
 
         let hasRoutingProviders = !providers.isEmpty
         if !hasRoutingProviders, quantizations.isEmpty, settings.maxPricePerMillionTokens <= 0 {
-            if !preferredProviders.isEmpty {
-                DiagnosticsLogger.log(
-                    "OpenRouter provider routing omitted with incompatible preferred provider",
-                    category: .network,
-                    metadata: [
-                        "model": model,
-                        "preferred": preferredProviders.joined(separator: ",")
-                    ]
-                )
-            }
             return nil
         }
 
@@ -2485,46 +2545,11 @@ final class ChatRepository {
         )
     }
 
-    private func openRouterAvailableProviderSlugs(
-        for model: String,
-        catalogModel: SimpleModel?
-    ) async -> [String] {
-        let fromEndpoints = await modelService.getAvailableProviders(for: model)
-        let endpointSlugs = normalizedOpenRouterSlugs(fromEndpoints)
-        if !endpointSlugs.isEmpty {
-            return endpointSlugs
-        }
-        if let catalogModel, !catalogModel.availableProviders.isEmpty {
-            return normalizedOpenRouterSlugs(catalogModel.availableProviders)
-        }
-        return []
-    }
-
-    private func openRouterAvailableQuantizations(catalogModel: SimpleModel?) -> [String] {
-        guard let catalogModel, !catalogModel.availableQuantizations.isEmpty else {
-            return []
-        }
-        return normalizedOpenRouterSlugs(catalogModel.availableQuantizations)
-    }
-
     private func normalizedOpenRouterSlugs(_ values: [String]) -> [String] {
         var seen: Set<String> = []
         return values
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty && seen.insert($0).inserted }
-    }
-
-    private func filterCompatibleOpenRouterSlugs(_ preferred: [String], available: [String]) -> [String] {
-        guard !available.isEmpty else { return [] }
-        let availableSet = Set(available.map { $0.lowercased() })
-        return preferred.filter { availableSet.contains($0.lowercased()) }
-    }
-
-    private func resolveCompatibleOpenRouterProviderSlugs(
-        _ preferred: [String],
-        available: [String]
-    ) -> [String] {
-        filterCompatibleOpenRouterSlugs(preferred, available: available)
     }
 
     private func effectiveGeminiThinkingLevel(settings: AppSettings, model: String) -> String? {

@@ -32,19 +32,13 @@ enum ZAICodingPlanModelCatalog {
 }
 
 enum ProviderCatalog {
+    /// Providers implemented directly by YamabikoChat. Other API providers are supplied by models.dev.
     static let options: [ProviderDisplay] = [
         ProviderDisplay(key: "GEMINI", title: "Google Gemini"),
         ProviderDisplay(key: "OPENROUTER", title: "OpenRouter"),
-        ProviderDisplay(key: "OPENCODE_GO", title: "OpenCode Go"),
-        ProviderDisplay(key: "SUPERGROK", title: "SuperGrok"),
-        ProviderDisplay(key: "CLINEPASS", title: "Cline Pass"),
-        ProviderDisplay(key: "ALIBABA_CODING_PLAN", title: "Alibaba Coding Plan"),
-        ProviderDisplay(key: "ZAI", title: "Z.ai Coding Plan"),
-        ProviderDisplay(key: "MINIMAX", title: "MiniMax"),
-        ProviderDisplay(key: "OPENAI", title: "OpenAI"),
         ProviderDisplay(key: "CODEX_AUTH", title: "Codex Auth"),
-        ProviderDisplay(key: "APPLE_INTELLIGENCE", title: "Apple Intelligence"),
-        ProviderDisplay(key: "OPENAI_COMPAT", title: "OpenAI (Custom)")
+        ProviderDisplay(key: "SUPERGROK", title: "SuperGrok"),
+        ProviderDisplay(key: "APPLE_INTELLIGENCE", title: "Apple Intelligence")
     ]
 
     /// Providers available in dual mode and auto conversation settings (Apple Intelligence excluded).
@@ -54,7 +48,13 @@ enum ProviderCatalog {
 
     static func displayName(for provider: String) -> String {
         let normalized = provider.uppercased()
-        return options.first(where: { $0.key == normalized })?.title ?? options.first?.title ?? provider
+        if let builtIn = options.first(where: { $0.key == normalized }) {
+            return builtIn.title
+        }
+        if let modelsDevID = ProviderReference(persistedID: provider).modelsDevID {
+            return modelsDevID
+        }
+        return provider
     }
 
     static func defaultModel(for provider: String) -> String {

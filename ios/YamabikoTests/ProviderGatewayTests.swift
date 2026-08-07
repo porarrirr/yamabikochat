@@ -50,6 +50,60 @@ private final class ProviderGatewayHTTPClient: HTTPClientProtocol {
 }
 
 final class ProviderGatewayTests: XCTestCase {
+    func testModelsDevOpenCodeGoMigratesExistingNativeCredential() async throws {
+        let provider = CatalogProvider(
+            id: "opencode-go",
+            name: "OpenCode Go",
+            npm: "@ai-sdk/openai-compatible",
+            api: "https://opencode.ai/zen/go/v1",
+            env: ["OPENCODE_API_KEY"],
+            models: [CatalogModel(
+                id: "glm-5.1",
+                name: "GLM 5.1",
+                attachment: false,
+                reasoning: false,
+                reasoningOptions: [],
+                toolCall: false,
+                structuredOutput: false,
+                temperature: true,
+                inputModalities: ["text"],
+                outputModalities: ["text"],
+                limits: CatalogLimits(context: nil, input: nil, output: nil),
+                cost: CatalogCost(
+                    inputPerMillion: nil,
+                    outputPerMillion: nil,
+                    reasoningPerMillion: nil,
+                    cacheReadPerMillion: nil,
+                    cacheWritePerMillion: nil
+                )
+            )]
+        )
+        let fixture = try makeModelsDevFixture(provider: provider)
+        try fixture.credentials.setCredential("existing-opencode-key", for: .openCodeGo)
+        fixture.httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.httpResponse(url: request.url, statusCode: 200))
+        }
+
+        _ = try await fixture.gateway.generate(
+            request: ProviderRequest(
+                model: "glm-5.1",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")],
+                stream: false
+            ),
+            providerID: "MODELS_DEV:opencode-go"
+        )
+
+        XCTAssertEqual(
+            try fixture.credentials.readSecret(key: "models_dev_opencode-go_OPENCODE_API_KEY"),
+            "existing-opencode-key"
+        )
+        XCTAssertEqual(
+            fixture.httpClient.sentRequests.first?.headers["Authorization"],
+            "Bearer existing-opencode-key"
+        )
+    }
+
     func testModelsDevOpenAICompatibleReasoningEffortUsesTopLevelWireField() async throws {
         let provider = CatalogProvider(
             id: "example",

@@ -73,17 +73,45 @@ struct DualModeOverridesForm: View {
 
     @ViewBuilder
     private var openRouterControls: some View {
-        Picker(L10n.format("%@: OpenRouter reasoning mode", prefix), selection: openRouterReasoningModeBinding) {
-            Text(L10n.text("inherit")).tag("inherit")
-            Text(L10n.text("auto")).tag("auto")
-            Text(L10n.text("effort")).tag("effort")
-            Text(L10n.text("budget")).tag("budget")
+        if let capabilities = openRouterReasoningCapabilities {
+            Picker(L10n.format("%@: OpenRouter reasoning mode", prefix), selection: openRouterReasoningModeBinding) {
+                Text(L10n.text("inherit")).tag("inherit")
+                ForEach(openRouterReasoningModes, id: \.self) { mode in
+                    Text(verbatim: mode).tag(mode)
+                }
+            }
+            Toggle(L10n.format("%@: OpenRouter thinking enabled", prefix), isOn: openRouterThinkingEnabledBinding)
+                .disabled(capabilities.mandatory)
+            if capabilities.supportsMaxTokens {
+                TextField(L10n.format("%@: OpenRouter budget override", prefix), text: openRouterBudgetBinding)
+                    .keyboardType(.numberPad)
+            }
+            if !openRouterReasoningEfforts.isEmpty {
+                Picker(L10n.format("%@: OpenRouter effort override", prefix), selection: openRouterEffortBinding) {
+                    Text(L10n.text("inherit")).tag("")
+                    ForEach(openRouterReasoningEfforts, id: \.self) { effort in
+                        Text(verbatim: effort).tag(effort)
+                    }
+                }
+            }
+            Toggle(L10n.format("%@: Exclude reasoning", prefix), isOn: openRouterExcludeBinding)
+        } else {
+            Text(L10n.format("%@: このモデルはOpenRouter Reasoning設定に対応していません。", prefix))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
-        Toggle(L10n.format("%@: OpenRouter thinking enabled", prefix), isOn: openRouterThinkingEnabledBinding)
-        TextField(L10n.format("%@: OpenRouter budget override", prefix), text: openRouterBudgetBinding)
-            .keyboardType(.numberPad)
-        TextField(L10n.format("%@: OpenRouter effort override", prefix), text: openRouterEffortBinding)
-        Toggle(L10n.format("%@: Exclude reasoning", prefix), isOn: openRouterExcludeBinding)
+    }
+
+    private var openRouterReasoningCapabilities: OpenRouterReasoningCapabilities? {
+        viewModel.openRouterReasoningCapabilities(forModelId: model)
+    }
+
+    private var openRouterReasoningModes: [String] {
+        viewModel.openRouterReasoningModes(forModelId: model)
+    }
+
+    private var openRouterReasoningEfforts: [String] {
+        viewModel.openRouterReasoningEfforts(forModelId: model)
     }
 
     @ViewBuilder
@@ -267,16 +295,22 @@ struct DualModeOverridesForm: View {
     private var openRouterReasoningModeBinding: Binding<String> {
         Binding(
             get: {
-                switch side {
+                let stored: String? = switch side {
                 case .a: viewModel.settings.dualOpenRouterReasoningModeA ?? "inherit"
                 case .b: viewModel.settings.dualOpenRouterReasoningModeB ?? "inherit"
                 }
+                guard let stored else { return "inherit" }
+                let normalized = stored.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                return normalized == "inherit" || openRouterReasoningModes.contains(normalized)
+                    ? normalized
+                    : "inherit"
             },
             set: { newValue in
-                let normalized = (newValue == "inherit") ? nil : newValue
+                let normalized = newValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                let value = openRouterReasoningModes.contains(normalized) ? normalized : nil
                 switch side {
-                case .a: viewModel.settings.dualOpenRouterReasoningModeA = normalized
-                case .b: viewModel.settings.dualOpenRouterReasoningModeB = normalized
+                case .a: viewModel.settings.dualOpenRouterReasoningModeA = value
+                case .b: viewModel.settings.dualOpenRouterReasoningModeB = value
                 }
             }
         )
@@ -286,13 +320,25 @@ struct DualModeOverridesForm: View {
         switch side {
         case .a:
             Binding(
-                get: { viewModel.settings.dualOpenRouterThinkingEnabledA ?? viewModel.settings.openRouterThinkingEnabled },
-                set: { viewModel.settings.dualOpenRouterThinkingEnabledA = $0 }
+                get: {
+                    openRouterReasoningCapabilities?.mandatory == true ||
+                        (viewModel.settings.dualOpenRouterThinkingEnabledA ?? viewModel.settings.openRouterThinkingEnabled)
+                },
+                set: {
+                    viewModel.settings.dualOpenRouterThinkingEnabledA =
+                        openRouterReasoningCapabilities?.mandatory == true ? true : $0
+                }
             )
         case .b:
             Binding(
-                get: { viewModel.settings.dualOpenRouterThinkingEnabledB ?? viewModel.settings.openRouterThinkingEnabled },
-                set: { viewModel.settings.dualOpenRouterThinkingEnabledB = $0 }
+                get: {
+                    openRouterReasoningCapabilities?.mandatory == true ||
+                        (viewModel.settings.dualOpenRouterThinkingEnabledB ?? viewModel.settings.openRouterThinkingEnabled)
+                },
+                set: {
+                    viewModel.settings.dualOpenRouterThinkingEnabledB =
+                        openRouterReasoningCapabilities?.mandatory == true ? true : $0
+                }
             )
         }
     }
@@ -327,13 +373,31 @@ struct DualModeOverridesForm: View {
         switch side {
         case .a:
             Binding(
-                get: { viewModel.settings.dualOpenRouterReasoningEffortA ?? "" },
-                set: { viewModel.settings.dualOpenRouterReasoningEffortA = SettingsStringHelpers.nilIfBlank($0) }
+                get: {
+                    let effort = viewModel.settings.dualOpenRouterReasoningEffortA?
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .lowercased() ?? ""
+                    return openRouterReasoningEfforts.contains(effort) ? effort : ""
+                },
+                set: {
+                    let effort = $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    viewModel.settings.dualOpenRouterReasoningEffortA =
+                        openRouterReasoningEfforts.contains(effort) ? effort : nil
+                }
             )
         case .b:
             Binding(
-                get: { viewModel.settings.dualOpenRouterReasoningEffortB ?? "" },
-                set: { viewModel.settings.dualOpenRouterReasoningEffortB = SettingsStringHelpers.nilIfBlank($0) }
+                get: {
+                    let effort = viewModel.settings.dualOpenRouterReasoningEffortB?
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .lowercased() ?? ""
+                    return openRouterReasoningEfforts.contains(effort) ? effort : ""
+                },
+                set: {
+                    let effort = $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    viewModel.settings.dualOpenRouterReasoningEffortB =
+                        openRouterReasoningEfforts.contains(effort) ? effort : nil
+                }
             )
         }
     }

@@ -21,12 +21,16 @@ struct ProviderReference: Codable, Hashable, Sendable {
 }
 
 enum ModelsDevMergedProvider {
+    private static let catalogProviderIDsRepresentedByBuiltIns: Set<String> = ["google", "openrouter"]
+
     static func catalogID(for persistedID: String) -> String? {
         let reference = ProviderReference(persistedID: persistedID)
         if let dynamic = reference.modelsDevID { return dynamic }
-        return [
-            "GEMINI": "google", "OPENAI": "openai"
-        ][persistedID.uppercased()]
+        return persistedID.caseInsensitiveCompare("GEMINI") == .orderedSame ? "google" : nil
+    }
+
+    static func isSelectableCatalogProvider(_ providerID: String) -> Bool {
+        !catalogProviderIDsRepresentedByBuiltIns.contains(providerID.lowercased())
     }
 }
 
