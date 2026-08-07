@@ -35,6 +35,7 @@ struct CatalogProviderPickerField: View {
                 Text(selectedLabel).foregroundStyle(.secondary).lineLimit(1)
             }
         }
+        .accessibilityIdentifier("provider-picker-field")
     }
 }
 
@@ -92,8 +93,8 @@ private struct CatalogProviderListView: View {
     @ViewBuilder
     private func providerRow(_ id: String, _ title: String, _ subtitle: String?) -> some View {
         Button {
-            dismiss()
             onSelect(id)
+            dismiss()
         } label: {
             HStack {
                 VStack(alignment: .leading) {
@@ -103,9 +104,11 @@ private struct CatalogProviderListView: View {
                 Spacer()
                 if selectedProviderID.caseInsensitiveCompare(id) == .orderedSame { Image(systemName: "checkmark") }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .contentShape(Rectangle())
+        .accessibilityIdentifier("provider-row-\(id)")
     }
 
     private static let mergedProviderIDs: Set<String> = [
@@ -201,7 +204,10 @@ private struct CatalogModelListView: View {
                     Spacer()
                     if model.id == modelID { Image(systemName: "checkmark") }
                 }
-            }.buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
         .overlay {
             if filtered.isEmpty { ContentUnavailableView.search(text: query) }

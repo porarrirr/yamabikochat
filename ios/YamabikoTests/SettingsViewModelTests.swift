@@ -24,6 +24,22 @@ private final class SettingsViewModelCredentialStore: SecureCredentialStore {
 
 final class SettingsViewModelTests: XCTestCase {
     @MainActor
+    func testGeminiRotationCatalogProviderUsesModelsDevGoogleModels() throws {
+        let providers = try ModelsDevCatalogRepository.parseCatalog(Data(Self.modelsDevGeminiFixture.utf8))
+        let viewModel = SettingsViewModel()
+        viewModel.modelsDevCatalogState = CatalogLoadState(
+            availability: .ready,
+            providers: providers
+        )
+
+        XCTAssertEqual(viewModel.geminiRotationCatalogProvider?.id, "google")
+        XCTAssertEqual(
+            viewModel.geminiRotationCatalogProvider?.models.map(\.id),
+            ["gemini-model-from-models-dev"]
+        )
+    }
+
+    @MainActor
     func testBindLoadsCurrentProviderApiKeyFromCredentialStore() throws {
         let fixture = try makeFixture()
         var settings = try fixture.repository.loadSettings()
@@ -253,4 +269,15 @@ final class SettingsViewModelTests: XCTestCase {
 
         return (repository, credentials)
     }
+
+    private static let modelsDevGeminiFixture = #"""
+    {"providers":{
+      "other":{"name":"Other","npm":"@ai-sdk/openai-compatible","models":{
+        "other-model":{"name":"Other Model","modalities":{"output":["text"]}}
+      }},
+      "google":{"name":"Google Generative AI","npm":"@ai-sdk/google","models":{
+        "gemini-model-from-models-dev":{"name":"Gemini from models.dev","modalities":{"output":["text"]}}
+      }}
+    }}
+    """#
 }

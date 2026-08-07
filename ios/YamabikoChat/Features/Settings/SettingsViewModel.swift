@@ -529,6 +529,11 @@ final class SettingsViewModel: ObservableObject {
         settings.geminiRotationModelsList()
     }
 
+    var geminiRotationCatalogProvider: CatalogProvider? {
+        guard let providerID = ModelsDevMergedProvider.catalogID(for: "GEMINI") else { return nil }
+        return modelsDevCatalogState.providers.first { $0.id == providerID }
+    }
+
     func addGeminiKeySlot() {
         guard let repository else { return }
         guard let name = geminiKeySlotNameInput.nilIfBlank else {

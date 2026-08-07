@@ -68,6 +68,38 @@ final class AppStoreScreenshotTests: XCTestCase {
         }
     }
 
+    func testProviderSelectionChangesProvider() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppStoreScreenshotDemo"]
+        app.launch()
+
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
+        XCTAssertTrue(openSettings(app: app))
+        let connectionRow = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "API・モデル")
+        ).firstMatch
+        XCTAssertTrue(connectionRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(connectionRow.isHittable)
+        connectionRow.tap()
+        XCTAssertTrue(app.navigationBars["接続"].waitForExistence(timeout: 5))
+
+        let providerField = app.buttons["provider-picker-field"].firstMatch
+        XCTAssertTrue(providerField.waitForExistence(timeout: 5))
+        XCTAssertTrue(providerField.isHittable)
+        providerField.tap()
+
+        XCTAssertTrue(app.navigationBars["プロバイダー"].waitForExistence(timeout: 5))
+        let geminiRow = app.buttons["provider-row-GEMINI"].firstMatch
+        XCTAssertTrue(geminiRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(geminiRow.isHittable)
+        geminiRow.tap()
+
+        XCTAssertTrue(app.navigationBars["接続"].waitForExistence(timeout: 5))
+        let updatedProviderField = app.buttons["provider-picker-field"].firstMatch
+        XCTAssertTrue(updatedProviderField.waitForExistence(timeout: 5))
+        XCTAssertTrue(updatedProviderField.label.contains("Google Gemini"))
+    }
+
     private func navigateToConversationList(app: XCUIApplication) {
         if listIsVisible(app: app) {
             return

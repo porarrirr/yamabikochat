@@ -396,18 +396,17 @@ struct SettingsScreen: View {
             }
 
             Section("ローテーションモデル一覧") {
-                Picker("モデルを追加", selection: Binding(
-                    get: { "" },
-                    set: { newValue in
-                        if !newValue.isEmpty {
-                            viewModel.addGeminiRotationModel(newValue)
-                        }
-                    }
-                )) {
-                    Text("選択...").tag("")
-                    ForEach(GeminiModelCatalog.suggestedModels, id: \.self) { model in
-                        Text(model).tag(model)
-                    }
+                if let provider = viewModel.geminiRotationCatalogProvider {
+                    CatalogModelPickerField(
+                        modelID: Binding(
+                            get: { "" },
+                            set: { modelID in
+                                viewModel.addGeminiRotationModel(modelID)
+                            }
+                        ),
+                        provider: provider,
+                        title: "モデルを追加"
+                    )
                 }
 
                 ForEach(viewModel.geminiRotationModels, id: \.self) { model in
@@ -426,6 +425,25 @@ struct SettingsScreen: View {
                     Text("未設定の場合は現在選択中のモデルのみを使用します（既存動作と同じ）。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                }
+
+                switch viewModel.modelsDevCatalogState.availability {
+                case .loading:
+                    ProgressView("models.devからモデル一覧を読み込み中...")
+                case .stale:
+                    Text("保存済み一覧を表示中: \(viewModel.modelsDevCatalogState.error ?? "更新失敗")")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                case .error:
+                    Text(viewModel.modelsDevCatalogState.error ?? "models.devからモデル一覧を取得できませんでした")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                default:
+                    EmptyView()
+                }
+
+                Button("モデル一覧を更新") {
+                    viewModel.refreshModelsDevCatalog()
                 }
             }
         }

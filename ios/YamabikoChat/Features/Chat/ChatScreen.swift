@@ -76,7 +76,6 @@ struct ChatScreen: View {
                             : measuredWidth
                         let timelineWidth = max(viewportWidth - chatTimelineHorizontalPadding * 2, 0)
                         let timelineMinHeight = max(scrollGeometry.size.height - chatTimelineVerticalPadding * 2, 0)
-                        let timelineAlignment: Alignment = timeline.isEmpty ? .topLeading : .bottomLeading
 
                         ScrollView {
                             VStack(alignment: .leading, spacing: 24) {
@@ -142,7 +141,7 @@ struct ChatScreen: View {
                             .frame(width: timelineWidth, alignment: .topLeading)
                             .frame(
                                 minHeight: timeline.isEmpty ? nil : timelineMinHeight,
-                                alignment: timelineAlignment
+                                alignment: .topLeading
                             )
                             .scrollTargetLayout()
                             .padding(.horizontal, chatTimelineHorizontalPadding)
