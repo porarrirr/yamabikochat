@@ -1983,14 +1983,12 @@ fun SettingsScreen(
                             selectedCatalogModel?.description?.let {
                                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            val savedReasoningEffort = if (ProviderReference(apiProvider).isModelsDev &&
-                                selectedCatalogModel != null &&
-                                catalogProvider != null
-                            ) {
-                                viewModel.modelsDevReasoningEffort(catalogProvider.id, selectedCatalogModel.id)
-                            } else {
-                                ""
-                            }
+                            val savedReasoningEffort = selectedCatalogModel
+                                ?.takeIf { ProviderReference(apiProvider).isModelsDev }
+                                ?.let { selected ->
+                                    viewModel.modelsDevReasoningEffort(requireNotNull(catalogProvider).id, selected.id)
+                                }
+                                .orEmpty()
                             if (ProviderReference(apiProvider).isModelsDev &&
                                 selectedCatalogModel != null &&
                                 selectedCatalogModel.shouldShowReasoningEffortPreference(savedReasoningEffort)
