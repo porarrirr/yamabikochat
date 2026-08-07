@@ -9,6 +9,8 @@ import com.porarri.yamabikochat.data.local.SettingsManager
 import com.porarri.yamabikochat.data.model.ModelRepository
 import com.porarri.yamabikochat.data.modelsdev.CatalogModel
 import com.porarri.yamabikochat.data.modelsdev.CatalogProvider
+import com.porarri.yamabikochat.data.modelsdev.CatalogReasoningOption
+import com.porarri.yamabikochat.data.modelsdev.ModelsDevReasoningPreference
 import com.porarri.yamabikochat.data.modelsdev.ModelsDevCatalogRepository
 import com.porarri.yamabikochat.data.remote.AlibabaCodingPlanProvider
 import com.porarri.yamabikochat.data.remote.AnthropicCompatibleProvider
@@ -31,6 +33,7 @@ import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -81,7 +84,7 @@ class ApiRepositoryModelsDevTest {
         coEvery { catalogRepository.providerOrLoad(any()) } returns provider
         every { settingsManager.getModelsDevField("example", "EXAMPLE_API_KEY") } returns "dynamic-key"
         coEvery {
-            openAiProvider.generateContent(any(), any(), any(), any(), any(), any(), any(), any())
+            openAiProvider.generateContent(any(), any(), any(), any(), any(), any(), any(), any(), any())
         } returns Response.success(GenerateContentResponse(text = "ok"))
 
         val response = repository.generateAutoConversationResponse(
@@ -97,8 +100,76 @@ class ApiRepositoryModelsDevTest {
         coVerify {
             openAiProvider.generateContent(
                 "dynamic-key", "openai/gpt-oss-120b", any(), "https://example.com/v1",
-                null, false, false, false
+                null, false, false, false, null
             )
+        }
+    }
+
+    @Test
+    fun modelsDevReasoningEffortIsPassedToOpenAiCompatibleWireAdapter() = runBlocking {
+        val modelId = "openai/gpt-oss-120b"
+        val provider = catalogProvider(
+            id = "example",
+            npm = "@ai-sdk/openai-compatible",
+            api = "https://example.com/v1",
+            env = listOf("EXAMPLE_API_KEY"),
+            reasoningOptions = listOf(CatalogReasoningOption("effort", listOf("low", "high")))
+        )
+        coEvery { catalogRepository.providerOrLoad(any()) } returns provider
+        every { settingsManager.getModelsDevField("example", "EXAMPLE_API_KEY") } returns "dynamic-key"
+        every {
+            settingsManager.getModelsDevField(
+                "example",
+                ModelsDevReasoningPreference.fieldName(modelId)
+            )
+        } returns "high"
+        coEvery {
+            openAiProvider.generateContent(any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } returns Response.success(GenerateContentResponse(text = "ok"))
+
+        val response = repository.generateContent(
+            model = modelId,
+            request = GenerateContentRequest(listOf(Content(role = "user", parts = listOf(Part(text = "hello"))))),
+            providerOverride = "MODELS_DEV:example"
+        )
+
+        assertTrue(response.isSuccessful)
+        coVerify {
+            openAiProvider.generateContent(
+                "dynamic-key", modelId, any(), "https://example.com/v1",
+                null, false, false, false, "high"
+            )
+        }
+    }
+
+    @Test
+    fun unsupportedSavedReasoningEffortStopsBeforeProviderRequest() = runBlocking {
+        val modelId = "openai/gpt-oss-120b"
+        val provider = catalogProvider(
+            id = "example",
+            npm = "@ai-sdk/openai-compatible",
+            api = "https://example.com/v1",
+            env = listOf("EXAMPLE_API_KEY"),
+            reasoningOptions = listOf(CatalogReasoningOption("effort", listOf("low", "high")))
+        )
+        coEvery { catalogRepository.providerOrLoad(any()) } returns provider
+        every { settingsManager.getModelsDevField("example", "EXAMPLE_API_KEY") } returns "dynamic-key"
+        every {
+            settingsManager.getModelsDevField(
+                "example",
+                ModelsDevReasoningPreference.fieldName(modelId)
+            )
+        } returns "ultra"
+
+        val response = repository.generateContent(
+            model = modelId,
+            request = GenerateContentRequest(listOf(Content(role = "user", parts = listOf(Part(text = "hello"))))),
+            providerOverride = "MODELS_DEV:example"
+        )
+
+        assertEquals(400, response.code())
+        coVerify(exactly = 0) {
+            openAiProvider.generateContent(any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -113,7 +184,7 @@ class ApiRepositoryModelsDevTest {
         coEvery { catalogRepository.providerOrLoad(any()) } returns provider
         every { settingsManager.getModelsDevField("anthropic", "ANTHROPIC_API_KEY") } returns "anthropic-key"
         coEvery {
-            anthropicProvider.generateContent(any(), any(), any(), any(), any(), any())
+            anthropicProvider.generateContent(any(), any(), any(), any(), any(), any(), any())
         } returns Response.success(GenerateContentResponse(text = "ok"))
 
         val response = repository.generateContent(
@@ -125,7 +196,7 @@ class ApiRepositoryModelsDevTest {
         assertTrue(response.isSuccessful)
         coVerify {
             anthropicProvider.generateContent(
-                "anthropic-key", "claude-test", any(), "https://api.anthropic.com/v1/", "Anthropic", null
+                "anthropic-key", "claude-test", any(), "https://api.anthropic.com/v1/", "Anthropic", null, null
             )
         }
     }
@@ -134,13 +205,19 @@ class ApiRepositoryModelsDevTest {
         id: String,
         npm: String,
         api: String?,
-        env: List<String>
+        env: List<String>,
+        reasoningOptions: List<CatalogReasoningOption> = emptyList()
     ) = CatalogProvider(
         id = id,
         name = id.replaceFirstChar { it.uppercase() },
         npm = npm,
         api = api,
         env = env,
-        models = listOf(CatalogModel(id = if (id == "anthropic") "claude-test" else "openai/gpt-oss-120b", name = "Model"))
+        models = listOf(CatalogModel(
+            id = if (id == "anthropic") "claude-test" else "openai/gpt-oss-120b",
+            name = "Model",
+            reasoning = reasoningOptions.isNotEmpty(),
+            reasoningOptions = reasoningOptions
+        ))
     )
 }

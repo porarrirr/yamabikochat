@@ -1211,6 +1211,30 @@ struct SettingsScreen: View {
                     ),
                     provider: provider
                 )
+                if let dynamicProvider = currentModelsDevProvider,
+                   let selectedModel = dynamicProvider.models.first(where: { $0.id == viewModel.settings.defaultModel }) {
+                    let savedReasoningEffort = viewModel.modelsDevReasoningEffort(
+                        providerID: dynamicProvider.id,
+                        modelID: selectedModel.id
+                    )
+                    if selectedModel.shouldShowReasoningEffortPreference(savedEffort: savedReasoningEffort) {
+                        ModelsDevReasoningEffortPicker(
+                            model: selectedModel,
+                            currentEffort: savedReasoningEffort,
+                            onChange: { effort in
+                                viewModel.saveModelsDevReasoningEffort(
+                                    providerID: dynamicProvider.id,
+                                    modelID: selectedModel.id,
+                                    effort: effort
+                                )
+                            }
+                        )
+                        .id("\(dynamicProvider.id)\u{0}\(selectedModel.id)")
+                        Text("models.devがこのモデルについて公開している対応値だけを表示します。")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 if viewModel.settings.defaultModel.isEmpty {
                     Text("モデルを明示的に選択してください。")
                         .font(.caption2)

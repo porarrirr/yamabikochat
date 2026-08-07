@@ -41,6 +41,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         var tools: [[String: AnyEncodable]]?
         var provider: [String: AnyEncodable]?
         var reasoning: [String: AnyEncodable]?
+        var reasoningEffort: String?
         var cacheControl: PromptCacheControl?
         var promptCacheKey: String?
         var maxTokens: Int?
@@ -53,6 +54,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             case tools
             case provider
             case reasoning
+            case reasoningEffort = "reasoning_effort"
             case cacheControl = "cache_control"
             case promptCacheKey = "prompt_cache_key"
             case maxTokens = "max_tokens"
@@ -67,6 +69,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             try container.encodeIfPresent(tools, forKey: .tools)
             try container.encodeIfPresent(provider, forKey: .provider)
             try container.encodeIfPresent(reasoning, forKey: .reasoning)
+            try container.encodeIfPresent(reasoningEffort, forKey: .reasoningEffort)
             try container.encodeIfPresent(cacheControl, forKey: .cacheControl)
             try container.encodeIfPresent(promptCacheKey, forKey: .promptCacheKey)
             try container.encodeIfPresent(maxTokens, forKey: .maxTokens)
@@ -307,6 +310,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             tools: toolsPayload,
             provider: providerPayload,
             reasoning: reasoningPayload,
+            reasoningEffort: request.metadata["modelsDevReasoningEffort"]?.trimmedNonEmpty,
             cacheControl: cacheControl(for: request, provider: provider),
             promptCacheKey: promptCacheKey(for: request, provider: provider),
             maxTokens: Int(request.metadata["max_output_tokens"] ?? ""),

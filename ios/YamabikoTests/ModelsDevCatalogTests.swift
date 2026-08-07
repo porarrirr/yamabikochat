@@ -7,6 +7,7 @@ final class ModelsDevCatalogTests: XCTestCase {
         XCTAssertEqual(providers.map(\.id), ["example"])
         XCTAssertEqual(providers[0].models.map(\.id), ["chat"])
         XCTAssertTrue(providers[0].models[0].toolCall)
+        XCTAssertEqual(providers[0].models[0].supportedReasoningEfforts, ["low", "high"])
     }
 
     func testAllCurrentNpmKindsHaveVerifiedMappings() {
@@ -26,6 +27,32 @@ final class ModelsDevCatalogTests: XCTestCase {
         XCTAssertEqual(reference.persistedID, "MODELS_DEV:acme")
         XCTAssertEqual(ProviderReference(persistedID: reference.persistedID).modelsDevID, "acme")
         XCTAssertFalse(ProviderReference(persistedID: "UNKNOWN_PROVIDER").isModelsDev)
+    }
+
+    func testSavedReasoningEffortKeepsPreferenceVisibleWhenCatalogOptionsDisappear() {
+        let model = CatalogModel(
+            id: "reasoner",
+            name: "Reasoner",
+            attachment: false,
+            reasoning: true,
+            reasoningOptions: [],
+            toolCall: false,
+            structuredOutput: false,
+            temperature: true,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            limits: CatalogLimits(context: nil, input: nil, output: nil),
+            cost: CatalogCost(
+                inputPerMillion: nil,
+                outputPerMillion: nil,
+                reasoningPerMillion: nil,
+                cacheReadPerMillion: nil,
+                cacheWritePerMillion: nil
+            )
+        )
+
+        XCTAssertTrue(model.shouldShowReasoningEffortPreference(savedEffort: "high"))
+        XCTAssertFalse(model.shouldShowReasoningEffortPreference(savedEffort: ""))
     }
 
     func testOpenCodeGoDoesNotUseOpenCodeZenCatalog() {
@@ -56,7 +83,7 @@ final class ModelsDevCatalogTests: XCTestCase {
     {"providers":{
       "openrouter":{"name":"OpenRouter","npm":"@ai-sdk/openai-compatible","models":{"or":{"name":"OR","modalities":{"output":["text"]}}}},
       "example":{"name":"Example","npm":"@ai-sdk/openai-compatible","env":["EXAMPLE_API_KEY"],"models":{
-        "chat":{"name":"Chat","tool_call":true,"modalities":{"input":["text"],"output":["text"]}},
+        "chat":{"name":"Chat","tool_call":true,"reasoning":true,"reasoning_options":[{"type":"effort","values":["low","high"]}],"modalities":{"input":["text"],"output":["text"]}},
         "old":{"name":"Old","status":"deprecated","modalities":{"output":["text"]}},
         "image":{"name":"Image","modalities":{"output":["image"]}}
       }}

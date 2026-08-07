@@ -35,6 +35,15 @@ struct CatalogReasoningOption: Codable, Equatable, Sendable {
     var values: [String] = []
 }
 
+enum ModelsDevReasoningPreference {
+    private static let fieldPrefix = "YAMABIKO_REASONING_EFFORT_"
+
+    static func fieldName(modelID: String) -> String {
+        let encodedModelID = modelID.utf8.map { String(format: "%02X", $0) }.joined()
+        return fieldPrefix + encodedModelID
+    }
+}
+
 struct CatalogLimits: Codable, Equatable, Sendable {
     var context: Int?
     var input: Int?
@@ -66,6 +75,22 @@ struct CatalogModel: Codable, Identifiable, Equatable, Sendable {
     var lastUpdated: String?
     var limits: CatalogLimits
     var cost: CatalogCost
+
+    var supportedReasoningEfforts: [String] {
+        var seen = Set<String>()
+        return reasoningOptions
+            .filter { $0.type.caseInsensitiveCompare("effort") == .orderedSame }
+            .flatMap(\.values)
+            .compactMap { rawValue in
+                let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                guard !value.isEmpty, seen.insert(value).inserted else { return nil }
+                return value
+            }
+    }
+
+    func shouldShowReasoningEffortPreference(savedEffort: String) -> Bool {
+        !supportedReasoningEfforts.isEmpty || !savedEffort.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     func matches(_ query: String) -> Bool {
         let value = query.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -1983,6 +1983,66 @@ fun SettingsScreen(
                             selectedCatalogModel?.description?.let {
                                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
+                            val savedReasoningEffort = if (ProviderReference(apiProvider).isModelsDev &&
+                                selectedCatalogModel != null &&
+                                catalogProvider != null
+                            ) {
+                                viewModel.modelsDevReasoningEffort(catalogProvider.id, selectedCatalogModel.id)
+                            } else {
+                                ""
+                            }
+                            if (ProviderReference(apiProvider).isModelsDev &&
+                                selectedCatalogModel != null &&
+                                selectedCatalogModel.shouldShowReasoningEffortPreference(savedReasoningEffort)
+                            ) {
+                                var showReasoningEffortSheet by remember { mutableStateOf(false) }
+                                var selectedReasoningEffort by remember(apiProvider, model) {
+                                    mutableStateOf(savedReasoningEffort)
+                                }
+                                YamabikoSelectRow(
+                                    title = "Reasoning effort",
+                                    value = when {
+                                        selectedReasoningEffort.isBlank() -> "プロバイダー既定"
+                                        selectedReasoningEffort in selectedCatalogModel.supportedReasoningEfforts -> selectedReasoningEffort
+                                        else -> "$selectedReasoningEffort（現在は非対応）"
+                                    },
+                                    onClick = { showReasoningEffortSheet = true }
+                                )
+                                if (showReasoningEffortSheet) {
+                                    YamabikoOptionBottomSheet(
+                                        title = "Reasoning effort",
+                                        options = buildList {
+                                            add(YamabikoOption("", "プロバイダー既定"))
+                                            if (selectedReasoningEffort.isNotEmpty() &&
+                                                selectedReasoningEffort !in selectedCatalogModel.supportedReasoningEfforts
+                                            ) {
+                                                add(YamabikoOption(
+                                                    selectedReasoningEffort,
+                                                    "$selectedReasoningEffort（現在は非対応）"
+                                                ))
+                                            }
+                                            addAll(selectedCatalogModel.supportedReasoningEfforts.map { effort ->
+                                                YamabikoOption(effort, effort)
+                                            })
+                                        },
+                                        selectedKey = selectedReasoningEffort,
+                                        onOptionSelected = { option ->
+                                            selectedReasoningEffort = option.key
+                                            viewModel.saveModelsDevReasoningEffort(
+                                                catalogProvider.id,
+                                                selectedCatalogModel.id,
+                                                option.key
+                                            )
+                                        },
+                                        onDismissRequest = { showReasoningEffortSheet = false }
+                                    )
+                                }
+                                Text(
+                                    "models.devがこのモデルについて公開している対応値だけを表示します。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             when (modelsDevCatalogState.availability) {
                                 CatalogAvailability.LOADING -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                                 CatalogAvailability.STALE -> Text(

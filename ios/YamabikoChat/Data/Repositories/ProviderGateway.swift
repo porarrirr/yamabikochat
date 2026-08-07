@@ -525,6 +525,18 @@ final class ProviderGateway {
         if request.thinking?.enabled == true, !selectedModel.reasoning {
             throw ProviderClientError.parseFailure("\(selectedModel.name) does not support reasoning")
         }
+        let savedReasoningEffort = try credentialStore.readSecret(
+            key: modelsDevFieldKey(
+                providerID: catalog.id,
+                fieldName: ModelsDevReasoningPreference.fieldName(modelID: selectedModel.id)
+            )
+        )?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if let savedReasoningEffort, !savedReasoningEffort.isEmpty,
+           !selectedModel.supportedReasoningEfforts.contains(savedReasoningEffort) {
+            throw ProviderClientError.parseFailure(
+                "Saved reasoning effort '\(savedReasoningEffort)' is not supported by \(selectedModel.name)"
+            )
+        }
         let profile = ModelsDevProviderAdapterRegistry.profile(for: catalog)
         let credentialField = catalog.env.first(where: {
             $0.contains("API_KEY") || $0.contains("TOKEN") || $0.contains("SECRET") || $0.contains("BEARER")
@@ -560,6 +572,14 @@ final class ProviderGateway {
         dynamicRequest.metadata["modelsDevProviderID"] = catalog.id
         dynamicRequest.metadata["modelsDevBaseURL"] = baseURL
         dynamicRequest.metadata["modelsDevCredentialKey"] = credentialKey
+        if let savedReasoningEffort, !savedReasoningEffort.isEmpty {
+            dynamicRequest.metadata["modelsDevReasoningEffort"] = savedReasoningEffort
+            DiagnosticsLogger.log(
+                "models.dev reasoning effort applied",
+                category: .network,
+                metadata: ["provider": catalog.id, "model": selectedModel.id, "effort": savedReasoningEffort]
+            )
+        }
         dynamicRequest.metadata["modelsDevAuthHeader"] = switch profile.adapter {
         case .azureOpenAI: "api-key"
         case .cloudflareAIGateway: "cf-aig-authorization"

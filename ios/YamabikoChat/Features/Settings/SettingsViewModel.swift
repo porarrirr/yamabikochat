@@ -198,6 +198,40 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    func modelsDevReasoningEffort(providerID: String, modelID: String) -> String {
+        modelsDevField(
+            providerID: providerID,
+            fieldName: ModelsDevReasoningPreference.fieldName(modelID: modelID)
+        ).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    func saveModelsDevReasoningEffort(providerID: String, modelID: String, effort: String) {
+        let normalized = effort.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard let model = modelsDevCatalogState.providers
+            .first(where: { $0.id == providerID.lowercased() })?
+            .models.first(where: { $0.id == modelID })
+        else {
+            errorMessage = L10n.text("選択したモデルをmodels.devカタログで確認できません。")
+            return
+        }
+        guard normalized.isEmpty || model.supportedReasoningEfforts.contains(normalized) else {
+            errorMessage = L10n.text("このReasoning effortは選択したモデルでサポートされていません。")
+            return
+        }
+        do {
+            try credentialStore?.saveSecret(
+                normalized.nilIfBlank,
+                key: modelsDevFieldKey(
+                    providerID: providerID,
+                    fieldName: ModelsDevReasoningPreference.fieldName(modelID: modelID)
+                )
+            )
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func modelsDevFieldKey(providerID: String, fieldName: String) -> String {
         let provider = providerID.lowercased().replacingOccurrences(of: "[^a-z0-9._-]+", with: "_", options: .regularExpression)
         let field = fieldName.uppercased().replacingOccurrences(of: "[^A-Z0-9_]+", with: "_", options: .regularExpression)

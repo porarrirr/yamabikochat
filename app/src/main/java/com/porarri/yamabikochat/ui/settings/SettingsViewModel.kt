@@ -13,6 +13,7 @@ import com.porarri.yamabikochat.data.local.TokenUsageDailyPoint
 import com.porarri.yamabikochat.data.local.TokenUsageTotals
 import com.porarri.yamabikochat.data.remote.SimpleModel
 import com.porarri.yamabikochat.data.modelsdev.CatalogLoadState
+import com.porarri.yamabikochat.data.modelsdev.ModelsDevReasoningPreference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -109,6 +110,35 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
             }
             _secureStorageError.value = if (failed) "暗号化ストレージにプロバイダー設定を保存できませんでした" else null
             updateApiKeyStatus()
+        }
+    }
+
+    fun modelsDevReasoningEffort(providerId: String, modelId: String): String =
+        repository.peekModelsDevField(
+            providerId,
+            ModelsDevReasoningPreference.fieldName(modelId)
+        ).orEmpty().trim().lowercase()
+
+    fun saveModelsDevReasoningEffort(providerId: String, modelId: String, effort: String) {
+        val normalized = effort.trim().lowercase()
+        val model = modelsDevCatalogState.value.providers
+            .firstOrNull { it.id == providerId.lowercase() }
+            ?.models?.firstOrNull { it.id == modelId }
+        if (model == null) {
+            _secureStorageError.value = "選択したモデルをmodels.devカタログで確認できません"
+            return
+        }
+        if (normalized.isNotEmpty() && normalized !in model.supportedReasoningEfforts) {
+            _secureStorageError.value = "このReasoning effortは選択したモデルでサポートされていません"
+            return
+        }
+        viewModelScope.launch {
+            val saved = repository.saveModelsDevField(
+                providerId,
+                ModelsDevReasoningPreference.fieldName(modelId),
+                normalized
+            )
+            _secureStorageError.value = if (saved) null else "Reasoning effortを暗号化ストレージに保存できませんでした"
         }
     }
 

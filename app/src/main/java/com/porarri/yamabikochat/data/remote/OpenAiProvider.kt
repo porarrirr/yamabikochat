@@ -37,7 +37,8 @@ class OpenAiProvider(
         promptCacheKeyOverride: String? = null,
         useApiKeyHeader: Boolean = false,
         useCloudflareGatewayHeader: Boolean = false,
-        stripOpenAiProviderPrefix: Boolean = true
+        stripOpenAiProviderPrefix: Boolean = true,
+        reasoningEffortOverride: String? = null
     ): Response<GenerateContentResponse> = withContext(Dispatchers.IO) {
         try {
             val cleanedKey = apiKey.trim()
@@ -68,6 +69,7 @@ class OpenAiProvider(
                         model = normalizeOpenAiModel(payload.model, stripOpenAiProviderPrefix),
                         provider = null,
                         reasoning = reasoning,
+                        reasoningEffort = reasoningEffortOverride,
                         cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
                         max_tokens = budget ?: payload.max_tokens,
@@ -82,6 +84,7 @@ class OpenAiProvider(
                         model = normalizeOpenAiModel(payload.model, stripOpenAiProviderPrefix),
                         provider = null,
                         reasoning = reasoning,
+                        reasoningEffort = reasoningEffortOverride,
                         cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
                         max_tokens = budget ?: payload.max_tokens,
@@ -112,7 +115,8 @@ class OpenAiProvider(
         promptCacheKeyOverride: String? = null,
         useApiKeyHeader: Boolean = false,
         useCloudflareGatewayHeader: Boolean = false,
-        stripOpenAiProviderPrefix: Boolean = true
+        stripOpenAiProviderPrefix: Boolean = true,
+        reasoningEffortOverride: String? = null
     ): Response<ResponseBody> = withContext(Dispatchers.IO) {
         try {
             val cleanedKey = apiKey.trim()
@@ -143,6 +147,7 @@ class OpenAiProvider(
                         stream = true,
                         provider = null,
                         reasoning = reasoning,
+                        reasoningEffort = reasoningEffortOverride,
                         cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
                         max_tokens = budget ?: payload.max_tokens,
@@ -158,6 +163,7 @@ class OpenAiProvider(
                         stream = true,
                         provider = null,
                         reasoning = reasoning,
+                        reasoningEffort = reasoningEffortOverride,
                         cacheControl = null,
                         reasoningSplit = reasoningSplit.takeIf { it },
                         max_tokens = budget ?: payload.max_tokens,

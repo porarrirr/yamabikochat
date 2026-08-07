@@ -36,6 +36,7 @@ import kotlinx.serialization.json.Json
 import com.porarri.yamabikochat.data.modelsdev.CatalogProvider
 import com.porarri.yamabikochat.data.modelsdev.ModelsDevCatalogRepository
 import com.porarri.yamabikochat.data.modelsdev.ModelsDevProviderAdapterRegistry
+import com.porarri.yamabikochat.data.modelsdev.ModelsDevReasoningPreference
 import com.porarri.yamabikochat.data.modelsdev.ProviderAdapterKind
 import com.porarri.yamabikochat.data.modelsdev.ProviderReference
 
@@ -247,6 +248,7 @@ class ApiRepository(
     ): retrofit2.Response<GenerateContentResponse> {
         validateModelsDevRequest(provider, model, request)?.let { return unsupportedModelsDevResponse(provider, it) }
         val profile = ModelsDevProviderAdapterRegistry.profile(provider)
+        val reasoningEffort = savedModelsDevReasoningEffort(provider, model)
         val baseUrl = modelsDevBaseUrl(provider) ?: return retrofit2.Response.error(
             400, "A completed base URL is required for ${provider.name}.".toResponseBody(missingKeyMediaType)
         )
@@ -260,16 +262,21 @@ class ApiRepository(
             ProviderAdapterKind.AZURE_OPEN_AI,
             ProviderAdapterKind.UNVERIFIED_OPEN_AI_COMPATIBLE -> {
                 if (!profile.isVerifiedMapping) DiagnosticsLogger.log("models.dev unverified OpenAI-compatible mode provider=${provider.id}")
+                logModelsDevReasoningEffort(provider, model, reasoningEffort)
                 openAiProvider.generateContent(
                     apiKey, model, request, baseUrl,
                     useApiKeyHeader = profile.adapter == ProviderAdapterKind.AZURE_OPEN_AI,
                     useCloudflareGatewayHeader = profile.adapter == ProviderAdapterKind.CLOUDFLARE_AI_GATEWAY,
-                    stripOpenAiProviderPrefix = false
+                    stripOpenAiProviderPrefix = false,
+                    reasoningEffortOverride = reasoningEffort
                 )
             }
-            ProviderAdapterKind.ANTHROPIC -> anthropicCompatibleProvider.generateContent(
-                apiKey, model, request, baseUrl, provider.name
-            )
+            ProviderAdapterKind.ANTHROPIC -> {
+                logModelsDevReasoningEffort(provider, model, reasoningEffort)
+                anthropicCompatibleProvider.generateContent(
+                    apiKey, model, request, baseUrl, provider.name, reasoningEffort = reasoningEffort
+                )
+            }
             else -> unsupportedModelsDevResponse(provider)
         }
     }
@@ -282,6 +289,7 @@ class ApiRepository(
     ): retrofit2.Response<ResponseBody> {
         validateModelsDevRequest(provider, model, request)?.let { return unsupportedModelsDevStreamResponse(provider, it) }
         val profile = ModelsDevProviderAdapterRegistry.profile(provider)
+        val reasoningEffort = savedModelsDevReasoningEffort(provider, model)
         val baseUrl = modelsDevBaseUrl(provider) ?: return retrofit2.Response.error(
             400, "A completed base URL is required for ${provider.name}.".toResponseBody(missingKeyMediaType)
         )
@@ -295,16 +303,21 @@ class ApiRepository(
             ProviderAdapterKind.AZURE_OPEN_AI,
             ProviderAdapterKind.UNVERIFIED_OPEN_AI_COMPATIBLE -> {
                 if (!profile.isVerifiedMapping) DiagnosticsLogger.log("models.dev unverified OpenAI-compatible mode provider=${provider.id}")
+                logModelsDevReasoningEffort(provider, model, reasoningEffort)
                 openAiProvider.streamGenerateContent(
                     apiKey, model, request, baseUrl,
                     useApiKeyHeader = profile.adapter == ProviderAdapterKind.AZURE_OPEN_AI,
                     useCloudflareGatewayHeader = profile.adapter == ProviderAdapterKind.CLOUDFLARE_AI_GATEWAY,
-                    stripOpenAiProviderPrefix = false
+                    stripOpenAiProviderPrefix = false,
+                    reasoningEffortOverride = reasoningEffort
                 )
             }
-            ProviderAdapterKind.ANTHROPIC -> anthropicCompatibleProvider.streamGenerateContent(
-                apiKey, model, request, baseUrl, provider.name
-            )
+            ProviderAdapterKind.ANTHROPIC -> {
+                logModelsDevReasoningEffort(provider, model, reasoningEffort)
+                anthropicCompatibleProvider.streamGenerateContent(
+                    apiKey, model, request, baseUrl, provider.name, reasoningEffort = reasoningEffort
+                )
+            }
             else -> unsupportedModelsDevStreamResponse(provider)
         }
     }
@@ -319,7 +332,24 @@ class ApiRepository(
         if (request.generationConfig?.thinkingConfig?.enabled == true && !model.reasoning) {
             return "${model.name} does not support reasoning"
         }
+        val savedEffort = savedModelsDevReasoningEffort(provider, modelId)
+        if (savedEffort != null && savedEffort !in model.supportedReasoningEfforts) {
+            return "Saved reasoning effort '$savedEffort' is not supported by ${model.name}"
+        }
         return null
+    }
+
+    private fun savedModelsDevReasoningEffort(provider: CatalogProvider, modelId: String): String? {
+        return settingsManager.getModelsDevField(
+            provider.id,
+            ModelsDevReasoningPreference.fieldName(modelId)
+        )?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun logModelsDevReasoningEffort(provider: CatalogProvider, modelId: String, effort: String?) {
+        effort?.let {
+            DiagnosticsLogger.log("models.dev reasoning effort applied provider=${provider.id} model=$modelId effort=$it")
+        }
     }
 
     private suspend fun normalizedOpenRouterPreferences(settings: Settings?): ProviderPreferences? {

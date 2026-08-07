@@ -135,6 +135,44 @@ struct CatalogModelPickerField: View {
     }
 }
 
+struct ModelsDevReasoningEffortPicker: View {
+    let model: CatalogModel
+    let currentEffort: String
+    let onChange: (String) -> Void
+
+    @State private var selection: String
+
+    init(
+        model: CatalogModel,
+        currentEffort: String,
+        onChange: @escaping (String) -> Void
+    ) {
+        self.model = model
+        self.currentEffort = currentEffort
+        self.onChange = onChange
+        let normalized = currentEffort.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        _selection = State(initialValue: normalized)
+    }
+
+    var body: some View {
+        Picker("Reasoning effort", selection: Binding(
+            get: { selection },
+            set: { value in
+                selection = value
+                onChange(value)
+            }
+        )) {
+            Text("プロバイダー既定").tag("")
+            if !selection.isEmpty, !model.supportedReasoningEfforts.contains(selection) {
+                Text("\(selection)（現在は非対応）").tag(selection)
+            }
+            ForEach(model.supportedReasoningEfforts, id: \.self) { effort in
+                Text(effort).tag(effort)
+            }
+        }
+    }
+}
+
 private struct CatalogModelListView: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var modelID: String

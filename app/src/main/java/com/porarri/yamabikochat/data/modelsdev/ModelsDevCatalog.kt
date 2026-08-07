@@ -53,6 +53,14 @@ data class CatalogReasoningOption(
     val values: List<String> = emptyList()
 )
 
+object ModelsDevReasoningPreference {
+    private const val FIELD_PREFIX = "YAMABIKO_REASONING_EFFORT_"
+
+    fun fieldName(modelId: String): String = FIELD_PREFIX + modelId
+        .toByteArray(Charsets.UTF_8)
+        .joinToString(separator = "") { byte -> "%02X".format(byte.toInt() and 0xFF) }
+}
+
 @Serializable
 data class CatalogModel(
     val id: String,
@@ -72,6 +80,19 @@ data class CatalogModel(
     val limits: CatalogLimits = CatalogLimits(),
     val cost: CatalogCost = CatalogCost()
 ) {
+    val supportedReasoningEfforts: List<String>
+        get() = reasoningOptions
+            .asSequence()
+            .filter { it.type.equals("effort", ignoreCase = true) }
+            .flatMap { it.values.asSequence() }
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .toList()
+
+    fun shouldShowReasoningEffortPreference(savedEffort: String): Boolean =
+        supportedReasoningEfforts.isNotEmpty() || savedEffort.isNotBlank()
+
     fun matches(query: String): Boolean {
         val normalized = query.trim().lowercase()
         if (normalized.isEmpty()) return true

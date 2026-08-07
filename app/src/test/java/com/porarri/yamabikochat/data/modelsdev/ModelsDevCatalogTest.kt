@@ -28,6 +28,15 @@ class ModelsDevCatalogTest {
         assertEquals(listOf("example"), providers.map { it.id })
         assertEquals(listOf("chat"), providers.single().models.map { it.id })
         assertTrue(providers.single().models.single().toolCall)
+        assertEquals(listOf("low", "high"), providers.single().models.single().supportedReasoningEfforts)
+    }
+
+    @Test
+    fun savedReasoningEffortKeepsPreferenceVisibleWhenCatalogOptionsDisappear() {
+        val model = CatalogModel(id = "reasoner", name = "Reasoner")
+
+        assertTrue(model.shouldShowReasoningEffortPreference("high"))
+        assertFalse(model.shouldShowReasoningEffortPreference(""))
     }
 
     @Test
@@ -106,7 +115,7 @@ class ModelsDevCatalogTest {
             {"providers":{
               "openrouter":{"name":"OpenRouter","npm":"@ai-sdk/openai-compatible","models":{"or":{"name":"OR","modalities":{"output":["text"]}}}},
               "example":{"name":"Example","npm":"@ai-sdk/openai-compatible","env":["EXAMPLE_API_KEY"],"models":{
-                "chat":{"name":"Chat","tool_call":true,"modalities":{"input":["text"],"output":["text"]}},
+                "chat":{"name":"Chat","tool_call":true,"reasoning":true,"reasoning_options":[{"type":"effort","values":["low","high"]}],"modalities":{"input":["text"],"output":["text"]}},
                 "old":{"name":"Old","status":"deprecated","modalities":{"output":["text"]}},
                 "image":{"name":"Image","modalities":{"output":["image"]}}
               }}

@@ -50,6 +50,164 @@ private final class ProviderGatewayHTTPClient: HTTPClientProtocol {
 }
 
 final class ProviderGatewayTests: XCTestCase {
+    func testModelsDevOpenAICompatibleReasoningEffortUsesTopLevelWireField() async throws {
+        let provider = CatalogProvider(
+            id: "example",
+            name: "Example",
+            npm: "@ai-sdk/openai-compatible",
+            api: "https://example.com/v1",
+            env: ["EXAMPLE_API_KEY"],
+            models: [CatalogModel(
+                id: "gpt-reasoner",
+                name: "Reasoner",
+                attachment: false,
+                reasoning: true,
+                reasoningOptions: [CatalogReasoningOption(type: "effort", values: ["low", "high"])],
+                toolCall: false,
+                structuredOutput: false,
+                temperature: true,
+                inputModalities: ["text"],
+                outputModalities: ["text"],
+                limits: CatalogLimits(context: nil, input: nil, output: nil),
+                cost: CatalogCost(
+                    inputPerMillion: nil,
+                    outputPerMillion: nil,
+                    reasoningPerMillion: nil,
+                    cacheReadPerMillion: nil,
+                    cacheWritePerMillion: nil
+                )
+            )]
+        )
+        let fixture = try makeModelsDevFixture(provider: provider)
+        try fixture.credentials.saveSecret("dynamic-key", key: "models_dev_example_EXAMPLE_API_KEY")
+        try fixture.credentials.saveSecret(
+            "high",
+            key: "models_dev_example_\(ModelsDevReasoningPreference.fieldName(modelID: "gpt-reasoner"))"
+        )
+        fixture.httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.httpResponse(url: request.url, statusCode: 200))
+        }
+
+        _ = try await fixture.gateway.generate(
+            request: ProviderRequest(
+                model: "gpt-reasoner",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")],
+                stream: false
+            ),
+            providerID: "MODELS_DEV:example"
+        )
+
+        let body = try XCTUnwrap(fixture.httpClient.sentRequests.first?.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(root["reasoning_effort"] as? String, "high")
+        XCTAssertNil(root["reasoning"])
+    }
+
+    func testModelsDevAnthropicReasoningEffortUsesOutputConfig() async throws {
+        let provider = CatalogProvider(
+            id: "anthropic",
+            name: "Anthropic",
+            npm: "@ai-sdk/anthropic",
+            api: "https://api.anthropic.com/v1/",
+            env: ["ANTHROPIC_API_KEY"],
+            models: [CatalogModel(
+                id: "claude-reasoner",
+                name: "Claude Reasoner",
+                attachment: false,
+                reasoning: true,
+                reasoningOptions: [CatalogReasoningOption(type: "effort", values: ["low", "medium", "high"])],
+                toolCall: false,
+                structuredOutput: false,
+                temperature: true,
+                inputModalities: ["text"],
+                outputModalities: ["text"],
+                limits: CatalogLimits(context: nil, input: nil, output: nil),
+                cost: CatalogCost(
+                    inputPerMillion: nil,
+                    outputPerMillion: nil,
+                    reasoningPerMillion: nil,
+                    cacheReadPerMillion: nil,
+                    cacheWritePerMillion: nil
+                )
+            )]
+        )
+        let fixture = try makeModelsDevFixture(provider: provider)
+        try fixture.credentials.saveSecret("anthropic-key", key: "models_dev_anthropic_ANTHROPIC_API_KEY")
+        try fixture.credentials.saveSecret(
+            "medium",
+            key: "models_dev_anthropic_\(ModelsDevReasoningPreference.fieldName(modelID: "claude-reasoner"))"
+        )
+        fixture.httpClient.sendResponder = { request in
+            let data = #"{"content":[{"type":"text","text":"ok"}]}"#.data(using: .utf8)!
+            return (data, Self.httpResponse(url: request.url, statusCode: 200))
+        }
+
+        _ = try await fixture.gateway.generate(
+            request: ProviderRequest(
+                model: "claude-reasoner",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")],
+                stream: false
+            ),
+            providerID: "MODELS_DEV:anthropic"
+        )
+
+        let body = try XCTUnwrap(fixture.httpClient.sentRequests.first?.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual((root["output_config"] as? [String: Any])?["effort"] as? String, "medium")
+    }
+
+    func testModelsDevUnsupportedSavedReasoningEffortStopsBeforeHTTPRequest() async throws {
+        let provider = CatalogProvider(
+            id: "example",
+            name: "Example",
+            npm: "@ai-sdk/openai-compatible",
+            api: "https://example.com/v1",
+            env: ["EXAMPLE_API_KEY"],
+            models: [CatalogModel(
+                id: "gpt-reasoner",
+                name: "Reasoner",
+                attachment: false,
+                reasoning: true,
+                reasoningOptions: [CatalogReasoningOption(type: "effort", values: ["low", "high"])],
+                toolCall: false,
+                structuredOutput: false,
+                temperature: true,
+                inputModalities: ["text"],
+                outputModalities: ["text"],
+                limits: CatalogLimits(context: nil, input: nil, output: nil),
+                cost: CatalogCost(
+                    inputPerMillion: nil,
+                    outputPerMillion: nil,
+                    reasoningPerMillion: nil,
+                    cacheReadPerMillion: nil,
+                    cacheWritePerMillion: nil
+                )
+            )]
+        )
+        let fixture = try makeModelsDevFixture(provider: provider)
+        try fixture.credentials.saveSecret("dynamic-key", key: "models_dev_example_EXAMPLE_API_KEY")
+        try fixture.credentials.saveSecret(
+            "ultra",
+            key: "models_dev_example_\(ModelsDevReasoningPreference.fieldName(modelID: "gpt-reasoner"))"
+        )
+
+        do {
+            _ = try await fixture.gateway.generate(
+                request: ProviderRequest(
+                    model: "gpt-reasoner",
+                    messages: [ProviderRequestMessage(role: "user", content: "hello")],
+                    stream: false
+                ),
+                providerID: "MODELS_DEV:example"
+            )
+            XCTFail("Unsupported saved reasoning effort must fail before sending")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("ultra"))
+        }
+        XCTAssertTrue(fixture.httpClient.sentRequests.isEmpty)
+    }
+
     func testGenerateInjectsRequestedProviderBeforeClientResolvesEndpoint() async throws {
         let fixture = try makeFixture()
         try fixture.credentials.setCredential("openrouter-key", for: .openRouter)
@@ -589,6 +747,31 @@ final class ProviderGatewayTests: XCTestCase {
             settingsRepository: settings,
             credentialStore: credentials,
             httpClient: httpClient
+        )
+        return (gateway, credentials, httpClient, settings)
+    }
+
+    private func makeModelsDevFixture(provider: CatalogProvider) throws -> (
+        gateway: ProviderGateway,
+        credentials: ProviderGatewayCredentialStore,
+        httpClient: ProviderGatewayHTTPClient,
+        settings: SettingsRepository
+    ) {
+        let dbQueue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(dbQueue)
+        let settings = SettingsRepository(dbQueue: dbQueue)
+        let credentials = ProviderGatewayCredentialStore()
+        let httpClient = ProviderGatewayHTTPClient()
+        let cacheURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("models-dev-\(UUID().uuidString).json")
+        try JSONEncoder().encode([provider]).write(to: cacheURL)
+        let defaults = UserDefaults(suiteName: "ProviderGatewayTests.\(UUID().uuidString)")!
+        let catalogRepository = ModelsDevCatalogRepository(defaults: defaults, cacheURL: cacheURL)
+        let gateway = ProviderGateway(
+            settingsRepository: settings,
+            credentialStore: credentials,
+            httpClient: httpClient,
+            modelsDevCatalogRepository: catalogRepository
         )
         return (gateway, credentials, httpClient, settings)
     }

@@ -27,13 +27,20 @@ class AnthropicCompatibleProvider(
         request: GenerateContentRequest,
         baseUrl: String,
         providerLabel: String,
-        mcpAuthorizationToken: String? = null
+        mcpAuthorizationToken: String? = null,
+        reasoningEffort: String? = null
     ): Response<GenerateContentResponse> = withContext(Dispatchers.IO) {
         val cleanedKey = apiKey.trim()
         if (cleanedKey.isEmpty()) {
             return@withContext Response.error(401, "API Key is empty".toResponseBody())
         }
-        val payload = buildRequest(model, request, stream = false, mcpAuthorizationToken = mcpAuthorizationToken)
+        val payload = buildRequest(
+            model,
+            request,
+            stream = false,
+            mcpAuthorizationToken = mcpAuthorizationToken,
+            reasoningEffort = reasoningEffort
+        )
         try {
             val response = makeService(baseUrl).createMessage(
                 apiKey = cleanedKey,
@@ -60,13 +67,20 @@ class AnthropicCompatibleProvider(
         request: GenerateContentRequest,
         baseUrl: String,
         providerLabel: String,
-        mcpAuthorizationToken: String? = null
+        mcpAuthorizationToken: String? = null,
+        reasoningEffort: String? = null
     ): Response<ResponseBody> = withContext(Dispatchers.IO) {
         val cleanedKey = apiKey.trim()
         if (cleanedKey.isEmpty()) {
             return@withContext Response.error(401, "API Key is empty".toResponseBody())
         }
-        val payload = buildRequest(model, request, stream = true, mcpAuthorizationToken = mcpAuthorizationToken)
+        val payload = buildRequest(
+            model,
+            request,
+            stream = true,
+            mcpAuthorizationToken = mcpAuthorizationToken,
+            reasoningEffort = reasoningEffort
+        )
         try {
             makeService(baseUrl).streamMessage(
                 apiKey = cleanedKey,
@@ -84,7 +98,8 @@ class AnthropicCompatibleProvider(
         model: String,
         request: GenerateContentRequest,
         stream: Boolean,
-        mcpAuthorizationToken: String?
+        mcpAuthorizationToken: String?,
+        reasoningEffort: String?
     ): AnthropicMessageRequest {
         val thinking = buildThinking(request.generationConfig?.thinkingConfig)
         val mcp = buildMcpConfiguration(request.tools.orEmpty(), mcpAuthorizationToken)
@@ -96,6 +111,7 @@ class AnthropicCompatibleProvider(
             maxTokens = maxTokens,
             stream = stream,
             thinking = thinking,
+            outputConfig = reasoningEffort?.trim()?.takeIf { it.isNotEmpty() }?.let(::AnthropicOutputConfig),
             mcpServers = mcp?.servers,
             tools = mcp?.toolsets
         )

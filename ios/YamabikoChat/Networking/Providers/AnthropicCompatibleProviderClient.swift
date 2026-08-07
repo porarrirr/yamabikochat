@@ -23,6 +23,10 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         }
     }
 
+    private struct AnthropicOutputConfig: Encodable {
+        var effort: String
+    }
+
     private struct AnthropicMCPServer: Encodable {
         var type: String = "url"
         var url: String
@@ -71,6 +75,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         var maxTokens: Int
         var stream: Bool
         var thinking: AnthropicThinking?
+        var outputConfig: AnthropicOutputConfig?
         var mcpServers: [AnthropicMCPServer]?
         var tools: [AnyEncodable]?
 
@@ -81,6 +86,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
             case maxTokens = "max_tokens"
             case stream
             case thinking
+            case outputConfig = "output_config"
             case mcpServers = "mcp_servers"
             case tools
         }
@@ -93,6 +99,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
             try container.encode(maxTokens, forKey: .maxTokens)
             try container.encode(stream, forKey: .stream)
             try container.encodeIfPresent(thinking, forKey: .thinking)
+            try container.encodeIfPresent(outputConfig, forKey: .outputConfig)
             try container.encodeIfPresent(mcpServers, forKey: .mcpServers)
             try container.encodeIfPresent(tools, forKey: .tools)
         }
@@ -286,6 +293,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
             maxTokens: maxTokens,
             stream: stream,
             thinking: thinking,
+            outputConfig: request.metadata["modelsDevReasoningEffort"]?.trimmedNonEmpty.map(AnthropicOutputConfig.init),
             mcpServers: mcpConfiguration?.servers,
             tools: buildAnthropicTools(request.tools, mcpConfiguration: mcpConfiguration)
         )

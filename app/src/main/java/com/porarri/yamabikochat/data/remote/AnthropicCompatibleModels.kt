@@ -12,6 +12,8 @@ data class AnthropicMessageRequest(
     val maxTokens: Int,
     val stream: Boolean = false,
     val thinking: AnthropicThinking? = null,
+    @SerialName("output_config")
+    val outputConfig: AnthropicOutputConfig? = null,
     @SerialName("mcp_servers")
     val mcpServers: List<AnthropicMcpServer>? = null,
     val tools: List<AnthropicMcpToolset>? = null
@@ -43,6 +45,11 @@ data class AnthropicThinking(
     val type: String = "enabled",
     @SerialName("budget_tokens")
     val budgetTokens: Int
+)
+
+@Serializable
+data class AnthropicOutputConfig(
+    val effort: String
 )
 
 @Serializable

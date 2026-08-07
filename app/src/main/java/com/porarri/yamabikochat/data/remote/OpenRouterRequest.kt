@@ -27,6 +27,8 @@ data class OpenRouterRequest(
     val stop: List<String>? = null,
     override val provider: ProviderPreferences? = null,
     override val reasoning: OpenRouterReasoning? = null,
+    @SerialName("reasoning_effort")
+    val reasoningEffort: String? = null,
     @SerialName("reasoning_split")
     val reasoningSplit: Boolean? = null,
     val thinking: ZaiThinking? = null,
@@ -48,6 +50,8 @@ data class OpenRouterMultiModalRequest(
     val stop: List<String>? = null,
     override val provider: ProviderPreferences? = null,
     override val reasoning: OpenRouterReasoning? = null,
+    @SerialName("reasoning_effort")
+    val reasoningEffort: String? = null,
     @SerialName("reasoning_split")
     val reasoningSplit: Boolean? = null,
     val thinking: ZaiThinking? = null,

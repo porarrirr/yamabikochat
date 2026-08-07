@@ -125,7 +125,10 @@ final class ModelsDevCatalogRepository: @unchecked Sendable {
                 let limits = model["limit"] as? [String: Any]
                 let cost = model["cost"] as? [String: Any]
                 let reasoningOptions = (model["reasoning_options"] as? [[String: Any]] ?? []).compactMap { option in
-                    (option["type"] as? String).map { CatalogReasoningOption(type: $0, values: option["values"] as? [String] ?? []) }
+                    (option["type"] as? String).map { type in
+                        let values = (option["values"] as? [Any] ?? []).compactMap { $0 as? String }
+                        return CatalogReasoningOption(type: type, values: values)
+                    }
                 }
                 return CatalogModel(
                     id: modelID,
