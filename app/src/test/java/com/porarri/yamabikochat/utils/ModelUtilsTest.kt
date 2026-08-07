@@ -207,14 +207,11 @@ class ModelUtilsTest {
         assertTrue(ModelUtils.GEMINI_2_5_MODELS.contains("gemini-2.5-pro"))
         assertTrue(ModelUtils.GEMINI_2_5_MODELS.contains("gemini-2.5-flash"))
         assertTrue(ModelUtils.GEMINI_2_5_MODELS.contains("gemini-2.5-flash-lite"))
-        assertTrue(ModelUtils.GEMINI_2_5_MODELS.contains("gemini-2.5-pro-tts"))
-        assertEquals(7, ModelUtils.GEMINI_2_5_MODELS.size)
-        
-        // 2.0系モデルの確認
-        assertTrue(ModelUtils.GEMINI_2_0_MODELS.contains("gemini-2.0-pro"))
-        assertTrue(ModelUtils.GEMINI_2_0_MODELS.contains("gemini-2.0-flash"))
-        assertTrue(ModelUtils.GEMINI_2_0_MODELS.contains("gemini-2.0-flash-exp"))
-        assertEquals(3, ModelUtils.GEMINI_2_0_MODELS.size)
+        assertEquals(3, ModelUtils.GEMINI_2_5_MODELS.size)
+
+        assertTrue(ModelUtils.GEMINI_3_MODELS.contains("gemini-3.6-flash"))
+        assertTrue(ModelUtils.GEMINI_3_MODELS.contains("gemini-3.1-pro-preview"))
+        assertFalse(ModelUtils.GEMINI_3_MODELS.contains("gemini-3-pro"))
     }
 
     @Test

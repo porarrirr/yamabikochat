@@ -170,35 +170,20 @@ object ModelUtils {
         }
     }
     
-    /**
-     * 2.5系モデルの一覧を取得（参考用）
-     */
+    /** 現行の Gemini 2.5 テキストモデル（参考用） */
     val GEMINI_2_5_MODELS = listOf(
         "gemini-2.5-pro",
         "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-        "gemini-2.5-pro-tts",
-        "gemini-2.5-pro-preview",
-        "gemini-2.5-flash-preview",
-        "gemini-2.5-flash-lite-preview"
+        "gemini-2.5-flash-lite"
     )
 
-    /**
-     * 3系モデルの一覧（参考用）
-     */
+    /** 現行の Gemini 3.x テキストモデル（参考用） */
     val GEMINI_3_MODELS = listOf(
-        "gemini-3-pro",
-        "gemini-3-flash",
-        "gemini-3-pro-preview",
-        "gemini-3-flash-preview"
-    )
-    
-    /**
-     * 2.0系モデルの一覧を取得（thinking非対応）
-     */
-    val GEMINI_2_0_MODELS = listOf(
-        "gemini-2.0-pro",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-exp"
+        "gemini-3.6-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3.1-pro-preview",
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite"
     )
 }

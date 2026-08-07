@@ -6,6 +6,7 @@ enum ProviderClientError: LocalizedError, Sendable {
     case invalidResponse
     case httpStatus(Int, String)
     case parseFailure(String)
+    case unsupportedModel(provider: String, model: String)
 
     var errorDescription: String? {
         switch self {
@@ -22,6 +23,8 @@ enum ProviderClientError: LocalizedError, Sendable {
             return "HTTP \(status): \(body)"
         case let .parseFailure(reason):
             return "Response parse failed: \(reason)"
+        case let .unsupportedModel(provider, model):
+            return "Unsupported model for \(provider): \(model)."
         }
     }
 }

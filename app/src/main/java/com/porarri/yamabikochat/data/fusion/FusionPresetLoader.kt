@@ -1,5 +1,6 @@
 package com.porarri.yamabikochat.data.fusion
 
+import com.porarri.yamabikochat.data.remote.ProviderCatalog
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -184,26 +185,30 @@ object FusionPresetLoader {
 
     fun normalizedFusionPresetDefinition(preset: FusionPresetDefinition): FusionPresetDefinition {
         val normalizedPanels = preset.panelModels.map { panel ->
+            val provider = panel.provider.trim().uppercase()
             panel.copy(
-                provider = panel.provider.trim().uppercase(),
-                modelId = panel.modelId.trim()
+                provider = provider,
+                modelId = ProviderCatalog.migrateLegacyModelId(provider, panel.modelId.trim())
             )
         }
+        val judgeProvider = preset.judgeModel.provider.trim().uppercase()
         val judge = preset.judgeModel.copy(
-            provider = preset.judgeModel.provider.trim().uppercase(),
-            modelId = preset.judgeModel.modelId.trim()
+            provider = judgeProvider,
+            modelId = ProviderCatalog.migrateLegacyModelId(judgeProvider, preset.judgeModel.modelId.trim())
         )
+        val synthesizerProvider = preset.synthesizerModel.provider.trim().uppercase()
         val synthesizer = preset.synthesizerModel.copy(
-            provider = preset.synthesizerModel.provider.trim().uppercase(),
-            modelId = preset.synthesizerModel.modelId.trim()
+            provider = synthesizerProvider,
+            modelId = ProviderCatalog.migrateLegacyModelId(synthesizerProvider, preset.synthesizerModel.modelId.trim())
         )
         val fallbackRaw = preset.fallbackModel
         val fallback = if (fallbackRaw == null) {
             synthesizer
         } else {
+            val fallbackProvider = fallbackRaw.provider.trim().uppercase()
             val normalized = fallbackRaw.copy(
-                provider = fallbackRaw.provider.trim().uppercase(),
-                modelId = fallbackRaw.modelId.trim()
+                provider = fallbackProvider,
+                modelId = ProviderCatalog.migrateLegacyModelId(fallbackProvider, fallbackRaw.modelId.trim())
             )
             if (normalized.modelId.isEmpty() || normalized.provider.isEmpty()) {
                 synthesizer

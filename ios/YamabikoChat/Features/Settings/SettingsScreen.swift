@@ -485,8 +485,6 @@ struct SettingsScreen: View {
                     .foregroundStyle(.secondary)
             }
 
-            TextField("モデル検索", text: $viewModel.modelSearchQuery)
-
             HStack {
                 Button("取得") {
                     Task { await viewModel.refreshOpenRouterModels(force: false) }
@@ -507,26 +505,6 @@ struct SettingsScreen: View {
                 Text(err)
                     .font(.caption)
                     .foregroundStyle(.red)
-            }
-
-            ForEach(viewModel.filteredOpenRouterModels.prefix(30)) { model in
-                Button {
-                    viewModel.setDefaultModel(model.id)
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(model.name)
-                                .font(.subheadline)
-                            if model.id == viewModel.settings.defaultModel {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                            }
-                        }
-                        Text(model.id)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
             }
 
             Divider()
@@ -1211,7 +1189,21 @@ struct SettingsScreen: View {
 
     private var providerModelEditor: some View {
         Group {
-            if let provider = currentCatalogModelProvider {
+            if currentProviderKey == "OPENROUTER" {
+                OpenRouterModelPickerField(
+                    titleKey: "Model",
+                    model: Binding(
+                        get: { viewModel.settings.defaultModel },
+                        set: { viewModel.setDefaultModel($0) }
+                    ),
+                    models: viewModel.openRouterModels,
+                    isLoading: viewModel.openRouterModelsLoading,
+                    error: viewModel.openRouterModelsError,
+                    onRefresh: {
+                        Task { await viewModel.refreshOpenRouterModels(force: false) }
+                    }
+                )
+            } else if let provider = currentCatalogModelProvider {
                 CatalogModelPickerField(
                     modelID: Binding(
                         get: { viewModel.settings.defaultModel },
@@ -1362,6 +1354,18 @@ struct SettingsScreen: View {
                     get: { viewModel.settings.defaultModel },
                     set: { viewModel.setDefaultModel($0) }
                 ))
+            } else if currentProviderKey == "ZAI" {
+                Picker("Z.ai Coding Plan Model", selection: Binding(
+                    get: { viewModel.settings.defaultModel },
+                    set: { viewModel.setDefaultModel($0) }
+                )) {
+                    ForEach(ZAICodingPlanModelCatalog.supportedModels, id: \.self) { model in
+                        Text(model).tag(model)
+                    }
+                }
+                Text("Coding Plan 専用 endpoint で利用可能なモデルだけを表示しています。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             } else if isAppleIntelligenceProvider {
                 Text(AppleIntelligenceModelCatalog.displayModel)
             } else {

@@ -38,7 +38,7 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testSetProviderReloadsApiKeyDraftForSelectedProvider() throws {
+    func testSetProviderReloadsApiKeyDraftForSelectedProvider() async throws {
         let fixture = try makeFixture()
         var settings = try fixture.repository.loadSettings()
         settings.apiProvider = "OPENROUTER"
@@ -49,6 +49,7 @@ final class SettingsViewModelTests: XCTestCase {
         let viewModel = SettingsViewModel()
         viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
         viewModel.setProvider("OPENAI")
+        await Task.yield()
 
         XCTAssertEqual(viewModel.apiKeyDraft, "openai-key")
     }
@@ -87,7 +88,7 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testSetProviderReloadsAlibabaApiKeyDraftForSelectedProvider() throws {
+    func testSetProviderReloadsAlibabaApiKeyDraftForSelectedProvider() async throws {
         let fixture = try makeFixture()
         var settings = try fixture.repository.loadSettings()
         settings.apiProvider = "OPENAI"
@@ -98,9 +99,41 @@ final class SettingsViewModelTests: XCTestCase {
         let viewModel = SettingsViewModel()
         viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
         viewModel.setProvider("ALIBABA_CODING_PLAN")
+        await Task.yield()
 
         XCTAssertEqual(viewModel.apiKeyDraft, "alibaba-key")
         XCTAssertEqual(viewModel.settings.defaultModel, AlibabaCodingPlanModelCatalog.defaultModel)
+    }
+
+    @MainActor
+    func testSetProviderUsesOpenCodeGoCatalogInsteadOfOpenCodeZenModel() throws {
+        let fixture = try makeFixture()
+        var settings = try fixture.repository.loadSettings()
+        settings.apiProvider = "OPENROUTER"
+        settings.defaultModel = "openai/gpt-4o-mini"
+        try fixture.repository.saveSettings(settings)
+
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.setProvider("OPENCODE_GO")
+
+        XCTAssertEqual(viewModel.settings.apiProvider, "OPENCODE_GO")
+        XCTAssertEqual(viewModel.settings.defaultModel, OpenCodeGoModelCatalog.defaultModel)
+    }
+
+    @MainActor
+    func testSetProviderUsesZAICodingPlanModel() throws {
+        let fixture = try makeFixture()
+        var settings = try fixture.repository.loadSettings()
+        settings.apiProvider = "OPENAI"
+        settings.defaultModel = "gpt-4.1-mini"
+        try fixture.repository.saveSettings(settings)
+
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.setProvider("ZAI")
+
+        XCTAssertEqual(viewModel.settings.defaultModel, ZAICodingPlanModelCatalog.defaultModel)
     }
 
     @MainActor

@@ -16,6 +16,7 @@ enum AppConstants {
     static let defaultClinePassBaseURL = URL(string: "https://api.cline.bot/api/v1/")!
     static let defaultAlibabaCodingPlanBaseURL = URL(string: "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/")!
     static let defaultMiniMaxBaseURL = URL(string: "https://api.minimax.io/v1/")!
+    static let defaultZAICodingPlanBaseURL = URL(string: "https://api.z.ai/api/coding/paas/v4/")!
     static let defaultSuperGrokBaseURL = URL(string: "https://api.x.ai/v1/")!
 
     /// GitHub Pages (`docs/`). Enable Pages on the repo before App Store submission.

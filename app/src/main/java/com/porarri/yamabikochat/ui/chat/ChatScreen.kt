@@ -458,7 +458,7 @@ fun ChatScreen(
                                         "CODEX_AUTH" -> "Codex Auth"
                                         "SUPERGROK" -> "SuperGrok"
                                         "OPENAI_COMPAT" -> "OpenAI (Custom)"
-                                        "ZAI" -> "Z.ai"
+                                        "ZAI" -> "Z.ai Coding Plan"
                                         else -> preset.apiProvider
                                     }
                                     val thinkingSuffix = if (preset.thinkingEnabled) " · Thinking" else ""
@@ -2332,7 +2332,7 @@ private fun ChatScreenPreview() {
                                 userText = "この文章を要約して",
                                 modelAText = "要点は3つです…",
                                 modelBText = "結論から言うと…",
-                                modelAName = "glm-4.6",
+                                modelAName = "glm-5.2",
                                 modelBName = "MiniMax-M2.1",
                                 modelAProvider = "ZAI",
                                 modelBProvider = "MINIMAX",

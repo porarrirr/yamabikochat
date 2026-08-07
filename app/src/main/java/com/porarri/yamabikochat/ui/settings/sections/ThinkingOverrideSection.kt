@@ -130,7 +130,7 @@ fun ThinkingOverrideSection(
                 }
                 if (isZai) {
                     Text(
-                        text = "Z.ai はON/OFFのみ対応しています",
+                        text = "Z.ai Coding Plan はON/OFFのみ対応しています",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

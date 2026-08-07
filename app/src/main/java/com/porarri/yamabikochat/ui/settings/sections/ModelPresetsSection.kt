@@ -378,7 +378,7 @@ private fun PresetProviderCard(
                                 "GEMINI" -> "Gemini API Key (Optional)"
                                 "OPENROUTER" -> "OpenRouter API Key (Optional)"
                                 "MINIMAX" -> "MiniMax API Key (Optional)"
-                                "ZAI" -> "Z.ai API Key (Optional)"
+                                "ZAI" -> "Z.ai Coding Plan API Key (Optional)"
                                 "OPENCODE_GO" -> "OpenCode Go API Key (Optional)"
                                 "ALIBABA_CODING_PLAN" -> "Alibaba Coding Plan API Key (Optional)"
                                 else -> "API Key (Optional)"

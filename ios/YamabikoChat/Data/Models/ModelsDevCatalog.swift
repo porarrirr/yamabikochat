@@ -25,8 +25,7 @@ enum ModelsDevMergedProvider {
         let reference = ProviderReference(persistedID: persistedID)
         if let dynamic = reference.modelsDevID { return dynamic }
         return [
-            "GEMINI": "google", "OPENAI": "openai", "OPENCODE_GO": "opencode",
-            "ALIBABA_CODING_PLAN": "alibaba-coding-plan", "ZAI": "zai", "MINIMAX": "minimax"
+            "GEMINI": "google", "OPENAI": "openai"
         ][persistedID.uppercased()]
     }
 }

@@ -400,7 +400,16 @@ final class SettingsViewModel: ObservableObject {
         if let data = try? JSONEncoder().encode(providerMap), let json = String(data: data, encoding: .utf8) {
             settings.providerDefaultModelsJSON = json
         }
-        loadCurrentProviderAPIKey()
+        scheduleAPIKeyLoad(for: nextProvider)
+    }
+
+    private func scheduleAPIKeyLoad(for provider: String) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.settings.apiProvider.caseInsensitiveCompare(provider) == .orderedSame else {
+                return
+            }
+            self.loadCurrentProviderAPIKey()
+        }
     }
 
     var openAICompatPresets: [OpenAICompatPreset] {
@@ -900,26 +909,8 @@ final class SettingsViewModel: ObservableObject {
     }
 
     private func defaultModelForProvider(_ provider: String) -> String {
-        switch provider.uppercased() {
-        case "GEMINI":
-            return "gemini-2.5-flash"
-        case "ALIBABA_CODING_PLAN":
-            return AlibabaCodingPlanModelCatalog.defaultModel
-        case "OPENCODE_GO":
-            return OpenCodeGoModelCatalog.defaultModel
-        case "SUPERGROK":
-            return SuperGrokModelCatalog.defaultModel
-        case "CLINEPASS":
-            return ClinePassModelCatalog.defaultModel
-        case "MINIMAX":
-            return "MiniMax-M2.1"
-        case "CODEX_AUTH":
-            return CodexModelCatalog.defaultModel()
-        case "APPLE_INTELLIGENCE":
-            return AppleIntelligenceModelCatalog.displayModel
-        default:
-            return settings.modelForProvider(provider.uppercased())
-        }
+        let catalogDefault = ProviderCatalog.defaultModel(for: provider)
+        return catalogDefault.isEmpty ? settings.modelForProvider(provider.uppercased()) : catalogDefault
     }
 
     private func syncSystemPromptPresetName() {

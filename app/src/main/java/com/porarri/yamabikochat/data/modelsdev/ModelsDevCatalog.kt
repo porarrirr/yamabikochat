@@ -27,8 +27,7 @@ data class ProviderReference(
 object ModelsDevMergedProvider {
     fun catalogIdFor(persistedId: String): String? = ProviderReference(persistedId).modelsDevId
         ?: mapOf(
-            "GEMINI" to "google", "OPENAI" to "openai", "OPENCODE_GO" to "opencode",
-            "ALIBABA_CODING_PLAN" to "alibaba-coding-plan", "ZAI" to "zai", "MINIMAX" to "minimax"
+            "GEMINI" to "google", "OPENAI" to "openai"
         )[persistedId.uppercase()]
 }
 

@@ -113,6 +113,57 @@ final class ProviderGatewayTests: XCTestCase {
         XCTAssertEqual(root["model"] as? String, "cline-pass/glm-5.2")
     }
 
+    func testZAIGenerateUsesCodingPlanEndpoint() async throws {
+        let fixture = try makeFixture()
+        try fixture.credentials.setCredential("zai-key", for: .zai)
+
+        fixture.httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"zai ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.httpResponse(url: request.url, statusCode: 200))
+        }
+
+        let response = try await fixture.gateway.generate(
+            request: ProviderRequest(
+                model: "glm-5.2",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")],
+                stream: false
+            ),
+            provider: .zai
+        )
+
+        XCTAssertEqual(response.text, "zai ok")
+        let request = try XCTUnwrap(fixture.httpClient.sentRequests.first)
+        XCTAssertEqual(request.url.absoluteString, "https://api.z.ai/api/coding/paas/v4/chat/completions")
+        XCTAssertEqual(request.headers["Authorization"], "Bearer zai-key")
+        let body = try XCTUnwrap(request.body)
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(root["model"] as? String, "glm-5.2")
+    }
+
+    func testZAIRejectsModelOutsideCodingPlanBeforeSending() async throws {
+        let fixture = try makeFixture()
+        try fixture.credentials.setCredential("zai-key", for: .zai)
+
+        do {
+            _ = try await fixture.gateway.generate(
+                request: ProviderRequest(
+                    model: "glm-5.1",
+                    messages: [ProviderRequestMessage(role: "user", content: "hello")],
+                    stream: false
+                ),
+                provider: .zai
+            )
+            XCTFail("Expected unsupported model error")
+        } catch let error as ProviderClientError {
+            guard case let .unsupportedModel(provider, model) = error else {
+                return XCTFail("Unexpected provider error: \(error)")
+            }
+            XCTAssertEqual(provider, "Z.ai Coding Plan")
+            XCTAssertEqual(model, "glm-5.1")
+        }
+        XCTAssertTrue(fixture.httpClient.sentRequests.isEmpty)
+    }
+
     func testOpenCodeGoStreamRetriesNonStreamingWhenNoAnswerTextArrives() async throws {
         let fixture = try makeFixture()
         try fixture.credentials.setCredential("opencode-key", for: .openCodeGo)

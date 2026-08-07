@@ -58,4 +58,23 @@ class FusionPresetLoaderTest {
         assertEquals("OPENROUTER", normalized.judgeModel.provider)
         assertTrue(normalized.fallbackModel != null)
     }
+
+    @Test
+    fun normalizeMigratesLegacyZaiModelWithoutChangingOpenCodeGoModel() {
+        val raw = FusionPresetDefinition(
+            panelModels = listOf(
+                PanelModelConfig(modelId = "glm-5.1", provider = "ZAI"),
+                PanelModelConfig(modelId = "glm-5.1", provider = "OPENCODE_GO")
+            ),
+            judgeModel = PanelModelConfig(modelId = "glm-5.1", provider = "ZAI"),
+            synthesizerModel = PanelModelConfig(modelId = "glm-5.1", provider = "OPENCODE_GO")
+        )
+
+        val normalized = FusionPresetLoader.normalizedFusionPresetDefinition(raw)
+
+        assertEquals("glm-5.2", normalized.panelModels[0].modelId)
+        assertEquals("glm-5.1", normalized.panelModels[1].modelId)
+        assertEquals("glm-5.2", normalized.judgeModel.modelId)
+        assertEquals("glm-5.1", normalized.synthesizerModel.modelId)
+    }
 }

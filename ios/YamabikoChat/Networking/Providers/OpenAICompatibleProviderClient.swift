@@ -88,6 +88,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             )
         }
         let resolvedProvider = LLMProvider(rawOrDefault: request.metadata["provider"] ?? settings.apiProvider)
+        try validateModel(request.model, for: resolvedProvider)
         let apiKey = try resolvedCredential(
             for: resolvedProvider,
             settings: settings,
@@ -129,6 +130,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                         return
                     }
                     let resolvedProvider = LLMProvider(rawOrDefault: request.metadata["provider"] ?? settings.apiProvider)
+                    try validateModel(request.model, for: resolvedProvider)
                     let apiKey = try resolvedCredential(
                         for: resolvedProvider,
                         settings: settings,
@@ -407,10 +409,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             }
             return url
         case .zai:
-            guard let url = URL(string: "https://api.z.ai/v1/chat/completions") else {
-                throw ProviderClientError.invalidBaseURL("https://api.z.ai/v1/chat/completions")
-            }
-            return url
+            return AppConstants.defaultZAICodingPlanBaseURL.appendingPathComponent("chat/completions")
         case .clinePass:
             guard let url = URL(string: "https://api.cline.bot/api/v1/chat/completions") else {
                 throw ProviderClientError.invalidBaseURL("https://api.cline.bot/api/v1/chat/completions")
@@ -433,6 +432,12 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         }
 
         return headers
+    }
+
+    private func validateModel(_ model: String, for provider: LLMProvider) throws {
+        if provider == .zai, !ZAICodingPlanModelCatalog.isSupported(model) {
+            throw ProviderClientError.unsupportedModel(provider: "Z.ai Coding Plan", model: model)
+        }
     }
 
     private func mapMessages(

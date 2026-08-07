@@ -28,6 +28,20 @@ final class ModelsDevCatalogTests: XCTestCase {
         XCTAssertFalse(ProviderReference(persistedID: "UNKNOWN_PROVIDER").isModelsDev)
     }
 
+    func testOpenCodeGoDoesNotUseOpenCodeZenCatalog() {
+        XCTAssertNil(ModelsDevMergedProvider.catalogID(for: "OPENCODE_GO"))
+        XCTAssertEqual(ModelsDevMergedProvider.catalogID(for: "MODELS_DEV:opencode"), "opencode")
+    }
+
+    func testBuiltInProvidersDoNotMergeWithDifferentProtocolCatalogs() {
+        XCTAssertNil(ModelsDevMergedProvider.catalogID(for: "ALIBABA_CODING_PLAN"))
+        XCTAssertNil(ModelsDevMergedProvider.catalogID(for: "MINIMAX"))
+        XCTAssertNil(ModelsDevMergedProvider.catalogID(for: "ZAI"))
+        XCTAssertEqual(ModelsDevMergedProvider.catalogID(for: "MODELS_DEV:alibaba-coding-plan"), "alibaba-coding-plan")
+        XCTAssertEqual(ModelsDevMergedProvider.catalogID(for: "MODELS_DEV:minimax"), "minimax")
+        XCTAssertEqual(ModelsDevMergedProvider.catalogID(for: "MODELS_DEV:zai"), "zai")
+    }
+
     private static let currentNpmKinds = [
         "@ai-sdk/amazon-bedrock", "@ai-sdk/anthropic", "@ai-sdk/azure", "@ai-sdk/cerebras",
         "@ai-sdk/cohere", "@ai-sdk/deepinfra", "@ai-sdk/gateway", "@ai-sdk/google",

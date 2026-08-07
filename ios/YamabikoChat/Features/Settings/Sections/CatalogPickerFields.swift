@@ -2,8 +2,18 @@ import SwiftUI
 
 struct CatalogProviderPickerField: View {
     @Binding var providerID: String
-    let catalogProviders: [CatalogProvider]
+    private let catalogProviders: [CatalogProviderOption]
     var title: String = "API Provider"
+
+    init(
+        providerID: Binding<String>,
+        catalogProviders: [CatalogProvider],
+        title: String = "API Provider"
+    ) {
+        _providerID = providerID
+        self.catalogProviders = catalogProviders.map(CatalogProviderOption.init)
+        self.title = title
+    }
 
     private var selectedLabel: String {
         if let builtIn = ProviderCatalog.options.first(where: { $0.key == providerID.uppercased() }) { return builtIn.title }
@@ -13,7 +23,11 @@ struct CatalogProviderPickerField: View {
 
     var body: some View {
         NavigationLink {
-            CatalogProviderListView(providerID: $providerID, catalogProviders: catalogProviders)
+            CatalogProviderListView(
+                selectedProviderID: providerID,
+                catalogProviders: catalogProviders,
+                onSelect: { providerID = $0 }
+            )
         } label: {
             HStack {
                 Text(L10n.text(title))
@@ -24,10 +38,28 @@ struct CatalogProviderPickerField: View {
     }
 }
 
+private struct CatalogProviderOption: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let persistedID: String
+
+    init(_ provider: CatalogProvider) {
+        id = provider.id
+        name = provider.name
+        persistedID = provider.reference.persistedID
+    }
+
+    func matches(_ query: String) -> Bool {
+        let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty || id.localizedCaseInsensitiveContains(value) || name.localizedCaseInsensitiveContains(value)
+    }
+}
+
 private struct CatalogProviderListView: View {
     @Environment(\.dismiss) private var dismiss
-    @Binding var providerID: String
-    let catalogProviders: [CatalogProvider]
+    let selectedProviderID: String
+    let catalogProviders: [CatalogProviderOption]
+    let onSelect: (String) -> Void
     @State private var query = ""
 
     private var filteredBuiltIns: [ProviderDisplay] {
@@ -36,7 +68,7 @@ private struct CatalogProviderListView: View {
         }
     }
 
-    private var filteredCatalog: [CatalogProvider] {
+    private var filteredCatalog: [CatalogProviderOption] {
         catalogProviders.filter { provider in
             !Self.mergedProviderIDs.contains(provider.id) && provider.matches(query)
         }
@@ -47,9 +79,9 @@ private struct CatalogProviderListView: View {
             Section("YamabikoChat") {
                 ForEach(filteredBuiltIns) { provider in providerRow(provider.key, provider.title, nil) }
             }
-            Section("models.dev") {
+            Section {
                 ForEach(filteredCatalog) { provider in
-                    providerRow(provider.reference.persistedID, provider.name, provider.id)
+                    providerRow(provider.persistedID, provider.name, provider.id)
                 }
             }
         }
@@ -60,8 +92,8 @@ private struct CatalogProviderListView: View {
     @ViewBuilder
     private func providerRow(_ id: String, _ title: String, _ subtitle: String?) -> some View {
         Button {
-            providerID = id
             dismiss()
+            onSelect(id)
         } label: {
             HStack {
                 VStack(alignment: .leading) {
@@ -69,9 +101,11 @@ private struct CatalogProviderListView: View {
                     if let subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
                 }
                 Spacer()
-                if providerID.caseInsensitiveCompare(id) == .orderedSame { Image(systemName: "checkmark") }
+                if selectedProviderID.caseInsensitiveCompare(id) == .orderedSame { Image(systemName: "checkmark") }
             }
-        }.buttonStyle(.plain)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 
     private static let mergedProviderIDs: Set<String> = [

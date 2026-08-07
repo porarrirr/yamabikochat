@@ -322,6 +322,7 @@ class SettingsScreenState(
         model = providerModels[nextProviderKey]
             ?: latestSettings?.getModelForProvider(newProvider)
             ?: ""
+        model = ProviderCatalog.migrateLegacyModelId(nextProviderKey, model)
         if (nextProviderKey == "MINIMAX" && model.isBlank()) {
             model = "MiniMax-M2.1"
         }
@@ -485,20 +486,23 @@ class SettingsScreenState(
     }
 
     fun applySettings(currentSettingsState: Settings?) {
+        val normalizedCurrentSettings = currentSettingsState
+            ?.remapRemovedProviders()
+            ?.normalizedForPersistence()
         val previousSettings = latestSettings
-        latestSettings = currentSettingsState
-        if (currentSettingsState != null && previousSettings != null) {
+        latestSettings = normalizedCurrentSettings
+        if (normalizedCurrentSettings != null && previousSettings != null) {
             val onlyPinnedRecentChanged = previousSettings.copy(
-                openRouterPinnedModels = currentSettingsState.openRouterPinnedModels,
-                openRouterRecentModels = currentSettingsState.openRouterRecentModels
-            ) == currentSettingsState
+                openRouterPinnedModels = normalizedCurrentSettings.openRouterPinnedModels,
+                openRouterRecentModels = normalizedCurrentSettings.openRouterRecentModels
+            ) == normalizedCurrentSettings
             if (onlyPinnedRecentChanged) {
-                openRouterPinnedModels = currentSettingsState.getOpenRouterPinnedModelsList()
-                openRouterRecentModels = currentSettingsState.getOpenRouterRecentModelsList()
+                openRouterPinnedModels = normalizedCurrentSettings.getOpenRouterPinnedModelsList()
+                openRouterRecentModels = normalizedCurrentSettings.getOpenRouterRecentModelsList()
                 return
             }
         }
-        currentSettingsState?.let { settingsState ->
+        normalizedCurrentSettings?.let { settingsState ->
             providerModels.clear()
             providerModels.putAll(settingsState.getProviderModels())
             val promptPresets = settingsState.getSystemPromptPresetsList()

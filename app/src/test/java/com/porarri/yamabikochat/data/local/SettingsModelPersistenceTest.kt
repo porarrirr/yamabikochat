@@ -4,6 +4,28 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class SettingsModelPersistenceTest {
+    @Test
+    fun normalizationMigratesOnlyZaiLegacyModelIds() {
+        val normalized = Settings(
+            apiProvider = "ZAI",
+            defaultModel = "glm-5.1",
+            dualProviderA = "ZAI",
+            dualModelA = "glm-5.1",
+            dualProviderB = "OPENCODE_GO",
+            dualModelB = "glm-5.1",
+            autoProviderA = "ZAI",
+            autoModelA = "glm-5.1",
+            providerDefaultModels = """{"ZAI":"glm-5.1","OPENCODE_GO":"glm-5.1"}"""
+        ).normalizedForPersistence()
+
+        assertEquals("glm-5.2", normalized.defaultModel)
+        assertEquals("glm-5.2", normalized.dualModelA)
+        assertEquals("glm-5.1", normalized.dualModelB)
+        assertEquals("glm-5.2", normalized.autoModelA)
+        assertEquals("glm-5.2", normalized.getModelForProvider("ZAI"))
+        assertEquals("glm-5.1", normalized.getModelForProvider("OPENCODE_GO"))
+    }
+
 
     @Test
     fun withModelForProvider_persistsPreviousProviderModel() {

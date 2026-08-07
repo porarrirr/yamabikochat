@@ -380,7 +380,12 @@ private fun AutoConversationModelConfiguration(
                 onOptionSelected = {
                     val changed = !provider.equals(it.key, ignoreCase = true)
                     onProviderChange(it.key)
-                    if (changed && ProviderReference(it.key).isModelsDev) onModelChange("")
+                    if (changed) {
+                        onModelChange(
+                            if (ProviderReference(it.key).isModelsDev) ""
+                            else ProviderCatalog.defaultModel(it.key)
+                        )
+                    }
                 },
                 onDismissRequest = { showProviderSheet = false }
             )
@@ -405,6 +410,26 @@ private fun AutoConversationModelConfiguration(
             Spacer(modifier = Modifier.height(12.dp))
             ReasoningOverrideSection(reasoning)
             ToolingOverrideSection(provider = provider, tooling = tools)
+        } else if (ProviderCatalog.constrainedModelIds(provider) != null) {
+            val modelIds = ProviderCatalog.constrainedModelIds(provider).orEmpty()
+            var showModelSheet by remember { mutableStateOf(false) }
+            YamabikoSelectRow(
+                title = "モデル",
+                value = model.ifBlank { ProviderCatalog.defaultModel(provider) },
+                onClick = { showModelSheet = true }
+            )
+            if (showModelSheet) {
+                YamabikoOptionBottomSheet(
+                    title = ProviderCatalog.displayName(provider),
+                    options = modelIds.map { YamabikoOption(key = it, title = it) },
+                    selectedKey = model,
+                    onOptionSelected = { onModelChange(it.key) },
+                    onDismissRequest = { showModelSheet = false },
+                    searchable = true
+                )
+            }
+            ToolingOverrideSection(provider = provider, tooling = tools)
+            ThinkingOverrideSection(provider = provider, model = model, thinking = thinking)
         } else if (dynamicProvider != null) {
             var showModelSheet by remember { mutableStateOf(false) }
             YamabikoSelectRow(

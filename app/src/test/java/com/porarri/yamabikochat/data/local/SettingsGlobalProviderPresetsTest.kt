@@ -72,4 +72,5 @@ class SettingsGlobalProviderPresetsTest {
             providers
         )
     }
+
 }

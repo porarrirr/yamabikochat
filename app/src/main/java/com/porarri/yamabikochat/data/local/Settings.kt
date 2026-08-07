@@ -211,12 +211,25 @@ data class Settings(
         val task = fusionTaskType.trim().lowercase().let {
             if (it in setOf("research", "coding", "auto")) it else "auto"
         }
+        val normalizedProviderModels = providerModelMap().toMutableMap().apply {
+            this["ZAI"]?.let { this["ZAI"] = ProviderCatalog.migrateLegacyModelId("ZAI", it) }
+        }
         return copy(
             isDualModeEnabled = dual,
             isAutoConversationEnabled = auto,
             isFusionModeEnabled = fusion,
             fusionPresetName = "custom",
             fusionTaskType = task,
+            defaultModel = ProviderCatalog.migrateLegacyModelId(apiProvider, defaultModel),
+            dualModelA = ProviderCatalog.migrateLegacyModelId(dualProviderA, dualModelA),
+            dualModelB = ProviderCatalog.migrateLegacyModelId(dualProviderB, dualModelB),
+            autoModelA = ProviderCatalog.migrateLegacyModelId(autoProviderA, autoModelA),
+            autoModelB = ProviderCatalog.migrateLegacyModelId(autoProviderB, autoModelB),
+            providerDefaultModels = if (normalizedProviderModels.isEmpty()) {
+                providerDefaultModels
+            } else {
+                gson.toJson(normalizedProviderModels)
+            },
             fusionCustomPresetJSON = com.porarri.yamabikochat.data.fusion.FusionPresetLoader
                 .normalizedFusionCustomPresetJSON(fusionCustomPresetJSON)
         )

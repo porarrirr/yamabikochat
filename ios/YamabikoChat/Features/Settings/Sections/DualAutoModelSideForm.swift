@@ -52,13 +52,23 @@ struct DualAutoModelSideForm: View {
                 set: { newValue in
                     let changed = provider.caseInsensitiveCompare(newValue) != .orderedSame
                     provider = newValue
-                    if changed && ProviderReference(persistedID: newValue).isModelsDev { model = "" }
+                    if changed {
+                        model = ProviderReference(persistedID: newValue).isModelsDev
+                            ? ""
+                            : ProviderCatalog.defaultModel(for: newValue)
+                    }
                 }
             ),
             catalogProviders: catalogProviders,
             title: providerTitleKey
         )
-        if let dynamicProvider = catalogProvider {
+        if let modelIDs = ProviderCatalog.constrainedModelIDs(for: provider) {
+            Picker(L10n.text(modelTitleKey), selection: $model) {
+                ForEach(modelIDs, id: \.self) { modelID in
+                    Text(modelID).tag(modelID)
+                }
+            }
+        } else if let dynamicProvider = catalogProvider {
             CatalogModelPickerField(modelID: $model, provider: dynamicProvider, title: modelTitleKey)
         } else {
             TextField(L10n.text(modelTitleKey), text: $model)

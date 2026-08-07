@@ -1,9 +1,11 @@
 import Foundation
 
 enum AlibabaCodingPlanModelCatalog {
-    static let defaultModel = "qwen3.5-plus"
+    static let defaultModel = "qwen3.7-plus"
 
     static let supportedModels: [String] = [
+        "qwen3.7-plus",
+        "qwen3.6-plus",
         "qwen3.5-plus",
         "kimi-k2.5",
         "glm-5",

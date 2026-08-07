@@ -36,6 +36,7 @@ import com.porarri.yamabikochat.data.remote.OpenCodeGoModelCatalog
 import com.porarri.yamabikochat.data.remote.OpenAiCompatPreset
 import com.porarri.yamabikochat.data.remote.ProviderCatalog
 import com.porarri.yamabikochat.data.remote.SimpleModel
+import com.porarri.yamabikochat.data.remote.ZaiCodingPlanModelCatalog
 import com.porarri.yamabikochat.data.modelsdev.CatalogAvailability
 import com.porarri.yamabikochat.data.modelsdev.ProviderReference
 import com.porarri.yamabikochat.data.modelsdev.ModelsDevMergedProvider
@@ -1070,7 +1071,7 @@ fun SettingsScreen(
                             isOpenCodeGoProvider -> "OpenCode Go API Key"
                             isClinePassProvider -> "Cline Pass API Key"
                             isAlibabaCodingPlanProvider -> "Alibaba Coding Plan API Key"
-                            else -> "Z.ai API Key"
+                            else -> "Z.ai Coding Plan API Key"
                         }
                         val savedKeyPlaceholder = when {
                             isGeminiProvider -> "保存済みのGemini APIキーを使用中（表示するにはアイコンをタップ）"
@@ -1081,7 +1082,7 @@ fun SettingsScreen(
                             isOpenCodeGoProvider -> "保存済みのOpenCode Go APIキーを使用中（表示するにはアイコンをタップ）"
                             isClinePassProvider -> "保存済みのCline Pass APIキーを使用中（表示するにはアイコンをタップ）"
                             isAlibabaCodingPlanProvider -> "保存済みのAlibaba Coding Plan APIキーを使用中（表示するにはアイコンをタップ）"
-                            else -> "保存済みのZ.ai APIキーを使用中（表示するにはアイコンをタップ）"
+                            else -> "保存済みのZ.ai Coding Plan APIキーを使用中（表示するにはアイコンをタップ）"
                         }
 
                         YamabikoTextField(
@@ -1919,6 +1920,31 @@ fun SettingsScreen(
                                 placeholder = { Text(ClinePassModelCatalog.defaultModel) },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true
+                            )
+                        }
+                        "ZAI" -> {
+                            val selectedModel = model.ifBlank { ZaiCodingPlanModelCatalog.defaultModel }
+                            var showZaiModelSheet by remember { mutableStateOf(false) }
+                            YamabikoSelectRow(
+                                title = "Z.ai Coding Plan Model",
+                                value = selectedModel,
+                                onClick = { showZaiModelSheet = true }
+                            )
+                            if (showZaiModelSheet) {
+                                YamabikoOptionBottomSheet(
+                                    title = "Z.ai Coding Plan Model",
+                                    options = ZaiCodingPlanModelCatalog.supportedModels.map {
+                                        YamabikoOption(key = it, title = it, subtitle = "chat/completions")
+                                    },
+                                    selectedKey = selectedModel,
+                                    onOptionSelected = { option -> model = option.key },
+                                    onDismissRequest = { showZaiModelSheet = false }
+                                )
+                            }
+                            Text(
+                                text = "Coding Plan 専用 endpoint で利用可能なモデルだけを表示しています。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         else -> if (ModelsDevMergedProvider.catalogIdFor(apiProvider) != null &&
@@ -3147,7 +3173,7 @@ private fun SettingsScreenPreviewContent(initialTab: Int) {
 
     var isDualModeEnabled by remember { mutableStateOf(true) }
     var dualProviderA by remember { mutableStateOf("ZAI") }
-    var dualModelA by remember { mutableStateOf("glm-4.6") }
+    var dualModelA by remember { mutableStateOf("glm-5.2") }
     var dualSelectedProviderA by remember { mutableStateOf<String?>(null) }
     var dualProviderB by remember { mutableStateOf("MINIMAX") }
     var dualModelB by remember { mutableStateOf("MiniMax-M2.1") }
@@ -3569,7 +3595,7 @@ private fun SettingsScreenPreviewContent(initialTab: Int) {
                                         "GEMINI" -> "Google Gemini"
                                         "OPENROUTER" -> "OpenRouter"
                                         "MINIMAX" -> "MiniMax"
-                                        "ZAI" -> "Z.ai"
+                                        "ZAI" -> "Z.ai Coding Plan"
                                         "OPENAI" -> "OpenAI"
                                         "CODEX_AUTH" -> "Codex Auth"
                                         "SUPERGROK" -> "SuperGrok"

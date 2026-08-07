@@ -24,7 +24,7 @@ enum ShortcutProviderAppEnum: String, AppEnum {
         .superGrok: DisplayRepresentation(title: "SuperGrok"),
         .clinePass: DisplayRepresentation(title: "Cline Pass"),
         .alibabaCodingPlan: DisplayRepresentation(title: "Alibaba Coding Plan"),
-        .zai: DisplayRepresentation(title: "Z.ai"),
+        .zai: DisplayRepresentation(title: "Z.ai Coding Plan"),
         .miniMax: DisplayRepresentation(title: "MiniMax"),
         .openAI: DisplayRepresentation(title: "OpenAI"),
         .codexAuth: DisplayRepresentation(title: "Codex Auth"),

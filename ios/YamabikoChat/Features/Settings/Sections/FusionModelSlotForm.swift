@@ -34,22 +34,6 @@ struct FusionModelSlotForm: View {
         provider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "OPENROUTER"
     }
 
-    private var isClinePassProvider: Bool {
-        provider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "CLINEPASS"
-    }
-
-    private var clinePassModelSelection: Binding<String> {
-        Binding(
-            get: {
-                if let match = ClinePassModelCatalog.model(for: model) {
-                    return match.id
-                }
-                return model
-            },
-            set: { model = $0 }
-        )
-    }
-
     var body: some View {
         if !availableProviderPresets.isEmpty {
             Picker(L10n.text("プロバイダープリセット"), selection: Binding(
@@ -74,7 +58,11 @@ struct FusionModelSlotForm: View {
                 set: { newValue in
                     let changed = provider.caseInsensitiveCompare(newValue) != .orderedSame
                     provider = newValue
-                    if changed && ProviderReference(persistedID: newValue).isModelsDev { model = "" }
+                    if changed {
+                        model = ProviderReference(persistedID: newValue).isModelsDev
+                            ? ""
+                            : ProviderCatalog.defaultModel(for: newValue)
+                    }
                     onProviderChanged(newValue)
                 }
             ),
@@ -91,22 +79,12 @@ struct FusionModelSlotForm: View {
                 error: openRouterModelsError,
                 onRefresh: onRefreshOpenRouterModels
             )
-        } else if isClinePassProvider {
-            Picker(L10n.text(modelTitleKey), selection: clinePassModelSelection) {
-                ForEach(ClinePassModelCatalog.supportedModels) { option in
-                    Text(option.displayName).tag(option.id)
+        } else if let modelIDs = ProviderCatalog.constrainedModelIDs(for: provider) {
+            Picker(L10n.text(modelTitleKey), selection: $model) {
+                ForEach(modelIDs, id: \.self) { modelID in
+                    Text(modelID).tag(modelID)
                 }
             }
-
-            if let selected = ClinePassModelCatalog.model(for: model) {
-                Text(selected.description)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
-            TextField(L10n.text(modelTitleKey), text: $model)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
         } else if let dynamicProvider = catalogProvider {
             CatalogModelPickerField(modelID: $model, provider: dynamicProvider, title: modelTitleKey)
         } else {

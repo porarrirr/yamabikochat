@@ -112,22 +112,32 @@ extension AppSettings {
         normalized.panelModels = preset.panelModels.map { panel in
             var copy = panel
             copy.provider = panel.provider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-            copy.modelId = panel.modelId.trimmingCharacters(in: .whitespacesAndNewlines)
+            copy.modelId = ProviderCatalog.migrateLegacyModelID(
+                panel.modelId.trimmingCharacters(in: .whitespacesAndNewlines),
+                for: copy.provider
+            )
             return copy
         }
         normalized.judgeModel.provider = preset.judgeModel.provider
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased()
-        normalized.judgeModel.modelId = preset.judgeModel.modelId
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        normalized.judgeModel.modelId = ProviderCatalog.migrateLegacyModelID(
+            preset.judgeModel.modelId.trimmingCharacters(in: .whitespacesAndNewlines),
+            for: normalized.judgeModel.provider
+        )
         normalized.synthesizerModel.provider = preset.synthesizerModel.provider
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased()
-        normalized.synthesizerModel.modelId = preset.synthesizerModel.modelId
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        normalized.synthesizerModel.modelId = ProviderCatalog.migrateLegacyModelID(
+            preset.synthesizerModel.modelId.trimmingCharacters(in: .whitespacesAndNewlines),
+            for: normalized.synthesizerModel.provider
+        )
         if var fallback = normalized.fallbackModel {
             fallback.provider = fallback.provider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-            fallback.modelId = fallback.modelId.trimmingCharacters(in: .whitespacesAndNewlines)
+            fallback.modelId = ProviderCatalog.migrateLegacyModelID(
+                fallback.modelId.trimmingCharacters(in: .whitespacesAndNewlines),
+                for: fallback.provider
+            )
             if fallback.modelId.isEmpty || fallback.provider.isEmpty {
                 normalized.fallbackModel = normalized.synthesizerModel
             } else {

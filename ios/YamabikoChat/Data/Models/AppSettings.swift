@@ -486,8 +486,26 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             normalized.autoThinkingBudgetB = max(0, value)
         }
         normalized.remapRemovedProviders()
+        normalized.migrateLegacyPlanModelIDs()
         normalized.applyAppleIntelligenceModelNormalization()
         return normalized
+    }
+
+    private mutating func migrateLegacyPlanModelIDs() {
+        defaultModel = ProviderCatalog.migrateLegacyModelID(defaultModel, for: apiProvider)
+        dualModelA = ProviderCatalog.migrateLegacyModelID(dualModelA, for: dualProviderA)
+        dualModelB = ProviderCatalog.migrateLegacyModelID(dualModelB, for: dualProviderB)
+        autoModelA = ProviderCatalog.migrateLegacyModelID(autoModelA, for: autoProviderA)
+        autoModelB = ProviderCatalog.migrateLegacyModelID(autoModelB, for: autoProviderB)
+
+        var models = providerModelMap()
+        if let zaiModel = models["ZAI"] {
+            models["ZAI"] = ZAICodingPlanModelCatalog.migrateLegacyModel(zaiModel)
+        }
+        if let data = try? JSONEncoder().encode(models),
+           let json = String(data: data, encoding: .utf8) {
+            providerDefaultModelsJSON = json
+        }
     }
 
     mutating func remapRemovedProviders() {

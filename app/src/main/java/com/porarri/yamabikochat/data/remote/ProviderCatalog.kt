@@ -34,7 +34,7 @@ object ProviderCatalog {
         ProviderDisplay(SUPERGROK, "SuperGrok"),
         ProviderDisplay(CLINEPASS, "Cline Pass"),
         ProviderDisplay(ALIBABA_CODING_PLAN, "Alibaba Coding Plan"),
-        ProviderDisplay(ZAI, "Z.ai"),
+        ProviderDisplay(ZAI, "Z.ai Coding Plan"),
         ProviderDisplay(MINIMAX, "MiniMax"),
         ProviderDisplay(OPENAI, "OpenAI"),
         ProviderDisplay(CODEX_AUTH, "Codex Auth"),
@@ -54,7 +54,7 @@ object ProviderCatalog {
         SUPERGROK -> SuperGrokModelCatalog.defaultModel
         CLINEPASS -> ClinePassModelCatalog.defaultModel
         ALIBABA_CODING_PLAN -> AlibabaCodingPlanModelCatalog.defaultModel
-        ZAI -> "glm-4.6"
+        ZAI -> ZaiCodingPlanModelCatalog.defaultModel
         MINIMAX -> "MiniMax-M2.1"
         OPENAI -> "gpt-4.1-mini"
         CODEX_AUTH -> com.porarri.yamabikochat.utils.CodexModelPresets.defaultModel()
@@ -62,6 +62,18 @@ object ProviderCatalog {
         OPENROUTER -> "deepseek/deepseek-chat"
         else -> ""
     }
+
+    fun constrainedModelIds(provider: String): List<String>? = when (provider.uppercase()) {
+        OPENCODE_GO -> OpenCodeGoModelCatalog.supportedModels.map { it.id }
+        CLINEPASS -> ClinePassModelCatalog.supportedModels.map { it.id }
+        ALIBABA_CODING_PLAN -> AlibabaCodingPlanModelCatalog.supportedModels
+        ZAI -> ZaiCodingPlanModelCatalog.supportedModels
+        else -> null
+    }
+
+    fun migrateLegacyModelId(provider: String, model: String): String =
+        if (provider.equals(ZAI, ignoreCase = true)) ZaiCodingPlanModelCatalog.migrateLegacyModel(model)
+        else model
 
     fun remapRemovedProvider(provider: String): String = when (provider.uppercase()) {
         "GEMINI_AUTH" -> GEMINI
@@ -159,17 +171,22 @@ object OpenCodeGoModelCatalog {
     val supportedModels = listOf(
         OpenCodeGoModel("glm-5.2", "GLM-5.2", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("glm-5.1", "GLM-5.1", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("grok-4.5", "Grok 4.5", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("kimi-k3", "Kimi K3", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("kimi-k2.7-code", "Kimi K2.7 Code", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("kimi-k2.6", "Kimi K2.6", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("deepseek-v4-pro", "DeepSeek V4 Pro", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("deepseek-v4-flash", "DeepSeek V4 Flash", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("mimo-v2.5-pro", "MiMo-V2.5-Pro", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("mimo-v2.5", "MiMo-V2.5", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("hy3", "HY 3", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("qwen3.8-max", "Qwen3.8 Max", OpenCodeGoEndpointKind.MESSAGES),
         OpenCodeGoModel("qwen3.7-max", "Qwen3.7 Max", OpenCodeGoEndpointKind.MESSAGES),
         OpenCodeGoModel("qwen3.7-plus", "Qwen3.7 Plus", OpenCodeGoEndpointKind.MESSAGES),
         OpenCodeGoModel("qwen3.6-plus", "Qwen3.6 Plus", OpenCodeGoEndpointKind.MESSAGES),
         OpenCodeGoModel("minimax-m3", "MiniMax M3", OpenCodeGoEndpointKind.MESSAGES),
-        OpenCodeGoModel("minimax-m2.7", "MiniMax M2.7", OpenCodeGoEndpointKind.MESSAGES)
+        OpenCodeGoModel("minimax-m2.7", "MiniMax M2.7", OpenCodeGoEndpointKind.MESSAGES),
+        OpenCodeGoModel("minimax-m2.5", "MiniMax M2.5", OpenCodeGoEndpointKind.MESSAGES)
     )
 
     fun normalizedModelId(raw: String): String {
@@ -197,6 +214,7 @@ object ClinePassModelCatalog {
 
     val supportedModels = listOf(
         ClinePassModel("cline-pass/glm-5.2", "GLM 5.2"),
+        ClinePassModel("cline-pass/kimi-k3", "Kimi K3"),
         ClinePassModel("cline-pass/kimi-k2.7-code", "Kimi K2.7 Code"),
         ClinePassModel("cline-pass/kimi-k2.6", "Kimi K2.6"),
         ClinePassModel("cline-pass/deepseek-v4-pro", "DeepSeek V4 Pro"),
@@ -210,12 +228,10 @@ object ClinePassModelCatalog {
 
     fun normalizedModelId(raw: String): String {
         val trimmed = raw.trim()
-        return if (trimmed.startsWith("cline-pass/", ignoreCase = true)) {
+        return if (trimmed.startsWith("cline-pass/", ignoreCase = true) || trimmed.isEmpty()) {
             trimmed
-        } else if (trimmed.isNotEmpty()) {
-            "cline-pass/$trimmed"
         } else {
-            trimmed
+            "cline-pass/$trimmed"
         }
     }
 
@@ -226,9 +242,11 @@ object ClinePassModelCatalog {
 }
 
 object AlibabaCodingPlanModelCatalog {
-    const val defaultModel = "qwen3.5-plus"
+    const val defaultModel = "qwen3.7-plus"
 
     val supportedModels = listOf(
+        "qwen3.7-plus",
+        "qwen3.6-plus",
         "qwen3.5-plus",
         "kimi-k2.5",
         "glm-5",
@@ -238,4 +256,21 @@ object AlibabaCodingPlanModelCatalog {
         "qwen3-coder-plus",
         "glm-4.7"
     )
+}
+
+object ZaiCodingPlanModelCatalog {
+    const val defaultModel = "glm-5.2"
+
+    val supportedModels = listOf(
+        "glm-5.2",
+        "glm-5-turbo",
+        "glm-4.7"
+    )
+
+    fun isSupported(model: String): Boolean = supportedModels.any {
+        it.equals(model.trim(), ignoreCase = true)
+    }
+
+    fun migrateLegacyModel(model: String): String =
+        if (model.trim().equals("glm-5.1", ignoreCase = true)) defaultModel else model
 }

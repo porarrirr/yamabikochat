@@ -3,6 +3,53 @@ import GRDB
 @testable import YamabikoChat
 
 final class AppSettingsTests: XCTestCase {
+    func testNormalizationMigratesOnlyZaiLegacyModelIDs() throws {
+        var settings = AppSettings()
+        settings.apiProvider = "ZAI"
+        settings.defaultModel = "glm-5.1"
+        settings.dualProviderA = "ZAI"
+        settings.dualModelA = "glm-5.1"
+        settings.dualProviderB = "OPENCODE_GO"
+        settings.dualModelB = "glm-5.1"
+        settings.autoProviderA = "ZAI"
+        settings.autoModelA = "glm-5.1"
+        settings.providerDefaultModelsJSON = #"{"ZAI":"glm-5.1","OPENCODE_GO":"glm-5.1"}"#
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertEqual(normalized.defaultModel, "glm-5.2")
+        XCTAssertEqual(normalized.dualModelA, "glm-5.2")
+        XCTAssertEqual(normalized.dualModelB, "glm-5.1")
+        XCTAssertEqual(normalized.autoModelA, "glm-5.2")
+        XCTAssertEqual(normalized.providerModelMap()["ZAI"], "glm-5.2")
+        XCTAssertEqual(normalized.providerModelMap()["OPENCODE_GO"], "glm-5.1")
+    }
+
+    func testFusionNormalizationMigratesOnlyZaiLegacyModelIDs() {
+        func model(_ provider: String) -> PanelModelConfig {
+            PanelModelConfig(
+                modelId: "glm-5.1",
+                provider: provider,
+                temperature: nil,
+                maxTokens: nil,
+                timeoutMs: nil,
+                role: nil
+            )
+        }
+        var preset = AppSettings.defaultFusionCustomPreset()
+        preset.panelModels = [model("ZAI"), model("OPENCODE_GO")]
+        preset.judgeModel = model("ZAI")
+        preset.synthesizerModel = model("OPENCODE_GO")
+        preset.fallbackModel = nil
+
+        let normalized = AppSettings.normalizedFusionPresetDefinition(preset)
+
+        XCTAssertEqual(normalized.panelModels[0].modelId, "glm-5.2")
+        XCTAssertEqual(normalized.panelModels[1].modelId, "glm-5.1")
+        XCTAssertEqual(normalized.judgeModel.modelId, "glm-5.2")
+        XCTAssertEqual(normalized.synthesizerModel.modelId, "glm-5.1")
+    }
+
     func testFreshDatabaseMigrationPersistsCurrentSettingsSchema() throws {
         let dbQueue = try DatabaseQueue()
 

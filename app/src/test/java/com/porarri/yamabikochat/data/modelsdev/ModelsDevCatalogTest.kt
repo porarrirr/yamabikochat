@@ -53,6 +53,16 @@ class ModelsDevCatalogTest {
     }
 
     @Test
+    fun builtInProvidersDoNotMergeWithDifferentProductsOrProtocols() {
+        assertEquals(null, ModelsDevMergedProvider.catalogIdFor("OPENCODE_GO"))
+        assertEquals(null, ModelsDevMergedProvider.catalogIdFor("ALIBABA_CODING_PLAN"))
+        assertEquals(null, ModelsDevMergedProvider.catalogIdFor("MINIMAX"))
+        assertEquals(null, ModelsDevMergedProvider.catalogIdFor("ZAI"))
+        assertEquals("opencode", ModelsDevMergedProvider.catalogIdFor("MODELS_DEV:opencode"))
+        assertEquals("zai", ModelsDevMergedProvider.catalogIdFor("MODELS_DEV:zai"))
+    }
+
+    @Test
     fun providerOrLoadHydratesFreshDiskCacheBeforeResolvingProvider() = runBlocking {
         val directory = Files.createTempDirectory("models-dev-cache-test").toFile()
         directory.resolve("models_dev_catalog_cache.json").writeText(

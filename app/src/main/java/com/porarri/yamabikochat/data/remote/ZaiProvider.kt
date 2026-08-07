@@ -47,6 +47,12 @@ class ZaiProvider(
             if (cleanedApiKey.isEmpty()) {
                 return@withContext Response.error(401, "API Key is empty".toResponseBody())
             }
+            if (!ZaiCodingPlanModelCatalog.isSupported(model)) {
+                return@withContext Response.error(
+                    400,
+                    "Unsupported Z.ai Coding Plan model: $model".toResponseBody()
+                )
+            }
 
             // Convert Gemini request into OpenAI-compatible payload
             val converted = RequestConverter.geminiToOpenRouter(request, model, null)
@@ -89,6 +95,12 @@ class ZaiProvider(
             val cleanedApiKey = apiKey.trim()
             if (cleanedApiKey.isEmpty()) {
                 return@withContext Response.error(401, "API Key is empty".toResponseBody())
+            }
+            if (!ZaiCodingPlanModelCatalog.isSupported(model)) {
+                return@withContext Response.error(
+                    400,
+                    "Unsupported Z.ai Coding Plan model: $model".toResponseBody()
+                )
             }
 
             val converted = RequestConverter.geminiToOpenRouter(request, model, null)
