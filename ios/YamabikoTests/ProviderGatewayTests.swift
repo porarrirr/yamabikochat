@@ -50,36 +50,56 @@ private final class ProviderGatewayHTTPClient: HTTPClientProtocol {
 }
 
 final class ProviderGatewayTests: XCTestCase {
-    func testModelsDevOpenCodeGoMigratesExistingNativeCredential() async throws {
-        let provider = CatalogProvider(
-            id: "opencode-go",
-            name: "OpenCode Go",
-            npm: "@ai-sdk/openai-compatible",
-            api: "https://opencode.ai/zen/go/v1",
-            env: ["OPENCODE_API_KEY"],
-            models: [CatalogModel(
-                id: "glm-5.1",
-                name: "GLM 5.1",
-                attachment: false,
-                reasoning: false,
-                reasoningOptions: [],
-                toolCall: false,
-                structuredOutput: false,
-                temperature: true,
-                inputModalities: ["text"],
-                outputModalities: ["text"],
-                limits: CatalogLimits(context: nil, input: nil, output: nil),
-                cost: CatalogCost(
-                    inputPerMillion: nil,
-                    outputPerMillion: nil,
-                    reasoningPerMillion: nil,
-                    cacheReadPerMillion: nil,
-                    cacheWritePerMillion: nil
+    func testModelsDevFormerBuiltInsMigrateExistingNativeCredentials() async throws {
+        let cases: [(id: String, env: String, legacy: CredentialProvider)] = [
+            ("openai", "OPENAI_API_KEY", .openAI),
+            ("opencode-go", "OPENCODE_API_KEY", .openCodeGo),
+            ("cline-pass", "CLINE_API_KEY", .clinePass),
+            ("alibaba-coding-plan", "ALIBABA_CODING_PLAN_API_KEY", .alibabaCodingPlan),
+            ("zai-coding-plan", "ZHIPU_API_KEY", .zai),
+            ("minimax", "MINIMAX_API_KEY", .miniMax)
+        ]
+
+        for migration in cases {
+            let provider = Self.migrationTestProvider(id: migration.id, env: migration.env)
+            let fixture = try makeModelsDevFixture(provider: provider)
+            let legacyKey = "legacy-\(migration.id)-key"
+            try fixture.credentials.setCredential(legacyKey, for: migration.legacy)
+            fixture.httpClient.sendResponder = { request in
+                let data = migration.id == "minimax"
+                    ? #"{"content":[{"type":"text","text":"ok"}]}"#.data(using: .utf8)!
+                    : #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+                return (data, Self.httpResponse(url: request.url, statusCode: 200))
+            }
+
+            _ = try await fixture.gateway.generate(
+                request: ProviderRequest(
+                    model: "migration-model",
+                    messages: [ProviderRequestMessage(role: "user", content: "hello")],
+                    stream: false
+                ),
+                providerID: "MODELS_DEV:\(migration.id)"
+            )
+
+            let destinationKey = "models_dev_\(migration.id)_\(migration.env)"
+            XCTAssertEqual(try fixture.credentials.readSecret(key: destinationKey), legacyKey, migration.id)
+            if migration.id == "minimax" {
+                XCTAssertEqual(fixture.httpClient.sentRequests.first?.headers["x-api-key"], legacyKey, migration.id)
+            } else {
+                XCTAssertEqual(
+                    fixture.httpClient.sentRequests.first?.headers["Authorization"],
+                    "Bearer \(legacyKey)",
+                    migration.id
                 )
-            )]
-        )
+            }
+        }
+    }
+
+    func testModelsDevMigrationDoesNotOverwriteExistingDynamicCredential() async throws {
+        let provider = Self.migrationTestProvider(id: "openai", env: "OPENAI_API_KEY")
         let fixture = try makeModelsDevFixture(provider: provider)
-        try fixture.credentials.setCredential("existing-opencode-key", for: .openCodeGo)
+        try fixture.credentials.setCredential("legacy-openai-key", for: .openAI)
+        try fixture.credentials.saveSecret("dynamic-openai-key", key: "models_dev_openai_OPENAI_API_KEY")
         fixture.httpClient.sendResponder = { request in
             let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
             return (data, Self.httpResponse(url: request.url, statusCode: 200))
@@ -87,21 +107,44 @@ final class ProviderGatewayTests: XCTestCase {
 
         _ = try await fixture.gateway.generate(
             request: ProviderRequest(
-                model: "glm-5.1",
+                model: "migration-model",
                 messages: [ProviderRequestMessage(role: "user", content: "hello")],
                 stream: false
             ),
-            providerID: "MODELS_DEV:opencode-go"
+            providerID: "MODELS_DEV:openai"
         )
 
         XCTAssertEqual(
-            try fixture.credentials.readSecret(key: "models_dev_opencode-go_OPENCODE_API_KEY"),
-            "existing-opencode-key"
+            try fixture.credentials.readSecret(key: "models_dev_openai_OPENAI_API_KEY"),
+            "dynamic-openai-key"
         )
         XCTAssertEqual(
             fixture.httpClient.sentRequests.first?.headers["Authorization"],
-            "Bearer existing-opencode-key"
+            "Bearer dynamic-openai-key"
         )
+    }
+
+    func testModelsDevZAIStandardDoesNotReuseCodingPlanCredential() async throws {
+        let provider = Self.migrationTestProvider(id: "zai", env: "ZHIPU_API_KEY")
+        let fixture = try makeModelsDevFixture(provider: provider)
+        try fixture.credentials.setCredential("coding-plan-key", for: .zai)
+
+        do {
+            _ = try await fixture.gateway.generate(
+                request: ProviderRequest(
+                    model: "migration-model",
+                    messages: [ProviderRequestMessage(role: "user", content: "hello")],
+                    stream: false
+                ),
+                providerID: "MODELS_DEV:zai"
+            )
+            XCTFail("Expected the standard Z.AI provider to require its own credential")
+        } catch let ProviderClientError.missingCredential(provider) {
+            XCTAssertEqual(provider, "zai")
+        }
+
+        XCTAssertNil(try fixture.credentials.readSecret(key: "models_dev_zai_ZHIPU_API_KEY"))
+        XCTAssertTrue(fixture.httpClient.sentRequests.isEmpty)
     }
 
     func testModelsDevOpenAICompatibleReasoningEffortUsesTopLevelWireField() async throws {
@@ -803,6 +846,36 @@ final class ProviderGatewayTests: XCTestCase {
             httpClient: httpClient
         )
         return (gateway, credentials, httpClient, settings)
+    }
+
+    private static func migrationTestProvider(id: String, env: String) -> CatalogProvider {
+        CatalogProvider(
+            id: id,
+            name: id,
+            npm: id == "minimax" ? "@ai-sdk/anthropic" : "@ai-sdk/openai-compatible",
+            api: id == "openai" ? nil : "https://example.com/v1",
+            env: [env],
+            models: [CatalogModel(
+                id: "migration-model",
+                name: "Migration Model",
+                attachment: false,
+                reasoning: false,
+                reasoningOptions: [],
+                toolCall: false,
+                structuredOutput: false,
+                temperature: true,
+                inputModalities: ["text"],
+                outputModalities: ["text"],
+                limits: CatalogLimits(context: nil, input: nil, output: nil),
+                cost: CatalogCost(
+                    inputPerMillion: nil,
+                    outputPerMillion: nil,
+                    reasoningPerMillion: nil,
+                    cacheReadPerMillion: nil,
+                    cacheWritePerMillion: nil
+                )
+            )]
+        )
     }
 
     private func makeModelsDevFixture(provider: CatalogProvider) throws -> (

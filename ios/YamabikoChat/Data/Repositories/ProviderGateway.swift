@@ -602,7 +602,12 @@ final class ProviderGateway {
         guard try credentialStore.readSecret(key: destinationKey)?.trimmedNonEmpty == nil else { return }
 
         let legacyProvider: CredentialProvider? = switch providerID.lowercased() {
+        case "openai": .openAI
         case "opencode-go": .openCodeGo
+        case "cline-pass": .clinePass
+        case "alibaba-coding-plan": .alibabaCodingPlan
+        case "zai-coding-plan": .zai
+        case "minimax": .miniMax
         default: nil
         }
         guard let legacyProvider,
