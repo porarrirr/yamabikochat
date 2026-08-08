@@ -967,11 +967,11 @@ data class Settings(
         val parsed = parseStringKeyedStringMap(providerDefaultModels)
 
         val currentProvider = apiProvider.uppercase()
-        val currentModel = defaultModel.takeIf { it.isNotBlank() }
-        return if (!parsed.containsKey(currentProvider) && currentModel != null) {
-            parsed + (currentProvider to currentModel)
-        } else {
-            parsed
+        val currentModel = defaultModel.trim()
+        return when {
+            currentModel.isNotEmpty() -> parsed + (currentProvider to currentModel)
+            !parsed.containsKey(currentProvider) -> parsed + (currentProvider to defaultModel)
+            else -> parsed
         }
     }
 

@@ -261,6 +261,22 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(presets.first?.name, L10n.format("グローバル: %@", "Google Gemini"))
     }
 
+    func testBuildGlobalProviderPresetsUsesCurrentModelsDevModelWhenStoredEntryIsEmpty() {
+        var settings = AppSettings()
+        settings.apiProvider = "MODELS_DEV:anthropic"
+        settings.defaultModel = "claude-sonnet-4-5"
+        settings.providerDefaultModelsJSON = #"{"MODELS_DEV:ANTHROPIC":""}"#
+        settings.showGlobalProviderPresetsInChat = false
+        settings.setShowGlobalProviderPresetInChat(provider: settings.apiProvider, visible: true)
+
+        let presets = settings.buildGlobalProviderPresets().filter {
+            settings.shouldShowGlobalProviderPresetInChat(provider: $0.apiProvider)
+        }
+
+        XCTAssertEqual(presets.map(\.apiProvider), ["MODELS_DEV:ANTHROPIC"])
+        XCTAssertEqual(presets.map(\.model), ["claude-sonnet-4-5"])
+    }
+
     func testRemapRemovedProvidersMigratesAppleIntelligenceFromDualAutoProviders() {
         var settings = AppSettings()
         settings.dualProviderA = "APPLE_INTELLIGENCE"

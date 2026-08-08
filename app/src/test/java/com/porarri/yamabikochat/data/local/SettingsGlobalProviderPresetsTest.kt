@@ -73,4 +73,21 @@ class SettingsGlobalProviderPresetsTest {
         )
     }
 
+    @Test
+    fun buildGlobalProviderPresets_usesCurrentModelsDevModelWhenStoredEntryIsEmpty() {
+        val settings = Settings(
+            apiProvider = "MODELS_DEV:anthropic",
+            defaultModel = "claude-sonnet-4-5",
+            providerDefaultModels = """{"MODELS_DEV:ANTHROPIC":""}""",
+            showGlobalProviderPresetsInChat = false,
+            showGlobalProviderPresetsInChatByProvider = """{"MODELS_DEV:ANTHROPIC":true}"""
+        )
+
+        val presets = settings.buildGlobalProviderPresets()
+            .filter { settings.shouldShowGlobalProviderPresetInChat(it.apiProvider) }
+
+        assertEquals(listOf("MODELS_DEV:ANTHROPIC"), presets.map { it.apiProvider })
+        assertEquals(listOf("claude-sonnet-4-5"), presets.map { it.model })
+    }
+
 }

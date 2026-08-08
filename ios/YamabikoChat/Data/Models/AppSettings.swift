@@ -728,12 +728,15 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             return [apiProvider.uppercased(): defaultModel]
         }
 
-        if map[apiProvider.uppercased()] == nil {
-            var merged = map
-            merged[apiProvider.uppercased()] = defaultModel
-            return merged
+        var merged = map
+        let currentProvider = apiProvider.uppercased()
+        let currentModel = defaultModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !currentModel.isEmpty {
+            merged[currentProvider] = currentModel
+        } else if merged[currentProvider] == nil {
+            merged[currentProvider] = defaultModel
         }
-        return map
+        return merged
     }
 
     func openAICompatPresets() -> [OpenAICompatPreset] {
