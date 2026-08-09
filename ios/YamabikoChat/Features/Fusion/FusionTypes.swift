@@ -95,7 +95,6 @@ struct PanelModelConfig: Codable, Sendable, Equatable {
     var modelId: String
     var provider: String
     var temperature: Double?
-    var maxTokens: Int?
     var timeoutMs: Int?
     var role: String?
 }
@@ -108,9 +107,6 @@ struct FusionRequest: Codable, Sendable, Equatable {
     var synthesizerModel: PanelModelConfig
     var fallbackModel: PanelModelConfig?
     var preset: String
-    var maxPanelTokens: Int
-    var maxJudgeTokens: Int
-    var maxSynthesizerTokens: Int
     var timeoutMs: Int
     var allowWebSearch: Bool
     var taskType: FusionTaskType

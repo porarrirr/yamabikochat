@@ -31,6 +31,8 @@ struct OpenCodeGoProviderClient: ProviderClient {
         var model: String
         var messages: [ChatMessage]
         var stream: Bool
+        var maxTokens: Int?
+        var temperature: Double?
         var promptCacheKey: String?
         var streamOptions: ChatStreamOptions?
 
@@ -38,6 +40,8 @@ struct OpenCodeGoProviderClient: ProviderClient {
             case model
             case messages
             case stream
+            case maxTokens = "max_tokens"
+            case temperature
             case promptCacheKey = "prompt_cache_key"
             case streamOptions = "stream_options"
         }
@@ -160,6 +164,8 @@ struct OpenCodeGoProviderClient: ProviderClient {
                 embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
             ),
             stream: stream,
+            maxTokens: positiveIntMetadata("max_output_tokens", from: request),
+            temperature: doubleMetadata("temperature", from: request),
             promptCacheKey: promptCacheKey(for: request, route: route),
             streamOptions: stream ? ChatStreamOptions() : nil
         )
@@ -173,7 +179,8 @@ struct OpenCodeGoProviderClient: ProviderClient {
         return HTTPRequest(
             url: endpoint,
             headers: headers,
-            body: try JSONEncoder().encode(body)
+            body: try JSONEncoder().encode(body),
+            timeoutInterval: request.timeoutInterval
         )
     }
 
@@ -191,7 +198,7 @@ struct OpenCodeGoProviderClient: ProviderClient {
                 embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
             ),
             system: request.systemPrompt?.trimmedNonEmpty,
-            maxTokens: Self.defaultMaxTokens,
+            maxTokens: positiveIntMetadata("max_output_tokens", from: request) ?? Self.defaultMaxTokens,
             stream: stream
         )
         var headers = [
@@ -205,7 +212,8 @@ struct OpenCodeGoProviderClient: ProviderClient {
         return HTTPRequest(
             url: endpoint,
             headers: headers,
-            body: try JSONEncoder().encode(body)
+            body: try JSONEncoder().encode(body),
+            timeoutInterval: request.timeoutInterval
         )
     }
 
@@ -285,6 +293,16 @@ struct OpenCodeGoProviderClient: ProviderClient {
         ].joined(separator: "\n")
         let digest = SHA256.hash(data: Data(seed.utf8)).map { String(format: "%02x", $0) }.joined()
         return "opencode-go-\(String(digest.prefix(48)))"
+    }
+
+    private func positiveIntMetadata(_ key: String, from request: ProviderRequest) -> Int? {
+        guard let value = Int(request.metadata[key] ?? ""), value > 0 else { return nil }
+        return value
+    }
+
+    private func doubleMetadata(_ key: String, from request: ProviderRequest) -> Double? {
+        guard let value = Double(request.metadata[key] ?? ""), value.isFinite else { return nil }
+        return value
     }
 
     private func parseChatResponse(data: Data) throws -> ProviderResponse {

@@ -80,6 +80,8 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.Locale
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
 private enum class SettingsSheet {
     ThemeColor,
@@ -125,6 +127,51 @@ fun SettingsScreen(
     val superGrokAuthActionRunning by viewModel.superGrokAuthActionRunning.collectAsState()
     val codexUsageState by viewModel.codexUsageState.collectAsState()
     val tokenUsageState by viewModel.tokenUsageState.collectAsState()
+    val installedAgentSkills by viewModel.installedAgentSkills.collectAsState()
+    val agentSkillPreview by viewModel.agentSkillPreview.collectAsState()
+    val hostedSkillExecution by viewModel.hostedSkillExecution.collectAsState()
+    var showHostedSkillConfirmation by remember { mutableStateOf(false) }
+    val zipSkillLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(viewModel::inspectAgentSkill)
+    }
+    val folderSkillLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri?.let(viewModel::inspectAgentSkill)
+    }
+
+    agentSkillPreview?.let { preview ->
+        var trusted by remember(preview.contentHash) { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = viewModel::discardAgentSkillPreview,
+            title = { Text("Agent Skillを確認") },
+            text = {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 520.dp)) {
+                    item { Text("\$${preview.manifest.name}", fontWeight = FontWeight.Bold) }
+                    item { Text(preview.manifest.description) }
+                    if (preview.replacesExisting) item { Text("同名Skillを置換し、従来の有効状態を維持します。", color = MaterialTheme.colorScheme.error) }
+                    item { Text(if (preview.hasScripts) "スクリプトあり（端末では実行しません）" else "指示・資料のみ") }
+                    item { Text("allowed-tools: ${preview.manifest.allowedTools.joinToString().ifBlank { "なし" }}\n権限は自動付与しません。", style = MaterialTheme.typography.bodySmall) }
+                    if (preview.externalUrls.isNotEmpty()) item { Text("外部URLらしき記述:\n${preview.externalUrls.joinToString("\n")}", style = MaterialTheme.typography.bodySmall) }
+                    items(preview.files.size) { index ->
+                        val file = preview.files[index]
+                        Text("${if (file.isScript) "⚠ " else ""}${file.path} (${file.size} bytes)", style = MaterialTheme.typography.bodySmall)
+                    }
+                    item { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(trusted, { trusted = it }); Text("内容を確認し、このSkillを信頼します") } }
+                }
+            },
+            confirmButton = { TextButton(onClick = { viewModel.installAgentSkill(true) }, enabled = trusted) { Text(if (preview.replacesExisting) "置換" else "インストール") } },
+            dismissButton = { TextButton(onClick = viewModel::discardAgentSkillPreview) { Text("キャンセル") } }
+        )
+    }
+
+    if (showHostedSkillConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showHostedSkillConfirmation = false },
+            title = { Text("OpenAI hosted Skill実行") },
+            text = { Text("APIキーを使うOPENAIだけが対象です。SkillをOpenAIの一時コンテナへ送信し、API利用料が発生します。最終利用から20分で失効し、外部ネットワークは無効です。") },
+            confirmButton = { TextButton(onClick = { viewModel.setHostedSkillExecution(true); showHostedSkillConfirmation = false }) { Text("理解して有効化") } },
+            dismissButton = { TextButton(onClick = { showHostedSkillConfirmation = false }) { Text("キャンセル") } }
+        )
+    }
 
     LaunchedEffect(secureStorageError) {
         secureStorageError?.let {
@@ -963,6 +1010,52 @@ fun SettingsScreen(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
+                                }
+                            }
+                        }
+                        item {
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Agent Skills", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(onClick = { zipSkillLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }) { Text("ZIPを追加") }
+                                        OutlinedButton(onClick = { folderSkillLauncher.launch(null) }) { Text("フォルダを追加") }
+                                    }
+                                    if (installedAgentSkills.isEmpty()) Text("インストール済みSkillはありません。URL取得・公開カタログには対応していません。", style = MaterialTheme.typography.bodySmall)
+                                    installedAgentSkills.forEach { skill ->
+                                        var showSkillDetails by remember(skill.manifest.name, skill.contentHash) { mutableStateOf(false) }
+                                        HorizontalDivider()
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Column(Modifier.weight(1f)) {
+                                                Text("\$${skill.manifest.name}", fontWeight = FontWeight.Bold)
+                                                Text(skill.manifest.description, style = MaterialTheme.typography.bodySmall)
+                                                Text(if (skill.hasScripts) "スクリプトあり · OpenAI hosted利用可能" else "指示・資料のみ", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                            Switch(skill.isEnabled, { viewModel.setAgentSkillEnabled(skill.manifest.name, it) })
+                                        }
+                                        TextButton(onClick = { showSkillDetails = !showSkillDetails }) {
+                                            Text(if (showSkillDetails) "詳細を閉じる" else "詳細を表示")
+                                        }
+                                        if (showSkillDetails) {
+                                            Text(
+                                                buildString {
+                                                    skill.manifest.license?.let { append("license: $it\n") }
+                                                    skill.manifest.compatibility?.let { append("compatibility: $it\n") }
+                                                    append("allowed-tools: ${skill.manifest.allowedTools.joinToString().ifBlank { "なし" }}\n")
+                                                    skill.manifest.metadata.toSortedMap().forEach { (key, value) -> append("$key: $value\n") }
+                                                    append("SHA-256: ${skill.contentHash}\n")
+                                                    skill.files.forEach { file -> append("${if (file.isScript) "⚠ " else ""}${file.path} (${file.size} bytes)\n") }
+                                                }.trim(),
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        }
+                                        TextButton(onClick = { viewModel.deleteAgentSkill(skill.manifest.name) }) { Text("削除", color = MaterialTheme.colorScheme.error) }
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("OpenAI hosted Skill実行", Modifier.weight(1f))
+                                        Switch(hostedSkillExecution, { enabled -> if (enabled) showHostedSkillConfirmation = true else viewModel.setHostedSkillExecution(false) })
+                                    }
+                                    Text("OFFでは端末でスクリプトを実行せず、指示とUTF-8資料だけを利用します。", style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }

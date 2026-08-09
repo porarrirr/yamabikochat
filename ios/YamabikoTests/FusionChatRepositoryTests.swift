@@ -123,7 +123,97 @@ private final class FusionFailingPanelHTTPClient: HTTPClientProtocol {
     }
 }
 
+private final class FusionReasoningContinuationHTTPClient: HTTPClientProtocol {
+    private let counterLock = NSLock()
+    private(set) var sendCallCount = 0
+    private(set) var streamCallCount = 0
+
+    func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
+        counterLock.withLock { sendCallCount += 1 }
+        let body = request.body.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        let content: String
+        let reasoning: String?
+
+        if body.contains("required JSON now") {
+            content = fusionJudgeJSON
+            reasoning = nil
+        } else if body.contains("provide the answer text now") {
+            content = body.contains("analysis panel") ? "continued panel answer" : "continued final answer"
+            reasoning = nil
+        } else {
+            content = ""
+            reasoning = body.contains("judge comparing") || body.contains("Compare these answers")
+                ? "judge reasoning"
+                : "model reasoning"
+        }
+
+        var message: [String: Any] = ["content": content]
+        if let reasoning {
+            message["reasoning_content"] = reasoning
+        }
+        let data = try JSONSerialization.data(withJSONObject: [
+            "choices": [["message": message]]
+        ])
+        return (
+            data,
+            HTTPURLResponse(url: request.url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        )
+    }
+
+    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
+        counterLock.withLock { streamCallCount += 1 }
+        let stream = AsyncThrowingStream<String, Error> { continuation in
+            continuation.yield(#"data: {"choices":[{"delta":{"reasoning_content":"synthesis reasoning"}}]}"#)
+            continuation.yield("")
+            continuation.yield("data: [DONE]")
+            continuation.yield("")
+            continuation.finish()
+        }
+        return (
+            stream,
+            HTTPURLResponse(url: request.url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        )
+    }
+}
+
 final class FusionChatRepositoryTests: XCTestCase {
+    func testReasoningOnlyFusionPhasesContinueUntilFinalAnswer() async throws {
+        let httpClient = FusionReasoningContinuationHTTPClient()
+        let fixture = try makeFixture(httpClient: httpClient) { settings in
+            settings.isFusionModeEnabled = true
+            let model = PanelModelConfig(
+                modelId: "deepseek-v4-flash",
+                provider: "OPENCODE_GO",
+                temperature: nil,
+                timeoutMs: 120_000,
+                role: nil
+            )
+            var preset = AppSettings.defaultFusionCustomPreset()
+            preset.panelModels = [model]
+            preset.judgeModel = model
+            preset.synthesizerModel = model
+            preset.fallbackModel = model
+            settings.fusionCustomPresetJSON = settings.encodeFusionCustomPreset(preset)
+        }
+        try fixture.credentials.setCredential("opencode-key", for: .openCodeGo)
+
+        let conversationID = try fixture.repository.createConversation(title: "Fusion continuation")
+        let result = try await fixture.repository.sendFusionMessage(
+            conversationId: conversationID,
+            text: "Solve this problem"
+        )
+
+        let messages = try fixture.conversations.fetchMessages(conversationId: conversationID)
+        XCTAssertEqual(messages.last?.text, "continued final answer")
+        XCTAssertGreaterThanOrEqual(httpClient.sendCallCount, 3)
+        XCTAssertEqual(httpClient.streamCallCount, 1)
+        let traceId = try XCTUnwrap(messages.last?.fusionTraceId)
+        let trace = try XCTUnwrap(fixture.repository.fetchFusionTrace(id: traceId))
+        XCTAssertEqual(trace.status, "completed")
+        XCTAssertEqual(trace.panelResults.first?.content, "continued panel answer")
+        XCTAssertEqual(result.response.text, "continued final answer")
+    }
+
     func testSendFusionMessageStoresMessagesTraceAndStreamsSynthesis() async throws {
         let httpClient = FusionChatHTTPClient()
         let fixture = try makeFixture(httpClient: httpClient) { settings in

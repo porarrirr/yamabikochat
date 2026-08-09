@@ -8,6 +8,9 @@ import com.porarri.yamabikochat.data.remote.GenerationConfig
 import com.porarri.yamabikochat.data.remote.Part
 import com.porarri.yamabikochat.data.remote.SystemInstruction
 import com.porarri.yamabikochat.data.remote.Tool
+import com.porarri.yamabikochat.data.skills.AgentSkillRepository
+import com.porarri.yamabikochat.data.skills.AgentSkillTools
+import com.porarri.yamabikochat.data.skills.SkillRequestContext
 import com.porarri.yamabikochat.data.tools.ClientTools
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 
@@ -16,6 +19,7 @@ class FusionService(
     private val stream: FusionStream? = null,
     private val estimateCost: FusionCostEstimator = { _, _, _, _ -> null },
     private val settingsProvider: suspend () -> Settings,
+    private val skillRepository: AgentSkillRepository? = null,
     private val toolRunner: ClientToolCallingRunner? = null,
     private val traceStore: FusionTraceStore? = null,
     private val orchestrator: FusionOrchestrator = FusionOrchestrator()
@@ -143,7 +147,8 @@ class FusionService(
                     fusionDepth = context.fusionDepth,
                     userPrompt = request.userPrompt,
                     conversationHistory = conversationHistory,
-                    userAttachments = userAttachments
+                    userAttachments = userAttachments,
+                    conversationId = context.conversationId?.toString()
                 )
             },
             invoke = { bundle, phase ->
@@ -172,9 +177,10 @@ class FusionService(
         fusionDepth: Int,
         userPrompt: String,
         conversationHistory: List<FusionHistoryMessage>,
-        userAttachments: List<String> = emptyList()
+        userAttachments: List<String> = emptyList(),
+        conversationId: String? = null
     ): GenerateContentRequest {
-        val contents = when (phase) {
+        var contents = when (phase) {
             FusionPhase.panel -> panelContents(
                 history = conversationHistory,
                 userPrompt = userPrompt,
@@ -185,16 +191,32 @@ class FusionService(
             )
         }
 
-        val tools: List<Tool>? = if (
-            allowTools &&
-            phase == FusionPhase.panel &&
-            settings.clientWebSearchToolEnabled &&
-            ClientTools.supportsClientWebSearchTool(model.provider)
-        ) {
-            listOf(Tool(function_declarations = ClientTools.toGeminiFunctionDeclarations()))
+        val skillContext = if (phase == FusionPhase.panel) {
+            skillRepository?.requestContext(userPrompt, conversationId)
         } else {
             null
         }
+        contents = applySkillContext(contents, skillContext)
+
+        val declarations = buildList {
+            if (
+                allowTools &&
+                phase == FusionPhase.panel &&
+                settings.clientWebSearchToolEnabled &&
+                ClientTools.supportsClientWebSearchTool(model.provider)
+            ) {
+                addAll(ClientTools.toGeminiFunctionDeclarations())
+            }
+            if (
+                phase == FusionPhase.panel &&
+                ClientTools.supportsClientWebSearchTool(model.provider) &&
+                skillRepository != null
+            ) {
+                addAll(AgentSkillTools.declarations(skillRepository))
+            }
+        }
+        val tools: List<Tool>? = declarations.takeIf { it.isNotEmpty() }
+            ?.let { listOf(Tool(function_declarations = it)) }
 
         val resolvedMaxTokens = model.maxTokens ?: maxTokens
         val generationConfig = GenerationConfig(
@@ -218,12 +240,38 @@ class FusionService(
                 SystemInstruction(parts = listOf(Part(text = it)))
             },
             generationConfig = generationConfig,
-            tools = tools
+            tools = tools,
+            skillContext = skillContext
         ).also {
             // fusionDepth retained for parity / future metadata; unused in GenerateContentRequest
             if (fusionDepth > 0) {
                 DiagnosticsLogger.log("Fusion buildRequest phase=$phase depth=$fusionDepth model=${model.modelId}")
             }
+        }
+    }
+
+    private fun applySkillContext(
+        contents: List<Content>,
+        context: SkillRequestContext?
+    ): List<Content> {
+        if (context == null) return contents
+        val injection = listOfNotNull(context.syntheticUserContext, context.explicitUserContext)
+            .joinToString("\n\n")
+        if (injection.isBlank()) return contents
+        val index = contents.indexOfLast { it.role == "user" }
+        if (index < 0) return contents
+        return contents.toMutableList().also { result ->
+            val content = result[index]
+            val parts = content.parts.toMutableList()
+            val textIndex = parts.indexOfLast { it.text != null }
+            if (textIndex >= 0) {
+                parts[textIndex] = parts[textIndex].copy(
+                    text = parts[textIndex].text.orEmpty() + "\n\n" + injection
+                )
+            } else {
+                parts += Part(text = injection)
+            }
+            result[index] = content.copy(parts = parts)
         }
     }
 

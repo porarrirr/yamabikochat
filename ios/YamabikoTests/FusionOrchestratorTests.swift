@@ -26,27 +26,21 @@ final class FusionOrchestratorTests: XCTestCase {
                 modelId: "judge-model",
                 provider: "OPENAI",
                 temperature: 0.1,
-                maxTokens: 512,
                 timeoutMs: 5_000
             ),
             synthesizerModel: PanelModelConfig(
                 modelId: "synth-model",
                 provider: "OPENAI",
                 temperature: 0.3,
-                maxTokens: 512,
                 timeoutMs: 5_000
             ),
             fallbackModel: PanelModelConfig(
                 modelId: "fallback-model",
                 provider: "OPENAI",
                 temperature: 0.3,
-                maxTokens: 512,
                 timeoutMs: 5_000
             ),
             preset: "quality",
-            maxPanelTokens: 512,
-            maxJudgeTokens: 512,
-            maxSynthesizerTokens: 512,
             timeoutMs: 5_000,
             allowWebSearch: false,
             taskType: .research,
@@ -58,8 +52,7 @@ final class FusionOrchestratorTests: XCTestCase {
         model: PanelModelConfig,
         systemPrompt: String,
         phase: FusionPhase,
-        allowTools: Bool,
-        maxTokens: Int
+        allowTools: Bool
     ) throws -> ProviderRequest {
         ProviderRequest(
             model: model.modelId,
@@ -157,6 +150,31 @@ final class FusionOrchestratorTests: XCTestCase {
         }
     }
 
+    func testReasoningOnlyPanelResponseIsRecordedAsFailure() async {
+        let request = sampleRequest(panelModels: [
+            PanelModelConfig(modelId: "reasoning-only", provider: "OPENAI", timeoutMs: 5_000)
+        ])
+
+        do {
+            _ = try await orchestrator.runThroughJudge(
+                request: request,
+                context: FusionContext(),
+                buildRequest: buildRequest,
+                invoke: { _, _, _ in
+                    ProviderResponse(text: "", reasoningSummary: "unfinished reasoning")
+                },
+                estimateCost: { _, _, _ in nil }
+            )
+            XCTFail("Expected reasoning-only panel response to fail")
+        } catch FusionError.allPanelsFailed(let panelResults) {
+            XCTAssertEqual(panelResults.count, 1)
+            XCTAssertFalse(panelResults[0].success)
+            XCTAssertTrue(panelResults[0].error?.contains("returned no answer text") == true)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testPanelTimeoutIsRecordedAsFailure() async throws {
         let request = sampleRequest(panelModels: [
             PanelModelConfig(modelId: "panel-slow", provider: "OPENAI", timeoutMs: 50)
@@ -173,6 +191,20 @@ final class FusionOrchestratorTests: XCTestCase {
             XCTFail("Expected allPanelsFailed")
         } catch FusionError.allPanelsFailed {
             XCTAssertTrue(true)
+        }
+    }
+
+    func testFusionTimeoutReportsConfiguredDeadlineInsteadOfCancellation() async throws {
+        do {
+            _ = try await FusionTimeout.run(milliseconds: 25) {
+                try await Task.sleep(nanoseconds: 5_000_000_000)
+                return "late"
+            }
+            XCTFail("Expected timeout")
+        } catch let error as FusionTimeout.TimeoutError {
+            XCTAssertEqual(error.localizedDescription, L10n.format("タイムアウト (%d ms)", 25))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
         }
     }
 

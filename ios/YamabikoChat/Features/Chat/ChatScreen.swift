@@ -331,6 +331,19 @@ struct ChatScreen: View {
                 attachmentPanel
             }
 
+            if !viewModel.skillAutocompleteSuggestions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(viewModel.skillAutocompleteSuggestions, id: \.self) { name in
+                            Button("$\(name)") { viewModel.selectSkillAutocomplete(name) }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                }
+            }
+
             HStack(alignment: .bottom, spacing: 8) {
                 if viewModel.canAttachImages {
                     Button {

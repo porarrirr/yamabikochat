@@ -140,6 +140,27 @@ final class ChatRepositorySyncTests: XCTestCase {
         XCTAssertEqual(secondID, firstID)
     }
 
+    func testGeneratedAttachmentsAreDeduplicatedForMessagesAndVariants() throws {
+        let fixture = try makeFixture()
+        let conversationID = try fixture.repository.createConversation(title: "Attachment Test")
+        let messageID = try fixture.conversations.insertMessage(
+            ChatMessage(conversationId: conversationID, role: "model", text: "answer")
+        )
+        let variant = try fixture.conversations.insertMessageVariant(
+            baseMessageId: messageID,
+            text: "variant"
+        )
+        let variantID = try XCTUnwrap(variant.id)
+
+        try fixture.conversations.appendAttachments(messageId: messageID, paths: ["/tmp/a.txt", "/tmp/a.txt"])
+        try fixture.conversations.appendAttachments(messageId: messageID, paths: ["/tmp/a.txt", "/tmp/b.txt"])
+        try fixture.conversations.appendAttachments(variantId: variantID, paths: ["/tmp/v.txt", "/tmp/v.txt"])
+
+        let full = try XCTUnwrap(fixture.conversations.fetchFullMessage(id: messageID))
+        XCTAssertEqual(Self.decodeAttachments(full.message.attachmentsJSON), ["/tmp/a.txt", "/tmp/b.txt"])
+        XCTAssertEqual(Self.decodeAttachments(full.variants.first?.attachmentsJSON ?? "[]"), ["/tmp/v.txt"])
+    }
+
     func testSendMessageRenamesDefaultConversationToFirstPrompt() async throws {
         let fixture = try makeFixture()
         let conversationID = try fixture.repository.createConversation(title: "New Chat")
@@ -350,7 +371,7 @@ final class ChatRepositorySyncTests: XCTestCase {
         XCTAssertEqual(totals.totalCostUsd, 0.42, accuracy: 0.000_001)
     }
 
-    func testOpenCodeGoEmptyStreamFallsBackToNonStreamingResponse() async throws {
+    func testOpenCodeGoEmptyStreamWithoutReasoningFailsDirectly() async throws {
         let payload = #"""
         {
           "choices":[{"message":{"content":"fallback ok","reasoning_content":"fallback reasoning"}}],
@@ -370,19 +391,22 @@ final class ChatRepositorySyncTests: XCTestCase {
         try fixture.credentials.setCredential("opencode-go-key", for: .openCodeGo)
 
         let conversationID = try fixture.repository.createConversation(title: "New Chat")
-        let result = try await fixture.repository.sendMessage(
-            conversationId: conversationID,
-            text: "hello",
-            attachments: []
-        )
+        do {
+            _ = try await fixture.repository.sendMessage(
+                conversationId: conversationID,
+                text: "hello",
+                attachments: []
+            )
+            XCTFail("Expected a content-free stream to fail without a fallback request.")
+        } catch let error as ProviderClientError {
+            guard case let .parseFailure(message) = error else {
+                return XCTFail("Expected parseFailure, got \(error).")
+            }
+            XCTAssertEqual(message, "Provider stream returned no answer text or reasoning.")
+        }
 
         XCTAssertEqual(httpClient.streamCallCount, 1)
-        XCTAssertEqual(httpClient.sendCallCount, 1)
-        XCTAssertEqual(result.response.text, "fallback ok")
-
-        let assistant = try XCTUnwrap(fixture.conversations.fetchFullMessage(id: result.assistantMessageId))
-        XCTAssertEqual(assistant.message.text, "fallback ok")
-        XCTAssertEqual(assistant.thinkingStream, "fallback reasoning")
+        XCTAssertEqual(httpClient.sendCallCount, 0)
     }
 
     private func makeFixture(
@@ -419,5 +443,10 @@ final class ChatRepositorySyncTests: XCTestCase {
             pricingRepository: pricingRepository
         )
         return (repository, conversations, credentials)
+    }
+
+    private static func decodeAttachments(_ rawValue: String) -> [String] {
+        guard let data = rawValue.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 }

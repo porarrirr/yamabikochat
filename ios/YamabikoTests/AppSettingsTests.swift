@@ -31,7 +31,6 @@ final class AppSettingsTests: XCTestCase {
                 modelId: "glm-5.1",
                 provider: provider,
                 temperature: nil,
-                maxTokens: nil,
                 timeoutMs: nil,
                 role: nil
             )
@@ -48,6 +47,36 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(normalized.panelModels[1].modelId, "glm-5.1")
         XCTAssertEqual(normalized.judgeModel.modelId, "glm-5.2")
         XCTAssertEqual(normalized.synthesizerModel.modelId, "glm-5.1")
+    }
+
+    func testFusionNormalizationRemovesLegacyOutputLimitFields() throws {
+        let current = AppSettings.defaultFusionCustomPreset()
+        let data = try JSONEncoder().encode(current)
+        var root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        root["maxPanelTokens"] = 4096
+        root["maxJudgeTokens"] = 2048
+        root["maxSynthesizerTokens"] = 4096
+        var panels = try XCTUnwrap(root["panelModels"] as? [[String: Any]])
+        panels[0]["maxTokens"] = 4096
+        root["panelModels"] = panels
+
+        var settings = AppSettings()
+        settings.fusionCustomPresetJSON = String(
+            data: try JSONSerialization.data(withJSONObject: root),
+            encoding: .utf8
+        ) ?? ""
+
+        let normalized = settings.normalizedForPersistence()
+        let normalizedData = try XCTUnwrap(normalized.fusionCustomPresetJSON.data(using: .utf8))
+        let normalizedRoot = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: normalizedData) as? [String: Any]
+        )
+        let normalizedPanels = try XCTUnwrap(normalizedRoot["panelModels"] as? [[String: Any]])
+
+        XCTAssertNil(normalizedRoot["maxPanelTokens"])
+        XCTAssertNil(normalizedRoot["maxJudgeTokens"])
+        XCTAssertNil(normalizedRoot["maxSynthesizerTokens"])
+        XCTAssertNil(normalizedPanels[0]["maxTokens"])
     }
 
     func testFreshDatabaseMigrationPersistsCurrentSettingsSchema() throws {

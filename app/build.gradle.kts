@@ -92,6 +92,8 @@ android {
 dependencies {
 
     // Core
+    implementation("org.snakeyaml:snakeyaml-engine:3.0.1")
+    implementation("androidx.documentfile:documentfile:1.0.1")
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime)

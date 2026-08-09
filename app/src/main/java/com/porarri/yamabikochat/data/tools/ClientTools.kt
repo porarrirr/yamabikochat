@@ -5,6 +5,8 @@ import com.porarri.yamabikochat.data.tools.search.FetchUrlTool
 import com.porarri.yamabikochat.data.tools.search.WebSearchTool
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import com.porarri.yamabikochat.data.skills.AgentSkillRepository
+import com.porarri.yamabikochat.data.skills.AgentSkillTools
 
 object ClientTools {
     private val json = Json {
@@ -31,8 +33,8 @@ object ClientTools {
         }
     }
 
-    fun defaultRegistry(): LocalToolRegistry =
-        LocalToolRegistry(listOf(WebSearchTool(), FetchUrlTool()))
+    fun defaultRegistry(skillRepository: AgentSkillRepository? = null): LocalToolRegistry =
+        LocalToolRegistry(listOf(WebSearchTool(), FetchUrlTool()) + (skillRepository?.let(AgentSkillTools::executors) ?: emptyList()))
 
     fun clientToolDefinitions(): List<ToolDefinition> =
         defaultRegistry().definitions

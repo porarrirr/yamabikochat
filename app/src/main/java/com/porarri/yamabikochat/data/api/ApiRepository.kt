@@ -39,6 +39,8 @@ import com.porarri.yamabikochat.data.modelsdev.ModelsDevProviderAdapterRegistry
 import com.porarri.yamabikochat.data.modelsdev.ModelsDevReasoningPreference
 import com.porarri.yamabikochat.data.modelsdev.ProviderAdapterKind
 import com.porarri.yamabikochat.data.modelsdev.ProviderReference
+import com.porarri.yamabikochat.data.remote.OpenAIHostedSkillsClient
+import com.porarri.yamabikochat.data.remote.OpenAIHostedSkillsPolicy
 
 class ApiRepository(
     private val geminiProvider: GeminiProvider,
@@ -54,7 +56,8 @@ class ApiRepository(
     private val superGrokAuthRepository: SuperGrokAuthRepository,
     private val modelRepository: ModelRepository,
     private val modelsDevCatalogRepository: ModelsDevCatalogRepository,
-    private val settingsProvider: suspend () -> Settings?
+    private val settingsProvider: suspend () -> Settings?,
+    private val openAIHostedSkillsClient: OpenAIHostedSkillsClient? = null
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -466,6 +469,13 @@ class ApiRepository(
                     }
                     "OPENAI" -> {
                         val baseUrl = settings?.openAiBaseUrl?.takeIf { it.isNotBlank() } ?: "https://api.openai.com/v1/"
+                        if (request.skillContext?.hostedExecutionEnabled == true && request.skillContext.catalog.isNotEmpty()) {
+                            OpenAIHostedSkillsPolicy.validationError(model, baseUrl)?.let { message ->
+                                return retrofit2.Response.error(400, message.toResponseBody(missingKeyMediaType))
+                            }
+                            return openAIHostedSkillsClient?.generate(actualApiKey, model, request)
+                                ?: retrofit2.Response.error(500, "Hosted Skill client is unavailable".toResponseBody(missingKeyMediaType))
+                        }
                         openAiProvider.generateContent(actualApiKey, model, request, baseUrl)
                     }
                     "MINIMAX" -> {
@@ -547,6 +557,13 @@ class ApiRepository(
                     }
                     "OPENAI" -> {
                         val baseUrl = settings?.openAiBaseUrl?.takeIf { it.isNotBlank() } ?: "https://api.openai.com/v1/"
+                        if (request.skillContext?.hostedExecutionEnabled == true && request.skillContext.catalog.isNotEmpty()) {
+                            OpenAIHostedSkillsPolicy.validationError(model, baseUrl)?.let { message ->
+                                return retrofit2.Response.error(400, message.toResponseBody(missingKeyMediaType))
+                            }
+                            return openAIHostedSkillsClient?.stream(actualApiKey, model, request)
+                                ?: retrofit2.Response.error(500, "Hosted Skill client is unavailable".toResponseBody(missingKeyMediaType))
+                        }
                         openAiProvider.streamGenerateContent(actualApiKey, model, request, baseUrl)
                     }
                     "MINIMAX" -> {

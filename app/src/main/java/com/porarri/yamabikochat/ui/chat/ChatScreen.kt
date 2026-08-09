@@ -166,6 +166,7 @@ fun ChatScreen(
     val errorMessage by viewModel.errorMessage.collectAsState()
     val isAutoConversationRunning by viewModel.isAutoConversationRunning.collectAsState()
     val autoConversationStatus by viewModel.autoConversationStatus.collectAsState()
+    val enabledSkillNames by viewModel.enabledSkillNames.collectAsState()
     var text by rememberSaveable { mutableStateOf(initialPrompt ?: "") }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -611,7 +612,12 @@ fun ChatScreen(
             onFilePick = { filePicker.launch("*/*") },
             isAutoConversationEnabled = settings?.isAutoConversationEnabled ?: false,
             contextLabel = inputContextLabel,
-            isSecretMode = isSecretChat
+            isSecretMode = isSecretChat,
+            skillSuggestions = run {
+                val prefix = Regex("(?:^|\\s)\\$([a-z0-9-]*)$").find(text)?.groupValues?.getOrNull(1)
+                if (prefix == null) emptyList() else enabledSkillNames.filter { it.startsWith(prefix) }.take(6)
+            },
+            onSkillSelected = { name -> text = text.replace(Regex("\\$[a-z0-9-]*$"), "\$$name ") }
         )
             }
         }

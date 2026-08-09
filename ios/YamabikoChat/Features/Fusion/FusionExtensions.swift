@@ -32,9 +32,6 @@ extension AppSettings {
     static func defaultFusionCustomPreset() -> FusionPresetDefinition {
         FusionPresetDefinition(
             taskType: .research,
-            maxPanelTokens: 4096,
-            maxJudgeTokens: 2048,
-            maxSynthesizerTokens: 4096,
             timeoutMs: 120_000,
             allowWebSearch: true,
             panelModels: [
@@ -42,7 +39,6 @@ extension AppSettings {
                     modelId: "gemini-2.5-pro",
                     provider: "GEMINI",
                     temperature: 0.3,
-                    maxTokens: 4096,
                     timeoutMs: 120_000,
                     role: "researcher"
                 ),
@@ -50,7 +46,6 @@ extension AppSettings {
                     modelId: "anthropic/claude-sonnet-4",
                     provider: "OPENROUTER",
                     temperature: 0.3,
-                    maxTokens: 4096,
                     timeoutMs: 120_000,
                     role: "analyst"
                 ),
@@ -58,7 +53,6 @@ extension AppSettings {
                     modelId: "openai/gpt-4.1",
                     provider: "OPENROUTER",
                     temperature: 0.3,
-                    maxTokens: 4096,
                     timeoutMs: 120_000,
                     role: "critic"
                 ),
@@ -66,7 +60,6 @@ extension AppSettings {
                     modelId: "deepseek/deepseek-chat",
                     provider: "OPENROUTER",
                     temperature: 0.4,
-                    maxTokens: 4096,
                     timeoutMs: 120_000,
                     role: "synthesizer_candidate"
                 )
@@ -75,7 +68,6 @@ extension AppSettings {
                 modelId: "anthropic/claude-sonnet-4",
                 provider: "OPENROUTER",
                 temperature: 0.1,
-                maxTokens: 2048,
                 timeoutMs: 90_000,
                 role: nil
             ),
@@ -83,7 +75,6 @@ extension AppSettings {
                 modelId: "gemini-2.5-pro",
                 provider: "GEMINI",
                 temperature: 0.4,
-                maxTokens: 4096,
                 timeoutMs: 120_000,
                 role: nil
             ),
@@ -91,7 +82,6 @@ extension AppSettings {
                 modelId: "gemini-2.5-flash",
                 provider: "GEMINI",
                 temperature: 0.5,
-                maxTokens: 4096,
                 timeoutMs: 60_000,
                 role: nil
             )

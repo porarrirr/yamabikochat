@@ -47,7 +47,7 @@ class ClientToolCallingRunner(
                 var response = generate(request, model, provider)
                 if (!response.isSuccessful) {
                     val errorBody = response.errorBody()?.string().orEmpty()
-                    if (ClientToolFallbackPolicy.shouldRetryWithoutClientTools(
+                    if (baseRequest.skillContext == null && ClientToolFallbackPolicy.shouldRetryWithoutClientTools(
                             httpStatus = response.code(),
                             body = errorBody,
                             tools = request.tools.orEmpty(),

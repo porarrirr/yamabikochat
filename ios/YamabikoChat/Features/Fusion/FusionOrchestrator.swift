@@ -7,8 +7,7 @@ struct FusionOrchestrator: Sendable {
         PanelModelConfig,
         String,
         FusionPhase,
-        Bool,
-        Int
+        Bool
     ) async throws -> ProviderRequest
 
     typealias ProgressHandler = @Sendable (FusionProgressSnapshot) -> Void
@@ -40,7 +39,7 @@ struct FusionOrchestrator: Sendable {
             request: request,
             panelSystemPrompt: FusionPrompts.panelSystemPrompt(taskType: request.taskType),
             buildPanelRequest: { panel, systemPrompt in
-                try await buildRequest(panel, systemPrompt, .panel, request.allowWebSearch, request.maxPanelTokens)
+                try await buildRequest(panel, systemPrompt, .panel, request.allowWebSearch)
             },
             invoke: invoke,
             estimateCost: estimateCost,
@@ -92,8 +91,7 @@ struct FusionOrchestrator: Sendable {
             request.synthesizerModel,
             synthSystemPrompt,
             .synthesizer,
-            false,
-            request.maxSynthesizerTokens
+            false
         )
         synthesisRequest.messages = [
             ProviderRequestMessage(role: "user", content: synthesisUserPrompt)
@@ -210,8 +208,7 @@ struct FusionOrchestrator: Sendable {
                 request.judgeModel,
                 systemPrompt,
                 .judge,
-                false,
-                request.maxJudgeTokens
+                false
             )
             providerRequest.messages = [ProviderRequestMessage(role: "user", content: userContent)]
             providerRequest.stream = false
@@ -320,8 +317,7 @@ struct FusionOrchestrator: Sendable {
             fallback,
             request.systemPrompt ?? "",
             .fallback,
-            false,
-            request.maxSynthesizerTokens
+            false
         )
         providerRequest.messages = [ProviderRequestMessage(role: "user", content: request.userPrompt)]
         providerRequest.stream = true

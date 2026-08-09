@@ -46,10 +46,14 @@ final class SettingsViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var diagnosticsLogText: String = ""
     @Published var tokenUsageState: TokenUsageUiState = .init()
+    @Published private(set) var installedAgentSkills: [InstalledAgentSkill] = []
+    @Published var agentSkillInstallPreview: AgentSkillInstallPreview?
+    @Published private(set) var openAIHostedSkillExecutionEnabled = false
 
     private var repository: ChatRepository?
     private var credentialStore: SecureCredentialStore?
     private var modelsDevCatalogRepository: ModelsDevCatalogRepository?
+    private var skillRepository: AgentSkillRepository?
     private var cancellables: Set<AnyCancellable> = []
     private var autoSaveWorkItem: DispatchWorkItem?
     private var isHydratingFromPersistence = false
@@ -62,12 +66,20 @@ final class SettingsViewModel: ObservableObject {
     func bind(
         repository: ChatRepository,
         credentialStore: SecureCredentialStore,
-        modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil
+        modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
+        skillRepository: AgentSkillRepository? = nil
     ) {
         guard self.repository == nil else { return }
         self.repository = repository
         self.credentialStore = credentialStore
         self.modelsDevCatalogRepository = modelsDevCatalogRepository
+        self.skillRepository = skillRepository
+        openAIHostedSkillExecutionEnabled = skillRepository?.openAIHostedExecutionEnabled ?? false
+
+        skillRepository?.skillsPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.installedAgentSkills = $0 }
+            .store(in: &cancellables)
 
         modelsDevCatalogRepository?.statePublisher
             .receive(on: DispatchQueue.main)
@@ -177,6 +189,58 @@ final class SettingsViewModel: ObservableObject {
 
     func refreshModelsDevCatalog() {
         Task { _ = await modelsDevCatalogRepository?.load(forceRefresh: true) }
+    }
+
+    func inspectAgentSkill(at url: URL) {
+        guard let skillRepository else { return }
+        Task {
+            do {
+                let preview = try await Task.detached { try skillRepository.inspect(sourceURL: url) }.value
+                agentSkillInstallPreview = preview
+            } catch {
+                errorMessage = error.localizedDescription
+                DiagnosticsLogger.log("Agent Skill inspection failed", category: .settings, error: error)
+            }
+        }
+    }
+
+    func installAgentSkill(trusted: Bool, allowReplacement: Bool) {
+        guard let skillRepository, let preview = agentSkillInstallPreview else { return }
+        do {
+            _ = try skillRepository.install(preview, trusted: trusted, allowReplacement: allowReplacement)
+            agentSkillInstallPreview = nil
+            statusMessage = "Agent Skillをインストールしました。"
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func discardAgentSkillPreview() {
+        if let preview = agentSkillInstallPreview { skillRepository?.discard(preview) }
+        agentSkillInstallPreview = nil
+    }
+
+    func setAgentSkillEnabled(_ enabled: Bool, name: String) {
+        do { try skillRepository?.setEnabled(enabled, name: name) }
+        catch { errorMessage = error.localizedDescription }
+    }
+
+    func deleteAgentSkill(name: String) {
+        do {
+            try skillRepository?.delete(name: name)
+            statusMessage = "Agent Skillを削除しました。一時コンテナは遅くとも20分で失効します。"
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    func confirmOpenAIHostedSkillExecution() {
+        skillRepository?.openAIHostedExecutionEnabled = true
+        openAIHostedSkillExecutionEnabled = true
+        statusMessage = "OpenAI hosted Skill実行を有効にしました。"
+    }
+
+    func disableOpenAIHostedSkillExecution() {
+        skillRepository?.openAIHostedExecutionEnabled = false
+        openAIHostedSkillExecutionEnabled = false
     }
 
     func modelsDevField(providerID: String, fieldName: String) -> String {
@@ -783,7 +847,6 @@ final class SettingsViewModel: ObservableObject {
             modelId: "gemini-2.5-flash",
             provider: "GEMINI",
             temperature: nil,
-            maxTokens: nil,
             timeoutMs: nil,
             role: "panel"
         )
@@ -818,7 +881,6 @@ final class SettingsViewModel: ObservableObject {
             modelId: modelId,
             provider: provider.uppercased(),
             temperature: preset.fallbackModel?.temperature ?? preset.synthesizerModel.temperature,
-            maxTokens: preset.fallbackModel?.maxTokens ?? preset.synthesizerModel.maxTokens,
             timeoutMs: preset.fallbackModel?.timeoutMs ?? preset.synthesizerModel.timeoutMs,
             role: preset.fallbackModel?.role
         )

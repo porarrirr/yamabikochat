@@ -2,9 +2,6 @@ import Foundation
 
 struct FusionPresetDefinition: Codable, Sendable, Equatable {
     var taskType: FusionTaskType
-    var maxPanelTokens: Int
-    var maxJudgeTokens: Int
-    var maxSynthesizerTokens: Int
     var timeoutMs: Int
     var allowWebSearch: Bool
     var panelModels: [PanelModelConfig]
@@ -63,9 +60,6 @@ enum FusionPresetLoader {
             synthesizerModel: preset.synthesizerModel,
             fallbackModel: preset.fallbackModel,
             preset: presetLabel,
-            maxPanelTokens: preset.maxPanelTokens,
-            maxJudgeTokens: preset.maxJudgeTokens,
-            maxSynthesizerTokens: preset.maxSynthesizerTokens,
             timeoutMs: preset.timeoutMs,
             allowWebSearch: allowWebSearch,
             taskType: resolvedTaskType,

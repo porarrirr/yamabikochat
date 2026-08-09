@@ -8,6 +8,12 @@ packages:
   GRDB:
     url: https://github.com/groue/GRDB.swift.git
     from: 7.0.0
+  Yams:
+    url: https://github.com/jpsim/Yams.git
+    exactVersion: 6.2.2
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    exactVersion: 0.9.20
 settings:
   SWIFT_VERSION: 5.10
   MARKETING_VERSION: 1.0.0
@@ -33,6 +39,8 @@ targets:
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
       - package: GRDB
+      - package: Yams
+      - package: ZIPFoundation
       - target: YamabikoShareExtension
         embed: true
     postBuildScripts:

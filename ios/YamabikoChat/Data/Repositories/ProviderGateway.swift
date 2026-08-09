@@ -14,6 +14,7 @@ final class ProviderGateway {
     /// succeeds, so this is treated as transient rather than surfaced immediately.
     private static let transientGeminiRetryLimit = 2
     private static let transientGeminiRetryDelayNanoseconds: UInt64 = 400_000_000
+    static let reasoningContinuationLimit = 3
 
     private let geminiRotationStateLock = NSLock()
     private var lastGoodGeminiRotationCandidate: GeminiRotationCandidate?
@@ -234,7 +235,10 @@ final class ProviderGateway {
         provider: LLMProvider
     ) async throws -> ProviderResponse {
         let settings = try settingsRepository.load()
-        let client = registry.client(for: provider)
+        if provider == .openAI {
+            try OpenAIHostedSkillsPolicy.validate(request: request, settings: settings)
+        }
+        let client = try registry.client(for: provider, request: request)
 
         var request = request
         request.metadata["provider"] = provider.rawValue
@@ -326,7 +330,10 @@ final class ProviderGateway {
         provider: LLMProvider
     ) async throws -> AsyncThrowingStream<ProviderStreamEvent, Error> {
         let settings = try settingsRepository.load()
-        let client = registry.client(for: provider)
+        if provider == .openAI {
+            try OpenAIHostedSkillsPolicy.validate(request: request, settings: settings)
+        }
+        let client = try registry.client(for: provider, request: request)
 
         var request = request
         request.metadata["provider"] = provider.rawValue
@@ -348,6 +355,8 @@ final class ProviderGateway {
                 }
 
                 var streamHadAnswerText = false
+                var streamReasoning = ""
+                var streamUsage: ProviderUsage?
                 var transientAttempt = 0
                 var superGrokAuthRetried = false
                 var candidateIndex = 0
@@ -372,35 +381,85 @@ final class ProviderGateway {
                             if event.includesNonEmptyAnswerText {
                                 streamHadAnswerText = true
                             }
+                            switch event {
+                            case let .reasoningDelta(delta):
+                                streamReasoning += delta
+                            case let .completed(response):
+                                if let reasoning = response.reasoningSummary?.trimmedNonEmpty {
+                                    streamReasoning = reasoning
+                                }
+                                streamUsage = response.usage ?? streamUsage
+                            case .textDelta, .toolCallDelta, .serverActivity:
+                                break
+                            }
                             continuation.yield(event)
                         }
 
                         if provider.retriesNonStreamingWhenStreamReturnsNoText, !streamHadAnswerText {
                             DiagnosticsLogger.log(
-                                "Stream completed without text; retrying non-streaming",
+                                "Stream completed with reasoning only; continuing response",
                                 category: .network,
                                 metadata: [
                                     "provider": provider.rawValue,
                                     "model": currentRequest.model
                                 ]
                             )
-                            let fallback = try await client.generate(
-                                request: currentRequest,
-                                settings: settings,
-                                credentialStore: currentCredentialStore,
-                                httpClient: httpClient
-                            )
-                            continuation.yield(
-                                .completed(
-                                    ProviderResponse(
-                                        text: fallback.text,
-                                        reasoningSummary: fallback.reasoningSummary,
-                                        raw: fallback.raw,
-                                        usage: fallback.usage,
-                                        toolCalls: fallback.toolCalls
+                            guard var latestReasoning = streamReasoning.trimmedNonEmpty else {
+                                throw ProviderClientError.parseFailure(
+                                    "Provider stream returned no answer text or reasoning."
+                                )
+                            }
+                            var continuationRequest = currentRequest
+                            var accumulatedReasoning = [latestReasoning]
+                            var accumulatedUsage = streamUsage
+                            var continuationRounds = 0
+
+                            while true {
+                                try Task.checkCancellation()
+                                guard continuationRounds < Self.reasoningContinuationLimit else {
+                                    throw ProviderClientError.parseFailure(
+                                        "Provider returned reasoning without answer text after \(Self.reasoningContinuationLimit) continuation requests."
+                                    )
+                                }
+                                continuationRounds += 1
+                                continuationRequest.messages.append(
+                                    ProviderRequestMessage(
+                                        role: "assistant",
+                                        content: "",
+                                        reasoningContent: latestReasoning
                                     )
                                 )
-                            )
+                                continuationRequest.messages.append(
+                                    ProviderRequestMessage(
+                                        role: "user",
+                                        content: "Continue the same response and provide the answer text now."
+                                    )
+                                )
+                                var completed = try await client.generate(
+                                    request: continuationRequest,
+                                    settings: settings,
+                                    credentialStore: currentCredentialStore,
+                                    httpClient: httpClient
+                                )
+                                if let usage = completed.usage {
+                                    accumulatedUsage = accumulatedUsage?.adding(usage) ?? usage
+                                }
+                                if let reasoning = completed.reasoningSummary?.trimmedNonEmpty {
+                                    latestReasoning = reasoning
+                                    accumulatedReasoning.append(reasoning)
+                                }
+                                if completed.text.trimmedNonEmpty != nil || !completed.toolCalls.isEmpty {
+                                    completed.usage = accumulatedUsage
+                                    completed.reasoningSummary = accumulatedReasoning.joined(separator: "\n\n")
+                                    continuation.yield(.completed(completed))
+                                    break
+                                }
+                                guard completed.reasoningSummary?.trimmedNonEmpty != nil else {
+                                    throw ProviderClientError.parseFailure(
+                                        "Provider continuation returned no answer text or reasoning."
+                                    )
+                                }
+                            }
                         }
                         if rotationActive {
                             rememberGoodGeminiRotationCandidate(rotationCandidates[candidateIndex])

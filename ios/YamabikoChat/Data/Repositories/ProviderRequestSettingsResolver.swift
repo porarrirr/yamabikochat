@@ -36,6 +36,15 @@ enum ProviderRequestToolScope: Sendable, Equatable {
             return false
         }
     }
+
+    var allowsAgentSkills: Bool {
+        switch self {
+        case .all, .fusionPanel:
+            return true
+        case .providerOnly, .none:
+            return false
+        }
+    }
 }
 
 struct ProviderRequestResolvedSettings: Sendable, Equatable {
@@ -50,14 +59,17 @@ struct ProviderRequestResolvedSettings: Sendable, Equatable {
 final class ProviderRequestSettingsResolver {
     private let modelService: OpenRouterModelService
     private let localToolRegistry: LocalToolRegistry
+    private let skillRepository: AgentSkillRepository
 
     init(
         modelService: OpenRouterModelService,
+        skillRepository: AgentSkillRepository = AgentSkillRepository(),
         localToolRegistry: LocalToolRegistry = LocalToolRegistry(
             executors: [WebSearchTool(), FetchUrlTool()]
         )
     ) {
         self.modelService = modelService
+        self.skillRepository = skillRepository
         self.localToolRegistry = localToolRegistry
     }
 
@@ -169,6 +181,9 @@ final class ProviderRequestSettingsResolver {
            settings.clientWebSearchToolEnabled,
            supportsClientWebSearch {
             tools.append(contentsOf: localToolRegistry.definitions.map(\.providerTool))
+        }
+        if toolScope.allowsAgentSkills, supportsClientWebSearch {
+            tools.append(contentsOf: AgentSkillTools.definitions(repository: skillRepository).map(\.providerTool))
         }
         return tools
     }

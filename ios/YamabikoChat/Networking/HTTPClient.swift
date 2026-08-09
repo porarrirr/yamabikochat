@@ -5,12 +5,20 @@ struct HTTPRequest {
     var method: String
     var headers: [String: String]
     var body: Data?
+    var timeoutInterval: TimeInterval?
 
-    init(url: URL, method: String = "POST", headers: [String: String] = [:], body: Data? = nil) {
+    init(
+        url: URL,
+        method: String = "POST",
+        headers: [String: String] = [:],
+        body: Data? = nil,
+        timeoutInterval: TimeInterval? = nil
+    ) {
         self.url = url
         self.method = method
         self.headers = headers
         self.body = body
+        self.timeoutInterval = timeoutInterval
     }
 }
 
@@ -30,6 +38,9 @@ struct URLSessionHTTPClient: HTTPClientProtocol {
         var urlRequest = URLRequest(url: request.url)
         urlRequest.httpMethod = request.method
         urlRequest.httpBody = request.body
+        if let timeoutInterval = request.timeoutInterval {
+            urlRequest.timeoutInterval = timeoutInterval
+        }
         request.headers.forEach { urlRequest.setValue($1, forHTTPHeaderField: $0) }
 
         let (data, response) = try await session.data(for: urlRequest)
@@ -43,6 +54,9 @@ struct URLSessionHTTPClient: HTTPClientProtocol {
         var urlRequest = URLRequest(url: request.url)
         urlRequest.httpMethod = request.method
         urlRequest.httpBody = request.body
+        if let timeoutInterval = request.timeoutInterval {
+            urlRequest.timeoutInterval = timeoutInterval
+        }
         request.headers.forEach { urlRequest.setValue($1, forHTTPHeaderField: $0) }
 
         let (bytes, response) = try await session.bytes(for: urlRequest)

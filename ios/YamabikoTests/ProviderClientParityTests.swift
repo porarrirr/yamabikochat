@@ -47,6 +47,38 @@ private final class CapturingHTTPClient: HTTPClientProtocol {
 }
 
 final class ProviderClientParityTests: XCTestCase {
+    func testOpenAIHostedSkillsPolicyValidatesModelsBaseURLAndCredentialCacheKey() throws {
+        XCTAssertTrue(OpenAIHostedSkillsPolicy.supportsModel("gpt-5.4"))
+        XCTAssertTrue(OpenAIHostedSkillsPolicy.supportsModel("gpt-5.4-mini-2026-03-17"))
+        XCTAssertTrue(OpenAIHostedSkillsPolicy.supportsModel("gpt-5.5"))
+        XCTAssertTrue(OpenAIHostedSkillsPolicy.supportsModel("gpt-5.6-sol"))
+        XCTAssertTrue(OpenAIHostedSkillsPolicy.supportsModel("gpt-5.6-luna"))
+        XCTAssertFalse(OpenAIHostedSkillsPolicy.supportsModel("gpt-4.1-mini"))
+        XCTAssertFalse(OpenAIHostedSkillsPolicy.supportsModel("gpt-5.4-pro"))
+        XCTAssertFalse(OpenAIHostedSkillsPolicy.supportsModel("gpt-5.5-pro"))
+
+        XCTAssertTrue(OpenAIHostedSkillsPolicy.isOfficialBaseURL("https://api.openai.com/v1/"))
+        XCTAssertTrue(OpenAIHostedSkillsPolicy.isOfficialBaseURL("https://API.OPENAI.COM/v1"))
+        XCTAssertFalse(OpenAIHostedSkillsPolicy.isOfficialBaseURL("http://api.openai.com/v1/"))
+        XCTAssertFalse(OpenAIHostedSkillsPolicy.isOfficialBaseURL("https://proxy.example.com/v1/"))
+        XCTAssertFalse(OpenAIHostedSkillsPolicy.isOfficialBaseURL("https://api.openai.com.evil.example/v1/"))
+
+        let context = SkillRequestContext(
+            catalog: [AgentSkillCatalogEntry(name: "test", description: "test")],
+            explicitlyRequestedNames: [],
+            explicitInstructions: [],
+            resourceLists: [],
+            conversationID: "conversation-1",
+            enabledSkillSetHash: "skills-hash",
+            hostedExecutionEnabled: true
+        )
+        let first = OpenAIHostedSkillsPolicy.cacheKey(context: context, token: "secret-key-a")
+        let second = OpenAIHostedSkillsPolicy.cacheKey(context: context, token: "secret-key-b")
+        XCTAssertNotEqual(first, second)
+        XCTAssertFalse(first.contains("secret-key-a"))
+        XCTAssertFalse(second.contains("secret-key-b"))
+    }
+
     func testCodexGenerateUsesResponsesPayloadAndSessionHeader() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCodexAccessToken("codex-access-token")
@@ -1551,7 +1583,12 @@ final class ProviderClientParityTests: XCTestCase {
             stream: false,
             tools: [],
             thinking: nil,
-            metadata: ["provider": "OPENCODE_GO", "promptCacheKey": "conversation-42"]
+            metadata: [
+                "provider": "OPENCODE_GO",
+                "promptCacheKey": "conversation-42",
+                "max_output_tokens": "8192",
+                "temperature": "0.25"
+            ]
         )
 
         let response = try await client.generate(
@@ -1572,6 +1609,8 @@ final class ProviderClientParityTests: XCTestCase {
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
         XCTAssertEqual(body["model"] as? String, "kimi-k2.6")
         XCTAssertEqual(body["prompt_cache_key"] as? String, "conversation-42")
+        XCTAssertEqual(body["max_tokens"] as? Int, 8192)
+        XCTAssertEqual(body["temperature"] as? Double, 0.25)
         let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
         XCTAssertEqual(messages.first?["role"] as? String, "system")
         XCTAssertEqual(messages.first?["content"] as? String, "stable system")
@@ -1616,6 +1655,35 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertNil(messages[2]["reasoning_content"])
     }
 
+    func testOpenCodeGoCarriesFusionTimeoutToHTTPTransport() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "deepseek-v4-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            metadata: ["provider": "OPENCODE_GO"],
+            timeoutInterval: 121
+        )
+
+        _ = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(httpClient.lastRequest?.timeoutInterval, 121)
+    }
+
     func testOpenCodeGoMiniMaxModelUsesMessagesEndpoint() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("go-key", for: .openCodeGo)
@@ -1635,7 +1703,7 @@ final class ProviderClientParityTests: XCTestCase {
             stream: false,
             tools: [],
             thinking: nil,
-            metadata: ["provider": "OPENCODE_GO"]
+            metadata: ["provider": "OPENCODE_GO", "max_output_tokens": "6144"]
         )
 
         let response = try await client.generate(
@@ -1657,6 +1725,7 @@ final class ProviderClientParityTests: XCTestCase {
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
         XCTAssertEqual(body["model"] as? String, "minimax-m2.7")
         XCTAssertEqual(body["system"] as? String, "stable system")
+        XCTAssertEqual(body["max_tokens"] as? Int, 6144)
         XCTAssertNil(body["prompt_cache_key"])
     }
 

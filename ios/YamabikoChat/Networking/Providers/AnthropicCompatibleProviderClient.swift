@@ -120,7 +120,8 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         let httpRequest = HTTPRequest(
             url: endpoint,
             headers: headers(token: apiKey, streaming: false, includesMCP: mcpConfiguration != nil),
-            body: payload
+            body: payload,
+            timeoutInterval: request.timeoutInterval
         )
 
         let (data, response) = try await httpClient.send(httpRequest)
@@ -149,7 +150,8 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
                     let httpRequest = HTTPRequest(
                         url: endpoint,
                         headers: headers(token: apiKey, streaming: true, includesMCP: mcpConfiguration != nil),
-                        body: payload
+                        body: payload,
+                        timeoutInterval: request.timeoutInterval
                     )
 
                     let (lineStream, response) = try await httpClient.stream(httpRequest)

@@ -25,6 +25,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
+import android.net.Uri
+import com.porarri.yamabikochat.data.skills.AgentSkillInstallPreview
+import com.porarri.yamabikochat.data.skills.InstalledAgentSkill
 
 private const val OPENROUTER_RECENT_LIMIT = 5
 private const val TOKEN_STATS_RANGE_DAYS = 30L
@@ -39,6 +42,12 @@ private fun normalizeCsvLines(raw: String): String =
         .joinToString(", ")
 
 class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
+
+    val installedAgentSkills: StateFlow<List<InstalledAgentSkill>> = repository.agentSkillRepository.installedSkills
+    private val _agentSkillPreview = MutableStateFlow<AgentSkillInstallPreview?>(null)
+    val agentSkillPreview: StateFlow<AgentSkillInstallPreview?> = _agentSkillPreview.asStateFlow()
+    private val _hostedSkillExecution = MutableStateFlow(repository.agentSkillRepository.openAIHostedExecutionEnabled)
+    val hostedSkillExecution: StateFlow<Boolean> = _hostedSkillExecution.asStateFlow()
 
     val settings: StateFlow<Settings?> = repository.getSettings()
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -90,6 +99,43 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
 
     fun refreshModelsDevCatalog() {
         viewModelScope.launch { repository.refreshModelsDevCatalog(forceRefresh = true) }
+    }
+
+    fun inspectAgentSkill(uri: Uri) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { repository.agentSkillRepository.inspect(uri) } }
+                .onSuccess { _agentSkillPreview.value = it }
+                .onFailure { _secureStorageError.value = it.message ?: "Agent Skillを検査できません。" }
+        }
+    }
+
+    fun discardAgentSkillPreview() {
+        _agentSkillPreview.value?.let(repository.agentSkillRepository::discard)
+        _agentSkillPreview.value = null
+    }
+
+    fun installAgentSkill(trusted: Boolean) {
+        val preview = _agentSkillPreview.value ?: return
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { repository.agentSkillRepository.install(preview, trusted, preview.replacesExisting) } }
+                .onSuccess { _agentSkillPreview.value = null }
+                .onFailure { _secureStorageError.value = it.message ?: "Agent Skillをインストールできません。" }
+        }
+    }
+
+    fun setAgentSkillEnabled(name: String, enabled: Boolean) = viewModelScope.launch(Dispatchers.IO) {
+        runCatching { repository.agentSkillRepository.setEnabled(name, enabled) }
+            .onFailure { _secureStorageError.value = it.message }
+    }
+
+    fun deleteAgentSkill(name: String) = viewModelScope.launch(Dispatchers.IO) {
+        runCatching { repository.agentSkillRepository.delete(name) }
+            .onFailure { _secureStorageError.value = it.message }
+    }
+
+    fun setHostedSkillExecution(enabled: Boolean) {
+        repository.agentSkillRepository.openAIHostedExecutionEnabled = enabled
+        _hostedSkillExecution.value = enabled
     }
 
     fun modelsDevField(providerId: String, fieldName: String): String =

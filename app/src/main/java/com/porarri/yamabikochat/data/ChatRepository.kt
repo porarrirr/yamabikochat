@@ -62,6 +62,7 @@ import com.porarri.yamabikochat.data.remote.extractTokenUsageSnapshot
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import com.porarri.yamabikochat.utils.FileValidationUtils
 import com.porarri.yamabikochat.utils.SqlLikeUtils
+import com.porarri.yamabikochat.data.skills.AgentSkillRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -76,7 +77,8 @@ class ChatRepository(
     private val codexAuthRepository: CodexAuthRepository,
     private val superGrokAuthRepository: SuperGrokAuthRepository,
     private val pricingRepository: LiteLlmPricingRepository,
-    private val modelsDevCatalogRepository: ModelsDevCatalogRepository
+    private val modelsDevCatalogRepository: ModelsDevCatalogRepository,
+    val agentSkillRepository: AgentSkillRepository
 ) {
     private val fusionTraceStore = FusionTraceStore(
         saveRecord = { databaseRepository.saveFusionTrace(it) },
@@ -110,7 +112,11 @@ class ChatRepository(
         settingsProvider = {
             databaseRepository.getLatestSettings() ?: Settings()
         },
-        toolRunner = DefaultClientToolCallingRunner(fusionGenerate),
+        skillRepository = agentSkillRepository,
+        toolRunner = DefaultClientToolCallingRunner(
+            fusionGenerate,
+            com.porarri.yamabikochat.data.tools.ClientTools.defaultRegistry(agentSkillRepository)
+        ),
         traceStore = fusionTraceStore
     )
 

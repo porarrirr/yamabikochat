@@ -79,6 +79,16 @@ final class AttachmentRepository {
         return destination
     }
 
+    func persistGeneratedFile(data: Data, filename: String) throws -> URL {
+        let safeName = filename.replacingOccurrences(of: #"[^A-Za-z0-9._-]+"#, with: "_", options: .regularExpression)
+        let supportURL = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let directory = supportURL.appendingPathComponent("YamabikoChat/Attachments", isDirectory: true)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let destination = directory.appendingPathComponent(UUID().uuidString + "_" + (safeName.isEmpty ? "generated-file" : safeName))
+        try data.write(to: destination, options: [.atomic])
+        return destination
+    }
+
     private func coordinateAndCopyToTemporary(url: URL) throws -> URL {
         let secured = url.startAccessingSecurityScopedResource()
         defer {

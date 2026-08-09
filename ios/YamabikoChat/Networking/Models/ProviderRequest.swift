@@ -86,6 +86,9 @@ struct ProviderRequest: Codable, Sendable, Equatable {
     var thinking: ProviderThinkingConfig?
     var provider: ProviderRoutingConfig?
     var metadata: [String: String]
+    var timeoutInterval: TimeInterval?
+    /// Ephemeral user-priority Agent Skill context. Never persisted to chat storage.
+    var skillContext: SkillRequestContext?
 
     init(
         model: String,
@@ -95,7 +98,9 @@ struct ProviderRequest: Codable, Sendable, Equatable {
         tools: [ProviderTool] = [],
         thinking: ProviderThinkingConfig? = nil,
         provider: ProviderRoutingConfig? = nil,
-        metadata: [String: String] = [:]
+        metadata: [String: String] = [:],
+        timeoutInterval: TimeInterval? = nil,
+        skillContext: SkillRequestContext? = nil
     ) {
         self.model = model
         self.messages = messages
@@ -105,5 +110,7 @@ struct ProviderRequest: Codable, Sendable, Equatable {
         self.thinking = thinking
         self.provider = provider
         self.metadata = metadata
+        self.timeoutInterval = timeoutInterval
+        self.skillContext = skillContext
     }
 }

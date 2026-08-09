@@ -29,6 +29,7 @@ final class ChatRepository {
     private let providers: ProviderGateway
     private let credentialStore: SecureCredentialStore
     private let modelService: OpenRouterModelService
+    private let skillRepository: AgentSkillRepository
     private let requestSettingsResolver: ProviderRequestSettingsResolver
     private let codexAuthRepository: CodexAuthRepository
     private let superGrokAuthRepository: SuperGrokAuthRepository
@@ -44,6 +45,7 @@ final class ChatRepository {
         providers: ProviderGateway,
         credentialStore: SecureCredentialStore,
         modelService: OpenRouterModelService,
+        skillRepository: AgentSkillRepository = AgentSkillRepository(),
         requestSettingsResolver: ProviderRequestSettingsResolver,
         codexAuthRepository: CodexAuthRepository,
         superGrokAuthRepository: SuperGrokAuthRepository,
@@ -63,6 +65,7 @@ final class ChatRepository {
         self.providers = providers
         self.credentialStore = credentialStore
         self.modelService = modelService
+        self.skillRepository = skillRepository
         self.requestSettingsResolver = requestSettingsResolver
         self.codexAuthRepository = codexAuthRepository
         self.superGrokAuthRepository = superGrokAuthRepository
@@ -614,15 +617,21 @@ final class ChatRepository {
             model: conversation.model
         )
 
+        let skillContext = try skillContext(
+            messages: resolvedMessages,
+            conversationID: String(conversationId),
+            provider: conversation.apiProvider
+        )
         return ProviderRequest(
             model: conversation.model,
-            messages: resolvedMessages,
+            messages: applyingSkillContext(skillContext, to: resolvedMessages),
             systemPrompt: SystemPromptComposer.composeForAPI(conversation.systemPrompt),
             stream: settings.isStreamingEnabled,
             tools: resolvedSettings.tools,
             thinking: resolvedSettings.thinking,
             provider: resolvedSettings.routing,
-            metadata: metadata
+            metadata: metadata,
+            skillContext: skillContext
         )
     }
 
@@ -728,31 +737,55 @@ final class ChatRepository {
                 onStreamEvent: onStreamEvent,
                 onStreamingSnapshot: onStreamingSnapshot
             )
-            return ProviderResponse(
+            let response = ProviderResponse(
                 text: session.text,
                 reasoningSummary: session.reasoningText.trimmedNonEmpty,
                 raw: nil,
                 usage: session.usage,
-                toolCalls: session.toolCalls
+                toolCalls: session.toolCalls,
+                generatedFiles: session.generatedFiles,
+                serverActivities: session.serverActivities
             )
+            if persistResults {
+                try persistProviderResponse(
+                    response,
+                    kind: persistenceKind,
+                    includeGeneratedFiles: false
+                )
+            }
+            return response
         }
 
         let response = try await providers.generate(request: request, providerID: provider)
         if persistResults {
-            try persistProviderResponse(response, kind: persistenceKind)
+            try persistProviderResponse(
+                response,
+                kind: persistenceKind,
+                includeGeneratedFiles: false
+            )
         }
         return response
     }
 
     private func persistProviderResponse(
         _ response: ProviderResponse,
-        kind: ChatStreamPersistenceKind
+        kind: ChatStreamPersistenceKind,
+        includeGeneratedFiles: Bool = true
     ) throws {
         let target = ChatStreamSessionTarget(conversations: conversations, kind: kind)
         try target.persist(
             text: response.text,
             thinking: response.reasoningSummary ?? ""
         )
+        guard includeGeneratedFiles else { return }
+        let generatedPaths = response.generatedFiles.compactMap(\.localPath)
+        guard !generatedPaths.isEmpty else { return }
+        switch kind {
+        case let .message(messageId):
+            try conversations.appendAttachments(messageId: messageId, paths: generatedPaths)
+        case let .variant(variantId, _):
+            try conversations.appendAttachments(variantId: variantId, paths: generatedPaths)
+        }
     }
 
     private func saveToolActivities(
@@ -1043,10 +1076,10 @@ final class ChatRepository {
             )
             let request = try await fusionService.buildProviderRequest(
                 model: fallbackModel,
+                defaultTimeoutMs: fusionRequest.timeoutMs,
                 systemPrompt: conversation.systemPrompt ?? "",
                 phase: .fallback,
                 allowTools: false,
-                maxTokens: fusionRequest.maxSynthesizerTokens,
                 settings: settings,
                 fusionDepth: 0,
                 userPrompt: text,
@@ -1142,7 +1175,12 @@ final class ChatRepository {
                 onStreamEvent: onStreamEvent,
                 onStreamingSnapshot: onStreamingSnapshot
             )
-            finalText = session.text
+            guard let answer = session.text.trimmedNonEmpty else {
+                throw ProviderClientError.parseFailure(
+                    L10n.text("Fusion synthesizer returned no answer text.")
+                )
+            }
+            finalText = answer
             synthUsage = session.usage
             let latencyMs = Int64(Date().timeIntervalSince(synthStarted) * 1000)
             let cost = await pricingRepository.estimateCostUsd(
@@ -2141,16 +2179,50 @@ final class ChatRepository {
             metadata["promptCacheKey"] = promptCacheKey
         }
         metadata["supportsVision"] = await visionMetadataFlag(provider: provider, model: model)
+        let baseMessages = messages ?? [ProviderRequestMessage(role: "user", content: text)]
+        let skillContext = try skillContext(
+            messages: baseMessages,
+            conversationID: promptCacheKey,
+            provider: provider
+        )
         return ProviderRequest(
             model: model,
-            messages: messages ?? [ProviderRequestMessage(role: "user", content: text)],
+            messages: applyingSkillContext(skillContext, to: baseMessages),
             systemPrompt: SystemPromptComposer.composeForAPI(systemPrompt),
             stream: stream ?? settings.isStreamingEnabled,
             tools: resolvedSettings.tools,
             thinking: resolvedSettings.thinking,
             provider: resolvedSettings.routing,
-            metadata: metadata
+            metadata: metadata,
+            skillContext: skillContext
         )
+    }
+
+    private func skillContext(
+        messages: [ProviderRequestMessage],
+        conversationID: String?,
+        provider: String
+    ) throws -> SkillRequestContext? {
+        let lastUserText = messages.last(where: { $0.role == "user" })?.content ?? ""
+        let reference = ProviderReference(persistedID: provider)
+        let supportsTools = reference.isModelsDev || LLMProvider(rawOrDefault: provider).supportsClientWebSearchTool
+        return try skillRepository.requestContext(
+            for: lastUserText,
+            conversationID: conversationID,
+            providerSupportsTools: supportsTools
+        )
+    }
+
+    private func applyingSkillContext(
+        _ context: SkillRequestContext?,
+        to source: [ProviderRequestMessage]
+    ) -> [ProviderRequestMessage] {
+        guard let context else { return source }
+        let injection = [context.syntheticUserContext, context.explicitUserContext].compactMap { $0 }.joined(separator: "\n\n")
+        guard !injection.isEmpty, let index = source.lastIndex(where: { $0.role == "user" }) else { return source }
+        var messages = source
+        messages[index].content += "\n\n" + injection
+        return messages
     }
 
     private enum DualHistorySide {
@@ -2285,6 +2357,14 @@ final class ChatRepository {
             return "[]"
         }
         return text
+    }
+
+    private func decodeArray(_ raw: String) -> [String] {
+        guard let data = raw.data(using: .utf8),
+              let values = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return values
     }
 
     private func updateConversationTitleIfNeeded(

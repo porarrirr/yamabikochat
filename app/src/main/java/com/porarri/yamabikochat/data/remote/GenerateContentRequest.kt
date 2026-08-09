@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlinx.serialization.json.JsonElement
+import com.porarri.yamabikochat.data.skills.SkillRequestContext
 
 @Serializable
 data class GenerateContentRequest(
@@ -16,7 +17,9 @@ data class GenerateContentRequest(
     @Transient
     val codexConfig: CodexRequestConfig? = null,
     @Transient
-    val promptCacheKey: String? = null
+    val promptCacheKey: String? = null,
+    @Transient
+    val skillContext: SkillRequestContext? = null
 )
 
 @Serializable

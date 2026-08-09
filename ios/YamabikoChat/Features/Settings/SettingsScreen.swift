@@ -11,6 +11,8 @@ struct SettingsScreen: View {
     @State private var navigationPath: [SettingsCategory] = []
     @State private var showDiagnosticsSheet = false
     @State private var modelsDevFieldDrafts: [String: String] = [:]
+    @State private var showAgentSkillImporter = false
+    @State private var showHostedSkillConfirmation = false
 
     enum SettingsTab: String, Identifiable {
         case api
@@ -101,7 +103,8 @@ struct SettingsScreen: View {
                 viewModel.bind(
                     repository: container.chatRepository,
                     credentialStore: container.credentialStore,
-                    modelsDevCatalogRepository: container.modelsDevCatalogRepository
+                    modelsDevCatalogRepository: container.modelsDevCatalogRepository,
+                    skillRepository: container.skillRepository
                 )
             }
             .onDisappear {
@@ -156,6 +159,33 @@ struct SettingsScreen: View {
             }
         }
         .navigationTitle(category.title)
+        .fileImporter(
+            isPresented: $showAgentSkillImporter,
+            allowedContentTypes: [.zip, .folder],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case let .success(urls):
+                if let url = urls.first { viewModel.inspectAgentSkill(at: url) }
+            case let .failure(error):
+                viewModel.errorMessage = error.localizedDescription
+            }
+        }
+        .sheet(item: $viewModel.agentSkillInstallPreview, onDismiss: viewModel.discardAgentSkillPreview) { preview in
+            AgentSkillInstallReview(
+                preview: preview,
+                onCancel: viewModel.discardAgentSkillPreview,
+                onInstall: { trusted in
+                    viewModel.installAgentSkill(trusted: trusted, allowReplacement: preview.replacesExisting)
+                }
+            )
+        }
+        .alert("OpenAI hosted Skill実行", isPresented: $showHostedSkillConfirmation) {
+            Button("キャンセル", role: .cancel) {}
+            Button("理解して有効化") { viewModel.confirmOpenAIHostedSkillExecution() }
+        } message: {
+            Text("OpenAI APIキーを使うOPENAIプロバイダーだけが対象です。Skill一式をOpenAIの一時コンテナへ送信し、API利用料が発生します。コンテナは最終利用から20分で失効し、外部ネットワークは無効です。")
+        }
     }
 
     private var apiTabContent: some View {
@@ -297,9 +327,79 @@ struct SettingsScreen: View {
 
     private var managementCategoryContent: some View {
         Group {
+            agentSkillsSection
             tokenUsageSection
             diagnosticsSection
             legalSection
+        }
+    }
+
+    private var agentSkillsSection: some View {
+        Section("Agent Skills") {
+            Button {
+                showAgentSkillImporter = true
+            } label: {
+                Label("ZIPまたはフォルダからインストール", systemImage: "square.and.arrow.down")
+            }
+
+            if viewModel.installedAgentSkills.isEmpty {
+                Text("インストール済みSkillはありません。URL取得や公開カタログには対応していません。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(viewModel.installedAgentSkills) { skill in
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle(isOn: Binding(
+                        get: { skill.isEnabled },
+                        set: { viewModel.setAgentSkillEnabled($0, name: skill.manifest.name) }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("$\(skill.manifest.name)").font(.headline)
+                            Text(skill.manifest.description).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    HStack {
+                        Text(skill.hasScripts ? "スクリプトあり" : "指示・資料のみ")
+                        if skill.hasScripts { Text("OpenAI hosted利用可能") }
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    Text("\(skill.files.count)ファイル · SHA-256 \(skill.contentHash.prefix(12))…")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                    DisclosureGroup("詳細を表示") {
+                        VStack(alignment: .leading, spacing: 5) {
+                            if let license = skill.manifest.license { Text("license: \(license)") }
+                            if let compatibility = skill.manifest.compatibility { Text("compatibility: \(compatibility)") }
+                            Text("allowed-tools: \(skill.manifest.allowedTools.isEmpty ? "なし" : skill.manifest.allowedTools.joined(separator: ", "))")
+                            ForEach(skill.manifest.metadata.sorted(by: { $0.key < $1.key }), id: \.key) { entry in
+                                Text("\(entry.key): \(entry.value)")
+                            }
+                            Divider()
+                            ForEach(skill.files) { file in
+                                Text("\(file.isScript ? "⚠ " : "")\(file.path) · \(ByteCountFormatter.string(fromByteCount: file.size, countStyle: .file))")
+                            }
+                        }
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                    }
+                    Button("削除", role: .destructive) { viewModel.deleteAgentSkill(name: skill.manifest.name) }
+                        .font(.caption)
+                }
+                .padding(.vertical, 4)
+            }
+
+            Toggle("OpenAI hosted Skill実行", isOn: Binding(
+                get: { viewModel.openAIHostedSkillExecutionEnabled },
+                set: { enabled in
+                    if enabled { showHostedSkillConfirmation = true }
+                    else { viewModel.disableOpenAIHostedSkillExecution() }
+                }
+            ))
+            Text("OFFではローカルでスクリプトを実行せず、指示とUTF-8資料だけをモデルへ提供します。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 

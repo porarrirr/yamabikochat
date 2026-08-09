@@ -54,7 +54,8 @@ struct SuperGrokProviderClient: ProviderClient {
         let httpRequest = HTTPRequest(
             url: endpoint,
             headers: headers(token: token),
-            body: payload
+            body: payload,
+            timeoutInterval: request.timeoutInterval
         )
 
         let (data, response) = try await httpClient.send(httpRequest)
@@ -81,7 +82,8 @@ struct SuperGrokProviderClient: ProviderClient {
                     let httpRequest = HTTPRequest(
                         url: endpoint,
                         headers: headers(token: token, stream: true),
-                        body: payload
+                        body: payload,
+                        timeoutInterval: request.timeoutInterval
                     )
 
                     let (lineStream, response) = try await httpClient.stream(httpRequest)

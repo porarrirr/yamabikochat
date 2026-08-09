@@ -58,6 +58,11 @@ enum FusionPanelRunner {
             let response = try await FusionTimeout.run(milliseconds: timeoutMs) {
                 try await invoke(providerRequest, provider, .panel)
             }
+            guard let answer = response.text.trimmedNonEmpty else {
+                throw ProviderClientError.parseFailure(
+                    L10n.format("Fusion panel %@ returned no answer text.", panel.modelId)
+                )
+            }
             let latencyMs = Int64(Date().timeIntervalSince(started) * 1000)
             let usage = response.usage?.normalizedNonEmpty()
             let cost = await estimateCost(panel.provider, panel.modelId, usage)
@@ -65,7 +70,7 @@ enum FusionPanelRunner {
                 modelId: panel.modelId,
                 provider: panel.provider.uppercased(),
                 success: true,
-                content: response.text,
+                content: answer,
                 error: nil,
                 latencyMs: latencyMs,
                 inputTokens: usage?.inputTokens,

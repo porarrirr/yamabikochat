@@ -53,7 +53,8 @@ struct GeminiProviderClient: ProviderClient {
                     let httpRequest = HTTPRequest(
                         url: endpoint,
                         headers: ["Content-Type": "application/json"],
-                        body: body.data
+                        body: body.data,
+                        timeoutInterval: request.timeoutInterval
                     )
                     DiagnosticsLogger.log(
                         "Gemini stream start",
@@ -328,7 +329,8 @@ struct GeminiProviderClient: ProviderClient {
         let httpRequest = HTTPRequest(
             url: url,
             headers: ["Content-Type": "application/json"],
-            body: payload.data
+            body: payload.data,
+            timeoutInterval: request.timeoutInterval
         )
 
         let (data, response) = try await httpClient.send(httpRequest)

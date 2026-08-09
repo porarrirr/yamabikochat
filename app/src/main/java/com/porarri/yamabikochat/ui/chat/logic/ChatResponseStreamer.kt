@@ -15,6 +15,7 @@ import com.porarri.yamabikochat.data.remote.ResponsePart
 import com.porarri.yamabikochat.data.remote.TokenUsageSnapshot
 import com.porarri.yamabikochat.data.remote.extractTokenUsageSnapshot
 import com.porarri.yamabikochat.data.remote.toTokenUsageSnapshot
+import com.porarri.yamabikochat.data.tools.ToolActivityStep
 import com.porarri.yamabikochat.BuildConfig
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +29,8 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.json.JSONObject
+import java.io.File
 
 /**
  * Handles model response generation for single-provider conversations.
@@ -217,7 +220,115 @@ class ChatResponseStreamer(
                 var parseErrorCount = 0
                 val nonDataLines = mutableListOf<String>()
                 var sawAnyLine = false
+                val hostedActivities = mutableListOf<ToolActivityStep>()
                 val normalizedProvider = provider.uppercase()
+                val isHostedSkillStream = normalizedProvider == "OPENAI" &&
+                    request.skillContext?.hostedExecutionEnabled == true
+
+                suspend fun persistHostedActivities() {
+                    if (hostedActivities.isEmpty()) return
+                    val encoded = ToolActivityStep.encodeSteps(hostedActivities)
+                    val variantId = activeVariant?.id
+                    if (variantId != null) repository.saveToolActivitiesForVariant(variantId, encoded)
+                    else repository.saveToolActivities(messageId, encoded)
+                    fetchFullMessage(messageId)
+                }
+
+                suspend fun consumeHostedEvent(payload: String): Boolean {
+                    if (!isHostedSkillStream) return false
+                    val event = runCatching { JSONObject(payload) }.getOrNull() ?: return false
+                    when (event.optString("type")) {
+                        "yamabiko.generated_file" -> {
+                            val path = event.optString("path")
+                            if (path.isNotBlank() && File(path).isFile && path !in currentAttachments) {
+                                currentAttachments += path
+                                hasData = true
+                                updateFullMessageState(currentText, currentAttachments, null, currentThinking)
+                            }
+                            hostedActivities += ToolActivityStep(
+                                id = "file:${event.optString("filename")}:${hostedActivities.size}",
+                                round = 0,
+                                toolName = "openai_container_file",
+                                title = "生成ファイルを保存",
+                                detail = event.optString("filename", "generated-file"),
+                                status = ToolActivityStep.Status.completed,
+                                createdAtMs = System.currentTimeMillis()
+                            )
+                            persistHostedActivities()
+                            return true
+                        }
+                        "yamabiko.generated_file_error" -> {
+                            hostedActivities += ToolActivityStep(
+                                id = "file-error:${event.optString("filename")}:${hostedActivities.size}",
+                                round = 0,
+                                toolName = "openai_container_file",
+                                title = "生成ファイルの取得に失敗",
+                                detail = event.optString("filename", "generated-file"),
+                                status = ToolActivityStep.Status.failed,
+                                errorMessage = event.optString("message", "Container file download failed").take(1_000),
+                                createdAtMs = System.currentTimeMillis()
+                            )
+                            persistHostedActivities()
+                            return true
+                        }
+                        "response.output_item.done" -> {
+                            val item = event.optJSONObject("item") ?: return false
+                            val itemType = item.optString("type")
+                            if (itemType != "shell_call" && itemType != "shell_call_output") return false
+                            val callId = item.optString("call_id", item.optString("id", "shell-${hostedActivities.size}"))
+                            if (itemType == "shell_call") {
+                                val action = item.optJSONObject("action")
+                                val commands = action?.optJSONArray("commands")
+                                val detail = buildString {
+                                    if (commands != null) for (index in 0 until commands.length()) {
+                                        if (isNotEmpty()) append('\n')
+                                        append(commands.optString(index))
+                                    }
+                                    action?.optLong("timeout_ms")?.takeIf { it > 0 }?.let { append("\ntimeout_ms=$it") }
+                                }.take(4_000)
+                                hostedActivities.removeAll { it.id == "shell:$callId" }
+                                hostedActivities += ToolActivityStep(
+                                    id = "shell:$callId",
+                                    round = 0,
+                                    toolName = "openai_hosted_shell",
+                                    title = "OpenAI hosted shell",
+                                    detail = detail,
+                                    status = ToolActivityStep.Status.running,
+                                    createdAtMs = System.currentTimeMillis()
+                                )
+                            } else {
+                                val outputs = item.optJSONArray("output")
+                                var failed = false
+                                var timedOut = false
+                                val detail = buildString {
+                                    if (outputs != null) for (index in 0 until outputs.length()) {
+                                        val output = outputs.optJSONObject(index) ?: continue
+                                        output.optString("stdout").takeIf { it.isNotBlank() }?.let { append("stdout:\n$it\n") }
+                                        output.optString("stderr").takeIf { it.isNotBlank() }?.let { append("stderr:\n$it\n") }
+                                        val outcome = output.optJSONObject("outcome")
+                                        if (outcome?.optString("type") == "timeout") timedOut = true
+                                        if (outcome?.has("exit_code") == true && outcome.optInt("exit_code") != 0) failed = true
+                                    }
+                                }.take(4_000)
+                                val existing = hostedActivities.indexOfFirst { it.id == "shell:$callId" }
+                                val completed = ToolActivityStep(
+                                    id = "shell:$callId",
+                                    round = 0,
+                                    toolName = "openai_hosted_shell",
+                                    title = "OpenAI hosted shell結果",
+                                    detail = detail,
+                                    status = if (failed || timedOut) ToolActivityStep.Status.failed else ToolActivityStep.Status.completed,
+                                    errorMessage = if (timedOut) "タイムアウト" else if (failed) "コマンドが非0で終了しました" else null,
+                                    createdAtMs = System.currentTimeMillis()
+                                )
+                                if (existing >= 0) hostedActivities[existing] = completed else hostedActivities += completed
+                            }
+                            persistHostedActivities()
+                            return false
+                        }
+                    }
+                    return false
+                }
                 val isOpenCodeGoMessagesModel =
                     normalizedProvider == "OPENCODE_GO" &&
                         OpenCodeGoModelCatalog.modelFor(model)?.endpointKind == OpenCodeGoEndpointKind.MESSAGES
@@ -259,8 +370,10 @@ class ChatResponseStreamer(
                         }
 
                         try {
+                            if (consumeHostedEvent(payload)) return
                             val parsedChunk = if (
-                                normalizedProvider == "CODEX_AUTH"
+                                normalizedProvider == "CODEX_AUTH" ||
+                                isHostedSkillStream
                             ) {
                                 val delta = parseCodexResponsesDelta(payload, currentText)
                                 val usage = parseCodexResponsesUsage(payload)
@@ -583,7 +696,8 @@ class ChatResponseStreamer(
                         repository.saveInlineData(inline, respPart.fileData?.displayName)?.let { attachments.add(it) }
                     }
                     respPart.fileData?.let { file ->
-                        textBuilder.append(formatFileDataPlaceholder(file.displayName, file.fileUri))
+                        localGeneratedFile(file.fileUri)?.let(attachments::add)
+                            ?: textBuilder.append(formatFileDataPlaceholder(file.displayName, file.fileUri))
                     }
                 }
             }
@@ -592,7 +706,8 @@ class ChatResponseStreamer(
                 repository.saveInlineData(inline, part.fileData?.displayName)?.let { attachments.add(it) }
             }
             if (part.fileData != null && part.inlineData == null) {
-                textBuilder.append(formatFileDataPlaceholder(part.fileData.displayName, part.fileData.fileUri))
+                localGeneratedFile(part.fileData.fileUri)?.let(attachments::add)
+                    ?: textBuilder.append(formatFileDataPlaceholder(part.fileData.displayName, part.fileData.fileUri))
             }
         }
 
@@ -601,6 +716,12 @@ class ChatResponseStreamer(
             thinking = thinkingBuilder.toString(),
             attachments = attachments
         )
+    }
+
+    private fun localGeneratedFile(raw: String?): String? {
+        val value = raw?.takeIf { it.isNotBlank() } ?: return null
+        val file = if (value.startsWith("file:")) runCatching { File(java.net.URI(value)) }.getOrNull() else File(value)
+        return file?.takeIf { it.isFile }?.absolutePath
     }
 
     private fun formatFunctionCall(functionCall: FunctionCall): String {

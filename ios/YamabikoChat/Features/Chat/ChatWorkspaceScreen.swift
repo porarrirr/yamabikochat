@@ -32,7 +32,8 @@ struct ChatWorkspaceScreen: View {
         .task {
             viewModel.bind(
                 repository: container.chatRepository,
-                attachmentRepository: container.attachmentRepository
+                attachmentRepository: container.attachmentRepository,
+                skillRepository: container.skillRepository
             )
             applyShareImportDraftIfNeeded()
         }

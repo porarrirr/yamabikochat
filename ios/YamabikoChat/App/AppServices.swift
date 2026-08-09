@@ -10,6 +10,7 @@ final class AppServices {
     let settingsRepository: SettingsRepository
     let conversationRepository: ConversationRepository
     let attachmentRepository: AttachmentRepository
+    let skillRepository: AgentSkillRepository
     let openRouterModelService: OpenRouterModelService
     let requestSettingsResolver: ProviderRequestSettingsResolver
     let modelsDevCatalogRepository: ModelsDevCatalogRepository
@@ -33,14 +34,23 @@ final class AppServices {
         settingsRepository = SettingsRepository(dbQueue: dbQueue)
         conversationRepository = ConversationRepository(dbQueue: dbQueue)
         attachmentRepository = AttachmentRepository()
+        skillRepository = AgentSkillRepository()
         openRouterModelService = OpenRouterModelService(credentialStore: credentialStore)
-        requestSettingsResolver = ProviderRequestSettingsResolver(modelService: openRouterModelService)
+        let localTools = LocalToolRegistry(
+            executors: [WebSearchTool(), FetchUrlTool()] + AgentSkillTools.executors(repository: skillRepository)
+        )
+        requestSettingsResolver = ProviderRequestSettingsResolver(
+            modelService: openRouterModelService,
+            skillRepository: skillRepository,
+            localToolRegistry: localTools
+        )
         modelsDevCatalogRepository = ModelsDevCatalogRepository()
         codexAuthRepository = CodexAuthRepository(credentialStore: credentialStore)
         superGrokAuthRepository = SuperGrokAuthRepository(credentialStore: credentialStore)
         providerGateway = ProviderGateway(
             settingsRepository: settingsRepository,
             credentialStore: credentialStore,
+            registry: ProviderRegistry(skillRepository: skillRepository, attachmentRepository: attachmentRepository),
             superGrokAuthRepository: superGrokAuthRepository,
             modelsDevCatalogRepository: modelsDevCatalogRepository
         )
@@ -50,7 +60,9 @@ final class AppServices {
             providerGateway: providerGateway,
             pricingRepository: LiteLlmPricingRepository(),
             traceStore: fusionTraceStore,
-            requestSettingsResolver: requestSettingsResolver
+            requestSettingsResolver: requestSettingsResolver,
+            skillRepository: skillRepository,
+            localToolRegistry: localTools
         )
         chatRepository = ChatRepository(
             conversations: conversationRepository,
@@ -58,9 +70,11 @@ final class AppServices {
             providers: providerGateway,
             credentialStore: credentialStore,
             modelService: openRouterModelService,
+            skillRepository: skillRepository,
             requestSettingsResolver: requestSettingsResolver,
             codexAuthRepository: codexAuthRepository,
             superGrokAuthRepository: superGrokAuthRepository,
+            localToolRegistry: localTools,
             fusionService: fusionService,
             fusionTraceStore: fusionTraceStore
         )

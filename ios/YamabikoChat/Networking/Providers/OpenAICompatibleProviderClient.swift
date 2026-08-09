@@ -103,7 +103,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         let httpRequest = HTTPRequest(
             url: endpoint,
             headers: headers(for: resolvedProvider, token: apiKey),
-            body: payload
+            body: payload,
+            timeoutInterval: request.timeoutInterval
         )
 
         let (data, response) = try await httpClient.send(httpRequest)
@@ -145,7 +146,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                     let httpRequest = HTTPRequest(
                         url: endpoint,
                         headers: headers(for: resolvedProvider, token: apiKey),
-                        body: payload
+                        body: payload,
+                        timeoutInterval: request.timeoutInterval
                     )
 
                     let (lineStream, response) = try await httpClient.stream(httpRequest)
@@ -219,7 +221,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         let httpRequest = HTTPRequest(
             url: context.endpoint,
             headers: context.headers,
-            body: payload
+            body: payload,
+            timeoutInterval: request.timeoutInterval
         )
         let (data, response) = try await httpClient.send(httpRequest)
         guard (200 ... 299).contains(response.statusCode) else {
@@ -241,7 +244,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         let httpRequest = HTTPRequest(
             url: context.endpoint,
             headers: headers,
-            body: payload
+            body: payload,
+            timeoutInterval: request.timeoutInterval
         )
         let (lineStream, response) = try await httpClient.stream(httpRequest)
         guard (200 ... 299).contains(response.statusCode) else {

@@ -6,6 +6,9 @@ enum ClientToolFallbackPolicy {
         request: ProviderRequest,
         round: Int
     ) -> Bool {
+        // Skill tool rejection is user-visible. Retrying without skills would silently
+        // violate the explicit request and is therefore intentionally prohibited.
+        guard request.skillContext?.catalog.isEmpty != false else { return false }
         guard round == 1,
               request.tools.contains(where: { $0.type == "function" || $0.type == "function_declarations" }),
               case let ProviderClientError.httpStatus(status, body) = error,

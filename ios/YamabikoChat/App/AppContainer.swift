@@ -10,6 +10,7 @@ final class AppContainer: ObservableObject {
     let settingsRepository: SettingsRepository
     let conversationRepository: ConversationRepository
     let attachmentRepository: AttachmentRepository
+    let skillRepository: AgentSkillRepository
     let openRouterModelService: OpenRouterModelService
     let modelsDevCatalogRepository: ModelsDevCatalogRepository
     let codexAuthRepository: CodexAuthRepository
@@ -24,6 +25,7 @@ final class AppContainer: ObservableObject {
         settingsRepository = services.settingsRepository
         conversationRepository = services.conversationRepository
         attachmentRepository = services.attachmentRepository
+        skillRepository = services.skillRepository
         openRouterModelService = services.openRouterModelService
         modelsDevCatalogRepository = services.modelsDevCatalogRepository
         codexAuthRepository = services.codexAuthRepository

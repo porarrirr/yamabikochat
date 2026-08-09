@@ -17,25 +17,20 @@ enum FusionTimeout {
         operation: @escaping @Sendable () async throws -> T
     ) async throws -> T {
         let timeoutMs = max(1, milliseconds)
-        let worker = Task {
-            try await operation()
-        }
-        let timeoutTask = Task {
-            try await Task.sleep(nanoseconds: UInt64(timeoutMs) * 1_000_000)
-            worker.cancel()
-            throw TimeoutError.timedOut(milliseconds: timeoutMs)
-        }
+        return try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(timeoutMs) * 1_000_000)
+                throw TimeoutError.timedOut(milliseconds: timeoutMs)
+            }
+            defer { group.cancelAll() }
 
-        do {
-            let result = try await worker.value
-            timeoutTask.cancel()
-            return result
-        } catch is CancellationError {
-            timeoutTask.cancel()
-            throw TimeoutError.timedOut(milliseconds: timeoutMs)
-        } catch {
-            timeoutTask.cancel()
-            throw error
+            guard let first = try await group.next() else {
+                throw CancellationError()
+            }
+            return first
         }
     }
 }

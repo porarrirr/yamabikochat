@@ -24,6 +24,8 @@ import com.porarri.yamabikochat.data.remote.ZaiProvider
 import com.porarri.yamabikochat.data.remote.OpenAiProvider
 import com.porarri.yamabikochat.data.remote.CodexResponsesProvider
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
+import com.porarri.yamabikochat.data.skills.AgentSkillRepository
+import com.porarri.yamabikochat.data.remote.OpenAIHostedSkillsClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -43,6 +45,7 @@ class MyApplication : Application() {
     private val openRouterApiService by lazy { RetrofitClient.openRouterInstance }
     private val zaiApiService by lazy { RetrofitClient.zaiInstance }
     private val attachmentStorage by lazy { AttachmentStorage(applicationContext) }
+    private val agentSkillRepository by lazy { AgentSkillRepository(applicationContext) }
     private val chatDao by lazy { database.chatDao() }
     private val databaseRepository by lazy { DatabaseRepository(chatDao) }
     private val modelService by lazy { OpenRouterModelService(openRouterApiService) }
@@ -73,7 +76,8 @@ class MyApplication : Application() {
             superGrokAuthRepository = superGrokAuthRepository,
             modelRepository = modelRepository,
             modelsDevCatalogRepository = modelsDevCatalogRepository,
-            settingsProvider = { databaseRepository.getLatestSettings() }
+            settingsProvider = { databaseRepository.getLatestSettings() },
+            openAIHostedSkillsClient = OpenAIHostedSkillsClient(applicationContext, agentSkillRepository)
         )
     }
     private val fileRepository by lazy {
@@ -88,7 +92,8 @@ class MyApplication : Application() {
             codexAuthRepository = codexAuthRepository,
             superGrokAuthRepository = superGrokAuthRepository,
             pricingRepository = pricingRepository,
-            modelsDevCatalogRepository = modelsDevCatalogRepository
+            modelsDevCatalogRepository = modelsDevCatalogRepository,
+            agentSkillRepository = agentSkillRepository
         )
     }
     val viewModelFactory by lazy { ViewModelFactory(repository) }

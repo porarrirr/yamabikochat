@@ -37,7 +37,8 @@ struct CodexProviderClient: ProviderClient {
         let httpRequest = HTTPRequest(
             url: endpoint,
             headers: headers,
-            body: payload
+            body: payload,
+            timeoutInterval: request.timeoutInterval
         )
 
         let (data, response) = try await httpClient.send(httpRequest)
@@ -82,7 +83,8 @@ struct CodexProviderClient: ProviderClient {
                     let httpRequest = HTTPRequest(
                         url: endpoint,
                         headers: headers,
-                        body: payload
+                        body: payload,
+                        timeoutInterval: request.timeoutInterval
                     )
 
                     let (lineStream, response) = try await httpClient.stream(httpRequest)

@@ -37,6 +37,7 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var streamingSnapshots: [Int64: ChatStreamingSnapshot] = [:]
     @Published private(set) var isSecretConversation: Bool = false
     @Published private(set) var conversationTitle: String = "New Chat"
+    @Published private(set) var enabledSkillNames: [String] = []
 
     let speechService = SpeechRecognitionService()
 
@@ -93,10 +94,16 @@ final class ChatViewModel: ObservableObject {
         autoConversationTask?.cancel()
     }
 
-    func bind(repository: ChatRepository, attachmentRepository: AttachmentRepository) {
+    func bind(repository: ChatRepository, attachmentRepository: AttachmentRepository, skillRepository: AgentSkillRepository? = nil) {
         guard self.repository == nil else { return }
         self.repository = repository
         self.attachmentRepository = attachmentRepository
+
+        skillRepository?.skillsPublisher
+            .map { $0.filter(\.isEnabled).map { $0.manifest.name }.sorted() }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.enabledSkillNames = $0 }
+            .store(in: &cancellables)
 
         repository.observeMessages(conversationId: conversationID)
             .receive(on: DispatchQueue.main)
@@ -167,6 +174,19 @@ final class ChatViewModel: ObservableObject {
                 error: error
             )
         }
+    }
+
+    var skillAutocompleteSuggestions: [String] {
+        guard let match = inputText.range(of: #"(?:^|\s)\$([a-z0-9-]*)$"#, options: .regularExpression),
+              let dollar = inputText[match].lastIndex(of: "$") else { return [] }
+        let prefix = String(inputText[inputText.index(after: dollar)...])
+        return enabledSkillNames.filter { prefix.isEmpty || $0.hasPrefix(prefix) }.prefix(6).map { $0 }
+    }
+
+    func selectSkillAutocomplete(_ name: String) {
+        guard let match = inputText.range(of: #"(?:^|\s)\$([a-z0-9-]*)$"#, options: .regularExpression),
+              let dollar = inputText[match].lastIndex(of: "$") else { return }
+        inputText.replaceSubrange(dollar..<inputText.endIndex, with: "$\(name) ")
     }
 
     func applySharedText(_ text: String?) {

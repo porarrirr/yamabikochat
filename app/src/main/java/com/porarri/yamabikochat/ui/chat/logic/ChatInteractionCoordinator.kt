@@ -12,6 +12,7 @@ import com.porarri.yamabikochat.data.local.DualChatMessage
 import com.porarri.yamabikochat.data.local.FullChatMessage
 import com.porarri.yamabikochat.data.local.Settings
 import com.porarri.yamabikochat.data.remote.GenerateContentRequest
+import com.porarri.yamabikochat.data.remote.Content
 import com.porarri.yamabikochat.data.remote.GenerationConfig
 import com.porarri.yamabikochat.data.remote.Part
 import com.porarri.yamabikochat.data.remote.SystemInstruction
@@ -21,6 +22,8 @@ import com.porarri.yamabikochat.data.tools.ToolActivityStep
 import com.porarri.yamabikochat.ui.chat.ConversationHistoryBuilder
 import com.porarri.yamabikochat.utils.MiniMaxUtils
 import com.porarri.yamabikochat.utils.ToolingUtils
+import com.porarri.yamabikochat.data.skills.AgentSkillTools
+import com.porarri.yamabikochat.data.skills.SkillRequestContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,7 +44,8 @@ class ChatInteractionCoordinator(
                 request = request,
                 providerOverride = provider
             )
-        }
+        },
+        registry = ClientTools.defaultRegistry(repository.agentSkillRepository)
     )
 ) {
     private val json = Json {
@@ -121,7 +125,13 @@ class ChatInteractionCoordinator(
             fullMessagesState.update { it + historyPreparation.newlyFetchedMessages }
         }
 
-        val tools = ToolingUtils.buildTools(settings, activeProvider)
+        val skillContext = repository.agentSkillRepository.requestContext(text, "conversation-${conversation.id}")
+        val skillDeclarations = if (ClientTools.supportsClientWebSearchTool(activeProvider)) {
+            AgentSkillTools.declarations(repository.agentSkillRepository)
+        } else {
+            emptyList()
+        }
+        val tools = appendSkillDeclarations(ToolingUtils.buildTools(settings, activeProvider), skillDeclarations)
         val thinkingConfig = settings.buildThinkingConfigFor(activeProvider, activeModel)
         val generationConfig = buildGenerationConfig(settings, activeProvider, activeModel, thinkingConfig)
         val systemInstructionSource = conversation.systemPrompt ?: settings.systemPrompt
@@ -133,20 +143,21 @@ class ChatInteractionCoordinator(
         }
 
         val request = GenerateContentRequest(
-            contents = historyPreparation.history,
+            contents = applySkillContext(historyPreparation.history, skillContext),
             tools = tools.takeIf { it.isNotEmpty() },
             generationConfig = generationConfig,
             system_instruction = systemInstruction,
             codexConfig = codexConfig,
-            promptCacheKey = "conversation-${conversation.id}"
+            promptCacheKey = "conversation-${conversation.id}",
+            skillContext = skillContext
         )
 
         if (skipModelResponse) {
             return SingleMessageResult(historyPreparation.newlyFetchedMessages)
         }
 
-        val useClientTools =
-            settings.clientWebSearchToolEnabled && ClientTools.supportsClientWebSearchTool(activeProvider)
+        val useClientTools = ClientTools.supportsClientWebSearchTool(activeProvider) &&
+            (settings.clientWebSearchToolEnabled || skillDeclarations.isNotEmpty())
 
         if (useClientTools) {
             scope.launch(Dispatchers.IO) {
@@ -238,7 +249,9 @@ class ChatInteractionCoordinator(
             fullMessagesState.update { it + historyPreparation.newlyFetchedMessages }
         }
 
-        val tools = ToolingUtils.buildTools(settings, activeProvider)
+        val skillContext = repository.agentSkillRepository.requestContext(userMessage.text, "conversation-${conversation.id}")
+        val skillDeclarations = if (ClientTools.supportsClientWebSearchTool(activeProvider)) AgentSkillTools.declarations(repository.agentSkillRepository) else emptyList()
+        val tools = appendSkillDeclarations(ToolingUtils.buildTools(settings, activeProvider), skillDeclarations)
         val thinkingConfig = settings.buildThinkingConfigFor(activeProvider, activeModel)
         val generationConfig = buildGenerationConfig(settings, activeProvider, activeModel, thinkingConfig)
         val systemInstructionSource = conversation.systemPrompt ?: settings.systemPrompt
@@ -250,16 +263,17 @@ class ChatInteractionCoordinator(
         }
 
         val request = GenerateContentRequest(
-            contents = historyPreparation.history,
+            contents = applySkillContext(historyPreparation.history, skillContext),
             tools = tools.takeIf { it.isNotEmpty() },
             generationConfig = generationConfig,
             system_instruction = systemInstruction,
             codexConfig = codexConfig,
-            promptCacheKey = "conversation-${conversation.id}"
+            promptCacheKey = "conversation-${conversation.id}",
+            skillContext = skillContext
         )
 
-        val useClientTools =
-            settings.clientWebSearchToolEnabled && ClientTools.supportsClientWebSearchTool(activeProvider)
+        val useClientTools = ClientTools.supportsClientWebSearchTool(activeProvider) &&
+            (settings.clientWebSearchToolEnabled || skillDeclarations.isNotEmpty())
 
         if (useClientTools) {
             scope.launch(Dispatchers.IO) {
@@ -519,8 +533,11 @@ class ChatInteractionCoordinator(
         val userMessageParts = historyBuilder.buildNewMessageParts(text, attachments)
         val (historyA, historyB) = historyBuilder.buildDualHistories(dualMessages, userMessageParts)
 
-        val toolsForA = ToolingUtils.buildTools(settings, settings.dualProviderA, Settings.ReasoningContext.DUAL_A)
-        val toolsForB = ToolingUtils.buildTools(settings, settings.dualProviderB, Settings.ReasoningContext.DUAL_B)
+        val skillContext = repository.agentSkillRepository.requestContext(text, "conversation-$conversationId")
+        val declarationsA = if (ClientTools.supportsClientWebSearchTool(settings.dualProviderA)) AgentSkillTools.declarations(repository.agentSkillRepository) else emptyList()
+        val declarationsB = if (ClientTools.supportsClientWebSearchTool(settings.dualProviderB)) AgentSkillTools.declarations(repository.agentSkillRepository) else emptyList()
+        val toolsForA = appendSkillDeclarations(ToolingUtils.buildTools(settings, settings.dualProviderA, Settings.ReasoningContext.DUAL_A), declarationsA)
+        val toolsForB = appendSkillDeclarations(ToolingUtils.buildTools(settings, settings.dualProviderB, Settings.ReasoningContext.DUAL_B), declarationsB)
 
         val thinkingConfigA = settings.buildThinkingConfigFor(
             provider = settings.dualProviderA,
@@ -545,21 +562,23 @@ class ChatInteractionCoordinator(
         }
 
         val requestA = GenerateContentRequest(
-            contents = historyA,
+            contents = applySkillContext(historyA, skillContext),
             system_instruction = settings.dualSystemPromptA?.let { SystemInstruction(parts = listOf(Part(it))) },
             generationConfig = buildGenerationConfig(settings, settings.dualProviderA, settings.dualModelA, thinkingConfigA),
             tools = toolsForA.takeIf { it.isNotEmpty() }?.toList(),
             codexConfig = codexConfigA,
-            promptCacheKey = "conversation-$conversationId-dual-a"
+            promptCacheKey = "conversation-$conversationId-dual-a",
+            skillContext = skillContext
         )
 
         val requestB = GenerateContentRequest(
-            contents = historyB,
+            contents = applySkillContext(historyB, skillContext),
             system_instruction = settings.dualSystemPromptB?.let { SystemInstruction(parts = listOf(Part(it))) },
             generationConfig = buildGenerationConfig(settings, settings.dualProviderB, settings.dualModelB, thinkingConfigB),
             tools = toolsForB.takeIf { it.isNotEmpty() }?.toList(),
             codexConfig = codexConfigB,
-            promptCacheKey = "conversation-$conversationId-dual-b"
+            promptCacheKey = "conversation-$conversationId-dual-b",
+            skillContext = skillContext
         )
 
         val modelDualMessage = DualChatMessage(
@@ -599,6 +618,34 @@ class ChatInteractionCoordinator(
                 )
                 repository.updateDualMessage(updatedMessage)
             }
+        }
+    }
+
+    private fun appendSkillDeclarations(
+        tools: List<com.porarri.yamabikochat.data.remote.Tool>,
+        declarations: List<com.porarri.yamabikochat.data.remote.FunctionDeclaration>
+    ): List<com.porarri.yamabikochat.data.remote.Tool> {
+        if (declarations.isEmpty()) return tools
+        val result = tools.toMutableList()
+        val index = result.indexOfFirst { it.function_declarations != null }
+        if (index >= 0) result[index] = result[index].copy(function_declarations = result[index].function_declarations.orEmpty() + declarations)
+        else result += com.porarri.yamabikochat.data.remote.Tool(function_declarations = declarations)
+        return result
+    }
+
+    private fun applySkillContext(contents: List<Content>, context: SkillRequestContext?): List<Content> {
+        if (context == null) return contents
+        val injection = listOfNotNull(context.syntheticUserContext, context.explicitUserContext).joinToString("\n\n")
+        if (injection.isBlank()) return contents
+        val index = contents.indexOfLast { it.role == "user" }
+        if (index < 0) return contents
+        return contents.toMutableList().also { result ->
+            val content = result[index]
+            val parts = content.parts.toMutableList()
+            val textIndex = parts.indexOfLast { it.text != null }
+            if (textIndex >= 0) parts[textIndex] = parts[textIndex].copy(text = parts[textIndex].text.orEmpty() + "\n\n" + injection)
+            else parts += Part(text = injection)
+            result[index] = content.copy(parts = parts)
         }
     }
 

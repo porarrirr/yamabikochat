@@ -91,6 +91,8 @@ struct ChatStreamSessionResult {
     var reasoningText: String
     var usage: ProviderUsage?
     var toolCalls: [ToolCall]
+    var generatedFiles: [ProviderGeneratedFile]
+    var serverActivities: [ProviderServerActivity]
 }
 
 enum ChatStreamSession {
@@ -106,6 +108,8 @@ enum ChatStreamSession {
         var reasoningText = ""
         var finalUsage: ProviderUsage?
         var finalToolCalls: [ToolCall] = []
+        var generatedFiles: [ProviderGeneratedFile] = []
+        var serverActivities: [ProviderServerActivity] = []
         var coordinator = ChatStreamingPersistenceCoordinator()
         do {
             for try await event in stream {
@@ -116,6 +120,8 @@ enum ChatStreamSession {
                     reasoningText: &reasoningText,
                     finalUsage: &finalUsage,
                     finalToolCalls: &finalToolCalls,
+                    generatedFiles: &generatedFiles,
+                    serverActivities: &serverActivities,
                     coordinator: &coordinator,
                     onStreamEvent: onStreamEvent,
                     onStreamingSnapshot: onStreamingSnapshot
@@ -146,7 +152,9 @@ enum ChatStreamSession {
             text: fullText,
             reasoningText: reasoningText,
             usage: finalUsage,
-            toolCalls: finalToolCalls
+            toolCalls: finalToolCalls,
+            generatedFiles: generatedFiles,
+            serverActivities: serverActivities
         )
     }
 
@@ -157,6 +165,8 @@ enum ChatStreamSession {
         reasoningText: inout String,
         finalUsage: inout ProviderUsage?,
         finalToolCalls: inout [ToolCall],
+        generatedFiles: inout [ProviderGeneratedFile],
+        serverActivities: inout [ProviderServerActivity],
         coordinator: inout ChatStreamingPersistenceCoordinator,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
@@ -185,9 +195,13 @@ enum ChatStreamSession {
             )
         case .toolCallDelta:
             break
+        case let .serverActivity(activity):
+            serverActivities.append(activity)
         case let .completed(response):
             finalUsage = response.usage ?? finalUsage
             finalToolCalls = response.toolCalls
+            generatedFiles = response.generatedFiles
+            serverActivities = response.serverActivities.isEmpty ? serverActivities : response.serverActivities
             if fullText.isEmpty, !response.text.isEmpty {
                 fullText = response.text
             }

@@ -419,27 +419,34 @@ final class ProviderGatewayTests: XCTestCase {
         XCTAssertTrue(fixture.httpClient.sentRequests.isEmpty)
     }
 
-    func testOpenCodeGoStreamRetriesNonStreamingWhenNoAnswerTextArrives() async throws {
+    func testOpenCodeGoStreamContinuesReasoningOnlyResponsesUntilAnswerArrives() async throws {
         let fixture = try makeFixture()
         try fixture.credentials.setCredential("opencode-key", for: .openCodeGo)
 
         fixture.httpClient.streamResponder = { request in
             let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"choices":[{"delta":{"reasoning_content":"first reasoning"}}]}"#)
+                continuation.yield("")
                 continuation.yield("data: [DONE]")
                 continuation.yield("")
                 continuation.finish()
             }
             return (stream, Self.httpResponse(url: request.url, statusCode: 200))
         }
+        let counter = CallCounter()
         fixture.httpClient.sendResponder = { request in
-            let data = #"{"choices":[{"message":{"content":"fallback answer"}}]}"#
+            counter.count += 1
+            let payload = counter.count == 1
+                ? #"{"choices":[{"message":{"content":"","reasoning_content":"second reasoning"}}]}"#
+                : #"{"choices":[{"message":{"content":"continued answer"}}]}"#
+            let data = payload
                 .data(using: .utf8)!
             return (data, Self.httpResponse(url: request.url, statusCode: 200))
         }
 
         let stream = try await fixture.gateway.stream(
             request: ProviderRequest(
-                model: "glm-5.1",
+                model: "deepseek-v4-flash",
                 messages: [ProviderRequestMessage(role: "user", content: "hello")],
                 stream: true
             ),
@@ -454,17 +461,107 @@ final class ProviderGatewayTests: XCTestCase {
         }
 
         XCTAssertEqual(fixture.httpClient.streamedRequests.count, 1)
-        XCTAssertEqual(fixture.httpClient.sentRequests.count, 1)
-        XCTAssertEqual(completedResponses.last?.text, "fallback answer")
+        XCTAssertEqual(fixture.httpClient.sentRequests.count, 2)
+        XCTAssertEqual(completedResponses.last?.text, "continued answer")
+        XCTAssertEqual(completedResponses.last?.reasoningSummary, "first reasoning\n\nsecond reasoning")
 
         let streamBody = try XCTUnwrap(fixture.httpClient.streamedRequests.first?.body)
         let streamRoot = try XCTUnwrap(try JSONSerialization.jsonObject(with: streamBody) as? [String: Any])
         XCTAssertEqual(streamRoot["stream"] as? Bool, true)
         XCTAssertNotNil(streamRoot["stream_options"])
 
-        let retryBody = try XCTUnwrap(fixture.httpClient.sentRequests.first?.body)
-        let retryRoot = try XCTUnwrap(try JSONSerialization.jsonObject(with: retryBody) as? [String: Any])
-        XCTAssertEqual(retryRoot["stream"] as? Bool, false)
+        let firstContinuationBody = try XCTUnwrap(fixture.httpClient.sentRequests.first?.body)
+        let firstContinuationRoot = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: firstContinuationBody) as? [String: Any]
+        )
+        XCTAssertEqual(firstContinuationRoot["stream"] as? Bool, false)
+        let firstMessages = try XCTUnwrap(firstContinuationRoot["messages"] as? [[String: Any]])
+        XCTAssertEqual(firstMessages[firstMessages.count - 2]["reasoning_content"] as? String, "first reasoning")
+        XCTAssertTrue((firstMessages.last?["content"] as? String)?.contains("provide the answer text") == true)
+
+        let secondContinuationBody = try XCTUnwrap(fixture.httpClient.sentRequests.last?.body)
+        let secondContinuationRoot = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: secondContinuationBody) as? [String: Any]
+        )
+        let secondMessages = try XCTUnwrap(secondContinuationRoot["messages"] as? [[String: Any]])
+        XCTAssertEqual(secondMessages[secondMessages.count - 2]["reasoning_content"] as? String, "second reasoning")
+    }
+
+    func testOpenCodeGoStreamStopsAfterReasoningContinuationLimit() async throws {
+        let fixture = try makeFixture()
+        try fixture.credentials.setCredential("opencode-key", for: .openCodeGo)
+
+        fixture.httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"choices":[{"delta":{"reasoning_content":"initial reasoning"}}]}"#)
+                continuation.yield("")
+                continuation.yield("data: [DONE]")
+                continuation.yield("")
+                continuation.finish()
+            }
+            return (stream, Self.httpResponse(url: request.url, statusCode: 200))
+        }
+        fixture.httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"","reasoning_content":"more reasoning"}}]}"#
+                .data(using: .utf8)!
+            return (data, Self.httpResponse(url: request.url, statusCode: 200))
+        }
+
+        let stream = try await fixture.gateway.stream(
+            request: ProviderRequest(
+                model: "deepseek-v4-flash",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")],
+                stream: true
+            ),
+            provider: .openCodeGo
+        )
+
+        do {
+            for try await _ in stream {}
+            XCTFail("Expected reasoning continuation limit error")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("continuation requests"))
+        }
+        XCTAssertEqual(fixture.httpClient.sentRequests.count, ProviderGateway.reasoningContinuationLimit)
+    }
+
+    func testHostedSkillsRejectUnsupportedModelBeforeNetworkRequest() async throws {
+        let fixture = try makeFixture()
+        let request = ProviderRequest(
+            model: "gpt-4.1-mini",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            skillContext: Self.hostedSkillContext()
+        )
+
+        do {
+            _ = try await fixture.gateway.generate(request: request, provider: .openAI)
+            XCTFail("Expected unsupported hosted Skill model error")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("対応していません"))
+        }
+        XCTAssertTrue(fixture.httpClient.sentRequests.isEmpty)
+    }
+
+    func testHostedSkillsRejectCustomOpenAIEndpointBeforeNetworkRequest() async throws {
+        let fixture = try makeFixture()
+        var settings = try fixture.settings.load()
+        settings.openAIBaseURL = "https://proxy.example.com/v1/"
+        try fixture.settings.save(settings)
+        let request = ProviderRequest(
+            model: "gpt-5.6-sol",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            skillContext: Self.hostedSkillContext()
+        )
+
+        do {
+            _ = try await fixture.gateway.generate(request: request, provider: .openAI)
+            XCTFail("Expected official OpenAI endpoint validation error")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("公式エンドポイント"))
+        }
+        XCTAssertTrue(fixture.httpClient.sentRequests.isEmpty)
     }
 
     func testGeminiGenerateRetriesTransientInternalServerError() async throws {
@@ -875,6 +972,18 @@ final class ProviderGatewayTests: XCTestCase {
                     cacheWritePerMillion: nil
                 )
             )]
+        )
+    }
+
+    private static func hostedSkillContext() -> SkillRequestContext {
+        SkillRequestContext(
+            catalog: [AgentSkillCatalogEntry(name: "test", description: "test")],
+            explicitlyRequestedNames: [],
+            explicitInstructions: [],
+            resourceLists: [],
+            conversationID: "conversation-1",
+            enabledSkillSetHash: "skills-hash",
+            hostedExecutionEnabled: true
         )
     }
 

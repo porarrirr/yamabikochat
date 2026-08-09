@@ -1,6 +1,8 @@
 import Foundation
 
 final class FusionService {
+    static let reasoningContinuationLimit = 3
+
     private let settingsRepository: SettingsRepository
     private let providerGateway: ProviderGateway
     private let pricingRepository: any LiteLlmPricingEstimating
@@ -8,6 +10,7 @@ final class FusionService {
     private let orchestrator: FusionOrchestrator
     private let localToolRegistry: LocalToolRegistry
     private let requestSettingsResolver: ProviderRequestSettingsResolver
+    private let skillRepository: AgentSkillRepository?
 
     init(
         settingsRepository: SettingsRepository,
@@ -15,6 +18,7 @@ final class FusionService {
         pricingRepository: any LiteLlmPricingEstimating,
         traceStore: FusionTraceStore,
         requestSettingsResolver: ProviderRequestSettingsResolver,
+        skillRepository: AgentSkillRepository? = nil,
         localToolRegistry: LocalToolRegistry = LocalToolRegistry(
             executors: [WebSearchTool(), FetchUrlTool()]
         ),
@@ -25,6 +29,7 @@ final class FusionService {
         self.pricingRepository = pricingRepository
         self.traceStore = traceStore
         self.requestSettingsResolver = requestSettingsResolver
+        self.skillRepository = skillRepository
         self.localToolRegistry = localToolRegistry
         self.orchestrator = orchestrator
     }
@@ -58,14 +63,20 @@ final class FusionService {
 
         let synthStarted = Date()
         do {
-            let response = try await providerGateway.generate(
+            let response = try await invoke(
                 request: {
                     var req = outcome.synthesisRequest
                     req.stream = false
                     return req
                 }(),
-                providerID: outcome.synthesizerProvider
+                provider: outcome.synthesizerProvider,
+                phase: .synthesizer
             )
+            guard let answer = response.text.trimmedNonEmpty else {
+                throw ProviderClientError.parseFailure(
+                    L10n.text("Fusion synthesizer returned no answer text.")
+                )
+            }
             let latencyMs = Int64(Date().timeIntervalSince(synthStarted) * 1000)
             let usage = response.usage?.normalizedNonEmpty()
             let cost = await estimateCost(
@@ -77,7 +88,7 @@ final class FusionService {
                 modelId: outcome.synthesizerModel.modelId,
                 provider: outcome.synthesizerModel.provider.uppercased(),
                 success: true,
-                content: response.text,
+                content: answer,
                 latencyMs: latencyMs,
                 inputTokens: usage?.inputTokens,
                 outputTokens: usage?.outputTokens,
@@ -88,12 +99,12 @@ final class FusionService {
             let trace = orchestrator.finalizeTrace(
                 trace: outcome.trace,
                 synthesisResult: synthesisResult,
-                finalAnswer: response.text,
+                finalAnswer: answer,
                 logPrompts: context.logPrompts
             )
             try traceStore.save(trace: trace, conversationId: context.conversationId)
             return FusionRunResult(
-                finalAnswer: response.text,
+                finalAnswer: answer,
                 traceId: trace.requestId,
                 judgeAnalysis: options.debugMode ? trace.judgeResult?.analysis : nil,
                 rawPanelResults: options.debugMode ? trace.panelResults : nil,
@@ -153,22 +164,23 @@ final class FusionService {
         return try await orchestrator.runThroughJudge(
             request: request,
             context: context,
-            buildRequest: { [weak self] model, systemPrompt, phase, allowTools, maxTokens in
+            buildRequest: { [weak self] model, systemPrompt, phase, allowTools in
                 guard let self else {
                     throw FusionError.serviceDeallocated
                 }
                 return try await self.buildProviderRequest(
                     model: model,
+                    defaultTimeoutMs: request.timeoutMs,
                     systemPrompt: systemPrompt,
                     phase: phase,
                     allowTools: allowTools,
-                    maxTokens: maxTokens,
                     settings: settings,
                     fusionDepth: context.fusionDepth,
                     userPrompt: request.userPrompt,
                     conversationHistory: conversationHistory,
                     userAttachments: userAttachments,
-                    supportsVision: resolvedVisionSupportByModel[model.modelId] ?? false
+                    supportsVision: resolvedVisionSupportByModel[model.modelId] ?? false,
+                    conversationID: context.conversationId.map(String.init)
                 )
             },
             invoke: { [weak self] providerRequest, provider, phase in
@@ -178,8 +190,7 @@ final class FusionService {
                 return try await self.invoke(
                     request: providerRequest,
                     provider: provider,
-                    phase: phase,
-                    settings: settings
+                    phase: phase
                 )
             },
             estimateCost: { [weak self] provider, model, usage in
@@ -191,16 +202,17 @@ final class FusionService {
 
     func buildProviderRequest(
         model: PanelModelConfig,
+        defaultTimeoutMs: Int? = nil,
         systemPrompt: String,
         phase: FusionPhase,
         allowTools: Bool,
-        maxTokens: Int,
         settings: AppSettings,
         fusionDepth: Int,
         userPrompt: String,
         conversationHistory: [ProviderRequestMessage],
         userAttachments: [String] = [],
-        supportsVision: Bool = false
+        supportsVision: Bool = false,
+        conversationID: String? = nil
     ) async throws -> ProviderRequest {
         let toolScope: ProviderRequestToolScope = phase == .panel
             ? .fusionPanel(allowWebSearch: allowTools)
@@ -219,11 +231,15 @@ final class FusionService {
         ], uniquingKeysWith: { _, fusionValue in fusionValue })
         Self.applyGenerationMetadata(
             to: &metadata,
-            model: model,
-            phaseMaxTokens: maxTokens
+            model: model
         )
         if phase == .panel {
             metadata["supportsVision"] = supportsVision ? "true" : "false"
+        }
+
+        let timeoutMs = model.timeoutMs ?? defaultTimeoutMs
+        let transportTimeoutInterval = timeoutMs.map {
+            TimeInterval(max(1, $0)) / 1_000 + 1
         }
 
         var messages = conversationHistory
@@ -233,6 +249,20 @@ final class FusionService {
                 userPrompt: userPrompt,
                 userAttachments: userAttachments
             )
+        }
+
+        let skillContext: SkillRequestContext?
+        if phase == .panel, let skillRepository {
+            let supportsTools = ProviderReference(persistedID: model.provider).isModelsDev
+                || LLMProvider(rawOrDefault: model.provider).supportsClientWebSearchTool
+            skillContext = try skillRepository.requestContext(
+                for: userPrompt,
+                conversationID: conversationID,
+                providerSupportsTools: supportsTools
+            )
+            messages = Self.applyingSkillContext(skillContext, to: messages)
+        } else {
+            skillContext = nil
         }
 
         return ProviderRequest(
@@ -245,8 +275,25 @@ final class FusionService {
             tools: resolvedSettings.tools,
             thinking: resolvedSettings.thinking,
             provider: resolvedSettings.routing,
-            metadata: metadata
+            metadata: metadata,
+            timeoutInterval: transportTimeoutInterval,
+            skillContext: skillContext
         )
+    }
+
+    private static func applyingSkillContext(
+        _ context: SkillRequestContext?,
+        to source: [ProviderRequestMessage]
+    ) -> [ProviderRequestMessage] {
+        guard let context else { return source }
+        let injection = [context.syntheticUserContext, context.explicitUserContext]
+            .compactMap { $0 }
+            .joined(separator: "\n\n")
+        guard !injection.isEmpty,
+              let index = source.lastIndex(where: { $0.role == "user" }) else { return source }
+        var messages = source
+        messages[index].content += "\n\n" + injection
+        return messages
     }
 
     private static func panelMessages(
@@ -281,13 +328,8 @@ final class FusionService {
 
     private static func applyGenerationMetadata(
         to metadata: inout [String: String],
-        model: PanelModelConfig,
-        phaseMaxTokens: Int
+        model: PanelModelConfig
     ) {
-        let resolvedMaxTokens = model.maxTokens ?? phaseMaxTokens
-        if resolvedMaxTokens > 0 {
-            metadata["max_output_tokens"] = String(resolvedMaxTokens)
-        }
         if let temperature = model.temperature {
             metadata["temperature"] = String(temperature)
         }
@@ -296,19 +338,70 @@ final class FusionService {
     private func invoke(
         request: ProviderRequest,
         provider: String,
-        phase: FusionPhase,
-        settings: AppSettings
+        phase: FusionPhase
     ) async throws -> ProviderResponse {
-        try Task.checkCancellation()
-        if phase == .panel, !request.tools.isEmpty {
-            let toolOrchestrator = ToolCallingOrchestrator(registry: localToolRegistry)
-            let outcome = try await toolOrchestrator.run(request: request) { req, _ in
-                try Task.checkCancellation()
-                return try await self.providerGateway.generate(request: req, providerID: provider)
+        var currentRequest = request
+        var accumulatedUsage: ProviderUsage?
+        var accumulatedReasoning: [String] = []
+        var continuationRounds = 0
+
+        while true {
+            try Task.checkCancellation()
+            let response: ProviderResponse
+            if phase == .panel, !currentRequest.tools.isEmpty {
+                let toolOrchestrator = ToolCallingOrchestrator(registry: localToolRegistry)
+                let outcome = try await toolOrchestrator.run(request: currentRequest) { req, _ in
+                    try Task.checkCancellation()
+                    return try await self.providerGateway.generate(request: req, providerID: provider)
+                }
+                response = outcome.response
+            } else {
+                response = try await providerGateway.generate(request: currentRequest, providerID: provider)
             }
-            return outcome.response
+
+            if let usage = response.usage {
+                accumulatedUsage = accumulatedUsage?.adding(usage) ?? usage
+            }
+            if let reasoning = response.reasoningSummary?.trimmedNonEmpty {
+                accumulatedReasoning.append(reasoning)
+            }
+            if response.text.trimmedNonEmpty != nil || !response.toolCalls.isEmpty {
+                var completed = response
+                completed.usage = accumulatedUsage
+                completed.reasoningSummary = accumulatedReasoning.isEmpty
+                    ? response.reasoningSummary
+                    : accumulatedReasoning.joined(separator: "\n\n")
+                return completed
+            }
+
+            guard let reasoning = response.reasoningSummary?.trimmedNonEmpty else {
+                return response
+            }
+            guard continuationRounds < Self.reasoningContinuationLimit else {
+                throw ProviderClientError.parseFailure(
+                    "Fusion \(phase.rawValue) returned reasoning without answer text after \(Self.reasoningContinuationLimit) continuation requests."
+                )
+            }
+            continuationRounds += 1
+            currentRequest.messages.append(
+                ProviderRequestMessage(role: "assistant", content: "", reasoningContent: reasoning)
+            )
+            currentRequest.messages.append(
+                ProviderRequestMessage(
+                    role: "user",
+                    content: Self.continuationPrompt(for: phase)
+                )
+            )
         }
-        return try await providerGateway.generate(request: request, providerID: provider)
+    }
+
+    private static func continuationPrompt(for phase: FusionPhase) -> String {
+        switch phase {
+        case .judge:
+            return "Continue the same response and return only the required JSON now."
+        case .panel, .synthesizer, .fallback:
+            return "Continue the same response and provide the answer text now."
+        }
     }
 
     private func estimateCost(provider: String, model: String, usage: ProviderUsage?) async -> Double? {

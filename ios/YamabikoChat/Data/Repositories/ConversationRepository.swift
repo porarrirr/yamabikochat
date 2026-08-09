@@ -527,6 +527,26 @@ final class ConversationRepository {
         }
     }
 
+    func appendAttachments(messageId: Int64, paths: [String]) throws {
+        let normalized = paths.filter { !$0.isEmpty }
+        guard !normalized.isEmpty else { return }
+        try dbQueue.write { db in
+            guard var message = try ChatMessage.fetchOne(db, key: messageId) else { return }
+            message.attachmentsJSON = mergeAttachmentJSON(message.attachmentsJSON, additions: normalized)
+            try message.update(db)
+        }
+    }
+
+    func appendAttachments(variantId: Int64, paths: [String]) throws {
+        let normalized = paths.filter { !$0.isEmpty }
+        guard !normalized.isEmpty else { return }
+        try dbQueue.write { db in
+            guard var variant = try ChatMessageVariant.fetchOne(db, key: variantId) else { return }
+            variant.attachmentsJSON = mergeAttachmentJSON(variant.attachmentsJSON, additions: normalized)
+            try variant.update(db)
+        }
+    }
+
     func updateMessageText(messageId: Int64, text: String) throws {
         try dbQueue.write { db in
             guard var mutable = try ChatMessage.fetchOne(db, key: messageId) else { return }
@@ -1170,6 +1190,16 @@ final class ConversationRepository {
             return []
         }
         return decoded
+    }
+
+    private func mergeAttachmentJSON(_ raw: String, additions: [String]) -> String {
+        var seen = Set<String>()
+        let merged = (decodeArray(raw) + additions).filter { seen.insert($0).inserted }
+        guard let data = try? JSONEncoder().encode(merged),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return raw
+        }
+        return encoded
     }
 
     private func touchConversation(db: Database, conversationId: Int64) throws {

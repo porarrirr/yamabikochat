@@ -8,8 +8,9 @@ struct ProviderRegistry {
     private let codex: CodexProviderClient
     private let superGrok: SuperGrokProviderClient
     private let appleIntelligence: AppleIntelligenceProviderClient
+    private let openAIHostedSkills: OpenAIHostedSkillsProviderClient?
 
-    init() {
+    init(skillRepository: AgentSkillRepository? = nil, attachmentRepository: AttachmentRepository? = nil) {
         openAICompatible = OpenAICompatibleProviderClient()
         anthropicCompatible = AnthropicCompatibleProviderClient()
         openCodeGo = OpenCodeGoProviderClient()
@@ -17,6 +18,9 @@ struct ProviderRegistry {
         codex = CodexProviderClient()
         superGrok = SuperGrokProviderClient()
         appleIntelligence = AppleIntelligenceProviderClient()
+        if let skillRepository, let attachmentRepository {
+            openAIHostedSkills = OpenAIHostedSkillsProviderClient(manager: OpenAISkillContainerManager(skillRepository: skillRepository), attachmentRepository: attachmentRepository)
+        } else { openAIHostedSkills = nil }
     }
 
     func client(for provider: LLMProvider) -> ProviderClient {
@@ -36,5 +40,17 @@ struct ProviderRegistry {
         case .openRouter, .openAI, .openAICompat, .miniMax, .zai, .clinePass:
             return openAICompatible
         }
+    }
+
+    func client(for provider: LLMProvider, request: ProviderRequest) throws -> ProviderClient {
+        if provider == .openAI,
+           request.skillContext?.hostedExecutionEnabled == true,
+           request.skillContext?.catalog.isEmpty == false {
+            guard let openAIHostedSkills else {
+                throw ProviderClientError.parseFailure("OpenAI hosted Skill client is unavailable")
+            }
+            return openAIHostedSkills
+        }
+        return client(for: provider)
     }
 }

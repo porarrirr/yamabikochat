@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.withContext
@@ -45,6 +46,9 @@ class ChatViewModel(
     private val repository: ChatRepository,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+    val enabledSkillNames: StateFlow<List<String>> = repository.agentSkillRepository.installedSkills
+        .map { skills -> skills.filter { it.isEnabled }.map { it.manifest.name }.sorted() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     // --- Helpers to keep reasoning (CoT) out of final content when models inline it ---
     private fun splitReasoningBlocks(input: String): Pair<String, String> {
         if (input.isEmpty()) return input to ""

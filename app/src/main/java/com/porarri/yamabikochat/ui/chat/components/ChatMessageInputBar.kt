@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -58,7 +60,9 @@ fun ChatMessageInputBar(
     onFilePick: () -> Unit,
     isAutoConversationEnabled: Boolean,
     contextLabel: String?,
-    isSecretMode: Boolean
+    isSecretMode: Boolean,
+    skillSuggestions: List<String> = emptyList(),
+    onSkillSelected: (String) -> Unit = {}
 ) {
     var showAttachmentMenu by remember { mutableStateOf(false) }
     val canSend = value.isNotBlank() || attachments.isNotEmpty()
@@ -77,6 +81,14 @@ fun ChatMessageInputBar(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
             )
+        }
+
+        if (skillSuggestions.isNotEmpty()) {
+            LazyRow(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 6.dp)) {
+                items(skillSuggestions) { name ->
+                    androidx.compose.material3.AssistChip(onClick = { onSkillSelected(name) }, label = { Text("\$$name") })
+                }
+            }
         }
 
         Row(
@@ -249,4 +261,3 @@ private fun SecretImeTextField(
         )
     }
 }
-

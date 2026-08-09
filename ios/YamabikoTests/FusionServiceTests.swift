@@ -35,7 +35,6 @@ final class FusionServiceTests: XCTestCase {
             systemPrompt: "panel",
             phase: .panel,
             allowTools: false,
-            maxTokens: 512,
             settings: AppSettings(),
             fusionDepth: 0,
             userPrompt: "Hello",
@@ -60,7 +59,6 @@ final class FusionServiceTests: XCTestCase {
             systemPrompt: "panel",
             phase: .panel,
             allowTools: false,
-            maxTokens: 512,
             settings: AppSettings(),
             fusionDepth: 0,
             userPrompt: "Latest",
@@ -73,27 +71,46 @@ final class FusionServiceTests: XCTestCase {
         XCTAssertEqual(request.messages.last?.content, "Latest")
     }
 
-    func testGenerationMetadataIncludesMaxTokensAndTemperature() async throws {
+    func testGenerationMetadataIncludesTemperatureWithoutFusionTokenLimit() async throws {
         let service = makeService()
         let request = try await service.buildProviderRequest(
             model: PanelModelConfig(
                 modelId: "m1",
                 provider: "OPENAI",
-                temperature: 0.2,
-                maxTokens: 1234
+                temperature: 0.2
             ),
             systemPrompt: "judge",
             phase: .judge,
             allowTools: false,
-            maxTokens: 4096,
             settings: AppSettings(),
             fusionDepth: 0,
             userPrompt: "test",
             conversationHistory: []
         )
 
-        XCTAssertEqual(request.metadata["max_output_tokens"], "1234")
+        XCTAssertNil(request.metadata["max_output_tokens"])
         XCTAssertEqual(request.metadata["temperature"], "0.2")
+    }
+
+    func testFusionTimeoutIsPropagatedToProviderRequestBeyondThePhaseDeadline() async throws {
+        let service = makeService()
+        let request = try await service.buildProviderRequest(
+            model: PanelModelConfig(
+                modelId: "deepseek-v4-flash",
+                provider: "OPENCODE_GO",
+                timeoutMs: nil
+            ),
+            defaultTimeoutMs: 120_000,
+            systemPrompt: "panel",
+            phase: .panel,
+            allowTools: false,
+            settings: AppSettings(),
+            fusionDepth: 0,
+            userPrompt: "test",
+            conversationHistory: []
+        )
+
+        XCTAssertEqual(request.timeoutInterval, 121)
     }
 
     func testPanelRequestIncludesGeminiGlobalReasoningAndTools() async throws {
@@ -110,7 +127,6 @@ final class FusionServiceTests: XCTestCase {
             systemPrompt: "panel",
             phase: .panel,
             allowTools: true,
-            maxTokens: 512,
             settings: settings,
             fusionDepth: 0,
             userPrompt: "Latest",
@@ -138,7 +154,6 @@ final class FusionServiceTests: XCTestCase {
             systemPrompt: "panel",
             phase: .panel,
             allowTools: true,
-            maxTokens: 512,
             settings: settings,
             fusionDepth: 0,
             userPrompt: "Latest",
@@ -149,7 +164,6 @@ final class FusionServiceTests: XCTestCase {
             systemPrompt: "judge",
             phase: .judge,
             allowTools: false,
-            maxTokens: 512,
             settings: settings,
             fusionDepth: 0,
             userPrompt: "Latest",
