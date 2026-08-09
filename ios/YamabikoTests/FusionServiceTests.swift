@@ -7,25 +7,30 @@ final class FusionServiceTests: XCTestCase {
         let dbQueue = try! DatabaseQueue()
         try! AppDatabase.migrator.migrate(dbQueue)
         let settings = SettingsRepository(dbQueue: dbQueue)
+        let credentials = InMemoryCredentialStore()
+        let resolver = ProviderRequestSettingsResolver(
+            modelService: OpenRouterModelService(credentialStore: credentials)
+        )
         let gateway = ProviderGateway(
             settingsRepository: settings,
-            credentialStore: InMemoryCredentialStore(),
+            credentialStore: credentials,
             httpClient: NoopHTTPClient()
         )
         return FusionService(
             settingsRepository: settings,
             providerGateway: gateway,
             pricingRepository: FusionNoopPricingRepository(),
-            traceStore: FusionTraceStore(dbQueue: dbQueue)
+            traceStore: FusionTraceStore(dbQueue: dbQueue),
+            requestSettingsResolver: resolver
         )
     }
 
-    func testPanelMessagesDoesNotDuplicateMatchingUserTurn() {
+    func testPanelMessagesDoesNotDuplicateMatchingUserTurn() async throws {
         let service = makeService()
         let history = [
             ProviderRequestMessage(role: "user", content: "Hello", attachments: ["file:///img.png"])
         ]
-        let request = service.buildProviderRequest(
+        let request = try await service.buildProviderRequest(
             model: PanelModelConfig(modelId: "m1", provider: "OPENAI"),
             systemPrompt: "panel",
             phase: .panel,
@@ -45,12 +50,12 @@ final class FusionServiceTests: XCTestCase {
         XCTAssertEqual(request.metadata["supportsVision"], "true")
     }
 
-    func testPanelMessagesAppendsWhenHistoryDoesNotIncludeCurrentTurn() {
+    func testPanelMessagesAppendsWhenHistoryDoesNotIncludeCurrentTurn() async throws {
         let service = makeService()
         let history = [
             ProviderRequestMessage(role: "user", content: "Earlier")
         ]
-        let request = service.buildProviderRequest(
+        let request = try await service.buildProviderRequest(
             model: PanelModelConfig(modelId: "m1", provider: "OPENAI"),
             systemPrompt: "panel",
             phase: .panel,
@@ -68,9 +73,9 @@ final class FusionServiceTests: XCTestCase {
         XCTAssertEqual(request.messages.last?.content, "Latest")
     }
 
-    func testGenerationMetadataIncludesMaxTokensAndTemperature() {
+    func testGenerationMetadataIncludesMaxTokensAndTemperature() async throws {
         let service = makeService()
-        let request = service.buildProviderRequest(
+        let request = try await service.buildProviderRequest(
             model: PanelModelConfig(
                 modelId: "m1",
                 provider: "OPENAI",
@@ -89,6 +94,74 @@ final class FusionServiceTests: XCTestCase {
 
         XCTAssertEqual(request.metadata["max_output_tokens"], "1234")
         XCTAssertEqual(request.metadata["temperature"], "0.2")
+    }
+
+    func testPanelRequestIncludesGeminiGlobalReasoningAndTools() async throws {
+        let service = makeService()
+        var settings = AppSettings()
+        settings.clientWebSearchToolEnabled = true
+        settings.geminiThinkingEnabled = true
+        settings.geminiThinkingBudget = 1536
+        settings.geminiGoogleSearchEnabled = true
+        settings.geminiCodeExecutionEnabled = true
+
+        let request = try await service.buildProviderRequest(
+            model: PanelModelConfig(modelId: "gemini-2.5-flash", provider: "GEMINI"),
+            systemPrompt: "panel",
+            phase: .panel,
+            allowTools: true,
+            maxTokens: 512,
+            settings: settings,
+            fusionDepth: 0,
+            userPrompt: "Latest",
+            conversationHistory: []
+        )
+
+        XCTAssertEqual(request.thinking?.budget, 1536)
+        XCTAssertTrue(request.tools.contains { $0.type == "google_search" })
+        XCTAssertTrue(request.tools.contains { $0.type == "code_execution" })
+        XCTAssertTrue(request.tools.contains { $0.payload["name"] == WebSearchTool.name })
+        XCTAssertTrue(request.tools.contains { $0.payload["name"] == FetchUrlTool.name })
+    }
+
+    func testFusionCodexGlobalReasoningAndNativeWebSearchApplyToAllPhases() async throws {
+        let service = makeService()
+        var settings = AppSettings()
+        settings.codexReasoningEnabled = true
+        settings.codexReasoningEffort = "high"
+        settings.codexWebSearchEnabled = true
+        settings.codexWebSearchContextSize = "high"
+        let model = PanelModelConfig(modelId: "gpt-5.6-sol", provider: "CODEX_AUTH")
+
+        let panel = try await service.buildProviderRequest(
+            model: model,
+            systemPrompt: "panel",
+            phase: .panel,
+            allowTools: true,
+            maxTokens: 512,
+            settings: settings,
+            fusionDepth: 0,
+            userPrompt: "Latest",
+            conversationHistory: []
+        )
+        let judge = try await service.buildProviderRequest(
+            model: model,
+            systemPrompt: "judge",
+            phase: .judge,
+            allowTools: false,
+            maxTokens: 512,
+            settings: settings,
+            fusionDepth: 0,
+            userPrompt: "Latest",
+            conversationHistory: []
+        )
+
+        XCTAssertEqual(panel.thinking?.effort, "high")
+        XCTAssertEqual(judge.thinking?.effort, "high")
+        XCTAssertEqual(panel.metadata["codexWebSearchEnabled"], "true")
+        XCTAssertEqual(panel.metadata["codexWebSearchContextSize"], "high")
+        XCTAssertEqual(judge.metadata["codexWebSearchEnabled"], "true")
+        XCTAssertTrue(judge.tools.isEmpty)
     }
 }
 

@@ -29,6 +29,7 @@ final class ChatRepository {
     private let providers: ProviderGateway
     private let credentialStore: SecureCredentialStore
     private let modelService: OpenRouterModelService
+    private let requestSettingsResolver: ProviderRequestSettingsResolver
     private let codexAuthRepository: CodexAuthRepository
     private let superGrokAuthRepository: SuperGrokAuthRepository
     private let pricingRepository: any LiteLlmPricingEstimating
@@ -43,6 +44,7 @@ final class ChatRepository {
         providers: ProviderGateway,
         credentialStore: SecureCredentialStore,
         modelService: OpenRouterModelService,
+        requestSettingsResolver: ProviderRequestSettingsResolver,
         codexAuthRepository: CodexAuthRepository,
         superGrokAuthRepository: SuperGrokAuthRepository,
         pricingRepository: any LiteLlmPricingEstimating = LiteLlmPricingRepository(),
@@ -61,6 +63,7 @@ final class ChatRepository {
         self.providers = providers
         self.credentialStore = credentialStore
         self.modelService = modelService
+        self.requestSettingsResolver = requestSettingsResolver
         self.codexAuthRepository = codexAuthRepository
         self.superGrokAuthRepository = superGrokAuthRepository
         self.pricingRepository = pricingRepository
@@ -594,12 +597,12 @@ final class ChatRepository {
             }
         }
 
-        let tools = toolsForProvider(settings: settings, provider: conversation.apiProvider)
-        var metadata = metadataForProvider(
+        let resolvedSettings = try await requestSettingsResolver.resolve(
             settings: settings,
             provider: conversation.apiProvider,
             model: conversation.model
         )
+        var metadata = resolvedSettings.metadata
         if conversation.apiProvider.uppercased() == "CODEX_AUTH" {
             let sessionId = try conversations.getOrCreateCodexSessionId(conversationId: conversationId)
             metadata["codexSessionId"] = sessionId
@@ -616,17 +619,9 @@ final class ChatRepository {
             messages: resolvedMessages,
             systemPrompt: SystemPromptComposer.composeForAPI(conversation.systemPrompt),
             stream: settings.isStreamingEnabled,
-            tools: tools,
-            thinking: try thinkingConfigForProvider(
-                settings: settings,
-                provider: conversation.apiProvider,
-                model: conversation.model
-            ),
-            provider: try await providerPreferencesForProvider(
-                settings: settings,
-                provider: conversation.apiProvider,
-                model: conversation.model
-            ),
+            tools: resolvedSettings.tools,
+            thinking: resolvedSettings.thinking,
+            provider: resolvedSettings.routing,
             metadata: metadata
         )
     }
@@ -1046,7 +1041,7 @@ final class ChatRepository {
                 provider: fallbackModel.provider,
                 model: fallbackModel.modelId
             )
-            let request = fusionService.buildProviderRequest(
+            let request = try await fusionService.buildProviderRequest(
                 model: fallbackModel,
                 systemPrompt: conversation.systemPrompt ?? "",
                 phase: .fallback,
@@ -1897,7 +1892,10 @@ final class ChatRepository {
 
             let response: ProviderResponse
             do {
-                response = try await providers.generate(request: request, providerID: turnProvider)
+                response = try await generateNonStreamingResponse(
+                    request: request,
+                    provider: turnProvider
+                )
                 await recordTokenUsageIfAvailable(
                     provider: turnProvider,
                     model: turnModel,
@@ -2131,12 +2129,13 @@ final class ChatRepository {
         context: AppSettings.ReasoningContext = .default,
         promptCacheKey: String? = nil
     ) async throws -> ProviderRequest {
-        var metadata = metadataForProvider(
+        let resolvedSettings = try await requestSettingsResolver.resolve(
             settings: settings,
             provider: provider,
             model: model,
             context: context
         )
+        var metadata = resolvedSettings.metadata
         metadata["provider"] = provider
         if let promptCacheKey = promptCacheKey?.trimmingCharacters(in: .whitespacesAndNewlines), !promptCacheKey.isEmpty {
             metadata["promptCacheKey"] = promptCacheKey
@@ -2147,442 +2146,11 @@ final class ChatRepository {
             messages: messages ?? [ProviderRequestMessage(role: "user", content: text)],
             systemPrompt: SystemPromptComposer.composeForAPI(systemPrompt),
             stream: stream ?? settings.isStreamingEnabled,
-            tools: toolsForProvider(settings: settings, provider: provider, context: context),
-            thinking: try thinkingConfigForProvider(settings: settings, provider: provider, model: model, context: context),
-            provider: try await providerPreferencesForProvider(
-                settings: settings,
-                provider: provider,
-                model: model
-            ),
+            tools: resolvedSettings.tools,
+            thinking: resolvedSettings.thinking,
+            provider: resolvedSettings.routing,
             metadata: metadata
         )
-    }
-
-    private func toolsForProvider(
-        settings: AppSettings,
-        provider: String,
-        context: AppSettings.ReasoningContext = .default
-    ) -> [ProviderTool] {
-        let overrides = settings.toolOverride(for: context)
-        let supportsClientWebSearch = ProviderReference(persistedID: provider).isModelsDev
-            || LLMProvider(rawOrDefault: provider).supportsClientWebSearchTool
-        var tools: [ProviderTool]
-        switch provider.uppercased() {
-        case "GEMINI":
-            tools = []
-            if overrides.googleSearch ?? settings.geminiGoogleSearchEnabled {
-                tools.append(ProviderTool(type: "google_search", payload: [:]))
-            }
-            if overrides.codeExecution ?? settings.geminiCodeExecutionEnabled {
-                tools.append(ProviderTool(type: "code_execution", payload: [:]))
-            }
-            if overrides.urlContext ?? settings.geminiURLContextEnabled {
-                tools.append(ProviderTool(type: "url_context", payload: [:]))
-            }
-            if overrides.googleMaps ?? settings.geminiGoogleMapsEnabled {
-                tools.append(ProviderTool(type: "google_maps", payload: [:]))
-            }
-            if overrides.computerUse ?? settings.geminiComputerUseEnabled {
-                tools.append(ProviderTool(type: "computer_use", payload: [:]))
-            }
-            let declarations = settings.geminiFunctionDeclarations.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !declarations.isEmpty {
-                tools.append(ProviderTool(type: "function_declarations", payload: ["json": declarations]))
-            }
-        case "OPENROUTER":
-            tools = []
-            if overrides.googleSearch ?? settings.openRouterGoogleSearchEnabled {
-                tools.append(ProviderTool(type: "google_search", payload: [:]))
-            }
-            if overrides.codeExecution ?? settings.openRouterCodeExecutionEnabled {
-                tools.append(ProviderTool(type: "code_execution", payload: [:]))
-            }
-        case "ALIBABA_CODING_PLAN":
-            tools = []
-            if settings.alibabaMCPEnabled {
-                if let serverURL = settings.resolvedAlibabaMCPServerURL() {
-                    var payload: [String: String] = [
-                        "server_url": serverURL,
-                        "server_name": settings.resolvedAlibabaMCPServerName()
-                    ]
-                    let allowedTools = settings.alibabaMCPAllowedToolsList()
-                    if !allowedTools.isEmpty {
-                        payload["allowed_tools"] = allowedTools.joined(separator: ",")
-                    }
-                    tools.append(ProviderTool(type: "mcp_toolset", payload: payload))
-                } else {
-                    DiagnosticsLogger.log(
-                        "Alibaba MCP enabled but server URL is invalid; skipping MCP toolset",
-                        level: .warning,
-                        category: .settings
-                    )
-                }
-            }
-        default:
-            tools = []
-        }
-
-        if case .default = context,
-           settings.clientWebSearchToolEnabled,
-           supportsClientWebSearch {
-            tools.append(contentsOf: localToolRegistry.definitions.map(\.providerTool))
-        }
-        return tools
-    }
-
-    private func metadataForProvider(
-        settings: AppSettings,
-        provider: String,
-        model: String,
-        context: AppSettings.ReasoningContext = .default
-    ) -> [String: String] {
-        switch provider.uppercased() {
-        case "CODEX_AUTH":
-            let summary = settings.codexReasoningSummary.ifBlank("auto").lowercased()
-            let summaryToSend: String?
-            if settings.codexReasoningEnabled &&
-                summary != "none" &&
-                (settings.codexSupportsReasoningSummaries || CodexModelCatalog.supportsReasoningSummary(model)) {
-                summaryToSend = summary
-            } else {
-                summaryToSend = nil
-            }
-
-            let verbosity = settings.codexVerbosity.ifBlank("medium").lowercased()
-            let verbosityToSend = CodexModelCatalog.supportsTextVerbosity(model) ? verbosity : nil
-
-            var metadata: [String: String] = [
-                "codexUserAgentPreset": settings.codexUserAgentPreset.ifBlank(CodexUserAgentPresetCatalog.presetAndroid),
-                "codexWebSearchEnabled": settings.codexWebSearchEnabled ? "true" : "false",
-                "codexWebSearchContextSize": settings.codexWebSearchContextSize.ifBlank("medium"),
-                "codexPromptCacheEnabled": settings.codexPromptCacheEnabled ? "true" : "false",
-                "codexPromptCacheMinLength": String(max(0, settings.codexPromptCacheMinLength)),
-                "codexPromptCacheType": settings.codexPromptCacheType.ifBlank("ephemeral")
-            ]
-            if let summaryToSend {
-                metadata["codexReasoningSummary"] = summaryToSend
-            }
-            if let verbosityToSend {
-                metadata["codexVerbosity"] = verbosityToSend
-            }
-            return metadata
-        case "GEMINI":
-            let overrides = settings.thinkingOverride(for: context)
-            let level = effectiveGeminiThinkingLevel(
-                settings: settings,
-                model: model,
-                enabledOverride: overrides.enabled,
-                levelOverride: overrides.level
-            ) ?? ""
-            return [
-                "geminiResponseMimeType": settings.geminiResponseMimeType,
-                "geminiResponseJSONSchema": settings.geminiResponseJSONSchema,
-                "geminiFunctionDeclarations": settings.geminiFunctionDeclarations,
-                "geminiThinkingLevel": level
-            ]
-        default:
-            return [:]
-        }
-    }
-
-    private func thinkingConfigForProvider(
-        settings: AppSettings,
-        provider: String,
-        model: String,
-        context: AppSettings.ReasoningContext = .default
-    ) throws -> ProviderThinkingConfig? {
-        let overrides = settings.thinkingOverride(for: context)
-        switch provider.uppercased() {
-        case "OPENROUTER":
-            return try buildOpenRouterThinkingConfig(settings: settings, model: model, context: context)
-        case "CODEX_AUTH":
-            let enabled = overrides.enabled ?? settings.codexReasoningEnabled
-            let baseEffort = settings.codexReasoningEffort.ifBlank("medium")
-            let overrideEffort = overrides.codexEffort?.ifBlank(baseEffort)
-            let effort = enabled ? (overrideEffort ?? baseEffort) : "none"
-            return ProviderThinkingConfig(
-                enabled: nil,
-                budget: nil,
-                effort: effort,
-                includeThoughts: true,
-                exclude: nil
-            )
-        case "SUPERGROK":
-            let enabled = overrides.enabled ?? settings.superGrokReasoningEnabled
-            let baseEffort = settings.superGrokReasoningEffort.ifBlank("medium")
-            let overrideEffort = overrides.codexEffort?.ifBlank(baseEffort)
-            let rawEffort = enabled ? (overrideEffort ?? baseEffort) : "none"
-            let effort: String
-            if rawEffort == "none" {
-                effort = "none"
-            } else {
-                let normalized = rawEffort.lowercased()
-                effort = ["low", "medium", "high"].contains(normalized) ? normalized : "medium"
-            }
-            // Catalog miss = custom model; only omit reasoning for known non-reasoning models.
-            if let catalog = SuperGrokModelCatalog.model(for: model), !catalog.supportsReasoning {
-                return nil
-            }
-            return ProviderThinkingConfig(
-                enabled: nil,
-                budget: nil,
-                effort: effort,
-                includeThoughts: true,
-                exclude: nil
-            )
-        case "GEMINI":
-            let enabled = overrides.enabled ?? settings.geminiThinkingEnabled
-            let budget = overrides.budget ?? settings.geminiThinkingBudget
-            if GeminiModelUtils.isThinkingLevelSupported(model: model) {
-                return ProviderThinkingConfig(
-                    enabled: nil,
-                    budget: nil,
-                    effort: nil,
-                    includeThoughts: true,
-                    exclude: nil
-                )
-            }
-            guard let budget = GeminiModelUtils.calculateEffectiveThinkingBudget(
-                model: model,
-                userThinkingEnabled: enabled,
-                userThinkingBudget: budget
-            ) else {
-                return nil
-            }
-            return ProviderThinkingConfig(
-                enabled: nil,
-                budget: budget,
-                effort: nil,
-                includeThoughts: true,
-                exclude: nil
-            )
-        default:
-            return nil
-        }
-    }
-
-    private func buildOpenRouterThinkingConfig(
-        settings: AppSettings,
-        model: String,
-        context: AppSettings.ReasoningContext = .default
-    ) throws -> ProviderThinkingConfig? {
-        let overrides = settings.openRouterOverride(for: context)
-        let reasoningExclude = overrides.exclude ?? settings.openRouterReasoningExclude
-        let requestedThinkingEnabled = overrides.enabled ?? settings.openRouterThinkingEnabled
-        guard let modelInfo = modelService.getModelById(model) else {
-            if requestedThinkingEnabled {
-                throw ProviderClientError.parseFailure(
-                    "OpenRouter reasoning capabilities are unavailable for model: \(model)"
-                )
-            }
-            return nil
-        }
-        guard let capabilities = modelInfo.reasoning else {
-            if requestedThinkingEnabled {
-                throw ProviderClientError.parseFailure(
-                    "OpenRouter model does not expose reasoning capabilities: \(model)"
-                )
-            }
-            return nil
-        }
-        let thinkingEnabled = capabilities.mandatory || requestedThinkingEnabled
-        let reasoningMode = (overrides.mode ?? settings.openRouterReasoningMode)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        let reasoningEffort = (overrides.effort ?? settings.openRouterReasoningEffort)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        let thinkingBudget = max(0, overrides.budget ?? settings.openRouterThinkingBudget)
-
-        let includeThoughts = !reasoningExclude
-        if !thinkingEnabled {
-            return ProviderThinkingConfig(
-                enabled: false,
-                budget: nil,
-                effort: nil,
-                includeThoughts: includeThoughts,
-                exclude: true
-            )
-        }
-
-        let supportedModes = ["auto"]
-            + (capabilities.selectableEfforts.isEmpty ? [] : ["effort"])
-            + (capabilities.supportsMaxTokens ? ["budget"] : [])
-        let mode = supportedModes.contains(reasoningMode) ? reasoningMode : "auto"
-        let budget = (mode == "budget" && thinkingBudget > 0) ? thinkingBudget : nil
-        let effort: String?
-        if mode == "effort" {
-            let supportedEfforts = capabilities.selectableEfforts
-            if supportedEfforts.contains(reasoningEffort) {
-                effort = reasoningEffort
-            } else if let defaultEffort = capabilities.defaultEffort?.lowercased(),
-                      supportedEfforts.contains(defaultEffort) {
-                effort = defaultEffort
-            } else if let firstEffort = supportedEfforts.first {
-                effort = firstEffort
-            } else {
-                throw ProviderClientError.parseFailure(
-                    "OpenRouter reasoning effort is unavailable for model: \(model)"
-                )
-            }
-        } else {
-            effort = nil
-        }
-        let enabled: Bool? = (mode == "auto" || (budget == nil && effort == nil)) ? true : nil
-        let exclude: Bool? = reasoningExclude ? true : nil
-
-        if budget == nil, effort == nil, enabled == nil, exclude == nil {
-            return nil
-        }
-
-        return ProviderThinkingConfig(
-            enabled: enabled,
-            budget: budget,
-            effort: effort,
-            includeThoughts: includeThoughts,
-            exclude: exclude
-        )
-    }
-
-    private func providerPreferencesForProvider(
-        settings: AppSettings,
-        provider: String,
-        model: String
-    ) async throws -> ProviderRoutingConfig? {
-        guard provider.uppercased() == "OPENROUTER" else { return nil }
-
-        let preferredProviders = settings.preferredProvidersList()
-        let requestedQuantizations = normalizedOpenRouterSlugs(settings.selectedQuantizationsList())
-        var providers: [String] = []
-        var quantizations: [String] = []
-
-        if !preferredProviders.isEmpty || !requestedQuantizations.isEmpty {
-            let endpointOptions: OpenRouterModelEndpointOptions
-            do {
-                endpointOptions = try await modelService.getModelEndpointOptions(modelId: model)
-            } catch {
-                DiagnosticsLogger.log(
-                    "OpenRouter endpoint restriction validation failed",
-                    category: .network,
-                    metadata: ["model": model],
-                    error: error
-                )
-                throw ProviderClientError.parseFailure(
-                    "OpenRouter endpoint restrictions could not be validated for \(model): \(error.localizedDescription)"
-                )
-            }
-
-            let availableProviderSet = Set(endpointOptions.providerEndpoints.map(\.tag))
-            let invalidProviders = preferredProviders.filter { !availableProviderSet.contains($0) }
-            guard invalidProviders.isEmpty else {
-                throw ProviderClientError.parseFailure(
-                    "Unavailable OpenRouter endpoint tag(s) for \(model): \(invalidProviders.joined(separator: ", "))"
-                )
-            }
-            providers = preferredProviders
-
-            let availableQuantizationSet = Set(endpointOptions.quantizations)
-            let invalidQuantizations = requestedQuantizations.filter {
-                !availableQuantizationSet.contains($0)
-            }
-            guard invalidQuantizations.isEmpty else {
-                throw ProviderClientError.parseFailure(
-                    "Unavailable OpenRouter quantization(s) for \(model): \(invalidQuantizations.joined(separator: ", "))"
-                )
-            }
-            quantizations = requestedQuantizations
-        }
-
-        let hasRoutingProviders = !providers.isEmpty
-        if !hasRoutingProviders, quantizations.isEmpty, settings.maxPricePerMillionTokens <= 0 {
-            return nil
-        }
-
-        let onlyProviders: [String]?
-        if !settings.allowFallbacks, hasRoutingProviders {
-            onlyProviders = providers
-        } else {
-            onlyProviders = nil
-        }
-        let orderProviders = onlyProviders == nil ? (hasRoutingProviders ? providers : nil) : nil
-
-        let maxPrice: ProviderMaxPriceConfig?
-        if settings.maxPricePerMillionTokens > 0 {
-            maxPrice = ProviderMaxPriceConfig(
-                prompt: settings.maxPricePerMillionTokens,
-                completion: settings.maxPricePerMillionTokens,
-                request: nil,
-                image: nil,
-                audio: nil
-            )
-        } else {
-            maxPrice = nil
-        }
-
-        let trimmedSort = settings.providerSort.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
-        DiagnosticsLogger.log(
-            "OpenRouter provider routing applied",
-            category: .network,
-            metadata: [
-                "model": model,
-                "providers": providers.joined(separator: ","),
-                "only": (onlyProviders ?? []).joined(separator: ","),
-                "allow_fallbacks": String(settings.allowFallbacks)
-            ]
-        )
-
-        return ProviderRoutingConfig(
-            order: orderProviders,
-            allowFallbacks: hasRoutingProviders ? settings.allowFallbacks : nil,
-            requireParameters: settings.requireParameters ? true : nil,
-            dataCollection: nil,
-            quantizations: quantizations.isEmpty ? nil : quantizations,
-            maxPrice: maxPrice,
-            only: onlyProviders,
-            ignore: nil,
-            sort: trimmedSort.isEmpty ? nil : trimmedSort
-        )
-    }
-
-    private func normalizedOpenRouterSlugs(_ values: [String]) -> [String] {
-        var seen: Set<String> = []
-        return values
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            .filter { !$0.isEmpty && seen.insert($0).inserted }
-    }
-
-    private func effectiveGeminiThinkingLevel(settings: AppSettings, model: String) -> String? {
-        effectiveGeminiThinkingLevel(
-            settings: settings,
-            model: model,
-            enabledOverride: nil,
-            levelOverride: nil
-        )
-    }
-
-    private func effectiveGeminiThinkingLevel(
-        settings: AppSettings,
-        model: String,
-        enabledOverride: Bool?,
-        levelOverride: String?
-    ) -> String? {
-        guard GeminiModelUtils.isThinkingLevelSupported(model: model) else { return nil }
-
-        let defaultLevel = GeminiModelUtils.getDefaultThinkingLevel(model: model)
-        let levelSource = levelOverride ?? settings.geminiThinkingLevel
-        var normalized = GeminiModelUtils.normalizeThinkingLevel(
-            model: model,
-            level: levelSource
-        ) ?? defaultLevel
-
-        let enabled = enabledOverride ?? settings.geminiThinkingEnabled
-        if !GeminiModelUtils.isThinkingAlwaysOn(model: model), !enabled {
-            if let minimal = GeminiModelUtils.getMinimalThinkingLevel(model: model) {
-                normalized = minimal
-            }
-        }
-        return normalized
     }
 
     private enum DualHistorySide {
@@ -2603,7 +2171,10 @@ final class ChatRepository {
         model: String
     ) async -> DualSideResult {
         do {
-            let response = try await providers.generate(request: request, providerID: provider)
+            let response = try await generateNonStreamingResponse(
+                request: request,
+                provider: provider
+            )
             return DualSideResult(
                 text: response.text,
                 reasoning: response.reasoningSummary,
@@ -2618,6 +2189,26 @@ final class ChatRepository {
                 error: error
             )
         }
+    }
+
+    private func generateNonStreamingResponse(
+        request: ProviderRequest,
+        provider: String
+    ) async throws -> ProviderResponse {
+        let hasClientTools = request.tools.contains { tool in
+            tool.type == "function" && localToolRegistry.definitions.contains { definition in
+                definition.name == tool.payload["name"]
+            }
+        }
+        guard hasClientTools else {
+            return try await providers.generate(request: request, providerID: provider)
+        }
+
+        let orchestrator = ToolCallingOrchestrator(registry: localToolRegistry)
+        let outcome = try await orchestrator.run(request: request) { [providers] roundRequest, _ in
+            try await providers.generate(request: roundRequest, providerID: provider)
+        }
+        return outcome.response
     }
 
     private func buildDualHistory(

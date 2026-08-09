@@ -8,7 +8,7 @@ enum FusionPanelRunner {
     static func runAll(
         request: FusionRequest,
         panelSystemPrompt: String,
-        buildPanelRequest: @escaping @Sendable (PanelModelConfig, String) throws -> ProviderRequest,
+        buildPanelRequest: @escaping @Sendable (PanelModelConfig, String) async throws -> ProviderRequest,
         invoke: @escaping Invoke,
         estimateCost: @escaping CostEstimator,
         onProgress: ProgressHandler? = nil
@@ -45,7 +45,7 @@ enum FusionPanelRunner {
         panel: PanelModelConfig,
         request: FusionRequest,
         panelSystemPrompt: String,
-        buildPanelRequest: @escaping @Sendable (PanelModelConfig, String) throws -> ProviderRequest,
+        buildPanelRequest: @escaping @Sendable (PanelModelConfig, String) async throws -> ProviderRequest,
         invoke: @escaping Invoke,
         estimateCost: @escaping CostEstimator
     ) async -> PanelResult {
@@ -54,7 +54,7 @@ enum FusionPanelRunner {
         let started = Date()
 
         do {
-            let providerRequest = try buildPanelRequest(panel, panelSystemPrompt)
+            let providerRequest = try await buildPanelRequest(panel, panelSystemPrompt)
             let response = try await FusionTimeout.run(milliseconds: timeoutMs) {
                 try await invoke(providerRequest, provider, .panel)
             }

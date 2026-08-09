@@ -7,12 +7,14 @@ final class FusionService {
     private let traceStore: FusionTraceStore
     private let orchestrator: FusionOrchestrator
     private let localToolRegistry: LocalToolRegistry
+    private let requestSettingsResolver: ProviderRequestSettingsResolver
 
     init(
         settingsRepository: SettingsRepository,
         providerGateway: ProviderGateway,
         pricingRepository: any LiteLlmPricingEstimating,
         traceStore: FusionTraceStore,
+        requestSettingsResolver: ProviderRequestSettingsResolver,
         localToolRegistry: LocalToolRegistry = LocalToolRegistry(
             executors: [WebSearchTool(), FetchUrlTool()]
         ),
@@ -22,6 +24,7 @@ final class FusionService {
         self.providerGateway = providerGateway
         self.pricingRepository = pricingRepository
         self.traceStore = traceStore
+        self.requestSettingsResolver = requestSettingsResolver
         self.localToolRegistry = localToolRegistry
         self.orchestrator = orchestrator
     }
@@ -145,6 +148,7 @@ final class FusionService {
             )
             visionSupportByModel[panel.modelId] = supports
         }
+        let resolvedVisionSupportByModel = visionSupportByModel
 
         return try await orchestrator.runThroughJudge(
             request: request,
@@ -153,7 +157,7 @@ final class FusionService {
                 guard let self else {
                     throw FusionError.serviceDeallocated
                 }
-                return self.buildProviderRequest(
+                return try await self.buildProviderRequest(
                     model: model,
                     systemPrompt: systemPrompt,
                     phase: phase,
@@ -164,7 +168,7 @@ final class FusionService {
                     userPrompt: request.userPrompt,
                     conversationHistory: conversationHistory,
                     userAttachments: userAttachments,
-                    supportsVision: visionSupportByModel[model.modelId] ?? false
+                    supportsVision: resolvedVisionSupportByModel[model.modelId] ?? false
                 )
             },
             invoke: { [weak self] providerRequest, provider, phase in
@@ -197,12 +201,22 @@ final class FusionService {
         conversationHistory: [ProviderRequestMessage],
         userAttachments: [String] = [],
         supportsVision: Bool = false
-    ) -> ProviderRequest {
-        var metadata: [String: String] = [
+    ) async throws -> ProviderRequest {
+        let toolScope: ProviderRequestToolScope = phase == .panel
+            ? .fusionPanel(allowWebSearch: allowTools)
+            : .providerOnly
+        let resolvedSettings = try await requestSettingsResolver.resolve(
+            settings: settings,
+            provider: model.provider,
+            model: model.modelId,
+            toolScope: toolScope
+        )
+        var metadata = resolvedSettings.metadata
+        metadata.merge([
             "provider": model.provider.uppercased(),
             "fusionPhase": phase.rawValue,
             "fusionDepth": String(fusionDepth)
-        ]
+        ], uniquingKeysWith: { _, fusionValue in fusionValue })
         Self.applyGenerationMetadata(
             to: &metadata,
             model: model,
@@ -221,14 +235,6 @@ final class FusionService {
             )
         }
 
-        var tools: [ProviderTool] = []
-        if allowTools, phase == .panel, settings.clientWebSearchToolEnabled {
-            let knownProvider = LLMProvider(rawValue: model.provider.uppercased())
-            if ProviderReference(persistedID: model.provider).isModelsDev || knownProvider?.supportsClientWebSearchTool == true {
-                tools = localToolRegistry.definitions.map(\.providerTool)
-            }
-        }
-
         return ProviderRequest(
             model: model.modelId,
             messages: messages,
@@ -236,9 +242,9 @@ final class FusionService {
                 systemPrompt.trimmedNonEmpty
             ),
             stream: phase == .synthesizer,
-            tools: tools,
-            thinking: nil,
-            provider: nil,
+            tools: resolvedSettings.tools,
+            thinking: resolvedSettings.thinking,
+            provider: resolvedSettings.routing,
             metadata: metadata
         )
     }

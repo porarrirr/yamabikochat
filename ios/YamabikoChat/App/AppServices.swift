@@ -11,6 +11,7 @@ final class AppServices {
     let conversationRepository: ConversationRepository
     let attachmentRepository: AttachmentRepository
     let openRouterModelService: OpenRouterModelService
+    let requestSettingsResolver: ProviderRequestSettingsResolver
     let modelsDevCatalogRepository: ModelsDevCatalogRepository
     let codexAuthRepository: CodexAuthRepository
     let superGrokAuthRepository: SuperGrokAuthRepository
@@ -33,6 +34,7 @@ final class AppServices {
         conversationRepository = ConversationRepository(dbQueue: dbQueue)
         attachmentRepository = AttachmentRepository()
         openRouterModelService = OpenRouterModelService(credentialStore: credentialStore)
+        requestSettingsResolver = ProviderRequestSettingsResolver(modelService: openRouterModelService)
         modelsDevCatalogRepository = ModelsDevCatalogRepository()
         codexAuthRepository = CodexAuthRepository(credentialStore: credentialStore)
         superGrokAuthRepository = SuperGrokAuthRepository(credentialStore: credentialStore)
@@ -47,7 +49,8 @@ final class AppServices {
             settingsRepository: settingsRepository,
             providerGateway: providerGateway,
             pricingRepository: LiteLlmPricingRepository(),
-            traceStore: fusionTraceStore
+            traceStore: fusionTraceStore,
+            requestSettingsResolver: requestSettingsResolver
         )
         chatRepository = ChatRepository(
             conversations: conversationRepository,
@@ -55,6 +58,7 @@ final class AppServices {
             providers: providerGateway,
             credentialStore: credentialStore,
             modelService: openRouterModelService,
+            requestSettingsResolver: requestSettingsResolver,
             codexAuthRepository: codexAuthRepository,
             superGrokAuthRepository: superGrokAuthRepository,
             fusionService: fusionService,

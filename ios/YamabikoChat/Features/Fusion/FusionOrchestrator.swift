@@ -9,7 +9,7 @@ struct FusionOrchestrator: Sendable {
         FusionPhase,
         Bool,
         Int
-    ) throws -> ProviderRequest
+    ) async throws -> ProviderRequest
 
     typealias ProgressHandler = @Sendable (FusionProgressSnapshot) -> Void
 
@@ -40,7 +40,7 @@ struct FusionOrchestrator: Sendable {
             request: request,
             panelSystemPrompt: FusionPrompts.panelSystemPrompt(taskType: request.taskType),
             buildPanelRequest: { panel, systemPrompt in
-                try buildRequest(panel, systemPrompt, .panel, request.allowWebSearch, request.maxPanelTokens)
+                try await buildRequest(panel, systemPrompt, .panel, request.allowWebSearch, request.maxPanelTokens)
             },
             invoke: invoke,
             estimateCost: estimateCost,
@@ -88,7 +88,7 @@ struct FusionOrchestrator: Sendable {
             )
 
         let synthSystemPrompt = FusionPrompts.synthesizerSystemPrompt(debugMode: context.debugMode)
-        var synthesisRequest = try buildRequest(
+        var synthesisRequest = try await buildRequest(
             request.synthesizerModel,
             synthSystemPrompt,
             .synthesizer,
@@ -110,7 +110,7 @@ struct FusionOrchestrator: Sendable {
             panels: successfulPanels
         )
 
-        var trace = FusionTrace(
+        let trace = FusionTrace(
             requestId: requestId,
             preset: request.preset,
             startedAtMs: startedAtMs,
@@ -205,8 +205,8 @@ struct FusionOrchestrator: Sendable {
             failedModels: failedModels
         )
 
-        func makeJudgeRequest(systemPrompt: String, userContent: String) throws -> ProviderRequest {
-            var providerRequest = try buildRequest(
+        @Sendable func makeJudgeRequest(systemPrompt: String, userContent: String) async throws -> ProviderRequest {
+            var providerRequest = try await buildRequest(
                 request.judgeModel,
                 systemPrompt,
                 .judge,
@@ -228,7 +228,7 @@ struct FusionOrchestrator: Sendable {
         do {
             let response = try await FusionTimeout.run(milliseconds: timeoutMs) {
                 try await invoke(
-                    try makeJudgeRequest(
+                    try await makeJudgeRequest(
                         systemPrompt: FusionPrompts.judgeSystemPrompt(),
                         userContent: judgeUserContent
                     ),
@@ -256,7 +256,7 @@ struct FusionOrchestrator: Sendable {
             let repairStarted = Date()
             let repairResponse = try await FusionTimeout.run(milliseconds: timeoutMs) {
                 try await invoke(
-                    try makeJudgeRequest(
+                    try await makeJudgeRequest(
                         systemPrompt: FusionPrompts.judgeSystemPrompt(),
                         userContent: FusionPrompts.jsonRepairPrompt(invalidJSON: response.text)
                     ),
@@ -316,16 +316,23 @@ struct FusionOrchestrator: Sendable {
         estimateCost: @escaping CostEstimator
     ) async throws -> FusionJudgeOutcome {
         let fallback = request.fallbackModel ?? request.synthesizerModel
-        var providerRequest = try buildRequest(fallback, request.systemPrompt ?? "", .fallback, false, request.maxSynthesizerTokens)
+        var providerRequest = try await buildRequest(
+            fallback,
+            request.systemPrompt ?? "",
+            .fallback,
+            false,
+            request.maxSynthesizerTokens
+        )
         providerRequest.messages = [ProviderRequestMessage(role: "user", content: request.userPrompt)]
         providerRequest.stream = true
         providerRequest.metadata["fusionDepth"] = String(context.fusionDepth)
+        let requestToInvoke = providerRequest
 
         let timeoutMs = fallback.timeoutMs ?? request.timeoutMs
         let started = Date()
         let response = try await FusionTimeout.run(milliseconds: timeoutMs) {
             try await invoke(
-                providerRequest,
+                requestToInvoke,
                 fallback.provider,
                 .fallback
             )
