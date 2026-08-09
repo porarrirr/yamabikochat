@@ -4,7 +4,7 @@ struct FusionModeSettingsSection: View {
     @ObservedObject var viewModel: SettingsViewModel
 
     private var chatVisibleProviderPresets: [ModelPreset] {
-        viewModel.settings.chatVisibleGlobalProviderPresetsForDualAuto()
+        viewModel.settings.chatVisibleGlobalProviderPresets()
     }
 
     var body: some View {

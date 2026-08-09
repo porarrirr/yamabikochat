@@ -269,9 +269,7 @@ final class AppSettingsTests: XCTestCase {
         settings.showGlobalProviderPresetsInChat = false
         settings.setShowGlobalProviderPresetInChat(provider: settings.apiProvider, visible: true)
 
-        let presets = settings.buildGlobalProviderPresets().filter {
-            settings.shouldShowGlobalProviderPresetInChat(provider: $0.apiProvider)
-        }
+        let presets = settings.chatVisibleGlobalProviderPresets()
 
         XCTAssertEqual(presets.map(\.apiProvider), ["MODELS_DEV:ANTHROPIC"])
         XCTAssertEqual(presets.map(\.model), ["claude-sonnet-4-5"])

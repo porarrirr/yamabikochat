@@ -830,10 +830,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     func availableChatPresets() -> [ModelPreset] {
-        let globalPresets = settings.buildGlobalProviderPresets()
-        return globalPresets.filter { preset in
-            settings.shouldShowGlobalProviderPresetInChat(provider: preset.apiProvider)
-        }
+        settings.chatVisibleGlobalProviderPresets()
     }
 
     func applyChatPreset(_ preset: ModelPreset) {

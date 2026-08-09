@@ -893,11 +893,16 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         showGlobalProviderPresetsInChatByProviderJSON = Self.encodeStringKeyedBooleanMap(overrides)
     }
 
+    func chatVisibleGlobalProviderPresets() -> [ModelPreset] {
+        buildGlobalProviderPresets().filter { preset in
+            shouldShowGlobalProviderPresetInChat(provider: preset.apiProvider)
+        }
+    }
+
     func chatVisibleGlobalProviderPresetsForDualAuto() -> [ModelPreset] {
         let supportedProviders = Set(ProviderCatalog.dualAutoConversationOptions.map(\.key))
-        return buildGlobalProviderPresets().filter { preset in
-            supportedProviders.contains(preset.apiProvider.uppercased()) &&
-                shouldShowGlobalProviderPresetInChat(provider: preset.apiProvider)
+        return chatVisibleGlobalProviderPresets().filter { preset in
+            supportedProviders.contains(preset.apiProvider.uppercased())
         }
     }
 
