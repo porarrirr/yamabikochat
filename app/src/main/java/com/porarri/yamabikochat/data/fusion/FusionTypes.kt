@@ -136,6 +136,7 @@ data class PanelModelConfig(
     val provider: String,
     val temperature: Double? = null,
     val maxTokens: Int? = null,
+    /** Legacy preset field retained for decoding only; Fusion does not enforce it. */
     val timeoutMs: Int? = null,
     val role: String? = null
 )
@@ -152,6 +153,7 @@ data class FusionRequest(
     val maxPanelTokens: Int,
     val maxJudgeTokens: Int,
     val maxSynthesizerTokens: Int,
+    /** Legacy preset field retained for compatibility; Fusion does not enforce it. */
     val timeoutMs: Int,
     val allowWebSearch: Boolean,
     val taskType: FusionTaskType,

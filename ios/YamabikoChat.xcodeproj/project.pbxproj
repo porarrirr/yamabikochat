@@ -92,7 +92,6 @@
 		62858D753E8FDE9E560BD802 /* AppleIntelligenceProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FF77399450389CF5892A94D /* AppleIntelligenceProviderClient.swift */; };
 		63C9F2743F9BF86C7ECDA389 /* openrouter-glm-5-2-endpoints.json in Resources */ = {isa = PBXBuildFile; fileRef = 41CC56251ECE1833FCA591E2 /* openrouter-glm-5-2-endpoints.json */; };
 		63CF0C65FD8E7E330AA43B05 /* DualModeOverridesForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59A2630B4697497BBF8955FB /* DualModeOverridesForm.swift */; };
-		65AF28C64A1623D30E8D89E1 /* FusionTimeout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3400FF9007BB617185154013 /* FusionTimeout.swift */; };
 		670A0526C3E844BAF3DD048B /* ShortcutIntentSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E93C7AF2F5D471C3BD988B7F /* ShortcutIntentSupport.swift */; };
 		674D06E4C49E2F3F7B6B3B6A /* ProviderDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB55024341507549B0165D92 /* ProviderDisplay.swift */; };
 		675B831CC0D122711E3DD7F6 /* FetchUrlTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE12C7F3EC38F862ED83E620 /* FetchUrlTool.swift */; };
@@ -315,7 +314,6 @@
 		321B02A1F52280A6AF7BD4EE /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		32B877B5A57F5D09C71601E2 /* AgentSkillInstallReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSkillInstallReview.swift; sourceTree = "<group>"; };
 		32CA8311076713E626B18DDF /* ProviderResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderResponse.swift; sourceTree = "<group>"; };
-		3400FF9007BB617185154013 /* FusionTimeout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionTimeout.swift; sourceTree = "<group>"; };
 		3547BEA762DAAB71C17AC763 /* OpenAICompatibleProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatibleProviderClient.swift; sourceTree = "<group>"; };
 		354A655F2DAC30AF82690AAD /* LiteLlmPricingRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteLlmPricingRepositoryTests.swift; sourceTree = "<group>"; };
 		37DAF1937619E2F98B8EBAA2 /* AgentSkillTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSkillTools.swift; sourceTree = "<group>"; };
@@ -758,7 +756,6 @@
 				AEBE386ABAEAC56D7D311E89 /* FusionProgressView.swift */,
 				B80C49D629250890536FF4E7 /* FusionPrompts.swift */,
 				272961B0AC4AC5B1A1389611 /* FusionService.swift */,
-				3400FF9007BB617185154013 /* FusionTimeout.swift */,
 				DD89EC3E4E42F747C4DC4BA4 /* FusionTracePresentation.swift */,
 				ECD5042A0D83A58D6DBE82D8 /* FusionTraceStore.swift */,
 				B73E0977D7F7F3F60BC9831B /* FusionTypes.swift */,
@@ -1368,7 +1365,6 @@
 				58BB91C5EA4A2F53636B0862 /* FusionProgressView.swift in Sources */,
 				325EEB8EC09D854B3651A4C2 /* FusionPrompts.swift in Sources */,
 				89439286F73C074CCE369705 /* FusionService.swift in Sources */,
-				65AF28C64A1623D30E8D89E1 /* FusionTimeout.swift in Sources */,
 				559990A849565C8C664CEDF7 /* FusionTracePresentation.swift in Sources */,
 				75A2EA0F497E1594294270B3 /* FusionTraceStore.swift in Sources */,
 				9163AC419115028A5AA03DF9 /* FusionTypes.swift in Sources */,

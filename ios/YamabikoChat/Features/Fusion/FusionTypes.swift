@@ -95,6 +95,7 @@ struct PanelModelConfig: Codable, Sendable, Equatable {
     var modelId: String
     var provider: String
     var temperature: Double?
+    /// Legacy preset field retained for decoding only; Fusion does not enforce it.
     var timeoutMs: Int?
     var role: String?
 }
@@ -107,6 +108,7 @@ struct FusionRequest: Codable, Sendable, Equatable {
     var synthesizerModel: PanelModelConfig
     var fallbackModel: PanelModelConfig?
     var preset: String
+    /// Legacy preset field retained for compatibility; Fusion does not enforce it.
     var timeoutMs: Int
     var allowWebSearch: Bool
     var taskType: FusionTaskType

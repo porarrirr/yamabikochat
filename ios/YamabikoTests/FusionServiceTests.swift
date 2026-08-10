@@ -92,7 +92,7 @@ final class FusionServiceTests: XCTestCase {
         XCTAssertEqual(request.metadata["temperature"], "0.2")
     }
 
-    func testFusionTimeoutIsPropagatedToProviderRequestBeyondThePhaseDeadline() async throws {
+    func testFusionRequestDisablesURLSessionTimeout() async throws {
         let service = makeService()
         let request = try await service.buildProviderRequest(
             model: PanelModelConfig(
@@ -100,7 +100,6 @@ final class FusionServiceTests: XCTestCase {
                 provider: "OPENCODE_GO",
                 timeoutMs: nil
             ),
-            defaultTimeoutMs: 120_000,
             systemPrompt: "panel",
             phase: .panel,
             allowTools: false,
@@ -110,7 +109,7 @@ final class FusionServiceTests: XCTestCase {
             conversationHistory: []
         )
 
-        XCTAssertEqual(request.timeoutInterval, 121)
+        XCTAssertEqual(request.timeoutInterval, .greatestFiniteMagnitude)
     }
 
     func testPanelRequestIncludesGeminiGlobalReasoningAndTools() async throws {

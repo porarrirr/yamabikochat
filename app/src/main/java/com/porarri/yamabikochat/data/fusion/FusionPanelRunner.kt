@@ -37,7 +37,6 @@ object FusionPanelRunner {
             async {
                 val result = runSingle(
                     panel = panel,
-                    request = request,
                     panelSystemPrompt = panelSystemPrompt,
                     buildPanelRequest = buildPanelRequest,
                     invoke = invoke,
@@ -56,19 +55,15 @@ object FusionPanelRunner {
 
     private suspend fun runSingle(
         panel: PanelModelConfig,
-        request: FusionRequest,
         panelSystemPrompt: String,
         buildPanelRequest: FusionPanelRequestBuilder,
         invoke: FusionPanelInvoke,
         estimateCost: FusionPanelCostEstimator
     ): PanelResult {
-        val timeoutMs = panel.timeoutMs ?: request.timeoutMs
         val started = System.currentTimeMillis()
         return try {
             val bundle = buildPanelRequest(panel, panelSystemPrompt)
-            val response = FusionTimeout.run(milliseconds = timeoutMs) {
-                invoke(bundle, FusionPhase.panel)
-            }
+            val response = invoke(bundle, FusionPhase.panel)
             val latencyMs = System.currentTimeMillis() - started
             val cost = estimateCost(
                 panel.provider,

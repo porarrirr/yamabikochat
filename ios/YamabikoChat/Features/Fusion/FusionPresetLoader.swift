@@ -2,6 +2,7 @@ import Foundation
 
 struct FusionPresetDefinition: Codable, Sendable, Equatable {
     var taskType: FusionTaskType
+    /// Legacy persisted field retained for backward-compatible decoding.
     var timeoutMs: Int
     var allowWebSearch: Bool
     var panelModels: [PanelModelConfig]

@@ -220,19 +220,16 @@ struct FusionOrchestrator: Sendable {
         }
 
         let provider = request.judgeModel.provider
-        let timeoutMs = request.judgeModel.timeoutMs ?? request.timeoutMs
 
         do {
-            let response = try await FusionTimeout.run(milliseconds: timeoutMs) {
-                try await invoke(
-                    try await makeJudgeRequest(
-                        systemPrompt: FusionPrompts.judgeSystemPrompt(),
-                        userContent: judgeUserContent
-                    ),
-                    provider,
-                    .judge
-                )
-            }
+            let response = try await invoke(
+                try await makeJudgeRequest(
+                    systemPrompt: FusionPrompts.judgeSystemPrompt(),
+                    userContent: judgeUserContent
+                ),
+                provider,
+                .judge
+            )
             let latencyMs = Int64(Date().timeIntervalSince(started) * 1000)
             let usage = response.usage?.normalizedNonEmpty()
             let cost = await estimateCost(request.judgeModel.provider, request.judgeModel.modelId, usage)
@@ -251,16 +248,14 @@ struct FusionOrchestrator: Sendable {
             }
 
             let repairStarted = Date()
-            let repairResponse = try await FusionTimeout.run(milliseconds: timeoutMs) {
-                try await invoke(
-                    try await makeJudgeRequest(
-                        systemPrompt: FusionPrompts.judgeSystemPrompt(),
-                        userContent: FusionPrompts.jsonRepairPrompt(invalidJSON: response.text)
-                    ),
-                    provider,
-                    .judge
-                )
-            }
+            let repairResponse = try await invoke(
+                try await makeJudgeRequest(
+                    systemPrompt: FusionPrompts.judgeSystemPrompt(),
+                    userContent: FusionPrompts.jsonRepairPrompt(invalidJSON: response.text)
+                ),
+                provider,
+                .judge
+            )
             let repairLatency = Int64(Date().timeIntervalSince(repairStarted) * 1000)
             let repairUsage = repairResponse.usage?.normalizedNonEmpty()
             let repairCost = await estimateCost(request.judgeModel.provider, request.judgeModel.modelId, repairUsage)
@@ -324,15 +319,12 @@ struct FusionOrchestrator: Sendable {
         providerRequest.metadata["fusionDepth"] = String(context.fusionDepth)
         let requestToInvoke = providerRequest
 
-        let timeoutMs = fallback.timeoutMs ?? request.timeoutMs
         let started = Date()
-        let response = try await FusionTimeout.run(milliseconds: timeoutMs) {
-            try await invoke(
-                requestToInvoke,
-                fallback.provider,
-                .fallback
-            )
-        }
+        let response = try await invoke(
+            requestToInvoke,
+            fallback.provider,
+            .fallback
+        )
         let latencyMs = Int64(Date().timeIntervalSince(started) * 1000)
         let usage = response.usage?.normalizedNonEmpty()
         let cost = await estimateCost(fallback.provider, fallback.modelId, usage)

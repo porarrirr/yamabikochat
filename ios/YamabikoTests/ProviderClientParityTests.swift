@@ -1655,7 +1655,7 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertNil(messages[2]["reasoning_content"])
     }
 
-    func testOpenCodeGoCarriesFusionTimeoutToHTTPTransport() async throws {
+    func testOpenCodeGoCarriesRequestTimeoutToHTTPTransport() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("go-key", for: .openCodeGo)
 

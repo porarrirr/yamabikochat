@@ -249,15 +249,11 @@ class FusionOrchestrator {
             )
         }
 
-        val timeoutMs = request.judgeModel.timeoutMs ?: request.timeoutMs
-
         return try {
-            val response = FusionTimeout.run(milliseconds = timeoutMs) {
-                invoke(
-                    makeJudgeRequest(FusionPrompts.judgeSystemPrompt(), judgeUserContent),
-                    FusionPhase.judge
-                )
-            }
+            val response = invoke(
+                makeJudgeRequest(FusionPrompts.judgeSystemPrompt(), judgeUserContent),
+                FusionPhase.judge
+            )
             val latencyMs = System.currentTimeMillis() - started
             val cost = estimateCost(
                 request.judgeModel.provider,
@@ -281,15 +277,13 @@ class FusionOrchestrator {
             }
 
             val repairStarted = System.currentTimeMillis()
-            val repairResponse = FusionTimeout.run(milliseconds = timeoutMs) {
-                invoke(
-                    makeJudgeRequest(
-                        FusionPrompts.judgeSystemPrompt(),
-                        FusionPrompts.jsonRepairPrompt(invalidJSON = response.text)
-                    ),
-                    FusionPhase.judge
-                )
-            }
+            val repairResponse = invoke(
+                makeJudgeRequest(
+                    FusionPrompts.judgeSystemPrompt(),
+                    FusionPrompts.jsonRepairPrompt(invalidJSON = response.text)
+                ),
+                FusionPhase.judge
+            )
             val repairLatency = System.currentTimeMillis() - repairStarted
             val repairCost = estimateCost(
                 request.judgeModel.provider,
@@ -361,11 +355,8 @@ class FusionOrchestrator {
             provider = fallback.provider.uppercase(),
             request = genRequest
         )
-        val timeoutMs = fallback.timeoutMs ?: request.timeoutMs
         val started = System.currentTimeMillis()
-        val response = FusionTimeout.run(milliseconds = timeoutMs) {
-            invoke(bundle, FusionPhase.fallback)
-        }
+        val response = invoke(bundle, FusionPhase.fallback)
         val latencyMs = System.currentTimeMillis() - started
         val cost = estimateCost(fallback.provider, fallback.modelId, response.inputTokens, response.outputTokens)
 

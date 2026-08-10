@@ -11,6 +11,7 @@ data class FusionPresetDefinition(
     val maxPanelTokens: Int = 4096,
     val maxJudgeTokens: Int = 2048,
     val maxSynthesizerTokens: Int = 4096,
+    /** Legacy persisted field retained for backward-compatible decoding. */
     val timeoutMs: Int = 120_000,
     val allowWebSearch: Boolean = true,
     val panelModels: List<PanelModelConfig> = emptyList(),

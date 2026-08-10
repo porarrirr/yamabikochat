@@ -21,7 +21,6 @@ enum FusionPanelRunner {
                 group.addTask {
                     await runSingle(
                         panel: panel,
-                        request: request,
                         panelSystemPrompt: panelSystemPrompt,
                         buildPanelRequest: buildPanelRequest,
                         invoke: invoke,
@@ -43,21 +42,17 @@ enum FusionPanelRunner {
 
     private static func runSingle(
         panel: PanelModelConfig,
-        request: FusionRequest,
         panelSystemPrompt: String,
         buildPanelRequest: @escaping @Sendable (PanelModelConfig, String) async throws -> ProviderRequest,
         invoke: @escaping Invoke,
         estimateCost: @escaping CostEstimator
     ) async -> PanelResult {
-        let timeoutMs = panel.timeoutMs ?? request.timeoutMs
         let provider = panel.provider
         let started = Date()
 
         do {
             let providerRequest = try await buildPanelRequest(panel, panelSystemPrompt)
-            let response = try await FusionTimeout.run(milliseconds: timeoutMs) {
-                try await invoke(providerRequest, provider, .panel)
-            }
+            let response = try await invoke(providerRequest, provider, .panel)
             guard let answer = response.text.trimmedNonEmpty else {
                 throw ProviderClientError.parseFailure(
                     L10n.format("Fusion panel %@ returned no answer text.", panel.modelId)

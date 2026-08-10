@@ -54,8 +54,8 @@ class CodexResponsesProvider(
     private val requestClient: OkHttpClient = httpClient.newBuilder()
         .connectTimeout(REQUEST_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .writeTimeout(REQUEST_WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .readTimeout(REQUEST_READ_TIMEOUT_MINUTES, TimeUnit.MINUTES)
-        .callTimeout(REQUEST_CALL_TIMEOUT_MINUTES, TimeUnit.MINUTES)
+        .readTimeout(0, TimeUnit.MILLISECONDS)
+        .callTimeout(0, TimeUnit.MILLISECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
@@ -574,7 +574,5 @@ class CodexResponsesProvider(
         private const val STREAM_WRITE_TIMEOUT_SECONDS = 60L
         private const val REQUEST_CONNECT_TIMEOUT_SECONDS = 60L
         private const val REQUEST_WRITE_TIMEOUT_SECONDS = 60L
-        private const val REQUEST_READ_TIMEOUT_MINUTES = 10L
-        private const val REQUEST_CALL_TIMEOUT_MINUTES = 10L
     }
 }

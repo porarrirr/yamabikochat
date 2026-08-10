@@ -1076,7 +1076,6 @@ final class ChatRepository {
             )
             let request = try await fusionService.buildProviderRequest(
                 model: fallbackModel,
-                defaultTimeoutMs: fusionRequest.timeoutMs,
                 systemPrompt: conversation.systemPrompt ?? "",
                 phase: .fallback,
                 allowTools: false,

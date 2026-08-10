@@ -175,37 +175,21 @@ final class FusionOrchestratorTests: XCTestCase {
         }
     }
 
-    func testPanelTimeoutIsRecordedAsFailure() async throws {
+    func testPanelRunsPastLegacyConfiguredTimeout() async throws {
         let request = sampleRequest(panelModels: [
             PanelModelConfig(modelId: "panel-slow", provider: "OPENAI", timeoutMs: 50)
         ])
 
-        do {
-            _ = try await orchestrator.runThroughJudge(
-                request: request,
-                context: FusionContext(),
-                buildRequest: buildRequest,
-                invoke: slowInvoke,
-                estimateCost: { _, _, _ in nil }
-            )
-            XCTFail("Expected allPanelsFailed")
-        } catch FusionError.allPanelsFailed {
-            XCTAssertTrue(true)
-        }
-    }
+        let outcome = try await orchestrator.runThroughJudge(
+            request: request,
+            context: FusionContext(),
+            buildRequest: buildRequest,
+            invoke: slowInvoke,
+            estimateCost: { _, _, _ in nil }
+        )
 
-    func testFusionTimeoutReportsConfiguredDeadlineInsteadOfCancellation() async throws {
-        do {
-            _ = try await FusionTimeout.run(milliseconds: 25) {
-                try await Task.sleep(nanoseconds: 5_000_000_000)
-                return "late"
-            }
-            XCTFail("Expected timeout")
-        } catch let error as FusionTimeout.TimeoutError {
-            XCTAssertEqual(error.localizedDescription, L10n.format("タイムアウト (%d ms)", 25))
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
+        XCTAssertEqual(outcome.trace.panelResults.first?.content, "late")
+        XCTAssertTrue(outcome.trace.panelResults.first?.success == true)
     }
 
     func testSynthesizerMergesConversationSystemPrompt() async throws {

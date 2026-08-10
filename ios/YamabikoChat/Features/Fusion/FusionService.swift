@@ -170,7 +170,6 @@ final class FusionService {
                 }
                 return try await self.buildProviderRequest(
                     model: model,
-                    defaultTimeoutMs: request.timeoutMs,
                     systemPrompt: systemPrompt,
                     phase: phase,
                     allowTools: allowTools,
@@ -202,7 +201,6 @@ final class FusionService {
 
     func buildProviderRequest(
         model: PanelModelConfig,
-        defaultTimeoutMs: Int? = nil,
         systemPrompt: String,
         phase: FusionPhase,
         allowTools: Bool,
@@ -235,11 +233,6 @@ final class FusionService {
         )
         if phase == .panel {
             metadata["supportsVision"] = supportsVision ? "true" : "false"
-        }
-
-        let timeoutMs = model.timeoutMs ?? defaultTimeoutMs
-        let transportTimeoutInterval = timeoutMs.map {
-            TimeInterval(max(1, $0)) / 1_000 + 1
         }
 
         var messages = conversationHistory
@@ -276,7 +269,9 @@ final class FusionService {
             thinking: resolvedSettings.thinking,
             provider: resolvedSettings.routing,
             metadata: metadata,
-            timeoutInterval: transportTimeoutInterval,
+            // URLRequest defaults to a 60-second idle timeout. Fusion requests
+            // must remain active until completion or explicit user cancellation.
+            timeoutInterval: .greatestFiniteMagnitude,
             skillContext: skillContext
         )
     }
