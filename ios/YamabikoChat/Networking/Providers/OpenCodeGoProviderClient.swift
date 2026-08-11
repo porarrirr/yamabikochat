@@ -430,8 +430,8 @@ struct OpenCodeGoProviderClient: ProviderClient {
             cachedInputTokens: intValue(in: promptDetails, keys: ["cached_tokens", "cachedTokens", "cached_input_tokens"]) ??
                 intValue(in: inputDetails, keys: ["cached_tokens", "cachedTokens", "cached_input_tokens"]) ??
                 intValue(in: object, keys: ["cache_read_input_tokens", "cached_input_tokens", "cachedInputTokens"]),
-            cacheCreationInputTokens: intValue(in: inputDetails, keys: ["cache_creation_input_tokens", "cacheCreationInputTokens"]) ??
-                intValue(in: object, keys: ["cache_creation_input_tokens", "cacheCreationInputTokens"])
+            cacheCreationInputTokens: intValue(in: inputDetails, keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_input_tokens", "cacheCreationInputTokens"]) ??
+                intValue(in: object, keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_input_tokens", "cacheCreationInputTokens"])
         )
         .normalizedNonEmpty()
     }

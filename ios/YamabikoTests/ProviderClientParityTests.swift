@@ -79,6 +79,66 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertFalse(second.contains("secret-key-b"))
     }
 
+    func testOpenAIHostedSkillsCarriesPromptCacheKeyAndParsesCacheUsage() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("openai-key", for: .openAI)
+        let skillRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hosted-skill-cache-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: skillRoot) }
+        let skillRepository = AgentSkillRepository(rootURL: skillRoot)
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            if request.url.path == "/v1/containers" {
+                return (
+                    Data(#"{"id":"container-1"}"#.utf8),
+                    Self.makeHTTPResponse(url: request.url, statusCode: 200)
+                )
+            }
+            let response = #"{"output":[{"type":"message","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":2048,"output_tokens":20,"total_tokens":2068,"input_tokens_details":{"cached_tokens":1536,"cache_write_tokens":256},"output_tokens_details":{"reasoning_tokens":4}}}"#
+            return (
+                Data(response.utf8),
+                Self.makeHTTPResponse(url: request.url, statusCode: 200)
+            )
+        }
+
+        let context = SkillRequestContext(
+            catalog: [AgentSkillCatalogEntry(name: "test", description: "test")],
+            explicitlyRequestedNames: [],
+            explicitInstructions: [],
+            resourceLists: [],
+            conversationID: "conversation-42",
+            enabledSkillSetHash: "skills-hash",
+            hostedExecutionEnabled: true
+        )
+        let request = ProviderRequest(
+            model: "gpt-5.6",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            metadata: ["provider": "OPENAI", "promptCacheKey": "conversation-42"],
+            skillContext: context
+        )
+        let client = OpenAIHostedSkillsProviderClient(
+            manager: OpenAISkillContainerManager(skillRepository: skillRepository),
+            attachmentRepository: AttachmentRepository()
+        )
+
+        let result = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let responsesRequest = try XCTUnwrap(httpClient.requests.first { $0.url.path == "/v1/responses" })
+        let root = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(responsesRequest.body)) as? [String: Any]
+        )
+        XCTAssertEqual(root["prompt_cache_key"] as? String, "conversation-42")
+        XCTAssertEqual(result.usage?.cachedInputTokens, 1536)
+        XCTAssertEqual(result.usage?.cacheCreationInputTokens, 256)
+        XCTAssertEqual(result.usage?.reasoningTokens, 4)
+    }
+
     func testCodexGenerateUsesResponsesPayloadAndSessionHeader() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCodexAccessToken("codex-access-token")
@@ -1066,7 +1126,10 @@ final class ProviderClientParityTests: XCTestCase {
             stream: false,
             tools: [],
             thinking: nil,
-            metadata: ["provider": "OPENROUTER"]
+            metadata: [
+                "provider": "OPENROUTER",
+                "promptCacheKey": "conversation-42"
+            ]
         )
 
         _ = try await client.generate(
@@ -1081,7 +1144,85 @@ final class ProviderClientParityTests: XCTestCase {
         let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
         let cacheControl = try XCTUnwrap(root["cache_control"] as? [String: Any])
         XCTAssertEqual(cacheControl["type"] as? String, "ephemeral")
-        XCTAssertNil(root["prompt_cache_key"])
+        XCTAssertEqual(root["prompt_cache_key"] as? String, "conversation-42")
+        XCTAssertEqual(root["session_id"] as? String, "conversation-42")
+    }
+
+    func testOpenRouterQwenRequestMarksLatestMessageAsExplicitCacheBreakpoint() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("openrouter-key", for: .openRouter)
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            (
+                Data(#"{"choices":[{"message":{"content":"ok"}}]}"#.utf8),
+                Self.makeHTTPResponse(url: request.url, statusCode: 200)
+            )
+        }
+        let request = ProviderRequest(
+            model: "qwen/qwen3-coder-plus",
+            messages: [
+                ProviderRequestMessage(role: "user", content: "first"),
+                ProviderRequestMessage(role: "assistant", content: "answer"),
+                ProviderRequestMessage(role: "user", content: "latest")
+            ],
+            stream: false,
+            metadata: [
+                "provider": "OPENROUTER",
+                "promptCacheKey": "conversation-42"
+            ]
+        )
+
+        _ = try await OpenAICompatibleProviderClient().generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let root = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(httpClient.lastRequest?.body)) as? [String: Any]
+        )
+        let messages = try XCTUnwrap(root["messages"] as? [[String: Any]])
+        XCTAssertTrue(messages[0]["content"] is String)
+        let latestParts = try XCTUnwrap(messages.last?["content"] as? [[String: Any]])
+        XCTAssertEqual(latestParts.first?["text"] as? String, "latest")
+        let cacheControl = try XCTUnwrap(latestParts.first?["cache_control"] as? [String: Any])
+        XCTAssertEqual(cacheControl["type"] as? String, "ephemeral")
+        XCTAssertEqual(root["prompt_cache_key"] as? String, "conversation-42")
+        XCTAssertEqual(root["session_id"] as? String, "conversation-42")
+    }
+
+    func testOpenRouterGeminiRequestMarksLatestMessageAsExplicitCacheBreakpoint() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("openrouter-key", for: .openRouter)
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            (
+                Data(#"{"choices":[{"message":{"content":"ok"}}]}"#.utf8),
+                Self.makeHTTPResponse(url: request.url, statusCode: 200)
+            )
+        }
+        let request = ProviderRequest(
+            model: "google/gemini-3-pro-preview",
+            messages: [ProviderRequestMessage(role: "user", content: "latest")],
+            stream: false,
+            metadata: ["provider": "OPENROUTER", "promptCacheKey": "conversation-42"]
+        )
+
+        _ = try await OpenAICompatibleProviderClient().generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let root = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(httpClient.lastRequest?.body)) as? [String: Any]
+        )
+        let messages = try XCTUnwrap(root["messages"] as? [[String: Any]])
+        let latestParts = try XCTUnwrap(messages.last?["content"] as? [[String: Any]])
+        let cacheControl = try XCTUnwrap(latestParts.first?["cache_control"] as? [String: Any])
+        XCTAssertEqual(cacheControl["type"] as? String, "ephemeral")
     }
 
     func testOpenAIGenerateIncludesConversationPromptCacheKey() async throws {
@@ -1387,8 +1528,7 @@ final class ProviderClientParityTests: XCTestCase {
                 "completion_tokens":30,
                 "total_tokens":150,
                 "completion_tokens_details":{"reasoning_tokens":9},
-                "prompt_tokens_details":{"cached_tokens":48},
-                "input_tokens_details":{"cache_creation_tokens":12}
+                "prompt_tokens_details":{"cached_tokens":48,"cache_write_tokens":12}
               }
             }
             """#.data(using: .utf8)!

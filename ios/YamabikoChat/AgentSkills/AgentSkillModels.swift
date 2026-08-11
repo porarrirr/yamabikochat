@@ -69,6 +69,52 @@ struct SkillRequestContext: Codable, Sendable, Equatable {
     }
 }
 
+struct AgentSkillPromptApplication {
+    var messages: [ProviderRequestMessage]
+    var currentContext: SkillRequestContext?
+}
+
+enum AgentSkillPromptComposer {
+    static func apply(
+        repository: AgentSkillRepository,
+        to source: [ProviderRequestMessage],
+        conversationID: String?,
+        providerSupportsTools: Bool
+    ) throws -> AgentSkillPromptApplication {
+        let lastUserText = source.last(where: { $0.role == "user" })?.content ?? ""
+        let currentContext = try repository.requestContext(
+            for: lastUserText,
+            conversationID: conversationID,
+            providerSupportsTools: providerSupportsTools
+        )
+        guard let currentContext else {
+            return AgentSkillPromptApplication(messages: source, currentContext: nil)
+        }
+
+        var messages = source
+        let userIndices = source.indices.filter { source[$0].role == "user" }
+        if let firstUserIndex = userIndices.first,
+           let catalog = currentContext.syntheticUserContext?.trimmedNonEmpty {
+            messages[firstUserIndex].content = catalog + "\n\n" + source[firstUserIndex].content
+        }
+
+        for index in userIndices {
+            let messageContext = try repository.requestContext(
+                for: source[index].content,
+                conversationID: conversationID,
+                providerSupportsTools: providerSupportsTools
+            )
+            guard let explicit = messageContext?.explicitUserContext?.trimmedNonEmpty else { continue }
+            messages[index].content += "\n\n" + explicit
+        }
+
+        return AgentSkillPromptApplication(
+            messages: messages,
+            currentContext: currentContext
+        )
+    }
+}
+
 struct AgentSkillInstallPreview: Identifiable, Sendable {
     let id: UUID
     let manifest: AgentSkillManifest

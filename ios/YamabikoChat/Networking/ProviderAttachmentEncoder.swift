@@ -141,26 +141,38 @@ enum ProviderAttachmentEncoder {
         }
     }
 
+    struct OpenAIPromptCacheControl: Encodable {
+        let type = "ephemeral"
+    }
+
     struct OpenAIContentPart: Encodable {
         let type: String
         let text: String?
         let imageURL: OpenAIImageURLWrapper?
+        let cacheControl: OpenAIPromptCacheControl?
 
         enum CodingKeys: String, CodingKey {
             case type
             case text
             case imageURL = "image_url"
+            case cacheControl = "cache_control"
         }
 
-        static func textPart(_ text: String) -> OpenAIContentPart {
-            OpenAIContentPart(type: "text", text: text, imageURL: nil)
+        static func textPart(_ text: String, cacheControl: Bool = false) -> OpenAIContentPart {
+            OpenAIContentPart(
+                type: "text",
+                text: text,
+                imageURL: nil,
+                cacheControl: cacheControl ? OpenAIPromptCacheControl() : nil
+            )
         }
 
         static func imagePart(dataURL: String) -> OpenAIContentPart {
             OpenAIContentPart(
                 type: "image_url",
                 text: nil,
-                imageURL: OpenAIImageURLWrapper(url: dataURL)
+                imageURL: OpenAIImageURLWrapper(url: dataURL),
+                cacheControl: nil
             )
         }
     }
@@ -172,16 +184,17 @@ enum ProviderAttachmentEncoder {
     static func buildOpenAIMessageContent(
         text: String,
         attachments: [String],
-        embedImages: Bool
+        embedImages: Bool,
+        cacheControl: Bool = false
     ) -> OpenAIMessageContent {
         let images = loadImagePayloads(from: attachments, embedImages: embedImages)
-        guard !images.isEmpty else {
+        guard !images.isEmpty || cacheControl else {
             return .plain(text)
         }
 
         var parts: [OpenAIContentPart] = []
         if !text.isEmpty {
-            parts.append(.textPart(text))
+            parts.append(.textPart(text, cacheControl: cacheControl))
         }
         for image in images {
             parts.append(.imagePart(dataURL: image.dataURL))

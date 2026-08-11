@@ -471,9 +471,9 @@ struct CodexProviderClient: ProviderClient {
                 ]
             )
         let cacheCreationInputTokens =
-            intValue(in: inputDetails, keys: ["cache_creation_tokens", "cacheCreationTokens", "cache_creation_input_tokens"]) ??
-            intValue(in: promptDetails, keys: ["cache_creation_tokens", "cacheCreationTokens", "cache_creation_input_tokens"]) ??
-            intValue(in: usageObject, keys: ["cache_creation_input_tokens", "cacheCreationInputTokens", "cache_creation_input_token_count"])
+            intValue(in: inputDetails, keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_tokens", "cacheCreationTokens", "cache_creation_input_tokens"]) ??
+            intValue(in: promptDetails, keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_tokens", "cacheCreationTokens", "cache_creation_input_tokens"]) ??
+            intValue(in: usageObject, keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_input_tokens", "cacheCreationInputTokens", "cache_creation_input_token_count"])
         return ProviderUsage(
             inputTokens: inputTokens,
             outputTokens: outputTokens,

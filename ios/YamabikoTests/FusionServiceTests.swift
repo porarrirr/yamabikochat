@@ -40,13 +40,15 @@ final class FusionServiceTests: XCTestCase {
             userPrompt: "Hello",
             conversationHistory: history,
             userAttachments: ["file:///img.png"],
-            supportsVision: true
+            supportsVision: true,
+            conversationID: "42"
         )
 
         XCTAssertEqual(request.messages.count, 1)
         XCTAssertEqual(request.messages[0].content, "Hello")
         XCTAssertEqual(request.messages[0].attachments, ["file:///img.png"])
         XCTAssertEqual(request.metadata["supportsVision"], "true")
+        XCTAssertEqual(request.metadata["promptCacheKey"], "fusion-42")
     }
 
     func testPanelMessagesAppendsWhenHistoryDoesNotIncludeCurrentTurn() async throws {

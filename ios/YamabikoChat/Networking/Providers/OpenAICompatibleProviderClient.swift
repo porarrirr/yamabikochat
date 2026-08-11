@@ -44,6 +44,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         var reasoningEffort: String?
         var cacheControl: PromptCacheControl?
         var promptCacheKey: String?
+        var sessionId: String?
         var maxTokens: Int?
         var temperature: Double?
 
@@ -57,6 +58,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             case reasoningEffort = "reasoning_effort"
             case cacheControl = "cache_control"
             case promptCacheKey = "prompt_cache_key"
+            case sessionId = "session_id"
             case maxTokens = "max_tokens"
             case temperature
         }
@@ -72,6 +74,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             try container.encodeIfPresent(reasoningEffort, forKey: .reasoningEffort)
             try container.encodeIfPresent(cacheControl, forKey: .cacheControl)
             try container.encodeIfPresent(promptCacheKey, forKey: .promptCacheKey)
+            try container.encodeIfPresent(sessionId, forKey: .sessionId)
             try container.encodeIfPresent(maxTokens, forKey: .maxTokens)
             try container.encodeIfPresent(temperature, forKey: .temperature)
         }
@@ -308,7 +311,11 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             messages: mapMessages(
                 request.messages,
                 systemPrompt: request.systemPrompt,
-                embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
+                embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata),
+                explicitCacheBreakpoint: requiresExplicitOpenRouterCacheBreakpoint(
+                    model: request.model,
+                    provider: provider
+                )
             ),
             stream: stream,
             tools: toolsPayload,
@@ -317,6 +324,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             reasoningEffort: request.metadata["modelsDevReasoningEffort"]?.trimmedNonEmpty,
             cacheControl: cacheControl(for: request, provider: provider),
             promptCacheKey: promptCacheKey(for: request, provider: provider),
+            sessionId: sessionId(for: request, provider: provider),
             maxTokens: Int(request.metadata["max_output_tokens"] ?? ""),
             temperature: Double(request.metadata["temperature"] ?? "")
         )
@@ -333,9 +341,31 @@ struct OpenAICompatibleProviderClient: ProviderClient {
     }
 
     private func promptCacheKey(for request: ProviderRequest, provider: LLMProvider) -> String? {
-        guard provider == .openAI else { return nil }
+        guard provider == .openAI || provider == .openRouter else { return nil }
         return request.metadata["promptCacheKey"]?.trimmedNonEmpty
     }
+
+    private func sessionId(for request: ProviderRequest, provider: LLMProvider) -> String? {
+        guard provider == .openRouter else { return nil }
+        return request.metadata["promptCacheKey"]?.trimmedNonEmpty
+    }
+
+    private func requiresExplicitOpenRouterCacheBreakpoint(model: String, provider: LLMProvider) -> Bool {
+        guard provider == .openRouter else { return false }
+        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.hasPrefix("google/gemini")
+            || normalized.hasPrefix("gemini")
+            || Self.explicitOpenRouterCacheModels.contains(normalized)
+    }
+
+    private static let explicitOpenRouterCacheModels: Set<String> = [
+        "deepseek/deepseek-v3.2",
+        "qwen/qwen3-max",
+        "qwen/qwen-plus",
+        "qwen/qwen3.6-plus",
+        "qwen/qwen3-coder-plus",
+        "qwen/qwen3-coder-flash"
+    ]
 
     private func resolvedCredential(
         for provider: LLMProvider,
@@ -451,7 +481,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
     private func mapMessages(
         _ messages: [ProviderRequestMessage],
         systemPrompt: String?,
-        embedImages: Bool
+        embedImages: Bool,
+        explicitCacheBreakpoint: Bool
     ) -> [OpenAIMessage] {
         var mapped: [OpenAIMessage] = []
         if let systemPrompt, !systemPrompt.isEmpty {
@@ -466,7 +497,10 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             )
         }
 
-        for message in messages {
+        let cacheBreakpointIndex = explicitCacheBreakpoint
+            ? messages.lastIndex(where: { $0.role != "tool" && !$0.content.isEmpty })
+            : nil
+        for (index, message) in messages.enumerated() {
             if message.role == "tool" {
                 mapped.append(
                     OpenAIMessage(
@@ -496,7 +530,8 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                     content: ProviderAttachmentEncoder.buildOpenAIMessageContent(
                         text: message.content,
                         attachments: message.attachments,
-                        embedImages: embedImages
+                        embedImages: embedImages,
+                        cacheControl: index == cacheBreakpointIndex
                     ),
                     toolCalls: toolCalls?.isEmpty == true ? nil : toolCalls,
                     toolCallId: nil,
@@ -606,9 +641,9 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                 ]
             )
         let cacheCreationTokens =
-            intValue(in: promptDetails, keys: ["cache_creation_tokens", "cacheCreationTokens", "cache_creation_input_tokens"]) ??
-            intValue(in: inputDetails, keys: ["cache_creation_tokens", "cacheCreationTokens", "cache_creation_input_tokens"]) ??
-            intValue(in: object, keys: ["cache_creation_input_tokens", "cacheCreationInputTokens", "cache_creation_input_token_count"])
+            intValue(in: promptDetails, keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_tokens", "cacheCreationTokens", "cache_creation_input_tokens"]) ??
+            intValue(in: inputDetails, keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_tokens", "cacheCreationTokens", "cache_creation_input_tokens"]) ??
+            intValue(in: object, keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_input_tokens", "cacheCreationInputTokens", "cache_creation_input_token_count"])
 
         return ProviderUsage(
             inputTokens: inputTokens,

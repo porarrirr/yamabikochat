@@ -526,7 +526,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         let cachedTokens =
             intValue(in: object, keys: ["cache_read_input_tokens", "cached_input_tokens", "cacheReadInputTokens", "cachedInputTokens"])
         let cacheCreationTokens =
-            intValue(in: object, keys: ["cache_creation_input_tokens", "cacheCreationInputTokens", "cache_creation_input_token_count"])
+            intValue(in: object, keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_input_tokens", "cacheCreationInputTokens", "cache_creation_input_token_count"])
 
         let usage = ProviderUsage(
             inputTokens: inputTokens,

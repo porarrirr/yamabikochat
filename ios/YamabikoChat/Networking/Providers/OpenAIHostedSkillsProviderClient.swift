@@ -242,6 +242,9 @@ struct OpenAIHostedSkillsProviderClient: ProviderClient {
         tools.append(["type": "shell", "environment": ["type": "container_reference", "container_id": containerID]])
         var body: [String: Any] = ["model": request.model, "input": input, "tools": tools, "stream": stream]
         if let prompt = request.systemPrompt?.trimmedNonEmpty { body["instructions"] = prompt }
+        if let promptCacheKey = request.metadata["promptCacheKey"]?.trimmedNonEmpty {
+            body["prompt_cache_key"] = promptCacheKey
+        }
         if let thinking = request.thinking, thinking.enabled != false {
             var reasoning: [String: Any] = [:]
             if let effort = thinking.effort { reasoning["effort"] = effort }
@@ -266,7 +269,19 @@ struct OpenAIHostedSkillsProviderClient: ProviderClient {
             if let activity = Self.activity(from: item) { activities.append(activity) }
         }
         let usageObject = root["usage"] as? [String: Any]
-        let usage = ProviderUsage(inputTokens: usageObject?["input_tokens"] as? Int, outputTokens: usageObject?["output_tokens"] as? Int, totalTokens: usageObject?["total_tokens"] as? Int)
+        let inputDetails = usageObject?["input_tokens_details"] as? [String: Any]
+        let outputDetails = usageObject?["output_tokens_details"] as? [String: Any]
+        let usage = ProviderUsage(
+            inputTokens: Self.intValue(in: usageObject, keys: ["input_tokens", "inputTokens"]),
+            outputTokens: Self.intValue(in: usageObject, keys: ["output_tokens", "outputTokens"]),
+            totalTokens: Self.intValue(in: usageObject, keys: ["total_tokens", "totalTokens"]),
+            reasoningTokens: Self.intValue(in: outputDetails, keys: ["reasoning_tokens", "reasoningTokens"]),
+            cachedInputTokens: Self.intValue(in: inputDetails, keys: ["cached_tokens", "cachedTokens"]),
+            cacheCreationInputTokens: Self.intValue(
+                in: inputDetails,
+                keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_input_tokens"]
+            )
+        )
         var generated = Self.fileReferences(in: root)
         for index in generated.indices {
             do {
@@ -281,6 +296,16 @@ struct OpenAIHostedSkillsProviderClient: ProviderClient {
             }
         }
         return ProviderResponse(text: text, reasoningSummary: reasoning.trimmedNonEmpty, raw: nil, usage: usage.normalizedNonEmpty(), toolCalls: calls, generatedFiles: generated, serverActivities: activities)
+    }
+
+    private static func intValue(in object: [String: Any]?, keys: [String]) -> Int? {
+        guard let object else { return nil }
+        for key in keys {
+            if let value = object[key] as? Int { return value }
+            if let value = object[key] as? NSNumber { return value.intValue }
+            if let value = object[key] as? String, let parsed = Int(value) { return parsed }
+        }
+        return nil
     }
 
     private static func activity(from item: [String: Any]) -> ProviderServerActivity? {

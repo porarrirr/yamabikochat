@@ -227,6 +227,9 @@ final class FusionService {
             "fusionPhase": phase.rawValue,
             "fusionDepth": String(fusionDepth)
         ], uniquingKeysWith: { _, fusionValue in fusionValue })
+        if let conversationID = conversationID?.trimmedNonEmpty {
+            metadata["promptCacheKey"] = "fusion-\(conversationID)"
+        }
         Self.applyGenerationMetadata(
             to: &metadata,
             model: model
@@ -248,12 +251,14 @@ final class FusionService {
         if phase == .panel, let skillRepository {
             let supportsTools = ProviderReference(persistedID: model.provider).isModelsDev
                 || LLMProvider(rawOrDefault: model.provider).supportsClientWebSearchTool
-            skillContext = try skillRepository.requestContext(
-                for: userPrompt,
+            let application = try AgentSkillPromptComposer.apply(
+                repository: skillRepository,
+                to: messages,
                 conversationID: conversationID,
                 providerSupportsTools: supportsTools
             )
-            messages = Self.applyingSkillContext(skillContext, to: messages)
+            skillContext = application.currentContext
+            messages = application.messages
         } else {
             skillContext = nil
         }
@@ -274,21 +279,6 @@ final class FusionService {
             timeoutInterval: .greatestFiniteMagnitude,
             skillContext: skillContext
         )
-    }
-
-    private static func applyingSkillContext(
-        _ context: SkillRequestContext?,
-        to source: [ProviderRequestMessage]
-    ) -> [ProviderRequestMessage] {
-        guard let context else { return source }
-        let injection = [context.syntheticUserContext, context.explicitUserContext]
-            .compactMap { $0 }
-            .joined(separator: "\n\n")
-        guard !injection.isEmpty,
-              let index = source.lastIndex(where: { $0.role == "user" }) else { return source }
-        var messages = source
-        messages[index].content += "\n\n" + injection
-        return messages
     }
 
     private static func panelMessages(

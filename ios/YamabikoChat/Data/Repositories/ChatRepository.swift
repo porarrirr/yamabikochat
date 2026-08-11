@@ -617,21 +617,21 @@ final class ChatRepository {
             model: conversation.model
         )
 
-        let skillContext = try skillContext(
+        let skillApplication = try applySkillContext(
             messages: resolvedMessages,
             conversationID: String(conversationId),
             provider: conversation.apiProvider
         )
         return ProviderRequest(
             model: conversation.model,
-            messages: applyingSkillContext(skillContext, to: resolvedMessages),
+            messages: skillApplication.messages,
             systemPrompt: SystemPromptComposer.composeForAPI(conversation.systemPrompt),
             stream: settings.isStreamingEnabled,
             tools: resolvedSettings.tools,
             thinking: resolvedSettings.thinking,
             provider: resolvedSettings.routing,
             metadata: metadata,
-            skillContext: skillContext
+            skillContext: skillApplication.currentContext
         )
     }
 
@@ -1084,7 +1084,8 @@ final class ChatRepository {
                 userPrompt: text,
                 conversationHistory: history,
                 userAttachments: normalizedAttachments,
-                supportsVision: fallbackSupportsVision
+                supportsVision: fallbackSupportsVision,
+                conversationID: String(conversationId)
             )
             let provider = fallbackModel.provider
             let assistantMessageId = try conversations.insertMessage(
@@ -2179,49 +2180,37 @@ final class ChatRepository {
         }
         metadata["supportsVision"] = await visionMetadataFlag(provider: provider, model: model)
         let baseMessages = messages ?? [ProviderRequestMessage(role: "user", content: text)]
-        let skillContext = try skillContext(
+        let skillApplication = try applySkillContext(
             messages: baseMessages,
             conversationID: promptCacheKey,
             provider: provider
         )
         return ProviderRequest(
             model: model,
-            messages: applyingSkillContext(skillContext, to: baseMessages),
+            messages: skillApplication.messages,
             systemPrompt: SystemPromptComposer.composeForAPI(systemPrompt),
             stream: stream ?? settings.isStreamingEnabled,
             tools: resolvedSettings.tools,
             thinking: resolvedSettings.thinking,
             provider: resolvedSettings.routing,
             metadata: metadata,
-            skillContext: skillContext
+            skillContext: skillApplication.currentContext
         )
     }
 
-    private func skillContext(
+    private func applySkillContext(
         messages: [ProviderRequestMessage],
         conversationID: String?,
         provider: String
-    ) throws -> SkillRequestContext? {
-        let lastUserText = messages.last(where: { $0.role == "user" })?.content ?? ""
+    ) throws -> AgentSkillPromptApplication {
         let reference = ProviderReference(persistedID: provider)
         let supportsTools = reference.isModelsDev || LLMProvider(rawOrDefault: provider).supportsClientWebSearchTool
-        return try skillRepository.requestContext(
-            for: lastUserText,
+        return try AgentSkillPromptComposer.apply(
+            repository: skillRepository,
+            to: messages,
             conversationID: conversationID,
             providerSupportsTools: supportsTools
         )
-    }
-
-    private func applyingSkillContext(
-        _ context: SkillRequestContext?,
-        to source: [ProviderRequestMessage]
-    ) -> [ProviderRequestMessage] {
-        guard let context else { return source }
-        let injection = [context.syntheticUserContext, context.explicitUserContext].compactMap { $0 }.joined(separator: "\n\n")
-        guard !injection.isEmpty, let index = source.lastIndex(where: { $0.role == "user" }) else { return source }
-        var messages = source
-        messages[index].content += "\n\n" + injection
-        return messages
     }
 
     private enum DualHistorySide {

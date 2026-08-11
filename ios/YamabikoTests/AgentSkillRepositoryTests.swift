@@ -132,6 +132,36 @@ final class AgentSkillRepositoryTests: XCTestCase {
         XCTAssertFalse(internalRequest.tools.contains { $0.payload["name"] == AgentSkillTools.activateName })
     }
 
+    func testPromptComposerKeepsPreviouslySentUserMessagesByteStableAcrossTurns() throws {
+        let preview = try repository.inspect(sourceURL: makeSkill(name: "stable-skill"))
+        _ = try repository.install(preview, trusted: true, allowReplacement: false)
+        let firstSource = [
+            ProviderRequestMessage(role: "user", content: "$stable-skill review this")
+        ]
+        let first = try AgentSkillPromptComposer.apply(
+            repository: repository,
+            to: firstSource,
+            conversationID: "conversation-1",
+            providerSupportsTools: true
+        )
+        let secondSource = [
+            ProviderRequestMessage(role: "user", content: "$stable-skill review this"),
+            ProviderRequestMessage(role: "assistant", content: "first answer"),
+            ProviderRequestMessage(role: "user", content: "continue")
+        ]
+        let second = try AgentSkillPromptComposer.apply(
+            repository: repository,
+            to: secondSource,
+            conversationID: "conversation-1",
+            providerSupportsTools: true
+        )
+
+        XCTAssertEqual(first.messages[0].content, second.messages[0].content)
+        XCTAssertTrue(first.messages[0].content.hasPrefix("<available_agent_skills>"))
+        XCTAssertTrue(first.messages[0].content.contains("<explicit_agent_skill name=\"stable-skill\">"))
+        XCTAssertFalse(second.messages[2].content.contains("<available_agent_skills>"))
+    }
+
     private func makeSkill(
         name: String,
         descriptionYAML: String = "A test skill",

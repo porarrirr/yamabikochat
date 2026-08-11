@@ -12,7 +12,8 @@ enum AgentSkillTools {
         let names = repository.enabledSkills.map { $0.manifest.name }.sorted()
         guard !names.isEmpty else { return [] }
         let enumJSON = names.compactMap { name -> String? in
-            guard let data = try? JSONSerialization.data(withJSONObject: name), let json = String(data: data, encoding: .utf8) else { return nil }
+            guard let data = try? JSONSerialization.data(withJSONObject: name, options: [.fragmentsAllowed]),
+                  let json = String(data: data, encoding: .utf8) else { return nil }
             return json
         }.joined(separator: ",")
         return [
