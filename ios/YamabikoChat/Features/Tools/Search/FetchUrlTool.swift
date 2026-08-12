@@ -8,7 +8,9 @@ struct FetchUrlTool: LocalToolExecutor {
 
     let definition = ToolDefinition(
         name: name,
-        description: "Fetch an HTTP or HTTPS page and return readable text. The returned body is limited to 8000 characters.",
+        description: """
+        Fetch an HTTP or HTTPS page and return up to 8000 characters of readable text. Use it to inspect an original source discovered through web_search, verify important claims, and follow relevant leads. Prefer primary or authoritative pages. Do not claim support for information absent from the returned content.
+        """,
         parametersJSON: """
         {
           "type": "object",

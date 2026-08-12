@@ -5,7 +5,9 @@ struct WebSearchTool: LocalToolExecutor {
 
     let definition = ToolDefinition(
         name: name,
-        description: "Search the public web. Returns up to 8 result titles, snippets, and URLs. Use fetch_url only when page text is needed.",
+        description: """
+        Search the public web and return up to 8 result titles, snippets, and URLs. Use focused queries for current, uncertain, niche, or externally verifiable information. Evaluate the results and refine, broaden, or split the query when they are insufficient or conflicting. Do not repeat equivalent searches. Search snippets are discovery aids; use fetch_url to inspect important original sources.
+        """,
         parametersJSON: """
         {
           "type": "object",

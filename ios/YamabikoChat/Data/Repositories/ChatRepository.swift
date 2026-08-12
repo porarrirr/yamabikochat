@@ -625,7 +625,10 @@ final class ChatRepository {
         return ProviderRequest(
             model: conversation.model,
             messages: skillApplication.messages,
-            systemPrompt: SystemPromptComposer.composeForAPI(conversation.systemPrompt),
+            systemPrompt: SystemPromptComposer.composeForAPI(
+                conversation.systemPrompt,
+                enablesAgenticWebSearch: resolvedSettings.tools.containsWebSearchTool
+            ),
             stream: settings.isStreamingEnabled,
             tools: resolvedSettings.tools,
             thinking: resolvedSettings.thinking,
@@ -2188,7 +2191,10 @@ final class ChatRepository {
         return ProviderRequest(
             model: model,
             messages: skillApplication.messages,
-            systemPrompt: SystemPromptComposer.composeForAPI(systemPrompt),
+            systemPrompt: SystemPromptComposer.composeForAPI(
+                systemPrompt,
+                enablesAgenticWebSearch: resolvedSettings.tools.containsWebSearchTool
+            ),
             stream: stream ?? settings.isStreamingEnabled,
             tools: resolvedSettings.tools,
             thinking: resolvedSettings.thinking,

@@ -50,6 +50,21 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         XCTAssertFalse(resolved.tools.contains { $0.type == "google_search" })
     }
 
+    func testClientWebSearchToolsAreOmittedWhenSettingIsDisabled() async throws {
+        let resolver = makeResolver()
+        var settings = AppSettings()
+        settings.clientWebSearchToolEnabled = false
+
+        let resolved = try await resolver.resolve(
+            settings: settings,
+            provider: "GEMINI",
+            model: "gemini-2.5-flash"
+        )
+
+        XCTAssertFalse(resolved.tools.containsWebSearchTool)
+        XCTAssertFalse(resolved.tools.contains { $0.payload["name"] == FetchUrlTool.name })
+    }
+
     func testOpenRouterGlobalRoutingIsResolvedForEveryMode() async throws {
         let resolver = makeResolver()
         var settings = AppSettings()

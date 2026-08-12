@@ -267,7 +267,8 @@ final class FusionService {
             model: model.modelId,
             messages: messages,
             systemPrompt: SystemPromptComposer.composeForAPI(
-                systemPrompt.trimmedNonEmpty
+                systemPrompt.trimmedNonEmpty,
+                enablesAgenticWebSearch: resolvedSettings.tools.containsWebSearchTool
             ),
             stream: phase == .synthesizer,
             tools: resolvedSettings.tools,

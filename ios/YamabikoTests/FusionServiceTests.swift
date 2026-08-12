@@ -139,6 +139,27 @@ final class FusionServiceTests: XCTestCase {
         XCTAssertTrue(request.tools.contains { $0.type == "code_execution" })
         XCTAssertTrue(request.tools.contains { $0.payload["name"] == WebSearchTool.name })
         XCTAssertTrue(request.tools.contains { $0.payload["name"] == FetchUrlTool.name })
+        XCTAssertTrue(request.systemPrompt?.contains("Search agentically when the task requires investigation:") == true)
+    }
+
+    func testPanelRequestOmitsWebSearchInstructionsWhenToolsAreDisallowed() async throws {
+        let service = makeService()
+        var settings = AppSettings()
+        settings.clientWebSearchToolEnabled = true
+
+        let request = try await service.buildProviderRequest(
+            model: PanelModelConfig(modelId: "gemini-2.5-flash", provider: "GEMINI"),
+            systemPrompt: "panel",
+            phase: .panel,
+            allowTools: false,
+            settings: settings,
+            fusionDepth: 0,
+            userPrompt: "Latest",
+            conversationHistory: []
+        )
+
+        XCTAssertFalse(request.tools.containsWebSearchTool)
+        XCTAssertFalse(request.systemPrompt?.contains("web_search") == true)
     }
 
     func testFusionCodexGlobalReasoningAndNativeWebSearchApplyToAllPhases() async throws {

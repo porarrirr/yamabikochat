@@ -58,4 +58,28 @@ final class SystemPromptComposerTests: XCTestCase {
         XCTAssertTrue(composed?.hasPrefix("Stable instructions") == true)
         XCTAssertFalse(composed?.hasPrefix("Today's date:") == true)
     }
+
+    func testComposeForAPI_appendsAgenticWebSearchInstructionsWhenEnabled() {
+        let composed = SystemPromptComposer.composeForAPI(
+            "Be helpful.",
+            enablesAgenticWebSearch: true,
+            now: makeDate(year: 2026, month: 6, day: 27)
+        )
+
+        XCTAssertTrue(composed?.contains("You have access to web_search and fetch_url.") == true)
+        XCTAssertTrue(composed?.contains("Search agentically when the task requires investigation:") == true)
+        XCTAssertTrue(composed?.contains("cite the URLs of the sources actually used") == true)
+        XCTAssertTrue(composed?.hasSuffix("Today's date: 2026/06/27") == true)
+    }
+
+    func testComposeForAPI_omitsAgenticWebSearchInstructionsWhenDisabled() {
+        let composed = SystemPromptComposer.composeForAPI(
+            "Be helpful.",
+            enablesAgenticWebSearch: false,
+            now: makeDate(year: 2026, month: 6, day: 27)
+        )
+
+        XCTAssertFalse(composed?.contains("web_search") == true)
+        XCTAssertEqual(composed, "Be helpful.\n\nToday's date: 2026/06/27")
+    }
 }

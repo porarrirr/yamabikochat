@@ -92,6 +92,14 @@ struct ToolResult: Codable, Sendable, Equatable {
     }
 }
 
+extension Collection where Element == ProviderTool {
+    var containsWebSearchTool: Bool {
+        contains {
+            $0.type == "function" && $0.payload["name"] == WebSearchTool.name
+        }
+    }
+}
+
 struct ToolSource: Codable, Sendable, Equatable, Identifiable {
     var title: String
     var url: String
