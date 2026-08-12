@@ -72,6 +72,7 @@ google-services.json
 # Build outputs (do not commit)
 app/build/
 app/release/
+dist/
 
 # Claude Code settings (local only)
 .claude/settings.local.json
