@@ -29,6 +29,7 @@ replay_pid*
 
 # Android Studio and Gradle files
 .gradle/
+.kotlin/
 build/
 captures/
 .externalNativeBuild/
@@ -42,9 +43,15 @@ Pods/
 *.xcarchive
 *.ipa
 *.dSYM/
+*.dSYM.zip
+*.xcresult
+*.app/
+*.xctest/
+.swiftpm/
 
 # IDE files
 .idea/
+.vscode/
 *.iml
 *.ipr
 *.iws
@@ -63,16 +70,25 @@ Thumbs.db
 # Keystore files (CRITICAL SECURITY)
 *.keystore
 *.jks
+*.p12
+*.mobileprovision
 
 # API Keys and credentials (CRITICAL SECURITY)
 api_keys.properties
 secrets.properties
 google-services.json
+.env
+.env.*
+!.env.example
 
 # Build outputs (do not commit)
 app/build/
 app/release/
 dist/
+*.apk
+*.aab
+*.apks
+*.idsig
 
 # Claude Code settings (local only)
 .claude/settings.local.json
@@ -85,3 +101,13 @@ opencode/
 
 # Local Codex reference clone (not part of this repo)
 codex/
+
+# Temporary and patch files
+.tmp/
+tmp/
+*.tmp
+*.bak
+*.orig
+*.rej
+*.swp
+*~
