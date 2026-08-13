@@ -48,4 +48,4 @@ Builds intended for distribution are published on [GitHub Releases](https://gith
 
 ## License
 
-[MIT License](LICENSE)
+Original project code is available under the [MIT License](LICENSE). Bundled and restored third-party software remains subject to its own terms; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

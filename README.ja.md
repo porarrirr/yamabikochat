@@ -48,4 +48,4 @@ open YamabikoChat.xcodeproj
 
 ## ライセンス
 
-[MIT License](LICENSE)
+独自コードは [MIT License](LICENSE) で公開しています。同梱・復元される第三者ソフトウェアには個別のライセンスが適用されます。詳細は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) を参照してください。
