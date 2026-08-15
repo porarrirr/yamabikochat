@@ -309,7 +309,23 @@ function nativeToolPayload(tool, api) {
 }
 
 function mutatePayload(payload, request, config) {
-  const value = structuredClone(payload);
+  // Google places a live AbortSignal instance in config.abortSignal. A structured clone
+  // strips its prototype, leaving an object without addEventListener and breaking every
+  // Google request before it reaches the network. Copy only containers we mutate so the
+  // SDK-owned AbortSignal and other runtime objects retain their identity.
+  const value = { ...payload };
+  if (payload.config && typeof payload.config === "object") {
+    value.config = { ...payload.config };
+    if (payload.config.thinkingConfig && typeof payload.config.thinkingConfig === "object") {
+      value.config.thinkingConfig = { ...payload.config.thinkingConfig };
+    }
+  }
+  if (payload.reasoning && typeof payload.reasoning === "object") {
+    value.reasoning = { ...payload.reasoning };
+  }
+  if (payload.text && typeof payload.text === "object") {
+    value.text = { ...payload.text };
+  }
   const metadata = request.metadata || {};
   const nativeTools = (request.tools || []).filter((tool) => tool.type !== "function");
   if (config.api === "google-generative-ai" && nativeTools.length) {
@@ -414,7 +430,9 @@ function streamFunction(request, config, report) {
         hasSystemPrompt: String(Boolean(request.systemPrompt)),
         messageCount: String(request.messages?.length || 0),
         toolTypes: (request.tools || []).map((tool) => tool.type).join(","),
-        thinkingLevel: config.thinkingLevel || "none"
+        thinkingLevel: config.thinkingLevel || "none",
+        abortSignalType: mutated.config?.abortSignal?.constructor?.name || "none",
+        abortSignalListener: typeof mutated.config?.abortSignal?.addEventListener
       });
       return config.provider === "xai-oauth"
         ? sanitizeGrokPayload(

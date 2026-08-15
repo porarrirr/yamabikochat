@@ -283543,7 +283543,19 @@ function nativeToolPayload(tool, api) {
   return api === "google-generative-ai" ? null : { type: tool.type, payload: tool.payload || {} };
 }
 function mutatePayload(payload, request, config) {
-  const value2 = structuredClone(payload);
+  const value2 = { ...payload };
+  if (payload.config && typeof payload.config === "object") {
+    value2.config = { ...payload.config };
+    if (payload.config.thinkingConfig && typeof payload.config.thinkingConfig === "object") {
+      value2.config.thinkingConfig = { ...payload.config.thinkingConfig };
+    }
+  }
+  if (payload.reasoning && typeof payload.reasoning === "object") {
+    value2.reasoning = { ...payload.reasoning };
+  }
+  if (payload.text && typeof payload.text === "object") {
+    value2.text = { ...payload.text };
+  }
   const metadata = request.metadata || {};
   const nativeTools = (request.tools || []).filter((tool) => tool.type !== "function");
   if (config.api === "google-generative-ai" && nativeTools.length) {
@@ -283644,7 +283656,9 @@ function streamFunction(request, config, report) {
         hasSystemPrompt: String(Boolean(request.systemPrompt)),
         messageCount: String(request.messages?.length || 0),
         toolTypes: (request.tools || []).map((tool) => tool.type).join(","),
-        thinkingLevel: config.thinkingLevel || "none"
+        thinkingLevel: config.thinkingLevel || "none",
+        abortSignalType: mutated.config?.abortSignal?.constructor?.name || "none",
+        abortSignalListener: typeof mutated.config?.abortSignal?.addEventListener
       });
       return config.provider === "xai-oauth" ? sanitizePayload(
         mutated,
