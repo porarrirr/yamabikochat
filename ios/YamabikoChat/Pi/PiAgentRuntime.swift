@@ -60,6 +60,10 @@ private struct PiRuntimeEvent: Decodable {
     var metadata: [String: String]?
     var requestId: String?
     var toolCallId: String?
+    var stepId: Int?
+    var timeMs: Int64?
+    var succeeded: Bool?
+    var usage: ProviderUsage?
     var name: String?
     var arguments: JSONValue?
     var response: ProviderResponse?
@@ -68,6 +72,85 @@ private struct PiRuntimeEvent: Decodable {
     var verificationUri: String?
     var credential: JSONValue?
     var profile: PiOAuthProfile?
+}
+
+struct PiConversationMetricsCollector {
+    private struct OpenLLMStep {
+        var startedAtMs: Int64
+        var firstTokenAtMs: Int64?
+    }
+
+    private let context: ProviderMetricsContext?
+    private let providerID: String
+    private var openLLMSteps: [Int: OpenLLMStep] = [:]
+    private var activeStepID: Int?
+    private var openTools: [String: Int64] = [:]
+
+    init(context: ProviderMetricsContext?, providerID: String) {
+        self.context = context
+        self.providerID = providerID
+    }
+
+    mutating func startLLM(stepID: Int, at timeMs: Int64) {
+        openLLMSteps[stepID] = OpenLLMStep(startedAtMs: timeMs, firstTokenAtMs: nil)
+        activeStepID = stepID
+    }
+
+    mutating func observeToken(at timeMs: Int64) {
+        guard let stepID = activeStepID, openLLMSteps[stepID]?.firstTokenAtMs == nil else { return }
+        openLLMSteps[stepID]?.firstTokenAtMs = timeMs
+    }
+
+    mutating func endLLM(stepID: Int, at timeMs: Int64, succeeded: Bool, usage: ProviderUsage?) {
+        guard let open = openLLMSteps.removeValue(forKey: stepID) else { return }
+        if activeStepID == stepID { activeStepID = nil }
+        guard let context else { return }
+        let disjoint = usage?.disjointInputUsage(providerID: providerID)
+        context.recorder(
+            ConversationExecutionMetric(
+                conversationId: context.conversationId,
+                turnId: context.turnId,
+                kind: .llm,
+                startedAtMs: open.startedAtMs,
+                firstTokenAtMs: open.firstTokenAtMs,
+                completedAtMs: timeMs,
+                succeeded: succeeded,
+                inputTokens: disjoint?.inputTokens,
+                outputTokens: disjoint?.outputTokens,
+                cachedInputTokens: disjoint?.cachedInputTokens,
+                cacheCreationInputTokens: disjoint?.cacheCreationInputTokens
+            )
+        )
+    }
+
+    mutating func closeInterruptedLLMSteps(at timeMs: Int64) {
+        for stepID in openLLMSteps.keys.sorted() {
+            endLLM(stepID: stepID, at: timeMs, succeeded: false, usage: nil)
+        }
+    }
+
+    mutating func startTool(callID: String, at timeMs: Int64) {
+        openTools[callID] = timeMs
+    }
+
+    mutating func endTool(callID: String, at timeMs: Int64, succeeded: Bool) {
+        guard let startedAtMs = openTools.removeValue(forKey: callID), let context else { return }
+        context.recorder(
+            ConversationExecutionMetric(
+                conversationId: context.conversationId,
+                turnId: context.turnId,
+                kind: .tool,
+                startedAtMs: startedAtMs,
+                firstTokenAtMs: nil,
+                completedAtMs: timeMs,
+                succeeded: succeeded,
+                inputTokens: nil,
+                outputTokens: nil,
+                cachedInputTokens: nil,
+                cacheCreationInputTokens: nil
+            )
+        )
+    }
 }
 
 enum PiOAuthProvider: String, Codable, Sendable {
@@ -235,6 +318,8 @@ actor PiAgentRuntime {
         let piRequest = try Self.makeRequest(request, supportsImages: configuration.supportsImages)
         let envelope = PiRunEnvelope(runId: runID, request: piRequest, config: configuration)
         let body = try JSONEncoder().encode(envelope)
+        let metricsContext = ProviderMetricsContext.current
+        let metricsProviderID = request.metadata["provider"] ?? configuration.provider
         var urlRequest = URLRequest(url: endpoint.appendingPathComponent("v1/run"))
         urlRequest.httpMethod = "POST"
         urlRequest.httpBody = body
@@ -256,6 +341,15 @@ actor PiAgentRuntime {
 
         return AsyncThrowingStream { continuation in
             let task = Task {
+                var metrics = PiConversationMetricsCollector(
+                    context: metricsContext,
+                    providerID: metricsProviderID
+                )
+
+                func nowMs() -> Int64 {
+                    Int64(Date().timeIntervalSince1970 * 1_000)
+                }
+
                 do {
                     let (bytes, response) = try await session.bytes(for: urlRequest)
                     guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
@@ -277,9 +371,38 @@ actor PiAgentRuntime {
                                 )
                             )
                         case "text_delta":
+                            if event.delta?.trimmedNonEmpty != nil { metrics.observeToken(at: event.timeMs ?? nowMs()) }
                             continuation.yield(.textDelta(event.delta ?? ""))
                         case "reasoning_delta":
+                            if event.delta?.trimmedNonEmpty != nil { metrics.observeToken(at: event.timeMs ?? nowMs()) }
                             continuation.yield(.reasoningDelta(event.delta ?? ""))
+                        case "llm_start":
+                            guard let id = event.stepId else {
+                                throw ProviderClientError.parseFailure("Pi emitted an invalid LLM start event")
+                            }
+                            metrics.startLLM(stepID: id, at: event.timeMs ?? nowMs())
+                        case "llm_end":
+                            guard let id = event.stepId else {
+                                throw ProviderClientError.parseFailure("Pi emitted an invalid LLM end event")
+                            }
+                            metrics.endLLM(
+                                stepID: id,
+                                at: event.timeMs ?? nowMs(),
+                                succeeded: event.succeeded ?? false,
+                                usage: event.usage
+                            )
+                        case "tool_start":
+                            guard let callID = event.toolCallId else {
+                                throw ProviderClientError.parseFailure("Pi emitted an invalid tool start event")
+                            }
+                            metrics.startTool(callID: callID, at: event.timeMs ?? nowMs())
+                        case "tool_end":
+                            guard let callID = event.toolCallId else { break }
+                            metrics.endTool(
+                                callID: callID,
+                                at: event.timeMs ?? nowMs(),
+                                succeeded: event.succeeded ?? false
+                            )
                         case "tool_request":
                             guard let requestID = event.requestId,
                                   let callID = event.toolCallId,
@@ -322,8 +445,10 @@ actor PiAgentRuntime {
                             continue
                         }
                     }
+                    metrics.closeInterruptedLLMSteps(at: nowMs())
                     continuation.finish()
                 } catch is CancellationError {
+                    metrics.closeInterruptedLLMSteps(at: nowMs())
                     DiagnosticsLogger.log(
                         "Pi runtime request cancelled",
                         level: .warning,
@@ -334,6 +459,7 @@ actor PiAgentRuntime {
                     await Self.abort(runID: runID, endpoint: endpoint, token: token)
                     continuation.finish(throwing: CancellationError())
                 } catch {
+                    metrics.closeInterruptedLLMSteps(at: nowMs())
                     DiagnosticsLogger.log(
                         "Pi runtime bridge failed",
                         category: .network,

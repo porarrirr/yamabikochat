@@ -3,6 +3,19 @@ import Combine
 import GRDB
 @testable import YamabikoChat
 
+private final class ConversationMetricSink: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [ConversationExecutionMetric] = []
+
+    func append(_ metric: ConversationExecutionMetric) {
+        lock.withLock { storage.append(metric) }
+    }
+
+    var values: [ConversationExecutionMetric] {
+        lock.withLock { storage }
+    }
+}
+
 final class ConversationStatsTests: XCTestCase {
     func testFormattingMatchesCompactStatsLine() {
         XCTAssertEqual(ChatStatsFormatter.tokens(517), "517")
@@ -42,6 +55,52 @@ final class ConversationStatsTests: XCTestCase {
         XCTAssertNil(stats.averageTTFTMs)
         XCTAssertNil(stats.tokensPerSecond)
         XCTAssertNil(stats.cacheHitPercent)
+    }
+
+    func testPiAgentEventsRecordEachLLMStepAndMatchedToolDirectly() throws {
+        let sink = ConversationMetricSink()
+        let context = ProviderMetricsContext(
+            conversationId: 9,
+            turnId: "turn-1",
+            recorder: { [sink] metric in sink.append(metric) }
+        )
+        var collector = PiConversationMetricsCollector(context: context, providerID: "OPENAI")
+
+        collector.startLLM(stepID: 1, at: 1_000)
+        collector.observeToken(at: 1_200)
+        collector.endLLM(
+            stepID: 1,
+            at: 1_700,
+            succeeded: true,
+            usage: ProviderUsage(
+                inputTokens: 100,
+                outputTokens: 20,
+                cachedInputTokens: 70,
+                cacheCreationInputTokens: 5
+            )
+        )
+        collector.startTool(callID: "call-1", at: 1_710)
+        collector.endTool(callID: "call-1", at: 1_900, succeeded: true)
+        collector.startLLM(stepID: 2, at: 2_000)
+        collector.observeToken(at: 2_100)
+        collector.endLLM(
+            stepID: 2,
+            at: 2_500,
+            succeeded: true,
+            usage: ProviderUsage(inputTokens: 30, outputTokens: 10)
+        )
+
+        let metrics = sink.values
+        XCTAssertEqual(metrics.map(\.kind), [.llm, .tool, .llm])
+        XCTAssertEqual(metrics.map(\.turnId), ["turn-1", "turn-1", "turn-1"])
+        XCTAssertEqual(metrics[0].firstTokenAtMs, 1_200)
+        XCTAssertEqual(metrics[0].inputTokens, 25)
+        XCTAssertEqual(metrics[0].cachedInputTokens, 70)
+        XCTAssertEqual(metrics[0].cacheCreationInputTokens, 5)
+        XCTAssertEqual(metrics[0].outputTokens, 20)
+        XCTAssertEqual(metrics[1].completedAtMs - metrics[1].startedAtMs, 190)
+        XCTAssertEqual(metrics[2].firstTokenAtMs, 2_100)
+        XCTAssertEqual(metrics[2].outputTokens, 10)
     }
 
     func testProviderUsageNormalizationSeparatesInclusiveAndDisjointInputs() {

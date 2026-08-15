@@ -266,6 +266,18 @@ function usage(value) {
   };
 }
 
+function providerUsage(value) {
+  if (!value) return null;
+  return {
+    inputTokens: value.input || 0,
+    outputTokens: value.output || 0,
+    totalTokens: value.totalTokens || 0,
+    reasoningTokens: value.reasoning,
+    cachedInputTokens: value.cacheRead || 0,
+    cacheCreationInputTokens: value.cacheWrite || 0
+  };
+}
+
 function messagesFrom(request, config) {
   return request.messages.map((message) => {
     if (message.role === "assistant" || message.role === "model") {
@@ -540,15 +552,29 @@ async function runAgent(envelope, res) {
     maxRetryDelayMs: 60000
   });
   runs.set(runId, agent);
+  let step = 0;
+  let activeStep = null;
   agent.subscribe((event) => {
-    if (event.type === "message_update") {
+    if (event.type === "turn_start") {
+      activeStep = ++step;
+      send(res, { type: "llm_start", stepId: activeStep, timeMs: Date.now() });
+    } else if (event.type === "message_update") {
       const update = event.assistantMessageEvent;
       if (update.type === "text_delta") send(res, { type: "text_delta", delta: update.delta });
       if (update.type === "thinking_delta") send(res, { type: "reasoning_delta", delta: update.delta });
+    } else if (event.type === "message_end" && event.message?.role === "assistant") {
+      send(res, {
+        type: "llm_end",
+        stepId: activeStep,
+        timeMs: Date.now(),
+        succeeded: event.message.stopReason !== "error" && event.message.stopReason !== "aborted" && !event.message.errorMessage,
+        usage: providerUsage(event.message.usage)
+      });
+      activeStep = null;
     } else if (event.type === "tool_execution_start") {
-      send(res, { type: "tool_start", id: event.toolCallId, name: event.toolName, arguments: event.args });
+      send(res, { type: "tool_start", toolCallId: event.toolCallId, name: event.toolName, timeMs: Date.now() });
     } else if (event.type === "tool_execution_end") {
-      send(res, { type: "tool_end", id: event.toolCallId, name: event.toolName, isError: event.isError, result: event.result });
+      send(res, { type: "tool_end", toolCallId: event.toolCallId, name: event.toolName, timeMs: Date.now(), succeeded: !event.isError });
     }
   });
   try {
