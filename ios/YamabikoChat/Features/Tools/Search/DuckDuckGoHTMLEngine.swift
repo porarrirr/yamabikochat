@@ -122,7 +122,14 @@ struct DuckDuckGoHTMLEngine: SearchEngine {
             )
             .map { HTMLTextExtractor.extract(from: $0, maxCharacters: 600) } ?? ""
 
-            results.append(SearchResult(title: title, snippet: snippet, url: decodedURL))
+            results.append(
+                SearchResult(
+                    title: title,
+                    snippet: snippet,
+                    url: decodedURL,
+                    publishedAt: extractPublishedDate(from: snippet)
+                )
+            )
             if results.count >= min(max(1, maxResults), resultLimit) {
                 break
             }
@@ -166,6 +173,47 @@ struct DuckDuckGoHTMLEngine: SearchEngine {
             return "jp-jp"
         }
         return "\(region)-\(language)"
+    }
+
+    static func extractPublishedDate(from text: String) -> String? {
+        let patterns = [
+            #"(?<!\d)(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?!\d)"#,
+            #"(?<!\d)(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日"#
+        ]
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern),
+                  let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+                  let year = integerCapture(1, match: match, input: text),
+                  let month = integerCapture(2, match: match, input: text),
+                  let day = integerCapture(3, match: match, input: text),
+                  let formatted = isoDate(year: year, month: month, day: day)
+            else {
+                continue
+            }
+            return formatted
+        }
+
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        for format in ["MMM d, yyyy", "MMMM d, yyyy"] {
+            formatter.dateFormat = format
+            guard let regex = try? NSRegularExpression(
+                pattern: #"(?i)\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},\s+\d{4}\b"#
+            ), let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+            let range = Range(match.range, in: text),
+            let date = formatter.date(from: String(text[range])) else {
+                continue
+            }
+            let output = DateFormatter()
+            output.calendar = formatter.calendar
+            output.locale = formatter.locale
+            output.timeZone = formatter.timeZone
+            output.dateFormat = "yyyy-MM-dd"
+            return output.string(from: date)
+        }
+        return nil
     }
 
     private func fetch(endpoint: String, query: String, region: String) async throws -> String {
@@ -237,5 +285,34 @@ struct DuckDuckGoHTMLEngine: SearchEngine {
             return String(input[range])
         }
         return nil
+    }
+
+    private static func integerCapture(
+        _ capture: Int,
+        match: NSTextCheckingResult,
+        input: String
+    ) -> Int? {
+        guard let range = Range(match.range(at: capture), in: input) else { return nil }
+        return Int(input[range])
+    }
+
+    private static func isoDate(year: Int, month: Int, day: Int) -> String? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let components = DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: year,
+            month: month,
+            day: day
+        )
+        guard let date = calendar.date(from: components),
+              calendar.dateComponents([.year, .month, .day], from: date).year == year,
+              calendar.dateComponents([.year, .month, .day], from: date).month == month,
+              calendar.dateComponents([.year, .month, .day], from: date).day == day
+        else {
+            return nil
+        }
+        return String(format: "%04d-%02d-%02d", year, month, day)
     }
 }

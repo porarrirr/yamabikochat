@@ -107,6 +107,13 @@ struct ToolCallingOrchestrator: Sendable {
     }
 
     private static func duplicateKey(for call: ToolCall) -> String {
+        if call.name == WebSearchTool.name,
+           let data = call.argumentsJSON.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let query = object["query"] as? String {
+            let limit = ToolArguments.int(object["max_results"]) ?? DuckDuckGoHTMLEngine.resultLimit
+            return "\(call.name)\nquery=\(RelevantPageReader.normalizeSearchQuery(query))\nmax_results=\(limit)"
+        }
         let arguments: String
         if let data = call.argumentsJSON.data(using: .utf8),
            let object = try? JSONSerialization.jsonObject(with: data),

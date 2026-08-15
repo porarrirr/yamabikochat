@@ -16,13 +16,19 @@ private actor TestToolCounter {
 }
 
 private struct TestToolExecutor: LocalToolExecutor {
-    let definition = ToolDefinition(
-        name: "test_tool",
-        description: "Test tool",
-        parametersJSON: #"{"type":"object"}"#
-    )
+    let definition: ToolDefinition
     let counter: TestToolCounter
-    var shouldThrow = false
+    let shouldThrow: Bool
+
+    init(counter: TestToolCounter, shouldThrow: Bool = false, name: String = "test_tool") {
+        self.counter = counter
+        self.shouldThrow = shouldThrow
+        definition = ToolDefinition(
+            name: name,
+            description: "Test tool",
+            parametersJSON: #"{"type":"object"}"#
+        )
+    }
 
     func execute(call: ToolCall) async throws -> ToolResult {
         await counter.increment()
@@ -221,6 +227,95 @@ final class ToolCallingOrchestratorTests: XCTestCase {
         XCTAssertEqual(outcome.activities.map(\.status), [.completed, .failed])
         let executionCount = await counter.count
         XCTAssertEqual(executionCount, 1)
+    }
+
+    func testNormalizedEquivalentWebSearchQueriesAreSuppressed() async throws {
+        let counter = TestToolCounter()
+        let recorder = TestInvocationRecorder()
+        let orchestrator = ToolCallingOrchestrator(
+            registry: LocalToolRegistry(
+                executors: [TestToolExecutor(counter: counter, name: WebSearchTool.name)]
+            )
+        )
+
+        let outcome = try await orchestrator.run(
+            request: ProviderRequest(
+                model: "test",
+                messages: [ProviderRequestMessage(role: "user", content: "search")]
+            )
+        ) { request, _ in
+            let invocation = await recorder.append(request)
+            switch invocation {
+            case 1:
+                return ProviderResponse(
+                    text: "",
+                    toolCalls: [
+                        ToolCall(
+                            id: "call-1",
+                            name: WebSearchTool.name,
+                            argumentsJSON: #"{"query":"ＳＷＩＦＴ、   Search","max_results":8}"#,
+                            providerMetadata: nil
+                        )
+                    ]
+                )
+            case 2:
+                return ProviderResponse(
+                    text: "",
+                    toolCalls: [
+                        ToolCall(
+                            id: "call-2",
+                            name: WebSearchTool.name,
+                            argumentsJSON: #"{"max_results":8,"query":"swift search"}"#,
+                            providerMetadata: nil
+                        )
+                    ]
+                )
+            default:
+                return ProviderResponse(text: "done")
+            }
+        }
+
+        XCTAssertEqual(outcome.activities.map(\.status), [.completed, .failed])
+        let executionCount = await counter.count
+        XCTAssertEqual(executionCount, 1)
+    }
+
+    func testWebSearchWithLargerResultLimitIsNotSuppressed() async throws {
+        let counter = TestToolCounter()
+        let recorder = TestInvocationRecorder()
+        let orchestrator = ToolCallingOrchestrator(
+            registry: LocalToolRegistry(
+                executors: [TestToolExecutor(counter: counter, name: WebSearchTool.name)]
+            )
+        )
+
+        let outcome = try await orchestrator.run(
+            request: ProviderRequest(
+                model: "test",
+                messages: [ProviderRequestMessage(role: "user", content: "search")]
+            )
+        ) { request, _ in
+            let invocation = await recorder.append(request)
+            if invocation <= 2 {
+                let limit = invocation == 1 ? 3 : 8
+                return ProviderResponse(
+                    text: "",
+                    toolCalls: [
+                        ToolCall(
+                            id: "call-\(invocation)",
+                            name: WebSearchTool.name,
+                            argumentsJSON: #"{"query":"swift search","max_results":\#(limit)}"#,
+                            providerMetadata: nil
+                        )
+                    ]
+                )
+            }
+            return ProviderResponse(text: "done")
+        }
+
+        XCTAssertEqual(outcome.activities.map(\.status), [.completed, .completed])
+        let executionCount = await counter.count
+        XCTAssertEqual(executionCount, 2)
     }
 
     func testDefaultMaxRoundsIsFifteen() {

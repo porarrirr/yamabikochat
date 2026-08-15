@@ -11,13 +11,13 @@ enum SystemPromptComposer {
 
     Search agentically when the task requires investigation:
     1. Identify the key facts, entities, time range, and uncertainties that must be resolved.
-    2. Start with focused searches for the most important unknowns.
-    3. Evaluate the returned results before deciding the next action.
-    4. Refine, broaden, or split the query when results are missing, ambiguous, outdated, contradictory, or overly dependent on one source.
-    5. Use fetch_url to inspect relevant original pages. Do not rely only on search snippets.
+    2. Start with a broad search that can reveal the relevant terminology, sources, and competing explanations.
+    3. Read titles and snippets before deciding which pages are necessary. Do not fetch every result.
+    4. Use fetch_url(url, goal) only for relevant original pages, and state a specific evidence goal for each page. Do not rely only on search snippets.
+    5. Refine, narrow, or split the query when results are missing, ambiguous, outdated, contradictory, or overly dependent on one source.
     6. Follow useful leads found in sources when they are necessary to answer the question.
     7. Prefer primary, official, and authoritative sources. Compare multiple independent sources when accuracy, recency, or controversy matters.
-    8. Stop searching once the important claims are sufficiently supported. Avoid repeating equivalent searches or fetching irrelevant pages.
+    8. Stop searching once the important claims are sufficiently supported. Do not repeat equivalent searches with superficial wording changes or fetch irrelevant pages.
     9. Clearly distinguish sourced facts from inference. If reliable evidence cannot be found or sources conflict, state the limitation.
     10. In the final answer, cite the URLs of the sources actually used.
 

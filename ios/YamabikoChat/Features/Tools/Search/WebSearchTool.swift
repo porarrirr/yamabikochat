@@ -51,11 +51,12 @@ struct WebSearchTool: LocalToolExecutor {
             let results = try await engine.search(query: query, locale: locale, maxResults: limit)
             let object: [String: Any] = [
                 "query": query,
-                "results": results.map {
+                "results": results.map { result -> [String: Any] in
                     [
-                        "title": $0.title,
-                        "snippet": $0.snippet,
-                        "url": $0.url
+                        "title": result.title,
+                        "snippet": result.snippet,
+                        "url": result.url,
+                        "published_at": result.publishedAt ?? NSNull()
                     ]
                 }
             ]

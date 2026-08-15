@@ -185,6 +185,7 @@
 		D0AD31FBF5FF7FF42A9F8C58 /* SystemPromptComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B1630BEBD1C1648F035DAA9 /* SystemPromptComposerTests.swift */; };
 		D1A8661A85996F0D20CF89C9 /* ShareExtensionItemLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 318066D32E1B6D4FC5C655AD /* ShareExtensionItemLoader.swift */; };
 		D27E29A04A40CC534C77F870 /* SettingsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A487FA3FBC0728FA70BC4DC2 /* SettingsRepository.swift */; };
+		D35C69654837A8E5939A04FB /* LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 8A3E919592A32342E67703C3 /* LICENSE.txt */; };
 		D3F24BA15CE46220C3494CF3 /* ProjectFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E7DA902C4E31F43AC67F6DE /* ProjectFeatureTests.swift */; };
 		D47A3DA9EA4B8C62A4554CD6 /* GeminiModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEAC567088AC21851EC5F65E /* GeminiModelCatalog.swift */; };
 		D50FEEF4BBB585DACA27F0EA /* AppDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F787F7E2A908AFEEEBA0E1F /* AppDatabase.swift */; };
@@ -218,6 +219,7 @@
 		F59F98D988ECB2F6244F94F8 /* SuperGrokAuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B87B752F42B76EA2490112 /* SuperGrokAuthModels.swift */; };
 		F69F0939F13B693EE461FF79 /* AppStoreScreenshotDemoSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A338F8BAA2B2E3E8F2D0096A /* AppStoreScreenshotDemoSeeder.swift */; };
 		F6E818106835DBDE88EB9479 /* GeminiProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88E60BB6D93FEC509378FC79 /* GeminiProviderClient.swift */; };
+		F7E8A6A4B495FAF9230EB610 /* RelevantPageReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E64092198F686EF08BC626FC /* RelevantPageReader.swift */; };
 		F83EFAD8650B49B29FD63F50 /* AutoConversationMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E0AF024AFDE4AE3554BA68 /* AutoConversationMessage.swift */; };
 		F96F8931673091505236216B /* ModelsDevCatalogRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA315FEF3D504A495B8F5F2B /* ModelsDevCatalogRepository.swift */; };
 		F97C698E6296C53CE1574499 /* ClinePassModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE99330C07C20D5A185F5F8 /* ClinePassModelCatalog.swift */; };
@@ -391,6 +393,7 @@
 		875043B225A7D44033DFD07D /* YamabikoShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = YamabikoShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		88E60BB6D93FEC509378FC79 /* GeminiProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiProviderClient.swift; sourceTree = "<group>"; };
 		89C94BED57FA07CCF9938A80 /* TokenUsageStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenUsageStats.swift; sourceTree = "<group>"; };
+		8A3E919592A32342E67703C3 /* LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE.txt; sourceTree = "<group>"; };
 		8A8AAD9C976A025E68725D68 /* YamabikoChat.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YamabikoChat.entitlements; sourceTree = "<group>"; };
 		8AD85091957526398C20998B /* ModelsDevCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsDevCatalog.swift; sourceTree = "<group>"; };
 		8B5936D9B9C6967F14740D01 /* DualChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualChatMessage.swift; sourceTree = "<group>"; };
@@ -482,6 +485,7 @@
 		E1DCF3DC302B2389310C7088 /* OpenRouterModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterModels.swift; sourceTree = "<group>"; };
 		E24B2D0E1B8B5D9D45FF6161 /* MathMarkdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathMarkdownView.swift; sourceTree = "<group>"; };
 		E2819C18702B2FF815D12869 /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/Localizable.strings; sourceTree = "<group>"; };
+		E64092198F686EF08BC626FC /* RelevantPageReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelevantPageReader.swift; sourceTree = "<group>"; };
 		E71CD8E4DA7E0A67881EA450 /* StringTrimming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StringTrimming.swift; sourceTree = "<group>"; };
 		E93C7AF2F5D471C3BD988B7F /* ShortcutIntentSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutIntentSupport.swift; sourceTree = "<group>"; };
 		E9EB908ED95DE4E138D7A19F /* OpenRouterModelPickerField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterModelPickerField.swift; sourceTree = "<group>"; };
@@ -939,6 +943,7 @@
 				73FDBC095F0EFC6358C60DC3 /* DuckDuckGoHTMLEngine.swift */,
 				AE12C7F3EC38F862ED83E620 /* FetchUrlTool.swift */,
 				EFA8FC2F705B5D8D61A79B26 /* HTMLTextExtractor.swift */,
+				E64092198F686EF08BC626FC /* RelevantPageReader.swift */,
 				9289A5E87008C89F9D936F2A /* SearchEngine.swift */,
 				0B354292572D8B209DB7D922 /* WebSearchTool.swift */,
 			);
@@ -972,6 +977,7 @@
 		E83CFF0DED67E322E8A458B7 /* mathjax */ = {
 			isa = PBXGroup;
 			children = (
+				8A3E919592A32342E67703C3 /* LICENSE.txt */,
 				103A4F6B6DC37D5F26D3B66A /* markdown-renderer.js */,
 				68417249749E064D56E23ACE /* tex-svg.js */,
 			);
@@ -1157,6 +1163,7 @@
 			files = (
 				A6FD4DD0049C2696FF7EA66B /* Assets.xcassets in Resources */,
 				E2A1B28A639545AE6CCE732B /* InfoPlist.strings in Resources */,
+				D35C69654837A8E5939A04FB /* LICENSE.txt in Resources */,
 				2AB5391EDBA3C46611B33496 /* Localizable.strings in Resources */,
 				327128F66F2B0EDC0FADD90D /* PrivacyInfo.xcprivacy in Resources */,
 				E92E653594F51DA8DB04B311 /* markdown-renderer.js in Resources */,
@@ -1404,6 +1411,7 @@
 				574CED487E3F249D3C9CBB8B /* ProviderSSEStreamRunner.swift in Sources */,
 				67A83D5BBD97B63A244F9AE9 /* QueryModels.swift in Sources */,
 				F21ED9977B4C899512D10E80 /* RecentPhotoLibrary.swift in Sources */,
+				F7E8A6A4B495FAF9230EB610 /* RelevantPageReader.swift in Sources */,
 				7ECFAF36ED62E3488F99484B /* RootView.swift in Sources */,
 				FD6EBD60BE58614CFCB92BDF /* RunAndSaveYamabikoModelIntent.swift in Sources */,
 				5B37A957B7E112C745201D6B /* RunFusionIntent.swift in Sources */,

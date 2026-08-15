@@ -9,7 +9,7 @@ struct FetchUrlTool: LocalToolExecutor {
     let definition = ToolDefinition(
         name: name,
         description: """
-        Fetch an HTTP or HTTPS page and return up to 8000 characters of readable text. Use it to inspect an original source discovered through web_search, verify important claims, and follow relevant leads. Prefer primary or authoritative pages. Do not claim support for information absent from the returned content.
+        Read an HTTP or HTTPS page for a specific goal and return the most relevant passages with nearby context, up to 8000 characters. Use it only after evaluating web_search snippets. Prefer primary or authoritative pages. Do not claim support for information absent from the returned content.
         """,
         parametersJSON: """
         {
@@ -18,9 +18,13 @@ struct FetchUrlTool: LocalToolExecutor {
             "url": {
               "type": "string",
               "description": "The HTTP or HTTPS URL to fetch."
+            },
+            "goal": {
+              "type": "string",
+              "description": "The specific facts or question to investigate on this page."
             }
           },
-          "required": ["url"],
+          "required": ["url", "goal"],
           "additionalProperties": false
         }
         """
@@ -34,6 +38,9 @@ struct FetchUrlTool: LocalToolExecutor {
 
     func execute(call: ToolCall) async throws -> ToolResult {
         let arguments = try ToolArguments.object(from: call.argumentsJSON)
+        guard let goal = (arguments["goal"] as? String)?.trimmedNonEmpty else {
+            throw ProviderClientError.parseFailure("fetch_url requires a non-empty goal")
+        }
         guard let rawURL = (arguments["url"] as? String)?.trimmedNonEmpty,
               let url = URL(string: rawURL),
               let scheme = url.scheme?.lowercased(),
@@ -67,19 +74,27 @@ struct FetchUrlTool: LocalToolExecutor {
             throw ProviderClientError.parseFailure("Fetched page encoding is unsupported")
         }
 
-        let extracted = contentType.contains("text/plain")
-            ? String(rawText.prefix(Self.maxCharacters))
-            : HTMLTextExtractor.extract(from: rawText, maxCharacters: Self.maxCharacters)
-        guard !extracted.isEmpty else {
+        let paragraphs = contentType.contains("text/plain")
+            ? PageParagraphExtractor.extractPlainText(rawText)
+            : PageParagraphExtractor.extractHTML(rawText)
+        guard !paragraphs.isEmpty else {
             throw ProviderClientError.parseFailure("Fetched page did not contain readable text")
         }
+        let selection = RelevantPageReader.select(
+            paragraphs: paragraphs,
+            goal: goal,
+            maxCharacters: Self.maxCharacters
+        )
 
         let title = Self.extractTitle(from: rawText) ?? url.host ?? url.absoluteString
         let object: [String: Any] = [
             "url": url.absoluteString,
             "title": title,
-            "content": extracted,
-            "truncated": rawText.count > Self.maxCharacters
+            "goal": goal,
+            "content": selection.content,
+            "selection_status": selection.status.rawValue,
+            "selected_paragraph_count": selection.selectedParagraphCount,
+            "truncated": selection.truncated
         ]
         let outputData = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         DiagnosticsLogger.log(
@@ -87,7 +102,9 @@ struct FetchUrlTool: LocalToolExecutor {
             category: .network,
             metadata: [
                 "url": url.absoluteString,
-                "character_count": String(extracted.count)
+                "character_count": String(selection.content.count),
+                "selection_status": selection.status.rawValue,
+                "selected_paragraph_count": String(selection.selectedParagraphCount)
             ]
         )
         return ToolResult(

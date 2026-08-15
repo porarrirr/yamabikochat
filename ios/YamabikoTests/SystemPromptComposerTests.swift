@@ -68,6 +68,10 @@ final class SystemPromptComposerTests: XCTestCase {
 
         XCTAssertTrue(composed?.contains("You have access to web_search and fetch_url.") == true)
         XCTAssertTrue(composed?.contains("Search agentically when the task requires investigation:") == true)
+        XCTAssertTrue(composed?.contains("Start with a broad search") == true)
+        XCTAssertTrue(composed?.contains("Read titles and snippets") == true)
+        XCTAssertTrue(composed?.contains("fetch_url(url, goal)") == true)
+        XCTAssertTrue(composed?.contains("superficial wording changes") == true)
         XCTAssertTrue(composed?.contains("cite the URLs of the sources actually used") == true)
         XCTAssertTrue(composed?.hasSuffix("Today's date: 2026/06/27") == true)
     }
