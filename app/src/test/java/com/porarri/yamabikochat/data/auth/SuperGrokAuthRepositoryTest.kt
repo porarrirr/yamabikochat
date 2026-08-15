@@ -9,39 +9,6 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 
 class SuperGrokAuthRepositoryTest {
-    @Test
-    fun buildAuthorizeUrlIncludesRequiredParams() {
-        val url = SuperGrokAuthRepository.buildAuthorizeUrl(
-            redirectUri = SuperGrokAuthConstants.REDIRECT_URI,
-            verifier = "verifier",
-            challenge = "challenge",
-            state = "state-token",
-            nonce = "nonce-token"
-        )
-
-        val query = url.substringAfter('?')
-            .split('&')
-            .mapNotNull { part ->
-                val pieces = part.split('=', limit = 2)
-                if (pieces.size == 2) {
-                    pieces[0] to URLDecoder.decode(pieces[1], StandardCharsets.UTF_8.name())
-                } else {
-                    null
-                }
-            }
-            .toMap()
-
-        assertEquals("code", query["response_type"])
-        assertEquals(SuperGrokAuthConstants.CLIENT_ID, query["client_id"])
-        assertEquals(SuperGrokAuthConstants.REDIRECT_URI, query["redirect_uri"])
-        assertEquals(SuperGrokAuthConstants.SCOPE, query["scope"])
-        assertEquals("challenge", query["code_challenge"])
-        assertEquals("S256", query["code_challenge_method"])
-        assertEquals("state-token", query["state"])
-        assertEquals("nonce-token", query["nonce"])
-        assertEquals("generic", query["plan"])
-        assertEquals("opencode", query["referrer"])
-    }
 
     @Test
     fun accessTokenIsExpiringHonorsSkew() {

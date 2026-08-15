@@ -46,6 +46,8 @@ class FusionTraceStore(
         }.getOrNull()
     }
 
+    suspend fun load(id: String): FusionTrace? = fetch(id)
+
     private fun logTraceSummary(trace: FusionTrace, conversationId: Long?) {
         val metadata = mutableMapOf(
             "traceId" to trace.requestId,

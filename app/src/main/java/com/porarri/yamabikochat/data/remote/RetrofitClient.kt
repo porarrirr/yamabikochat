@@ -40,15 +40,6 @@ object RetrofitClient {
 
     private val okHttpClient = createHttpClient()
 
-    val geminiInstance: GeminiApiService by lazy {
-        val retrofit = Retrofit.Builder()
-            .baseUrl(GEMINI_BASE_URL)
-            .client(okHttpClient)
-            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-            .build()
-        retrofit.create(GeminiApiService::class.java)
-    }
-
     val openRouterInstance: OpenRouterApiService by lazy {
         val retrofit = Retrofit.Builder()
             .baseUrl(OPENROUTER_BASE_URL)
@@ -56,15 +47,6 @@ object RetrofitClient {
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
         retrofit.create(OpenRouterApiService::class.java)
-    }
-
-    val zaiInstance: ZaiApiService by lazy {
-        val retrofit = Retrofit.Builder()
-            .baseUrl(ZAI_BASE_URL)
-            .client(okHttpClient)
-            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-            .build()
-        retrofit.create(ZaiApiService::class.java)
     }
 
     val liteLlmPricingInstance: LiteLlmPricingApiService by lazy {
@@ -75,43 +57,4 @@ object RetrofitClient {
             .build()
         retrofit.create(LiteLlmPricingApiService::class.java)
     }
-
-    /**
-     * Static OpenAI service. Use when a global override is not required.
-     */
-    val openAiStaticInstance: OpenAiApiService by lazy {
-        val retrofit = Retrofit.Builder()
-            .baseUrl(OPENAI_BASE_URL)
-            .client(okHttpClient)
-            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-            .build()
-        retrofit.create(OpenAiApiService::class.java)
-    }
-
-    /**
-     * Factory for dynamic OpenAI-compatible services with arbitrary base URLs.
-     */
-    fun makeOpenAiInstance(baseUrl: String): OpenAiApiService {
-        val normalized = if (baseUrl.endsWith('/')) baseUrl else "$baseUrl/"
-        val retrofit = Retrofit.Builder()
-            .baseUrl(normalized)
-            .client(okHttpClient)
-            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-            .build()
-        return retrofit.create(OpenAiApiService::class.java)
-    }
-
-    fun makeAnthropicCompatibleInstance(baseUrl: String): AnthropicCompatibleApiService {
-        val normalized = if (baseUrl.endsWith('/')) baseUrl else "$baseUrl/"
-        val retrofit = Retrofit.Builder()
-            .baseUrl(normalized)
-            .client(okHttpClient)
-            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-            .build()
-        return retrofit.create(AnthropicCompatibleApiService::class.java)
-    }
-
-    // 互換性のために古いinstanceプロパティを保持
-    @Deprecated("Use geminiInstance instead")
-    val instance: GeminiApiService = geminiInstance
 }

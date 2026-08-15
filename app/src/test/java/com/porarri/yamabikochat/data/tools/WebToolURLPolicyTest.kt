@@ -1,6 +1,5 @@
 package com.porarri.yamabikochat.data.tools.search
 
-import com.porarri.yamabikochat.data.tools.WebToolException
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test

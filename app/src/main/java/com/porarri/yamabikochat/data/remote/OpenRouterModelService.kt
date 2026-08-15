@@ -238,4 +238,26 @@ class OpenRouterModelService(
         val endpoints = getModelEndpoints(modelId)
         return endpoints.mapNotNull { it.quantization }.distinct()
     }
+
+    suspend fun getModelEndpointOptions(modelId: String): OpenRouterModelEndpointOptions {
+        val endpoints = getModelEndpoints(modelId)
+        val dir = getProvidersDirectory()
+        val providerEndpoints = endpoints.map { ep ->
+            val tag = ep.tag ?: (dir.slugForName(ep.providerName) ?: ep.providerName?.lowercase() ?: "")
+            OpenRouterEndpointOption(
+                tag = tag,
+                providerName = ep.providerName ?: tag,
+                quantization = ep.quantization,
+                supportedParameters = ep.supportedParameters ?: emptyList(),
+                status = ep.statusText()
+            )
+        }.filter { it.tag.isNotBlank() }
+        val quantizations = endpoints.mapNotNull { it.quantization }.distinct()
+        return OpenRouterModelEndpointOptions(
+            modelId = modelId,
+            endpoints = endpoints,
+            providerEndpoints = providerEndpoints,
+            quantizations = quantizations
+        )
+    }
 }

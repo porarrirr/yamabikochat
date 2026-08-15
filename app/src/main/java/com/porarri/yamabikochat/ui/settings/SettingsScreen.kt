@@ -2765,7 +2765,7 @@ fun SettingsScreen(
                             viewModel.updateClientWebSearchToolEnabled(it)
                         }
                     )
-                    if (!com.porarri.yamabikochat.data.tools.ClientTools.supportsClientWebSearchTool(apiProvider)) {
+                    if (!com.porarri.yamabikochat.data.model.LLMProvider.fromRawOrDefault(apiProvider).supportsClientWebSearchTool) {
                         Text(
                             text = "現在のプロバイダーではこのツールは使用されません。",
                             style = MaterialTheme.typography.bodySmall,

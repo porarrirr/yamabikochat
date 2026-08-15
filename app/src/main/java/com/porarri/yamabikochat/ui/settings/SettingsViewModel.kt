@@ -421,7 +421,6 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
                 previousModel = previousProviderModel
             )
             repository.saveSettings(settingsWithModel.remapRemovedProviders())
-            val codexUaPresetSaved = repository.saveCodexUserAgentPreset(normalizedRequest.codexUserAgentPreset)
 
             val geminiSaveResult = when (request.geminiApiKeyAction) {
                 ApiKeyAction.Update -> repository.saveApiKey("GEMINI", request.apiKey.ifBlank { null })
@@ -500,8 +499,7 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
                     "OpenAI (Custom) のプリセットを選択してください。"
                 !geminiSaveResult || !openRouterSaveResult || !zaiSaveResult || !openAiSaveResult ||
                     !miniMaxSaveResult || !openAiCompatSaveResult || !openCodeGoSaveResult ||
-                    !clinePassSaveResult || !alibabaCodingPlanSaveResult || !alibabaMcpTokenSaveResult ||
-                    !codexUaPresetSaved ->
+                    !clinePassSaveResult || !alibabaCodingPlanSaveResult || !alibabaMcpTokenSaveResult ->
                     "暗号化ストレージを初期化できなかったため、APIキーを保存できませんでした。"
                 else -> null
             }

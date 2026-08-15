@@ -1,5 +1,8 @@
 package com.porarri.yamabikochat.data.tools
 
+import com.porarri.yamabikochat.data.model.ToolCall
+import com.porarri.yamabikochat.data.model.ToolDefinition
+import com.porarri.yamabikochat.data.model.ToolResult
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import kotlinx.coroutines.CancellationException
 import org.json.JSONObject

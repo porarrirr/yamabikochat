@@ -1,24 +1,22 @@
 package com.porarri.yamabikochat.data.fusion
 
-import com.porarri.yamabikochat.data.remote.Content
-import com.porarri.yamabikochat.data.remote.GenerateContentRequest
-import com.porarri.yamabikochat.data.remote.GenerationConfig
-import com.porarri.yamabikochat.data.remote.Part
-import com.porarri.yamabikochat.data.remote.SystemInstruction
-import com.porarri.yamabikochat.data.remote.TokenUsageSnapshot
+import com.porarri.yamabikochat.data.model.ProviderRequest
+import com.porarri.yamabikochat.data.model.ProviderRequestMessage
+import com.porarri.yamabikochat.data.model.ProviderResponse
+import com.porarri.yamabikochat.data.model.ProviderUsage
 import java.util.UUID
 
 typealias FusionOrchestratorInvoke =
-    suspend (FusionPanelRunner.GenerateRequestBundle, FusionPhase) -> FusionInvokeResult
+    suspend (FusionPanelRunner.GenerateRequestBundle, FusionPhase) -> ProviderResponse
 typealias FusionOrchestratorCostEstimator =
-    suspend (provider: String, model: String, inputTokens: Int?, outputTokens: Int?) -> Double?
+    suspend (provider: String, model: String, usage: ProviderUsage?) -> Double?
 typealias FusionOrchestratorRequestBuilder = suspend (
     model: PanelModelConfig,
     systemPrompt: String,
     phase: FusionPhase,
     allowTools: Boolean,
     maxTokens: Int
-) -> GenerateContentRequest
+) -> ProviderRequest
 typealias FusionOrchestratorProgressHandler = (FusionProgressSnapshot) -> Unit
 
 class FusionOrchestrator {
@@ -114,17 +112,13 @@ class FusionOrchestrator {
             synthSystemPrompt,
             FusionPhase.synthesizer,
             false,
-            request.maxSynthesizerTokens
-        ).let { base ->
-            base.copy(
-                contents = listOf(
-                    Content(role = "user", parts = listOf(Part(text = synthesisUserPrompt)))
-                ),
-                system_instruction = mergedSystem?.let {
-                    SystemInstruction(parts = listOf(Part(text = it)))
-                }
-            )
-        }
+            4096
+        ).copy(
+            messages = listOf(
+                ProviderRequestMessage(role = "user", content = synthesisUserPrompt)
+            ),
+            systemPrompt = mergedSystem
+        )
 
         val staticFallback = buildStaticFallback(
             judgeAnalysis = judgeAnalysis,
@@ -227,24 +221,16 @@ class FusionOrchestrator {
                 systemPrompt,
                 FusionPhase.judge,
                 false,
-                request.maxJudgeTokens
+                4096
             )
             val provider = request.judgeModel.provider.uppercase()
-            val generationConfig = (base.generationConfig ?: GenerationConfig()).copy(
-                responseMimeType = if (provider == "GEMINI" || provider == "GEMINI_AUTH") {
-                    "application/json"
-                } else {
-                    base.generationConfig?.responseMimeType
-                }
-            )
             return FusionPanelRunner.GenerateRequestBundle(
                 model = request.judgeModel.modelId,
                 provider = provider,
                 request = base.copy(
-                    contents = listOf(
-                        Content(role = "user", parts = listOf(Part(text = userContent)))
-                    ),
-                    generationConfig = generationConfig
+                    messages = listOf(
+                        ProviderRequestMessage(role = "user", content = userContent)
+                    )
                 )
             )
         }
@@ -258,8 +244,7 @@ class FusionOrchestrator {
             val cost = estimateCost(
                 request.judgeModel.provider,
                 request.judgeModel.modelId,
-                response.inputTokens,
-                response.outputTokens
+                response.usage
             )
 
             val parsed = FusionJudgeParser.parse(response.text)
@@ -269,8 +254,8 @@ class FusionOrchestrator {
                     rawJSON = response.text,
                     parseSucceeded = true,
                     latencyMs = latencyMs,
-                    inputTokens = response.inputTokens,
-                    outputTokens = response.outputTokens,
+                    inputTokens = response.usage?.inputTokens,
+                    outputTokens = response.usage?.outputTokens,
                     cost = cost,
                     error = null
                 )
@@ -288,8 +273,7 @@ class FusionOrchestrator {
             val repairCost = estimateCost(
                 request.judgeModel.provider,
                 request.judgeModel.modelId,
-                repairResponse.inputTokens,
-                repairResponse.outputTokens
+                repairResponse.usage
             )
             val repaired = FusionJudgeParser.parse(repairResponse.text)
             if (repaired != null) {
@@ -298,8 +282,8 @@ class FusionOrchestrator {
                     rawJSON = repairResponse.text,
                     parseSucceeded = true,
                     latencyMs = repairLatency,
-                    inputTokens = repairResponse.inputTokens,
-                    outputTokens = repairResponse.outputTokens,
+                    inputTokens = repairResponse.usage?.inputTokens,
+                    outputTokens = repairResponse.usage?.outputTokens,
                     cost = (cost ?: 0.0) + (repairCost ?: 0.0),
                     error = null
                 )
@@ -310,8 +294,8 @@ class FusionOrchestrator {
                 rawJSON = repairResponse.text,
                 parseSucceeded = false,
                 latencyMs = repairLatency,
-                inputTokens = repairResponse.inputTokens,
-                outputTokens = repairResponse.outputTokens,
+                inputTokens = repairResponse.usage?.inputTokens,
+                outputTokens = repairResponse.usage?.outputTokens,
                 cost = (cost ?: 0.0) + (repairCost ?: 0.0),
                 error = "Judge JSON parse failed"
             )
@@ -338,16 +322,16 @@ class FusionOrchestrator {
         invoke: FusionOrchestratorInvoke,
         estimateCost: FusionOrchestratorCostEstimator
     ): FusionJudgeOutcome {
-        val fallback = request.fallbackModel ?: request.synthesizerModel
+        val fallback = request.synthesizerModel
         val genRequest = buildRequest(
             fallback,
             request.systemPrompt.orEmpty(),
             FusionPhase.fallback,
             false,
-            request.maxSynthesizerTokens
+            4096
         ).copy(
-            contents = listOf(
-                Content(role = "user", parts = listOf(Part(text = request.userPrompt)))
+            messages = listOf(
+                ProviderRequestMessage(role = "user", content = request.userPrompt)
             )
         )
         val bundle = FusionPanelRunner.GenerateRequestBundle(
@@ -358,7 +342,7 @@ class FusionOrchestrator {
         val started = System.currentTimeMillis()
         val response = invoke(bundle, FusionPhase.fallback)
         val latencyMs = System.currentTimeMillis() - started
-        val cost = estimateCost(fallback.provider, fallback.modelId, response.inputTokens, response.outputTokens)
+        val cost = estimateCost(fallback.provider, fallback.modelId, response.usage)
 
         val synthesisResult = SynthesisPhaseResult(
             modelId = fallback.modelId,
@@ -366,8 +350,8 @@ class FusionOrchestrator {
             success = true,
             content = response.text,
             latencyMs = latencyMs,
-            inputTokens = response.inputTokens,
-            outputTokens = response.outputTokens,
+            inputTokens = response.usage?.inputTokens,
+            outputTokens = response.usage?.outputTokens,
             cost = cost,
             error = null,
             usedFallback = true
@@ -468,14 +452,13 @@ class FusionOrchestrator {
             }
         }
 
-        fun tokenUsageOrNull(input: Int?, output: Int?): TokenUsageSnapshot? {
+        fun tokenUsageOrNull(input: Int?, output: Int?): ProviderUsage? {
             if (input == null && output == null) return null
-            val snapshot = TokenUsageSnapshot(
+            return ProviderUsage(
                 inputTokens = input ?: 0,
                 outputTokens = output ?: 0,
                 totalTokens = (input ?: 0) + (output ?: 0)
-            ).normalized()
-            return snapshot.takeUnless { it.isEmpty() }
+            ).normalizedNonEmpty()
         }
     }
 }

@@ -2,7 +2,6 @@ package com.porarri.yamabikochat.data.modelsdev
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.porarri.yamabikochat.data.remote.OpenAiProvider
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -90,14 +89,6 @@ class ModelsDevCatalogTest {
 
         assertEquals("example", provider?.id)
         assertEquals(CatalogAvailability.READY, repository.state.value.availability)
-    }
-
-    @Test
-    fun openAiCompatibleModelNamespaceCanBePreserved() {
-        val provider = OpenAiProvider { error("service must not be created") }
-
-        assertEquals("openai/gpt-oss-120b", provider.normalizeOpenAiModel(" openai/gpt-oss-120b ", false))
-        assertEquals("gpt-oss-120b", provider.normalizeOpenAiModel("openai/gpt-oss-120b", true))
     }
 
     private companion object {

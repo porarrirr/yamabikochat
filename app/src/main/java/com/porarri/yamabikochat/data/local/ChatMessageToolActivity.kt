@@ -4,9 +4,42 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import com.porarri.yamabikochat.data.remote.Content
+import com.porarri.yamabikochat.data.model.ProviderRequestMessage
+import com.porarri.yamabikochat.data.model.ToolSource
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+
+@Serializable
+data class ToolActivityStep(
+    val id: String,
+    val round: Int = 0,
+    val toolName: String = "",
+    val title: String = "",
+    val detail: String = "",
+    val status: Status = Status.completed,
+    val resultCount: Int? = null,
+    val sources: List<ToolSource> = emptyList(),
+    val errorMessage: String? = null,
+    val createdAtMs: Long = System.currentTimeMillis()
+) {
+    @Serializable
+    enum class Status {
+        running,
+        completed,
+        failed
+    }
+
+    companion object {
+        private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
+
+        fun decodeSteps(raw: String): List<ToolActivityStep> =
+            runCatching { json.decodeFromString<List<ToolActivityStep>>(raw) }.getOrDefault(emptyList())
+
+        fun encodeSteps(steps: List<ToolActivityStep>): String =
+            json.encodeToString(steps)
+    }
+}
 
 @Entity(
     tableName = "chat_message_tool_activity",
@@ -37,12 +70,12 @@ data class ChatMessageToolActivity(
     val stepsJSON: String,
     val providerTranscriptJSON: String? = null
 ) {
-    val steps: List<com.porarri.yamabikochat.data.tools.ToolActivityStep>
-        get() = com.porarri.yamabikochat.data.tools.ToolActivityStep.decodeSteps(stepsJSON)
+    val steps: List<ToolActivityStep>
+        get() = ToolActivityStep.decodeSteps(stepsJSON)
 
-    val providerTranscript: List<Content>?
+    val providerTranscript: List<ProviderRequestMessage>?
         get() = providerTranscriptJSON?.let { encoded ->
-            runCatching { transcriptCodec.decodeFromString<List<Content>>(encoded) }.getOrNull()
+            runCatching { transcriptCodec.decodeFromString<List<ProviderRequestMessage>>(encoded) }.getOrNull()
         }
 
     companion object {
@@ -52,7 +85,7 @@ data class ChatMessageToolActivity(
             encodeDefaults = true
         }
 
-        fun encodeProviderTranscript(contents: List<Content>): String =
+        fun encodeProviderTranscript(contents: List<ProviderRequestMessage>): String =
             transcriptCodec.encodeToString(contents)
     }
 }

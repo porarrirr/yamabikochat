@@ -10,7 +10,6 @@ import com.porarri.yamabikochat.data.local.ChatMessage
 import com.porarri.yamabikochat.utils.FileValidationUtils
 import com.porarri.yamabikochat.data.local.ChatMessageSummary
 import com.porarri.yamabikochat.data.local.FullChatMessage
-import com.porarri.yamabikochat.data.remote.Content
 import com.porarri.yamabikochat.data.local.Settings
 import com.porarri.yamabikochat.data.local.Conversation
 import com.porarri.yamabikochat.data.local.DualChatMessage
@@ -92,8 +91,7 @@ class ChatViewModel(
     private val autoConversationManager = AutoConversationManager(repository, viewModelScope)
 
     private val historyBuilder = ConversationHistoryBuilder(repository)
-    private val jsonAdapter = Json { ignoreUnknownKeys = true }
-    private val responseStreamer = ChatResponseStreamer(repository, ::splitReasoningBlocks, jsonAdapter)
+    private val responseStreamer = ChatResponseStreamer(repository)
     private val dualChatResponder = DualChatResponder(repository)
     private val interactionCoordinator = ChatInteractionCoordinator(
         repository,

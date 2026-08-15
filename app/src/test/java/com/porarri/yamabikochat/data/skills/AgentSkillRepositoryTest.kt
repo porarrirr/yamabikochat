@@ -8,6 +8,7 @@ import com.porarri.yamabikochat.data.fusion.PanelModelConfig
 import com.porarri.yamabikochat.data.local.Settings
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -141,45 +142,46 @@ class AgentSkillRepositoryTest {
     }
 
     @Test
-    fun fusionOnlyInjectsSkillsIntoPanelRequests() {
+    fun fusionOnlyInjectsSkillsIntoPanelRequests() = runBlocking {
         repository.install(repository.inspect(makeSkill("fusion-skill")), trusted = true, allowReplacement = false)
+        val resolver = com.porarri.yamabikochat.data.repositories.ProviderRequestSettingsResolver(
+            modelService = mockk(relaxed = true),
+            skillRepository = repository
+        )
         val service = FusionService(
-            generate = { _, _, _ -> error("not invoked") },
             settingsProvider = { Settings() },
+            providerGateway = mockk(relaxed = true),
+            requestSettingsResolver = resolver,
             skillRepository = repository
         )
         val model = PanelModelConfig(modelId = "gpt-5.6", provider = "OPENAI")
-        val panel = service.buildGenerateRequest(
+        val panel = service.buildProviderRequest(
             model = model,
             systemPrompt = "panel",
             phase = FusionPhase.panel,
             allowTools = false,
-            maxTokens = 500,
             settings = Settings(),
             fusionDepth = 0,
-            userPrompt = "Use ${'$'}fusion-skill",
+            userPrompt = "Use \$fusion-skill",
             conversationHistory = emptyList(),
             conversationId = "42"
         )
-        val judge = service.buildGenerateRequest(
+        val judge = service.buildProviderRequest(
             model = model,
             systemPrompt = "judge",
             phase = FusionPhase.judge,
             allowTools = false,
-            maxTokens = 500,
             settings = Settings(),
             fusionDepth = 0,
-            userPrompt = "Use ${'$'}fusion-skill",
+            userPrompt = "Use \$fusion-skill",
             conversationHistory = emptyList(),
             conversationId = "42"
         )
 
-        assertEquals(listOf("fusion-skill"), panel.skillContext?.explicitlyRequestedNames)
-        assertTrue(panel.contents.single().parts.single().text.orEmpty().contains("<available_agent_skills>"))
-        assertTrue(panel.tools.orEmpty().flatMap { it.function_declarations.orEmpty() }.any { it.name == AgentSkillTools.ACTIVATE })
-        assertEquals(null, judge.skillContext)
-        assertFalse(judge.contents.single().parts.single().text.orEmpty().contains("<available_agent_skills>"))
-        assertTrue(judge.tools.isNullOrEmpty())
+        assertTrue(panel.messages.single().content.contains("<available_agent_skills>"))
+        assertTrue(panel.tools.any { it.payload["name"] == AgentSkillTools.ACTIVATE })
+        assertFalse(judge.messages.any { it.content.contains("<available_agent_skills>") })
+        assertTrue(judge.tools.none { it.payload["name"] == AgentSkillTools.ACTIVATE })
     }
 
     private fun mockContext(): Context {

@@ -1,8 +1,9 @@
 package com.porarri.yamabikochat.data.fusion
 
-import com.porarri.yamabikochat.data.remote.GenerateContentRequest
-import com.porarri.yamabikochat.data.remote.TokenUsageSnapshot
-import com.porarri.yamabikochat.data.tools.ToolCall
+import com.porarri.yamabikochat.data.model.ProviderRequest
+import com.porarri.yamabikochat.data.model.ProviderRequestMessage
+import com.porarri.yamabikochat.data.model.ProviderUsage
+import com.porarri.yamabikochat.data.model.ToolCall
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -98,34 +99,26 @@ data class FusionProgressSnapshot(
 
 @Serializable
 enum class FusionTaskType {
+    @SerialName("research")
     research,
+    @SerialName("coding")
     coding,
-    auto;
-
-    companion object {
-        fun fromRaw(raw: String?): FusionTaskType {
-            return when (raw?.trim()?.lowercase()) {
-                "research" -> research
-                "coding" -> coding
-                else -> auto
-            }
-        }
-    }
+    @SerialName("auto")
+    auto
 }
 
 @Serializable
 enum class FusionConfidence {
-    low,
+    high,
     medium,
-    high;
+    low;
 
     companion object {
-        fun fromRaw(raw: String?): FusionConfidence {
-            return when (raw?.trim()?.lowercase()) {
-                "low" -> low
-                "high" -> high
-                else -> medium
-            }
+        fun fromRaw(raw: String?): FusionConfidence = when (raw?.trim()?.lowercase()) {
+            "high" -> high
+            "medium" -> medium
+            "low" -> low
+            else -> medium
         }
     }
 }
@@ -135,10 +128,8 @@ data class PanelModelConfig(
     val modelId: String,
     val provider: String,
     val temperature: Double? = null,
-    val maxTokens: Int? = null,
-    /** Legacy preset field retained for decoding only; Fusion does not enforce it. */
     val timeoutMs: Int? = null,
-    val role: String? = null
+    val role: String? = "generalist"
 )
 
 @Serializable
@@ -149,16 +140,25 @@ data class FusionRequest(
     val judgeModel: PanelModelConfig,
     val synthesizerModel: PanelModelConfig,
     val fallbackModel: PanelModelConfig? = null,
-    val preset: String,
-    val maxPanelTokens: Int,
-    val maxJudgeTokens: Int,
-    val maxSynthesizerTokens: Int,
-    /** Legacy preset field retained for compatibility; Fusion does not enforce it. */
-    val timeoutMs: Int,
-    val allowWebSearch: Boolean,
-    val taskType: FusionTaskType,
+    val preset: String = "custom",
+    val maxPanelTokens: Int = 4096,
+    val maxJudgeTokens: Int = 2048,
+    val maxSynthesizerTokens: Int = 4096,
+    val timeoutMs: Int = 120_000,
+    val allowWebSearch: Boolean = true,
+    val taskType: FusionTaskType = FusionTaskType.auto,
     val metadata: Map<String, String> = emptyMap()
 )
+
+@Serializable
+data class SerializableToolCall(
+    val id: String,
+    val name: String,
+    val argumentsJSON: String
+)
+
+fun ToolCall.toSerializable(): SerializableToolCall =
+    SerializableToolCall(id = id, name = name, argumentsJSON = argumentsJSON)
 
 @Serializable
 data class PanelResult(
@@ -173,18 +173,8 @@ data class PanelResult(
     val cost: Double? = null,
     val toolCalls: List<SerializableToolCall>? = null,
     val finishReason: String? = null,
-    val role: String? = null
+    val role: String = "generalist"
 )
-
-@Serializable
-data class SerializableToolCall(
-    val id: String,
-    val name: String,
-    val argumentsJSON: String
-)
-
-fun ToolCall.toSerializable(): SerializableToolCall =
-    SerializableToolCall(id = id, name = name, argumentsJSON = argumentsJSON)
 
 @Serializable
 data class JudgeContradiction(
@@ -305,13 +295,13 @@ data class FusionRunResult(
 data class FusionTokenUsageRecord(
     val provider: String,
     val model: String,
-    val usage: TokenUsageSnapshot?,
+    val usage: ProviderUsage?,
     val requestType: String
 )
 
 data class FusionJudgeOutcome(
     val trace: FusionTrace,
-    val synthesisRequest: GenerateContentRequest,
+    val synthesisRequest: ProviderRequest,
     val synthesizerProvider: String,
     val synthesizerModel: PanelModelConfig,
     val staticFallbackAnswer: String,

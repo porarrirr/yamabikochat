@@ -11,8 +11,8 @@ import android.util.Base64OutputStream
 import android.util.Log
 import android.webkit.MimeTypeMap
 import androidx.exifinterface.media.ExifInterface
-import com.porarri.yamabikochat.data.remote.InlineData
-import com.porarri.yamabikochat.data.remote.Part
+import com.porarri.yamabikochat.data.model.InlineData
+import com.porarri.yamabikochat.data.model.Part
 import com.porarri.yamabikochat.utils.FileValidationUtils
 import java.io.File
 import java.io.FileInputStream

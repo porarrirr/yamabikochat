@@ -8,6 +8,33 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.longOrNull
 
 @Serializable
+data class OpenRouterReasoningCapabilities(
+    @SerialName("supported_efforts") val supportedEfforts: List<String>? = null,
+    val exposesEffortSelection: Boolean = false,
+    @SerialName("default_effort") val defaultEffort: String? = null,
+    @SerialName("default_enabled") val defaultEnabled: Boolean? = null,
+    @SerialName("supports_max_tokens") val supportsMaxTokens: Boolean = false,
+    val mandatory: Boolean = false
+) {
+    val selectableEfforts: List<String>
+        get() {
+            if (!exposesEffortSelection) return emptyList()
+            val source = supportedEfforts ?: GATEWAY_EFFORTS
+            val seen = mutableSetOf<String>()
+            return source
+                .map { it.trim().lowercase() }
+                .filter { effort ->
+                    if (effort.isEmpty() || !seen.add(effort)) return@filter false
+                    !mandatory || effort != "none"
+                }
+        }
+
+    companion object {
+        val GATEWAY_EFFORTS = listOf("max", "xhigh", "high", "medium", "low", "minimal", "none")
+    }
+}
+
+@Serializable
 data class OpenRouterModelsResponse(
     val data: List<OpenRouterModel>
 )
@@ -21,7 +48,8 @@ data class OpenRouterModel(
     @SerialName("context_length") val contextLength: Int? = null,
     val architecture: ModelArchitecture? = null,
     @SerialName("top_provider") val topProvider: ModelProvider? = null,
-    val created: Long? = null
+    val created: Long? = null,
+    val reasoning: OpenRouterReasoningCapabilities? = null
 )
 
 @Serializable
@@ -62,7 +90,8 @@ data class SimpleModel(
     val completionPricePerMillion: Double,
     val isFree: Boolean = false,
     val availableProviders: List<String> = emptyList(),
-    val availableQuantizations: List<String> = emptyList()
+    val availableQuantizations: List<String> = emptyList(),
+    val reasoning: OpenRouterReasoningCapabilities? = null
 ) {
     // 後方互換性のため、旧プロパティを維持（単位: USD/1 token）
     val promptPrice: Double
@@ -106,7 +135,8 @@ data class SimpleModel(
                 completionPricePerMillion = completionPricePerMillion,
                 isFree = promptPricePerToken == 0.0 && completionPricePerToken == 0.0,
                 availableProviders = model.topProvider?.availableProviders ?: emptyList(),
-                availableQuantizations = model.topProvider?.availableQuantizations ?: emptyList()
+                availableQuantizations = model.topProvider?.availableQuantizations ?: emptyList(),
+                reasoning = model.reasoning
             )
         }
     }
@@ -137,9 +167,11 @@ data class ModelEndpoint(
     @SerialName("max_completion_tokens") val maxCompletionTokens: Double? = null,
     @SerialName("max_prompt_tokens") val maxPromptTokens: Double? = null,
     val status: JsonElement? = null,
-    @SerialName("uptime_last_30m") val uptimeLast30m: Double? = null
+    @SerialName("uptime_last_30m") val uptimeLast30m: Double? = null,
+    val tag: String? = null
 )
 
+// Providers directory response from /api/v1/providers
 @Serializable
 data class ProvidersResponse(
     val data: List<ProviderInfo>
@@ -183,3 +215,20 @@ fun ModelEndpoint.statusText(): String? {
         else -> s.toString()
     }
 }
+
+data class OpenRouterEndpointOption(
+    val tag: String,
+    val providerName: String,
+    val quantization: String? = null,
+    val supportedParameters: List<String> = emptyList(),
+    val status: String? = null
+) {
+    val id: String get() = tag
+}
+
+data class OpenRouterModelEndpointOptions(
+    val modelId: String,
+    val endpoints: List<ModelEndpoint> = emptyList(),
+    val providerEndpoints: List<OpenRouterEndpointOption> = emptyList(),
+    val quantizations: List<String> = emptyList()
+)

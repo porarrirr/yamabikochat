@@ -35,8 +35,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.porarri.yamabikochat.data.tools.ToolActivityStep
-import com.porarri.yamabikochat.data.tools.ToolSource
+import com.porarri.yamabikochat.data.local.ToolActivityStep
+import com.porarri.yamabikochat.data.model.ToolSource
 
 @Composable
 fun ToolActivityDisclosure(

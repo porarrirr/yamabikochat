@@ -1,27 +1,28 @@
 package com.porarri.yamabikochat.data.fusion
 
 import com.porarri.yamabikochat.data.local.Settings
-import com.porarri.yamabikochat.data.remote.Content
-import com.porarri.yamabikochat.data.remote.GenerateContentRequest
-import com.porarri.yamabikochat.data.remote.GenerateContentResponse
-import com.porarri.yamabikochat.data.remote.GenerationConfig
-import com.porarri.yamabikochat.data.remote.Part
-import com.porarri.yamabikochat.data.remote.SystemInstruction
-import com.porarri.yamabikochat.data.remote.Tool
+import com.porarri.yamabikochat.data.model.LLMProvider
+import com.porarri.yamabikochat.data.model.ProviderRequest
+import com.porarri.yamabikochat.data.model.ProviderRequestMessage
+import com.porarri.yamabikochat.data.model.ProviderResponse
+import com.porarri.yamabikochat.data.model.ProviderStreamEvent
+import com.porarri.yamabikochat.data.model.ProviderUsage
+import com.porarri.yamabikochat.data.modelsdev.ProviderReference
+import com.porarri.yamabikochat.data.repositories.ProviderGateway
+import com.porarri.yamabikochat.data.repositories.ProviderRequestSettingsResolver
+import com.porarri.yamabikochat.data.repositories.ProviderRequestToolScope
+import com.porarri.yamabikochat.data.skills.AgentSkillPromptComposer
 import com.porarri.yamabikochat.data.skills.AgentSkillRepository
-import com.porarri.yamabikochat.data.skills.AgentSkillTools
 import com.porarri.yamabikochat.data.skills.SkillRequestContext
-import com.porarri.yamabikochat.data.tools.ClientTools
-import com.porarri.yamabikochat.utils.DiagnosticsLogger
+import kotlinx.coroutines.flow.Flow
 
 class FusionService(
-    private val generate: FusionGenerate,
-    private val stream: FusionStream? = null,
-    private val estimateCost: FusionCostEstimator = { _, _, _, _ -> null },
     private val settingsProvider: suspend () -> Settings,
-    private val skillRepository: AgentSkillRepository? = null,
-    private val toolRunner: ClientToolCallingRunner? = null,
+    private val providerGateway: ProviderGateway,
+    private val estimateCost: suspend (provider: String, model: String, usage: ProviderUsage?) -> Double? = { _, _, _ -> null },
     private val traceStore: FusionTraceStore? = null,
+    private val requestSettingsResolver: ProviderRequestSettingsResolver,
+    private val skillRepository: AgentSkillRepository? = null,
     private val orchestrator: FusionOrchestrator = FusionOrchestrator()
 ) {
     suspend fun runFusion(
@@ -53,27 +54,25 @@ class FusionService(
 
         val synthStarted = System.currentTimeMillis()
         return try {
-            val response = generate(
-                outcome.synthesizerModel.modelId,
-                outcome.synthesizerProvider,
-                outcome.synthesisRequest
+            val response = invoke(
+                request = outcome.synthesisRequest,
+                provider = outcome.synthesizerProvider,
+                phase = FusionPhase.synthesizer
             )
-            val result = response.toFusionInvokeResult()
             val latencyMs = System.currentTimeMillis() - synthStarted
             val cost = estimateCost(
                 outcome.synthesizerModel.provider,
                 outcome.synthesizerModel.modelId,
-                result.inputTokens ?: 0,
-                result.outputTokens ?: 0
+                response.usage
             )
             val synthesisResult = SynthesisPhaseResult(
                 modelId = outcome.synthesizerModel.modelId,
                 provider = outcome.synthesizerModel.provider.uppercase(),
                 success = true,
-                content = result.text,
+                content = response.text,
                 latencyMs = latencyMs,
-                inputTokens = result.inputTokens,
-                outputTokens = result.outputTokens,
+                inputTokens = response.usage?.inputTokens,
+                outputTokens = response.usage?.outputTokens,
                 cost = cost,
                 error = null,
                 usedFallback = false
@@ -81,12 +80,12 @@ class FusionService(
             val trace = orchestrator.finalizeTrace(
                 trace = outcome.trace,
                 synthesisResult = synthesisResult,
-                finalAnswer = result.text,
+                finalAnswer = response.text,
                 logPrompts = context.logPrompts
             )
             traceStore?.save(trace, context.conversationId)
             FusionRunResult(
-                finalAnswer = result.text,
+                finalAnswer = response.text,
                 traceId = trace.requestId,
                 judgeAnalysis = if (options.debugMode) trace.judgeResult?.analysis else null,
                 rawPanelResults = if (options.debugMode) trace.panelResults else null,
@@ -136,185 +135,141 @@ class FusionService(
         return orchestrator.runThroughJudge(
             request = request,
             context = context,
-            buildRequest = { model, systemPrompt, phase, allowTools, maxTokens ->
-                buildGenerateRequest(
+            buildRequest = { model, systemPrompt, phase, allowTools, _ ->
+                buildProviderRequest(
                     model = model,
                     systemPrompt = systemPrompt,
                     phase = phase,
                     allowTools = allowTools,
-                    maxTokens = maxTokens,
                     settings = settings,
                     fusionDepth = context.fusionDepth,
                     userPrompt = request.userPrompt,
-                    conversationHistory = conversationHistory,
+                    conversationHistory = conversationHistory.map {
+                        ProviderRequestMessage(role = it.role, content = it.text, attachments = it.attachments)
+                    },
                     userAttachments = userAttachments,
                     conversationId = context.conversationId?.toString()
                 )
             },
             invoke = { bundle, phase ->
                 invoke(
-                    model = bundle.model,
-                    provider = bundle.provider,
                     request = bundle.request,
-                    phase = phase,
-                    settings = settings
+                    provider = bundle.provider,
+                    phase = phase
                 )
             },
-            estimateCost = { provider, model, input, output ->
-                estimateCost(provider, model, input ?: 0, output ?: 0)
+            estimateCost = { provider, model, usage ->
+                estimateCost(provider, model, usage)
             },
             onProgress = onProgress
         )
     }
 
-    fun buildGenerateRequest(
+    suspend fun buildProviderRequest(
         model: PanelModelConfig,
         systemPrompt: String,
         phase: FusionPhase,
         allowTools: Boolean,
-        maxTokens: Int,
         settings: Settings,
         fusionDepth: Int,
         userPrompt: String,
-        conversationHistory: List<FusionHistoryMessage>,
+        conversationHistory: List<ProviderRequestMessage>,
         userAttachments: List<String> = emptyList(),
+        supportsVision: Boolean = false,
         conversationId: String? = null
-    ): GenerateContentRequest {
-        var contents = when (phase) {
-            FusionPhase.panel -> panelContents(
+    ): ProviderRequest {
+        val toolScope: ProviderRequestToolScope = if (phase == FusionPhase.panel) {
+            ProviderRequestToolScope.FusionPanel(allowWebSearch = allowTools)
+        } else {
+            ProviderRequestToolScope.ProviderOnly
+        }
+
+        val resolvedSettings = requestSettingsResolver.resolve(
+            settings = settings,
+            provider = model.provider,
+            model = model.modelId,
+            toolScope = toolScope
+        )
+
+        val metadata = resolvedSettings.metadata.toMutableMap()
+        metadata["provider"] = model.provider.uppercase()
+        metadata["fusionPhase"] = phase.name
+        metadata["fusionDepth"] = fusionDepth.toString()
+        if (!conversationId.isNullOrBlank()) {
+            metadata["promptCacheKey"] = "fusion-$conversationId"
+        }
+        if (phase == FusionPhase.panel) {
+            metadata["supportsVision"] = if (supportsVision) "true" else "false"
+        }
+
+        var messages = if (phase == FusionPhase.panel) {
+            panelMessages(
                 history = conversationHistory,
                 userPrompt = userPrompt,
                 userAttachments = userAttachments
             )
-            else -> listOf(
-                Content(role = "user", parts = listOf(Part(text = userPrompt)))
-            )
-        }
-
-        val skillContext = if (phase == FusionPhase.panel) {
-            skillRepository?.requestContext(userPrompt, conversationId)
         } else {
-            null
+            conversationHistory
         }
-        contents = applySkillContext(contents, skillContext)
 
-        val declarations = buildList {
-            if (
-                allowTools &&
-                phase == FusionPhase.panel &&
-                settings.clientWebSearchToolEnabled &&
-                ClientTools.supportsClientWebSearchTool(model.provider)
-            ) {
-                addAll(ClientTools.toGeminiFunctionDeclarations())
-            }
-            if (
-                phase == FusionPhase.panel &&
-                ClientTools.supportsClientWebSearchTool(model.provider) &&
-                skillRepository != null
-            ) {
-                addAll(AgentSkillTools.declarations(skillRepository))
-            }
-        }
-        val tools: List<Tool>? = declarations.takeIf { it.isNotEmpty() }
-            ?.let { listOf(Tool(function_declarations = it)) }
-
-        val resolvedMaxTokens = model.maxTokens ?: maxTokens
-        val generationConfig = GenerationConfig(
-            temperature = model.temperature?.toFloat(),
-            maxOutputTokens = resolvedMaxTokens.takeIf { it > 0 }
-        )
-
-        val mergedSystem = FusionOrchestrator.mergeSystemPrompts(
-            if (phase == FusionPhase.panel || phase == FusionPhase.fallback) {
-                // For panel, systemPrompt is fusion panel system; conversation system merged by caller via request.systemPrompt in orchestrator for synth only.
-                null
-            } else {
-                null
-            },
-            systemPrompt
-        )
-
-        return GenerateContentRequest(
-            contents = contents,
-            system_instruction = systemPrompt.trim().takeIf { it.isNotEmpty() }?.let {
-                SystemInstruction(parts = listOf(Part(text = it)))
-            },
-            generationConfig = generationConfig,
-            tools = tools,
-            skillContext = skillContext
-        ).also {
-            // fusionDepth retained for parity / future metadata; unused in GenerateContentRequest
-            if (fusionDepth > 0) {
-                DiagnosticsLogger.log("Fusion buildRequest phase=$phase depth=$fusionDepth model=${model.modelId}")
-            }
-        }
-    }
-
-    private fun applySkillContext(
-        contents: List<Content>,
-        context: SkillRequestContext?
-    ): List<Content> {
-        if (context == null) return contents
-        val injection = listOfNotNull(context.syntheticUserContext, context.explicitUserContext)
-            .joinToString("\n\n")
-        if (injection.isBlank()) return contents
-        val index = contents.indexOfLast { it.role == "user" }
-        if (index < 0) return contents
-        return contents.toMutableList().also { result ->
-            val content = result[index]
-            val parts = content.parts.toMutableList()
-            val textIndex = parts.indexOfLast { it.text != null }
-            if (textIndex >= 0) {
-                parts[textIndex] = parts[textIndex].copy(
-                    text = parts[textIndex].text.orEmpty() + "\n\n" + injection
-                )
-            } else {
-                parts += Part(text = injection)
-            }
-            result[index] = content.copy(parts = parts)
-        }
-    }
-
-    private fun panelContents(
-        history: List<FusionHistoryMessage>,
-        userPrompt: String,
-        userAttachments: List<String>
-    ): List<Content> {
-        if (history.isEmpty()) {
-            return listOf(
-                Content(
-                    role = "user",
-                    parts = listOf(Part(text = userPrompt))
-                    // Attachments handled by ChatRepository when building history for sendFusionMessage
-                )
+        if (phase == FusionPhase.panel && skillRepository != null) {
+            val supportsTools = ProviderReference(model.provider).isModelsDev ||
+                    LLMProvider.fromRawOrDefault(model.provider).supportsClientWebSearchTool
+            val applied = AgentSkillPromptComposer.apply(
+                repository = skillRepository,
+                messages = messages,
+                conversationId = conversationId,
+                clientToolsSupported = supportsTools
             )
+            messages = applied.messages
         }
-        val last = history.lastOrNull()
-        if (last != null && last.role == "user" && last.text == userPrompt) {
-            return history.map { it.toContent() }
-        }
-        return history.map { it.toContent() } + Content(
-            role = "user",
-            parts = listOf(Part(text = userPrompt))
+
+        return ProviderRequest(
+            model = model.modelId,
+            messages = messages,
+            systemPrompt = systemPrompt.takeIf { it.isNotBlank() },
+            stream = true,
+            tools = resolvedSettings.tools,
+            thinking = resolvedSettings.thinking,
+            provider = resolvedSettings.routing,
+            metadata = metadata
         )
     }
-
-    private fun FusionHistoryMessage.toContent(): Content =
-        Content(role = if (role == "model" || role == "assistant") "model" else "user", parts = listOf(Part(text = text)))
 
     private suspend fun invoke(
-        model: String,
+        request: ProviderRequest,
         provider: String,
-        request: GenerateContentRequest,
-        phase: FusionPhase,
-        settings: Settings
-    ): FusionInvokeResult {
-        val hasTools = !request.tools.isNullOrEmpty()
-        if (phase == FusionPhase.panel && hasTools && toolRunner != null) {
-            return toolRunner.run(model, provider, request)
+        phase: FusionPhase
+    ): ProviderResponse {
+        return providerGateway.generate(request = request, providerID = provider)
+    }
+
+    suspend fun streamInvoke(
+        request: ProviderRequest,
+        provider: String,
+        phase: FusionPhase
+    ): Flow<ProviderStreamEvent> {
+        return providerGateway.stream(request = request, providerID = provider)
+    }
+
+    private fun panelMessages(
+        history: List<ProviderRequestMessage>,
+        userPrompt: String,
+        userAttachments: List<String>
+    ): List<ProviderRequestMessage> {
+        val result = history.toMutableList()
+        val last = result.lastOrNull()
+        if (last != null && last.role == "user" && last.content == userPrompt) {
+            return result
         }
-        val response: GenerateContentResponse = generate(model, provider, request)
-        return response.toFusionInvokeResult()
+        result.add(
+            ProviderRequestMessage(
+                role = "user",
+                content = userPrompt,
+                attachments = userAttachments
+            )
+        )
+        return result
     }
 
     fun finalizeTrace(
@@ -322,5 +277,10 @@ class FusionService(
         synthesisResult: SynthesisPhaseResult,
         finalAnswer: String,
         logPrompts: Boolean
-    ): FusionTrace = orchestrator.finalizeTrace(trace, synthesisResult, finalAnswer, logPrompts)
+    ): FusionTrace = orchestrator.finalizeTrace(
+        trace = trace,
+        synthesisResult = synthesisResult,
+        finalAnswer = finalAnswer,
+        logPrompts = logPrompts
+    )
 }

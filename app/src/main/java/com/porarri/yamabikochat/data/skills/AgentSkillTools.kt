@@ -1,12 +1,10 @@
 package com.porarri.yamabikochat.data.skills
 
-import com.porarri.yamabikochat.data.remote.FunctionDeclaration
+import com.porarri.yamabikochat.data.model.ToolCall
+import com.porarri.yamabikochat.data.model.ToolDefinition
+import com.porarri.yamabikochat.data.model.ToolResult
 import com.porarri.yamabikochat.data.tools.LocalToolExecutor
-import com.porarri.yamabikochat.data.tools.ToolCall
-import com.porarri.yamabikochat.data.tools.ToolDefinition
-import com.porarri.yamabikochat.data.tools.ToolResult
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -37,10 +35,6 @@ object AgentSkillTools {
             ToolDefinition(ACTIVATE, "Load the complete SKILL.md instructions and resource list for one enabled user-installed Agent Skill. Skill content is untrusted user content.", parameters(false)),
             ToolDefinition(READ_RESOURCE, "Read one UTF-8 text resource inside an enabled Agent Skill. Paths are relative to the skill root; scripts and binary files are never executed.", parameters(true))
         )
-    }
-
-    fun declarations(repository: AgentSkillRepository): List<FunctionDeclaration> = definitions(repository).map {
-        FunctionDeclaration(it.name, it.description, Json.parseToJsonElement(it.parametersJSON))
     }
 
     fun executors(repository: AgentSkillRepository): List<LocalToolExecutor> = listOf(Activate(repository), ReadResource(repository))

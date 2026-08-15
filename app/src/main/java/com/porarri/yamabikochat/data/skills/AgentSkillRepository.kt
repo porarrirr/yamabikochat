@@ -139,12 +139,16 @@ class AgentSkillRepository(private val context: Context, private val root: File 
         DiagnosticsLogger.log("Agent Skill deleted skill=$name")
     }
 
-    fun requestContext(text: String, conversationId: String?): SkillRequestContext? {
+    fun requestContext(text: String, conversationId: String?, clientToolsSupported: Boolean = true): SkillRequestContext? {
         val enabled = enabledSkills
         if (enabled.isEmpty()) return null
         val names = explicitSkillNames(text, enabled.map { it.manifest.name }.toSet())
+        val catalog = if (clientToolsSupported) {
+            enabled.map { AgentSkillCatalogEntry(it.manifest.name, it.manifest.description) }
+        } else emptyList()
+        if (catalog.isEmpty() && names.isEmpty()) return null
         return SkillRequestContext(
-            catalog = enabled.map { AgentSkillCatalogEntry(it.manifest.name, it.manifest.description) },
+            catalog = catalog,
             explicitlyRequestedNames = names,
             explicitInstructions = names.map(::skillInstructions),
             resourceLists = names.map { resourcePaths(it).joinToString("\n") },

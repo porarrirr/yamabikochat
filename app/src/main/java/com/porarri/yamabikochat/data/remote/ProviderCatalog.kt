@@ -24,6 +24,7 @@ object ProviderCatalog {
     const val defaultSuperGrokBaseUrl = "https://api.x.ai/v1/"
     const val defaultClinePassBaseUrl = "https://api.cline.bot/api/v1/"
     const val defaultAlibabaCodingPlanBaseUrl = "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/v1/"
+    const val defaultZaiCodingPlanBaseUrl = "https://api.z.ai/api/coding/paas/v4/"
     const val alibabaMcpDefaultServerName = "firecrawl"
     const val firecrawlRemoteMcpUrlTemplate = "https://mcp.firecrawl.dev/fc-YOUR_API_KEY/v2/mcp"
 

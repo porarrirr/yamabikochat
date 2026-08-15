@@ -36,6 +36,9 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     signingConfigs {
@@ -94,6 +97,7 @@ dependencies {
     // Core
     implementation("org.snakeyaml:snakeyaml-engine:3.0.1")
     implementation("androidx.documentfile:documentfile:1.0.1")
+    implementation(libs.jna)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime)

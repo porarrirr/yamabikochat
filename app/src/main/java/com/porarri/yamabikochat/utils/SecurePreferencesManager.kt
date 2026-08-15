@@ -385,6 +385,12 @@ class SecurePreferencesManager private constructor(private val context: Context)
         return "models_dev_${provider}_$field"
     }
 
+    fun readSecret(key: String): String? = readString(key, key)
+
+    fun saveSecret(key: String, value: String?): Boolean = storeString(key, value, key)
+
+    fun deleteSecret(key: String) = clearKey(key, key)
+
     fun clearAllSecureData() {
         runCatching {
             encryptedPrefs?.edit()?.clear()?.apply()

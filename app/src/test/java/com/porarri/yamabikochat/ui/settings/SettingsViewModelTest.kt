@@ -53,7 +53,6 @@ class SettingsViewModelTest {
         every { repository.hasApiKey(any()) } returns false
         coEvery { repository.saveApiKey(any(), any()) } returns true
         coEvery { repository.saveOpenAiCompatApiKey(any(), any()) } returns true
-        every { repository.saveCodexUserAgentPreset(any()) } returns true
 
         viewModel = SettingsViewModel(repository)
     }

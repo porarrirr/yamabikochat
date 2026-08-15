@@ -84,7 +84,13 @@ data class CodexAuthState(
     val planType: String? = null,
     val accountId: String? = null,
     val hasApiKey: Boolean = false,
-    val lastRefresh: String? = null
+    val lastRefreshISO8601: String? = null
+)
+
+data class CodexBearerToken(
+    val token: String,
+    val isApiKey: Boolean = false,
+    val accountId: String? = null
 )
 
 data class CodexRateLimitWindow(

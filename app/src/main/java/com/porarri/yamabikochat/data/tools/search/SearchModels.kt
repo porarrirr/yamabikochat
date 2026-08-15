@@ -1,6 +1,5 @@
 package com.porarri.yamabikochat.data.tools.search
 
-import com.porarri.yamabikochat.data.tools.WebToolException
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive

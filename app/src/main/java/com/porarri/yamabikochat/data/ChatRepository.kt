@@ -1,7 +1,6 @@
 package com.porarri.yamabikochat.data
 
 import android.net.Uri
-import com.porarri.yamabikochat.data.api.ApiRepository
 import com.porarri.yamabikochat.data.auth.CodexAuthRepository
 import com.porarri.yamabikochat.data.auth.CodexAuthState
 import com.porarri.yamabikochat.data.auth.CodexUsageStatus
@@ -9,6 +8,17 @@ import com.porarri.yamabikochat.data.auth.SuperGrokAuthRepository
 import com.porarri.yamabikochat.data.auth.SuperGrokAuthState
 import com.porarri.yamabikochat.data.database.DatabaseRepository
 import com.porarri.yamabikochat.data.files.FileProcessingRepository
+import com.porarri.yamabikochat.data.fusion.FusionPhase
+import com.porarri.yamabikochat.data.fusion.FusionPresetLoader
+import com.porarri.yamabikochat.data.fusion.FusionProgressSnapshot
+import com.porarri.yamabikochat.data.fusion.FusionRunOptions
+import com.porarri.yamabikochat.data.fusion.FusionRunResult
+import com.porarri.yamabikochat.data.fusion.FusionService
+import com.porarri.yamabikochat.data.fusion.FusionTraceStore
+import com.porarri.yamabikochat.data.fusion.SynthesisPhaseResult
+import com.porarri.yamabikochat.data.fusion.FusionHistoryMessage
+import com.porarri.yamabikochat.data.fusion.FusionPanelChipStatus
+import com.porarri.yamabikochat.data.fusion.FusionPanelChipState
 import com.porarri.yamabikochat.data.local.AutoConversation
 import com.porarri.yamabikochat.data.local.AutoConversationConfig
 import com.porarri.yamabikochat.data.local.AutoConversationMessage
@@ -16,28 +26,12 @@ import com.porarri.yamabikochat.data.local.ChatMessage
 import com.porarri.yamabikochat.data.local.ChatMessageSummary
 import com.porarri.yamabikochat.data.local.ChatMessageVariant
 import com.porarri.yamabikochat.data.local.ChatProject
+import com.porarri.yamabikochat.data.local.Conversation
 import com.porarri.yamabikochat.data.local.ConversationListEntry
 import com.porarri.yamabikochat.data.local.ConversationSearchResult
-import com.porarri.yamabikochat.data.local.Conversation
 import com.porarri.yamabikochat.data.local.DualChatMessage
 import com.porarri.yamabikochat.data.local.FullAutoConversation
 import com.porarri.yamabikochat.data.local.FullChatMessage
-import com.porarri.yamabikochat.data.fusion.DefaultClientToolCallingRunner
-import com.porarri.yamabikochat.data.fusion.FusionError
-import com.porarri.yamabikochat.data.fusion.FusionGenerate
-import com.porarri.yamabikochat.data.fusion.FusionHistoryMessage
-import com.porarri.yamabikochat.data.fusion.FusionPanelChipStatus
-import com.porarri.yamabikochat.data.fusion.FusionPhase
-import com.porarri.yamabikochat.data.fusion.FusionPresetLoader
-import com.porarri.yamabikochat.data.fusion.FusionProgressSnapshot
-import com.porarri.yamabikochat.data.fusion.FusionService
-import com.porarri.yamabikochat.data.fusion.FusionTaskType
-import com.porarri.yamabikochat.data.fusion.FusionTrace
-import com.porarri.yamabikochat.data.fusion.FusionTraceStore
-import com.porarri.yamabikochat.data.fusion.FusionPanelChipState
-import com.porarri.yamabikochat.data.fusion.SynthesisPhaseResult
-import com.porarri.yamabikochat.data.fusion.toFusionInvokeResult
-import com.porarri.yamabikochat.data.local.FusionTraceRecord
 import com.porarri.yamabikochat.data.local.ModelPreset
 import com.porarri.yamabikochat.data.local.ProjectListEntry
 import com.porarri.yamabikochat.data.local.Settings
@@ -45,132 +39,106 @@ import com.porarri.yamabikochat.data.local.TokenUsageByModel
 import com.porarri.yamabikochat.data.local.TokenUsageDailyPoint
 import com.porarri.yamabikochat.data.local.TokenUsageRecord
 import com.porarri.yamabikochat.data.local.TokenUsageTotals
+import com.porarri.yamabikochat.data.model.LLMProvider
 import com.porarri.yamabikochat.data.model.ModelRepository
+import com.porarri.yamabikochat.data.model.ProviderRequest
+import com.porarri.yamabikochat.data.model.ProviderRequestMessage
+import com.porarri.yamabikochat.data.model.ProviderResponse
+import com.porarri.yamabikochat.data.model.ProviderStreamEvent
+import com.porarri.yamabikochat.data.model.ProviderUsage
 import com.porarri.yamabikochat.data.modelsdev.CatalogLoadState
 import com.porarri.yamabikochat.data.modelsdev.ModelsDevCatalogRepository
-import com.porarri.yamabikochat.data.remote.Content
-import com.porarri.yamabikochat.data.remote.GenerateContentRequest
-import com.porarri.yamabikochat.data.remote.GenerateContentResponse
-import com.porarri.yamabikochat.data.remote.InlineData
+import com.porarri.yamabikochat.data.modelsdev.ProviderReference
 import com.porarri.yamabikochat.data.remote.LiteLlmPricingRepository
-import com.porarri.yamabikochat.data.remote.ModelEndpoint
-import com.porarri.yamabikochat.data.remote.Part
-import com.porarri.yamabikochat.data.remote.ProviderDirectory
-import com.porarri.yamabikochat.data.remote.SimpleModel
-import com.porarri.yamabikochat.data.remote.TokenUsageSnapshot
-import com.porarri.yamabikochat.data.remote.extractTokenUsageSnapshot
+import com.porarri.yamabikochat.data.remote.ProviderCatalog
+import com.porarri.yamabikochat.data.repositories.ProviderGateway
+import com.porarri.yamabikochat.data.repositories.ProviderRequestSettingsResolver
+import com.porarri.yamabikochat.data.skills.AgentSkillPromptComposer
+import com.porarri.yamabikochat.data.skills.AgentSkillRepository
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import com.porarri.yamabikochat.utils.FileValidationUtils
+import com.porarri.yamabikochat.utils.SecurePreferencesManager
 import com.porarri.yamabikochat.utils.SqlLikeUtils
-import com.porarri.yamabikochat.data.skills.AgentSkillRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
-import okhttp3.ResponseBody
-import java.util.UUID
 
 class ChatRepository(
     private val databaseRepository: DatabaseRepository,
-    private val apiRepository: ApiRepository,
+    val providerGateway: ProviderGateway,
+    val requestSettingsResolver: ProviderRequestSettingsResolver,
     private val fileProcessingRepository: FileProcessingRepository,
     private val modelRepository: ModelRepository,
     private val codexAuthRepository: CodexAuthRepository,
     private val superGrokAuthRepository: SuperGrokAuthRepository,
     private val pricingRepository: LiteLlmPricingRepository,
     private val modelsDevCatalogRepository: ModelsDevCatalogRepository,
-    val agentSkillRepository: AgentSkillRepository
+    val agentSkillRepository: AgentSkillRepository,
+    private val securePreferences: SecurePreferencesManager
 ) {
     private val fusionTraceStore = FusionTraceStore(
         saveRecord = { databaseRepository.saveFusionTrace(it) },
         loadRecord = { databaseRepository.getFusionTrace(it) }
     )
 
-    private val fusionGenerate: FusionGenerate = { model, provider, request ->
-        val response = apiRepository.generateContent(
-            model = model,
-            request = request,
-            providerOverride = provider
-        )
-        if (!response.isSuccessful) {
-            val err = response.errorBody()?.string()?.take(500).orEmpty()
-            throw IllegalStateException("HTTP ${response.code()}: $err")
-        }
-        response.body() ?: throw IllegalStateException("Empty generate response body")
-    }
-
     private val fusionService = FusionService(
-        generate = fusionGenerate,
-        estimateCost = { provider, model, input, output ->
-            pricingRepository.estimateCostUsd(
-                provider = provider,
-                model = model,
-                inputTokens = input,
-                outputTokens = output,
-                reasoningTokens = null
-            )
-        },
         settingsProvider = {
             databaseRepository.getLatestSettings() ?: Settings()
         },
-        skillRepository = agentSkillRepository,
-        toolRunner = DefaultClientToolCallingRunner(
-            fusionGenerate,
-            com.porarri.yamabikochat.data.tools.ClientTools.defaultRegistry(agentSkillRepository)
-        ),
-        traceStore = fusionTraceStore
+        providerGateway = providerGateway,
+        estimateCost = { provider, model, usage ->
+            pricingRepository.estimateCostUsd(
+                provider = provider,
+                model = model,
+                inputTokens = usage?.inputTokens ?: 0,
+                outputTokens = usage?.outputTokens ?: 0,
+                reasoningTokens = usage?.reasoningTokens
+            )
+        },
+        traceStore = fusionTraceStore,
+        requestSettingsResolver = requestSettingsResolver,
+        skillRepository = agentSkillRepository
     )
 
-    // region Database delegation
-    fun getAllConversations(): Flow<List<Conversation>> = databaseRepository.getAllConversations()
-
-    fun getConversationListEntries(): Flow<List<ConversationListEntry>> =       
+    // region Database / Conversation Operations
+    fun getConversationListEntries(): Flow<List<ConversationListEntry>> =
         databaseRepository.getConversationListEntries()
 
-    fun getProjects(): Flow<List<ProjectListEntry>> = databaseRepository.getProjects()
+    fun getProjects(): Flow<List<ProjectListEntry>> =
+        databaseRepository.getProjects()
 
-    suspend fun getProjectById(id: Long): ChatProject? = databaseRepository.getProjectById(id)
-
-    suspend fun upsertProject(project: ChatProject): Long = databaseRepository.upsertProject(project)
+    suspend fun upsertProject(project: ChatProject): Long =
+        databaseRepository.upsertProject(project)
 
     suspend fun assignConversationToProject(conversationId: Long, projectId: Long?) =
         databaseRepository.assignConversationToProject(conversationId, projectId)
 
-    suspend fun deleteProject(id: Long, deleteConversations: Boolean) =
+    suspend fun deleteProject(id: Long, deleteConversations: Boolean = false) =
         databaseRepository.deleteProject(id, deleteConversations)
 
     suspend fun countConversationsInProject(projectId: Long): Int =
         databaseRepository.countConversationsInProject(projectId)
 
-    suspend fun getConversationById(id: Long): Conversation? = databaseRepository.getConversationById(id)
-
-    suspend fun findLatestEmptyConversationByTitle(title: String, projectId: Long? = null): Conversation? =
-        databaseRepository.findLatestEmptyConversationByTitle(title, projectId)
-
-    suspend fun upsertConversation(conversation: Conversation): Long =
-        databaseRepository.upsertConversation(conversation)
-
-    suspend fun deleteConversationById(id: Long) = databaseRepository.deleteConversationById(id)
-
     fun getMessagesForConversation(conversationId: Long): Flow<List<ChatMessageSummary>> =
         databaseRepository.getMessagesForConversation(conversationId)
 
-    suspend fun getFullMessageById(id: Long): FullChatMessage? =
-        databaseRepository.getFullMessageById(id)
+    suspend fun getFullMessageById(messageId: Long): FullChatMessage? =
+        databaseRepository.getFullMessageById(messageId)
 
-    suspend fun getFullMessagesByIds(ids: Collection<Long>): Map<Long, FullChatMessage> =
+    suspend fun getFullMessagesByIds(ids: List<Long>): Map<Long, FullChatMessage> =
         databaseRepository.getFullMessagesByIds(ids)
+
+    suspend fun getConversationById(id: Long): Conversation? =
+        databaseRepository.getConversationById(id)
+
+    suspend fun upsertConversation(conversation: Conversation): Long =
+        databaseRepository.upsertConversation(conversation)
 
     suspend fun insertMessage(message: ChatMessage): Long =
         databaseRepository.insertMessage(message)
 
     suspend fun updateMessage(message: ChatMessage) =
         databaseRepository.updateMessage(message)
-
-    suspend fun insertThinking(messageId: Long, thinkingStream: String) =
-        databaseRepository.insertThinking(messageId, thinkingStream)
-
-    suspend fun updateThinkingStream(messageId: Long, thinkingStream: String) =
-        databaseRepository.updateThinkingStream(messageId, thinkingStream)
 
     suspend fun insertMessageVariant(
         baseMessageId: Long,
@@ -183,111 +151,311 @@ class ChatRepository(
     suspend fun updateMessageVariant(variant: ChatMessageVariant) =
         databaseRepository.updateMessageVariant(variant)
 
-    suspend fun setMessageSelectedVariantIndex(messageId: Long, variantIndex: Int) =
-        databaseRepository.setMessageSelectedVariantIndex(messageId, variantIndex)
+    suspend fun setMessageSelectedVariantIndex(messageId: Long, selectedIndex: Int) =
+        databaseRepository.setMessageSelectedVariantIndex(messageId, selectedIndex)
+
+    suspend fun insertThinking(messageId: Long, thinking: String) =
+        databaseRepository.insertThinking(messageId, thinking)
+
+    suspend fun findLatestEmptyConversationByTitle(title: String, projectId: Long? = null): Conversation? =
+        databaseRepository.findLatestEmptyConversationByTitle(title, projectId)
 
     fun getSettings(): Flow<Settings?> = databaseRepository.getSettings()
 
     suspend fun saveSettings(settings: Settings) = databaseRepository.saveSettings(settings)
 
-    suspend fun saveToolActivities(
-        messageId: Long,
-        stepsJSON: String,
-        providerTranscriptJSON: String? = null
-    ) = databaseRepository.saveToolActivities(messageId, stepsJSON, providerTranscriptJSON)
+    suspend fun getProjectById(id: Long): ChatProject? = databaseRepository.getProjectById(id)
 
-    suspend fun saveToolActivitiesForVariant(
-        variantId: Long,
-        stepsJSON: String,
-        providerTranscriptJSON: String? = null
-    ) = databaseRepository.saveToolActivitiesForVariant(variantId, stepsJSON, providerTranscriptJSON)
+    suspend fun createProject(name: String, instructions: String?): Long =
+        databaseRepository.upsertProject(ChatProject(title = name, instructions = instructions))
 
-    suspend fun getToolActivityForMessage(messageId: Long) =
-        databaseRepository.getToolActivityForMessage(messageId)
+    suspend fun fetchFusionTrace(id: String): com.porarri.yamabikochat.data.fusion.FusionTrace? =
+        fusionTraceStore?.load(id)
 
-    suspend fun getToolActivityForVariant(variantId: Long) =
-        databaseRepository.getToolActivityForVariant(variantId)
+    // OpenRouter / Models
+    fun getOpenRouterModelsFlow(): StateFlow<List<com.porarri.yamabikochat.data.remote.SimpleModel>> =
+        modelRepository.getOpenRouterModelsFlow()
 
-    suspend fun saveFusionTrace(record: FusionTraceRecord) =
-        databaseRepository.saveFusionTrace(record)
+    fun getOpenRouterModelsLoading(): StateFlow<Boolean> =
+        modelRepository.getOpenRouterModelsLoading()
 
-    suspend fun getFusionTrace(id: String) =
-        databaseRepository.getFusionTrace(id)
+    fun getOpenRouterModelsError(): StateFlow<String?> =
+        modelRepository.getOpenRouterModelsError()
 
-    suspend fun fetchFusionTrace(id: String): FusionTrace? =
-        fusionTraceStore.fetch(id)
+    suspend fun getOpenRouterModels(forceRefresh: Boolean = false): List<com.porarri.yamabikochat.data.remote.SimpleModel> =
+        modelRepository.getOpenRouterModels(forceRefresh)
 
-    /**
-     * Runs Fusion panel→judge→synthesizer for a conversation turn.
-     * @return assistant message id
-     */
+    suspend fun getAvailableQuantizationsForModel(modelId: String): List<String> =
+        modelRepository.getAvailableQuantizationsForModel(modelId)
+
+    suspend fun getModelEndpoints(modelId: String) =
+        modelRepository.getModelEndpoints(modelId)
+
+    suspend fun getProvidersDirectory() =
+        modelRepository.getProvidersDirectory()
+
+    suspend fun getAvailableProvidersForModel(modelId: String): List<String> =
+        modelRepository.getAvailableProvidersForModel(modelId)
+
+    suspend fun refreshModelsDevCatalog(forceRefresh: Boolean = false) {
+        modelsDevCatalogRepository.load(forceRefresh)
+    }
+
+    suspend fun deleteConversationById(id: Long) = databaseRepository.deleteConversationById(id)
+
+    suspend fun clearHistory(conversationId: Long) =
+        databaseRepository.deleteMessagesForConversation(conversationId)
+
+    suspend fun updateConversation(conversation: Conversation) =
+        databaseRepository.upsertConversation(conversation)
+
+    suspend fun saveAttachment(uri: Uri): String? = fileProcessingRepository.saveAttachment(uri)
+
+    suspend fun validateFile(uri: Uri): FileValidationUtils.FileValidationResult =
+        fileProcessingRepository.validateFile(uri)
+
+    fun getAllModelPresets(): Flow<List<ModelPreset>> = databaseRepository.getAllModelPresets()
+
+    suspend fun upsertModelPreset(preset: ModelPreset) = databaseRepository.upsertModelPreset(preset)
+
+    suspend fun deleteModelPresetById(id: Long) = databaseRepository.deleteModelPresetById(id)
+
+    suspend fun insertDualMessage(message: DualChatMessage): Long =
+        databaseRepository.insertDualMessage(message)
+
+    suspend fun updateDualMessage(message: DualChatMessage) =
+        databaseRepository.updateDualMessage(message)
+
+    fun getDualMessagesForConversation(conversationId: Long): Flow<List<DualChatMessage>> =
+        databaseRepository.getDualMessagesForConversation(conversationId)
+
+    fun searchMessages(
+        query: String,
+        limit: Int = 200,
+        projectId: Long? = null
+    ): Flow<List<ConversationSearchResult>> =
+        databaseRepository.searchMessages(
+            pattern = SqlLikeUtils.buildEscapedContainsPattern(query),
+            limit = limit,
+            projectId = projectId
+        )
+
+    suspend fun getDualMessageById(id: Long): DualChatMessage? =
+        databaseRepository.getDualMessageById(id)
+
+    suspend fun createAutoConversation(
+        config: AutoConversationConfig,
+        boundChatConversationId: Long?
+    ): Long = databaseRepository.createAutoConversation(config, boundChatConversationId)
+
+    suspend fun updateAutoConversation(conversation: AutoConversation) =
+        databaseRepository.updateAutoConversation(conversation)
+
+    fun getAllAutoConversations(): Flow<List<AutoConversation>> =
+        databaseRepository.getAllAutoConversations()
+
+    suspend fun getAutoConversationById(id: Long): AutoConversation? =
+        databaseRepository.getAutoConversationById(id)
+
+    suspend fun deleteAutoConversationById(id: Long) =
+        databaseRepository.deleteAutoConversationById(id)
+
+    suspend fun insertAutoConversationMessage(message: AutoConversationMessage): Long =
+        databaseRepository.insertAutoConversationMessage(message)
+
+    fun getAutoConversationMessages(conversationId: Long): Flow<List<AutoConversationMessage>> =
+        databaseRepository.getAutoConversationMessages(conversationId)
+
+    suspend fun getLastAutoConversationMessage(conversationId: Long): AutoConversationMessage? =
+        databaseRepository.getLastAutoConversationMessage(conversationId)
+
+    suspend fun getFullAutoConversation(id: Long): FullAutoConversation? =
+        databaseRepository.getFullAutoConversation(id)
+    // endregion
+
+    // region Token Usage
+    suspend fun recordTokenUsage(
+        provider: String,
+        model: String,
+        usage: ProviderUsage,
+        conversationId: Long? = null,
+        requestType: String = "chat"
+    ) {
+        val normalized = usage.normalized()
+        if (normalized.isEmpty) return
+        val costUsd = pricingRepository.estimateCostUsd(
+            provider = provider,
+            model = model,
+            inputTokens = normalized.inputTokens ?: 0,
+            outputTokens = normalized.outputTokens ?: 0,
+            reasoningTokens = normalized.reasoningTokens
+        )
+        databaseRepository.insertTokenUsage(
+            TokenUsageRecord(
+                provider = provider.uppercase(),
+                model = model.trim().ifBlank { "unknown" },
+                requestType = requestType,
+                conversationId = conversationId,
+                inputTokens = normalized.inputTokens ?: 0,
+                outputTokens = normalized.outputTokens ?: 0,
+                totalTokens = normalized.totalTokens ?: 0,
+                reasoningTokens = normalized.reasoningTokens,
+                cachedInputTokens = normalized.cachedInputTokens,
+                costUsd = costUsd
+            )
+        )
+    }
+
+    fun observeTokenUsageTotals(sinceEpochMs: Long): Flow<TokenUsageTotals> =
+        databaseRepository.observeTokenUsageTotals(sinceEpochMs)
+
+    fun observeTokenUsageByModel(sinceEpochMs: Long, limit: Int): Flow<List<TokenUsageByModel>> =
+        databaseRepository.observeTokenUsageByModel(sinceEpochMs, limit)
+
+    fun observeTokenUsageDaily(sinceEpochMs: Long): Flow<List<TokenUsageDailyPoint>> =
+        databaseRepository.observeTokenUsageDaily(sinceEpochMs)
+    // endregion
+
+    // region Provider Gateway Operations
+    suspend fun buildProviderRequest(
+        conversation: Conversation,
+        settings: Settings,
+        provider: String,
+        model: String,
+        messages: List<ProviderRequestMessage>,
+        systemPrompt: String?,
+        context: Settings.ReasoningContext = Settings.ReasoningContext.DEFAULT
+    ): ProviderRequest {
+        val resolved = requestSettingsResolver.resolve(
+            settings = settings,
+            provider = provider,
+            model = model,
+            context = context
+        )
+
+        val supportsTools = ProviderReference(provider).isModelsDev ||
+                LLMProvider.fromRawOrDefault(provider).supportsClientWebSearchTool
+        val skillApplied = AgentSkillPromptComposer.apply(
+            repository = agentSkillRepository,
+            messages = messages,
+            conversationId = "conversation-${conversation.id}",
+            clientToolsSupported = supportsTools
+        )
+
+        val metadata = resolved.metadata.toMutableMap()
+        metadata["promptCacheKey"] = "conversation-${conversation.id}"
+
+        return ProviderRequest(
+            model = model,
+            messages = skillApplied.messages,
+            systemPrompt = systemPrompt?.trim()?.takeIf { it.isNotEmpty() },
+            stream = true,
+            tools = resolved.tools,
+            thinking = resolved.thinking,
+            provider = resolved.routing,
+            metadata = metadata
+        )
+    }
+
+    suspend fun streamProviderRequest(
+        request: ProviderRequest,
+        provider: String
+    ): Flow<ProviderStreamEvent> =
+        providerGateway.stream(request, provider)
+
+    suspend fun generateProviderRequest(
+        request: ProviderRequest,
+        provider: String
+    ): ProviderResponse =
+        providerGateway.generate(request, provider)
+
+    suspend fun generateAutoConversationResponse(
+        model: String,
+        provider: String,
+        systemPrompt: String,
+        conversationHistory: List<ProviderRequestMessage>,
+        reasoningContext: Settings.ReasoningContext
+    ): ProviderResponse {
+        val settings = databaseRepository.getLatestSettings() ?: Settings()
+        val resolved = requestSettingsResolver.resolve(
+            settings = settings,
+            provider = provider,
+            model = model,
+            context = reasoningContext
+        )
+        val request = ProviderRequest(
+            model = model,
+            messages = conversationHistory,
+            systemPrompt = systemPrompt.trim().takeIf { it.isNotEmpty() },
+            stream = false,
+            tools = resolved.tools,
+            thinking = resolved.thinking,
+            provider = resolved.routing,
+            metadata = resolved.metadata
+        )
+        return providerGateway.generate(request, provider)
+    }
+    // endregion
+
+    // region Fusion
+    suspend fun runFusion(
+        userPrompt: String,
+        options: FusionRunOptions = FusionRunOptions()
+    ): FusionRunResult = fusionService.runFusion(userPrompt, options)
+
     suspend fun sendFusionMessage(
         conversationId: Long,
         userText: String,
         attachments: List<String> = emptyList(),
         onProgress: (FusionProgressSnapshot) -> Unit = {}
     ): Long {
-        val settings = databaseRepository.getLatestSettings() ?: Settings()
-        if (!settings.isFusionModeEnabled) {
-            throw IllegalStateException("Fusion モードが有効ではありません。")
-        }
         val conversation = databaseRepository.getConversationById(conversationId)
-            ?: throw IllegalStateException("Conversation not found")
+            ?: throw IllegalArgumentException("Conversation $conversationId not found")
+        val settings = databaseRepository.getLatestSettings() ?: Settings()
+
+        val normalizedAttachments = attachments.map { uriString ->
+            runCatching { Uri.parse(uriString) }.getOrNull()?.let { uri ->
+                saveAttachment(uri)
+            } ?: uriString
+        }
+
+        val userMessage = ChatMessage(
+            conversationId = conversationId,
+            role = "user",
+            text = userText,
+            attachments = normalizedAttachments
+        )
+        databaseRepository.insertMessage(userMessage)
 
         val summaries = databaseRepository.getMessagesForConversation(conversationId).first()
-        val isFirstMessage = summaries.isEmpty()
-
-        val normalizedAttachments = attachments.filter { it.isNotBlank() }
-        databaseRepository.insertMessage(
-            ChatMessage(
-                conversationId = conversationId,
-                role = "user",
-                text = userText,
-                attachments = normalizedAttachments
-            )
-        )
-
-        if (isFirstMessage && conversation.title == "New Chat") {
-            databaseRepository.upsertConversation(
-                conversation.copy(title = userText.take(50))
-            )
-        }
-
-        val taskType = FusionTaskType.fromRaw(settings.fusionTaskType)
-        val allowWebSearchOverride: Boolean? =
-            if (settings.clientWebSearchToolEnabled) null else false
-
-        val fusionRequest = try {
-            FusionPresetLoader.buildRequest(
-                userPrompt = userText,
-                systemPrompt = conversation.systemPrompt,
-                taskTypeOverride = taskType,
-                allowWebSearchOverride = allowWebSearchOverride,
-                customPresetJSON = settings.fusionCustomPresetJSON
-            )
-        } catch (e: Exception) {
-            DiagnosticsLogger.log("Fusion preset load failed", e)
-            throw e
-        }
-
-        val updatedSummaries = databaseRepository.getMessagesForConversation(conversationId).first()
-        val historyIds = updatedSummaries.map { it.id }
-        val fullById = databaseRepository.getFullMessagesByIds(historyIds)
-        val history = updatedSummaries.mapNotNull { summary ->
-            val full = fullById[summary.id]?.chatMessage ?: return@mapNotNull null
+        val historyIds = summaries.map { it.id }
+        val fullMessages = databaseRepository.getFullMessagesByIds(historyIds)
+        val history = summaries.mapNotNull { summary ->
+            val full = fullMessages[summary.id] ?: return@mapNotNull null
             FusionHistoryMessage(
-                role = full.role,
-                text = full.text,
-                attachments = full.attachments
+                role = if (full.chatMessage.role == "model" || full.chatMessage.role == "assistant") "assistant" else "user",
+                text = full.displayText,
+                attachments = full.displayAttachments
             )
         }
 
+        val allowWebSearchOverride = if (settings.clientWebSearchToolEnabled) null else false
+        val fusionRequest = FusionPresetLoader.buildRequest(
+            userPrompt = userText,
+            systemPrompt = conversation.systemPrompt,
+            taskTypeOverride = com.porarri.yamabikochat.data.fusion.FusionTaskType.auto,
+            allowWebSearchOverride = allowWebSearchOverride,
+            customPresetJSON = settings.fusionCustomPresetJSON
+        )
         val context = com.porarri.yamabikochat.data.fusion.FusionContext(
             fusionDepth = 0,
-            debugMode = settings.fusionDebugModeEnabled,
-            logPrompts = settings.fusionLogPromptsEnabled,
+            debugMode = false,
+            logPrompts = true,
             conversationId = conversationId
         )
+
+        val initialChips = FusionProgressSnapshot.initialPanels(from = fusionRequest)
+        onProgress(FusionProgressSnapshot.panelPhase(panels = initialChips))
 
         val judgeOutcome = try {
             fusionService.runThroughJudge(
@@ -297,12 +465,9 @@ class ChatRepository(
                 userAttachments = normalizedAttachments,
                 onProgress = onProgress
             )
-        } catch (e: FusionError.AllPanelsFailed) {
-            DiagnosticsLogger.log(
-                "Fusion all panels failed; falling back to single model conversationId=$conversationId"
-            )
-            val failedTraceId = UUID.randomUUID().toString()
-            val failedTrace = FusionTrace(
+        } catch (e: com.porarri.yamabikochat.data.fusion.FusionError.AllPanelsFailed) {
+            val failedTraceId = java.util.UUID.randomUUID().toString()
+            val failedTrace = com.porarri.yamabikochat.data.fusion.FusionTrace(
                 requestId = failedTraceId,
                 preset = fusionRequest.preset,
                 startedAtMs = System.currentTimeMillis(),
@@ -310,11 +475,11 @@ class ChatRepository(
                 panelResults = e.panelResults,
                 judgeResult = null,
                 synthesisResult = null,
-                totalLatencyMs = e.panelResults.maxOfOrNull { it.latencyMs },
-                totalCost = null,
+                totalLatencyMs = 0L,
+                totalCost = com.porarri.yamabikochat.data.fusion.FusionOrchestrator.sumCosts(e.panelResults, null, null),
                 failedModels = e.panelResults.map { it.modelId },
                 status = "all_panels_failed",
-                userPrompt = if (settings.fusionLogPromptsEnabled) userText else null,
+                userPrompt = userText,
                 finalAnswer = null
             )
             fusionTraceStore.save(failedTrace, conversationId)
@@ -328,17 +493,16 @@ class ChatRepository(
             }
             onProgress(FusionProgressSnapshot.phaseOnly(FusionPhase.fallback, failedPanelChips))
 
-            val fallbackModel = fusionRequest.fallbackModel ?: fusionRequest.synthesizerModel
-            val fallbackRequest = fusionService.buildGenerateRequest(
+            val fallbackModel = fusionRequest.synthesizerModel
+            val fallbackRequest = fusionService.buildProviderRequest(
                 model = fallbackModel,
                 systemPrompt = conversation.systemPrompt.orEmpty(),
                 phase = FusionPhase.fallback,
                 allowTools = false,
-                maxTokens = fusionRequest.maxSynthesizerTokens,
                 settings = settings,
                 fusionDepth = 0,
                 userPrompt = userText,
-                conversationHistory = history,
+                conversationHistory = history.map { ProviderRequestMessage(role = it.role, content = it.text, attachments = it.attachments) },
                 userAttachments = normalizedAttachments
             )
             val assistantMessageId = databaseRepository.insertMessage(
@@ -349,24 +513,17 @@ class ChatRepository(
                     fusionTraceId = failedTraceId
                 )
             )
-            val response = apiRepository.generateContent(
-                model = fallbackModel.modelId,
-                request = fallbackRequest,
-                providerOverride = fallbackModel.provider
-            )
-            val text = if (response.isSuccessful) {
-                response.body()?.toFusionInvokeResult()?.text.orEmpty()
-            } else {
-                "エラー: HTTP ${response.code()}"
+            val response = try {
+                providerGateway.generate(fallbackRequest, fallbackModel.provider)
+            } catch (err: Exception) {
+                ProviderResponse(text = "エラー: ${err.message ?: "通信に失敗しました"}")
             }
-            val finalText = text.ifBlank { "Fusion フォールバックに失敗しました。" }
+            val finalText = response.text.ifBlank { "Fusion フォールバックに失敗しました。" }
             val existing = databaseRepository.getFullMessageById(assistantMessageId)?.chatMessage
             if (existing != null) {
-                databaseRepository.updateMessage(
-                    existing.copy(text = finalText, fusionTraceId = failedTraceId)
-                )
+                databaseRepository.updateMessage(existing.copy(text = finalText, fusionTraceId = failedTraceId))
             }
-            response.body()?.tokenUsage?.let { usage ->
+            response.usage?.let { usage ->
                 recordTokenUsage(
                     provider = fallbackModel.provider,
                     model = fallbackModel.modelId,
@@ -418,72 +575,34 @@ class ChatRepository(
         onProgress(FusionProgressSnapshot.phaseOnly(FusionPhase.synthesizer, synthPanelChips))
 
         val synthStarted = System.currentTimeMillis()
-        var finalText: String
-        var synthUsage: TokenUsageSnapshot? = null
+        var finalText = ""
+        var synthUsage: ProviderUsage? = null
         var synthesisResult: SynthesisPhaseResult
-        val streamJson = kotlinx.serialization.json.Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-        }
-
-        suspend fun persistPartialSynth(text: String) {
-            val existing = databaseRepository.getFullMessageById(assistantMessageId)?.chatMessage
-            if (existing != null) {
-                databaseRepository.updateMessage(
-                    existing.copy(
-                        text = text,
-                        fusionTraceId = judgeOutcome.trace.requestId
-                    )
-                )
-            }
-        }
 
         try {
-            val streamResponse = apiRepository.streamGenerateContent(
-                model = judgeOutcome.synthesizerModel.modelId,
-                request = judgeOutcome.synthesisRequest,
-                providerOverride = judgeOutcome.synthesizerProvider
-            )
-            if (!streamResponse.isSuccessful) {
-                throw IllegalStateException("HTTP ${streamResponse.code()}")
-            }
-            val streamBody = streamResponse.body()
-                ?: throw IllegalStateException("Empty synthesizer stream body")
-
+            var textAcc = ""
             var lastPersistMs = 0L
-            val streamResult = com.porarri.yamabikochat.ui.chat.logic.StreamChunkConsumer.consumeStreamDetailed(
-                body = streamBody,
-                provider = judgeOutcome.synthesizerProvider,
-                model = judgeOutcome.synthesizerModel.modelId,
-                json = streamJson,
-                onDelta = { text, _, _ ->
-                    val now = System.currentTimeMillis()
-                    if (now - lastPersistMs >= 100L) {
-                        lastPersistMs = now
-                        persistPartialSynth(text)
-                    }
-                },
-                onUsage = { usage -> synthUsage = usage }
-            )
 
-            if (!streamResult.hasData || streamResult.text.isBlank()) {
-                // Fall back to non-streaming generate when stream yields nothing.
-                val response = apiRepository.generateContent(
-                    model = judgeOutcome.synthesizerModel.modelId,
-                    request = judgeOutcome.synthesisRequest,
-                    providerOverride = judgeOutcome.synthesizerProvider
-                )
-                if (!response.isSuccessful) {
-                    throw IllegalStateException("HTTP ${response.code()}")
+            providerGateway.stream(judgeOutcome.synthesisRequest, judgeOutcome.synthesizerProvider).collect { event ->
+                when (event) {
+                    is ProviderStreamEvent.TextDelta -> textAcc += event.delta
+                    is ProviderStreamEvent.Completed -> {
+                        if (event.response.text.isNotBlank()) textAcc = event.response.text
+                        synthUsage = event.response.usage
+                    }
+                    is ProviderStreamEvent.ReasoningDelta -> {}
                 }
-                val body = response.body() ?: throw IllegalStateException("Empty synthesizer body")
-                val invokeResult = body.toFusionInvokeResult()
-                finalText = invokeResult.text
-                synthUsage = body.extractTokenUsageOrNull() ?: synthUsage
-            } else {
-                finalText = streamResult.text
+                val now = System.currentTimeMillis()
+                if (now - lastPersistMs >= 100L) {
+                    lastPersistMs = now
+                    val existing = databaseRepository.getFullMessageById(assistantMessageId)?.chatMessage
+                    if (existing != null) {
+                        databaseRepository.updateMessage(existing.copy(text = textAcc, fusionTraceId = judgeOutcome.trace.requestId))
+                    }
+                }
             }
 
+            finalText = textAcc
             val latencyMs = System.currentTimeMillis() - synthStarted
             val cost = pricingRepository.estimateCostUsd(
                 provider = judgeOutcome.synthesizerModel.provider,
@@ -505,10 +624,7 @@ class ChatRepository(
                 usedFallback = false
             )
         } catch (e: Exception) {
-            finalText = judgeOutcome.staticFallbackAnswer
-            if (finalText.isEmpty()) {
-                finalText = "エラー: ${e.message ?: e}"
-            }
+            finalText = judgeOutcome.staticFallbackAnswer.ifBlank { "エラー: ${e.message ?: e}" }
             synthesisResult = SynthesisPhaseResult(
                 modelId = judgeOutcome.synthesizerModel.modelId,
                 provider = judgeOutcome.synthesizerModel.provider.uppercase(),
@@ -521,13 +637,13 @@ class ChatRepository(
                 error = e.message ?: e.toString(),
                 usedFallback = true
             )
-            DiagnosticsLogger.log(
-                "Fusion synthesizer failed; using fallback traceId=${judgeOutcome.trace.requestId}",
-                e
-            )
+            DiagnosticsLogger.log("Fusion synthesizer failed traceId=${judgeOutcome.trace.requestId}", e)
         }
 
-        persistPartialSynth(finalText)
+        val existing = databaseRepository.getFullMessageById(assistantMessageId)?.chatMessage
+        if (existing != null) {
+            databaseRepository.updateMessage(existing.copy(text = finalText, fusionTraceId = judgeOutcome.trace.requestId))
+        }
 
         synthUsage?.let {
             recordTokenUsage(
@@ -549,172 +665,73 @@ class ChatRepository(
 
         return assistantMessageId
     }
-
-    private fun GenerateContentResponse.extractTokenUsageOrNull(): TokenUsageSnapshot? {
-        return extractTokenUsageSnapshot()
-    }
-
-    fun getAllModelPresets(): Flow<List<ModelPreset>> = databaseRepository.getAllModelPresets()
-
-    suspend fun upsertModelPreset(preset: ModelPreset) = databaseRepository.upsertModelPreset(preset)
-
-    suspend fun deleteModelPresetById(id: Long) = databaseRepository.deleteModelPresetById(id)
-
-    suspend fun insertDualMessage(message: DualChatMessage): Long =
-        databaseRepository.insertDualMessage(message)
-
-    suspend fun updateDualMessage(message: DualChatMessage) =
-        databaseRepository.updateDualMessage(message)
-
-    fun getDualMessagesForConversation(conversationId: Long): Flow<List<DualChatMessage>> =
-        databaseRepository.getDualMessagesForConversation(conversationId)       
-
-    fun searchMessages(
-        query: String,
-        limit: Int = 200,
-        projectId: Long? = null
-    ): Flow<List<ConversationSearchResult>> =
-        databaseRepository.searchMessages(
-            pattern = SqlLikeUtils.buildEscapedContainsPattern(query),
-            limit = limit,
-            projectId = projectId
-        )
-
-    suspend fun getDualMessageById(id: Long): DualChatMessage? =
-        databaseRepository.getDualMessageById(id)
-
-    suspend fun createAutoConversation(
-        config: AutoConversationConfig,
-        boundChatConversationId: Long?
-    ): Long = databaseRepository.createAutoConversation(config, boundChatConversationId)
-
-    suspend fun updateAutoConversation(conversation: AutoConversation) =
-        databaseRepository.updateAutoConversation(conversation)
-
-    fun getAllAutoConversations(): Flow<List<AutoConversation>> =
-        databaseRepository.getAllAutoConversations()
-
-    suspend fun getAutoConversationById(id: Long): AutoConversation? =
-        databaseRepository.getAutoConversationById(id)
-
-    suspend fun deleteAutoConversationById(id: Long) =
-        databaseRepository.deleteAutoConversationById(id)
-
-    suspend fun getOrCreateCodexSessionId(conversationId: Long): String =
-        databaseRepository.getOrCreateCodexSessionId(conversationId)
-
-    suspend fun insertAutoConversationMessage(message: AutoConversationMessage): Long =
-        databaseRepository.insertAutoConversationMessage(message)
-
-    fun getAutoConversationMessages(conversationId: Long): Flow<List<AutoConversationMessage>> =
-        databaseRepository.getAutoConversationMessages(conversationId)
-
-    suspend fun getLastAutoConversationMessage(conversationId: Long): AutoConversationMessage? =
-        databaseRepository.getLastAutoConversationMessage(conversationId)
-
-    suspend fun getFullAutoConversation(id: Long): FullAutoConversation? =
-        databaseRepository.getFullAutoConversation(id)
-
-    suspend fun recordTokenUsage(
-        provider: String,
-        model: String,
-        usage: TokenUsageSnapshot,
-        conversationId: Long? = null,
-        requestType: String = "chat"
-    ) {
-        val normalized = usage.normalized()
-        if (normalized.isEmpty()) return
-        val costUsd = pricingRepository.estimateCostUsd(
-            provider = provider,
-            model = model,
-            inputTokens = normalized.inputTokens,
-            outputTokens = normalized.outputTokens,
-            reasoningTokens = normalized.reasoningTokens
-        )
-        databaseRepository.insertTokenUsage(
-            TokenUsageRecord(
-                provider = provider.uppercase(),
-                model = model.trim().ifBlank { "unknown" },
-                requestType = requestType,
-                conversationId = conversationId,
-                inputTokens = normalized.inputTokens,
-                outputTokens = normalized.outputTokens,
-                totalTokens = normalized.totalTokens,
-                reasoningTokens = normalized.reasoningTokens,
-                cachedInputTokens = normalized.cachedInputTokens,
-                costUsd = costUsd
-            )
-        )
-    }
-
-    fun observeTokenUsageTotals(sinceEpochMs: Long): Flow<TokenUsageTotals> =
-        databaseRepository.observeTokenUsageTotals(sinceEpochMs)
-
-    fun observeTokenUsageByModel(sinceEpochMs: Long, limit: Int): Flow<List<TokenUsageByModel>> =
-        databaseRepository.observeTokenUsageByModel(sinceEpochMs, limit)
-
-    fun observeTokenUsageDaily(sinceEpochMs: Long): Flow<List<TokenUsageDailyPoint>> =
-        databaseRepository.observeTokenUsageDaily(sinceEpochMs)
     // endregion
 
-    // region API delegation
-    suspend fun generateContent(
-        model: String,
-        request: GenerateContentRequest,
-        providerOverride: String? = null,
-        sessionId: String? = null
-    ): retrofit2.Response<GenerateContentResponse> =
-        apiRepository.generateContent(model, request, providerOverride, sessionId)
+    // region API Key Management
+    fun saveApiKey(provider: String, apiKey: String?): Boolean {
+        val trimmed = apiKey?.trim()?.takeIf { it.isNotEmpty() }
+        val norm = provider.trim().uppercase()
+        return when (norm) {
+            "GEMINI" -> securePreferences.storeGeminiApiKey(trimmed)
+            "OPENROUTER" -> securePreferences.storeOpenRouterApiKey(trimmed)
+            "OPENAI" -> securePreferences.storeOpenAiApiKey(trimmed)
+            "MINIMAX" -> securePreferences.storeMiniMaxApiKey(trimmed)
+            "ZAI" -> securePreferences.storeZaiApiKey(trimmed)
+            "CLINEPASS" -> securePreferences.storeClinePassApiKey(trimmed)
+            "ALIBABA_CODING_PLAN" -> securePreferences.storeAlibabaCodingPlanApiKey(trimmed)
+            "OPENCODE_GO" -> securePreferences.storeOpenCodeGoApiKey(trimmed)
+            else -> securePreferences.saveSecret(norm, trimmed)
+        }
+    }
 
-    suspend fun streamGenerateContent(
-        model: String,
-        request: GenerateContentRequest,
-        providerOverride: String? = null,
-        sessionId: String? = null
-    ): retrofit2.Response<ResponseBody> =
-        apiRepository.streamGenerateContent(model, request, providerOverride, sessionId)
+    fun hasApiKey(provider: String): Boolean {
+        return !peekApiKey(provider).isNullOrBlank()
+    }
 
-    suspend fun generateDualContent(
-        modelA: String,
-        modelB: String,
-        providerA: String,
-        providerB: String,
-        requestA: GenerateContentRequest,
-        requestB: GenerateContentRequest
-    ): Pair<retrofit2.Response<GenerateContentResponse>, retrofit2.Response<GenerateContentResponse>> =
-        apiRepository.generateDualContent(modelA, modelB, providerA, providerB, requestA, requestB)
+    fun peekApiKey(provider: String): String? {
+        val norm = provider.trim().uppercase()
+        return when (norm) {
+            "GEMINI" -> securePreferences.getGeminiApiKey()
+            "OPENROUTER" -> securePreferences.getOpenRouterApiKey()
+            "OPENAI" -> securePreferences.getOpenAiApiKey()
+            "MINIMAX" -> securePreferences.getMiniMaxApiKey()
+            "ZAI" -> securePreferences.getZaiApiKey()
+            "CLINEPASS" -> securePreferences.getClinePassApiKey()
+            "ALIBABA_CODING_PLAN" -> securePreferences.getAlibabaCodingPlanApiKey()
+            "OPENCODE_GO" -> securePreferences.getOpenCodeGoApiKey()
+            else -> securePreferences.readSecret(norm)
+        }
+    }
 
-    suspend fun streamDualContent(
-        modelA: String,
-        modelB: String,
-        providerA: String,
-        providerB: String,
-        requestA: GenerateContentRequest,
-        requestB: GenerateContentRequest
-    ): Pair<retrofit2.Response<ResponseBody>, retrofit2.Response<ResponseBody>> =
-        apiRepository.streamDualContent(modelA, modelB, providerA, providerB, requestA, requestB)
+    fun saveOpenAiCompatApiKey(name: String, apiKey: String?): Boolean =
+        securePreferences.storeCustomApiKey(name, apiKey)
 
-    suspend fun generateAutoConversationResponse(
-        model: String,
-        provider: String,
-        systemPrompt: String,
-        conversationHistory: List<Content>,
-        reasoningContext: Settings.ReasoningContext
-    ): retrofit2.Response<GenerateContentResponse> =
-        apiRepository.generateAutoConversationResponse(model, provider, systemPrompt, conversationHistory, reasoningContext)
+    fun peekOpenAiCompatApiKey(name: String): String? =
+        securePreferences.getCustomApiKey(name)
 
-    suspend fun saveApiKey(provider: String, apiKey: String?): Boolean =
-        apiRepository.saveApiKey(provider, apiKey)
+    fun hasOpenAiCompatApiKey(name: String?): Boolean =
+        !name.isNullOrBlank() && !peekOpenAiCompatApiKey(name).isNullOrBlank()
 
-    fun hasApiKey(provider: String): Boolean = apiRepository.hasApiKey(provider)
+    suspend fun clearOpenAiCompatApiKey(name: String) =
+        securePreferences.clearCustomApiKey(name)
 
-    fun peekApiKey(provider: String): String? = apiRepository.peekApiKey(provider)
+    fun saveModelsDevField(providerId: String, fieldName: String, value: String?): Boolean =
+        securePreferences.storeModelsDevField(providerId, fieldName, value)
+
+    fun peekModelsDevField(providerId: String, fieldName: String): String? =
+        securePreferences.getModelsDevField(providerId, fieldName)
+
+    fun saveAlibabaMcpAuthorizationToken(token: String?): Boolean =
+        securePreferences.storeAlibabaMcpAuthorizationToken(token)
+
+    fun peekAlibabaMcpAuthorizationToken(): String? =
+        securePreferences.getAlibabaMcpAuthorizationToken()
     // endregion
 
     // region Codex Auth
     val codexAuthState: StateFlow<CodexAuthState> = codexAuthRepository.state
 
-    suspend fun loginCodexAuth(): Result<CodexAuthState> = codexAuthRepository.login()
+    suspend fun loginCodexAuth(): Result<CodexAuthState> = codexAuthRepository.loginWithBrowser()
 
     suspend fun logoutCodexAuth(): Result<CodexAuthState> = codexAuthRepository.logout()
 
@@ -722,9 +739,6 @@ class ChatRepository(
         codexAuthRepository.refreshIfNeeded(force)
 
     fun hasCodexAuth(): Boolean = codexAuthRepository.hasAuthToken()
-
-    fun saveCodexUserAgentPreset(preset: String?): Boolean =
-        codexAuthRepository.saveUserAgentPreset(preset)
 
     suspend fun retrieveCodexAuthUsage(): Result<CodexUsageStatus> =
         codexAuthRepository.retrieveUsageStatus()
@@ -747,82 +761,11 @@ class ChatRepository(
     fun hasSuperGrokAuth(): Boolean = superGrokAuthRepository.hasAuthToken()
     // endregion
 
-    // region OpenAI-compatible key helpers
-    suspend fun saveOpenAiCompatApiKey(name: String, apiKey: String?): Boolean =
-        apiRepository.saveOpenAiCompatApiKey(name, apiKey)
-
-    fun peekOpenAiCompatApiKey(name: String): String? = apiRepository.peekOpenAiCompatApiKey(name)
-
-    fun hasOpenAiCompatApiKey(name: String?): Boolean = apiRepository.hasOpenAiCompatApiKey(name)
-
-    suspend fun clearOpenAiCompatApiKey(name: String) = apiRepository.clearOpenAiCompatApiKey(name)
-
-    suspend fun saveModelsDevField(providerId: String, fieldName: String, value: String?): Boolean =
-        apiRepository.saveModelsDevField(providerId, fieldName, value)
-
-    fun peekModelsDevField(providerId: String, fieldName: String): String? =
-        apiRepository.peekModelsDevField(providerId, fieldName)
-    // endregion
-
-    suspend fun saveAlibabaMcpAuthorizationToken(token: String?): Boolean =
-        apiRepository.saveAlibabaMcpAuthorizationToken(token)
-
-    fun peekAlibabaMcpAuthorizationToken(): String? =
-        apiRepository.peekAlibabaMcpAuthorizationToken()
-
-    // region File processing delegation
-    suspend fun validateFile(uri: Uri): FileValidationUtils.FileValidationResult =
-        fileProcessingRepository.validateFile(uri)
-
-    suspend fun saveAttachment(uri: Uri): String? = fileProcessingRepository.saveAttachment(uri)
-
-    suspend fun getPartFromUri(uri: Uri): Part? = fileProcessingRepository.getPartFromUri(uri)
-
-    suspend fun saveInlineData(inlineData: InlineData, displayName: String? = null): String? =
-        fileProcessingRepository.saveInlineData(inlineData, displayName)
-    // endregion
-
-    // region Model delegation
+    // region ModelsDev
     val modelsDevCatalogState: StateFlow<CatalogLoadState> = modelsDevCatalogRepository.state
 
-    suspend fun refreshModelsDevCatalog(forceRefresh: Boolean = false): CatalogLoadState =
+    suspend fun loadModelsDevCatalog(forceRefresh: Boolean = false) {
         modelsDevCatalogRepository.load(forceRefresh)
-
-    suspend fun getOpenRouterModels(forceRefresh: Boolean = false): List<SimpleModel> =
-        modelRepository.getOpenRouterModels(forceRefresh)
-
-    fun getOpenRouterModelsFlow(): StateFlow<List<SimpleModel>> =
-        modelRepository.getOpenRouterModelsFlow()
-
-    fun getOpenRouterModelsLoading(): StateFlow<Boolean> =
-        modelRepository.getOpenRouterModelsLoading()
-
-    fun getOpenRouterModelsError(): StateFlow<String?> =
-        modelRepository.getOpenRouterModelsError()
-
-    fun searchOpenRouterModels(query: String): List<SimpleModel> =
-        modelRepository.searchOpenRouterModels(query)
-
-    fun getOpenRouterModelsByProvider(provider: String): List<SimpleModel> =
-        modelRepository.getOpenRouterModelsByProvider(provider)
-
-    fun getFreeOpenRouterModels(): List<SimpleModel> =
-        modelRepository.getFreeOpenRouterModels()
-
-    fun getOpenRouterModelById(modelId: String): SimpleModel? =
-        modelRepository.getOpenRouterModelById(modelId)
-
-    fun clearOpenRouterModelsCache() = modelRepository.clearOpenRouterModelsCache()
-
-    suspend fun getAvailableProvidersForModel(modelId: String): List<String> =
-        modelRepository.getAvailableProvidersForModel(modelId)
-
-    suspend fun getAvailableQuantizationsForModel(modelId: String): List<String> =
-        modelRepository.getAvailableQuantizationsForModel(modelId)
-
-    suspend fun getModelEndpoints(modelId: String): List<ModelEndpoint> =
-        modelRepository.getModelEndpoints(modelId)
-
-    suspend fun getProvidersDirectory(): ProviderDirectory = modelRepository.getProvidersDirectory()
+    }
     // endregion
 }

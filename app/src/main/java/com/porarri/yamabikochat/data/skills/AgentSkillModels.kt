@@ -1,5 +1,6 @@
 package com.porarri.yamabikochat.data.skills
 
+import com.porarri.yamabikochat.data.model.ProviderRequestMessage
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -58,6 +59,56 @@ Available resources:
 ${resourceLists[index]}
 </explicit_agent_skill>"""
         }
+}
+
+data class AgentSkillPromptApplication(
+    val messages: List<ProviderRequestMessage>,
+    val currentContext: SkillRequestContext?
+)
+
+object AgentSkillPromptComposer {
+    fun apply(
+        repository: AgentSkillRepository,
+        messages: List<ProviderRequestMessage>,
+        conversationId: String?,
+        clientToolsSupported: Boolean = true
+    ): AgentSkillPromptApplication {
+        val lastUserText = messages.lastOrNull { it.role == "user" }?.content.orEmpty()
+        val currentContext = repository.requestContext(
+            text = lastUserText,
+            conversationId = conversationId,
+            clientToolsSupported = clientToolsSupported
+        ) ?: return AgentSkillPromptApplication(messages = messages, currentContext = null)
+
+        val updated = messages.toMutableList()
+        val userIndices = updated.indices.filter { updated[it].role == "user" }
+        val catalogContext = currentContext.syntheticUserContext?.trim().takeIf { !it.isNullOrEmpty() }
+        if (catalogContext != null && userIndices.isNotEmpty()) {
+            val firstIdx = userIndices.first()
+            updated[firstIdx] = updated[firstIdx].copy(
+                content = "$catalogContext\n\n${updated[firstIdx].content}"
+            )
+        }
+
+        for (index in userIndices) {
+            val msgContext = repository.requestContext(
+                text = updated[index].content,
+                conversationId = conversationId,
+                clientToolsSupported = clientToolsSupported
+            )
+            val explicit = msgContext?.explicitUserContext?.trim().takeIf { !it.isNullOrEmpty() }
+            if (explicit != null) {
+                updated[index] = updated[index].copy(
+                    content = "${updated[index].content}\n\n$explicit"
+                )
+            }
+        }
+
+        return AgentSkillPromptApplication(
+            messages = updated,
+            currentContext = currentContext
+        )
+    }
 }
 
 data class AgentSkillInstallPreview(

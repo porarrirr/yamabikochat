@@ -4,15 +4,12 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.google.gson.Gson
 import com.google.gson.JsonParser
-import com.porarri.yamabikochat.data.remote.ThinkingConfig
-import com.porarri.yamabikochat.data.remote.CodexRequestConfig
 import com.porarri.yamabikochat.data.remote.OpenCodeGoEndpointKind
 import com.porarri.yamabikochat.data.remote.OpenCodeGoModelCatalog
 import com.porarri.yamabikochat.data.remote.ProviderCatalog
+import com.porarri.yamabikochat.utils.CodexModelPresets
 import com.porarri.yamabikochat.utils.MiniMaxUtils
 import com.porarri.yamabikochat.utils.ModelUtils
-import com.porarri.yamabikochat.data.local.ModelPreset
-import com.porarri.yamabikochat.utils.CodexModelPresets
 
 @Entity(tableName = "settings")
 data class Settings(
@@ -449,321 +446,64 @@ data class Settings(
         }
     }
 
-    fun buildThinkingConfigFor(
-        provider: String,
-        model: String,
-        context: ReasoningContext = ReasoningContext.DEFAULT
-    ): ThinkingConfig? {
-        val overrides = when (context) {
-            ReasoningContext.DUAL_A -> ThinkingOverrides(
-                enabled = dualThinkingEnabledA,
-                budget = dualThinkingBudgetA,
-                level = dualThinkingLevelA,
-                codexEffort = dualCodexReasoningEffortA
-            )
-            ReasoningContext.DUAL_B -> ThinkingOverrides(
-                enabled = dualThinkingEnabledB,
-                budget = dualThinkingBudgetB,
-                level = dualThinkingLevelB,
-                codexEffort = dualCodexReasoningEffortB
-            )
-            ReasoningContext.AUTO_A -> ThinkingOverrides(
-                enabled = autoThinkingEnabledA,
-                budget = autoThinkingBudgetA,
-                level = autoThinkingLevelA,
-                codexEffort = autoCodexReasoningEffortA
-            )
-            ReasoningContext.AUTO_B -> ThinkingOverrides(
-                enabled = autoThinkingEnabledB,
-                budget = autoThinkingBudgetB,
-                level = autoThinkingLevelB,
-                codexEffort = autoCodexReasoningEffortB
-            )
-            else -> null
-        }
-        return when (provider.uppercase()) {
-            "OPENROUTER" -> {
-                val profile = resolveOpenRouterProfile(
-                    when (context) {
-                        ReasoningContext.DUAL_A -> ReasoningOverrides(
-                            enabled = dualOpenRouterThinkingEnabledA,
-                            budget = dualOpenRouterThinkingBudgetA,
-                            mode = dualOpenRouterReasoningModeA,
-                            effort = dualOpenRouterReasoningEffortA,
-                            exclude = dualOpenRouterReasoningExcludeA
-                        )
-                        ReasoningContext.DUAL_B -> ReasoningOverrides(
-                            enabled = dualOpenRouterThinkingEnabledB,
-                            budget = dualOpenRouterThinkingBudgetB,
-                            mode = dualOpenRouterReasoningModeB,
-                            effort = dualOpenRouterReasoningEffortB,
-                            exclude = dualOpenRouterReasoningExcludeB
-                        )
-                        ReasoningContext.AUTO_A -> ReasoningOverrides(
-                            enabled = autoOpenRouterThinkingEnabledA,
-                            budget = autoOpenRouterThinkingBudgetA,
-                            mode = autoOpenRouterReasoningModeA,
-                            effort = autoOpenRouterReasoningEffortA,
-                            exclude = autoOpenRouterReasoningExcludeA
-                        )
-                        ReasoningContext.AUTO_B -> ReasoningOverrides(
-                            enabled = autoOpenRouterThinkingEnabledB,
-                            budget = autoOpenRouterThinkingBudgetB,
-                            mode = autoOpenRouterReasoningModeB,
-                            effort = autoOpenRouterReasoningEffortB,
-                            exclude = autoOpenRouterReasoningExcludeB
-                        )
-                        else -> null
-                    }
-                )
-                buildOpenRouterThinkingConfig(profile)
-            }
-            "OPENAI", "OPENAI_COMPAT", "MINIMAX", "CLINEPASS" -> buildOpenAiThinkingConfig(
-                model,
-                enabledOverride = overrides?.enabled,
-                budgetOverride = overrides?.budget
-            )
-            "OPENCODE_GO" -> when (OpenCodeGoModelCatalog.modelFor(model)?.endpointKind) {
-                OpenCodeGoEndpointKind.MESSAGES -> buildAnthropicThinkingConfig(
-                    enabledOverride = overrides?.enabled,
-                    budgetOverride = overrides?.budget
-                )
-                OpenCodeGoEndpointKind.CHAT_COMPLETIONS -> buildOpenAiThinkingConfig(
-                    model,
-                    enabledOverride = overrides?.enabled,
-                    budgetOverride = overrides?.budget
-                )
-                null -> null
-            }
-            "ALIBABA_CODING_PLAN" -> buildAnthropicThinkingConfig(
-                enabledOverride = overrides?.enabled,
-                budgetOverride = overrides?.budget
-            )
-            "CODEX_AUTH" -> buildCodexThinkingConfig(
-                enabledOverride = overrides?.enabled,
-                effortOverride = overrides?.codexEffort
-            )
-            "SUPERGROK" -> buildSuperGrokThinkingConfig(
-                model = model,
-                enabledOverride = overrides?.enabled,
-                effortOverride = overrides?.codexEffort
-            )
-            "ZAI" -> buildZaiThinkingConfig(enabledOverride = overrides?.enabled)
-            "GEMINI" -> buildGeminiThinkingConfig(
-                model,
-                enabledOverride = overrides?.enabled,
-                budgetOverride = overrides?.budget,
-                levelOverride = overrides?.level
-            )
-            else -> null
-        }
+    fun thinkingOverride(context: ReasoningContext): ThinkingOverrides = when (context) {
+        ReasoningContext.DUAL_A -> ThinkingOverrides(
+            enabled = dualThinkingEnabledA,
+            budget = dualThinkingBudgetA,
+            level = dualThinkingLevelA,
+            codexEffort = dualCodexReasoningEffortA
+        )
+        ReasoningContext.DUAL_B -> ThinkingOverrides(
+            enabled = dualThinkingEnabledB,
+            budget = dualThinkingBudgetB,
+            level = dualThinkingLevelB,
+            codexEffort = dualCodexReasoningEffortB
+        )
+        ReasoningContext.AUTO_A -> ThinkingOverrides(
+            enabled = autoThinkingEnabledA,
+            budget = autoThinkingBudgetA,
+            level = autoThinkingLevelA,
+            codexEffort = autoCodexReasoningEffortA
+        )
+        ReasoningContext.AUTO_B -> ThinkingOverrides(
+            enabled = autoThinkingEnabledB,
+            budget = autoThinkingBudgetB,
+            level = autoThinkingLevelB,
+            codexEffort = autoCodexReasoningEffortB
+        )
+        else -> ThinkingOverrides()
     }
 
-    private fun buildGeminiThinkingConfig(
-        model: String,
-        enabledOverride: Boolean? = null,
-        budgetOverride: Int? = null,
-        levelOverride: String? = null
-    ): ThinkingConfig? {
-        val enabled = enabledOverride ?: geminiThinkingEnabled
-        val budget = budgetOverride ?: geminiThinkingBudget
-        val level = levelOverride ?: geminiThinkingLevel
-        if (ModelUtils.isThinkingLevelSupported(model)) {
-            val defaultLevel = ModelUtils.getDefaultThinkingLevel(model)
-            val normalized = ModelUtils.normalizeThinkingLevel(model, level) ?: defaultLevel
-            val effectiveLevel = when {
-                ModelUtils.isThinkingAlwaysOn(model) -> normalized
-                !enabled -> ModelUtils.getMinimalThinkingLevel(model) ?: normalized
-                else -> normalized
-            }
-            return ThinkingConfig(
-                thinkingLevel = effectiveLevel,
-                includeThoughts = true
-            )
-        }
-
-        val effective = ModelUtils.calculateEffectiveThinkingBudget(
-            model,
-            enabled,
-            budget
-        ) ?: return null
-
-        return ThinkingConfig(
-            thinkingBudget = effective,
-            includeThoughts = true
+    fun openRouterOverride(context: ReasoningContext): ReasoningOverrides = when (context) {
+        ReasoningContext.DUAL_A -> ReasoningOverrides(
+            enabled = dualOpenRouterThinkingEnabledA,
+            budget = dualOpenRouterThinkingBudgetA,
+            mode = dualOpenRouterReasoningModeA,
+            effort = dualOpenRouterReasoningEffortA,
+            exclude = dualOpenRouterReasoningExcludeA
         )
-    }
-
-    private fun resolveOpenRouterProfile(overrides: ReasoningOverrides?): ReasoningProfile {
-        val base = ReasoningProfile(
-            enabled = openRouterThinkingEnabled,
-            budget = openRouterThinkingBudget,
-            mode = openRouterReasoningMode,
-            effort = openRouterReasoningEffort,
-            exclude = openRouterReasoningExclude
+        ReasoningContext.DUAL_B -> ReasoningOverrides(
+            enabled = dualOpenRouterThinkingEnabledB,
+            budget = dualOpenRouterThinkingBudgetB,
+            mode = dualOpenRouterReasoningModeB,
+            effort = dualOpenRouterReasoningEffortB,
+            exclude = dualOpenRouterReasoningExcludeB
         )
-
-        if (overrides == null) return base
-
-        return base.copy(
-            enabled = overrides.enabled ?: base.enabled,
-            budget = overrides.budget ?: base.budget,
-            mode = overrides.mode ?: base.mode,
-            effort = overrides.effort ?: base.effort,
-            exclude = overrides.exclude ?: base.exclude
+        ReasoningContext.AUTO_A -> ReasoningOverrides(
+            enabled = autoOpenRouterThinkingEnabledA,
+            budget = autoOpenRouterThinkingBudgetA,
+            mode = autoOpenRouterReasoningModeA,
+            effort = autoOpenRouterReasoningEffortA,
+            exclude = autoOpenRouterReasoningExcludeA
         )
-    }
-
-    private fun buildOpenRouterThinkingConfig(profile: ReasoningProfile): ThinkingConfig? {
-        val includeThoughts = !profile.exclude
-
-        if (!profile.enabled) {
-            return ThinkingConfig(
-                thinkingBudget = null,
-                includeThoughts = includeThoughts,
-                enabled = false,
-                exclude = true
-            )
-        }
-
-        val mode = profile.mode.lowercase()
-        val budget = if (mode == "budget" && profile.budget > 0) {
-            profile.budget
-        } else null
-        val effort = if (mode == "effort") {
-            profile.effort.takeIf { !it.isNullOrBlank() }
-        } else null
-
-        val enabledFlag = if (mode == "auto" || (budget == null && effort == null)) {
-            true
-        } else null
-
-        val excludeFlag = if (profile.exclude) true else null
-
-        if (budget == null && effort == null && enabledFlag == null && excludeFlag == null) {
-            return null
-        }
-
-        return ThinkingConfig(
-            thinkingBudget = budget,
-            includeThoughts = includeThoughts,
-            effort = effort,
-            enabled = enabledFlag,
-            exclude = excludeFlag
+        ReasoningContext.AUTO_B -> ReasoningOverrides(
+            enabled = autoOpenRouterThinkingEnabledB,
+            budget = autoOpenRouterThinkingBudgetB,
+            mode = autoOpenRouterReasoningModeB,
+            effort = autoOpenRouterReasoningEffortB,
+            exclude = autoOpenRouterReasoningExcludeB
         )
-    }
-
-    private fun buildOpenAiThinkingConfig(
-        model: String,
-        enabledOverride: Boolean? = null,
-        budgetOverride: Int? = null
-    ): ThinkingConfig? {
-        // For OpenAI Chat Completions, map thinkingBudget to max_tokens (or max_completion_tokens for reasoning models).
-        // Use the app's generic thinkingEnabled/thinkingBudget (Gemini fields) as the source when provider is OPENAI.
-        val enabled = enabledOverride ?: geminiThinkingEnabled
-        val budget = budgetOverride ?: geminiThinkingBudget
-        if (!enabled && budget <= 0) return null
-        val effective = if (enabled) budget else 0
-        return ThinkingConfig(
-            thinkingBudget = effective,
-            includeThoughts = true
-        )
-    }
-
-    private fun buildZaiThinkingConfig(enabledOverride: Boolean? = null): ThinkingConfig? {
-        val enabled = enabledOverride ?: geminiThinkingEnabled
-        return ThinkingConfig(
-            enabled = enabled
-        )
-    }
-
-    private fun buildAnthropicThinkingConfig(
-        enabledOverride: Boolean? = null,
-        budgetOverride: Int? = null
-    ): ThinkingConfig? {
-        val enabled = enabledOverride ?: geminiThinkingEnabled
-        val budget = budgetOverride ?: geminiThinkingBudget
-        if (!enabled) return null
-        return ThinkingConfig(
-            thinkingBudget = budget,
-            includeThoughts = true,
-            enabled = true
-        )
-    }
-
-    private fun buildCodexThinkingConfig(
-        enabledOverride: Boolean? = null,
-        effortOverride: String? = null
-    ): ThinkingConfig? {
-        val enabled = enabledOverride ?: codexReasoningEnabled
-        val effort = if (enabled) {
-            (effortOverride ?: codexReasoningEffort).trim().lowercase().ifBlank { "medium" }
-        } else {
-            "none"
-        }
-        return ThinkingConfig(
-            effort = effort,
-            includeThoughts = true
-        )
-    }
-
-    private fun buildSuperGrokThinkingConfig(
-        model: String,
-        enabledOverride: Boolean? = null,
-        effortOverride: String? = null
-    ): ThinkingConfig? {
-        val catalogModel = com.porarri.yamabikochat.data.remote.SuperGrokModelCatalog.modelFor(model)
-        // Catalog miss = custom model ID; treat as reasoning-capable and honor settings.
-        if (catalogModel != null && !catalogModel.supportsReasoning) return null
-        val enabled = enabledOverride ?: superGrokReasoningEnabled
-        val rawEffort = (effortOverride ?: superGrokReasoningEffort).trim().lowercase().ifBlank { "medium" }
-        val effort = if (enabled) {
-            when (rawEffort) {
-                "low", "medium", "high" -> rawEffort
-                else -> "medium"
-            }
-        } else {
-            "none"
-        }
-        return ThinkingConfig(
-            effort = effort,
-            includeThoughts = true
-        )
-    }
-
-    private data class ThinkingOverrides(
-        val enabled: Boolean?,
-        val budget: Int?,
-        val level: String?,
-        val codexEffort: String?
-    )
-
-    fun buildCodexRequestConfig(model: String): CodexRequestConfig? {
-        val normalizedSummary = codexReasoningSummary.trim().lowercase().ifBlank { "auto" }
-        val summaryRequested = normalizedSummary.takeIf { it != "none" && codexReasoningEnabled }
-        val supportsSummaries = codexSupportsReasoningSummaries || CodexModelPresets.supportsReasoningSummary(model)
-        val summaryToSend = if (supportsSummaries) summaryRequested else null
-
-        val normalizedVerbosity = codexVerbosity.trim().lowercase().ifBlank { "medium" }
-        val verbosityToSend = if (CodexModelPresets.supportsTextVerbosity(model)) normalizedVerbosity else null
-
-        val webSearchEnabled = codexWebSearchEnabled
-        val normalizedContextSize = codexWebSearchContextSize.trim().lowercase().ifBlank { "medium" }
-        val webSearchContextSize = if (webSearchEnabled) normalizedContextSize else null
-
-        val promptCacheEnabled = codexPromptCacheEnabled
-        val promptCacheMinLength = codexPromptCacheMinLength.takeIf { it > 0 }
-        val promptCacheType = codexPromptCacheType.trim().lowercase().ifBlank { "ephemeral" }
-
-        return CodexRequestConfig(
-            reasoningSummary = summaryToSend,
-            verbosity = verbosityToSend,
-            webSearchEnabled = webSearchEnabled,
-            webSearchContextSize = webSearchContextSize,
-            promptCacheEnabled = promptCacheEnabled,
-            promptCacheMinLength = promptCacheMinLength,
-            promptCacheType = promptCacheType
-        )
+        else -> ReasoningOverrides()
     }
     
     fun getCurrentModel(): String {
@@ -1039,37 +779,6 @@ data class Settings(
             }
         }
     }
-    
-    fun createProviderPreferences(): com.porarri.yamabikochat.data.remote.ProviderPreferences? {
-        val providers = getPreferredProvidersList()
-        val quantizations = getSelectedQuantizationsList()
-
-        if (providers.isEmpty() && quantizations.isEmpty() && maxPricePerMillionTokens == 0.0) {
-            return null
-        }
-        
-        // If a single provider is selected and fallbacks are not allowed, prefer strict routing via `only`
-        val onlyProviders = if (!allowFallbacks && providers.size == 1) providers else null
-        val orderProviders = if (onlyProviders == null) providers.takeIf { it.isNotEmpty() } else null
-
-        val maxPrice = if (maxPricePerMillionTokens > 0.0) {
-            // Apply same cap to prompt and completion (USD per 1M tokens)
-            com.porarri.yamabikochat.data.remote.MaxPrice(
-                prompt = maxPricePerMillionTokens,
-                completion = maxPricePerMillionTokens
-            )
-        } else null
-
-        return com.porarri.yamabikochat.data.remote.ProviderPreferences(
-            order = orderProviders,
-            only = onlyProviders,
-            quantizations = quantizations.takeIf { it.isNotEmpty() },
-            max_price = maxPrice,
-            allow_fallbacks = allowFallbacks.takeIf { providers.isNotEmpty() },
-            require_parameters = requireParameters.takeIf { it },
-            sort = providerSort.takeIf { it.isNotBlank() }
-        )
-    }
 
     // --- OpenAI-compatible helpers ---
     fun getOpenAiCompatPresetsList(): List<com.porarri.yamabikochat.data.remote.OpenAiCompatPreset> {
@@ -1144,7 +853,14 @@ data class Settings(
         val exclude: Boolean
     )
 
-    private data class ReasoningOverrides(
+    data class ThinkingOverrides(
+        val enabled: Boolean? = null,
+        val budget: Int? = null,
+        val level: String? = null,
+        val codexEffort: String? = null
+    )
+
+    data class ReasoningOverrides(
         val enabled: Boolean? = null,
         val budget: Int? = null,
         val mode: String? = null,

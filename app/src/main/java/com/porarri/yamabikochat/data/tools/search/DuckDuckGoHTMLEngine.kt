@@ -1,6 +1,5 @@
 package com.porarri.yamabikochat.data.tools.search
 
-import com.porarri.yamabikochat.data.tools.WebToolException
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import java.net.URL
 import java.net.URLDecoder

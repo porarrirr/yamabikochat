@@ -84,6 +84,12 @@ class DatabaseRepository(private val chatDao: ChatDao) {
         chatDao.deleteConversationCascade(id)
     }
 
+    suspend fun deleteMessagesForConversation(conversationId: Long) {
+        chatDao.deleteVariantsForConversation(conversationId)
+        chatDao.deleteMessagesForConversation(conversationId)
+        chatDao.deleteDualMessagesForConversation(conversationId)
+    }
+
     suspend fun purgeSecretConversations() {
         chatDao.purgeSecretConversations()
     }

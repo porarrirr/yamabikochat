@@ -1,5 +1,8 @@
 package com.porarri.yamabikochat.data.fusion
 
+import com.porarri.yamabikochat.data.model.ProviderRequest
+import com.porarri.yamabikochat.data.model.ProviderResponse
+import com.porarri.yamabikochat.data.model.ProviderUsage
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -7,9 +10,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 typealias FusionPanelInvoke =
-    suspend (FusionPanelRunner.GenerateRequestBundle, FusionPhase) -> FusionInvokeResult
+    suspend (FusionPanelRunner.GenerateRequestBundle, FusionPhase) -> ProviderResponse
 typealias FusionPanelCostEstimator =
-    suspend (provider: String, model: String, inputTokens: Int?, outputTokens: Int?) -> Double?
+    suspend (provider: String, model: String, usage: ProviderUsage?) -> Double?
 typealias FusionPanelProgressHandler = (FusionProgressSnapshot) -> Unit
 typealias FusionPanelRequestBuilder =
     suspend (PanelModelConfig, String) -> FusionPanelRunner.GenerateRequestBundle
@@ -18,7 +21,7 @@ object FusionPanelRunner {
     data class GenerateRequestBundle(
         val model: String,
         val provider: String,
-        val request: com.porarri.yamabikochat.data.remote.GenerateContentRequest
+        val request: ProviderRequest
     )
 
     suspend fun runAll(
@@ -68,8 +71,7 @@ object FusionPanelRunner {
             val cost = estimateCost(
                 panel.provider,
                 panel.modelId,
-                response.inputTokens,
-                response.outputTokens
+                response.usage
             )
             PanelResult(
                 modelId = panel.modelId,
@@ -78,12 +80,12 @@ object FusionPanelRunner {
                 content = response.text,
                 error = null,
                 latencyMs = latencyMs,
-                inputTokens = response.inputTokens,
-                outputTokens = response.outputTokens,
+                inputTokens = response.usage?.inputTokens,
+                outputTokens = response.usage?.outputTokens,
                 cost = cost,
-                toolCalls = response.toolCalls?.map { it.toSerializable() },
+                toolCalls = response.toolCalls.map { it.toSerializable() },
                 finishReason = null,
-                role = panel.role
+                role = panel.role ?: "generalist"
             )
         } catch (e: Exception) {
             val latencyMs = System.currentTimeMillis() - started
@@ -99,15 +101,8 @@ object FusionPanelRunner {
                 cost = null,
                 toolCalls = null,
                 finishReason = null,
-                role = panel.role
+                role = panel.role ?: "generalist"
             )
         }
     }
 }
-
-data class FusionInvokeResult(
-    val text: String,
-    val inputTokens: Int? = null,
-    val outputTokens: Int? = null,
-    val toolCalls: List<com.porarri.yamabikochat.data.tools.ToolCall>? = null
-)

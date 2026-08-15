@@ -8,9 +8,6 @@ import kotlinx.serialization.json.Json
 @Serializable
 data class FusionPresetDefinition(
     val taskType: FusionTaskType = FusionTaskType.research,
-    val maxPanelTokens: Int = 4096,
-    val maxJudgeTokens: Int = 2048,
-    val maxSynthesizerTokens: Int = 4096,
     /** Legacy persisted field retained for backward-compatible decoding. */
     val timeoutMs: Int = 120_000,
     val allowWebSearch: Boolean = true,
@@ -74,9 +71,6 @@ object FusionPresetLoader {
             synthesizerModel = preset.synthesizerModel,
             fallbackModel = preset.fallbackModel,
             preset = PRESET_LABEL,
-            maxPanelTokens = preset.maxPanelTokens,
-            maxJudgeTokens = preset.maxJudgeTokens,
-            maxSynthesizerTokens = preset.maxSynthesizerTokens,
             timeoutMs = preset.timeoutMs,
             allowWebSearch = allowWebSearch,
             taskType = resolvedTaskType,
@@ -107,9 +101,6 @@ object FusionPresetLoader {
     fun defaultFusionCustomPreset(): FusionPresetDefinition =
         FusionPresetDefinition(
             taskType = FusionTaskType.research,
-            maxPanelTokens = 4096,
-            maxJudgeTokens = 2048,
-            maxSynthesizerTokens = 4096,
             timeoutMs = 120_000,
             allowWebSearch = true,
             panelModels = listOf(
@@ -117,32 +108,24 @@ object FusionPresetLoader {
                     modelId = "gemini-2.5-pro",
                     provider = "GEMINI",
                     temperature = 0.3,
-                    maxTokens = 4096,
-                    timeoutMs = 120_000,
                     role = "researcher"
                 ),
                 PanelModelConfig(
                     modelId = "anthropic/claude-sonnet-4",
                     provider = "OPENROUTER",
                     temperature = 0.3,
-                    maxTokens = 4096,
-                    timeoutMs = 120_000,
                     role = "analyst"
                 ),
                 PanelModelConfig(
                     modelId = "openai/gpt-4.1",
                     provider = "OPENROUTER",
                     temperature = 0.3,
-                    maxTokens = 4096,
-                    timeoutMs = 120_000,
                     role = "critic"
                 ),
                 PanelModelConfig(
                     modelId = "deepseek/deepseek-chat",
                     provider = "OPENROUTER",
                     temperature = 0.4,
-                    maxTokens = 4096,
-                    timeoutMs = 120_000,
                     role = "synthesizer_candidate"
                 )
             ),
@@ -150,25 +133,19 @@ object FusionPresetLoader {
                 modelId = "anthropic/claude-sonnet-4",
                 provider = "OPENROUTER",
                 temperature = 0.1,
-                maxTokens = 2048,
-                timeoutMs = 90_000,
-                role = null
+                role = "generalist"
             ),
             synthesizerModel = PanelModelConfig(
                 modelId = "gemini-2.5-pro",
                 provider = "GEMINI",
                 temperature = 0.4,
-                maxTokens = 4096,
-                timeoutMs = 120_000,
-                role = null
+                role = "generalist"
             ),
             fallbackModel = PanelModelConfig(
                 modelId = "gemini-2.5-flash",
                 provider = "GEMINI",
                 temperature = 0.5,
-                maxTokens = 4096,
-                timeoutMs = 60_000,
-                role = null
+                role = "generalist"
             )
         )
 

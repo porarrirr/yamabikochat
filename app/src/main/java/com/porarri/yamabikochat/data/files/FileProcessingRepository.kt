@@ -3,8 +3,8 @@ package com.porarri.yamabikochat.data.files
 import android.content.Context
 import android.net.Uri
 import com.porarri.yamabikochat.data.attachments.AttachmentStorage
-import com.porarri.yamabikochat.data.remote.InlineData
-import com.porarri.yamabikochat.data.remote.Part
+import com.porarri.yamabikochat.data.model.InlineData
+import com.porarri.yamabikochat.data.model.Part
 import com.porarri.yamabikochat.utils.FileValidationUtils
 
 class FileProcessingRepository(

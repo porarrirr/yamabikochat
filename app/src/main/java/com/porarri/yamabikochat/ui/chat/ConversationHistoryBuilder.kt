@@ -4,27 +4,22 @@ import android.net.Uri
 import com.porarri.yamabikochat.data.ChatRepository
 import com.porarri.yamabikochat.data.local.ChatMessageSummary
 import com.porarri.yamabikochat.data.local.DualChatMessage
-import com.porarri.yamabikochat.data.remote.Content
-import com.porarri.yamabikochat.data.remote.Part
 import com.porarri.yamabikochat.data.local.FullChatMessage
-import com.porarri.yamabikochat.utils.DiagnosticsLogger
+import com.porarri.yamabikochat.data.model.ProviderRequestMessage
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+data class HistoryPreparation(
+    val messages: List<ProviderRequestMessage>,
+    val newlyFetchedMessages: Map<Long, FullChatMessage>
+)
+
 class ConversationHistoryBuilder(
     private val repository: ChatRepository,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val maxHistoryMessages: Int = DEFAULT_MAX_HISTORY_MESSAGES,
-    private val attachmentCacheSize: Int = DEFAULT_ATTACHMENT_CACHE_SIZE
+    private val maxHistoryMessages: Int = DEFAULT_MAX_HISTORY_MESSAGES
 ) {
-
-    private val attachmentCache = object : LinkedHashMap<String, Part?>(attachmentCacheSize, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Part?>?): Boolean {
-            return size > attachmentCacheSize
-        }
-    }
-
     suspend fun buildStandardHistory(
         text: String,
         attachmentsToSend: List<Uri>,
@@ -41,171 +36,70 @@ class ConversationHistoryBuilder(
         val missingIds = limitedSummaries.map { it.id }.filterNot { existingFullMessages.containsKey(it) }
         val fetched = repository.getFullMessagesByIds(missingIds)
         val combinedMessages = existingFullMessages + fetched
-        val sessionAttachmentCache = mutableMapOf<String, Part?>()
 
-        val history = limitedSummaries.flatMap { summary ->
-            val fullMessage = combinedMessages[summary.id] ?: return@flatMap emptyList()
-            val parts = resolveStoredMessageParts(
-                message = fullMessage,
-                sessionCache = sessionAttachmentCache,
-                includeThoughts = includeModelThoughts
+        val history = limitedSummaries.mapNotNull { summary ->
+            val full = combinedMessages[summary.id] ?: return@mapNotNull null
+            val role = if (full.chatMessage.role == "model" || full.chatMessage.role == "assistant") "assistant" else "user"
+            val effectiveText = full.displayText
+            val effectiveAttachments = full.displayAttachments
+            val effectiveThought = if (includeModelThoughts) full.displayThinkingStream ?: full.chatMessage.thinkingSummary else null
+
+            ProviderRequestMessage(
+                role = role,
+                content = effectiveText,
+                attachments = effectiveAttachments,
+                reasoningContent = effectiveThought
             )
-            val finalContent = Content(role = fullMessage.chatMessage.role, parts = parts)
-            if (fullMessage.chatMessage.role == "model") {
-                val activity = fullMessage.displayToolActivity
-                val providerTranscript = activity?.providerTranscript
-                if (activity != null && activity.steps.isNotEmpty() && providerTranscript == null) {
-                    DiagnosticsLogger.log(
-                        "Stored tool activity has no replayable provider transcript message=${summary.id}"
-                    )
-                }
-                providerTranscript.orEmpty() + finalContent
-            } else {
-                listOf(finalContent)
-            }
         }.toMutableList()
 
-        val userMessageParts = buildNewMessageParts(text, attachmentsToSend)
-        history.add(Content(role = "user", parts = userMessageParts))
+        val newAttachmentPaths = attachmentsToSend.mapNotNull { repository.saveAttachment(it) }
+        history.add(
+            ProviderRequestMessage(
+                role = "user",
+                content = text,
+                attachments = newAttachmentPaths
+            )
+        )
 
         HistoryPreparation(history, fetched)
     }
 
     suspend fun buildDualHistories(
         existingMessages: List<DualChatMessage>,
-        currentUserParts: List<Part>
-    ): Pair<List<Content>, List<Content>> = withContext(ioDispatcher) {
-        val historyA = mutableListOf<Content>()
-        val historyB = mutableListOf<Content>()
-        val sessionAttachmentCache = mutableMapOf<String, Part?>()
+        currentText: String,
+        currentAttachmentUris: List<Uri>
+    ): Pair<List<ProviderRequestMessage>, List<ProviderRequestMessage>> = withContext(ioDispatcher) {
+        val historyA = mutableListOf<ProviderRequestMessage>()
+        val historyB = mutableListOf<ProviderRequestMessage>()
+
+        val newAttachmentPaths = currentAttachmentUris.mapNotNull { repository.saveAttachment(it) }
 
         for (message in existingMessages) {
             when (message.role) {
                 "user" -> {
-                    val parts = resolveDualUserMessageParts(message, sessionAttachmentCache)
-                    historyA.add(Content(role = "user", parts = parts))
-                    historyB.add(Content(role = "user", parts = parts))
+                    val msg = ProviderRequestMessage(role = "user", content = message.userText, attachments = message.attachments)
+                    historyA.add(msg)
+                    historyB.add(msg)
                 }
                 "modelA" -> {
-                    val parts = resolveDualModelParts(message.modelAText, message.attachments, sessionAttachmentCache)
-                    historyA.add(Content(role = "model", parts = parts))
-                    historyB.add(Content(role = "user", parts = parts))
+                    historyA.add(ProviderRequestMessage(role = "assistant", content = message.modelAText, reasoningContent = message.modelAThinking))
+                    historyB.add(ProviderRequestMessage(role = "user", content = message.modelAText))
                 }
                 "modelB" -> {
-                    val parts = resolveDualModelParts(message.modelBText, message.attachments, sessionAttachmentCache)
-                    historyA.add(Content(role = "user", parts = parts))
-                    historyB.add(Content(role = "model", parts = parts))
+                    historyA.add(ProviderRequestMessage(role = "user", content = message.modelBText))
+                    historyB.add(ProviderRequestMessage(role = "assistant", content = message.modelBText, reasoningContent = message.modelBThinking))
                 }
             }
         }
 
-        historyA.add(Content(role = "user", parts = currentUserParts))
-        historyB.add(Content(role = "user", parts = currentUserParts))
+        val userMsg = ProviderRequestMessage(role = "user", content = currentText, attachments = newAttachmentPaths)
+        historyA.add(userMsg)
+        historyB.add(userMsg)
 
-        historyA to historyB
+        Pair(historyA, historyB)
     }
-
-    private suspend fun resolveStoredMessageParts(
-        message: FullChatMessage,
-        sessionCache: MutableMap<String, Part?>,
-        includeThoughts: Boolean
-    ): List<Part> {
-        val chatMessage = message.chatMessage
-        val baseText = if (includeThoughts && chatMessage.role == "model") {
-            val thought = message.displayThinkingStream?.takeIf { it.isNotBlank() }
-            if (thought != null) "<think>$thought</think>\n${message.displayText}" else message.displayText
-        } else {
-            message.displayText
-        }
-        val parts = mutableListOf(Part(text = baseText))
-        for (path in message.displayAttachments) {
-            val key = path
-            val cached = sessionCache[key] ?: getCachedPart(key)
-            val resolved = cached ?: repository.getPartFromUri(Uri.parse(path)).also { part ->
-                sessionCache[key] = part
-                putCachedPart(key, part)
-            }
-            if (resolved != null) {
-                parts.add(resolved)
-            }
-        }
-        return parts
-    }
-
-    suspend fun buildNewMessageParts(
-        text: String,
-        attachments: List<Uri>
-    ): List<Part> {
-        val parts = mutableListOf(Part(text = text))
-        for (uri in attachments) {
-            val key = uri.toString()
-            val cached = getCachedPart(key)
-            val resolved = cached ?: repository.getPartFromUri(uri).also { part ->
-                putCachedPart(key, part)
-            }
-            if (resolved != null) {
-                parts.add(resolved)
-            }
-        }
-        return parts
-    }
-
-    private suspend fun resolveDualUserMessageParts(
-        message: DualChatMessage,
-        sessionCache: MutableMap<String, Part?>
-    ): List<Part> {
-        val parts = mutableListOf(Part(text = message.userText))
-        for (attachment in message.attachments) {
-            val key = attachment
-            val cached = sessionCache[key] ?: getCachedPart(key)
-            val resolved = cached ?: repository.getPartFromUri(Uri.parse(attachment)).also { part ->
-                sessionCache[key] = part
-                putCachedPart(key, part)
-            }
-            if (resolved != null) {
-                parts.add(resolved)
-            }
-        }
-        return parts
-    }
-
-    private suspend fun resolveDualModelParts(
-        text: String,
-        attachments: List<String>,
-        sessionCache: MutableMap<String, Part?>
-    ): List<Part> {
-        val parts = mutableListOf(Part(text = text))
-        for (attachment in attachments) {
-            val key = attachment
-            val cached = sessionCache[key] ?: getCachedPart(key)
-            val resolved = cached ?: repository.getPartFromUri(Uri.parse(attachment)).also { part ->
-                sessionCache[key] = part
-                putCachedPart(key, part)
-            }
-            if (resolved != null) {
-                parts.add(resolved)
-            }
-        }
-        return parts
-    }
-
-    private fun getCachedPart(key: String): Part? = synchronized(attachmentCache) {
-        attachmentCache[key]
-    }
-
-    private fun putCachedPart(key: String, part: Part?) {
-        synchronized(attachmentCache) {
-            attachmentCache[key] = part
-        }
-    }
-
-    data class HistoryPreparation(
-        val history: List<Content>,
-        val newlyFetchedMessages: Map<Long, FullChatMessage>
-    )
 
     companion object {
-        private const val DEFAULT_MAX_HISTORY_MESSAGES = 20
-        private const val DEFAULT_ATTACHMENT_CACHE_SIZE = 32
+        const val DEFAULT_MAX_HISTORY_MESSAGES = 100
     }
 }

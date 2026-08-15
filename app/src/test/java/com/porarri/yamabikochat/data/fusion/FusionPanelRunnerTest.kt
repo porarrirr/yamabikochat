@@ -1,8 +1,8 @@
 package com.porarri.yamabikochat.data.fusion
 
-import com.porarri.yamabikochat.data.remote.Content
-import com.porarri.yamabikochat.data.remote.GenerateContentRequest
-import com.porarri.yamabikochat.data.remote.Part
+import com.porarri.yamabikochat.data.model.ProviderRequest
+import com.porarri.yamabikochat.data.model.ProviderRequestMessage
+import com.porarri.yamabikochat.data.model.ProviderResponse
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -38,16 +38,17 @@ class FusionPanelRunnerTest {
                 FusionPanelRunner.GenerateRequestBundle(
                     model = model.modelId,
                     provider = model.provider,
-                    request = GenerateContentRequest(
-                        contents = listOf(Content(role = "user", parts = listOf(Part(text = "test"))))
+                    request = ProviderRequest(
+                        model = model.modelId,
+                        messages = listOf(ProviderRequestMessage(role = "user", content = "test"))
                     )
                 )
             },
             invoke = { _, _ ->
                 delay(100)
-                FusionInvokeResult(text = "completed")
+                ProviderResponse(text = "completed")
             },
-            estimateCost = { _, _, _, _ -> null }
+            estimateCost = { _, _, _ -> null }
         )
 
         assertEquals("completed", results.single().content)

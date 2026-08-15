@@ -1,56 +1,28 @@
 package com.porarri.yamabikochat.ui.chat.logic
 
+import android.util.Log
 import com.porarri.yamabikochat.data.ChatRepository
 import com.porarri.yamabikochat.data.local.ChatMessage
 import com.porarri.yamabikochat.data.local.ChatMessageVariant
 import com.porarri.yamabikochat.data.local.FullChatMessage
-import com.porarri.yamabikochat.data.remote.GenerateContentRequest
-import com.porarri.yamabikochat.data.remote.GenerateContentResponse
-import com.porarri.yamabikochat.data.remote.FunctionCall
-import com.porarri.yamabikochat.data.remote.FunctionResponse
-import com.porarri.yamabikochat.data.remote.OpenCodeGoEndpointKind
-import com.porarri.yamabikochat.data.remote.OpenCodeGoModelCatalog
-import com.porarri.yamabikochat.data.remote.Part
-import com.porarri.yamabikochat.data.remote.ResponsePart
-import com.porarri.yamabikochat.data.remote.TokenUsageSnapshot
-import com.porarri.yamabikochat.data.remote.CodexResponsesStreamParser
-import com.porarri.yamabikochat.data.remote.extractTokenUsageSnapshot
-import com.porarri.yamabikochat.data.remote.toTokenUsageSnapshot
-import com.porarri.yamabikochat.data.tools.ToolActivityStep
-import com.porarri.yamabikochat.BuildConfig
+import com.porarri.yamabikochat.data.model.ProviderRequest
+import com.porarri.yamabikochat.data.model.ProviderStreamEvent
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import org.json.JSONObject
-import java.io.File
+import kotlinx.coroutines.launch
 
-/**
- * Handles model response generation for single-provider conversations.
- * Extracted from ChatViewModel to keep the view-model lean and focused on state orchestration.
- */
 class ChatResponseStreamer(
-    private val repository: ChatRepository,
-    private val splitReasoningBlocks: (String) -> Pair<String, String>,
-    private val json: Json
+    private val repository: ChatRepository
 ) {
-    /**
-     * Launches a streaming request and incrementally updates the UI state.
-     */
     fun launchStreamingResponse(
         scope: CoroutineScope,
         conversationId: Long,
         model: String,
         provider: String,
-        request: GenerateContentRequest,
+        request: ProviderRequest,
         fullMessages: MutableStateFlow<Map<Long, FullChatMessage>>,
         fetchFullMessage: (Long) -> Unit,
         existingMessageId: Long? = null
@@ -65,10 +37,7 @@ class ChatResponseStreamer(
             } else {
                 val existingFull = repository.getFullMessageById(existingMessageId)
                 if (existingFull == null) {
-                    android.util.Log.e(
-                        "ChatResponseStreamer",
-                        "Regeneration failed: message not found id=$existingMessageId"
-                    )
+                    Log.e("ChatResponseStreamer", "Regeneration failed: message not found id=$existingMessageId")
                     return@launch
                 }
                 val createdVariant = repository.insertMessageVariant(
@@ -98,709 +67,121 @@ class ChatResponseStreamer(
                 thinkingStream: String
             ) {
                 fullMessages.update { currentMap ->
-                    val existingFull = currentMap[messageId]
-                    val variant = activeVariant
-                    if (variant != null) {
-                        val updatedVariant = variant.copy(
-                            text = text,
-                            attachments = attachments,
-                            thinkingStream = thinkingStream.takeIf { it.isNotBlank() } ?: thinkingSummary
-                        )
-                        activeVariant = updatedVariant
-                        val base = (existingFull?.chatMessage ?: ChatMessage(
-                            id = messageId,
-                            conversationId = conversationId,
-                            role = "model",
-                            text = ""
-                        )).copy(selectedVariantIndex = variant.variantIndex)
-                        val variants = (existingFull?.variants.orEmpty()
-                            .filterNot { it.variantIndex == updatedVariant.variantIndex } + updatedVariant)
-                            .sortedBy { it.variantIndex }
-                        currentMap + (messageId to FullChatMessage(base, existingFull?.thinkingStream, variants))
-                    } else {
-                        val updated = FullChatMessage(
-                            chatMessage = ChatMessage(
-                                id = messageId,
-                                conversationId = conversationId,
-                                role = "model",
+                    val existing = currentMap[messageId]
+                    if (existing != null) {
+                        if (activeVariant != null) {
+                            val updatedVariant = activeVariant!!.copy(
                                 text = text,
                                 attachments = attachments,
-                                thinkingSummary = thinkingSummary
-                            ),
-                            thinkingStream = thinkingStream
-                        )
-                        currentMap + (messageId to updated)
+                                thinkingStream = thinkingStream.ifBlank { null }
+                            )
+                            activeVariant = updatedVariant
+                            val updatedFull = existing.copy(
+                                chatMessage = existing.chatMessage.copy(selectedVariantIndex = updatedVariant.variantIndex),
+                                variants = (existing.variants.filterNot { it.variantIndex == updatedVariant.variantIndex } + updatedVariant)
+                                    .sortedBy { it.variantIndex }
+                            )
+                            currentMap + (messageId to updatedFull)
+                        } else {
+                            val updatedFull = existing.copy(
+                                chatMessage = existing.chatMessage.copy(
+                                    text = text,
+                                    attachments = attachments,
+                                    thinkingSummary = thinkingSummary
+                                ),
+                                thinkingStream = thinkingStream.takeIf { it.isNotBlank() }
+                            )
+                            currentMap + (messageId to updatedFull)
+                        }
+                    } else {
+                        currentMap
                     }
                 }
             }
 
-            suspend fun persistResponse(
-                text: String,
-                attachments: List<String> = emptyList(),
-                thinkingSummary: String? = null,
-                thinkingStream: String = ""
-            ) {
-                val variant = activeVariant
-                if (variant != null) {
-                    val updatedVariant = variant.copy(
-                        text = text,
-                        attachments = attachments,
-                        thinkingStream = thinkingStream.takeIf { it.isNotBlank() } ?: thinkingSummary
-                    )
-                    repository.updateMessageVariant(updatedVariant)
-                    activeVariant = updatedVariant
-                    return
-                }
-
-                repository.getFullMessageById(messageId)?.chatMessage?.let {
-                    repository.updateMessage(
-                        it.copy(
-                            text = text,
-                            thinkingSummary = thinkingSummary,
-                            attachments = attachments
-                        )
-                    )
-                }
-                if (thinkingStream.isNotBlank()) {
-                    repository.insertThinking(messageId, thinkingStream)
-                } else if (isRegeneration) {
-                    repository.updateThinkingStream(messageId, "")
-                }
-            }
+            var textAccumulator = ""
+            var thinkingAccumulator = ""
+            var lastUiUpdateMs = 0L
 
             try {
-                val sessionId = if (provider.equals("CODEX_AUTH", ignoreCase = true)) {
-                    repository.getOrCreateCodexSessionId(conversationId)
-                } else {
-                    null
-                }
-                val response = repository.streamGenerateContent(
-                    model = model,
-                    request = request,
-                    providerOverride = provider,
-                    sessionId = sessionId
-                )
-                if (!response.isSuccessful) {
-                    val body = if (BuildConfig.DEBUG || BuildConfig.DIAGNOSTIC) {
-                        response.errorBody()?.string()?.take(2048)
-                    } else {
-                        null
-                    }
-                    DiagnosticsLogger.log(
-                        "Streaming API failed provider=${provider.uppercase()} model=$model code=${response.code()} body=${body.orEmpty()}"
-                    )
-                    if (BuildConfig.DEBUG || BuildConfig.DIAGNOSTIC) {
-                        android.util.Log.e(
-                            "ChatResponseStreamer",
-                            "Streaming API failed: code=${response.code()} body=$body"
-                        )
-                    } else {
-                        android.util.Log.e(
-                            "ChatResponseStreamer",
-                            "Streaming API failed: code=${response.code()}"
-                        )
-                    }
-                    persistResponse(text = apiFailureMessage(provider, response.code()))
-                    return@launch
-                }
-
-                val body = response.body()
-                if (body == null) {
-                    DiagnosticsLogger.log("Streaming API returned empty body provider=${provider.uppercase()} model=$model")
-                    persistResponse(text = STREAMING_GENERIC_ERROR)
-                    return@launch
-                }
-
-                var currentText = ""
-                var currentThinking = ""
-                var currentSummary = ""
-                val currentAttachments = mutableListOf<String>()
-                var hasData = false
-                var usageRecorded = false
-                var parseError: Throwable? = null
-                var parseErrorCount = 0
-                val nonDataLines = mutableListOf<String>()
-                var sawAnyLine = false
-                val hostedActivities = mutableListOf<ToolActivityStep>()
-                val normalizedProvider = provider.uppercase()
-                val isHostedSkillStream = normalizedProvider == "OPENAI" &&
-                    request.skillContext?.hostedExecutionEnabled == true
-
-                suspend fun persistHostedActivities() {
-                    if (hostedActivities.isEmpty()) return
-                    val encoded = ToolActivityStep.encodeSteps(hostedActivities)
-                    val variantId = activeVariant?.id
-                    if (variantId != null) repository.saveToolActivitiesForVariant(variantId, encoded)
-                    else repository.saveToolActivities(messageId, encoded)
-                    fetchFullMessage(messageId)
-                }
-
-                suspend fun consumeHostedEvent(payload: String): Boolean {
-                    if (!isHostedSkillStream) return false
-                    val event = runCatching { JSONObject(payload) }.getOrNull() ?: return false
-                    when (event.optString("type")) {
-                        "yamabiko.generated_file" -> {
-                            val path = event.optString("path")
-                            if (path.isNotBlank() && File(path).isFile && path !in currentAttachments) {
-                                currentAttachments += path
-                                hasData = true
-                                updateFullMessageState(currentText, currentAttachments, null, currentThinking)
-                            }
-                            hostedActivities += ToolActivityStep(
-                                id = "file:${event.optString("filename")}:${hostedActivities.size}",
-                                round = 0,
-                                toolName = "openai_container_file",
-                                title = "生成ファイルを保存",
-                                detail = event.optString("filename", "generated-file"),
-                                status = ToolActivityStep.Status.completed,
-                                createdAtMs = System.currentTimeMillis()
-                            )
-                            persistHostedActivities()
-                            return true
+                repository.streamProviderRequest(request, provider).collect { event ->
+                    when (event) {
+                        is ProviderStreamEvent.TextDelta -> {
+                            textAccumulator += event.delta
                         }
-                        "yamabiko.generated_file_error" -> {
-                            hostedActivities += ToolActivityStep(
-                                id = "file-error:${event.optString("filename")}:${hostedActivities.size}",
-                                round = 0,
-                                toolName = "openai_container_file",
-                                title = "生成ファイルの取得に失敗",
-                                detail = event.optString("filename", "generated-file"),
-                                status = ToolActivityStep.Status.failed,
-                                errorMessage = event.optString("message", "Container file download failed").take(1_000),
-                                createdAtMs = System.currentTimeMillis()
-                            )
-                            persistHostedActivities()
-                            return true
+                        is ProviderStreamEvent.ReasoningDelta -> {
+                            thinkingAccumulator += event.delta
                         }
-                        "response.output_item.done" -> {
-                            val item = event.optJSONObject("item") ?: return false
-                            val itemType = item.optString("type")
-                            if (itemType != "shell_call" && itemType != "shell_call_output") return false
-                            val callId = item.optString("call_id", item.optString("id", "shell-${hostedActivities.size}"))
-                            if (itemType == "shell_call") {
-                                val action = item.optJSONObject("action")
-                                val commands = action?.optJSONArray("commands")
-                                val detail = buildString {
-                                    if (commands != null) for (index in 0 until commands.length()) {
-                                        if (isNotEmpty()) append('\n')
-                                        append(commands.optString(index))
+                        is ProviderStreamEvent.Completed -> {
+                            val response = event.response
+                            if (response.text.isNotBlank()) textAccumulator = response.text
+                            val thinkingSummary = response.reasoningSummary ?: thinkingAccumulator.takeIf { it.isNotBlank() }
+
+                            if (activeVariant != null) {
+                                repository.updateMessageVariant(
+                                    activeVariant!!.copy(
+                                        text = textAccumulator,
+                                        thinkingStream = thinkingAccumulator.ifBlank { null }
+                                    )
+                                )
+                            } else {
+                                val full = repository.getFullMessageById(messageId)
+                                if (full != null) {
+                                    repository.updateMessage(
+                                        full.chatMessage.copy(
+                                            text = textAccumulator,
+                                            thinkingSummary = thinkingSummary
+                                        )
+                                    )
+                                    if (thinkingAccumulator.isNotBlank()) {
+                                        repository.insertThinking(messageId, thinkingAccumulator)
                                     }
-                                    action?.optLong("timeout_ms")?.takeIf { it > 0 }?.let { append("\ntimeout_ms=$it") }
-                                }.take(4_000)
-                                hostedActivities.removeAll { it.id == "shell:$callId" }
-                                hostedActivities += ToolActivityStep(
-                                    id = "shell:$callId",
-                                    round = 0,
-                                    toolName = "openai_hosted_shell",
-                                    title = "OpenAI hosted shell",
-                                    detail = detail,
-                                    status = ToolActivityStep.Status.running,
-                                    createdAtMs = System.currentTimeMillis()
-                                )
-                            } else {
-                                val outputs = item.optJSONArray("output")
-                                var failed = false
-                                var timedOut = false
-                                val detail = buildString {
-                                    if (outputs != null) for (index in 0 until outputs.length()) {
-                                        val output = outputs.optJSONObject(index) ?: continue
-                                        output.optString("stdout").takeIf { it.isNotBlank() }?.let { append("stdout:\n$it\n") }
-                                        output.optString("stderr").takeIf { it.isNotBlank() }?.let { append("stderr:\n$it\n") }
-                                        val outcome = output.optJSONObject("outcome")
-                                        if (outcome?.optString("type") == "timeout") timedOut = true
-                                        if (outcome?.has("exit_code") == true && outcome.optInt("exit_code") != 0) failed = true
-                                    }
-                                }.take(4_000)
-                                val existing = hostedActivities.indexOfFirst { it.id == "shell:$callId" }
-                                val completed = ToolActivityStep(
-                                    id = "shell:$callId",
-                                    round = 0,
-                                    toolName = "openai_hosted_shell",
-                                    title = "OpenAI hosted shell結果",
-                                    detail = detail,
-                                    status = if (failed || timedOut) ToolActivityStep.Status.failed else ToolActivityStep.Status.completed,
-                                    errorMessage = if (timedOut) "タイムアウト" else if (failed) "コマンドが非0で終了しました" else null,
-                                    createdAtMs = System.currentTimeMillis()
-                                )
-                                if (existing >= 0) hostedActivities[existing] = completed else hostedActivities += completed
+                                }
                             }
-                            persistHostedActivities()
-                            return false
-                        }
-                    }
-                    return false
-                }
-                val isOpenCodeGoMessagesModel =
-                    normalizedProvider == "OPENCODE_GO" &&
-                        OpenCodeGoModelCatalog.modelFor(model)?.endpointKind == OpenCodeGoEndpointKind.MESSAGES
-                val isAnthropicCompatibleStream =
-                    normalizedProvider == "ALIBABA_CODING_PLAN" || isOpenCodeGoMessagesModel
-                val isOpenAiCompatibleStream = normalizedProvider == "OPENROUTER" ||
-                    normalizedProvider == "ZAI" ||
-                    normalizedProvider == "OPENAI" ||
-                    normalizedProvider == "MINIMAX" ||
-                    normalizedProvider == "OPENAI_COMPAT" ||
-                    (normalizedProvider == "OPENCODE_GO" && !isOpenCodeGoMessagesModel)
 
-                val reader = body.byteStream().bufferedReader(Charsets.UTF_8)   
-                try {
-                    val eventBuffer = StringBuilder()
+                            response.usage?.let { usage ->
+                                repository.recordTokenUsage(
+                                    provider = provider,
+                                    model = model,
+                                    usage = usage,
+                                    conversationId = conversationId,
+                                    requestType = "chat"
+                                )
+                            }
 
-                    suspend fun recordUsageOnce(snapshot: TokenUsageSnapshot?, phase: String) {
-                        if (usageRecorded) return
-                        val usage = snapshot?.normalized() ?: return
-                        if (usage.isEmpty()) return
-                        runCatching {
-                            repository.recordTokenUsage(
-                                provider = provider,
-                                model = model,
-                                usage = usage,
-                                conversationId = conversationId,
-                                requestType = phase
+                            updateFullMessageState(
+                                text = textAccumulator,
+                                attachments = emptyList(),
+                                thinkingSummary = thinkingSummary,
+                                thinkingStream = thinkingAccumulator
                             )
-                        }.onSuccess {
-                            usageRecorded = true
                         }
                     }
 
-                    suspend fun flushEvent() {
-                        val payload = eventBuffer.toString().trim()
-                        eventBuffer.setLength(0)
-                        if (payload.isEmpty() || payload == DONE_TOKEN) {
-                            return
-                        }
-
-                        try {
-                            if (consumeHostedEvent(payload)) return
-                            val parsedChunk = if (
-                                normalizedProvider == "CODEX_AUTH" ||
-                                isHostedSkillStream
-                            ) {
-                                val delta = CodexResponsesStreamParser.delta(json, payload, currentText)
-                                val usage = CodexResponsesStreamParser.usage(json, payload)
-                                StreamChunkParse(
-                                    deltaText = delta.first,
-                                    deltaThinking = delta.second,
-                                    deltaSummary = delta.third,
-                                    usage = usage
-                                )
-                            } else if (isAnthropicCompatibleStream) {
-                                parseAnthropicCompatibleDelta(payload)
-                            } else if (isOpenAiCompatibleStream) {
-                                val streamResponse = json.decodeFromString<com.porarri.yamabikochat.data.remote.ChatCompletionStreamResponse>(payload)
-                                val delta = streamResponse.choices.firstOrNull()?.delta
-                                val fullText = delta?.content.orEmpty()
-                                val fullThinking = delta?.reasoningDetails
-                                    ?.joinToString(separator = "") { it.text.orEmpty() }
-                                    ?.takeIf { it.isNotBlank() }
-                                    ?: (delta?.reasoning ?: delta?.reasoningContent).orEmpty()
-
-                                val textDelta = incrementalDelta(currentText, fullText)
-                                val thinkingDelta = incrementalDelta(currentThinking, fullThinking)
-                                StreamChunkParse(
-                                    deltaText = textDelta,
-                                    deltaThinking = thinkingDelta,
-                                    usage = streamResponse.usage?.toTokenUsageSnapshot()
-                                )
-                            } else {
-                                val chunk = json.decodeFromString<GenerateContentResponse>(payload)
-                                val parts = chunk.candidates?.firstOrNull()?.content?.parts.orEmpty()
-                                val parsed = parseGeminiParts(parts)
-                                val attachmentsAdded = parsed.attachments.isNotEmpty()
-                                if (attachmentsAdded) {
-                                    currentAttachments.addAll(parsed.attachments)
-                                }
-                                val textDelta = parsed.text + chunk.text.orEmpty()
-                                if (attachmentsAdded && textDelta.isEmpty() && parsed.thinking.isEmpty()) {
-                                    hasData = true
-                                }
-                                StreamChunkParse(
-                                    deltaText = textDelta,
-                                    deltaThinking = parsed.thinking,
-                                    usage = chunk.extractTokenUsageSnapshot()
-                                )
-                            }
-                            val deltaText = parsedChunk.deltaText
-                            val deltaThinking = parsedChunk.deltaThinking
-                            val deltaSummary = parsedChunk.deltaSummary
-                            recordUsageOnce(parsedChunk.usage, "chat_stream")
-
-                            currentThinking += deltaThinking
-                            if (deltaSummary.isNotEmpty()) {
-                                currentSummary += deltaSummary
-                            }
-                            if (deltaText.isNotEmpty() || deltaThinking.isNotEmpty() || deltaSummary.isNotEmpty() || currentAttachments.isNotEmpty()) {
-                                hasData = true
-                                currentText += deltaText
-                                val summaryForMessage = if (
-                                    normalizedProvider == "CODEX_AUTH" && currentSummary.isNotBlank()
-                                ) {
-                                    currentSummary
-                                } else {
-                                    null
-                                }
-                                updateFullMessageState(
-                                    text = currentText,
-                                    attachments = currentAttachments.toList(),
-                                    thinkingSummary = summaryForMessage,
-                                    thinkingStream = currentThinking
-                                )
-                            }
-                        } catch (e: Exception) {
-                            parseErrorCount += 1
-                            if (parseError == null) parseError = e
-                            DiagnosticsLogger.log(
-                                "Failed to parse streaming chunk provider=${provider.uppercase()} model=$model payload=${payload.take(512)}",
-                                e
-                            )
-                            if (BuildConfig.DEBUG || BuildConfig.DIAGNOSTIC) {
-                                android.util.Log.e(
-                                    "ChatResponseStreamer",
-                                    "Failed to parse streaming chunk: ${payload.take(256)}",
-                                    e
-                                )
-                            } else {
-                                android.util.Log.e("ChatResponseStreamer", "Failed to parse streaming chunk", e)
-                            }
-                        }
-                    }
-
-                    while (true) {
-                        val rawLine = reader.readLine() ?: break
-                        sawAnyLine = true
-                        val trimmedLine = rawLine.trim()
-                        if (trimmedLine.startsWith(":")) continue
-                        if (trimmedLine.isEmpty()) {
-                            if (eventBuffer.isNotEmpty()) flushEvent()
-                            continue
-                        }
-                        if (trimmedLine.startsWith("{") || trimmedLine.startsWith("[")) {
-                            if (eventBuffer.isNotEmpty()) flushEvent()
-                            eventBuffer.append(trimmedLine)
-                            flushEvent()
-                        } else if (trimmedLine.startsWith("data:")) {
-                            val payload = trimmedLine.substringAfter("data:").trimStart()
-                            if (eventBuffer.isNotEmpty()) {
-                                val pending = eventBuffer.toString().trim()
-                                if (looksLikeCompleteJsonEvent(pending)) {
-                                    flushEvent()
-                                } else {
-                                    eventBuffer.append('\n')
-                                }
-                            }
-                            eventBuffer.append(payload)
-                        } else if (nonDataLines.size < 8) {
-                            if (trimmedLine.isNotEmpty()) {
-                                nonDataLines.add(trimmedLine.take(256))
-                            }
-                        }
-                    }
-
-                    if (eventBuffer.isNotEmpty()) {
-                        flushEvent()
-                    }
-                } finally {
-                    reader.close()
-                }
-
-                if (!hasData) {
-                    parseError?.let {
-                        DiagnosticsLogger.log(
-                            "Streaming finished without usable data provider=${provider.uppercase()} model=$model parseErrors=$parseErrorCount",
-                            it
+                    val now = System.currentTimeMillis()
+                    if (now - lastUiUpdateMs >= 60L) {
+                        lastUiUpdateMs = now
+                        updateFullMessageState(
+                            text = textAccumulator,
+                            attachments = emptyList(),
+                            thinkingSummary = null,
+                            thinkingStream = thinkingAccumulator
                         )
                     }
-                    if (parseError == null) {
-                        val safeUrl = runCatching {
-                            val url = response.raw().request.url
-                            "${url.scheme}://${url.host}${url.encodedPath}"
-                        }.getOrNull()
-                        DiagnosticsLogger.log(
-                            "Streaming had no data provider=${provider.uppercase()} model=$model code=${response.code()} url=${safeUrl.orEmpty()} contentType=${body.contentType()} length=${body.contentLength()} sawAnyLine=$sawAnyLine nonDataLines=${nonDataLines.joinToString(" | ")}"
-                        )
-                    }
-                    DiagnosticsLogger.log(
-                        "Streaming produced no usable data; falling back to non-streaming provider=${provider.uppercase()} model=$model"
-                    )
-                    when (val fallback = requestSingleResponse(conversationId, model, provider, request)) {
-                        is NonStreamingResult.Success -> {
-                            persistResponse(
-                                text = fallback.text,
-                                attachments = fallback.attachments,
-                                thinkingSummary = fallback.thinking.ifBlank { null },
-                                thinkingStream = fallback.thinking
-                            )
-                        }
-                        is NonStreamingResult.Failure -> {
-                            persistResponse(text = fallback.message)
-                        }
-                    }
-                    return@launch
                 }
-
-                val (cleanText, additionalThinking) = splitReasoningBlocks(currentText)
-                val finalThinking = (currentThinking + additionalThinking).trim()
-                val isCodex = provider.uppercase() == "CODEX_AUTH"
-                val finalSummary = currentSummary.trim()
-                val summaryToStore = if (isCodex && finalSummary.isNotEmpty()) {
-                    finalSummary
-                } else {
-                    finalThinking.ifEmpty { null }
-                }
-                persistResponse(
-                    text = cleanText,
-                    attachments = currentAttachments.toList(),
-                    thinkingSummary = summaryToStore,
-                    thinkingStream = finalThinking
-                )
             } catch (e: Exception) {
-                DiagnosticsLogger.log("Streaming request failed provider=${provider.uppercase()} model=$model", e)
-                android.util.Log.e("ChatResponseStreamer", "Streaming request failed", e)
-                persistResponse(text = networkFailureMessage(provider, e))
-            } finally {
-                fetchFullMessage.invoke(messageId)
-            }
-        }
-    }
-
-    /**
-     * Executes a non-streaming request and returns the parsed result.
-     */
-    suspend fun requestSingleResponse(
-        conversationId: Long,
-        model: String,
-        provider: String,
-        request: GenerateContentRequest
-    ): NonStreamingResult = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val sessionId = if (provider.equals("CODEX_AUTH", ignoreCase = true)) {
-                repository.getOrCreateCodexSessionId(conversationId)
-            } else {
-                null
-            }
-            val response = repository.generateContent(
-                model = model,
-                request = request,
-                providerOverride = provider,
-                sessionId = sessionId
-            )
-            if (!response.isSuccessful) {
-                val errorBody = if (BuildConfig.DEBUG || BuildConfig.DIAGNOSTIC) {
-                    response.errorBody()?.string()?.take(2048)
+                DiagnosticsLogger.log("Streaming failed messageId=$messageId", e)
+                val errText = textAccumulator.ifBlank { "エラー: ${e.message ?: "通信に失敗しました"}" }
+                if (activeVariant != null) {
+                    repository.updateMessageVariant(activeVariant!!.copy(text = errText))
                 } else {
-                    null
-                }
-                DiagnosticsLogger.log(
-                    "Generate content failed provider=${provider.uppercase()} model=$model code=${response.code()} body=${errorBody.orEmpty()}"
-                )
-                if (BuildConfig.DEBUG || BuildConfig.DIAGNOSTIC) {
-                    android.util.Log.e(
-                        "ChatResponseStreamer",
-                        "Generate content failed: code=${response.code()} body=$errorBody"
-                    )
-                } else {
-                    android.util.Log.e("ChatResponseStreamer", "Generate content failed: code=${response.code()}")
-                }
-                NonStreamingResult.Failure(apiFailureMessage(provider, response.code()))
-            } else {
-                val body = response.body()
-                if (body == null) {
-                    DiagnosticsLogger.log("Generate content returned empty body provider=${provider.uppercase()} model=$model")
-                    NonStreamingResult.Failure(STREAMING_GENERIC_ERROR)
-                } else {
-                    var text = ""
-                    var thinking = ""
-                    val attachments = mutableListOf<String>()
-                    body.extractTokenUsageSnapshot()?.let { usage ->
-                        runCatching {
-                            repository.recordTokenUsage(
-                                provider = provider,
-                                model = model,
-                                usage = usage,
-                                conversationId = conversationId,
-                                requestType = "chat_non_stream"
-                            )
-                        }
-                    }
-                    val parsed = parseGeminiParts(body.candidates?.firstOrNull()?.content?.parts.orEmpty())
-                    text += parsed.text + body.text.orEmpty()
-                    thinking += parsed.thinking
-                    attachments.addAll(parsed.attachments)
-                    val (cleanText, extraThinking) = splitReasoningBlocks(text)
-                    val combinedThinking = (thinking + extraThinking).trim()
-                    NonStreamingResult.Success(cleanText, combinedThinking, attachments)
-                }
-            }
-        } catch (e: Exception) {
-            DiagnosticsLogger.log("Generate content request threw exception provider=${provider.uppercase()} model=$model", e)
-            android.util.Log.e("ChatResponseStreamer", "Generate content request threw exception", e)
-            NonStreamingResult.Failure(networkFailureMessage(provider, e))
-        }
-    }
-
-    sealed class NonStreamingResult {
-        data class Success(val text: String, val thinking: String, val attachments: List<String>) : NonStreamingResult()
-        data class Failure(val message: String) : NonStreamingResult()
-    }
-
-    companion object {
-        private const val DONE_TOKEN = "[DONE]"
-        private const val STREAMING_GENERIC_ERROR = "応答の取得に失敗しました。しばらくしてから再試行してください。"
-    }
-
-    private fun apiFailureMessage(provider: String, code: Int): String {
-        val p = provider.uppercase()
-        return when (code) {
-            401 -> "APIキーが未設定または無効です（$p）"
-            403 -> "アクセスが拒否されました（$p）"
-            404 -> "エンドポイント/モデルが見つかりません（$p）"
-            408 -> "タイムアウトしました（$p）"
-            429 -> "レート制限です。少し待って再試行してください（$p）"
-            in 500..599 -> "サーバーエラーが発生しました（$p, code=$code）"
-            else -> "APIエラーが発生しました（$p, code=$code）"
-        }
-    }
-
-    private fun networkFailureMessage(provider: String, throwable: Throwable): String {
-        val p = provider.uppercase()
-        if (throwable is IllegalArgumentException) {
-            val detail = throwable.message?.takeIf { it.isNotBlank() } ?: throwable::class.java.simpleName
-            return "設定またはモデルが不正です（$p, $detail）"
-        }
-        val kind = throwable::class.java.simpleName
-        return "通信に失敗しました（$p, $kind）"
-    }
-
-    private data class ParsedParts(
-        val text: String,
-        val thinking: String,
-        val attachments: List<String>
-    )
-
-    private suspend fun parseGeminiParts(parts: List<ResponsePart>): ParsedParts {
-        val textBuilder = StringBuilder()
-        val thinkingBuilder = StringBuilder()
-        val attachments = mutableListOf<String>()
-
-        for (part in parts) {
-            if (part.thought == true) {
-                thinkingBuilder.append(part.text.orEmpty())
-            } else {
-                part.text?.let { textBuilder.append(it) }
-            }
-
-            part.functionCall?.let { textBuilder.append(formatFunctionCall(it)) }
-            part.functionResponse?.let { response ->
-                textBuilder.append(formatFunctionResponse(response))
-                response.parts?.forEach { respPart ->
-                    respPart.inlineData?.let { inline ->
-                        repository.saveInlineData(inline, respPart.fileData?.displayName)?.let { attachments.add(it) }
-                    }
-                    respPart.fileData?.let { file ->
-                        localGeneratedFile(file.fileUri)?.let(attachments::add)
-                            ?: textBuilder.append(formatFileDataPlaceholder(file.displayName, file.fileUri))
+                    val full = repository.getFullMessageById(messageId)
+                    if (full != null) {
+                        repository.updateMessage(full.chatMessage.copy(text = errText))
                     }
                 }
-            }
-
-            part.inlineData?.let { inline ->
-                repository.saveInlineData(inline, part.fileData?.displayName)?.let { attachments.add(it) }
-            }
-            if (part.fileData != null && part.inlineData == null) {
-                localGeneratedFile(part.fileData.fileUri)?.let(attachments::add)
-                    ?: textBuilder.append(formatFileDataPlaceholder(part.fileData.displayName, part.fileData.fileUri))
+                updateFullMessageState(errText, emptyList(), null, thinkingAccumulator)
             }
         }
-
-        return ParsedParts(
-            text = textBuilder.toString(),
-            thinking = thinkingBuilder.toString(),
-            attachments = attachments
-        )
     }
-
-    private fun localGeneratedFile(raw: String?): String? {
-        val value = raw?.takeIf { it.isNotBlank() } ?: return null
-        val file = if (value.startsWith("file:")) runCatching { File(java.net.URI(value)) }.getOrNull() else File(value)
-        return file?.takeIf { it.isFile }?.absolutePath
-    }
-
-    private fun formatFunctionCall(functionCall: FunctionCall): String {
-        val args = functionCall.args?.toString() ?: ""
-        return "\n[Function call] ${functionCall.name}${if (args.isNotBlank()) " $args" else ""}"
-    }
-
-    private fun formatFunctionResponse(functionResponse: FunctionResponse): String {
-        val response = functionResponse.response?.toString() ?: ""
-        return if (response.isBlank()) {
-            "\n[Function response] ${functionResponse.name}"
-        } else {
-            "\n[Function response] ${functionResponse.name}: $response"
-        }
-    }
-
-    private fun formatFileDataPlaceholder(displayName: String?, fileUri: String?): String {
-        val label = displayName ?: fileUri ?: "file"
-        return "\n[File] $label"
-    }
-
-    private fun incrementalDelta(buffer: String, incoming: String): String {
-        if (incoming.isEmpty()) return ""
-        if (incoming == buffer) return ""
-        if (incoming.length > buffer.length && incoming.startsWith(buffer)) {
-            return incoming.substring(buffer.length)
-        }
-        return incoming
-    }
-
-    private fun parseAnthropicCompatibleDelta(payload: String): StreamChunkParse {
-        val element = json.parseToJsonElement(payload)
-        val obj = element.jsonObject
-        val type = obj["type"]?.jsonPrimitive?.contentOrNull?.lowercase() ?: return StreamChunkParse("", "")
-        return when (type) {
-            "content_block_delta" -> {
-                val delta = obj["delta"]?.jsonObject ?: return StreamChunkParse("", "")
-                when (delta["type"]?.jsonPrimitive?.contentOrNull?.lowercase()) {
-                    "text_delta" -> StreamChunkParse(
-                        deltaText = delta["text"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                        deltaThinking = ""
-                    )
-                    "thinking_delta" -> StreamChunkParse(
-                        deltaText = "",
-                        deltaThinking = delta["thinking"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                    )
-                    else -> StreamChunkParse("", "")
-                }
-            }
-            "content_block_start" -> {
-                val block = obj["content_block"]?.jsonObject ?: return StreamChunkParse("", "")
-                when (block["type"]?.jsonPrimitive?.contentOrNull?.lowercase()) {
-                    "text" -> StreamChunkParse(
-                        deltaText = block["text"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                        deltaThinking = ""
-                    )
-                    "thinking" -> StreamChunkParse(
-                        deltaText = "",
-                        deltaThinking = block["thinking"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                    )
-                    else -> StreamChunkParse("", "")
-                }
-            }
-            "message_stop", "message_delta", "message_start", "ping" -> StreamChunkParse("", "")
-            else -> StreamChunkParse("", "")
-        }
-    }
-
-    private fun looksLikeCompleteJsonEvent(raw: String): Boolean {
-        if (!raw.startsWith("{")) return false
-        val obj = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return false
-        return obj.containsKey("choices") || obj.containsKey("type") || obj.containsKey("candidates")
-    }
-
-    private data class StreamChunkParse(
-        val deltaText: String,
-        val deltaThinking: String,
-        val deltaSummary: String = "",
-        val usage: TokenUsageSnapshot? = null
-    )
 }

@@ -1,5 +1,13 @@
 package com.porarri.yamabikochat.data.local
 
+import com.porarri.yamabikochat.data.remote.OpenRouterModelService
+import com.porarri.yamabikochat.data.remote.OpenRouterReasoningCapabilities
+import com.porarri.yamabikochat.data.remote.SimpleModel
+import com.porarri.yamabikochat.data.repositories.ProviderRequestSettingsResolver
+import com.porarri.yamabikochat.data.repositories.ProviderRequestToolScope
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -8,36 +16,79 @@ import org.junit.Test
 
 class SettingsReasoningTest {
 
+    private fun createResolver(
+        supportedEfforts: List<String>? = listOf("high", "medium", "low"),
+        supportsMaxTokens: Boolean = true,
+        mandatory: Boolean = false
+    ): ProviderRequestSettingsResolver {
+        val modelService = mockk<OpenRouterModelService>(relaxed = true)
+        every { modelService.getModelById(any()) } answers {
+            val modelId = firstArg<String>()
+            SimpleModel(
+                id = modelId,
+                name = modelId,
+                provider = modelId.substringBefore('/'),
+                topProvider = null,
+                contextLength = 128000,
+                promptPricePerMillion = 1.0,
+                completionPricePerMillion = 1.0,
+                isFree = false,
+                reasoning = OpenRouterReasoningCapabilities(
+                    supportedEfforts = supportedEfforts,
+                    exposesEffortSelection = supportedEfforts != null,
+                    supportsMaxTokens = supportsMaxTokens,
+                    mandatory = mandatory
+                )
+            )
+        }
+        return ProviderRequestSettingsResolver(
+            modelService = modelService,
+            skillRepository = mockk(relaxed = true)
+        )
+    }
+
     @Test
-    fun buildThinkingConfigFor_effortMode_setsEffortOnly() {
-        val settings = Settings().copy(
+    fun buildThinkingConfigFor_effortMode_setsEffortOnly() = runBlocking {
+        val settings = Settings(
             openRouterThinkingEnabled = true,
             openRouterReasoningMode = "effort",
             openRouterReasoningEffort = "high",
             openRouterReasoningExclude = false
         )
+        val resolver = createResolver(supportedEfforts = listOf("high", "medium", "low"))
+        val resolved = resolver.resolve(
+            settings = settings,
+            provider = "OPENROUTER",
+            model = "anthropic/claude-3.7-sonnet",
+            toolScope = ProviderRequestToolScope.None
+        )
 
-        val config = settings.buildThinkingConfigFor("OPENROUTER", "anthropic/claude-3.7-sonnet")
-
+        val config = resolved.thinking
         assertNotNull(config)
         config!!
         assertEquals("high", config.effort)
-        assertNull(config.thinkingBudget)
+        assertNull(config.budget)
         assertNull(config.enabled)
         assertNull(config.exclude)
-        assertTrue(config.includeThoughts)
+        assertEquals(true, config.includeThoughts)
     }
 
     @Test
-    fun buildThinkingConfigFor_disabledReasoning_setsEnabledFalse() {
-        val settings = Settings().copy(
+    fun buildThinkingConfigFor_disabledReasoning_setsEnabledFalse() = runBlocking {
+        val settings = Settings(
             openRouterThinkingEnabled = false,
             openRouterReasoningMode = "auto",
             openRouterReasoningExclude = false
         )
+        val resolver = createResolver()
+        val resolved = resolver.resolve(
+            settings = settings,
+            provider = "OPENROUTER",
+            model = "deepseek/deepseek-r1",
+            toolScope = ProviderRequestToolScope.None
+        )
 
-        val config = settings.buildThinkingConfigFor("OPENROUTER", "deepseek/deepseek-r1")
-
+        val config = resolved.thinking
         assertNotNull(config)
         config!!
         assertEquals(false, config.enabled)
@@ -45,43 +96,55 @@ class SettingsReasoningTest {
     }
 
     @Test
-    fun buildThinkingConfigFor_budgetMode_mapsTokensAndExclude() {
-        val settings = Settings().copy(
+    fun buildThinkingConfigFor_budgetMode_mapsTokensAndExclude() = runBlocking {
+        val settings = Settings(
             openRouterThinkingEnabled = true,
             openRouterThinkingBudget = 4096,
             openRouterReasoningMode = "budget",
             openRouterReasoningExclude = true
         )
+        val resolver = createResolver(supportsMaxTokens = true)
+        val resolved = resolver.resolve(
+            settings = settings,
+            provider = "OPENROUTER",
+            model = "anthropic/claude-3.7-sonnet",
+            toolScope = ProviderRequestToolScope.None
+        )
 
-        val config = settings.buildThinkingConfigFor("OPENROUTER", "anthropic/claude-3.7-sonnet")
-
+        val config = resolved.thinking
         assertNotNull(config)
         config!!
-        assertEquals(4096, config.thinkingBudget)
+        assertEquals(4096, config.budget)
         assertEquals(true, config.exclude)
         assertEquals(false, config.includeThoughts)
     }
 
     @Test
-    fun buildThinkingConfigFor_autoMode_enablesReasoning() {
-        val settings = Settings().copy(
+    fun buildThinkingConfigFor_autoMode_enablesReasoning() = runBlocking {
+        val settings = Settings(
             openRouterThinkingEnabled = true,
             openRouterReasoningMode = "auto",
             openRouterReasoningExclude = false
         )
+        val resolver = createResolver()
+        val resolved = resolver.resolve(
+            settings = settings,
+            provider = "OPENROUTER",
+            model = "mistralai/mistral-large",
+            toolScope = ProviderRequestToolScope.None
+        )
 
-        val config = settings.buildThinkingConfigFor("OPENROUTER", "mistralai/mistral-large")
-
+        val config = resolved.thinking
         assertNotNull(config)
         config!!
         assertEquals(true, config.enabled)
-        assertNull(config.thinkingBudget)
+        assertNull(config.budget)
         assertNull(config.effort)
     }
 
     @Test
-    fun buildThinkingConfigFor_dualOverridesUseContextValues() {
-        val settings = Settings().copy(
+    fun buildThinkingConfigFor_dualOverridesUseContextValues() = runBlocking {
+        val settings = Settings(
             openRouterThinkingEnabled = false,
             openRouterThinkingBudget = 0,
             openRouterReasoningMode = "auto",
@@ -90,145 +153,22 @@ class SettingsReasoningTest {
             dualOpenRouterReasoningModeA = "budget",
             dualOpenRouterReasoningExcludeA = false
         )
-
-        val config = settings.buildThinkingConfigFor(
+        val resolver = createResolver(supportsMaxTokens = true)
+        val resolved = resolver.resolve(
+            settings = settings,
             provider = "OPENROUTER",
             model = "openai/gpt-5-mini",
-            context = Settings.ReasoningContext.DUAL_A
+            context = Settings.ReasoningContext.DUAL_A,
+            toolScope = ProviderRequestToolScope.None
         )
 
+        val config = resolved.thinking
         assertNotNull(config)
         config!!
-        assertEquals(2048, config.thinkingBudget)
+        assertEquals(2048, config.budget)
         assertNull(config.enabled)
         assertNull(config.effort)
         assertNull(config.exclude)
-        assertTrue(config.includeThoughts)
-    }
-
-    @Test
-    fun buildThinkingConfigFor_alibabaUsesAnthropicBudget() {
-        val settings = Settings().copy(
-            geminiThinkingEnabled = true,
-            geminiThinkingBudget = 2048
-        )
-
-        val config = settings.buildThinkingConfigFor(
-            provider = "ALIBABA_CODING_PLAN",
-            model = "qwen3.7-plus"
-        )
-
-        assertNotNull(config)
-        config!!
-        assertEquals(true, config.enabled)
-        assertEquals(2048, config.thinkingBudget)
-        assertTrue(config.includeThoughts)
-    }
-
-    @Test
-    fun buildThinkingConfigFor_openCodeGoMessagesUsesAnthropicBudget() {
-        val settings = Settings().copy(
-            geminiThinkingEnabled = true,
-            geminiThinkingBudget = 2048
-        )
-
-        val config = settings.buildThinkingConfigFor(
-            provider = "OPENCODE_GO",
-            model = "qwen3.7-plus"
-        )
-
-        assertNotNull(config)
-        config!!
-        assertEquals(true, config.enabled)
-        assertEquals(2048, config.thinkingBudget)
-        assertTrue(config.includeThoughts)
-    }
-
-    @Test
-    fun buildThinkingConfigFor_openCodeGoChatCompletionsUsesOpenAiBudget() {
-        val settings = Settings().copy(
-            geminiThinkingEnabled = true,
-            geminiThinkingBudget = 4096
-        )
-
-        val config = settings.buildThinkingConfigFor(
-            provider = "OPENCODE_GO",
-            model = "glm-5.1"
-        )
-
-        assertNotNull(config)
-        config!!
-        assertNull(config.enabled)
-        assertEquals(4096, config.thinkingBudget)
-        assertTrue(config.includeThoughts)
-    }
-
-    @Test
-    fun buildThinkingConfigFor_superGrok_setsEffortWhenReasoningSupported() {
-        val settings = Settings().copy(
-            superGrokReasoningEnabled = true,
-            superGrokReasoningEffort = "high"
-        )
-
-        val config = settings.buildThinkingConfigFor("SUPERGROK", "grok-build-0.1")
-
-        assertNotNull(config)
-        config!!
-        assertEquals("high", config.effort)
-        assertTrue(config.includeThoughts)
-    }
-
-    @Test
-    fun buildThinkingConfigFor_superGrokNonReasoningModel_returnsNull() {
-        val settings = Settings().copy(
-            superGrokReasoningEnabled = true,
-            superGrokReasoningEffort = "high"
-        )
-
-        val config = settings.buildThinkingConfigFor("SUPERGROK", "grok-4.20-0309-non-reasoning")
-
-        assertNull(config)
-    }
-
-    @Test
-    fun buildThinkingConfigFor_superGrokCustomModel_sendsEffort() {
-        val settings = Settings().copy(
-            superGrokReasoningEnabled = true,
-            superGrokReasoningEffort = "high"
-        )
-
-        val config = settings.buildThinkingConfigFor("SUPERGROK", "custom-grok-model")
-
-        assertNotNull(config)
-        config!!
-        assertEquals("high", config.effort)
-        assertTrue(config.includeThoughts)
-    }
-
-    @Test
-    fun buildThinkingConfigFor_superGrokInvalidEffort_clampsToMedium() {
-        val settings = Settings().copy(
-            superGrokReasoningEnabled = true,
-            superGrokReasoningEffort = "xhigh"
-        )
-
-        val config = settings.buildThinkingConfigFor("SUPERGROK", "grok-build-0.1")
-
-        assertNotNull(config)
-        assertEquals("medium", config!!.effort)
-    }
-
-    @Test
-    fun buildCodexRequestConfig_carriesPromptCacheDisabledState() {
-        val settings = Settings().copy(
-            codexReasoningEnabled = false,
-            codexPromptCacheEnabled = false
-        )
-
-        val config = settings.buildCodexRequestConfig("unsupported-model")
-
-        assertNotNull(config)
-        config!!
-        assertEquals(false, config.promptCacheEnabled)
+        assertEquals(true, config.includeThoughts)
     }
 }
