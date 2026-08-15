@@ -115,34 +115,3 @@ struct ProviderMetricsContext: Sendable {
 
     @TaskLocal static var current: ProviderMetricsContext?
 }
-
-extension ProviderUsage {
-    /// Converts provider wire conventions into disjoint input buckets.
-    func disjointInputUsage(providerID: String) -> ProviderUsage {
-        let normalized = normalized()
-        let cached = max(0, normalized.cachedInputTokens ?? 0)
-        let created = max(0, normalized.cacheCreationInputTokens ?? 0)
-        let provider = providerID.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        let inclusiveProviders: Set<String> = [
-            "GEMINI", "GEMINI_AUTH", "OPENROUTER", "OPENAI", "OPENAI_COMPAT",
-            "OPENCODE_GO", "MODELS_DEV:OPENCODE-GO", "CODEX_AUTH", "CLINEPASS", "MINIMAX", "ZAI"
-        ]
-        // Every currently supported dynamic models.dev adapter except the native
-        // Anthropic Messages adapter reaches an OpenAI-compatible endpoint, whose
-        // prompt/input token count includes cache-read and cache-write tokens.
-        let modelsDevUsesInclusiveInput = provider.hasPrefix("MODELS_DEV:")
-            && provider != "MODELS_DEV:ANTHROPIC"
-        let rawInput = max(0, normalized.inputTokens ?? 0)
-        let uncached = (inclusiveProviders.contains(provider) || modelsDevUsesInclusiveInput)
-            ? max(0, rawInput - cached - created)
-            : rawInput
-        return ProviderUsage(
-            inputTokens: uncached,
-            outputTokens: normalized.outputTokens,
-            totalTokens: uncached + cached + created + max(0, normalized.outputTokens ?? 0),
-            reasoningTokens: normalized.reasoningTokens,
-            cachedInputTokens: normalized.cachedInputTokens,
-            cacheCreationInputTokens: normalized.cacheCreationInputTokens
-        )
-    }
-}

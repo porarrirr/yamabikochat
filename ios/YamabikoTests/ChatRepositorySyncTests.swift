@@ -242,7 +242,7 @@ final class ChatRepositorySyncTests: XCTestCase {
             [.completed(ProviderResponse(
                 text: "ok",
                 usage: ProviderUsage(
-                    inputTokens: 120,
+                    inputTokens: 60,
                     outputTokens: 30,
                     totalTokens: 150,
                     reasoningTokens: 9,
@@ -276,12 +276,45 @@ final class ChatRepositorySyncTests: XCTestCase {
         XCTAssertEqual(totals.totalTokens, 150)
     }
 
+    func testSendMessageRecordsPiAssistantUsageSamplesAsSeparateRequests() async throws {
+        let runtime = PiStreamSpy { _, _ in
+            [.completed(ProviderResponse(
+                text: "ok",
+                usage: ProviderUsage(inputTokens: 150, outputTokens: 30, totalTokens: 180),
+                usageSamples: [
+                    ProviderUsage(inputTokens: 100, outputTokens: 20, totalTokens: 120),
+                    ProviderUsage(inputTokens: 50, outputTokens: 10, totalTokens: 60)
+                ]
+            ))]
+        }
+        let fixture = try makeFixture(runtime: runtime) { settings in
+            settings.apiProvider = "OPENROUTER"
+            settings.defaultModel = "openai/gpt-4o-mini"
+            settings.providerDefaultModelsJSON = #"{"OPENROUTER":"openai/gpt-4o-mini"}"#
+            settings.isStreamingEnabled = false
+        }
+        try fixture.credentials.setCredential("openrouter-key", for: .openRouter)
+
+        let conversationID = try fixture.repository.createConversation(title: "New Chat")
+        _ = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "hello",
+            attachments: []
+        )
+
+        let totals = try fixture.conversations.fetchTokenUsageTotals(sinceEpochMs: 0)
+        XCTAssertEqual(totals.requestCount, 2)
+        XCTAssertEqual(totals.inputTokens, 150)
+        XCTAssertEqual(totals.outputTokens, 30)
+        XCTAssertEqual(totals.totalTokens, 180)
+    }
+
     func testSendMessagePassesCacheAndReasoningUsageToPricingEstimator() async throws {
         let runtime = PiStreamSpy { _, _ in
             [.completed(ProviderResponse(
                 text: "ok",
                 usage: ProviderUsage(
-                    inputTokens: 80,
+                    inputTokens: 45,
                     outputTokens: 20,
                     totalTokens: 100,
                     reasoningTokens: 7,

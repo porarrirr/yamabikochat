@@ -64,7 +64,7 @@ final class ConversationStatsTests: XCTestCase {
             turnId: "turn-1",
             recorder: { [sink] metric in sink.append(metric) }
         )
-        var collector = PiConversationMetricsCollector(context: context, providerID: "OPENAI")
+        var collector = PiConversationMetricsCollector(context: context)
 
         collector.startLLM(stepID: 1, at: 1_000)
         collector.observeToken(at: 1_200)
@@ -94,7 +94,7 @@ final class ConversationStatsTests: XCTestCase {
         XCTAssertEqual(metrics.map(\.kind), [.llm, .tool, .llm])
         XCTAssertEqual(metrics.map(\.turnId), ["turn-1", "turn-1", "turn-1"])
         XCTAssertEqual(metrics[0].firstTokenAtMs, 1_200)
-        XCTAssertEqual(metrics[0].inputTokens, 25)
+        XCTAssertEqual(metrics[0].inputTokens, 100)
         XCTAssertEqual(metrics[0].cachedInputTokens, 70)
         XCTAssertEqual(metrics[0].cacheCreationInputTokens, 5)
         XCTAssertEqual(metrics[0].outputTokens, 20)
@@ -103,57 +103,25 @@ final class ConversationStatsTests: XCTestCase {
         XCTAssertEqual(metrics[2].outputTokens, 10)
     }
 
-    func testProviderUsageNormalizationSeparatesInclusiveAndDisjointInputs() {
-        let inclusive = ProviderUsage(
-            inputTokens: 100,
-            outputTokens: 10,
-            totalTokens: 110,
-            cachedInputTokens: 70,
-            cacheCreationInputTokens: 5
-        ).disjointInputUsage(providerID: "OPENAI")
-        XCTAssertEqual(inclusive.inputTokens, 25)
-        XCTAssertEqual(inclusive.cachedInputTokens, 70)
-        XCTAssertEqual(inclusive.cacheCreationInputTokens, 5)
-        XCTAssertEqual(inclusive.totalTokens, 110)
-
-        let modelsDevOpenCodeGo = ProviderUsage(
-            inputTokens: 100,
-            outputTokens: 10,
-            totalTokens: 110,
-            cachedInputTokens: 80
-        ).disjointInputUsage(providerID: "MODELS_DEV:opencode-go")
-        XCTAssertEqual(modelsDevOpenCodeGo.inputTokens, 20)
-        XCTAssertEqual(modelsDevOpenCodeGo.cachedInputTokens, 80)
-
-        let modelsDevOpenAICompatible = ProviderUsage(
-            inputTokens: 120,
-            outputTokens: 5,
-            cachedInputTokens: 90,
-            cacheCreationInputTokens: 10
-        ).disjointInputUsage(providerID: "MODELS_DEV:groq")
-        XCTAssertEqual(modelsDevOpenAICompatible.inputTokens, 20)
-        XCTAssertEqual(modelsDevOpenAICompatible.cachedInputTokens, 90)
-        XCTAssertEqual(modelsDevOpenAICompatible.cacheCreationInputTokens, 10)
-
-        let modelsDevAnthropic = ProviderUsage(
-            inputTokens: 20,
-            outputTokens: 5,
-            cachedInputTokens: 90,
-            cacheCreationInputTokens: 10
-        ).disjointInputUsage(providerID: "MODELS_DEV:anthropic")
-        XCTAssertEqual(modelsDevAnthropic.inputTokens, 20)
-        XCTAssertEqual(modelsDevAnthropic.cachedInputTokens, 90)
-        XCTAssertEqual(modelsDevAnthropic.cacheCreationInputTokens, 10)
-        XCTAssertEqual(modelsDevOpenCodeGo.totalTokens, 110)
-
-        let anthropic = ProviderUsage(
+    func testPiUsageBucketsRemainDisjointWithoutSubtractingCacheTwice() {
+        let usage = ProviderUsage(
             inputTokens: 25,
             outputTokens: 10,
             cachedInputTokens: 70,
             cacheCreationInputTokens: 5
-        ).disjointInputUsage(providerID: "ALIBABA_CODING_PLAN")
-        XCTAssertEqual(anthropic.inputTokens, 25)
-        XCTAssertEqual(anthropic.totalTokens, 110)
+        ).normalized()
+        XCTAssertEqual(usage.inputTokens, 25)
+        XCTAssertEqual(usage.cachedInputTokens, 70)
+        XCTAssertEqual(usage.cacheCreationInputTokens, 5)
+        XCTAssertEqual(usage.totalTokens, 35)
+
+        let stats = ConversationStats(
+            inputTokens: 96,
+            outputTokens: 101,
+            cachedInputTokens: 800
+        )
+        XCTAssertEqual(stats.billedInputTokens, 896)
+        XCTAssertEqual(stats.cacheHitPercent, 89)
     }
 
     func testDefaultVisibilityAndRoundTrip() {

@@ -283717,8 +283717,7 @@ function makeTools(request, runId, res) {
     };
   });
 }
-function finalResponse(agent) {
-  const assistants = agent.state.messages.filter((message) => message.role === "assistant");
+function finalResponse(assistants) {
   const last = assistants.at(-1);
   if (!last) throw new Error("Pi provider returned no assistant message");
   if (last.stopReason === "error" || last.errorMessage) {
@@ -283749,6 +283748,7 @@ function finalResponse(agent) {
     text,
     reasoningSummary: reasoning || null,
     usage: assistants.length ? totals : null,
+    usageSamples: assistants.map((message) => providerUsage(message.usage)).filter(Boolean),
     toolCalls
   };
 }
@@ -283778,6 +283778,7 @@ async function runAgent(envelope, res) {
   runs.set(runId, agent);
   let step = 0;
   let activeStep = null;
+  const runAssistants = [];
   agent.subscribe((event) => {
     if (event.type === "turn_start") {
       activeStep = ++step;
@@ -283787,6 +283788,7 @@ async function runAgent(envelope, res) {
       if (update.type === "text_delta") send(res, { type: "text_delta", delta: update.delta });
       if (update.type === "thinking_delta") send(res, { type: "reasoning_delta", delta: update.delta });
     } else if (event.type === "message_end" && event.message?.role === "assistant") {
+      runAssistants.push(event.message);
       send(res, {
         type: "llm_end",
         stepId: activeStep,
@@ -283804,14 +283806,14 @@ async function runAgent(envelope, res) {
   try {
     report("agent_start", "Pi agent execution starting");
     await agent.continue();
-    const last = agent.state.messages.filter((message) => message.role === "assistant").at(-1);
+    const last = runAssistants.at(-1);
     report("provider_result", "Pi provider stream finished", {
       stopReason: last?.stopReason || "missing",
       rawStopReason: last?.rawStopReason || "none",
       contentTypes: (last?.content || []).map((part) => part.type).join(","),
       errorMessage: last?.errorMessage || "none"
     });
-    const response = finalResponse(agent);
+    const response = finalResponse(runAssistants);
     report("agent_complete", "Pi agent execution completed");
     send(res, { type: "completed", response });
   } catch (error) {

@@ -427,6 +427,7 @@ final class ChatRepository {
             provider: conversation.apiProvider,
             model: conversation.model,
             usage: response.usage,
+            usageSamples: response.usageSamples,
             conversationId: conversationId,
             requestType: "chat_non_stream"
         )
@@ -517,6 +518,7 @@ final class ChatRepository {
             provider: conversation.apiProvider,
             model: conversation.model,
             usage: response.usage,
+            usageSamples: response.usageSamples,
             conversationId: conversationId,
             requestType: "regenerate_non_stream"
         )
@@ -557,6 +559,7 @@ final class ChatRepository {
             provider: provider,
             model: request.model,
             usage: response.usage,
+            usageSamples: response.usageSamples,
             conversationId: conversationId,
             requestType: "chat_stream"
         )
@@ -600,6 +603,7 @@ final class ChatRepository {
             provider: provider,
             model: request.model,
             usage: response.usage,
+            usageSamples: response.usageSamples,
             conversationId: conversationId,
             requestType: "regenerate_stream"
         )
@@ -713,6 +717,7 @@ final class ChatRepository {
                 reasoningSummary: session.reasoningText.trimmedNonEmpty,
                 raw: nil,
                 usage: session.usage,
+                usageSamples: session.usageSamples,
                 toolCalls: session.toolCalls
             )
             if persistResults {
@@ -846,6 +851,7 @@ final class ChatRepository {
             provider: settings.dualProviderA,
             model: settings.dualModelA,
             usage: resultA.usage,
+            usageSamples: resultA.usageSamples,
             conversationId: conversationId,
             requestType: "dual_a"
         )
@@ -853,6 +859,7 @@ final class ChatRepository {
             provider: settings.dualProviderB,
             model: settings.dualModelB,
             usage: resultB.usage,
+            usageSamples: resultB.usageSamples,
             conversationId: conversationId,
             requestType: "dual_b"
         )
@@ -1068,6 +1075,7 @@ final class ChatRepository {
             provider: judgeOutcome.synthesizerModel.provider,
             model: judgeOutcome.synthesizerModel.modelId,
             usage: synthUsage,
+            usageSamples: session.usageSamples,
             conversationId: conversationId,
             requestType: "fusion_synth"
         )
@@ -1225,6 +1233,7 @@ final class ChatRepository {
                     provider: normalizedProvider,
                     model: normalizedModel,
                     usage: response.usage,
+                    usageSamples: response.usageSamples,
                     conversationId: conversationId,
                     requestType: "shortcut"
                 )
@@ -1767,6 +1776,7 @@ final class ChatRepository {
                     provider: turnProvider,
                     model: turnModel,
                     usage: response.usage,
+                    usageSamples: response.usageSamples,
                     conversationId: autoConversation.boundChatConversationId,
                     requestType: "auto_turn"
                 )
@@ -1934,18 +1944,46 @@ final class ChatRepository {
         provider: String,
         model: String,
         usage: ProviderUsage?,
+        usageSamples: [ProviderUsage]? = nil,
         conversationId: Int64?,
         requestType: String
     ) async {
-        guard let normalized = usage?
-            .disjointInputUsage(providerID: provider)
+        let samples: [ProviderUsage]
+        if let usageSamples, !usageSamples.isEmpty {
+            samples = usageSamples
+        } else if let usage {
+            samples = [usage]
+        } else {
+            return
+        }
+        for sample in samples {
+            await recordSingleTokenUsageIfAvailable(
+                provider: provider,
+                model: model,
+                usage: sample,
+                conversationId: conversationId,
+                requestType: requestType
+            )
+        }
+    }
+
+    private func recordSingleTokenUsageIfAvailable(
+        provider: String,
+        model: String,
+        usage: ProviderUsage,
+        conversationId: Int64?,
+        requestType: String
+    ) async {
+        guard let normalized = usage
             .normalizedNonEmpty()
         else { return }
         let resolvedInput = max(0, normalized.inputTokens ?? 0)
         let resolvedOutput = max(0, normalized.outputTokens ?? 0)
+        let resolvedCached = max(0, normalized.cachedInputTokens ?? 0)
+        let resolvedCacheCreation = max(0, normalized.cacheCreationInputTokens ?? 0)
         let resolvedTotal = max(
-            max(0, normalized.totalTokens ?? (resolvedInput + resolvedOutput)),
-            resolvedInput + resolvedOutput
+            max(0, normalized.totalTokens ?? 0),
+            resolvedInput + resolvedCached + resolvedCacheCreation + resolvedOutput
         )
 
         let costUsd = await pricingRepository.estimateCostUsd(
@@ -2086,6 +2124,7 @@ final class ChatRepository {
         var text: String
         var reasoning: String?
         var usage: ProviderUsage?
+        var usageSamples: [ProviderUsage]?
         var error: Error?
     }
 
@@ -2103,6 +2142,7 @@ final class ChatRepository {
                 text: response.text,
                 reasoning: response.reasoningSummary,
                 usage: response.usage,
+                usageSamples: response.usageSamples,
                 error: nil
             )
         } catch {
@@ -2110,6 +2150,7 @@ final class ChatRepository {
                 text: L10n.format("エラー: %@", error.localizedDescription),
                 reasoning: nil,
                 usage: nil,
+                usageSamples: nil,
                 error: error
             )
         }

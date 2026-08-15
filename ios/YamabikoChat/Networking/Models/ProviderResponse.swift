@@ -41,6 +41,7 @@ struct ProviderResponse: Codable, Sendable, Equatable {
     var reasoningSummary: String?
     var raw: String?
     var usage: ProviderUsage?
+    var usageSamples: [ProviderUsage]? = nil
     var toolCalls: [ToolCall] = []
 }
 

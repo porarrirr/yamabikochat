@@ -81,14 +81,12 @@ struct PiConversationMetricsCollector {
     }
 
     private let context: ProviderMetricsContext?
-    private let providerID: String
     private var openLLMSteps: [Int: OpenLLMStep] = [:]
     private var activeStepID: Int?
     private var openTools: [String: Int64] = [:]
 
-    init(context: ProviderMetricsContext?, providerID: String) {
+    init(context: ProviderMetricsContext?) {
         self.context = context
-        self.providerID = providerID
     }
 
     mutating func startLLM(stepID: Int, at timeMs: Int64) {
@@ -105,7 +103,7 @@ struct PiConversationMetricsCollector {
         guard let open = openLLMSteps.removeValue(forKey: stepID) else { return }
         if activeStepID == stepID { activeStepID = nil }
         guard let context else { return }
-        let disjoint = usage?.disjointInputUsage(providerID: providerID)
+        let normalized = usage?.normalized()
         context.recorder(
             ConversationExecutionMetric(
                 conversationId: context.conversationId,
@@ -115,10 +113,10 @@ struct PiConversationMetricsCollector {
                 firstTokenAtMs: open.firstTokenAtMs,
                 completedAtMs: timeMs,
                 succeeded: succeeded,
-                inputTokens: disjoint?.inputTokens,
-                outputTokens: disjoint?.outputTokens,
-                cachedInputTokens: disjoint?.cachedInputTokens,
-                cacheCreationInputTokens: disjoint?.cacheCreationInputTokens
+                inputTokens: normalized?.inputTokens,
+                outputTokens: normalized?.outputTokens,
+                cachedInputTokens: normalized?.cachedInputTokens,
+                cacheCreationInputTokens: normalized?.cacheCreationInputTokens
             )
         )
     }
@@ -319,7 +317,6 @@ actor PiAgentRuntime {
         let envelope = PiRunEnvelope(runId: runID, request: piRequest, config: configuration)
         let body = try JSONEncoder().encode(envelope)
         let metricsContext = ProviderMetricsContext.current
-        let metricsProviderID = request.metadata["provider"] ?? configuration.provider
         var urlRequest = URLRequest(url: endpoint.appendingPathComponent("v1/run"))
         urlRequest.httpMethod = "POST"
         urlRequest.httpBody = body
@@ -341,10 +338,7 @@ actor PiAgentRuntime {
 
         return AsyncThrowingStream { continuation in
             let task = Task {
-                var metrics = PiConversationMetricsCollector(
-                    context: metricsContext,
-                    providerID: metricsProviderID
-                )
+                var metrics = PiConversationMetricsCollector(context: metricsContext)
 
                 func nowMs() -> Int64 {
                     Int64(Date().timeIntervalSince1970 * 1_000)
