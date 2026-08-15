@@ -196,6 +196,10 @@ data class OpenRouterUsage(
     val prompt_tokens: Int? = null,
     val completion_tokens: Int? = null,
     val total_tokens: Int? = null,
+    @SerialName("prompt_cache_hit_tokens")
+    val promptCacheHitTokens: Int? = null,
+    @SerialName("prompt_cache_miss_tokens")
+    val promptCacheMissTokens: Int? = null,
     val prompt_tokens_details: OpenRouterPromptTokenDetails? = null,
     val completion_tokens_details: OpenRouterCompletionTokenDetails? = null,
     val cost: Double? = null

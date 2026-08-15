@@ -7,18 +7,6 @@ struct OpenCodeGoProviderClient: ProviderClient {
     private static let anthropicVersion = "2023-06-01"
     private static let defaultMaxTokens = 4096
 
-    private struct ChatMessage: Encodable {
-        var role: String
-        var content: ProviderAttachmentEncoder.OpenAIMessageContent
-        var reasoningContent: String?
-
-        enum CodingKeys: String, CodingKey {
-            case role
-            case content
-            case reasoningContent = "reasoning_content"
-        }
-    }
-
     private struct ChatStreamOptions: Encodable {
         var includeUsage: Bool = true
 
@@ -29,8 +17,9 @@ struct OpenCodeGoProviderClient: ProviderClient {
 
     private struct ChatRequestBody: Encodable {
         var model: String
-        var messages: [ChatMessage]
+        var messages: [OpenAICompatibleWireMessage]
         var stream: Bool
+        var tools: [[String: AnyEncodable]]?
         var maxTokens: Int?
         var temperature: Double?
         var promptCacheKey: String?
@@ -40,6 +29,7 @@ struct OpenCodeGoProviderClient: ProviderClient {
             case model
             case messages
             case stream
+            case tools
             case maxTokens = "max_tokens"
             case temperature
             case promptCacheKey = "prompt_cache_key"
@@ -47,17 +37,13 @@ struct OpenCodeGoProviderClient: ProviderClient {
         }
     }
 
-    private struct MessageRequestMessage: Encodable {
-        var role: String
-        var content: [ProviderAttachmentEncoder.AnthropicContentBlock]
-    }
-
     private struct MessageRequestBody: Encodable {
         var model: String
-        var messages: [MessageRequestMessage]
+        var messages: [AnthropicCompatibleWireMessage]
         var system: String?
         var maxTokens: Int
         var stream: Bool
+        var tools: [AnyEncodable]?
 
         enum CodingKeys: String, CodingKey {
             case model
@@ -65,6 +51,7 @@ struct OpenCodeGoProviderClient: ProviderClient {
             case system
             case maxTokens = "max_tokens"
             case stream
+            case tools
         }
     }
 
@@ -158,12 +145,14 @@ struct OpenCodeGoProviderClient: ProviderClient {
         let endpoint = AppConstants.defaultOpenCodeGoBaseURL.appendingPathComponent("chat/completions")
         let body = ChatRequestBody(
             model: route.id,
-            messages: mapChatMessages(
+            messages: OpenAICompatibleWireMapper.messages(
                 request.messages,
                 systemPrompt: request.systemPrompt,
-                embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
+                embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata),
+                providerLabel: "OpenCode Go chat"
             ),
             stream: stream,
+            tools: request.tools.isEmpty ? nil : try request.tools.map(openAIToolPayload),
             maxTokens: positiveIntMetadata("max_output_tokens", from: request),
             temperature: doubleMetadata("temperature", from: request),
             promptCacheKey: promptCacheKey(for: request, route: route),
@@ -193,13 +182,15 @@ struct OpenCodeGoProviderClient: ProviderClient {
         let endpoint = AppConstants.defaultOpenCodeGoBaseURL.appendingPathComponent("messages")
         let body = MessageRequestBody(
             model: route.id,
-            messages: mapMessages(
+            messages: AnthropicCompatibleWireMapper.messages(
                 request.messages,
-                embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
+                embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata),
+                providerLabel: "OpenCode Go messages"
             ),
             system: request.systemPrompt?.trimmedNonEmpty,
             maxTokens: positiveIntMetadata("max_output_tokens", from: request) ?? Self.defaultMaxTokens,
-            stream: stream
+            stream: stream,
+            tools: AnthropicCompatibleWireMapper.tools(request.tools)
         )
         var headers = [
             "Content-Type": "application/json",
@@ -215,70 +206,6 @@ struct OpenCodeGoProviderClient: ProviderClient {
             body: try JSONEncoder().encode(body),
             timeoutInterval: request.timeoutInterval
         )
-    }
-
-    private func mapChatMessages(
-        _ messages: [ProviderRequestMessage],
-        systemPrompt: String?,
-        embedImages: Bool
-    ) -> [ChatMessage] {
-        var mapped: [ChatMessage] = []
-        if let systemPrompt = systemPrompt?.trimmedNonEmpty {
-            mapped.append(
-                ChatMessage(
-                    role: "system",
-                    content: .plain(systemPrompt),
-                    reasoningContent: nil
-                )
-            )
-        }
-        for message in messages {
-            let role = normalizeChatRole(message.role)
-            ProviderAttachmentEncoder.logSkippedAttachmentsIfNeeded(
-                message.attachments,
-                providerLabel: "OpenCode Go chat",
-                embedImages: embedImages
-            )
-            mapped.append(
-                ChatMessage(
-                    role: role,
-                    content: ProviderAttachmentEncoder.buildOpenAIMessageContent(
-                        text: message.content,
-                        attachments: message.attachments,
-                        embedImages: embedImages
-                    ),
-                    reasoningContent: role == "assistant" ? message.reasoningContent?.trimmedNonEmpty : nil
-                )
-            )
-        }
-        return mapped
-    }
-
-    private func mapMessages(_ messages: [ProviderRequestMessage], embedImages: Bool) -> [MessageRequestMessage] {
-        messages.map { message in
-            ProviderAttachmentEncoder.logSkippedAttachmentsIfNeeded(
-                message.attachments,
-                providerLabel: "OpenCode Go messages",
-                embedImages: embedImages
-            )
-            return MessageRequestMessage(
-                role: normalizeMessagesRole(message.role),
-                content: ProviderAttachmentEncoder.buildAnthropicContentBlocks(
-                    text: message.content,
-                    attachments: message.attachments,
-                    embedImages: embedImages
-                )
-            )
-        }
-    }
-
-    private func normalizeChatRole(_ raw: String) -> String {
-        let role = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return ["system", "assistant", "user"].contains(role) ? role : "user"
-    }
-
-    private func normalizeMessagesRole(_ raw: String) -> String {
-        raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "assistant" ? "assistant" : "user"
     }
 
     private func promptCacheKey(for request: ProviderRequest, route: OpenCodeGoModel) -> String {
@@ -317,7 +244,8 @@ struct OpenCodeGoProviderClient: ProviderClient {
             text: content,
             reasoningSummary: reasoning,
             raw: String(data: data, encoding: .utf8),
-            usage: parseUsage(root["usage"] as? [String: Any])
+            usage: parseUsage(root["usage"] as? [String: Any]),
+            toolCalls: parseToolCalls(message["tool_calls"])
         )
     }
 
@@ -326,14 +254,16 @@ struct OpenCodeGoProviderClient: ProviderClient {
             throw ProviderClientError.parseFailure("OpenCode Go messages response root is not dictionary")
         }
         let text = extractText(from: root["content"]).joined()
-        if text.isEmpty {
-            throw ProviderClientError.parseFailure("OpenCode Go messages response does not contain text content")
+        let toolCalls = extractToolCalls(from: root["content"])
+        if text.isEmpty && toolCalls.isEmpty {
+            throw ProviderClientError.parseFailure("OpenCode Go messages response does not contain text or tool use content")
         }
         return ProviderResponse(
             text: text,
             reasoningSummary: nil,
             raw: String(data: data, encoding: .utf8),
-            usage: parseUsage(root["usage"] as? [String: Any])
+            usage: parseUsage(root["usage"] as? [String: Any]),
+            toolCalls: toolCalls
         )
     }
 
@@ -418,38 +348,63 @@ struct OpenCodeGoProviderClient: ProviderClient {
         }
     }
 
-    private func parseUsage(_ object: [String: Any]?) -> ProviderUsage? {
-        guard let object else { return nil }
-        let promptDetails = object["prompt_tokens_details"] as? [String: Any]
-        let inputDetails = object["input_tokens_details"] as? [String: Any]
-        return ProviderUsage(
-            inputTokens: intValue(in: object, keys: ["prompt_tokens", "input_tokens", "inputTokens"]),
-            outputTokens: intValue(in: object, keys: ["completion_tokens", "output_tokens", "outputTokens"]),
-            totalTokens: intValue(in: object, keys: ["total_tokens", "totalTokens"]),
-            reasoningTokens: intValue(in: object, keys: ["reasoning_tokens", "reasoningTokens"]),
-            cachedInputTokens: intValue(in: promptDetails, keys: ["cached_tokens", "cachedTokens", "cached_input_tokens"]) ??
-                intValue(in: inputDetails, keys: ["cached_tokens", "cachedTokens", "cached_input_tokens"]) ??
-                intValue(in: object, keys: ["cache_read_input_tokens", "cached_input_tokens", "cachedInputTokens"]),
-            cacheCreationInputTokens: intValue(in: inputDetails, keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_input_tokens", "cacheCreationInputTokens"]) ??
-                intValue(in: object, keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_input_tokens", "cacheCreationInputTokens"])
-        )
-        .normalizedNonEmpty()
-    }
-
-    private func intValue(in object: [String: Any]?, keys: [String]) -> Int? {
-        guard let object else { return nil }
-        for key in keys {
-            if let value = intValue(object[key]) {
-                return value
+    private func extractToolCalls(from rawContent: Any?) -> [ToolCall] {
+        guard let blocks = rawContent as? [[String: Any]] else { return [] }
+        return blocks.compactMap { block in
+            guard (block["type"] as? String)?.lowercased() == "tool_use",
+                  let id = (block["id"] as? String)?.trimmedNonEmpty,
+                  let name = (block["name"] as? String)?.trimmedNonEmpty else { return nil }
+            let argumentsJSON: String
+            if let input = block["input"], JSONSerialization.isValidJSONObject(input),
+               let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]),
+               let encoded = String(data: data, encoding: .utf8) {
+                argumentsJSON = encoded
+            } else {
+                argumentsJSON = "{}"
             }
+            return ToolCall(id: id, name: name, argumentsJSON: argumentsJSON, providerMetadata: nil)
         }
-        return nil
     }
 
-    private func intValue(_ raw: Any?) -> Int? {
-        if let value = raw as? Int { return value }
-        if let value = raw as? NSNumber { return value.intValue }
-        if let value = raw as? String { return Int(value) }
-        return nil
+    private func parseUsage(_ object: [String: Any]?) -> ProviderUsage? {
+        OpenAICompatibleUsageParser.parse(object)
     }
+
+    private func openAIToolPayload(_ tool: ProviderTool) throws -> [String: AnyEncodable] {
+        guard tool.type == "function" else {
+            return ["type": AnyEncodable(tool.type), "payload": AnyEncodable(tool.payload)]
+        }
+        guard let name = tool.payload["name"]?.trimmedNonEmpty,
+              let parametersJSON = tool.payload["parameters"]?.trimmedNonEmpty,
+              let data = parametersJSON.data(using: .utf8),
+              let parameters = try? JSONDecoder().decode(JSONValue.self, from: data)
+        else {
+            throw ProviderClientError.parseFailure(
+                "Invalid OpenCode Go function definition: \(tool.payload["name"] ?? "unnamed")"
+            )
+        }
+        var function: [String: AnyEncodable] = [
+            "name": AnyEncodable(name),
+            "parameters": AnyEncodable(parameters)
+        ]
+        if let description = tool.payload["description"]?.trimmedNonEmpty {
+            function["description"] = AnyEncodable(description)
+        }
+        return ["type": AnyEncodable("function"), "function": AnyEncodable(function)]
+    }
+
+    private func parseToolCalls(_ rawValue: Any?) -> [ToolCall] {
+        guard let values = rawValue as? [[String: Any]] else { return [] }
+        return values.enumerated().compactMap { index, value in
+            guard let function = value["function"] as? [String: Any],
+                  let name = (function["name"] as? String)?.trimmedNonEmpty else { return nil }
+            return ToolCall(
+                id: (value["id"] as? String)?.trimmedNonEmpty ?? "tool-call-\(index)",
+                name: name,
+                argumentsJSON: (function["arguments"] as? String)?.trimmedNonEmpty ?? "{}",
+                providerMetadata: nil
+            )
+        }
+    }
+
 }

@@ -3,38 +3,9 @@ import Foundation
 struct SuperGrokProviderClient: ProviderClient {
     let provider: LLMProvider = .superGrok
 
-    private struct ChatMessage: Encodable {
-        var role: String
-        var content: ProviderAttachmentEncoder.OpenAIMessageContent
-        var toolCalls: [OpenAIToolCall]?
-        var toolCallId: String?
-        var name: String?
-        var reasoningContent: String?
-
-        enum CodingKeys: String, CodingKey {
-            case role
-            case content
-            case toolCalls = "tool_calls"
-            case toolCallId = "tool_call_id"
-            case name
-            case reasoningContent = "reasoning_content"
-        }
-    }
-
-    private struct OpenAIFunctionCall: Encodable {
-        var name: String
-        var arguments: String
-    }
-
-    private struct OpenAIToolCall: Encodable {
-        var id: String
-        var type: String = "function"
-        var function: OpenAIFunctionCall
-    }
-
     private struct RequestBody: Encodable {
         var model: String
-        var messages: [ChatMessage]
+        var messages: [OpenAICompatibleWireMessage]
         var stream: Bool
         var tools: [[String: AnyEncodable]]?
         var reasoning: [String: AnyEncodable]?
@@ -178,66 +149,17 @@ struct SuperGrokProviderClient: ProviderClient {
 
         let body = RequestBody(
             model: route.id,
-            messages: mapMessages(request.messages, systemPrompt: request.systemPrompt, embedImages: embedImages),
+            messages: OpenAICompatibleWireMapper.messages(
+                request.messages,
+                systemPrompt: request.systemPrompt,
+                embedImages: embedImages,
+                providerLabel: "SuperGrok"
+            ),
             stream: stream,
             tools: toolsPayload,
             reasoning: reasoningPayload
         )
         return try JSONEncoder().encode(body)
-    }
-
-    private func mapMessages(
-        _ messages: [ProviderRequestMessage],
-        systemPrompt: String?,
-        embedImages: Bool
-    ) -> [ChatMessage] {
-        var mapped: [ChatMessage] = []
-        if let systemPrompt, !systemPrompt.isEmpty {
-            mapped.append(ChatMessage(role: "system", content: .plain(systemPrompt), toolCalls: nil, toolCallId: nil, name: nil, reasoningContent: nil))
-        }
-
-        for message in messages {
-            if message.role == "tool" {
-                mapped.append(
-                    ChatMessage(
-                        role: "tool",
-                        content: .plain(message.content),
-                        toolCalls: nil,
-                        toolCallId: message.toolCallId,
-                        name: message.toolName,
-                        reasoningContent: nil
-                    )
-                )
-                continue
-            }
-
-            ProviderAttachmentEncoder.logSkippedAttachmentsIfNeeded(
-                message.attachments,
-                providerLabel: "SuperGrok",
-                embedImages: embedImages
-            )
-            let toolCalls = message.toolCalls?.map {
-                OpenAIToolCall(
-                    id: $0.id,
-                    function: OpenAIFunctionCall(name: $0.name, arguments: $0.argumentsJSON)
-                )
-            }
-            mapped.append(
-                ChatMessage(
-                    role: message.role,
-                    content: ProviderAttachmentEncoder.buildOpenAIMessageContent(
-                        text: message.content,
-                        attachments: message.attachments,
-                        embedImages: embedImages
-                    ),
-                    toolCalls: toolCalls?.isEmpty == true ? nil : toolCalls,
-                    toolCallId: nil,
-                    name: nil,
-                    reasoningContent: message.role == "assistant" ? message.reasoningContent?.trimmedNonEmpty : nil
-                )
-            )
-        }
-        return mapped
     }
 
     private func openAIToolPayload(_ tool: ProviderTool) -> [String: AnyEncodable]? {
@@ -301,32 +223,7 @@ struct SuperGrokProviderClient: ProviderClient {
     }
 
     private func parseUsage(_ object: [String: Any]?) -> ProviderUsage? {
-        guard let object else { return nil }
-        let completionDetails = object["completion_tokens_details"] as? [String: Any]
-        let inputTokens = intValue(in: object, keys: ["prompt_tokens", "input_tokens"])
-        let outputTokens = intValue(in: object, keys: ["completion_tokens", "output_tokens"])
-        let totalTokens = intValue(in: object, keys: ["total_tokens"])
-        let reasoningTokens =
-            intValue(in: completionDetails, keys: ["reasoning_tokens"]) ??
-            intValue(in: object, keys: ["reasoning_tokens"])
-        return ProviderUsage(
-            inputTokens: inputTokens,
-            outputTokens: outputTokens,
-            totalTokens: totalTokens,
-            reasoningTokens: reasoningTokens,
-            cachedInputTokens: nil,
-            cacheCreationInputTokens: nil
-        ).normalizedNonEmpty()
-    }
-
-    private func intValue(in object: [String: Any]?, keys: [String]) -> Int? {
-        guard let object else { return nil }
-        for key in keys {
-            if let value = object[key] as? Int { return value }
-            if let value = object[key] as? NSNumber { return value.intValue }
-            if let value = object[key] as? String, let intValue = Int(value) { return intValue }
-        }
-        return nil
+        OpenAICompatibleUsageParser.parse(object)
     }
 
     private static func readStreamErrorBody(

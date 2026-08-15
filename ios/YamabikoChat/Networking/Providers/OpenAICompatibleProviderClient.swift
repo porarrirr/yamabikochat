@@ -3,40 +3,13 @@ import Foundation
 struct OpenAICompatibleProviderClient: ProviderClient {
     let provider: LLMProvider = .openAI
 
-    private struct OpenAIFunctionCall: Encodable {
-        var name: String
-        var arguments: String
-    }
-
-    private struct OpenAIToolCall: Encodable {
-        var id: String
-        var type: String = "function"
-        var function: OpenAIFunctionCall
-    }
-
-    private struct OpenAIMessage: Encodable {
-        var role: String
-        var content: ProviderAttachmentEncoder.OpenAIMessageContent?
-        var toolCalls: [OpenAIToolCall]?
-        var toolCallId: String?
-        var name: String?
-
-        enum CodingKeys: String, CodingKey {
-            case role
-            case content
-            case toolCalls = "tool_calls"
-            case toolCallId = "tool_call_id"
-            case name
-        }
-    }
-
     private struct PromptCacheControl: Encodable {
         var type: String = "ephemeral"
     }
 
     private struct OpenAIRequestBody: Encodable {
         var model: String
-        var messages: [OpenAIMessage]
+        var messages: [OpenAICompatibleWireMessage]
         var stream: Bool
         var tools: [[String: AnyEncodable]]?
         var provider: [String: AnyEncodable]?
@@ -308,14 +281,14 @@ struct OpenAICompatibleProviderClient: ProviderClient {
 
         let body = OpenAIRequestBody(
             model: request.model,
-            messages: mapMessages(
+            messages: OpenAICompatibleWireMapper.messages(
                 request.messages,
                 systemPrompt: request.systemPrompt,
                 embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata),
-                explicitCacheBreakpoint: requiresExplicitOpenRouterCacheBreakpoint(
+                cacheBreakpointIndex: requiresExplicitOpenRouterCacheBreakpoint(
                     model: request.model,
                     provider: provider
-                )
+                ) ? request.messages.lastIndex(where: { $0.role != "tool" && !$0.content.isEmpty }) : nil
             ),
             stream: stream,
             tools: toolsPayload,
@@ -478,70 +451,6 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         }
     }
 
-    private func mapMessages(
-        _ messages: [ProviderRequestMessage],
-        systemPrompt: String?,
-        embedImages: Bool,
-        explicitCacheBreakpoint: Bool
-    ) -> [OpenAIMessage] {
-        var mapped: [OpenAIMessage] = []
-        if let systemPrompt, !systemPrompt.isEmpty {
-            mapped.append(
-                OpenAIMessage(
-                    role: "system",
-                    content: .plain(systemPrompt),
-                    toolCalls: nil,
-                    toolCallId: nil,
-                    name: nil
-                )
-            )
-        }
-
-        let cacheBreakpointIndex = explicitCacheBreakpoint
-            ? messages.lastIndex(where: { $0.role != "tool" && !$0.content.isEmpty })
-            : nil
-        for (index, message) in messages.enumerated() {
-            if message.role == "tool" {
-                mapped.append(
-                    OpenAIMessage(
-                        role: "tool",
-                        content: .plain(message.content),
-                        toolCalls: nil,
-                        toolCallId: message.toolCallId,
-                        name: message.toolName
-                    )
-                )
-                continue
-            }
-            ProviderAttachmentEncoder.logSkippedAttachmentsIfNeeded(
-                message.attachments,
-                providerLabel: "OpenAI compatible",
-                embedImages: embedImages
-            )
-            let toolCalls = message.toolCalls?.map {
-                OpenAIToolCall(
-                    id: $0.id,
-                    function: OpenAIFunctionCall(name: $0.name, arguments: $0.argumentsJSON)
-                )
-            }
-            mapped.append(
-                OpenAIMessage(
-                    role: message.role,
-                    content: ProviderAttachmentEncoder.buildOpenAIMessageContent(
-                        text: message.content,
-                        attachments: message.attachments,
-                        embedImages: embedImages,
-                        cacheControl: index == cacheBreakpointIndex
-                    ),
-                    toolCalls: toolCalls?.isEmpty == true ? nil : toolCalls,
-                    toolCallId: nil,
-                    name: nil
-                )
-            )
-        }
-        return mapped
-    }
-
     private func openAIToolPayload(_ tool: ProviderTool) -> [String: AnyEncodable]? {
         guard tool.type == "function" else {
             return [
@@ -616,67 +525,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
     }
 
     private func parseUsage(_ object: [String: Any]?) -> ProviderUsage? {
-        guard let object else { return nil }
-        let completionDetails = object["completion_tokens_details"] as? [String: Any]
-        let outputDetails = object["output_tokens_details"] as? [String: Any]
-        let promptDetails = object["prompt_tokens_details"] as? [String: Any]
-        let inputDetails = object["input_tokens_details"] as? [String: Any]
-        let inputTokens = intValue(in: object, keys: ["prompt_tokens", "input_tokens", "promptTokens", "inputTokens"])
-        let outputTokens = intValue(in: object, keys: ["completion_tokens", "output_tokens", "completionTokens", "outputTokens"])
-        let totalTokens = intValue(in: object, keys: ["total_tokens", "totalTokens"])
-        let reasoningTokens =
-            intValue(in: object, keys: ["reasoning_tokens", "reasoningTokens", "reasoning_token_count", "reasoningTokenCount"]) ??
-            intValue(in: completionDetails, keys: ["reasoning_tokens", "reasoningTokens", "reasoning", "reasoning_token_count"]) ??
-            intValue(in: outputDetails, keys: ["reasoning_tokens", "reasoningTokens", "reasoning", "reasoning_token_count"])
-        let cachedTokens =
-            intValue(in: promptDetails, keys: ["cached_tokens", "cachedTokens", "cached_input_tokens", "cachedInputTokens"]) ??
-            intValue(in: inputDetails, keys: ["cached_tokens", "cachedTokens", "cached_input_tokens", "cachedInputTokens"]) ??
-            intValue(
-                in: object,
-                keys: [
-                    "cache_read_input_tokens",
-                    "cacheReadInputTokens",
-                    "cached_input_tokens",
-                    "cachedInputTokens"
-                ]
-            )
-        let cacheCreationTokens =
-            intValue(in: promptDetails, keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_tokens", "cacheCreationTokens", "cache_creation_input_tokens"]) ??
-            intValue(in: inputDetails, keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_tokens", "cacheCreationTokens", "cache_creation_input_tokens"]) ??
-            intValue(in: object, keys: ["cache_write_tokens", "cacheWriteTokens", "cache_creation_input_tokens", "cacheCreationInputTokens", "cache_creation_input_token_count"])
-
-        return ProviderUsage(
-            inputTokens: inputTokens,
-            outputTokens: outputTokens,
-            totalTokens: totalTokens,
-            reasoningTokens: reasoningTokens,
-            cachedInputTokens: cachedTokens,
-            cacheCreationInputTokens: cacheCreationTokens
-        )
-        .normalizedNonEmpty()
-    }
-
-    private func intValue(in object: [String: Any]?, keys: [String]) -> Int? {
-        guard let object else { return nil }
-        for key in keys {
-            if let value = intValue(object[key]) {
-                return value
-            }
-        }
-        return nil
-    }
-
-    private func intValue(_ raw: Any?) -> Int? {
-        if let value = raw as? Int {
-            return value
-        }
-        if let value = raw as? NSNumber {
-            return value.intValue
-        }
-        if let value = raw as? String {
-            return Int(value)
-        }
-        return nil
+        OpenAICompatibleUsageParser.parse(object)
     }
 
     private static func readStreamErrorBody(

@@ -2,6 +2,7 @@ package com.porarri.yamabikochat.data.remote
 
 import com.porarri.yamabikochat.TestLogUtils
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -133,6 +134,55 @@ class RequestConverterTest {
         assertEquals("kept reasoning", converted.messages[0].reasoningContent)
         assertEquals("call-1", converted.messages[1].toolCallId)
         assertEquals("tool", converted.messages[1].role)
+    }
+
+    @Test
+    fun secondRequestKeepsPreviousWireMessagesAsExactSerializedPrefix() {
+        val prefix = listOf(
+            Content(role = "user", parts = listOf(Part(text = "search"))),
+            Content(
+                role = "model",
+                parts = listOf(
+                    Part(text = "need current data", thought = true),
+                    Part(functionCall = FunctionCall(
+                        name = "web_search",
+                        args = Json.parseToJsonElement("""{"query":"news"}"""),
+                        id = "call-1"
+                    ))
+                )
+            ),
+            Content(
+                role = "user",
+                parts = listOf(Part(functionResponse = FunctionResponse(
+                    name = "web_search",
+                    response = Json.parseToJsonElement("""{"raw":"large result"}"""),
+                    id = "call-1"
+                )))
+            )
+        )
+        val first = RequestConverter.geminiToOpenRouter(
+            GenerateContentRequest(contents = prefix, promptCacheKey = "conversation-42"),
+            "deepseek-v4-flash"
+        ) as OpenRouterRequest
+        val second = RequestConverter.geminiToOpenRouter(
+            GenerateContentRequest(
+                contents = prefix + listOf(
+                    Content(role = "model", parts = listOf(
+                        Part(text = "final reasoning", thought = true),
+                        Part(text = "summary")
+                    )),
+                    Content(role = "user", parts = listOf(Part(text = "ありがとう")))
+                ),
+                promptCacheKey = "conversation-42"
+            ),
+            "deepseek-v4-flash"
+        ) as OpenRouterRequest
+
+        val json = Json { encodeDefaults = false }
+        val firstWire = first.messages.map { json.encodeToString(it) }
+        val secondPrefixWire = second.messages.take(first.messages.size).map { json.encodeToString(it) }
+        assertEquals(firstWire, secondPrefixWire)
+        assertEquals(first.promptCacheKey, second.promptCacheKey)
     }
 
     @Test

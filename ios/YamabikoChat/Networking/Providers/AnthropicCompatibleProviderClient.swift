@@ -8,11 +8,6 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
     private static let defaultMaxTokens = 4096
     private static let minimumThinkingBudgetTokens = 1024
 
-    private struct AnthropicMessage: Encodable {
-        var role: String
-        var content: [AnyEncodable]
-    }
-
     private struct AnthropicThinking: Encodable {
         var type: String = "enabled"
         var budgetTokens: Int
@@ -70,7 +65,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
 
     private struct AnthropicRequestBody: Encodable {
         var model: String
-        var messages: [AnthropicMessage]
+        var messages: [AnthropicCompatibleWireMessage]
         var system: String?
         var maxTokens: Int
         var stream: Bool
@@ -287,9 +282,10 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         )
         let body = AnthropicRequestBody(
             model: request.model.trimmingCharacters(in: .whitespacesAndNewlines),
-            messages: mapMessages(
+            messages: AnthropicCompatibleWireMapper.messages(
                 request.messages,
-                embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
+                embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata),
+                providerLabel: "Anthropic compatible"
             ),
             system: optionalNonEmpty(request.systemPrompt),
             maxTokens: maxTokens,
@@ -367,56 +363,6 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         return AnthropicThinking(budgetTokens: budget)
     }
 
-    private func mapMessages(_ messages: [ProviderRequestMessage], embedImages: Bool) -> [AnthropicMessage] {
-        messages.map { message in
-            if message.role == "tool" {
-                var result: [String: AnyEncodable] = [
-                    "type": AnyEncodable("tool_result"),
-                    "tool_use_id": AnyEncodable(message.toolCallId ?? ""),
-                    "content": AnyEncodable(message.content)
-                ]
-                if let isError = message.toolResultIsError {
-                    result["is_error"] = AnyEncodable(isError)
-                }
-                return AnthropicMessage(role: "user", content: [AnyEncodable(result)])
-            }
-            ProviderAttachmentEncoder.logSkippedAttachmentsIfNeeded(
-                message.attachments,
-                providerLabel: "Anthropic compatible",
-                embedImages: embedImages
-            )
-            let normalizedRole = normalizeRole(message.role)
-            var blocks: [AnyEncodable] = []
-            if !message.content.isEmpty || !message.attachments.isEmpty {
-                blocks = ProviderAttachmentEncoder.buildAnthropicContentBlocks(
-                    text: message.content,
-                    attachments: message.attachments,
-                    embedImages: embedImages
-                )
-                .map(AnyEncodable.init)
-            }
-            if normalizedRole == "assistant" {
-                for call in message.toolCalls ?? [] {
-                    let input = Self.jsonValue(from: call.argumentsJSON) ?? .object([:])
-                    let block: [String: AnyEncodable] = [
-                        "type": AnyEncodable("tool_use"),
-                        "id": AnyEncodable(call.id),
-                        "name": AnyEncodable(call.name),
-                        "input": AnyEncodable(input)
-                    ]
-                    blocks.append(AnyEncodable(block))
-                }
-            }
-            if blocks.isEmpty {
-                blocks.append(AnyEncodable(ProviderAttachmentEncoder.AnthropicContentBlock.textBlock("")))
-            }
-            return AnthropicMessage(
-                role: normalizedRole,
-                content: blocks
-            )
-        }
-    }
-
     private func buildAnthropicTools(
         _ tools: [ProviderTool],
         mcpConfiguration: AnthropicMCPConfiguration?
@@ -446,15 +392,6 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
     private static func jsonValue(from raw: String) -> JSONValue? {
         guard let data = raw.data(using: .utf8) else { return nil }
         return try? JSONDecoder().decode(JSONValue.self, from: data)
-    }
-
-    private func normalizeRole(_ value: String) -> String {
-        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "assistant":
-            return "assistant"
-        default:
-            return "user"
-        }
     }
 
     private func parseResponse(data: Data) throws -> ProviderResponse {

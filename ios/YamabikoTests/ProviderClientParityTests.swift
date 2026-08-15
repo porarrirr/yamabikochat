@@ -1795,6 +1795,73 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertNil(messages[2]["reasoning_content"])
     }
 
+    func testOpenCodeGoReplaysExactToolTranscriptAndParsesTopLevelCacheUsage() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.setCredential("go-key", for: .openCodeGo)
+
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"done"}}],"usage":{"prompt_tokens":12071,"completion_tokens":61,"prompt_cache_hit_tokens":12032,"prompt_cache_miss_tokens":39}}"#
+                .data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+
+        let client = OpenCodeGoProviderClient()
+        let request = ProviderRequest(
+            model: "deepseek-v4-flash",
+            messages: [
+                ProviderRequestMessage(role: "user", content: "search"),
+                ProviderRequestMessage(
+                    role: "assistant",
+                    content: "",
+                    reasoningContent: "need current data",
+                    toolCalls: [ToolCall(id: "call-search-1", name: "web_search", argumentsJSON: #"{"query":"news"}"#)]
+                ),
+                ProviderRequestMessage(
+                    role: "tool",
+                    content: #"{"raw":"unmodified result"}"#,
+                    toolCallId: "call-search-1",
+                    toolName: "web_search",
+                    toolResultIsError: false
+                ),
+                ProviderRequestMessage(role: "assistant", content: "summary", reasoningContent: "final reasoning"),
+                ProviderRequestMessage(role: "user", content: "ありがとう")
+            ],
+            stream: false,
+            tools: [ProviderTool(type: "function", payload: [
+                "name": "web_search",
+                "description": "search",
+                "parameters": #"{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}"#
+            ])],
+            metadata: ["provider": "OPENCODE_GO", "promptCacheKey": "conversation-42"]
+        )
+
+        let response = try await client.generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(response.usage?.cachedInputTokens, 12032)
+        XCTAssertNil(response.usage?.cacheCreationInputTokens)
+        let bodyData = try XCTUnwrap(httpClient.lastRequest?.body)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertEqual(body["prompt_cache_key"] as? String, "conversation-42")
+        XCTAssertEqual((body["tools"] as? [[String: Any]])?.count, 1)
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages.map { $0["role"] as? String }, ["user", "assistant", "tool", "assistant", "user"])
+        let toolCalls = try XCTUnwrap(messages[1]["tool_calls"] as? [[String: Any]])
+        XCTAssertEqual(toolCalls.count, 1)
+        let toolCall = try XCTUnwrap(toolCalls.first)
+        XCTAssertEqual(toolCall["id"] as? String, "call-search-1")
+        XCTAssertEqual((toolCall["function"] as? [String: Any])?["arguments"] as? String, #"{"query":"news"}"#)
+        XCTAssertEqual(messages[1]["reasoning_content"] as? String, "need current data")
+        XCTAssertEqual(messages[2]["tool_call_id"] as? String, "call-search-1")
+        XCTAssertEqual(messages[2]["content"] as? String, #"{"raw":"unmodified result"}"#)
+        XCTAssertEqual(messages[3]["reasoning_content"] as? String, "final reasoning")
+    }
+
     func testOpenCodeGoCarriesRequestTimeoutToHTTPTransport() async throws {
         let store = ProviderTestCredentialStore()
         try store.setCredential("go-key", for: .openCodeGo)

@@ -53,11 +53,19 @@ fun GenerateContentResponse.extractTokenUsageSnapshot(): TokenUsageSnapshot? {
 }
 
 fun OpenRouterUsage.toTokenUsageSnapshot(): TokenUsageSnapshot {
+    // OpenAI-compatible prompt_tokens is inclusive. DSH/Pi account for the
+    // uncached and cache-read buckets separately, so normalize at the wire
+    // boundary instead of making each UI or repository guess the convention.
+    val inclusiveInput = (prompt_tokens ?: 0).coerceAtLeast(0)
+    val cachedInput = (prompt_tokens_details?.cached_tokens ?: promptCacheHitTokens ?: 0)
+        .coerceIn(0, inclusiveInput)
+    val uncachedInput = inclusiveInput - cachedInput
+    val output = (completion_tokens ?: 0).coerceAtLeast(0)
     return TokenUsageSnapshot(
-        inputTokens = prompt_tokens ?: 0,
-        outputTokens = completion_tokens ?: 0,
-        totalTokens = total_tokens ?: ((prompt_tokens ?: 0) + (completion_tokens ?: 0)),
+        inputTokens = uncachedInput,
+        outputTokens = output,
+        totalTokens = uncachedInput + cachedInput + output,
         reasoningTokens = completion_tokens_details?.reasoning_tokens,
-        cachedInputTokens = prompt_tokens_details?.cached_tokens
+        cachedInputTokens = cachedInput.takeIf { it > 0 }
     ).normalized()
 }

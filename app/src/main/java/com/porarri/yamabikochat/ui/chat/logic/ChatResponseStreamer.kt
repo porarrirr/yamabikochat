@@ -13,6 +13,7 @@ import com.porarri.yamabikochat.data.remote.OpenCodeGoModelCatalog
 import com.porarri.yamabikochat.data.remote.Part
 import com.porarri.yamabikochat.data.remote.ResponsePart
 import com.porarri.yamabikochat.data.remote.TokenUsageSnapshot
+import com.porarri.yamabikochat.data.remote.CodexResponsesStreamParser
 import com.porarri.yamabikochat.data.remote.extractTokenUsageSnapshot
 import com.porarri.yamabikochat.data.remote.toTokenUsageSnapshot
 import com.porarri.yamabikochat.data.tools.ToolActivityStep
@@ -375,8 +376,8 @@ class ChatResponseStreamer(
                                 normalizedProvider == "CODEX_AUTH" ||
                                 isHostedSkillStream
                             ) {
-                                val delta = parseCodexResponsesDelta(payload, currentText)
-                                val usage = parseCodexResponsesUsage(payload)
+                                val delta = CodexResponsesStreamParser.delta(json, payload, currentText)
+                                val usage = CodexResponsesStreamParser.usage(json, payload)
                                 StreamChunkParse(
                                     deltaText = delta.first,
                                     deltaThinking = delta.second,
@@ -750,74 +751,6 @@ class ChatResponseStreamer(
             return incoming.substring(buffer.length)
         }
         return incoming
-    }
-
-    private fun parseCodexResponsesDelta(payload: String, currentText: String): Triple<String, String, String> {
-        val element = runCatching { json.parseToJsonElement(payload) }.getOrNull() ?: return Triple("", "", "")
-        val obj = element.jsonObject
-        val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: return Triple("", "", "")
-        val delta = obj["delta"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        return when (type) {
-            "response.output_text.delta" -> Triple(incrementalDelta(currentText, delta), "", "")
-            "response.reasoning_text.delta" -> Triple("", delta, "")
-            "response.reasoning_summary_text.delta" -> Triple("", "", delta)
-            "response.output_item.done" -> {
-                val fullText = extractOutputTextFromItem(obj["item"]?.jsonObject)
-                Triple(incrementalDelta(currentText, fullText), "", "")
-            }
-            else -> Triple("", "", "")
-        }
-    }
-
-    private fun parseCodexResponsesUsage(payload: String): TokenUsageSnapshot? {
-        val element = runCatching { json.parseToJsonElement(payload) }.getOrNull() ?: return null
-        val obj = element.jsonObject
-        if (obj["type"]?.jsonPrimitive?.contentOrNull != "response.completed") return null
-        val usageObj = runCatching {
-            obj["response"]?.jsonObject?.get("usage")?.jsonObject
-        }.getOrNull() ?: return null
-        val inputTokens = usageObj["input_tokens"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
-        val outputTokens = usageObj["output_tokens"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
-        val totalTokens = usageObj["total_tokens"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: (inputTokens + outputTokens)
-        val reasoningTokens = runCatching {
-            usageObj["output_tokens_details"]?.jsonObject
-                ?.get("reasoning_tokens")
-                ?.jsonPrimitive
-                ?.contentOrNull
-                ?.toIntOrNull()
-        }.getOrNull()
-        val cachedTokens = runCatching {
-            usageObj["input_tokens_details"]?.jsonObject
-                ?.get("cached_tokens")
-                ?.jsonPrimitive
-                ?.contentOrNull
-                ?.toIntOrNull()
-        }.getOrNull()
-        val snapshot = TokenUsageSnapshot(
-            inputTokens = inputTokens,
-            outputTokens = outputTokens,
-            totalTokens = totalTokens,
-            reasoningTokens = reasoningTokens,
-            cachedInputTokens = cachedTokens
-        ).normalized()
-        return snapshot.takeUnless { it.isEmpty() }
-    }
-
-    private fun extractOutputTextFromItem(item: kotlinx.serialization.json.JsonObject?): String {
-        if (item == null) return ""
-        val type = item["type"]?.jsonPrimitive?.contentOrNull
-        if (type != "message") return ""
-        val role = item["role"]?.jsonPrimitive?.contentOrNull
-        if (role != "assistant") return ""
-        val content = item["content"]?.jsonArray ?: return ""
-        val builder = StringBuilder()
-        content.forEach { block ->
-            val blockObj = block.jsonObject
-            if (blockObj["type"]?.jsonPrimitive?.contentOrNull == "output_text") {
-                builder.append(blockObj["text"]?.jsonPrimitive?.contentOrNull.orEmpty())
-            }
-        }
-        return builder.toString()
     }
 
     private fun parseAnthropicCompatibleDelta(payload: String): StreamChunkParse {
