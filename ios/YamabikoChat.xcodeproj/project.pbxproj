@@ -19,6 +19,7 @@
 		0A9A0767EFB4003076BD5FDC /* ProviderRequestSettingsResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80F31D5E7F475FAFCC7CD957 /* ProviderRequestSettingsResolverTests.swift */; };
 		0C3BB6177F58002E5A66449A /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = A830A97218DEF74E9FA3C2AF /* AppConstants.swift */; };
 		0CDA21EA006C871E5AC3164F /* CodexUserAgentCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63E141DD6CBBC6B7BD021B42 /* CodexUserAgentCatalog.swift */; };
+		0FBA8B52EBD213B2EDEF1A99 /* NodeMobile.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B3D8A5EF7A77209D4FC05951 /* NodeMobile.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		108090779CD14C0F53061E79 /* AppServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9668A67F5C25A97F7F0AC48 /* AppServices.swift */; };
 		10D322B8F73405F360B85BBE /* OpenCodeGoModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60224F6EBCC6491A82E063D /* OpenCodeGoModelCatalog.swift */; };
 		10FF1A71E46475590469FFC7 /* PiNodeRunner.mm in Sources */ = {isa = PBXBuildFile; fileRef = 3A3FD189F82D3DC30D73982B /* PiNodeRunner.mm */; };
@@ -61,7 +62,6 @@
 		493CB5E5A87943A6E57770E0 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = B035B29CBD761489AE1F2C66 /* ZIPFoundation */; };
 		49E4DCE20748F2F22FB31465 /* LocalAuthCallbackServerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59D76AC83FA6381A252F9360 /* LocalAuthCallbackServerTests.swift */; };
 		4AF8DCF064E32B3DD82E1D65 /* ModelPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE1F31BD54AADF6461CBC67C /* ModelPreset.swift */; };
-		4F815472EB660562C18867EC /* StreamDeltaAccumulator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9196309A73916FCCD1FD7B0 /* StreamDeltaAccumulator.swift */; };
 		52B64544F3C434797BB9506D /* NodeMobile.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B3D8A5EF7A77209D4FC05951 /* NodeMobile.xcframework */; };
 		553A93E0D9B67A81C73BC1CF /* RunYamabikoModelIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDCCF3C300EEC33D5F958B01 /* RunYamabikoModelIntent.swift */; };
 		559990A849565C8C664CEDF7 /* FusionTracePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD89EC3E4E42F747C4DC4BA4 /* FusionTracePresentation.swift */; };
@@ -144,7 +144,6 @@
 		A258A4BFE2E6449D6D1EC9FE /* ConversationVariantSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 165EBDEB744C9307E8CCF4C7 /* ConversationVariantSelectionTests.swift */; };
 		A5D85978C7B06F2A9BAE739D /* FusionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D940C0C6628F08BF5EAA8CC9 /* FusionServiceTests.swift */; };
 		A5EDE85ADAE21979AFD0F21B /* AuthFlowReadySignal.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2DD044916B4D621321F9D61 /* AuthFlowReadySignal.swift */; };
-		A6AEA588DA5A864F7350E68F /* StreamDeltaAccumulatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A12FA9662EE2E9EFA66419C /* StreamDeltaAccumulatorTests.swift */; };
 		A6DF3315E8E4B98E25854E2D /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB870EF06AABC09F6C08A140 /* SettingsScreen.swift */; };
 		A6FD4DD0049C2696FF7EA66B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2559F5CDE33F1C6606E7C9D0 /* Assets.xcassets */; };
 		AA8DCC77B7AF53AE101C5313 /* PiAgentRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E473F8E97A52BD5E31D96D0 /* PiAgentRuntime.swift */; };
@@ -252,6 +251,17 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		92C35E807F78E1DCFFEB34D6 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				0FBA8B52EBD213B2EDEF1A99 /* NodeMobile.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -317,7 +327,6 @@
 		47940928BCA24ACBA0867772 /* ConversationListViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListViewModelTests.swift; sourceTree = "<group>"; };
 		481CA1A12D0312351DABD396 /* ChatMessageThinking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageThinking.swift; sourceTree = "<group>"; };
 		4896B18C01C7F5988DF13828 /* DualModeSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualModeSettingsSection.swift; sourceTree = "<group>"; };
-		4A12FA9662EE2E9EFA66419C /* StreamDeltaAccumulatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDeltaAccumulatorTests.swift; sourceTree = "<group>"; };
 		4A4A275C5AEA3B4900440F13 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		4AD5BFFA938AB90157FB5E3F /* BackgroundTaskGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundTaskGuard.swift; sourceTree = "<group>"; };
 		4B52DE6355353E52D1B7576D /* AppSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsTests.swift; sourceTree = "<group>"; };
@@ -473,7 +482,6 @@
 		EE1F31BD54AADF6461CBC67C /* ModelPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPreset.swift; sourceTree = "<group>"; };
 		EFA8FC2F705B5D8D61A79B26 /* HTMLTextExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLTextExtractor.swift; sourceTree = "<group>"; };
 		F5E76571802BD1DCDB737AD8 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
-		F9196309A73916FCCD1FD7B0 /* StreamDeltaAccumulator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDeltaAccumulator.swift; sourceTree = "<group>"; };
 		FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		FDFB9E3E80818460DA5CDA5A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		FF047B35C735D75B50DB5BAD /* ProviderRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderRequest.swift; sourceTree = "<group>"; };
@@ -658,7 +666,6 @@
 			isa = PBXGroup;
 			children = (
 				7BE885E298CFD7325CE27F89 /* HTTPClient.swift */,
-				F9196309A73916FCCD1FD7B0 /* StreamDeltaAccumulator.swift */,
 				84A4D046619F55F57085FB26 /* Models */,
 				0DA7CB047F64EA9817D69431 /* Providers */,
 			);
@@ -913,7 +920,6 @@
 				00BE476866FB6887397FFD9C /* SharePayloadStorageTests.swift */,
 				96F5E643C3B8B25C7549BF97 /* ShortcutModelOptionsTests.swift */,
 				4D4722F97724588E0999ECF0 /* ShortcutRunTests.swift */,
-				4A12FA9662EE2E9EFA66419C /* StreamDeltaAccumulatorTests.swift */,
 				BC0B20D5E71F535CE4C00984 /* SuperGrokAuthRepositoryTests.swift */,
 				0F0B056D22F60CAD49BD2587 /* SvgCodeExtractorTests.swift */,
 				51CC989E2C978463E973E22C /* SvgPreviewSanitizerTests.swift */,
@@ -1029,6 +1035,7 @@
 				E253B5C8992D434DCF0FBE3E /* Resources */,
 				3BCE835AB20804B68F2E52B2 /* Frameworks */,
 				0C36FB9B5070980568CD2F2D /* Embed Foundation Extensions */,
+				92C35E807F78E1DCFFEB34D6 /* Embed Frameworks */,
 				5C713D9F3A7E66A6C621949D /* Set build-time version */,
 			);
 			buildRules = (
@@ -1262,7 +1269,6 @@
 				1A99660ADDB01688C1C504C1 /* SharePayloadStorageTests.swift in Sources */,
 				B1072B8314BBF69CF1E144CF /* ShortcutModelOptionsTests.swift in Sources */,
 				309AC42FDD9CC6EFE435D1EA /* ShortcutRunTests.swift in Sources */,
-				A6AEA588DA5A864F7350E68F /* StreamDeltaAccumulatorTests.swift in Sources */,
 				9F821BBC03A11DCF2E9CE3E1 /* SuperGrokAuthRepositoryTests.swift in Sources */,
 				F385BC565CFD26EB915C163B /* SvgCodeExtractorTests.swift in Sources */,
 				EF12AD93CA25107FB63F52E2 /* SvgPreviewSanitizerTests.swift in Sources */,
@@ -1404,7 +1410,6 @@
 				097350DBC7560773DB4B5B12 /* ShortcutModelOptionsProvider.swift in Sources */,
 				BC2297D64F8CDFAB8F34859B /* ShortcutProviderAppEnum.swift in Sources */,
 				79A232362351686E2A7742CC /* SpeechRecognitionService.swift in Sources */,
-				4F815472EB660562C18867EC /* StreamDeltaAccumulator.swift in Sources */,
 				7EC42C1157E7CBC0E1DF65C9 /* StringTrimming.swift in Sources */,
 				F59F98D988ECB2F6244F94F8 /* SuperGrokAuthModels.swift in Sources */,
 				12B8B4D43B8F75D3FD566CFF /* SuperGrokAuthRepository.swift in Sources */,

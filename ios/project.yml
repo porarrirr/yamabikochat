@@ -47,7 +47,7 @@ targets:
       - package: Yams
       - package: ZIPFoundation
       - framework: Vendor/NodeMobile.xcframework
-        embed: false
+        embed: true
       - target: YamabikoShareExtension
         embed: true
     postBuildScripts:

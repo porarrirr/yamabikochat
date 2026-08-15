@@ -42,27 +42,6 @@ struct ProviderResponse: Codable, Sendable, Equatable {
     var raw: String?
     var usage: ProviderUsage?
     var toolCalls: [ToolCall] = []
-    var generatedFiles: [ProviderGeneratedFile] = []
-    var serverActivities: [ProviderServerActivity] = []
-}
-
-struct ProviderGeneratedFile: Codable, Sendable, Equatable, Identifiable {
-    var containerID: String
-    var fileID: String
-    var filename: String
-    var localPath: String? = nil
-    var id: String { "\(containerID):\(fileID)" }
-}
-
-struct ProviderServerActivity: Codable, Sendable, Equatable, Identifiable {
-    enum Kind: String, Codable, Sendable { case skill, shell, file }
-    var id: String
-    var kind: Kind
-    var title: String
-    var detail: String
-    var exitCode: Int? = nil
-    var timedOut: Bool? = nil
-    var isError: Bool = false
 }
 
 extension ProviderUsage {
@@ -88,8 +67,6 @@ extension ProviderUsage {
 enum ProviderStreamEvent: Sendable, Equatable {
     case textDelta(String)
     case reasoningDelta(String)
-    case toolCallDelta(ToolCallDelta)
-    case serverActivity(ProviderServerActivity)
     case completed(ProviderResponse)
 }
 
@@ -102,7 +79,7 @@ extension ProviderStreamEvent {
             return delta.trimmedNonEmpty != nil
         case let .completed(response):
             return response.text.trimmedNonEmpty != nil
-        case .reasoningDelta, .toolCallDelta, .serverActivity:
+        case .reasoningDelta:
             return false
         }
     }

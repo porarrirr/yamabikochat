@@ -713,50 +713,30 @@ final class ChatRepository {
                 reasoningSummary: session.reasoningText.trimmedNonEmpty,
                 raw: nil,
                 usage: session.usage,
-                toolCalls: session.toolCalls,
-                generatedFiles: session.generatedFiles,
-                serverActivities: session.serverActivities
+                toolCalls: session.toolCalls
             )
             if persistResults {
-                try persistProviderResponse(
-                    response,
-                    kind: persistenceKind,
-                    includeGeneratedFiles: false
-                )
+                try persistProviderResponse(response, kind: persistenceKind)
             }
             return response
         }
 
         let response = try await providers.generate(request: request, providerID: provider)
         if persistResults {
-            try persistProviderResponse(
-                response,
-                kind: persistenceKind,
-                includeGeneratedFiles: false
-            )
+            try persistProviderResponse(response, kind: persistenceKind)
         }
         return response
     }
 
     private func persistProviderResponse(
         _ response: ProviderResponse,
-        kind: ChatStreamPersistenceKind,
-        includeGeneratedFiles: Bool = true
+        kind: ChatStreamPersistenceKind
     ) throws {
         let target = ChatStreamSessionTarget(conversations: conversations, kind: kind)
         try target.persist(
             text: response.text,
             thinking: response.reasoningSummary ?? ""
         )
-        guard includeGeneratedFiles else { return }
-        let generatedPaths = response.generatedFiles.compactMap(\.localPath)
-        guard !generatedPaths.isEmpty else { return }
-        switch kind {
-        case let .message(messageId):
-            try conversations.appendAttachments(messageId: messageId, paths: generatedPaths)
-        case let .variant(variantId, _):
-            try conversations.appendAttachments(variantId: variantId, paths: generatedPaths)
-        }
     }
 
     func sendDualMessage(conversationId: Int64, text: String, attachments: [String] = []) async throws -> DualChatMessage {

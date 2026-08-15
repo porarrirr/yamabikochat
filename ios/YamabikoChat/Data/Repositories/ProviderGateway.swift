@@ -56,7 +56,6 @@ final class ProviderGateway {
             case let .textDelta(delta): text += delta
             case let .reasoningDelta(delta): reasoning += delta
             case let .completed(response): completed = response
-            case .toolCallDelta, .serverActivity: break
             }
         }
         guard var response = completed else {

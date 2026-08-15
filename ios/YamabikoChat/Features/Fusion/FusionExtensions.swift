@@ -1,15 +1,5 @@
 import Foundation
 
-/// Extension point for learned model routing (v2+).
-protocol FusionRoutingPolicy: Sendable {
-    func selectPanelModels(for request: FusionRequest, preset: FusionPresetDefinition) -> [PanelModelConfig]
-}
-
-/// Extension point for automatic prompt evolution (v2+).
-protocol FusionPromptEvolver: Sendable {
-    func evolvePanelPrompt(base: String, taskType: FusionTaskType) -> String
-}
-
 extension AppSettings {
     func decodeFusionCustomPreset() -> FusionPresetDefinition? {
         let trimmed = fusionCustomPresetJSON.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -5,7 +5,7 @@ import GRDB
 
 final class ConversationVariantSelectionTests: XCTestCase {
     func testProviderHistoryReplaysToolTranscriptBeforeFinalAnswerAndNextUserMessage() throws {
-        let repository = try makeRepository()
+        let (repository, dbQueue) = try makeRepositoryWithQueue()
         let conversationId = try repository.createConversation(
             title: "Cache",
             model: "model",
@@ -23,10 +23,11 @@ final class ConversationVariantSelectionTests: XCTestCase {
             argumentsJSON: #"{"query":"large query"}"#,
             providerMetadata: nil
         )
-        try repository.saveToolActivities(
+        try insertActivity(
+            dbQueue: dbQueue,
             messageId: assistantId,
-            steps: [toolActivityStep(id: "call-1", detail: "large query")],
-            providerTranscript: [
+            step: toolActivityStep(id: "call-1", detail: "large query"),
+            transcript: [
                 ProviderRequestMessage(role: "assistant", content: "", toolCalls: [call]),
                 ProviderRequestMessage(
                     role: "tool",
@@ -154,7 +155,7 @@ final class ConversationVariantSelectionTests: XCTestCase {
     }
 
     func testSelectedVariantUsesVariantToolActivity() throws {
-        let repository = try makeRepository()
+        let (repository, dbQueue) = try makeRepositoryWithQueue()
         let conversationId = try repository.createConversation(
             title: "New Chat",
             model: "gpt-4o-mini",
@@ -173,15 +174,17 @@ final class ConversationVariantSelectionTests: XCTestCase {
         )
         let variantId = try XCTUnwrap(variant.id)
 
-        try repository.saveToolActivities(
+        try insertActivity(
+            dbQueue: dbQueue,
             messageId: assistantId,
-            steps: [toolActivityStep(id: "base", detail: "base search")],
-            providerTranscript: [ProviderRequestMessage(role: "tool", content: "base result")]
+            step: toolActivityStep(id: "base", detail: "base search"),
+            transcript: [ProviderRequestMessage(role: "tool", content: "base result")]
         )
-        try repository.saveToolActivities(
+        try insertActivity(
+            dbQueue: dbQueue,
             variantId: variantId,
-            steps: [toolActivityStep(id: "variant", detail: "variant search")],
-            providerTranscript: [ProviderRequestMessage(role: "tool", content: "variant result")]
+            step: toolActivityStep(id: "variant", detail: "variant search"),
+            transcript: [ProviderRequestMessage(role: "tool", content: "variant result")]
         )
 
         try repository.updateMessageSelectedVariantIndex(messageId: assistantId, variantIndex: variant.variantIndex)
@@ -397,6 +400,36 @@ final class ConversationVariantSelectionTests: XCTestCase {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)
         return ConversationRepository(dbQueue: dbQueue)
+    }
+
+    private func makeRepositoryWithQueue() throws -> (ConversationRepository, DatabaseQueue) {
+        let dbQueue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(dbQueue)
+        return (ConversationRepository(dbQueue: dbQueue), dbQueue)
+    }
+
+    /// Inserts a tool activity row directly. `saveToolActivities` was removed with the
+    /// pre-Pi streaming pipeline; the read-side transcript replay still serves legacy rows.
+    private func insertActivity(
+        dbQueue: DatabaseQueue,
+        messageId: Int64? = nil,
+        variantId: Int64? = nil,
+        step: ToolActivityStep,
+        transcript: [ProviderRequestMessage]
+    ) throws {
+        let stepsData = try JSONEncoder().encode([step])
+        var activity = ChatMessageToolActivity(
+            messageId: messageId,
+            variantId: variantId,
+            stepsJSON: String(data: stepsData, encoding: .utf8) ?? "[]",
+            providerTranscriptJSON: {
+                guard let data = try? JSONEncoder().encode(transcript) else { return nil }
+                return String(data: data, encoding: .utf8)
+            }()
+        )
+        try dbQueue.write { db in
+            try activity.insert(db)
+        }
     }
 
     private func toolActivityStep(id: String, detail: String) -> ToolActivityStep {
