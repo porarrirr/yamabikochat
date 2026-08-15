@@ -7,6 +7,14 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         var type: String = "ephemeral"
     }
 
+    private struct StreamOptions: Encodable {
+        var includeUsage: Bool = true
+
+        enum CodingKeys: String, CodingKey {
+            case includeUsage = "include_usage"
+        }
+    }
+
     private struct OpenAIRequestBody: Encodable {
         var model: String
         var messages: [OpenAICompatibleWireMessage]
@@ -20,6 +28,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
         var sessionId: String?
         var maxTokens: Int?
         var temperature: Double?
+        var streamOptions: StreamOptions?
 
         enum CodingKeys: String, CodingKey {
             case model
@@ -34,6 +43,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             case sessionId = "session_id"
             case maxTokens = "max_tokens"
             case temperature
+            case streamOptions = "stream_options"
         }
 
         func encode(to encoder: Encoder) throws {
@@ -50,6 +60,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             try container.encodeIfPresent(sessionId, forKey: .sessionId)
             try container.encodeIfPresent(maxTokens, forKey: .maxTokens)
             try container.encodeIfPresent(temperature, forKey: .temperature)
+            try container.encodeIfPresent(streamOptions, forKey: .streamOptions)
         }
     }
 
@@ -286,7 +297,7 @@ struct OpenAICompatibleProviderClient: ProviderClient {
                 systemPrompt: request.systemPrompt,
                 embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata),
                 cacheBreakpointIndex: requiresExplicitOpenRouterCacheBreakpoint(
-                    model: request.model,
+                    request: request,
                     provider: provider
                 ) ? request.messages.lastIndex(where: { $0.role != "tool" && !$0.content.isEmpty }) : nil
             ),
@@ -299,13 +310,16 @@ struct OpenAICompatibleProviderClient: ProviderClient {
             promptCacheKey: promptCacheKey(for: request, provider: provider),
             sessionId: sessionId(for: request, provider: provider),
             maxTokens: Int(request.metadata["max_output_tokens"] ?? ""),
-            temperature: Double(request.metadata["temperature"] ?? "")
+            temperature: Double(request.metadata["temperature"] ?? ""),
+            streamOptions: stream ? StreamOptions() : nil
         )
         return try JSONEncoder().encode(body)
     }
 
     private func cacheControl(for request: ProviderRequest, provider: LLMProvider) -> PromptCacheControl? {
-        guard provider == .openRouter else { return nil }
+        let isOpenRouter = provider == .openRouter
+            || request.metadata["modelsDevProviderID"]?.lowercased() == "openrouter"
+        guard isOpenRouter else { return nil }
         let normalizedModel = request.model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard normalizedModel.hasPrefix("anthropic/claude") || normalizedModel.hasPrefix("claude") else {
             return nil
@@ -314,17 +328,32 @@ struct OpenAICompatibleProviderClient: ProviderClient {
     }
 
     private func promptCacheKey(for request: ProviderRequest, provider: LLMProvider) -> String? {
-        guard provider == .openAI || provider == .openRouter else { return nil }
+        let modelsDevProvider = request.metadata["modelsDevProviderID"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let modelsDevCacheKeyProviders: Set<String> = ["openai", "openrouter", "opencode-go"]
+        guard provider == .openAI
+                || provider == .openRouter
+                || modelsDevProvider.map(modelsDevCacheKeyProviders.contains) == true
+        else { return nil }
         return request.metadata["promptCacheKey"]?.trimmedNonEmpty
     }
 
     private func sessionId(for request: ProviderRequest, provider: LLMProvider) -> String? {
-        guard provider == .openRouter else { return nil }
+        let isOpenRouter = provider == .openRouter
+            || request.metadata["modelsDevProviderID"]?.lowercased() == "openrouter"
+        guard isOpenRouter else { return nil }
         return request.metadata["promptCacheKey"]?.trimmedNonEmpty
     }
 
-    private func requiresExplicitOpenRouterCacheBreakpoint(model: String, provider: LLMProvider) -> Bool {
-        guard provider == .openRouter else { return false }
+    private func requiresExplicitOpenRouterCacheBreakpoint(
+        request: ProviderRequest,
+        provider: LLMProvider
+    ) -> Bool {
+        let isOpenRouter = provider == .openRouter
+            || request.metadata["modelsDevProviderID"]?.lowercased() == "openrouter"
+        guard isOpenRouter else { return false }
+        let model = request.model
         let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return normalized.hasPrefix("google/gemini")
             || normalized.hasPrefix("gemini")

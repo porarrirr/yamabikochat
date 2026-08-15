@@ -57,6 +57,36 @@ final class ConversationStatsTests: XCTestCase {
         XCTAssertEqual(inclusive.cacheCreationInputTokens, 5)
         XCTAssertEqual(inclusive.totalTokens, 110)
 
+        let modelsDevOpenCodeGo = ProviderUsage(
+            inputTokens: 100,
+            outputTokens: 10,
+            totalTokens: 110,
+            cachedInputTokens: 80
+        ).disjointInputUsage(providerID: "MODELS_DEV:opencode-go")
+        XCTAssertEqual(modelsDevOpenCodeGo.inputTokens, 20)
+        XCTAssertEqual(modelsDevOpenCodeGo.cachedInputTokens, 80)
+
+        let modelsDevOpenAICompatible = ProviderUsage(
+            inputTokens: 120,
+            outputTokens: 5,
+            cachedInputTokens: 90,
+            cacheCreationInputTokens: 10
+        ).disjointInputUsage(providerID: "MODELS_DEV:groq")
+        XCTAssertEqual(modelsDevOpenAICompatible.inputTokens, 20)
+        XCTAssertEqual(modelsDevOpenAICompatible.cachedInputTokens, 90)
+        XCTAssertEqual(modelsDevOpenAICompatible.cacheCreationInputTokens, 10)
+
+        let modelsDevAnthropic = ProviderUsage(
+            inputTokens: 20,
+            outputTokens: 5,
+            cachedInputTokens: 90,
+            cacheCreationInputTokens: 10
+        ).disjointInputUsage(providerID: "MODELS_DEV:anthropic")
+        XCTAssertEqual(modelsDevAnthropic.inputTokens, 20)
+        XCTAssertEqual(modelsDevAnthropic.cachedInputTokens, 90)
+        XCTAssertEqual(modelsDevAnthropic.cacheCreationInputTokens, 10)
+        XCTAssertEqual(modelsDevOpenCodeGo.totalTokens, 110)
+
         let anthropic = ProviderUsage(
             inputTokens: 25,
             outputTokens: 10,

@@ -2854,6 +2854,127 @@ final class ProviderClientParityTests: XCTestCase {
         XCTAssertEqual(usage.cacheCreationInputTokens, 6)
     }
 
+    func testModelsDevOpenCodeGoPreservesConversationCacheKey() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.saveSecret("go-secret", key: "models_dev_opencode-go_OPENCODE_API_KEY")
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":100,"completion_tokens":10,"prompt_cache_hit_tokens":80}}"#
+                .data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+        let request = ProviderRequest(
+            model: "deepseek-v4-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            metadata: [
+                "promptCacheKey": "conversation-42",
+                "modelsDevProviderID": "opencode-go",
+                "modelsDevBaseURL": "https://opencode.ai/zen/go/v1",
+                "modelsDevCredentialKey": "models_dev_opencode-go_OPENCODE_API_KEY",
+                "modelsDevAuthHeader": "bearer"
+            ]
+        )
+
+        let response = try await OpenAICompatibleProviderClient().generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        XCTAssertEqual(response.usage?.cachedInputTokens, 80)
+        let bodyData = try XCTUnwrap(httpClient.lastRequest?.body)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertEqual(body["prompt_cache_key"] as? String, "conversation-42")
+    }
+
+    func testModelsDevOfficialOpenAIPreservesConversationCacheKey() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.saveSecret("openai-secret", key: "models_dev_openai_OPENAI_API_KEY")
+        let httpClient = CapturingHTTPClient()
+        httpClient.sendResponder = { request in
+            let data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
+            return (data, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+        let request = ProviderRequest(
+            model: "gpt-5",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: false,
+            tools: [],
+            metadata: [
+                "promptCacheKey": "conversation-42",
+                "modelsDevProviderID": "openai",
+                "modelsDevBaseURL": "https://api.openai.com/v1",
+                "modelsDevCredentialKey": "models_dev_openai_OPENAI_API_KEY",
+                "modelsDevAuthHeader": "bearer"
+            ]
+        )
+
+        _ = try await OpenAICompatibleProviderClient().generate(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        )
+
+        let bodyData = try XCTUnwrap(httpClient.lastRequest?.body)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertEqual(body["prompt_cache_key"] as? String, "conversation-42")
+    }
+
+    func testModelsDevOpenCodeGoStreamRequestsUsageAndPreservesConversationCacheKey() async throws {
+        let store = ProviderTestCredentialStore()
+        try store.saveSecret("go-secret", key: "models_dev_opencode-go_OPENCODE_API_KEY")
+        let httpClient = CapturingHTTPClient()
+        httpClient.streamResponder = { request in
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(#"data: {"choices":[{"delta":{"content":"ok"}}]}"#)
+                continuation.yield("")
+                continuation.yield(#"data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":1,"prompt_cache_hit_tokens":80}}"#)
+                continuation.yield("")
+                continuation.yield("data: [DONE]")
+                continuation.yield("")
+                continuation.finish()
+            }
+            return (stream, Self.makeHTTPResponse(url: request.url, statusCode: 200))
+        }
+        let request = ProviderRequest(
+            model: "deepseek-v4-flash",
+            messages: [ProviderRequestMessage(role: "user", content: "hello")],
+            stream: true,
+            tools: [],
+            metadata: [
+                "promptCacheKey": "conversation-42",
+                "modelsDevProviderID": "opencode-go",
+                "modelsDevBaseURL": "https://opencode.ai/zen/go/v1",
+                "modelsDevCredentialKey": "models_dev_opencode-go_OPENCODE_API_KEY",
+                "modelsDevAuthHeader": "bearer"
+            ]
+        )
+
+        var completed: ProviderResponse?
+        for try await event in OpenAICompatibleProviderClient().stream(
+            request: request,
+            settings: AppSettings(),
+            credentialStore: store,
+            httpClient: httpClient
+        ) {
+            if case let .completed(response) = event {
+                completed = response
+            }
+        }
+
+        XCTAssertEqual(completed?.usage?.cachedInputTokens, 80)
+        let bodyData = try XCTUnwrap(httpClient.lastRequest?.body)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertEqual(body["prompt_cache_key"] as? String, "conversation-42")
+        XCTAssertEqual(body["stream"] as? Bool, true)
+        let streamOptions = try XCTUnwrap(body["stream_options"] as? [String: Any])
+        XCTAssertEqual(streamOptions["include_usage"] as? Bool, true)
+    }
+
     func testModelsDevAzureUsesApiKeyHeaderWithoutBearerAuthorization() async throws {
         let store = ProviderTestCredentialStore()
         try store.saveSecret("azure-secret", key: "models_dev_azure_AZURE_API_KEY")

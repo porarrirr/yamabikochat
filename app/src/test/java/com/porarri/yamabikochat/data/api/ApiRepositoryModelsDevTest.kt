@@ -143,6 +143,40 @@ class ApiRepositoryModelsDevTest {
     }
 
     @Test
+    fun modelsDevOpenCodeGoPreservesConversationPromptCacheKey() = runBlocking {
+        val modelId = "openai/gpt-oss-120b"
+        val provider = catalogProvider(
+            id = "opencode-go",
+            npm = "@ai-sdk/openai-compatible",
+            api = "https://opencode.ai/zen/go/v1",
+            env = listOf("OPENCODE_API_KEY")
+        )
+        coEvery { catalogRepository.providerOrLoad(any()) } returns provider
+        every { settingsManager.getModelsDevField("opencode-go", "OPENCODE_API_KEY") } returns "dynamic-key"
+        coEvery {
+            openAiProvider.generateContent(any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } returns Response.success(GenerateContentResponse(text = "ok"))
+        val request = GenerateContentRequest(
+            contents = listOf(Content(role = "user", parts = listOf(Part(text = "hello")))),
+            promptCacheKey = "conversation-42"
+        )
+
+        val response = repository.generateContent(
+            model = modelId,
+            request = request,
+            providerOverride = "MODELS_DEV:opencode-go"
+        )
+
+        assertTrue(response.isSuccessful)
+        coVerify {
+            openAiProvider.generateContent(
+                "dynamic-key", modelId, request, "https://opencode.ai/zen/go/v1",
+                "conversation-42", false, false, false, null
+            )
+        }
+    }
+
+    @Test
     fun unsupportedSavedReasoningEffortStopsBeforeProviderRequest() = runBlocking {
         val modelId = "openai/gpt-oss-120b"
         val provider = catalogProvider(
@@ -184,7 +218,7 @@ class ApiRepositoryModelsDevTest {
         coEvery { catalogRepository.providerOrLoad(any()) } returns provider
         every { settingsManager.getModelsDevField("anthropic", "ANTHROPIC_API_KEY") } returns "anthropic-key"
         coEvery {
-            anthropicProvider.generateContent(any(), any(), any(), any(), any(), any(), any())
+            anthropicProvider.generateContent(any(), any(), any(), any(), any(), any(), any(), any())
         } returns Response.success(GenerateContentResponse(text = "ok"))
 
         val response = repository.generateContent(
@@ -196,7 +230,7 @@ class ApiRepositoryModelsDevTest {
         assertTrue(response.isSuccessful)
         coVerify {
             anthropicProvider.generateContent(
-                "anthropic-key", "claude-test", any(), "https://api.anthropic.com/v1/", "Anthropic", null, null
+                "anthropic-key", "claude-test", any(), "https://api.anthropic.com/v1/", "Anthropic", null, null, true
             )
         }
     }

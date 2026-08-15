@@ -252,6 +252,7 @@ final class ProviderGatewayTests: XCTestCase {
         let body = try XCTUnwrap(fixture.httpClient.sentRequests.first?.body)
         let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
         XCTAssertEqual((root["output_config"] as? [String: Any])?["effort"] as? String, "medium")
+        XCTAssertEqual((root["cache_control"] as? [String: Any])?["type"] as? String, "ephemeral")
     }
 
     func testModelsDevUnsupportedSavedReasoningEffortStopsBeforeHTTPRequest() async throws {
@@ -419,7 +420,7 @@ final class ProviderGatewayTests: XCTestCase {
         XCTAssertTrue(fixture.httpClient.sentRequests.isEmpty)
     }
 
-    func testOpenCodeGoStreamRetriesNonStreamingWhenStreamReturnsNoAnswerText() async throws {
+    func testOpenCodeGoToolCallOnlyStreamIsNotRetriedNonStreaming() async throws {
         let fixture = try makeFixture()
         try fixture.credentials.setCredential("opencode-key", for: .openCodeGo)
 
@@ -433,12 +434,6 @@ final class ProviderGatewayTests: XCTestCase {
             }
             return (stream, Self.httpResponse(url: request.url, statusCode: 200))
         }
-        fixture.httpClient.sendResponder = { request in
-            let payload = #"{"choices":[{"message":{"content":"fallback answer","reasoning_content":"streamed reasoning"}}]}"#
-            let data = payload.data(using: .utf8)!
-            return (data, Self.httpResponse(url: request.url, statusCode: 200))
-        }
-
         let stream = try await fixture.gateway.stream(
             request: ProviderRequest(
                 model: "deepseek-v4-flash",
@@ -456,18 +451,9 @@ final class ProviderGatewayTests: XCTestCase {
         }
 
         XCTAssertEqual(fixture.httpClient.streamedRequests.count, 1)
-        XCTAssertEqual(fixture.httpClient.sentRequests.count, 1, "Should issue exactly 1 non-streaming fallback request when stream has no answer text")
-        XCTAssertEqual(completedResponses.last?.text, "fallback answer")
+        XCTAssertTrue(fixture.httpClient.sentRequests.isEmpty)
+        XCTAssertEqual(completedResponses.last?.text, "")
         XCTAssertEqual(completedResponses.last?.reasoningSummary, "streamed reasoning")
-
-        let fallbackBody = try XCTUnwrap(fixture.httpClient.sentRequests.first?.body)
-        let fallbackRoot = try XCTUnwrap(
-            try JSONSerialization.jsonObject(with: fallbackBody) as? [String: Any]
-        )
-        XCTAssertEqual(fallbackRoot["stream"] as? Bool, false)
-        let messages = try XCTUnwrap(fallbackRoot["messages"] as? [[String: Any]])
-        XCTAssertEqual(messages.count, 1)
-        XCTAssertEqual(messages.first?["content"] as? String, "hello")
     }
 
     func testOpenCodeGoStreamDoesNotRetryWhenStreamDeliversAnswerText() async throws {

@@ -22,6 +22,10 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         var effort: String
     }
 
+    private struct AnthropicCacheControl: Encodable {
+        var type: String = "ephemeral"
+    }
+
     private struct AnthropicMCPServer: Encodable {
         var type: String = "url"
         var url: String
@@ -71,6 +75,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
         var stream: Bool
         var thinking: AnthropicThinking?
         var outputConfig: AnthropicOutputConfig?
+        var cacheControl: AnthropicCacheControl?
         var mcpServers: [AnthropicMCPServer]?
         var tools: [AnyEncodable]?
 
@@ -82,6 +87,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
             case stream
             case thinking
             case outputConfig = "output_config"
+            case cacheControl = "cache_control"
             case mcpServers = "mcp_servers"
             case tools
         }
@@ -95,6 +101,7 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
             try container.encode(stream, forKey: .stream)
             try container.encodeIfPresent(thinking, forKey: .thinking)
             try container.encodeIfPresent(outputConfig, forKey: .outputConfig)
+            try container.encodeIfPresent(cacheControl, forKey: .cacheControl)
             try container.encodeIfPresent(mcpServers, forKey: .mcpServers)
             try container.encodeIfPresent(tools, forKey: .tools)
         }
@@ -292,6 +299,9 @@ struct AnthropicCompatibleProviderClient: ProviderClient {
             stream: stream,
             thinking: thinking,
             outputConfig: request.metadata["modelsDevReasoningEffort"]?.trimmedNonEmpty.map(AnthropicOutputConfig.init),
+            cacheControl: request.metadata["modelsDevProviderID"]?.lowercased() == "anthropic"
+                ? AnthropicCacheControl()
+                : nil,
             mcpServers: mcpConfiguration?.servers,
             tools: buildAnthropicTools(request.tools, mcpConfiguration: mcpConfiguration)
         )

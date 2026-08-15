@@ -379,9 +379,6 @@ final class ProviderGateway {
                     }
                 }
 
-                var streamHadAnswerText = false
-                var streamReasoning = ""
-                var streamUsage: ProviderUsage?
                 var transientAttempt = 0
                 var superGrokAuthRetried = false
                 var candidateIndex = 0
@@ -403,55 +400,9 @@ final class ProviderGateway {
                         )
                         for try await event in stream {
                             yieldedAnyEventThisAttempt = true
-                            if event.includesNonEmptyAnswerText {
-                                streamHadAnswerText = true
-                            }
-                            switch event {
-                            case let .reasoningDelta(delta):
-                                streamReasoning += delta
-                            case let .completed(response):
-                                if let reasoning = response.reasoningSummary?.trimmedNonEmpty {
-                                    streamReasoning = reasoning
-                                }
-                                streamUsage = response.usage ?? streamUsage
-                            case .textDelta, .toolCallDelta, .serverActivity:
-                                break
-                            }
                             continuation.yield(event)
                         }
 
-                        if provider.retriesNonStreamingWhenStreamReturnsNoText, !streamHadAnswerText {
-                            DiagnosticsLogger.log(
-                                "Stream completed without text; retrying non-streaming",
-                                category: .network,
-                                metadata: [
-                                    "provider": provider.rawValue,
-                                    "model": currentRequest.model
-                                ]
-                            )
-                            let fallback = try await client.generate(
-                                request: currentRequest,
-                                settings: settings,
-                                credentialStore: currentCredentialStore,
-                                httpClient: httpClient
-                            )
-                            let mergedReasoning = fallback.reasoningSummary?.trimmedNonEmpty
-                                ?? streamReasoning.trimmedNonEmpty
-                            let mergedUsage = fallback.usage ?? streamUsage
-                            continuation.yield(
-                                .completed(
-                                    ProviderResponse(
-                                        text: fallback.text,
-                                        reasoningSummary: mergedReasoning,
-                                        raw: fallback.raw,
-                                        usage: mergedUsage,
-                                        toolCalls: fallback.toolCalls,
-                                        generatedFiles: fallback.generatedFiles,
-                                        serverActivities: fallback.serverActivities
-                                    )
-                                )
-                            )
-                        }
                         if rotationActive {
                             rememberGoodGeminiRotationCandidate(rotationCandidates[candidateIndex])
                         }

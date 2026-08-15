@@ -58,7 +58,6 @@
 		353AB5AA99651B0E3EB882F9 /* AnthropicMessagesStreamParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B58CAC4F6C3257E317CD02 /* AnthropicMessagesStreamParser.swift */; };
 		3841881EDF31F3A3A8ABE6CD /* AutoConversationTriggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F78E25D8F74B8F031620DD9 /* AutoConversationTriggerTests.swift */; };
 		389F0035F053AD241EBCE6CB /* FusionOrchestratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A838796E06D9802E2EBC5A1A /* FusionOrchestratorTests.swift */; };
-		3AF4253852DF37564D1A0DE4 /* ClientToolFallbackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80C4F01E86173EE365B1D98 /* ClientToolFallbackPolicy.swift */; };
 		3B85342C06EEE33A7A4FE9F7 /* SharePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E5EC327A302F432B8A4083 /* SharePayload.swift */; };
 		3B9C7C3D5ACAB1D2B894E255 /* FusionExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50A3B8C96FD9035F786B2328 /* FusionExtensions.swift */; };
 		40123B24C266FB550D605E15 /* HTMLTextExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFA8FC2F705B5D8D61A79B26 /* HTMLTextExtractor.swift */; };
@@ -469,7 +468,6 @@
 		C470C52136C0F5806543DD92 /* CodexAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexAuthRepository.swift; sourceTree = "<group>"; };
 		C4E0AF024AFDE4AE3554BA68 /* AutoConversationMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversationMessage.swift; sourceTree = "<group>"; };
 		C60224F6EBCC6491A82E063D /* OpenCodeGoModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeGoModelCatalog.swift; sourceTree = "<group>"; };
-		C80C4F01E86173EE365B1D98 /* ClientToolFallbackPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientToolFallbackPolicy.swift; sourceTree = "<group>"; };
 		C9668A67F5C25A97F7F0AC48 /* AppServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppServices.swift; sourceTree = "<group>"; };
 		C999B182C41BD1B53399513E /* SSEPayloadAssemblerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSEPayloadAssemblerTests.swift; sourceTree = "<group>"; };
 		CA315FEF3D504A495B8F5F2B /* ModelsDevCatalogRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsDevCatalogRepository.swift; sourceTree = "<group>"; };
@@ -796,7 +794,6 @@
 		9629D888744E04FF429C6271 /* Core */ = {
 			isa = PBXGroup;
 			children = (
-				C80C4F01E86173EE365B1D98 /* ClientToolFallbackPolicy.swift */,
 				A7157EAA30E777555648D356 /* LocalToolRegistry.swift */,
 				FF960EDFF2A3F6B943489727 /* ToolCallingOrchestrator.swift */,
 				C093FE561B4B20D9C6ADF796 /* ToolDefinition.swift */,
@@ -1358,7 +1355,6 @@
 				845EF806947869EFB4FD8D8B /* ChatStreamingPersistence.swift in Sources */,
 				06872ECCFAD394292A44A8F7 /* ChatViewModel.swift in Sources */,
 				E27A6862F9650B6AA7DBDCA4 /* ChatWorkspaceScreen.swift in Sources */,
-				3AF4253852DF37564D1A0DE4 /* ClientToolFallbackPolicy.swift in Sources */,
 				F97C698E6296C53CE1574499 /* ClinePassModelCatalog.swift in Sources */,
 				7AA55F94D1771B63F74DAE98 /* CodexAuthRepository.swift in Sources */,
 				315256D3D28F249024506BD1 /* CodexModelPresets.swift in Sources */,

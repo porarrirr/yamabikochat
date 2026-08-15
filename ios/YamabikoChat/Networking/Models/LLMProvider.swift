@@ -25,11 +25,6 @@ enum LLMProvider: String, Codable, CaseIterable, Sendable {
         }
     }
 
-    /// When a stream completes without visible answer text, retry once with a non-streaming request.
-    var retriesNonStreamingWhenStreamReturnsNoText: Bool {
-        self == .openCodeGo
-    }
-
     var supportsClientWebSearchTool: Bool {
         switch self {
         case .openRouter, .openAI, .openAICompat, .miniMax, .zai, .clinePass, .alibabaCodingPlan, .gemini:

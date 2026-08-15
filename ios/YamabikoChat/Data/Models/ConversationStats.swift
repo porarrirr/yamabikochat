@@ -125,10 +125,15 @@ extension ProviderUsage {
         let provider = providerID.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let inclusiveProviders: Set<String> = [
             "GEMINI", "GEMINI_AUTH", "OPENROUTER", "OPENAI", "OPENAI_COMPAT",
-            "OPENCODE_GO", "CODEX_AUTH", "CLINEPASS", "MINIMAX", "ZAI"
+            "OPENCODE_GO", "MODELS_DEV:OPENCODE-GO", "CODEX_AUTH", "CLINEPASS", "MINIMAX", "ZAI"
         ]
+        // Every currently supported dynamic models.dev adapter except the native
+        // Anthropic Messages adapter reaches an OpenAI-compatible endpoint, whose
+        // prompt/input token count includes cache-read and cache-write tokens.
+        let modelsDevUsesInclusiveInput = provider.hasPrefix("MODELS_DEV:")
+            && provider != "MODELS_DEV:ANTHROPIC"
         let rawInput = max(0, normalized.inputTokens ?? 0)
-        let uncached = inclusiveProviders.contains(provider)
+        let uncached = (inclusiveProviders.contains(provider) || modelsDevUsesInclusiveInput)
             ? max(0, rawInput - cached - created)
             : rawInput
         return ProviderUsage(

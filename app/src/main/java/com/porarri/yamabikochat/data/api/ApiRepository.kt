@@ -268,6 +268,7 @@ class ApiRepository(
                 logModelsDevReasoningEffort(provider, model, reasoningEffort)
                 openAiProvider.generateContent(
                     apiKey, model, request, baseUrl,
+                    promptCacheKeyOverride = modelsDevPromptCacheKey(provider.id, request),
                     useApiKeyHeader = profile.adapter == ProviderAdapterKind.AZURE_OPEN_AI,
                     useCloudflareGatewayHeader = profile.adapter == ProviderAdapterKind.CLOUDFLARE_AI_GATEWAY,
                     stripOpenAiProviderPrefix = false,
@@ -277,7 +278,9 @@ class ApiRepository(
             ProviderAdapterKind.ANTHROPIC -> {
                 logModelsDevReasoningEffort(provider, model, reasoningEffort)
                 anthropicCompatibleProvider.generateContent(
-                    apiKey, model, request, baseUrl, provider.name, reasoningEffort = reasoningEffort
+                    apiKey, model, request, baseUrl, provider.name,
+                    reasoningEffort = reasoningEffort,
+                    automaticPromptCache = provider.id.equals("anthropic", ignoreCase = true)
                 )
             }
             else -> unsupportedModelsDevResponse(provider)
@@ -309,6 +312,7 @@ class ApiRepository(
                 logModelsDevReasoningEffort(provider, model, reasoningEffort)
                 openAiProvider.streamGenerateContent(
                     apiKey, model, request, baseUrl,
+                    promptCacheKeyOverride = modelsDevPromptCacheKey(provider.id, request),
                     useApiKeyHeader = profile.adapter == ProviderAdapterKind.AZURE_OPEN_AI,
                     useCloudflareGatewayHeader = profile.adapter == ProviderAdapterKind.CLOUDFLARE_AI_GATEWAY,
                     stripOpenAiProviderPrefix = false,
@@ -318,11 +322,26 @@ class ApiRepository(
             ProviderAdapterKind.ANTHROPIC -> {
                 logModelsDevReasoningEffort(provider, model, reasoningEffort)
                 anthropicCompatibleProvider.streamGenerateContent(
-                    apiKey, model, request, baseUrl, provider.name, reasoningEffort = reasoningEffort
+                    apiKey, model, request, baseUrl, provider.name,
+                    reasoningEffort = reasoningEffort,
+                    automaticPromptCache = provider.id.equals("anthropic", ignoreCase = true)
                 )
             }
             else -> unsupportedModelsDevStreamResponse(provider)
         }
+    }
+
+    private fun modelsDevPromptCacheKey(
+        providerId: String,
+        request: GenerateContentRequest
+    ): String? {
+        val supportsPromptCacheKey = providerId.trim().lowercase() in setOf(
+            "openai",
+            "openrouter",
+            "opencode-go"
+        )
+        if (!supportsPromptCacheKey) return null
+        return request.promptCacheKey?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     private fun validateModelsDevRequest(provider: CatalogProvider, modelId: String, request: GenerateContentRequest): String? {

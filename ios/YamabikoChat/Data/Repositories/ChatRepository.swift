@@ -679,45 +679,16 @@ final class ChatRepository {
         do {
             let outcome = try await orchestrator.run(
                 request: request,
-                invoke: { [self] roundRequest, round in
-                    do {
-                        return try await executeProviderRound(
-                            request: roundRequest,
-                            provider: provider,
-                            persistenceKind: persistenceKind,
-                            streamEnabled: streamEnabled,
-                            persistResults: persistResults,
-                            onStreamEvent: onStreamEvent,
-                            onStreamingSnapshot: onStreamingSnapshot
-                        )
-                    } catch {
-                        guard ClientToolFallbackPolicy.shouldRetryWithoutClientTools(
-                            error: error,
-                            request: roundRequest,
-                            round: round
-                        ) else {
-                            throw error
-                        }
-                        DiagnosticsLogger.log(
-                            "Model rejected client tools; retrying without local functions",
-                            level: .warning,
-                            category: .network,
-                            metadata: [
-                                "provider": provider,
-                                "model": roundRequest.model
-                            ],
-                            error: error
-                        )
-                        return try await executeProviderRound(
-                            request: ClientToolFallbackPolicy.removingClientTools(from: roundRequest),
-                            provider: provider,
-                            persistenceKind: persistenceKind,
-                            streamEnabled: streamEnabled,
-                            persistResults: persistResults,
-                            onStreamEvent: onStreamEvent,
-                            onStreamingSnapshot: onStreamingSnapshot
-                        )
-                    }
+                invoke: { [self] roundRequest, _ in
+                    try await executeProviderRound(
+                        request: roundRequest,
+                        provider: provider,
+                        persistenceKind: persistenceKind,
+                        streamEnabled: streamEnabled,
+                        persistResults: persistResults,
+                        onStreamEvent: onStreamEvent,
+                        onStreamingSnapshot: onStreamingSnapshot
+                    )
                 },
                 onProgressChanged: { [self] progress in
                     guard persistResults else { return }
@@ -741,6 +712,15 @@ final class ChatRepository {
                 }
             )
             if persistResults {
+                // The final transcript write is part of completing the turn. Progress
+                // writes are only for UI recovery and must not be the sole durable copy.
+                if !outcome.activities.isEmpty {
+                    try saveToolActivities(
+                        kind: persistenceKind,
+                        steps: outcome.activities,
+                        providerTranscript: outcome.replayMessages
+                    )
+                }
                 try persistProviderResponse(outcome.response, kind: persistenceKind)
             }
             return outcome.response

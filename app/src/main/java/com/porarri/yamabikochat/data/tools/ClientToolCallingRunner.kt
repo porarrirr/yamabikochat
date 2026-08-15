@@ -8,7 +8,6 @@ import com.porarri.yamabikochat.data.remote.GenerateContentResponse
 import com.porarri.yamabikochat.data.remote.Part
 import com.porarri.yamabikochat.data.remote.TokenUsageSnapshot
 import com.porarri.yamabikochat.data.remote.extractTokenUsageSnapshot
-import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
@@ -41,41 +40,14 @@ class ClientToolCallingRunner(
         onProgressChanged: (suspend (Progress) -> Unit)? = null
     ): Result {
         val orchestrator = ToolCallingOrchestrator(registry = registry, maxRounds = maxRounds)
-        var workingTools = baseRequest.tools
-
         val initial = ToolTurnRequest(messages = contentsToToolMessages(baseRequest.contents))
         val outcome = orchestrator.run(
             request = initial,
-            invoke = { turnRequest, round ->
-                var request = baseRequest.copy(
-                    contents = toolMessagesToContents(turnRequest.messages),
-                    tools = workingTools
+            invoke = { turnRequest, _ ->
+                val request = baseRequest.copy(
+                    contents = toolMessagesToContents(turnRequest.messages)
                 )
-                var response = generate(request, model, provider)
-                if (!response.isSuccessful) {
-                    val errorBody = response.errorBody()?.string().orEmpty()
-                    if (baseRequest.skillContext == null && ClientToolFallbackPolicy.shouldRetryWithoutClientTools(
-                            httpStatus = response.code(),
-                            body = errorBody,
-                            tools = request.tools.orEmpty(),
-                            round = round
-                        )
-                    ) {
-                        DiagnosticsLogger.log(
-                            "Model rejected client tools; retrying without local functions " +
-                                "provider=${provider.uppercase()} model=$model code=${response.code()}"
-                        )
-                        workingTools = ClientToolFallbackPolicy
-                            .removingClientTools(request.tools.orEmpty())
-                            .takeIf { it.isNotEmpty() }
-                        request = request.copy(tools = workingTools)
-                        response = generate(request, model, provider)
-                    } else {
-                        throw ClientToolCallingException(
-                            apiFailureMessage(provider, response.code(), errorBody)
-                        )
-                    }
-                }
+                val response = generate(request, model, provider)
                 if (!response.isSuccessful) {
                     val errorBody = response.errorBody()?.string().orEmpty()
                     throw ClientToolCallingException(

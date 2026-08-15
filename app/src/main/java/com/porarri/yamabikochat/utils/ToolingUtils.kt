@@ -10,7 +10,6 @@ import com.porarri.yamabikochat.data.remote.Tool
 import com.porarri.yamabikochat.data.remote.UrlContext
 import com.porarri.yamabikochat.data.remote.GoogleMaps
 import com.porarri.yamabikochat.data.remote.ComputerUse
-import com.porarri.yamabikochat.data.tools.ClientToolFallbackPolicy
 import com.porarri.yamabikochat.data.tools.ClientTools
 import kotlinx.serialization.json.Json
 
@@ -78,8 +77,11 @@ object ToolingUtils {
         return providerTools
     }
 
-    fun hasClientFunctionTools(tools: List<Tool>): Boolean =
-        ClientToolFallbackPolicy.hasClientFunctionTools(tools)
+    fun hasClientFunctionTools(tools: List<Tool>): Boolean = tools.any { tool ->
+        tool.function_declarations.orEmpty().any { declaration ->
+            declaration.name == "web_search" || declaration.name == "fetch_url"
+        }
+    }
 
     private fun parseFunctionDeclarations(raw: String): List<FunctionDeclaration>? {
         val trimmed = raw.trim()

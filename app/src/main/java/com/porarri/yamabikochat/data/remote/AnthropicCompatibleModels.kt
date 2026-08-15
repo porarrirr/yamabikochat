@@ -15,9 +15,16 @@ data class AnthropicMessageRequest(
     val thinking: AnthropicThinking? = null,
     @SerialName("output_config")
     val outputConfig: AnthropicOutputConfig? = null,
+    @SerialName("cache_control")
+    val cacheControl: AnthropicCacheControl? = null,
     @SerialName("mcp_servers")
     val mcpServers: List<AnthropicMcpServer>? = null,
     val tools: List<JsonElement>? = null
+)
+
+@Serializable
+data class AnthropicCacheControl(
+    val type: String = "ephemeral"
 )
 
 @Serializable

@@ -371,41 +371,6 @@ final class ChatRepositorySyncTests: XCTestCase {
         XCTAssertEqual(totals.totalCostUsd, 0.42, accuracy: 0.000_001)
     }
 
-    func testOpenCodeGoEmptyStreamRecoversWithNonStreamingResponse() async throws {
-        let payload = #"""
-        {
-          "choices":[{"message":{"content":"fallback ok","reasoning_content":"fallback reasoning"}}],
-          "usage":{"prompt_tokens":12,"completion_tokens":4,"total_tokens":16}
-        }
-        """#
-        let httpClient = GeminiStreamFallbackHTTPClient(
-            streamLines: ["data: [DONE]", ""],
-            nonStreamingBody: payload
-        )
-        let fixture = try makeFixture(httpClient: httpClient) { settings in
-            settings.apiProvider = "OPENCODE_GO"
-            settings.defaultModel = "deepseek-v4-flash"
-            settings.providerDefaultModelsJSON = #"{"OPENCODE_GO":"deepseek-v4-flash"}"#
-            settings.isStreamingEnabled = true
-        }
-        try fixture.credentials.setCredential("opencode-go-key", for: .openCodeGo)
-
-        let conversationID = try fixture.repository.createConversation(title: "New Chat")
-        let result = try await fixture.repository.sendMessage(
-            conversationId: conversationID,
-            text: "hello",
-            attachments: []
-        )
-
-        XCTAssertEqual(result.response.text, "fallback ok")
-        XCTAssertEqual(result.response.reasoningSummary, "fallback reasoning")
-        XCTAssertEqual(httpClient.streamCallCount, 1)
-        XCTAssertEqual(httpClient.sendCallCount, 1, "Non-streaming fallback should be invoked when OpenCode Go stream has zero answer text.")
-
-        let saved = try fixture.conversations.fetchFullMessage(id: result.assistantMessageId)
-        XCTAssertEqual(saved?.displayText, "fallback ok")
-    }
-
     func testOpenCodeGoNormalStreamDoesNotTriggerNonStreamingFallback() async throws {
         let streamPayload = #"data: {"choices":[{"delta":{"content":"normal stream text"}}]}"#
         let nonStreamPayload = #"""

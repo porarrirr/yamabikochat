@@ -32,7 +32,8 @@ class AnthropicCompatibleProvider(
         baseUrl: String,
         providerLabel: String,
         mcpAuthorizationToken: String? = null,
-        reasoningEffort: String? = null
+        reasoningEffort: String? = null,
+        automaticPromptCache: Boolean = false
     ): Response<GenerateContentResponse> = withContext(Dispatchers.IO) {
         val cleanedKey = apiKey.trim()
         if (cleanedKey.isEmpty()) {
@@ -43,7 +44,8 @@ class AnthropicCompatibleProvider(
             request,
             stream = false,
             mcpAuthorizationToken = mcpAuthorizationToken,
-            reasoningEffort = reasoningEffort
+            reasoningEffort = reasoningEffort,
+            automaticPromptCache = automaticPromptCache
         )
         try {
             val response = makeService(baseUrl).createMessage(
@@ -72,7 +74,8 @@ class AnthropicCompatibleProvider(
         baseUrl: String,
         providerLabel: String,
         mcpAuthorizationToken: String? = null,
-        reasoningEffort: String? = null
+        reasoningEffort: String? = null,
+        automaticPromptCache: Boolean = false
     ): Response<ResponseBody> = withContext(Dispatchers.IO) {
         val cleanedKey = apiKey.trim()
         if (cleanedKey.isEmpty()) {
@@ -83,7 +86,8 @@ class AnthropicCompatibleProvider(
             request,
             stream = true,
             mcpAuthorizationToken = mcpAuthorizationToken,
-            reasoningEffort = reasoningEffort
+            reasoningEffort = reasoningEffort,
+            automaticPromptCache = automaticPromptCache
         )
         try {
             makeService(baseUrl).streamMessage(
@@ -103,7 +107,8 @@ class AnthropicCompatibleProvider(
         request: GenerateContentRequest,
         stream: Boolean,
         mcpAuthorizationToken: String?,
-        reasoningEffort: String?
+        reasoningEffort: String?,
+        automaticPromptCache: Boolean
     ): AnthropicMessageRequest {
         val thinking = buildThinking(request.generationConfig?.thinkingConfig)
         val mcp = buildMcpConfiguration(request.tools.orEmpty(), mcpAuthorizationToken)
@@ -116,6 +121,7 @@ class AnthropicCompatibleProvider(
             stream = stream,
             thinking = thinking,
             outputConfig = reasoningEffort?.trim()?.takeIf { it.isNotEmpty() }?.let(::AnthropicOutputConfig),
+            cacheControl = AnthropicCacheControl().takeIf { automaticPromptCache },
             mcpServers = mcp?.servers,
             tools = buildTools(request.tools.orEmpty(), mcp)
         )
