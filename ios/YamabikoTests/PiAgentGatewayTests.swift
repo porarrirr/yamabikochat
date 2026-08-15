@@ -66,4 +66,38 @@ final class PiAgentGatewayTests: XCTestCase {
             XCTAssertTrue(message.contains("Unknown provider"))
         }
     }
+
+    func testGeminiThinkingLevelIsPassedThroughPiConfiguration() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.setCredential("test-gemini-key", for: .gemini)
+        let pi = PiStreamSpy()
+        let gateway = ProviderGateway(
+            settingsRepository: SettingsRepository(dbQueue: database),
+            credentialStore: credentials,
+            piStream: pi.stream
+        )
+
+        _ = try await gateway.stream(
+            request: ProviderRequest(
+                model: "gemini-3.1-pro-preview",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")],
+                thinking: ProviderThinkingConfig(
+                    enabled: nil,
+                    budget: nil,
+                    effort: nil,
+                    includeThoughts: true,
+                    exclude: nil
+                ),
+                metadata: ["geminiThinkingLevel": "high"]
+            ),
+            provider: .gemini
+        )
+
+        let configuration = try XCTUnwrap(pi.calls.first?.configuration)
+        XCTAssertEqual(configuration.api, "google-generative-ai")
+        XCTAssertEqual(configuration.provider, "google")
+        XCTAssertEqual(configuration.thinkingLevel, "high")
+    }
 }

@@ -206,7 +206,10 @@ final class ProviderGateway {
             apiKey: apiKey,
             headers: headers,
             reasoning: request.thinking?.enabled != false,
-            thinkingLevel: thinkingLevel(request.thinking),
+            thinkingLevel: thinkingLevel(
+                request.thinking,
+                geminiLevel: provider == .gemini ? request.metadata["geminiThinkingLevel"] : nil
+            ),
             supportsImages: request.metadata["supportsVision"] == "true",
             contextWindow: 128_000,
             maxTokens: max(1024, Int(request.metadata["max_output_tokens"] ?? "") ?? 8192),
@@ -291,9 +294,12 @@ final class ProviderGateway {
         return model.replacingOccurrences(of: "/openai/", with: "")
     }
 
-    private func thinkingLevel(_ thinking: ProviderThinkingConfig?) -> String? {
+    private func thinkingLevel(
+        _ thinking: ProviderThinkingConfig?,
+        geminiLevel: String? = nil
+    ) -> String? {
         guard thinking?.enabled != false else { return "off" }
-        let value = thinking?.effort?.lowercased()
+        let value = (geminiLevel?.trimmedNonEmpty ?? thinking?.effort)?.lowercased()
         return ["minimal", "low", "medium", "high", "xhigh", "max"].contains(value) ? value : nil
     }
 
