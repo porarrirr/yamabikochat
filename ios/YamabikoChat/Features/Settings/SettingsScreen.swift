@@ -322,6 +322,47 @@ struct SettingsScreen: View {
         Group {
             appearanceSection
             mathRenderingSection
+            chatStatsSection
+        }
+    }
+
+    private var chatStatsSection: some View {
+        Section {
+            ForEach(ChatStatsField.allCases) { field in
+                Toggle(L10n.text(chatStatsTitle(for: field)), isOn: chatStatsBinding(field))
+            }
+        } header: {
+            Text(L10n.text("チャットスタッツ"))
+        } footer: {
+            Text(L10n.text("入力欄の上に表示する項目を選択します。計測は非表示中も継続します。"))
+        }
+    }
+
+    private func chatStatsBinding(_ field: ChatStatsField) -> Binding<Bool> {
+        Binding(
+            get: { viewModel.settings.visibleChatStatsFields().contains(field) },
+            set: { isVisible in
+                var fields = viewModel.settings.visibleChatStatsFields()
+                if isVisible {
+                    fields.insert(field)
+                } else {
+                    fields.remove(field)
+                }
+                viewModel.settings.setVisibleChatStatsFields(fields)
+            }
+        )
+    }
+
+    private func chatStatsTitle(for field: ChatStatsField) -> String {
+        switch field {
+        case .turns: return "ターン"
+        case .steps: return "ステップ"
+        case .llmDuration: return "LLM時間"
+        case .toolDuration: return "ツール時間"
+        case .averageTTFT: return "平均TTFT"
+        case .tokensPerSecond: return "tok/s"
+        case .cacheHit: return "キャッシュヒット率"
+        case .tokens: return "入力・出力token"
         }
     }
 

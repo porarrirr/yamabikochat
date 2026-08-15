@@ -38,6 +38,7 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var isSecretConversation: Bool = false
     @Published private(set) var conversationTitle: String = "New Chat"
     @Published private(set) var enabledSkillNames: [String] = []
+    @Published private(set) var conversationStats: ConversationStats = .init()
 
     let speechService = SpeechRecognitionService()
 
@@ -124,6 +125,11 @@ final class ChatViewModel: ObservableObject {
             .sink { [weak self] in
                 self?.dualMessages = $0
             }
+            .store(in: &cancellables)
+
+        repository.observeConversationStats(conversationId: conversationID)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.conversationStats = $0 }
             .store(in: &cancellables)
 
         repository.observeLatestTokenUsage(conversationId: conversationID)
@@ -1186,6 +1192,41 @@ final class ChatViewModel: ObservableObject {
         } else {
             contextUsageLabel = "\(usedText)/-"
         }
+    }
+
+    var chatStatsGroups: [String] {
+        let visible = settings.visibleChatStatsFields()
+        let stats = conversationStats
+        var groups: [String] = []
+        if visible.contains(.turns), stats.turns > 0 {
+            groups.append(L10n.format("%dターン", Int(stats.turns)))
+        }
+        if visible.contains(.steps), stats.steps > 0 {
+            groups.append(L10n.format("%dステップ", Int(stats.steps)))
+        }
+        if visible.contains(.llmDuration), stats.llmDurationMs > 0 {
+            groups.append(L10n.format("LLM %@", ChatStatsFormatter.duration(milliseconds: Double(stats.llmDurationMs))))
+        }
+        if visible.contains(.toolDuration), stats.toolDurationMs > 0 {
+            groups.append(L10n.format("ツール %@", ChatStatsFormatter.duration(milliseconds: Double(stats.toolDurationMs))))
+        }
+        if visible.contains(.averageTTFT), let average = stats.averageTTFTMs {
+            groups.append(L10n.format("平均 TTFT %@", ChatStatsFormatter.duration(milliseconds: average)))
+        }
+        if visible.contains(.tokensPerSecond), let throughput = stats.tokensPerSecond {
+            groups.append(L10n.format("%@ tok/s", ChatStatsFormatter.throughput(throughput)))
+        }
+        if visible.contains(.cacheHit), let percent = stats.cacheHitPercent {
+            groups.append(L10n.format("キャッシュヒット %d%%", percent))
+        }
+        if visible.contains(.tokens), stats.billedInputTokens > 0 || stats.outputTokens > 0 {
+            groups.append(L10n.format(
+                "入力 %@ tok · 出力 %@ tok",
+                ChatStatsFormatter.tokens(stats.billedInputTokens),
+                ChatStatsFormatter.tokens(stats.outputTokens)
+            ))
+        }
+        return groups
     }
 }
 

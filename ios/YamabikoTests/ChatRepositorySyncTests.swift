@@ -312,7 +312,7 @@ final class ChatRepositorySyncTests: XCTestCase {
 
         let totals = try fixture.conversations.fetchTokenUsageTotals(sinceEpochMs: 0)
         XCTAssertEqual(totals.requestCount, 1)
-        XCTAssertEqual(totals.inputTokens, 120)
+        XCTAssertEqual(totals.inputTokens, 60)
         XCTAssertEqual(totals.outputTokens, 30)
         XCTAssertEqual(totals.cachedInputTokens, 48)
         XCTAssertEqual(totals.cacheCreationInputTokens, 12)
@@ -361,7 +361,7 @@ final class ChatRepositorySyncTests: XCTestCase {
         let call = try XCTUnwrap(lastCall)
         XCTAssertEqual(call.provider, "OPENROUTER")
         XCTAssertEqual(call.model, "openai/gpt-4o-mini")
-        XCTAssertEqual(call.inputTokens, 80)
+        XCTAssertEqual(call.inputTokens, 45)
         XCTAssertEqual(call.outputTokens, 20)
         XCTAssertEqual(call.cachedInputTokens, 30)
         XCTAssertEqual(call.cacheCreationInputTokens, 5)

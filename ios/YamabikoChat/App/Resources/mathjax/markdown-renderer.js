@@ -23,6 +23,49 @@
     return escapeAttr(unescaped);
   }
 
+  function externalArrow() {
+    return '<span class="yamabiko-external-arrow" aria-hidden="true">↗</span>';
+  }
+
+  function externalLinkHtml(safeUrl, label, labelAlreadyHasArrow) {
+    var arrow = labelAlreadyHasArrow ? "" : " " + externalArrow();
+    return '<a href="' + safeUrl + '">' + label + arrow + "</a>";
+  }
+
+  function bareUrlLabel(rawUrl) {
+    var match = String(rawUrl || "").match(/^https?:\/\/(?:www\.)?([^\/?#:]+)(?::\d+)?/i);
+    return match && match[1] ? match[1] : rawUrl;
+  }
+
+  function splitTrailingUrlPunctuation(rawUrl) {
+    var url = String(rawUrl || "");
+    var suffix = "";
+    var alwaysTrailing = /[.,!?;:、。！？；：]$/;
+
+    while (url && alwaysTrailing.test(url)) {
+      suffix = url.slice(-1) + suffix;
+      url = url.slice(0, -1);
+    }
+
+    var bracketPairs = [
+      ["(", ")"], ["[", "]"], ["{", "}"],
+      ["（", "）"], ["「", "」"], ["『", "』"]
+    ];
+    bracketPairs.forEach(function(pair) {
+      var opening = pair[0];
+      var closing = pair[1];
+      while (url.charAt(url.length - 1) === closing) {
+        var openings = url.split(opening).length - 1;
+        var closings = url.split(closing).length - 1;
+        if (closings <= openings) break;
+        suffix = closing + suffix;
+        url = url.slice(0, -1);
+      }
+    });
+
+    return { url: url, suffix: suffix };
+  }
+
   function isEscaped(text, index) {
     var backslashCount = 0;
     var cursor = index - 1;
@@ -142,9 +185,20 @@
       if (!safe) {
         inlineLinkTokens.push(textLabel);
       } else {
-        inlineLinkTokens.push('<a href="' + safe + '">' + textLabel + "</a>");
+        inlineLinkTokens.push(externalLinkHtml(safe, textLabel, /↗\s*$/.test(label || "")));
       }
       return key;
+    });
+
+    var bareLinkTokens = [];
+    input = input.replace(/https?:\/\/[^\s<>"']+/gi, function(rawUrl) {
+      var parts = splitTrailingUrlPunctuation(rawUrl);
+      var safe = safeHref(parts.url);
+      if (!safe) return rawUrl;
+      var key = "@@YBBARELINK" + bareLinkTokens.length + "@@";
+      var label = escapeHtml(bareUrlLabel(parts.url));
+      bareLinkTokens.push(externalLinkHtml(safe, label, false));
+      return key + parts.suffix;
     });
 
     var output = escapeHtml(input);
@@ -156,6 +210,10 @@
 
     output = output.replace(/@@YBLINK(\d+)@@/g, function(_, index) {
       return inlineLinkTokens[Number(index)] || "";
+    });
+
+    output = output.replace(/@@YBBARELINK(\d+)@@/g, function(_, index) {
+      return bareLinkTokens[Number(index)] || "";
     });
 
     output = output.replace(/@@YBCODE(\d+)@@/g, function(_, index) {

@@ -818,6 +818,64 @@ final class ConversationRepository {
         }
     }
 
+    func insertExecutionMetric(_ metric: ConversationExecutionMetric) throws {
+        try dbQueue.write { db in
+            var mutable = metric
+            try mutable.insert(db)
+        }
+    }
+
+    func observeConversationStats(conversationId: Int64) -> AnyPublisher<ConversationStats, Never> {
+        ValueObservation.tracking { db -> ConversationStats in
+            let row = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT
+                    COUNT(DISTINCT turnId) AS turns,
+                    COALESCE(SUM(CASE WHEN kind = 'llm' THEN 1 ELSE 0 END), 0) AS steps,
+                    COALESCE(SUM(CASE WHEN kind = 'llm' AND succeeded = 1
+                        THEN MAX(0, completedAtMs - startedAtMs) ELSE 0 END), 0) AS llmDurationMs,
+                    COALESCE(SUM(CASE WHEN kind = 'tool'
+                        THEN MAX(0, completedAtMs - startedAtMs) ELSE 0 END), 0) AS toolDurationMs,
+                    COALESCE(SUM(CASE WHEN kind = 'llm' AND succeeded = 1 AND firstTokenAtMs IS NOT NULL
+                        THEN MAX(0, firstTokenAtMs - startedAtMs) ELSE 0 END), 0) AS ttftTotalMs,
+                    COALESCE(SUM(CASE WHEN kind = 'llm' AND succeeded = 1 AND firstTokenAtMs IS NOT NULL
+                        THEN 1 ELSE 0 END), 0) AS ttftSampleCount,
+                    COALESCE(SUM(CASE WHEN kind = 'llm' AND succeeded = 1
+                        AND firstTokenAtMs IS NOT NULL AND outputTokens IS NOT NULL
+                        THEN MAX(0, completedAtMs - firstTokenAtMs) ELSE 0 END), 0) AS decodeDurationMs,
+                    COALESCE(SUM(CASE WHEN kind = 'llm' AND succeeded = 1
+                        AND firstTokenAtMs IS NOT NULL AND outputTokens IS NOT NULL
+                        THEN outputTokens ELSE 0 END), 0) AS decodeOutputTokens,
+                    COALESCE(SUM(CASE WHEN kind = 'llm' AND succeeded = 1 THEN inputTokens ELSE 0 END), 0) AS inputTokens,
+                    COALESCE(SUM(CASE WHEN kind = 'llm' AND succeeded = 1 THEN outputTokens ELSE 0 END), 0) AS outputTokens,
+                    COALESCE(SUM(CASE WHEN kind = 'llm' AND succeeded = 1 THEN cachedInputTokens ELSE 0 END), 0) AS cachedInputTokens,
+                    COALESCE(SUM(CASE WHEN kind = 'llm' AND succeeded = 1 THEN cacheCreationInputTokens ELSE 0 END), 0) AS cacheCreationInputTokens
+                FROM conversation_execution_metrics
+                WHERE conversationId = ?
+                """,
+                arguments: [conversationId]
+            )
+            return ConversationStats(
+                turns: row?["turns"] ?? 0,
+                steps: row?["steps"] ?? 0,
+                llmDurationMs: row?["llmDurationMs"] ?? 0,
+                toolDurationMs: row?["toolDurationMs"] ?? 0,
+                ttftTotalMs: row?["ttftTotalMs"] ?? 0,
+                ttftSampleCount: row?["ttftSampleCount"] ?? 0,
+                decodeDurationMs: row?["decodeDurationMs"] ?? 0,
+                decodeOutputTokens: row?["decodeOutputTokens"] ?? 0,
+                inputTokens: row?["inputTokens"] ?? 0,
+                outputTokens: row?["outputTokens"] ?? 0,
+                cachedInputTokens: row?["cachedInputTokens"] ?? 0,
+                cacheCreationInputTokens: row?["cacheCreationInputTokens"] ?? 0
+            )
+        }
+        .publisher(in: dbQueue)
+        .replaceError(with: ConversationStats())
+        .eraseToAnyPublisher()
+    }
+
     func observeTokenUsageTotals(sinceEpochMs: Int64) -> AnyPublisher<TokenUsageTotals, Never> {
         ValueObservation.tracking { db -> TokenUsageTotals in
             let row = try Row.fetchOne(

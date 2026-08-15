@@ -316,6 +316,7 @@ enum MathMarkdownHTMLBuilder {
               -webkit-overflow-scrolling: touch;
               touch-action: pan-x pan-y;
               overscroll-behavior-x: contain;
+              scrollbar-width: thin;
             }
             .yamabiko-table-wrap mjx-container,
             .yamabiko-table-wrap mjx-container svg {
@@ -326,21 +327,37 @@ enum MathMarkdownHTMLBuilder {
               width: max-content;
               min-width: 100%;
               table-layout: auto;
-              border: 1px solid \(borderColor);
+              border: 0;
             }
             th, td {
-              border: 1px solid \(borderColor);
-              padding: 0.46em 0.62em;
+              min-width: 8.5em;
+              max-width: 18em;
+              border: 0;
+              border-bottom: 1px solid \(borderColor);
+              padding: 0.72em 0.7em;
               vertical-align: top;
               white-space: normal;
               overflow-wrap: anywhere;
               word-break: normal;
+              font-weight: 400;
             }
             th {
-              background: \(codeBackgroundColor);
+              background: transparent;
               font-weight: 600;
             }
-            a { color: \(linkColor); text-decoration: underline; }
+            table strong { font-weight: 600; }
+            a {
+              color: \(linkColor);
+              text-decoration-line: underline;
+              text-decoration-style: dotted;
+              text-underline-offset: 0.16em;
+              text-decoration-thickness: 1px;
+            }
+            .yamabiko-external-arrow {
+              display: inline-block;
+              margin-left: 0.12em;
+              text-decoration: none;
+            }
           </style>
         </head>
         <body>
@@ -401,32 +418,89 @@ enum MathMarkdownHTMLBuilder {
                 containers.forEach(function(element) {
                   if (element.__yamabikoHorizontalScrollBound) return;
                   element.__yamabikoHorizontalScrollBound = true;
+                  var scrollGain = 1.6;
                   var touchStartX = 0;
                   var touchStartY = 0;
                   var scrollLeftStart = 0;
                   var isHorizontalScroll = false;
+                  var lastTouchX = 0;
+                  var lastTouchTime = 0;
+                  var horizontalVelocity = 0;
+                  var momentumFrame = 0;
+                  function maximumScrollLeft() {
+                    return Math.max(0, element.scrollWidth - element.clientWidth);
+                  }
+                  function clampScrollLeft(value) {
+                    return Math.max(0, Math.min(maximumScrollLeft(), value));
+                  }
+                  function stopMomentum() {
+                    if (momentumFrame) {
+                      cancelAnimationFrame(momentumFrame);
+                      momentumFrame = 0;
+                    }
+                  }
+                  function startMomentum() {
+                    stopMomentum();
+                    var velocity = horizontalVelocity;
+                    if (Math.abs(velocity) < 0.08) return;
+                    var previousTime = performance.now();
+                    function step(now) {
+                      var elapsed = Math.min(32, Math.max(1, now - previousTime));
+                      previousTime = now;
+                      var previousLeft = element.scrollLeft;
+                      var nextLeft = clampScrollLeft(previousLeft + velocity * elapsed);
+                      element.scrollLeft = nextLeft;
+                      velocity *= Math.pow(0.94, elapsed / 16.67);
+                      if (
+                        Math.abs(velocity) < 0.02 ||
+                        (nextLeft === previousLeft && (nextLeft === 0 || nextLeft === maximumScrollLeft()))
+                      ) {
+                        momentumFrame = 0;
+                        return;
+                      }
+                      momentumFrame = requestAnimationFrame(step);
+                    }
+                    momentumFrame = requestAnimationFrame(step);
+                  }
                   element.addEventListener('touchstart', function(e) {
                     if (!e.touches || !e.touches.length) return;
+                    stopMomentum();
                     touchStartX = e.touches[0].clientX;
                     touchStartY = e.touches[0].clientY;
+                    lastTouchX = touchStartX;
+                    lastTouchTime = performance.now();
                     scrollLeftStart = element.scrollLeft;
                     isHorizontalScroll = false;
+                    horizontalVelocity = 0;
                   }, { passive: true });
                   element.addEventListener('touchmove', function(e) {
                     if (!e.touches || !e.touches.length) return;
-                    var dx = e.touches[0].clientX - touchStartX;
-                    var dy = e.touches[0].clientY - touchStartY;
+                    var touchX = e.touches[0].clientX;
+                    var touchY = e.touches[0].clientY;
+                    var dx = touchX - touchStartX;
+                    var dy = touchY - touchStartY;
                     if (!isHorizontalScroll) {
                       if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
                       isHorizontalScroll = Math.abs(dx) > Math.abs(dy);
                     }
                     if (isHorizontalScroll && element.scrollWidth > element.clientWidth) {
-                      element.scrollLeft = scrollLeftStart - dx;
+                      var now = performance.now();
+                      var elapsed = Math.max(1, now - lastTouchTime);
+                      var delta = (lastTouchX - touchX) * scrollGain;
+                      element.scrollLeft = clampScrollLeft(scrollLeftStart - dx * scrollGain);
+                      horizontalVelocity = delta / elapsed;
+                      lastTouchX = touchX;
+                      lastTouchTime = now;
                       e.preventDefault();
                     }
                   }, { passive: false });
                   element.addEventListener('touchend', function() {
+                    if (isHorizontalScroll) startMomentum();
                     isHorizontalScroll = false;
+                  }, { passive: true });
+                  element.addEventListener('touchcancel', function() {
+                    isHorizontalScroll = false;
+                    horizontalVelocity = 0;
                   }, { passive: true });
                 });
               }
@@ -679,6 +753,49 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         if (!/^https?:\/\//i.test(unescaped)) return null;
         return escapeAttr(unescaped);
       }
+
+      function externalArrow() {
+        return '<span class="yamabiko-external-arrow" aria-hidden="true">↗</span>';
+      }
+
+      function externalLinkHtml(safeUrl, label, labelAlreadyHasArrow) {
+        var arrow = labelAlreadyHasArrow ? "" : " " + externalArrow();
+        return '<a href="' + safeUrl + '">' + label + arrow + "</a>";
+      }
+
+      function bareUrlLabel(rawUrl) {
+        var match = String(rawUrl || "").match(/^https?:\/\/(?:www\.)?([^\/?#:]+)(?::\d+)?/i);
+        return match && match[1] ? match[1] : rawUrl;
+      }
+
+      function splitTrailingUrlPunctuation(rawUrl) {
+        var url = String(rawUrl || "");
+        var suffix = "";
+        var alwaysTrailing = /[.,!?;:、。！？；：]$/;
+
+        while (url && alwaysTrailing.test(url)) {
+          suffix = url.slice(-1) + suffix;
+          url = url.slice(0, -1);
+        }
+
+        var bracketPairs = [
+          ["(", ")"], ["[", "]"], ["{", "}"],
+          ["（", "）"], ["「", "」"], ["『", "』"]
+        ];
+        bracketPairs.forEach(function(pair) {
+          var opening = pair[0];
+          var closing = pair[1];
+          while (url.charAt(url.length - 1) === closing) {
+            var openings = url.split(opening).length - 1;
+            var closings = url.split(closing).length - 1;
+            if (closings <= openings) break;
+            suffix = closing + suffix;
+            url = url.slice(0, -1);
+          }
+        });
+
+        return { url: url, suffix: suffix };
+      }
     
       function isEscaped(text, index) {
         var backslashCount = 0;
@@ -799,9 +916,20 @@ private struct MathMarkdownWebView: UIViewRepresentable {
           if (!safe) {
             inlineLinkTokens.push(textLabel);
           } else {
-            inlineLinkTokens.push('<a href="' + safe + '">' + textLabel + "</a>");
+            inlineLinkTokens.push(externalLinkHtml(safe, textLabel, /↗\s*$/.test(label || "")));
           }
           return key;
+        });
+
+        var bareLinkTokens = [];
+        input = input.replace(/https?:\/\/[^\s<>"']+/gi, function(rawUrl) {
+          var parts = splitTrailingUrlPunctuation(rawUrl);
+          var safe = safeHref(parts.url);
+          if (!safe) return rawUrl;
+          var key = "@@YBBARELINK" + bareLinkTokens.length + "@@";
+          var label = escapeHtml(bareUrlLabel(parts.url));
+          bareLinkTokens.push(externalLinkHtml(safe, label, false));
+          return key + parts.suffix;
         });
     
         var output = escapeHtml(input);
@@ -813,6 +941,10 @@ private struct MathMarkdownWebView: UIViewRepresentable {
     
         output = output.replace(/@@YBLINK(\d+)@@/g, function(_, index) {
           return inlineLinkTokens[Number(index)] || "";
+        });
+
+        output = output.replace(/@@YBBARELINK(\d+)@@/g, function(_, index) {
+          return bareLinkTokens[Number(index)] || "";
         });
     
         output = output.replace(/@@YBCODE(\d+)@@/g, function(_, index) {

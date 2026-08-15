@@ -308,6 +308,32 @@ final class ProviderGateway {
     }
 
     func generate(request: ProviderRequest, providerID: String) async throws -> ProviderResponse {
+        let startedAtMs = Self.epochMilliseconds()
+        do {
+            let response = try await generateUnmeasured(request: request, providerID: providerID)
+            Self.recordLLMMetric(
+                providerID: providerID,
+                startedAtMs: startedAtMs,
+                firstTokenAtMs: nil,
+                completedAtMs: Self.epochMilliseconds(),
+                succeeded: true,
+                usage: response.usage
+            )
+            return response
+        } catch {
+            Self.recordLLMMetric(
+                providerID: providerID,
+                startedAtMs: startedAtMs,
+                firstTokenAtMs: nil,
+                completedAtMs: Self.epochMilliseconds(),
+                succeeded: false,
+                usage: nil
+            )
+            throw error
+        }
+    }
+
+    private func generateUnmeasured(request: ProviderRequest, providerID: String) async throws -> ProviderResponse {
         let reference = ProviderReference(persistedID: providerID)
         guard reference.isModelsDev else {
             guard let provider = knownProvider(providerID) else {
@@ -513,6 +539,72 @@ final class ProviderGateway {
     }
 
     func stream(request: ProviderRequest, providerID: String) async throws -> AsyncThrowingStream<ProviderStreamEvent, Error> {
+        let startedAtMs = Self.epochMilliseconds()
+        let metricsContext = ProviderMetricsContext.current
+        let source: AsyncThrowingStream<ProviderStreamEvent, Error>
+        do {
+            source = try await streamUnmeasured(request: request, providerID: providerID)
+        } catch {
+            Self.recordLLMMetric(
+                context: metricsContext,
+                providerID: providerID,
+                startedAtMs: startedAtMs,
+                firstTokenAtMs: nil,
+                completedAtMs: Self.epochMilliseconds(),
+                succeeded: false,
+                usage: nil
+            )
+            throw error
+        }
+
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                var firstTokenAtMs: Int64?
+                var usage: ProviderUsage?
+                var completed = false
+                do {
+                    for try await event in source {
+                        switch event {
+                        case let .textDelta(delta), let .reasoningDelta(delta):
+                            if firstTokenAtMs == nil, delta.trimmedNonEmpty != nil {
+                                firstTokenAtMs = Self.epochMilliseconds()
+                            }
+                        case let .completed(response):
+                            usage = response.usage ?? usage
+                            completed = true
+                        case .toolCallDelta, .serverActivity:
+                            break
+                        }
+                        continuation.yield(event)
+                    }
+                    Self.recordLLMMetric(
+                        context: metricsContext,
+                        providerID: providerID,
+                        startedAtMs: startedAtMs,
+                        firstTokenAtMs: firstTokenAtMs,
+                        completedAtMs: Self.epochMilliseconds(),
+                        succeeded: completed,
+                        usage: usage
+                    )
+                    continuation.finish()
+                } catch {
+                    Self.recordLLMMetric(
+                        context: metricsContext,
+                        providerID: providerID,
+                        startedAtMs: startedAtMs,
+                        firstTokenAtMs: firstTokenAtMs,
+                        completedAtMs: Self.epochMilliseconds(),
+                        succeeded: false,
+                        usage: nil
+                    )
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private func streamUnmeasured(request: ProviderRequest, providerID: String) async throws -> AsyncThrowingStream<ProviderStreamEvent, Error> {
         let reference = ProviderReference(persistedID: providerID)
         guard reference.isModelsDev else {
             guard let provider = knownProvider(providerID) else {
@@ -527,6 +619,57 @@ final class ProviderGateway {
             settings: settings,
             credentialStore: credentialStore,
             httpClient: httpClient
+        )
+    }
+
+    private static func epochMilliseconds() -> Int64 {
+        Int64(Date().timeIntervalSince1970 * 1_000)
+    }
+
+    private static func recordLLMMetric(
+        providerID: String,
+        startedAtMs: Int64,
+        firstTokenAtMs: Int64?,
+        completedAtMs: Int64,
+        succeeded: Bool,
+        usage: ProviderUsage?
+    ) {
+        recordLLMMetric(
+            context: ProviderMetricsContext.current,
+            providerID: providerID,
+            startedAtMs: startedAtMs,
+            firstTokenAtMs: firstTokenAtMs,
+            completedAtMs: completedAtMs,
+            succeeded: succeeded,
+            usage: usage
+        )
+    }
+
+    private static func recordLLMMetric(
+        context: ProviderMetricsContext?,
+        providerID: String,
+        startedAtMs: Int64,
+        firstTokenAtMs: Int64?,
+        completedAtMs: Int64,
+        succeeded: Bool,
+        usage: ProviderUsage?
+    ) {
+        guard let context else { return }
+        let disjoint = usage?.disjointInputUsage(providerID: providerID)
+        context.recorder(
+            ConversationExecutionMetric(
+                conversationId: context.conversationId,
+                turnId: context.turnId,
+                kind: .llm,
+                startedAtMs: startedAtMs,
+                firstTokenAtMs: firstTokenAtMs,
+                completedAtMs: completedAtMs,
+                succeeded: succeeded,
+                inputTokens: disjoint?.inputTokens,
+                outputTokens: disjoint?.outputTokens,
+                cachedInputTokens: disjoint?.cachedInputTokens,
+                cacheCreationInputTokens: disjoint?.cacheCreationInputTokens
+            )
         )
     }
 

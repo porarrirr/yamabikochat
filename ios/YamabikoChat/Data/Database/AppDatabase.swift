@@ -265,6 +265,8 @@ enum AppDatabase {
 
                 t.column("showGlobalProviderPresetsInChat", .boolean).notNull().defaults(to: true)
                 t.column("showGlobalProviderPresetsInChatByProviderJSON", .text).notNull().defaults(to: "{}")
+                t.column("chatStatsVisibleFieldsJSON", .text).notNull()
+                    .defaults(to: #"["tokensPerSecond","cacheHit","tokens"]"#)
 
                 t.column("extraJSON", .text).notNull().defaults(to: "{}")
             }
@@ -719,6 +721,40 @@ enum AppDatabase {
                 }
                 if !settingsColumns.contains("supergrokreasoningeffort") {
                     t.add(column: "superGrokReasoningEffort", .text).notNull().defaults(to: "medium")
+                }
+            }
+        }
+
+        migrator.registerMigration("v15_conversation_stats") { db in
+            try db.create(table: "conversation_execution_metrics", ifNotExists: true) { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("conversationId", .integer).notNull().references("conversations", onDelete: .cascade)
+                t.column("turnId", .text).notNull()
+                t.column("kind", .text).notNull()
+                t.column("startedAtMs", .integer).notNull()
+                t.column("firstTokenAtMs", .integer)
+                t.column("completedAtMs", .integer).notNull()
+                t.column("succeeded", .boolean).notNull()
+                t.column("inputTokens", .integer)
+                t.column("outputTokens", .integer)
+                t.column("cachedInputTokens", .integer)
+                t.column("cacheCreationInputTokens", .integer)
+            }
+            try db.create(
+                index: "idx_execution_metrics_conversation",
+                on: "conversation_execution_metrics",
+                columns: ["conversationId", "id"],
+                ifNotExists: true
+            )
+
+            let settingsRows = try Row.fetchAll(db, sql: "PRAGMA table_info(settings)")
+            let settingsColumns = Set(settingsRows.compactMap { ($0["name"] as String?)?.lowercased() })
+            if !settingsColumns.contains("chatstatsvisiblefieldsjson") {
+                try db.alter(table: "settings") { t in
+                    t.add(
+                        column: "chatStatsVisibleFieldsJSON",
+                        .text
+                    ).notNull().defaults(to: #"["tokensPerSecond","cacheHit","tokens"]"#)
                 }
             }
         }

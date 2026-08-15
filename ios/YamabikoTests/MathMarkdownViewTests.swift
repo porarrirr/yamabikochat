@@ -91,6 +91,11 @@ final class MathMarkdownViewTests: XCTestCase {
         XCTAssertTrue(html.contains("max-width: none"))
         XCTAssertTrue(html.contains("table {"))
         XCTAssertTrue(html.contains("th, td {"))
+        XCTAssertTrue(html.contains("min-width: 8.5em"))
+        XCTAssertTrue(html.contains("max-width: 18em"))
+        XCTAssertTrue(html.contains("border-bottom: 1px solid"))
+        XCTAssertTrue(html.contains("background: transparent"))
+        XCTAssertTrue(html.contains("font-weight: 400"))
     }
 
     func testBuildHTMLIncludesHorizontalScrollHelper() {
@@ -108,6 +113,10 @@ final class MathMarkdownViewTests: XCTestCase {
         XCTAssertTrue(html.contains("enableHorizontalScrollContainers"))
         XCTAssertTrue(html.contains("__yamabikoEnableHorizontalScroll"))
         XCTAssertTrue(html.contains(".yamabiko-table-wrap, pre, mjx-container[display=\"true\"]"))
+        XCTAssertTrue(html.contains("var scrollGain = 1.6"))
+        XCTAssertTrue(html.contains("startMomentum"))
+        XCTAssertTrue(html.contains("requestAnimationFrame(step)"))
+        XCTAssertTrue(html.contains("clampScrollLeft"))
     }
 
     func testHeightScriptMeasuresRenderedMarkdownRootInsteadOfViewport() {
@@ -444,6 +453,7 @@ line1\\nline2
         XCTAssertTrue(script.contains("@@YBMATH"))
         XCTAssertTrue(script.contains("@@YBCODE"))
         XCTAssertTrue(script.contains("@@YBLINK"))
+        XCTAssertTrue(script.contains("@@YBBARELINK"))
         XCTAssertFalse(script.contains("@@INLINE_MATH_"))
         XCTAssertFalse(script.contains("@@INLINE_CODE_"))
         XCTAssertFalse(script.contains("@@INLINE_LINK_"))
@@ -489,6 +499,76 @@ line1\\nline2
         XCTAssertTrue(result.contains("<tbody>"))
         XCTAssertTrue(result.contains("<th>項目</th>"))
         XCTAssertTrue(result.contains("<td>A</td>"))
+    }
+
+    func testMarkdownRendererConvertsBareURLToDomainLink() throws {
+        let result = try renderMarkdownWithJavaScript(
+            "参考: https://www.ankerjapan.com/blogs/magazine/example?source=chat"
+        )
+
+        XCTAssertTrue(result.contains("href=\"https://www.ankerjapan.com/blogs/magazine/example?source=chat\""))
+        XCTAssertTrue(result.contains(">ankerjapan.com <"))
+        XCTAssertTrue(result.contains("yamabiko-external-arrow"))
+        XCTAssertTrue(result.contains(">↗</span>"))
+        XCTAssertFalse(result.contains(">https://www.ankerjapan.com"))
+    }
+
+    func testMarkdownRendererPreservesEncodedURLAndExcludesTrailingPunctuation() throws {
+        let result = try renderMarkdownWithJavaScript(
+            "参照（https://pick-navi.com/ranking/%E3%83%A2%E3%83%90%E3%82%A4%E3%83%AB）。"
+        )
+
+        XCTAssertTrue(result.contains("href=\"https://pick-navi.com/ranking/%E3%83%A2%E3%83%90%E3%82%A4%E3%83%AB\""))
+        XCTAssertTrue(result.contains(">pick-navi.com <"))
+        XCTAssertTrue(result.contains("</a>）。"))
+    }
+
+    func testMarkdownRendererKeepsBalancedClosingParenthesisInBareURL() throws {
+        let result = try renderMarkdownWithJavaScript(
+            "https://example.com/wiki/Swift_(programming_language)"
+        )
+
+        XCTAssertTrue(result.contains("href=\"https://example.com/wiki/Swift_(programming_language)\""))
+    }
+
+    func testMarkdownRendererKeepsMarkdownLinkLabelAndAddsExternalIndicator() throws {
+        let result = try renderMarkdownWithJavaScript("[公式サイト](https://example.com/path)")
+
+        XCTAssertTrue(result.contains("href=\"https://example.com/path\""))
+        XCTAssertTrue(result.contains(">公式サイト <"))
+        XCTAssertTrue(result.contains(">↗</span>"))
+        XCTAssertFalse(result.contains(">example.com <"))
+    }
+
+    func testMarkdownRendererDoesNotDuplicateExistingExternalIndicator() throws {
+        let result = try renderMarkdownWithJavaScript("[公式サイト ↗](https://example.com/path)")
+
+        XCTAssertEqual(result.components(separatedBy: "↗").count - 1, 1)
+    }
+
+    func testMarkdownRendererDoesNotAutoLinkCodeMathOrUnsafeScheme() throws {
+        let result = try renderMarkdownWithJavaScript(
+            "`https://code.example/path` と $https://math.example/x$ と javascript:alert(1)"
+        )
+
+        XCTAssertTrue(result.contains("<code>https://code.example/path</code>"))
+        XCTAssertTrue(result.contains("$https://math.example/x$"))
+        XCTAssertTrue(result.contains("javascript:alert(1)"))
+        XCTAssertFalse(result.contains("href="))
+    }
+
+    func testMarkdownRendererAutoLinksBareURLInsideTableCell() throws {
+        let result = try renderMarkdownWithJavaScript(
+            """
+            | サイト | URL |
+            | --- | --- |
+            | Example | https://www.example.com/very/long/path |
+            """
+        )
+
+        XCTAssertTrue(result.contains("<td>Example</td>"))
+        XCTAssertTrue(result.contains("href=\"https://www.example.com/very/long/path\""))
+        XCTAssertTrue(result.contains(">example.com <"))
     }
 
     func testMarkdownRendererAppliesTableAlignment() throws {

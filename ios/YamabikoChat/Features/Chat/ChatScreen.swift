@@ -199,6 +199,12 @@ struct ChatScreen: View {
                     .padding(.bottom, 4)
                 }
 
+                if !viewModel.chatStatsGroups.isEmpty {
+                    ChatStatsLine(groups: viewModel.chatStatsGroups)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 5)
+                }
+
                 composerBar
                     .padding(.horizontal, 12)
                     .padding(.top, 8)
@@ -1060,6 +1066,33 @@ private extension URL {
         }
         let ext = pathExtension.lowercased()
         return ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif"].contains(ext)
+    }
+}
+
+private struct ChatStatsLine: View {
+    let groups: [String]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
+                    if index > 0 {
+                        Text("|")
+                            .foregroundStyle(.tertiary)
+                    }
+                    Text(group)
+                }
+            }
+            .font(.caption2)
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.horizontal, 10)
+        }
+        .frame(height: 18)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(groups.joined(separator: ", ")))
     }
 }
 

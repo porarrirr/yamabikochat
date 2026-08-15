@@ -65,7 +65,26 @@ struct ToolCallingOrchestrator: Sendable {
                     )
                 } else {
                     seenCalls.insert(duplicateKey)
+                    let toolStartedAtMs = Int64(Date().timeIntervalSince1970 * 1_000)
                     result = await registry.execute(call: call)
+                    let toolCompletedAtMs = Int64(Date().timeIntervalSince1970 * 1_000)
+                    if let metrics = ProviderMetricsContext.current {
+                        metrics.recorder(
+                            ConversationExecutionMetric(
+                                conversationId: metrics.conversationId,
+                                turnId: metrics.turnId,
+                                kind: .tool,
+                                startedAtMs: toolStartedAtMs,
+                                firstTokenAtMs: nil,
+                                completedAtMs: toolCompletedAtMs,
+                                succeeded: !result.isError,
+                                inputTokens: nil,
+                                outputTokens: nil,
+                                cachedInputTokens: nil,
+                                cacheCreationInputTokens: nil
+                            )
+                        )
+                    }
                 }
 
                 step.finish(with: result)

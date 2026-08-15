@@ -205,6 +205,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
 
     var showGlobalProviderPresetsInChat: Bool
     var showGlobalProviderPresetsInChatByProviderJSON: String
+    var chatStatsVisibleFieldsJSON: String
 
     var extraJSON: String
 
@@ -364,6 +365,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
 
         showGlobalProviderPresetsInChat = true
         showGlobalProviderPresetsInChatByProviderJSON = "{}"
+        chatStatsVisibleFieldsJSON = #"["tokensPerSecond","cacheHit","tokens"]"#
 
         extraJSON = "{}"
     }
@@ -378,6 +380,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
 
     func normalizedForPersistence() -> AppSettings {
         var normalized = self
+        normalized.setVisibleChatStatsFields(normalized.visibleChatStatsFields())
         if normalized.isDualModeEnabled {
             normalized.isAutoConversationEnabled = false
             normalized.isFusionModeEnabled = false
@@ -489,6 +492,23 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         normalized.migrateLegacyPlanModelIDs()
         normalized.applyAppleIntelligenceModelNormalization()
         return normalized
+    }
+
+    func visibleChatStatsFields() -> Set<ChatStatsField> {
+        guard let data = chatStatsVisibleFieldsJSON.data(using: .utf8),
+              let rawValues = try? JSONDecoder().decode([String].self, from: data)
+        else {
+            return ChatStatsField.defaultVisible
+        }
+        return Set(rawValues.compactMap(ChatStatsField.init(rawValue:)))
+    }
+
+    mutating func setVisibleChatStatsFields(_ fields: Set<ChatStatsField>) {
+        let ordered = ChatStatsField.allCases.filter(fields.contains).map(\.rawValue)
+        guard let data = try? JSONEncoder().encode(ordered),
+              let json = String(data: data, encoding: .utf8)
+        else { return }
+        chatStatsVisibleFieldsJSON = json
     }
 
     private mutating func migrateLegacyPlanModelIDs() {

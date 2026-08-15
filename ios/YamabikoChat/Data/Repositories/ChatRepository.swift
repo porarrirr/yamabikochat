@@ -98,6 +98,10 @@ final class ChatRepository {
         conversations.observeDualMessages(conversationId: conversationId)
     }
 
+    func observeConversationStats(conversationId: Int64) -> AnyPublisher<ConversationStats, Never> {
+        conversations.observeConversationStats(conversationId: conversationId)
+    }
+
     func settingsPublisher() -> AnyPublisher<AppSettings, Never> {
         settings.observe()
     }
@@ -355,6 +359,24 @@ final class ChatRepository {
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
     ) async throws -> SendMessageResult {
+        try await withConversationMetrics(conversationId: conversationId) {
+            try await self.sendMessageMeasured(
+                conversationId: conversationId,
+                text: text,
+                attachments: attachments,
+                onStreamEvent: onStreamEvent,
+                onStreamingSnapshot: onStreamingSnapshot
+            )
+        }
+    }
+
+    private func sendMessageMeasured(
+        conversationId: Int64,
+        text: String,
+        attachments: [String],
+        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
+        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
+    ) async throws -> SendMessageResult {
         let settings = try self.settings.load()
         guard var conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
@@ -425,6 +447,20 @@ final class ChatRepository {
     }
 
     func regenerateLastAssistantVariant(
+        conversationId: Int64,
+        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
+        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
+    ) async throws -> Int64 {
+        try await withConversationMetrics(conversationId: conversationId) {
+            try await self.regenerateLastAssistantVariantMeasured(
+                conversationId: conversationId,
+                onStreamEvent: onStreamEvent,
+                onStreamingSnapshot: onStreamingSnapshot
+            )
+        }
+    }
+
+    private func regenerateLastAssistantVariantMeasured(
         conversationId: Int64,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
@@ -813,6 +849,16 @@ final class ChatRepository {
     }
 
     func sendDualMessage(conversationId: Int64, text: String, attachments: [String] = []) async throws -> DualChatMessage {
+        try await withConversationMetrics(conversationId: conversationId) {
+            try await self.sendDualMessageMeasured(
+                conversationId: conversationId,
+                text: text,
+                attachments: attachments
+            )
+        }
+    }
+
+    private func sendDualMessageMeasured(conversationId: Int64, text: String, attachments: [String]) async throws -> DualChatMessage {
         let bgGuard = BackgroundTaskGuard()
         bgGuard.begin(name: "YamabikoChatDualStreaming")
         defer { bgGuard.end() }
@@ -959,6 +1005,26 @@ final class ChatRepository {
     }
 
     func sendFusionMessage(
+        conversationId: Int64,
+        text: String,
+        attachments: [String] = [],
+        onFusionProgress: (@Sendable (FusionProgressSnapshot) -> Void)? = nil,
+        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
+        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
+    ) async throws -> SendMessageResult {
+        try await withConversationMetrics(conversationId: conversationId) {
+            try await self.sendFusionMessageMeasured(
+                conversationId: conversationId,
+                text: text,
+                attachments: attachments,
+                onFusionProgress: onFusionProgress,
+                onStreamEvent: onStreamEvent,
+                onStreamingSnapshot: onStreamingSnapshot
+            )
+        }
+    }
+
+    private func sendFusionMessageMeasured(
         conversationId: Int64,
         text: String,
         attachments: [String] = [],
@@ -1378,16 +1444,18 @@ final class ChatRepository {
             )
 
             do {
-                let response = try await runToolCallingTurn(
-                    request: request,
-                    provider: resolvedProvider,
-                    conversationId: conversationId,
-                    persistenceKind: .message(messageId: assistantMessageId),
-                    streamEnabled: false,
-                    persistResults: true,
-                    onStreamEvent: nil,
-                    onStreamingSnapshot: nil
-                )
+                let response = try await withConversationMetrics(conversationId: conversationId) {
+                    try await self.runToolCallingTurn(
+                        request: request,
+                        provider: resolvedProvider,
+                        conversationId: conversationId,
+                        persistenceKind: .message(messageId: assistantMessageId),
+                        streamEnabled: false,
+                        persistResults: true,
+                        onStreamEvent: nil,
+                        onStreamingSnapshot: nil
+                    )
+                }
                 await recordTokenUsageIfAvailable(
                     provider: normalizedProvider,
                     model: normalizedModel,
@@ -1933,10 +2001,19 @@ final class ChatRepository {
 
             let response: ProviderResponse
             do {
-                response = try await generateNonStreamingResponse(
-                    request: request,
-                    provider: turnProvider
-                )
+                if let chatConversationId = autoConversation.boundChatConversationId {
+                    response = try await withConversationMetrics(conversationId: chatConversationId) {
+                        try await self.generateNonStreamingResponse(
+                            request: request,
+                            provider: turnProvider
+                        )
+                    }
+                } else {
+                    response = try await generateNonStreamingResponse(
+                        request: request,
+                        provider: turnProvider
+                    )
+                }
                 await recordTokenUsageIfAvailable(
                     provider: turnProvider,
                     model: turnModel,
@@ -2111,7 +2188,10 @@ final class ChatRepository {
         conversationId: Int64?,
         requestType: String
     ) async {
-        guard let normalized = usage?.normalizedNonEmpty() else { return }
+        guard let normalized = usage?
+            .disjointInputUsage(providerID: provider)
+            .normalizedNonEmpty()
+        else { return }
         let resolvedInput = max(0, normalized.inputTokens ?? 0)
         let resolvedOutput = max(0, normalized.outputTokens ?? 0)
         let resolvedTotal = max(
@@ -2156,6 +2236,35 @@ final class ChatRepository {
                 ],
                 error: error
             )
+        }
+    }
+
+    private func withConversationMetrics<T>(
+        conversationId: Int64,
+        operation: () async throws -> T
+    ) async rethrows -> T {
+        let context = ProviderMetricsContext(
+            conversationId: conversationId,
+            turnId: UUID().uuidString,
+            recorder: { [conversations] metric in
+                do {
+                    try conversations.insertExecutionMetric(metric)
+                } catch {
+                    DiagnosticsLogger.log(
+                        "Conversation execution metric persistence failed",
+                        category: .chat,
+                        metadata: [
+                            "conversation": String(metric.conversationId),
+                            "turn": metric.turnId,
+                            "kind": metric.kind.rawValue
+                        ],
+                        error: error
+                    )
+                }
+            }
+        )
+        return try await ProviderMetricsContext.$current.withValue(context) {
+            try await operation()
         }
     }
 
