@@ -41,16 +41,6 @@ private final class OpenRouterRecordingHTTPClient: HTTPClientProtocol {
         return (data, response)
     }
 
-    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
-        sentURLs.append(request.url)
-        let response = HTTPURLResponse(
-            url: request.url,
-            statusCode: 200,
-            httpVersion: nil,
-            headerFields: nil
-        )!
-        return (AsyncThrowingStream { continuation in continuation.finish() }, response)
-    }
 }
 
 private struct OpenRouterStubHTTPClient: HTTPClientProtocol {
@@ -67,15 +57,6 @@ private struct OpenRouterStubHTTPClient: HTTPClientProtocol {
         return (data, response)
     }
 
-    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
-        let response = HTTPURLResponse(
-            url: request.url,
-            statusCode: statusCode,
-            httpVersion: nil,
-            headerFields: nil
-        )!
-        return (AsyncThrowingStream { continuation in continuation.finish() }, response)
-    }
 }
 
 private actor SupersedingOpenRouterModelsHTTPClient: HTTPClientProtocol {
@@ -97,15 +78,6 @@ private actor SupersedingOpenRouterModelsHTTPClient: HTTPClientProtocol {
         return (data, response)
     }
 
-    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
-        let response = HTTPURLResponse(
-            url: request.url,
-            statusCode: 200,
-            httpVersion: nil,
-            headerFields: nil
-        )!
-        return (AsyncThrowingStream { $0.finish() }, response)
-    }
 
     private func delayIgnoringCancellation(nanoseconds: UInt64) async {
         await withCheckedContinuation { continuation in
@@ -133,16 +105,6 @@ private actor SupersedingOpenRouterEndpointsHTTPClient: HTTPClientProtocol {
             headerFields: nil
         )!
         return (data, response)
-    }
-
-    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
-        let response = HTTPURLResponse(
-            url: request.url,
-            statusCode: 200,
-            httpVersion: nil,
-            headerFields: nil
-        )!
-        return (AsyncThrowingStream { $0.finish() }, response)
     }
 
     func numberOfRequests() -> Int {

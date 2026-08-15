@@ -41,7 +41,6 @@ struct SkillRequestContext: Codable, Sendable, Equatable {
     var resourceLists: [String]
     var conversationID: String?
     var enabledSkillSetHash: String
-    var hostedExecutionEnabled: Bool
 
     var syntheticUserContext: String? {
         guard !catalog.isEmpty else { return nil }

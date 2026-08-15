@@ -3,7 +3,6 @@ import GRDB
 @testable import YamabikoChat
 
 private final class OpenRouterRoutingHTTPClient: HTTPClientProtocol {
-    private(set) var streamedRequests: [HTTPRequest] = []
     private let failingEndpointPathFragments: [String]
 
     init(failingEndpointPathFragments: [String] = []) {
@@ -35,18 +34,6 @@ private final class OpenRouterRoutingHTTPClient: HTTPClientProtocol {
         return (data, Self.httpResponse(url: request.url, statusCode: 200))
     }
 
-    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
-        streamedRequests.append(request)
-        let stream = AsyncThrowingStream<String, Error> { continuation in
-            continuation.yield(#"data: {"choices":[{"delta":{"content":"ok"}}]}"#)
-            continuation.yield("")
-            continuation.yield("data: [DONE]")
-            continuation.yield("")
-            continuation.finish()
-        }
-        return (stream, Self.httpResponse(url: request.url, statusCode: 200))
-    }
-
     private static func httpResponse(url: URL, statusCode: Int) -> HTTPURLResponse {
         HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
     }
@@ -73,11 +60,6 @@ private actor OpenRouterEndpointGenerationHTTPClient: HTTPClientProtocol {
             data = #"{"choices":[{"message":{"content":"ok"}}]}"#.data(using: .utf8)!
         }
         return (data, HTTPURLResponse(url: request.url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
-    }
-
-    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
-        let response = HTTPURLResponse(url: request.url, statusCode: 200, httpVersion: nil, headerFields: nil)!
-        return (AsyncThrowingStream { $0.finish() }, response)
     }
 
     private func endpointPayload(tag: String, provider: String) -> Data {
@@ -177,7 +159,7 @@ final class OpenRouterRoutingTests: XCTestCase {
         } catch {
             XCTAssertTrue(error.localizedDescription.contains("deepseek"))
         }
-        XCTAssertTrue(httpClient.streamedRequests.isEmpty)
+        XCTAssertTrue(fixture.runtime.calls.isEmpty)
     }
 
     func testSendMessageFailsForLegacyBaseProviderSlug() async throws {
@@ -215,7 +197,7 @@ final class OpenRouterRoutingTests: XCTestCase {
         } catch {
             XCTAssertTrue(error.localizedDescription.contains("google"))
         }
-        XCTAssertTrue(httpClient.streamedRequests.isEmpty)
+        XCTAssertTrue(fixture.runtime.calls.isEmpty)
     }
 
     func testSendMessageFailsForStaleGoogleSlugWhenFallbacksDisabled() async throws {
@@ -242,7 +224,7 @@ final class OpenRouterRoutingTests: XCTestCase {
         } catch {
             XCTAssertTrue(error.localizedDescription.contains("google"))
         }
-        XCTAssertTrue(httpClient.streamedRequests.isEmpty)
+        XCTAssertTrue(fixture.runtime.calls.isEmpty)
     }
 
     func testSendMessageOmitsProviderRoutingWhenPreferredProvidersEmpty() async throws {
@@ -265,10 +247,7 @@ final class OpenRouterRoutingTests: XCTestCase {
             attachments: []
         )
 
-        let request = try XCTUnwrap(httpClient.streamedRequests.first)
-        let body = try XCTUnwrap(request.body)
-        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertNil(root["provider"])
+        XCTAssertNil(fixture.runtime.calls.first?.request.provider)
     }
 
     func testSendMessageUsesOnlyWhenExplicitCompatibleProviderSelected() async throws {
@@ -291,13 +270,10 @@ final class OpenRouterRoutingTests: XCTestCase {
             attachments: []
         )
 
-        let request = try XCTUnwrap(httpClient.streamedRequests.first)
-        let body = try XCTUnwrap(request.body)
-        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        let provider = try XCTUnwrap(root["provider"] as? [String: Any])
-        XCTAssertEqual(provider["only"] as? [String], ["google-ai-studio"])
-        XCTAssertNil(provider["order"])
-        XCTAssertEqual(provider["allow_fallbacks"] as? Bool, false)
+        let provider = try XCTUnwrap(fixture.runtime.calls.first?.request.provider)
+        XCTAssertEqual(provider.only, ["google-ai-studio"])
+        XCTAssertNil(provider.order)
+        XCTAssertEqual(provider.allowFallbacks, false)
     }
 
     func testSendMessageKeepsCompatiblePreferredProviderInRoutingOrder() async throws {
@@ -320,12 +296,9 @@ final class OpenRouterRoutingTests: XCTestCase {
             attachments: []
         )
 
-        let request = try XCTUnwrap(httpClient.streamedRequests.first)
-        let body = try XCTUnwrap(request.body)
-        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        let provider = try XCTUnwrap(root["provider"] as? [String: Any])
-        XCTAssertEqual(provider["order"] as? [String], ["liquid/fp8"])
-        XCTAssertNil(provider["only"])
+        let provider = try XCTUnwrap(fixture.runtime.calls.first?.request.provider)
+        XCTAssertEqual(provider.order, ["liquid/fp8"])
+        XCTAssertNil(provider.only)
     }
 
     func testSendMessageFailsWhenEndpointCapabilitiesCannotBeFetched() async throws {
@@ -354,7 +327,7 @@ final class OpenRouterRoutingTests: XCTestCase {
         } catch {
             XCTAssertTrue(error.localizedDescription.contains("could not be validated"))
         }
-        XCTAssertTrue(httpClient.streamedRequests.isEmpty)
+        XCTAssertTrue(fixture.runtime.calls.isEmpty)
     }
 
     func testSendMessageUsesOnlyProviderWhenFallbacksDisabledAndSingleMatch() async throws {
@@ -377,12 +350,9 @@ final class OpenRouterRoutingTests: XCTestCase {
             attachments: []
         )
 
-        let request = try XCTUnwrap(httpClient.streamedRequests.first)
-        let body = try XCTUnwrap(request.body)
-        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        let provider = try XCTUnwrap(root["provider"] as? [String: Any])
-        XCTAssertEqual(provider["only"] as? [String], ["liquid/fp8"])
-        XCTAssertNil(provider["order"])
+        let provider = try XCTUnwrap(fixture.runtime.calls.first?.request.provider)
+        XCTAssertEqual(provider.only, ["liquid/fp8"])
+        XCTAssertNil(provider.order)
     }
 
     func testSendMessagePreservesExactEndpointTagAndXHighEffort() async throws {
@@ -427,13 +397,9 @@ final class OpenRouterRoutingTests: XCTestCase {
             attachments: []
         )
 
-        let request = try XCTUnwrap(httpClient.streamedRequests.first)
-        let body = try XCTUnwrap(request.body)
-        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        let provider = try XCTUnwrap(root["provider"] as? [String: Any])
-        let reasoning = try XCTUnwrap(root["reasoning"] as? [String: Any])
-        XCTAssertEqual(provider["order"] as? [String], ["novita/fp8"])
-        XCTAssertEqual(reasoning["effort"] as? String, "xhigh")
+        let request = try XCTUnwrap(fixture.runtime.calls.first?.request)
+        XCTAssertEqual(request.provider?.order, ["novita/fp8"])
+        XCTAssertEqual(request.thinking?.effort, "xhigh")
     }
 
     @MainActor
@@ -540,7 +506,8 @@ final class OpenRouterRoutingTests: XCTestCase {
     ) throws -> (
         repository: ChatRepository,
         modelService: OpenRouterModelService,
-        credentials: TestCredentialStore
+        credentials: TestCredentialStore,
+        runtime: PiStreamSpy
     ) {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)
@@ -548,13 +515,8 @@ final class OpenRouterRoutingTests: XCTestCase {
         let settings = SettingsRepository(dbQueue: dbQueue)
         let conversations = ConversationRepository(dbQueue: dbQueue)
         let credentials = TestCredentialStore()
+        let runtime = PiStreamSpy()
         let modelService = OpenRouterModelService(credentialStore: credentials, httpClient: httpClient)
-        let providers = ProviderGateway(
-            settingsRepository: settings,
-            credentialStore: credentials,
-            httpClient: httpClient
-        )
-        let codexAuth = CodexAuthRepository(credentialStore: credentials)
 
         if configureSettings != nil {
             var current = try settings.load()
@@ -567,11 +529,11 @@ final class OpenRouterRoutingTests: XCTestCase {
             settings: settings,
             conversations: conversations,
             credentials: credentials,
-            httpClient: httpClient,
+            piStream: runtime.stream,
             modelService: modelService,
             pricingRepository: NoopPricingRepository()
         )
-        return (repository, modelService, credentials)
+        return (repository, modelService, credentials, runtime)
     }
 }
 

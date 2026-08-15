@@ -50,9 +50,10 @@ final class AppServices {
         providerGateway = ProviderGateway(
             settingsRepository: settingsRepository,
             credentialStore: credentialStore,
-            registry: ProviderRegistry(skillRepository: skillRepository, attachmentRepository: attachmentRepository),
+            codexAuthRepository: codexAuthRepository,
             superGrokAuthRepository: superGrokAuthRepository,
-            modelsDevCatalogRepository: modelsDevCatalogRepository
+            modelsDevCatalogRepository: modelsDevCatalogRepository,
+            localTools: localTools
         )
         fusionTraceStore = FusionTraceStore(dbQueue: dbQueue)
         fusionService = FusionService(
@@ -61,8 +62,7 @@ final class AppServices {
             pricingRepository: LiteLlmPricingRepository(),
             traceStore: fusionTraceStore,
             requestSettingsResolver: requestSettingsResolver,
-            skillRepository: skillRepository,
-            localToolRegistry: localTools
+            skillRepository: skillRepository
         )
         chatRepository = ChatRepository(
             conversations: conversationRepository,
@@ -74,7 +74,6 @@ final class AppServices {
             requestSettingsResolver: requestSettingsResolver,
             codexAuthRepository: codexAuthRepository,
             superGrokAuthRepository: superGrokAuthRepository,
-            localToolRegistry: localTools,
             fusionService: fusionService,
             fusionTraceStore: fusionTraceStore
         )

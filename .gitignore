@@ -48,6 +48,8 @@ Pods/
 *.app/
 *.xctest/
 .swiftpm/
+ios/Vendor/
+ios/PiRuntime/node_modules/
 
 # IDE files
 .idea/

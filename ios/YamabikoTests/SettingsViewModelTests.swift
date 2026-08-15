@@ -263,8 +263,7 @@ final class SettingsViewModelTests: XCTestCase {
             dbQueue: dbQueue,
             settings: settings,
             conversations: conversations,
-            credentials: credentials,
-            httpClient: URLSessionHTTPClient()
+            credentials: credentials
         )
 
         return (repository, credentials)

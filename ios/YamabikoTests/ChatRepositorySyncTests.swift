@@ -22,46 +22,6 @@ private final class TestCredentialStore: SecureCredentialStore {
     }
 }
 
-private final class GeminiStreamFallbackHTTPClient: HTTPClientProtocol {
-    private let streamLines: [String]
-    private let nonStreamingBody: String
-    private(set) var streamCallCount: Int = 0
-    private(set) var sendCallCount: Int = 0
-
-    init(streamLines: [String], nonStreamingBody: String) {
-        self.streamLines = streamLines
-        self.nonStreamingBody = nonStreamingBody
-    }
-
-    func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
-        sendCallCount += 1
-        let response = HTTPURLResponse(
-            url: request.url,
-            statusCode: 200,
-            httpVersion: nil,
-            headerFields: nil
-        )!
-        return (nonStreamingBody.data(using: .utf8) ?? Data(), response)
-    }
-
-    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
-        streamCallCount += 1
-        let response = HTTPURLResponse(
-            url: request.url,
-            statusCode: 200,
-            httpVersion: nil,
-            headerFields: nil
-        )!
-        let stream = AsyncThrowingStream<String, Error> { continuation in
-            for line in streamLines {
-                continuation.yield(line)
-            }
-            continuation.finish()
-        }
-        return (stream, response)
-    }
-}
-
 private struct NoopPricingRepository: LiteLlmPricingEstimating {
     func estimateCostUsd(
         provider: String,
@@ -278,24 +238,20 @@ final class ChatRepositorySyncTests: XCTestCase {
     }
 
     func testSendMessageRecordsTokenUsageFromUsagePayload() async throws {
-        let payload = #"""
-        {
-          "choices":[{"message":{"content":"ok"}}],
-          "usage":{
-            "prompt_tokens":120,
-            "completion_tokens":30,
-            "total_tokens":150,
-            "completion_tokens_details":{"reasoning_tokens":9},
-            "prompt_tokens_details":{"cached_tokens":48},
-            "input_tokens_details":{"cache_creation_tokens":12}
-          }
+        let runtime = PiStreamSpy { _, _ in
+            [.completed(ProviderResponse(
+                text: "ok",
+                usage: ProviderUsage(
+                    inputTokens: 120,
+                    outputTokens: 30,
+                    totalTokens: 150,
+                    reasoningTokens: 9,
+                    cachedInputTokens: 48,
+                    cacheCreationInputTokens: 12
+                )
+            ))]
         }
-        """#
-        let httpClient = GeminiStreamFallbackHTTPClient(
-            streamLines: [],
-            nonStreamingBody: payload
-        )
-        let fixture = try makeFixture(httpClient: httpClient) { settings in
+        let fixture = try makeFixture(runtime: runtime) { settings in
             settings.apiProvider = "OPENROUTER"
             settings.defaultModel = "openai/gpt-4o-mini"
             settings.providerDefaultModelsJSON = #"{"OPENROUTER":"openai/gpt-4o-mini"}"#
@@ -321,26 +277,22 @@ final class ChatRepositorySyncTests: XCTestCase {
     }
 
     func testSendMessagePassesCacheAndReasoningUsageToPricingEstimator() async throws {
-        let payload = #"""
-        {
-          "choices":[{"message":{"content":"ok"}}],
-          "usage":{
-            "prompt_tokens":80,
-            "completion_tokens":20,
-            "total_tokens":100,
-            "completion_tokens_details":{"reasoning_tokens":7},
-            "prompt_tokens_details":{"cached_tokens":30},
-            "input_tokens_details":{"cache_creation_tokens":5}
-          }
+        let runtime = PiStreamSpy { _, _ in
+            [.completed(ProviderResponse(
+                text: "ok",
+                usage: ProviderUsage(
+                    inputTokens: 80,
+                    outputTokens: 20,
+                    totalTokens: 100,
+                    reasoningTokens: 7,
+                    cachedInputTokens: 30,
+                    cacheCreationInputTokens: 5
+                )
+            ))]
         }
-        """#
-        let httpClient = GeminiStreamFallbackHTTPClient(
-            streamLines: [],
-            nonStreamingBody: payload
-        )
         let pricingSpy = PricingSpyRepository(returnValue: 0.42)
         let fixture = try makeFixture(
-            httpClient: httpClient,
+            runtime: runtime,
             pricingRepository: pricingSpy
         ) { settings in
             settings.apiProvider = "OPENROUTER"
@@ -371,19 +323,14 @@ final class ChatRepositorySyncTests: XCTestCase {
         XCTAssertEqual(totals.totalCostUsd, 0.42, accuracy: 0.000_001)
     }
 
-    func testOpenCodeGoNormalStreamDoesNotTriggerNonStreamingFallback() async throws {
-        let streamPayload = #"data: {"choices":[{"delta":{"content":"normal stream text"}}]}"#
-        let nonStreamPayload = #"""
-        {
-          "choices":[{"message":{"content":"fallback text"}}],
-          "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}
+    func testOpenCodeGoNormalStreamUsesSinglePiRun() async throws {
+        let runtime = PiStreamSpy { _, _ in
+            [
+                .textDelta("normal stream text"),
+                .completed(ProviderResponse(text: "normal stream text"))
+            ]
         }
-        """#
-        let httpClient = GeminiStreamFallbackHTTPClient(
-            streamLines: [streamPayload, "data: [DONE]", ""],
-            nonStreamingBody: nonStreamPayload
-        )
-        let fixture = try makeFixture(httpClient: httpClient) { settings in
+        let fixture = try makeFixture(runtime: runtime) { settings in
             settings.apiProvider = "OPENCODE_GO"
             settings.defaultModel = "deepseek-v4-flash"
             settings.providerDefaultModelsJSON = #"{"OPENCODE_GO":"deepseek-v4-flash"}"#
@@ -399,25 +346,17 @@ final class ChatRepositorySyncTests: XCTestCase {
         )
 
         XCTAssertEqual(result.response.text, "normal stream text")
-        XCTAssertEqual(httpClient.streamCallCount, 1)
-        XCTAssertEqual(httpClient.sendCallCount, 0, "Non-streaming fallback must NOT trigger when stream delivers answer text.")
+        XCTAssertEqual(runtime.calls.count, 1)
 
         let saved = try fixture.conversations.fetchFullMessage(id: result.assistantMessageId)
         XCTAssertEqual(saved?.displayText, "normal stream text")
     }
 
-    func testOtherProviderEmptyStreamDoesNotTriggerNonStreamingFallback() async throws {
-        let nonStreamPayload = #"""
-        {
-          "choices":[{"message":{"content":"fallback text"}}],
-          "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}
+    func testOtherProviderEmptyStreamUsesSinglePiRun() async throws {
+        let runtime = PiStreamSpy { _, _ in
+            [.completed(ProviderResponse(text: ""))]
         }
-        """#
-        let httpClient = GeminiStreamFallbackHTTPClient(
-            streamLines: ["data: [DONE]", ""],
-            nonStreamingBody: nonStreamPayload
-        )
-        let fixture = try makeFixture(httpClient: httpClient) { settings in
+        let fixture = try makeFixture(runtime: runtime) { settings in
             settings.apiProvider = "OPENROUTER"
             settings.defaultModel = "openai/gpt-4o-mini"
             settings.providerDefaultModelsJSON = #"{"OPENROUTER":"openai/gpt-4o-mini"}"#
@@ -433,12 +372,11 @@ final class ChatRepositorySyncTests: XCTestCase {
         )
 
         XCTAssertEqual(result.response.text, "")
-        XCTAssertEqual(httpClient.streamCallCount, 1)
-        XCTAssertEqual(httpClient.sendCallCount, 0, "Non-streaming fallback must NOT trigger for non-OpenCodeGo providers.")
+        XCTAssertEqual(runtime.calls.count, 1)
     }
 
     private func makeFixture(
-        httpClient: HTTPClientProtocol = URLSessionHTTPClient(),
+        runtime: PiStreamSpy = PiStreamSpy(),
         pricingRepository: any LiteLlmPricingEstimating = NoopPricingRepository(),
         configureSettings: ((inout AppSettings) -> Void)? = nil
     ) throws -> (repository: ChatRepository, conversations: ConversationRepository, credentials: TestCredentialStore) {
@@ -448,13 +386,7 @@ final class ChatRepositorySyncTests: XCTestCase {
         let settings = SettingsRepository(dbQueue: dbQueue)
         let conversations = ConversationRepository(dbQueue: dbQueue)
         let credentials = TestCredentialStore()
-        let providers = ProviderGateway(
-            settingsRepository: settings,
-            credentialStore: credentials,
-            httpClient: httpClient
-        )
         let modelService = OpenRouterModelService(credentialStore: credentials)
-        let codexAuth = CodexAuthRepository(credentialStore: credentials)
 
         if configureSettings != nil {
             var current = try settings.load()
@@ -467,7 +399,7 @@ final class ChatRepositorySyncTests: XCTestCase {
             settings: settings,
             conversations: conversations,
             credentials: credentials,
-            httpClient: httpClient,
+            piStream: runtime.stream,
             pricingRepository: pricingRepository
         )
         return (repository, conversations, credentials)

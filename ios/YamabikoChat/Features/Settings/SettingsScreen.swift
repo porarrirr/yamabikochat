@@ -12,7 +12,6 @@ struct SettingsScreen: View {
     @State private var showDiagnosticsSheet = false
     @State private var modelsDevFieldDrafts: [String: String] = [:]
     @State private var showAgentSkillImporter = false
-    @State private var showHostedSkillConfirmation = false
 
     enum SettingsTab: String, Identifiable {
         case api
@@ -179,12 +178,6 @@ struct SettingsScreen: View {
                     viewModel.installAgentSkill(trusted: trusted, allowReplacement: preview.replacesExisting)
                 }
             )
-        }
-        .alert("OpenAI hosted Skill実行", isPresented: $showHostedSkillConfirmation) {
-            Button("キャンセル", role: .cancel) {}
-            Button("理解して有効化") { viewModel.confirmOpenAIHostedSkillExecution() }
-        } message: {
-            Text("OpenAI APIキーを使うOPENAIプロバイダーだけが対象です。Skill一式をOpenAIの一時コンテナへ送信し、API利用料が発生します。コンテナは最終利用から20分で失効し、外部ネットワークは無効です。")
         }
     }
 
@@ -402,7 +395,7 @@ struct SettingsScreen: View {
                     }
                     HStack {
                         Text(skill.hasScripts ? "スクリプトあり" : "指示・資料のみ")
-                        if skill.hasScripts { Text("OpenAI hosted利用可能") }
+                        if skill.hasScripts { Text("実行対象外") }
                     }
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -431,14 +424,7 @@ struct SettingsScreen: View {
                 .padding(.vertical, 4)
             }
 
-            Toggle("OpenAI hosted Skill実行", isOn: Binding(
-                get: { viewModel.openAIHostedSkillExecutionEnabled },
-                set: { enabled in
-                    if enabled { showHostedSkillConfirmation = true }
-                    else { viewModel.disableOpenAIHostedSkillExecution() }
-                }
-            ))
-            Text("OFFではローカルでスクリプトを実行せず、指示とUTF-8資料だけをモデルへ提供します。")
+            Text("Pi AgentにはSkillの指示とUTF-8資料だけを提供し、同梱スクリプトは実行しません。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }

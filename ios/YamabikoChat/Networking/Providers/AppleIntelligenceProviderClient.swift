@@ -1,15 +1,8 @@
 import Foundation
 import FoundationModels
 
-struct AppleIntelligenceProviderClient: ProviderClient {
-    let provider: LLMProvider = .appleIntelligence
-
-    func generate(
-        request: ProviderRequest,
-        settings: AppSettings,
-        credentialStore: SecureCredentialStore,
-        httpClient: HTTPClientProtocol
-    ) async throws -> ProviderResponse {
+struct AppleIntelligenceProviderClient {
+    func generate(request: ProviderRequest) async throws -> ProviderResponse {
         guard #available(iOS 26.0, *) else {
             throw ProviderClientError.parseFailure("Apple Intelligence requires iOS 26 or later.")
         }
@@ -18,12 +11,7 @@ struct AppleIntelligenceProviderClient: ProviderClient {
         return ProviderResponse(text: response)
     }
 
-    func stream(
-        request: ProviderRequest,
-        settings: AppSettings,
-        credentialStore: SecureCredentialStore,
-        httpClient: HTTPClientProtocol
-    ) -> AsyncThrowingStream<ProviderStreamEvent, Error> {
+    func stream(request: ProviderRequest) -> AsyncThrowingStream<ProviderStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -85,11 +73,13 @@ private enum AppleIntelligenceSession {
     private static func prompt(from request: ProviderRequest) -> String {
         request.messages
             .map { message in
-                ProviderAttachmentEncoder.logSkippedAttachmentsIfNeeded(
-                    message.attachments,
-                    providerLabel: "Apple Intelligence",
-                    embedImages: ProviderAttachmentEncoder.shouldEmbedImages(metadata: request.metadata)
-                )
+                if !message.attachments.isEmpty {
+                    DiagnosticsLogger.log(
+                        "Apple Intelligence does not accept attachments",
+                        category: .network,
+                        metadata: ["attachment_count": String(message.attachments.count)]
+                    )
+                }
                 let role = roleLabel(message.role)
                 return "\(role):\n\(message.content)"
             }

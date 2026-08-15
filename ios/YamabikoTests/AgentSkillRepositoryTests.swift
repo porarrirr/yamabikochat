@@ -11,7 +11,6 @@ final class AgentSkillRepositoryTests: XCTestCase {
             .appendingPathComponent("agent-skill-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
         repository = AgentSkillRepository(rootURL: temporaryRoot.appendingPathComponent("installed"))
-        repository.openAIHostedExecutionEnabled = false
     }
 
     override func tearDownWithError() throws {

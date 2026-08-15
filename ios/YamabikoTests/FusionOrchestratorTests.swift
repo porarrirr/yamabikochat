@@ -34,12 +34,6 @@ final class FusionOrchestratorTests: XCTestCase {
                 temperature: 0.3,
                 timeoutMs: 5_000
             ),
-            fallbackModel: PanelModelConfig(
-                modelId: "fallback-model",
-                provider: "OPENAI",
-                temperature: 0.3,
-                timeoutMs: 5_000
-            ),
             preset: "quality",
             timeoutMs: 5_000,
             allowWebSearch: false,
@@ -225,37 +219,40 @@ final class FusionOrchestratorTests: XCTestCase {
         XCTAssertEqual(outcome.trace.judgeResult?.analysis?.recommendedFinalPosition, "Use A")
     }
 
-    func testJudgeInvalidJSONFallsBackToSynthesisWithoutAnalysis() async throws {
+    func testJudgeInvalidJSONThrows() async throws {
         let request = sampleRequest(panelModels: [
             PanelModelConfig(modelId: "panel-a", provider: "OPENAI", timeoutMs: 5_000)
         ])
-        let outcome = try await orchestrator.runThroughJudge(
-            request: request,
-            context: FusionContext(),
-            buildRequest: buildRequest,
-            invoke: invalidJudgeInvoke,
-            estimateCost: { _, _, _ in nil }
-        )
-        XCTAssertFalse(outcome.trace.judgeResult?.parseSucceeded ?? true)
-        XCTAssertNil(outcome.trace.judgeResult?.analysis)
-        XCTAssertTrue(
-            outcome.synthesisRequest.messages.first?.content.contains("Judge analysis unavailable") ?? false
-        )
+        do {
+            _ = try await orchestrator.runThroughJudge(
+                request: request,
+                context: FusionContext(),
+                buildRequest: buildRequest,
+                invoke: invalidJudgeInvoke,
+                estimateCost: { _, _, _ in nil }
+            )
+            XCTFail("Expected invalid judge JSON to fail")
+        } catch ProviderClientError.parseFailure {
+            // Expected.
+        }
     }
 
-    func testRecursionGuardUsesFallbackModel() async throws {
+    func testRecursionGuardThrows() async throws {
         let request = sampleRequest(panelModels: [
             PanelModelConfig(modelId: "panel-a", provider: "OPENAI", timeoutMs: 5_000)
         ])
-        let outcome = try await orchestrator.runThroughJudge(
-            request: request,
-            context: FusionContext(fusionDepth: 1),
-            buildRequest: buildRequest,
-            invoke: mockInvoke,
-            estimateCost: { _, _, _ in nil }
-        )
-        XCTAssertEqual(outcome.trace.status, "recursion_fallback")
-        XCTAssertTrue(outcome.trace.panelResults.isEmpty)
+        do {
+            _ = try await orchestrator.runThroughJudge(
+                request: request,
+                context: FusionContext(fusionDepth: 1),
+                buildRequest: buildRequest,
+                invoke: mockInvoke,
+                estimateCost: { _, _, _ in nil }
+            )
+            XCTFail("Expected recursion limit error")
+        } catch FusionError.recursionLimitExceeded {
+            // Expected.
+        }
     }
 
     func testPresetLoaderResolvesDefaultWhenJSONEmpty() throws {
@@ -331,50 +328,13 @@ final class FusionOrchestratorTests: XCTestCase {
                 inputTokens: 1,
                 outputTokens: 1,
                 cost: 0.03,
-                error: nil,
-                usedFallback: false
+                error: nil
             ),
             finalAnswer: "final",
             logPrompts: false
         )
         XCTAssertEqual(trace.totalCost ?? 0, 0.06, accuracy: 0.0001)
         XCTAssertEqual(trace.status, "completed")
-    }
-
-    func testStaticFallbackUsesJudgeAndBestPanel() {
-        let fallback = orchestrator.buildStaticFallback(
-            judgeAnalysis: JudgeAnalysis(
-                consensus: ["x"],
-                contradictions: [],
-                uniqueInsights: [],
-                coverageGaps: [],
-                suspectedErrors: [],
-                sourceQualityIssues: [],
-                strongestAnswerParts: [],
-                recommendedFinalPosition: "Recommended",
-                confidence: .high,
-                notes: nil
-            ),
-            judgeRaw: nil,
-            panels: [
-                PanelResult(
-                    modelId: "fast",
-                    provider: "OPENAI",
-                    success: true,
-                    content: "panel answer",
-                    error: nil,
-                    latencyMs: 5,
-                    inputTokens: nil,
-                    outputTokens: nil,
-                    cost: nil,
-                    toolCalls: nil,
-                    finishReason: nil,
-                    role: nil
-                )
-            ]
-        )
-        XCTAssertTrue(fallback.contains("Recommended"))
-        XCTAssertTrue(fallback.contains("panel answer"))
     }
 
     // MARK: - Mock invokes
@@ -392,7 +352,7 @@ final class FusionOrchestratorTests: XCTestCase {
             return ProviderResponse(text: "panel-\(request.model)", usage: ProviderUsage(inputTokens: 3, outputTokens: 5))
         case .judge:
             return ProviderResponse(text: validJudgeJSON, usage: ProviderUsage(inputTokens: 10, outputTokens: 20))
-        case .synthesizer, .fallback:
+        case .synthesizer:
             return ProviderResponse(text: "synth-\(request.model)", usage: ProviderUsage(inputTokens: 4, outputTokens: 6))
         }
     }

@@ -35,15 +35,6 @@ private struct CodexRefreshFailureHTTPClient: HTTPClientProtocol {
         return (Data(body.utf8), response)
     }
 
-    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
-        let response = HTTPURLResponse(
-            url: request.url,
-            statusCode: statusCode,
-            httpVersion: nil,
-            headerFields: nil
-        )!
-        return (AsyncThrowingStream { $0.finish() }, response)
-    }
 }
 
 final class AuthRepositoryTests: XCTestCase {

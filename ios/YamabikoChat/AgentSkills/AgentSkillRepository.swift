@@ -15,7 +15,6 @@ final class AgentSkillRepository: @unchecked Sendable {
     private let rootURL: URL
     private let lock = NSLock()
     private let subject: CurrentValueSubject<[InstalledAgentSkill], Never>
-    private let hostedExecutionKey = "agentSkills.openAIHostedExecutionEnabled"
 
     init(fileManager: FileManager = .default, rootURL: URL? = nil) {
         self.fileManager = fileManager
@@ -41,11 +40,6 @@ final class AgentSkillRepository: @unchecked Sendable {
 
     var installedSkills: [InstalledAgentSkill] { subject.value }
     var enabledSkills: [InstalledAgentSkill] { subject.value.filter(\.isEnabled) }
-
-    var openAIHostedExecutionEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: hostedExecutionKey) }
-        set { UserDefaults.standard.set(newValue, forKey: hostedExecutionKey) }
-    }
 
     func inspect(sourceURL: URL) throws -> AgentSkillInstallPreview {
         let secured = sourceURL.startAccessingSecurityScopedResource()
@@ -164,8 +158,7 @@ final class AgentSkillRepository: @unchecked Sendable {
             explicitInstructions: instructions,
             resourceLists: resources,
             conversationID: conversationID,
-            enabledSkillSetHash: Self.hashStrings(enabled.map { "\($0.manifest.name):\($0.contentHash)" }.sorted()),
-            hostedExecutionEnabled: openAIHostedExecutionEnabled
+            enabledSkillSetHash: Self.hashStrings(enabled.map { "\($0.manifest.name):\($0.contentHash)" }.sorted())
         )
     }
 

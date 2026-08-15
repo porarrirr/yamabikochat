@@ -619,8 +619,6 @@ final class ChatViewModel: ObservableObject {
             return L10n.text("judging")
         case .synthesizer:
             return L10n.text("synthesizing")
-        case .fallback:
-            return L10n.text("fallback")
         }
     }
 

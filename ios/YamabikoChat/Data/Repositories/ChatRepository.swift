@@ -34,7 +34,6 @@ final class ChatRepository {
     private let codexAuthRepository: CodexAuthRepository
     private let superGrokAuthRepository: SuperGrokAuthRepository
     private let pricingRepository: any LiteLlmPricingEstimating
-    private let localToolRegistry: LocalToolRegistry
     private let fusionService: FusionService
     private let fusionTraceStore: FusionTraceStore
     private let fusionOrchestrator: FusionOrchestrator
@@ -50,12 +49,6 @@ final class ChatRepository {
         codexAuthRepository: CodexAuthRepository,
         superGrokAuthRepository: SuperGrokAuthRepository,
         pricingRepository: any LiteLlmPricingEstimating = LiteLlmPricingRepository(),
-        localToolRegistry: LocalToolRegistry = LocalToolRegistry(
-            executors: [
-                WebSearchTool(),
-                FetchUrlTool()
-            ]
-        ),
         fusionService: FusionService,
         fusionTraceStore: FusionTraceStore,
         fusionOrchestrator: FusionOrchestrator = FusionOrchestrator()
@@ -70,7 +63,6 @@ final class ChatRepository {
         self.codexAuthRepository = codexAuthRepository
         self.superGrokAuthRepository = superGrokAuthRepository
         self.pricingRepository = pricingRepository
-        self.localToolRegistry = localToolRegistry
         self.fusionService = fusionService
         self.fusionTraceStore = fusionTraceStore
         self.fusionOrchestrator = fusionOrchestrator
@@ -675,55 +667,20 @@ final class ChatRepository {
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
     ) async throws -> ProviderResponse {
-        let orchestrator = ToolCallingOrchestrator(registry: localToolRegistry)
         do {
-            let outcome = try await orchestrator.run(
+            let response = try await executeProviderRound(
                 request: request,
-                invoke: { [self] roundRequest, _ in
-                    try await executeProviderRound(
-                        request: roundRequest,
-                        provider: provider,
-                        persistenceKind: persistenceKind,
-                        streamEnabled: streamEnabled,
-                        persistResults: persistResults,
-                        onStreamEvent: onStreamEvent,
-                        onStreamingSnapshot: onStreamingSnapshot
-                    )
-                },
-                onProgressChanged: { [self] progress in
-                    guard persistResults else { return }
-                    do {
-                        try saveToolActivities(
-                            kind: persistenceKind,
-                            steps: progress.activities,
-                            providerTranscript: progress.replayMessages
-                        )
-                    } catch {
-                        DiagnosticsLogger.log(
-                            "Tool activity persistence failed",
-                            category: .chat,
-                            metadata: [
-                                "conversation": String(conversationId),
-                                "target": toolActivityTargetDescription(kind: persistenceKind)
-                            ],
-                            error: error
-                        )
-                    }
-                }
+                provider: provider,
+                persistenceKind: persistenceKind,
+                streamEnabled: streamEnabled,
+                persistResults: persistResults,
+                onStreamEvent: onStreamEvent,
+                onStreamingSnapshot: onStreamingSnapshot
             )
             if persistResults {
-                // The final transcript write is part of completing the turn. Progress
-                // writes are only for UI recovery and must not be the sole durable copy.
-                if !outcome.activities.isEmpty {
-                    try saveToolActivities(
-                        kind: persistenceKind,
-                        steps: outcome.activities,
-                        providerTranscript: outcome.replayMessages
-                    )
-                }
-                try persistProviderResponse(outcome.response, kind: persistenceKind)
+                try persistProviderResponse(response, kind: persistenceKind)
             }
-            return outcome.response
+            return response
         } catch {
             if persistResults {
                 let target = ChatStreamSessionTarget(conversations: conversations, kind: persistenceKind)
@@ -799,36 +756,6 @@ final class ChatRepository {
             try conversations.appendAttachments(messageId: messageId, paths: generatedPaths)
         case let .variant(variantId, _):
             try conversations.appendAttachments(variantId: variantId, paths: generatedPaths)
-        }
-    }
-
-    private func saveToolActivities(
-        kind: ChatStreamPersistenceKind,
-        steps: [ToolActivityStep],
-        providerTranscript: [ProviderRequestMessage]
-    ) throws {
-        switch kind {
-        case let .message(messageId):
-            try conversations.saveToolActivities(
-                messageId: messageId,
-                steps: steps,
-                providerTranscript: providerTranscript
-            )
-        case let .variant(variantId, _):
-            try conversations.saveToolActivities(
-                variantId: variantId,
-                steps: steps,
-                providerTranscript: providerTranscript
-            )
-        }
-    }
-
-    private func toolActivityTargetDescription(kind: ChatStreamPersistenceKind) -> String {
-        switch kind {
-        case let .message(messageId):
-            return "message:\(messageId)"
-        case let .variant(variantId, _):
-            return "variant:\(variantId)"
         }
     }
 
@@ -1070,102 +997,13 @@ final class ChatRepository {
             conversationId: conversationId
         )
 
-        let judgeOutcome: FusionJudgeOutcome
-        do {
-            judgeOutcome = try await fusionService.runThroughJudge(
-                request: fusionRequest,
-                context: context,
-                conversationHistory: history,
-                userAttachments: normalizedAttachments,
-                onProgress: onFusionProgress
-            )
-        } catch FusionError.allPanelsFailed(let panelResults) {
-            DiagnosticsLogger.log(
-                "Fusion all panels failed; falling back to single model",
-                category: .fusion,
-                metadata: [
-                    "conversationId": String(conversationId),
-                    "preset": fusionRequest.preset
-                ]
-            )
-            let failedTraceId = UUID().uuidString
-            let failedTrace = FusionTrace(
-                requestId: failedTraceId,
-                preset: fusionRequest.preset,
-                startedAtMs: Int64(Date().timeIntervalSince1970 * 1000),
-                completedAtMs: Int64(Date().timeIntervalSince1970 * 1000),
-                panelResults: panelResults,
-                judgeResult: nil,
-                synthesisResult: nil,
-                totalLatencyMs: panelResults.map(\.latencyMs).max(),
-                totalCost: nil,
-                failedModels: panelResults.map(\.modelId),
-                status: "all_panels_failed",
-                userPrompt: settings.fusionLogPromptsEnabled ? text : nil,
-                finalAnswer: nil
-            )
-            try fusionTraceStore.save(trace: failedTrace, conversationId: conversationId)
-
-            let failedPanelChips = panelResults.map { result in
-                FusionPanelChipStatus(
-                    modelId: result.modelId,
-                    provider: result.provider,
-                    state: result.success ? .succeeded : .failed
-                )
-            }
-            onFusionProgress?(
-                FusionProgressSnapshot.phaseOnly(.fallback, panels: failedPanelChips)
-            )
-
-            let fallbackModel = fusionRequest.fallbackModel ?? fusionRequest.synthesizerModel
-            let fallbackSupportsVision = await pricingRepository.modelSupportsVision(
-                provider: fallbackModel.provider,
-                model: fallbackModel.modelId
-            )
-            let request = try await fusionService.buildProviderRequest(
-                model: fallbackModel,
-                systemPrompt: conversation.systemPrompt ?? "",
-                phase: .fallback,
-                allowTools: false,
-                settings: settings,
-                fusionDepth: 0,
-                userPrompt: text,
-                conversationHistory: history,
-                userAttachments: normalizedAttachments,
-                supportsVision: fallbackSupportsVision,
-                conversationID: String(conversationId)
-            )
-            let provider = fallbackModel.provider
-            let assistantMessageId = try conversations.insertMessage(
-                ChatMessage(
-                    conversationId: conversationId,
-                    role: "model",
-                    text: "",
-                    fusionTraceId: failedTraceId
-                )
-            )
-            let response = try await runToolCallingTurn(
-                request: request,
-                provider: provider,
-                conversationId: conversationId,
-                persistenceKind: .message(messageId: assistantMessageId),
-                streamEnabled: settings.isStreamingEnabled,
-                onStreamEvent: onStreamEvent,
-                onStreamingSnapshot: onStreamingSnapshot
-            )
-            await recordTokenUsageIfAvailable(
-                provider: fallbackModel.provider,
-                model: fallbackModel.modelId,
-                usage: response.usage,
-                conversationId: conversationId,
-                requestType: "fusion_fallback"
-            )
-            return SendMessageResult(
-                userMessageId: userMessageId,
-                assistantMessageId: assistantMessageId,
-                response: response
-            )
-        }
+        let judgeOutcome = try await fusionService.runThroughJudge(
+            request: fusionRequest,
+            context: context,
+            conversationHistory: history,
+            userAttachments: normalizedAttachments,
+            onProgress: onFusionProgress
+        )
 
         for usage in judgeOutcome.panelTokenUsages {
             await recordTokenUsageIfAvailable(
@@ -1207,76 +1045,44 @@ final class ChatRepository {
         )
 
         let synthStarted = Date()
-        var finalText: String
-        var synthUsage: ProviderUsage?
-        var synthesisResult: SynthesisPhaseResult
-
-        do {
-            let stream = try await providers.stream(
-                request: judgeOutcome.synthesisRequest,
-                providerID: judgeOutcome.synthesizerModel.provider
-            )
-            let session = try await ChatStreamSession.run(
-                stream: stream,
-                conversations: conversations,
-                kind: .message(messageId: assistantMessageId),
-                onStreamEvent: onStreamEvent,
-                onStreamingSnapshot: onStreamingSnapshot
-            )
-            guard let answer = session.text.trimmedNonEmpty else {
-                throw ProviderClientError.parseFailure(
-                    L10n.text("Fusion synthesizer returned no answer text.")
-                )
-            }
-            finalText = answer
-            synthUsage = session.usage
-            let latencyMs = Int64(Date().timeIntervalSince(synthStarted) * 1000)
-            let cost = await pricingRepository.estimateCostUsd(
-                provider: judgeOutcome.synthesizerModel.provider,
-                model: judgeOutcome.synthesizerModel.modelId,
-                inputTokens: synthUsage?.inputTokens ?? 0,
-                outputTokens: synthUsage?.outputTokens ?? 0,
-                cachedInputTokens: synthUsage?.cachedInputTokens,
-                cacheCreationInputTokens: synthUsage?.cacheCreationInputTokens,
-                reasoningTokens: synthUsage?.reasoningTokens
-            )
-            synthesisResult = SynthesisPhaseResult(
-                modelId: judgeOutcome.synthesizerModel.modelId,
-                provider: judgeOutcome.synthesizerModel.provider.uppercased(),
-                success: true,
-                content: finalText,
-                latencyMs: latencyMs,
-                inputTokens: synthUsage?.inputTokens,
-                outputTokens: synthUsage?.outputTokens,
-                cost: cost,
-                error: nil,
-                usedFallback: false
-            )
-        } catch {
-            finalText = judgeOutcome.staticFallbackAnswer
-            if finalText.isEmpty {
-                finalText = L10n.format("エラー: %@", error.localizedDescription)
-            }
-            try conversations.updateMessageText(messageId: assistantMessageId, text: finalText)
-            synthesisResult = SynthesisPhaseResult(
-                modelId: judgeOutcome.synthesizerModel.modelId,
-                provider: judgeOutcome.synthesizerModel.provider.uppercased(),
-                success: false,
-                content: finalText,
-                latencyMs: Int64(Date().timeIntervalSince(synthStarted) * 1000),
-                inputTokens: nil,
-                outputTokens: nil,
-                cost: nil,
-                error: error.localizedDescription,
-                usedFallback: true
-            )
-            DiagnosticsLogger.log(
-                "Fusion synthesizer stream failed; using fallback",
-                category: .fusion,
-                requestID: judgeOutcome.trace.requestId,
-                error: error
+        let stream = try await providers.stream(
+            request: judgeOutcome.synthesisRequest,
+            providerID: judgeOutcome.synthesizerModel.provider
+        )
+        let session = try await ChatStreamSession.run(
+            stream: stream,
+            conversations: conversations,
+            kind: .message(messageId: assistantMessageId),
+            onStreamEvent: onStreamEvent,
+            onStreamingSnapshot: onStreamingSnapshot
+        )
+        guard let finalText = session.text.trimmedNonEmpty else {
+            throw ProviderClientError.parseFailure(
+                L10n.text("Fusion synthesizer returned no answer text.")
             )
         }
+        let synthUsage = session.usage
+        let latencyMs = Int64(Date().timeIntervalSince(synthStarted) * 1000)
+        let cost = await pricingRepository.estimateCostUsd(
+            provider: judgeOutcome.synthesizerModel.provider,
+            model: judgeOutcome.synthesizerModel.modelId,
+            inputTokens: synthUsage?.inputTokens ?? 0,
+            outputTokens: synthUsage?.outputTokens ?? 0,
+            cachedInputTokens: synthUsage?.cachedInputTokens,
+            cacheCreationInputTokens: synthUsage?.cacheCreationInputTokens,
+            reasoningTokens: synthUsage?.reasoningTokens
+        )
+        let synthesisResult = SynthesisPhaseResult(
+            modelId: judgeOutcome.synthesizerModel.modelId,
+            provider: judgeOutcome.synthesizerModel.provider.uppercased(),
+            success: true,
+            content: finalText,
+            latencyMs: latencyMs,
+            inputTokens: synthUsage?.inputTokens,
+            outputTokens: synthUsage?.outputTokens,
+            cost: cost,
+            error: nil
+        )
 
         await recordTokenUsageIfAvailable(
             provider: judgeOutcome.synthesizerModel.provider,
@@ -2349,20 +2155,7 @@ final class ChatRepository {
         request: ProviderRequest,
         provider: String
     ) async throws -> ProviderResponse {
-        let hasClientTools = request.tools.contains { tool in
-            tool.type == "function" && localToolRegistry.definitions.contains { definition in
-                definition.name == tool.payload["name"]
-            }
-        }
-        guard hasClientTools else {
-            return try await providers.generate(request: request, providerID: provider)
-        }
-
-        let orchestrator = ToolCallingOrchestrator(registry: localToolRegistry)
-        let outcome = try await orchestrator.run(request: request) { [providers] roundRequest, _ in
-            try await providers.generate(request: roundRequest, providerID: provider)
-        }
-        return outcome.response
+        try await providers.generate(request: request, providerID: provider)
     }
 
     private func buildDualHistory(

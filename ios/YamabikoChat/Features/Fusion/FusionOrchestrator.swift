@@ -24,15 +24,7 @@ struct FusionOrchestrator: Sendable {
         let startedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
 
         if context.fusionDepth >= FusionContext.maxFusionDepth {
-            return try await runRecursionFallback(
-                request: request,
-                context: context,
-                requestId: requestId,
-                startedAtMs: startedAtMs,
-                buildRequest: buildRequest,
-                invoke: invoke,
-                estimateCost: estimateCost
-            )
+            throw FusionError.recursionLimitExceeded
         }
 
         let panelResults = await FusionPanelRunner.runAll(
@@ -64,7 +56,7 @@ struct FusionOrchestrator: Sendable {
             FusionProgressSnapshot.phaseOnly(.judge, panels: finalPanelChips)
         )
 
-        let judgeOutcome = await runJudge(
+        let judgeOutcome = try await runJudge(
             request: request,
             successfulPanels: successfulPanels,
             failedModels: failedModels,
@@ -100,12 +92,6 @@ struct FusionOrchestrator: Sendable {
         synthesisRequest.systemPrompt = SystemPromptComposer.mergeForAPI(
             request.systemPrompt,
             synthSystemPrompt
-        )
-
-        let staticFallback = Self.buildStaticFallback(
-            judgeAnalysis: judgeAnalysis,
-            judgeRaw: judgeOutcome.rawJSON,
-            panels: successfulPanels
         )
 
         let trace = FusionTrace(
@@ -152,18 +138,9 @@ struct FusionOrchestrator: Sendable {
             synthesisRequest: synthesisRequest,
             synthesizerProvider: request.synthesizerModel.provider,
             synthesizerModel: request.synthesizerModel,
-            staticFallbackAnswer: staticFallback,
             panelTokenUsages: panelUsages,
             judgeTokenUsage: judgeUsage
         )
-    }
-
-    func buildStaticFallback(
-        judgeAnalysis: JudgeAnalysis?,
-        judgeRaw: String?,
-        panels: [PanelResult]
-    ) -> String {
-        Self.buildStaticFallback(judgeAnalysis: judgeAnalysis, judgeRaw: judgeRaw, panels: panels)
     }
 
     func finalizeTrace(
@@ -181,7 +158,7 @@ struct FusionOrchestrator: Sendable {
             judge: updated.judgeResult,
             synthesis: synthesisResult
         )
-        updated.status = synthesisResult.success ? "completed" : "synthesis_fallback"
+        updated.status = "completed"
         updated.finalAnswer = logPrompts ? finalAnswer : nil
         return updated
     }
@@ -195,7 +172,7 @@ struct FusionOrchestrator: Sendable {
         buildRequest: @escaping RequestBuilder,
         invoke: @escaping Invoke,
         estimateCost: @escaping CostEstimator
-    ) async -> JudgePhaseResult {
+    ) async throws -> JudgePhaseResult {
         let started = Date()
         let judgeUserContent = FusionPrompts.judgeUserPrompt(
             userPrompt: request.userPrompt,
@@ -221,8 +198,7 @@ struct FusionOrchestrator: Sendable {
 
         let provider = request.judgeModel.provider
 
-        do {
-            let response = try await invoke(
+        let response = try await invoke(
                 try await makeJudgeRequest(
                     systemPrompt: FusionPrompts.judgeSystemPrompt(),
                     userContent: judgeUserContent
@@ -234,8 +210,8 @@ struct FusionOrchestrator: Sendable {
             let usage = response.usage?.normalizedNonEmpty()
             let cost = await estimateCost(request.judgeModel.provider, request.judgeModel.modelId, usage)
 
-            if let analysis = FusionJudgeParser.parse(response.text) {
-                return JudgePhaseResult(
+        if let analysis = FusionJudgeParser.parse(response.text) {
+            return JudgePhaseResult(
                     analysis: analysis,
                     rawJSON: response.text,
                     parseSucceeded: true,
@@ -245,10 +221,10 @@ struct FusionOrchestrator: Sendable {
                     cost: cost,
                     error: nil
                 )
-            }
+        }
 
-            let repairStarted = Date()
-            let repairResponse = try await invoke(
+        let repairStarted = Date()
+        let repairResponse = try await invoke(
                 try await makeJudgeRequest(
                     systemPrompt: FusionPrompts.judgeSystemPrompt(),
                     userContent: FusionPrompts.jsonRepairPrompt(invalidJSON: response.text)
@@ -260,8 +236,8 @@ struct FusionOrchestrator: Sendable {
             let repairUsage = repairResponse.usage?.normalizedNonEmpty()
             let repairCost = await estimateCost(request.judgeModel.provider, request.judgeModel.modelId, repairUsage)
 
-            if let analysis = FusionJudgeParser.parse(repairResponse.text) {
-                return JudgePhaseResult(
+        if let analysis = FusionJudgeParser.parse(repairResponse.text) {
+            return JudgePhaseResult(
                     analysis: analysis,
                     rawJSON: repairResponse.text,
                     parseSucceeded: true,
@@ -271,123 +247,8 @@ struct FusionOrchestrator: Sendable {
                     cost: (cost ?? 0) + (repairCost ?? 0),
                     error: nil
                 )
-            }
-
-            return JudgePhaseResult(
-                analysis: nil,
-                rawJSON: repairResponse.text,
-                parseSucceeded: false,
-                latencyMs: repairLatency,
-                inputTokens: repairUsage?.inputTokens,
-                outputTokens: repairUsage?.outputTokens,
-                cost: (cost ?? 0) + (repairCost ?? 0),
-                error: "Judge JSON parse failed"
-            )
-        } catch {
-            let latencyMs = Int64(Date().timeIntervalSince(started) * 1000)
-            return JudgePhaseResult(
-                analysis: nil,
-                rawJSON: nil,
-                parseSucceeded: false,
-                latencyMs: latencyMs,
-                inputTokens: nil,
-                outputTokens: nil,
-                cost: nil,
-                error: error.localizedDescription
-            )
         }
-    }
-
-    private func runRecursionFallback(
-        request: FusionRequest,
-        context: FusionContext,
-        requestId: String,
-        startedAtMs: Int64,
-        buildRequest: @escaping RequestBuilder,
-        invoke: @escaping Invoke,
-        estimateCost: @escaping CostEstimator
-    ) async throws -> FusionJudgeOutcome {
-        let fallback = request.fallbackModel ?? request.synthesizerModel
-        var providerRequest = try await buildRequest(
-            fallback,
-            request.systemPrompt ?? "",
-            .fallback,
-            false
-        )
-        providerRequest.messages = [ProviderRequestMessage(role: "user", content: request.userPrompt)]
-        providerRequest.stream = true
-        providerRequest.metadata["fusionDepth"] = String(context.fusionDepth)
-        let requestToInvoke = providerRequest
-
-        let started = Date()
-        let response = try await invoke(
-            requestToInvoke,
-            fallback.provider,
-            .fallback
-        )
-        let latencyMs = Int64(Date().timeIntervalSince(started) * 1000)
-        let usage = response.usage?.normalizedNonEmpty()
-        let cost = await estimateCost(fallback.provider, fallback.modelId, usage)
-
-        let trace = FusionTrace(
-            requestId: requestId,
-            preset: request.preset,
-            startedAtMs: startedAtMs,
-            completedAtMs: Int64(Date().timeIntervalSince1970 * 1000),
-            panelResults: [],
-            judgeResult: nil,
-            synthesisResult: SynthesisPhaseResult(
-                modelId: fallback.modelId,
-                provider: fallback.provider.uppercased(),
-                success: true,
-                content: response.text,
-                latencyMs: latencyMs,
-                inputTokens: usage?.inputTokens,
-                outputTokens: usage?.outputTokens,
-                cost: cost,
-                error: nil,
-                usedFallback: true
-            ),
-            totalLatencyMs: latencyMs,
-            totalCost: cost,
-            failedModels: [],
-            status: "recursion_fallback",
-            userPrompt: context.logPrompts ? request.userPrompt : nil,
-            finalAnswer: context.logPrompts ? response.text : nil
-        )
-
-        return FusionJudgeOutcome(
-            trace: trace,
-            synthesisRequest: providerRequest,
-            synthesizerProvider: fallback.provider,
-            synthesizerModel: fallback,
-            staticFallbackAnswer: response.text,
-            panelTokenUsages: [],
-            judgeTokenUsage: nil
-        )
-    }
-
-    private static func buildStaticFallback(
-        judgeAnalysis: JudgeAnalysis?,
-        judgeRaw: String?,
-        panels: [PanelResult]
-    ) -> String {
-        var sections: [String] = []
-        if let judgeAnalysis {
-            if !judgeAnalysis.recommendedFinalPosition.isEmpty {
-                sections.append(judgeAnalysis.recommendedFinalPosition)
-            } else if !judgeAnalysis.consensus.isEmpty {
-                sections.append(judgeAnalysis.consensus.joined(separator: "\n"))
-            }
-        } else if let judgeRaw, !judgeRaw.isEmpty {
-            sections.append(judgeRaw)
-        }
-        if let best = panels.filter({ $0.success }).min(by: { $0.latencyMs < $1.latencyMs }) {
-            if !best.content.isEmpty {
-                sections.append(best.content)
-            }
-        }
-        return sections.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        throw ProviderClientError.parseFailure("Judge JSON parse failed")
     }
 
     private static func sanitizedModelId(_ modelId: String) -> String {

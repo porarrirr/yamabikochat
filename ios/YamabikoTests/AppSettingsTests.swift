@@ -39,8 +39,6 @@ final class AppSettingsTests: XCTestCase {
         preset.panelModels = [model("ZAI"), model("OPENCODE_GO")]
         preset.judgeModel = model("ZAI")
         preset.synthesizerModel = model("OPENCODE_GO")
-        preset.fallbackModel = nil
-
         let normalized = AppSettings.normalizedFusionPresetDefinition(preset)
 
         XCTAssertEqual(normalized.panelModels[0].modelId, "glm-5.2")

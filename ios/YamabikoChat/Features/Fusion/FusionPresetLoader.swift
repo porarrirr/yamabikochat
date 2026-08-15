@@ -8,7 +8,6 @@ struct FusionPresetDefinition: Codable, Sendable, Equatable {
     var panelModels: [PanelModelConfig]
     var judgeModel: PanelModelConfig
     var synthesizerModel: PanelModelConfig
-    var fallbackModel: PanelModelConfig?
 }
 
 enum FusionPresetLoader {
@@ -59,7 +58,6 @@ enum FusionPresetLoader {
             panelModels: preset.panelModels,
             judgeModel: preset.judgeModel,
             synthesizerModel: preset.synthesizerModel,
-            fallbackModel: preset.fallbackModel,
             preset: presetLabel,
             timeoutMs: preset.timeoutMs,
             allowWebSearch: allowWebSearch,

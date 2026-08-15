@@ -61,8 +61,7 @@ final class ShareImportFlowTests: XCTestCase {
             dbQueue: dbQueue,
             settings: settings,
             conversations: conversations,
-            credentials: credentials,
-            httpClient: URLSessionHTTPClient()
+            credentials: credentials
         )
     }
 }

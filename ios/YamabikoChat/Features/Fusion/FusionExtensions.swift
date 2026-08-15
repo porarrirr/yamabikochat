@@ -77,13 +77,6 @@ extension AppSettings {
                 temperature: 0.4,
                 timeoutMs: 120_000,
                 role: nil
-            ),
-            fallbackModel: PanelModelConfig(
-                modelId: "gemini-2.5-flash",
-                provider: "GEMINI",
-                temperature: 0.5,
-                timeoutMs: 60_000,
-                role: nil
             )
         )
     }
@@ -122,20 +115,6 @@ extension AppSettings {
             preset.synthesizerModel.modelId.trimmingCharacters(in: .whitespacesAndNewlines),
             for: normalized.synthesizerModel.provider
         )
-        if var fallback = normalized.fallbackModel {
-            fallback.provider = fallback.provider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-            fallback.modelId = ProviderCatalog.migrateLegacyModelID(
-                fallback.modelId.trimmingCharacters(in: .whitespacesAndNewlines),
-                for: fallback.provider
-            )
-            if fallback.modelId.isEmpty || fallback.provider.isEmpty {
-                normalized.fallbackModel = normalized.synthesizerModel
-            } else {
-                normalized.fallbackModel = fallback
-            }
-        } else {
-            normalized.fallbackModel = normalized.synthesizerModel
-        }
         return normalized
     }
 }

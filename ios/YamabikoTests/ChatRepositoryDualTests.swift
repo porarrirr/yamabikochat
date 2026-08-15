@@ -22,64 +22,10 @@ private final class DualTestCredentialStore: SecureCredentialStore {
     }
 }
 
-private final class DualChatHTTPClient: HTTPClientProtocol {
-    private let lock = NSLock()
-    private var bodies: [[String: Any]] = []
-    var failModels: Set<String> = []
-
-    func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
-        let payload = parseBody(request.body)
-        lock.lock()
-        bodies.append(payload)
-        lock.unlock()
-
-        let model = payload["model"] as? String ?? ""
-        if failModels.contains(model) {
-            return (
-                Data(#"{"error":"forced failure"}"#.utf8),
-                HTTPURLResponse(url: request.url, statusCode: 500, httpVersion: nil, headerFields: nil)!
-            )
-        }
-
-        let text = "response-\(model)"
-        let responseBody = #"{"choices":[{"message":{"content":"\#(text)"}}]}"#
-        return (
-            Data(responseBody.utf8),
-            HTTPURLResponse(url: request.url, statusCode: 200, httpVersion: nil, headerFields: nil)!
-        )
-    }
-
-    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
-        let stream = AsyncThrowingStream<String, Error> { continuation in
-            continuation.finish()
-        }
-        return (
-            stream,
-            HTTPURLResponse(url: request.url, statusCode: 500, httpVersion: nil, headerFields: nil)!
-        )
-    }
-
-    func payloads(forModel model: String) -> [[String: Any]] {
-        lock.lock()
-        defer { lock.unlock() }
-        return bodies.filter { ($0["model"] as? String) == model }
-    }
-
-    private func parseBody(_ data: Data?) -> [String: Any] {
-        guard
-            let data,
-            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            return [:]
-        }
-        return object
-    }
-}
-
 final class ChatRepositoryDualTests: XCTestCase {
     func testSendDualMessageStoresUserAndModelRowsSeparately() async throws {
-        let httpClient = DualChatHTTPClient()
-        let fixture = try makeFixture(httpClient: httpClient) { settings in
+        let runtime = Self.responseRuntime()
+        let fixture = try makeFixture(runtime: runtime) { settings in
             settings.dualProviderA = "OPENAI"
             settings.dualProviderB = "OPENAI"
             settings.dualModelA = "model-a"
@@ -108,8 +54,8 @@ final class ChatRepositoryDualTests: XCTestCase {
     }
 
     func testSendDualMessageBuildsIndependentHistoryPerSide() async throws {
-        let httpClient = DualChatHTTPClient()
-        let fixture = try makeFixture(httpClient: httpClient) { settings in
+        let runtime = Self.responseRuntime()
+        let fixture = try makeFixture(runtime: runtime) { settings in
             settings.dualProviderA = "OPENAI"
             settings.dualProviderB = "OPENAI"
             settings.dualModelA = "model-a"
@@ -123,26 +69,23 @@ final class ChatRepositoryDualTests: XCTestCase {
         _ = try await fixture.repository.sendDualMessage(conversationId: conversationID, text: "first")
         _ = try await fixture.repository.sendDualMessage(conversationId: conversationID, text: "second")
 
-        let modelARequests = httpClient.payloads(forModel: "model-a")
-        let modelBRequests = httpClient.payloads(forModel: "model-b")
+        let modelARequests = runtime.calls.map(\.request).filter { $0.model == "model-a" }
+        let modelBRequests = runtime.calls.map(\.request).filter { $0.model == "model-b" }
         XCTAssertGreaterThanOrEqual(modelARequests.count, 2)
         XCTAssertGreaterThanOrEqual(modelBRequests.count, 2)
 
-        let modelALastMessages = modelARequests.last?["messages"] as? [[String: Any]] ?? []
-        let modelAJoined = modelALastMessages.compactMap { $0["content"] as? String }.joined(separator: "\n")
+        let modelAJoined = modelARequests.last?.messages.map(\.content).joined(separator: "\n") ?? ""
         XCTAssertTrue(modelAJoined.contains("response-model-a"))
         XCTAssertFalse(modelAJoined.contains("response-model-b"))
 
-        let modelBLastMessages = modelBRequests.last?["messages"] as? [[String: Any]] ?? []
-        let modelBJoined = modelBLastMessages.compactMap { $0["content"] as? String }.joined(separator: "\n")
+        let modelBJoined = modelBRequests.last?.messages.map(\.content).joined(separator: "\n") ?? ""
         XCTAssertTrue(modelBJoined.contains("response-model-b"))
         XCTAssertFalse(modelBJoined.contains("response-model-a"))
     }
 
     func testSendDualMessageKeepsPartialSuccessWhenOneSideFails() async throws {
-        let httpClient = DualChatHTTPClient()
-        httpClient.failModels = ["model-b"]
-        let fixture = try makeFixture(httpClient: httpClient) { settings in
+        let runtime = Self.responseRuntime(failingModels: ["model-b"])
+        let fixture = try makeFixture(runtime: runtime) { settings in
             settings.dualProviderA = "OPENAI"
             settings.dualProviderB = "OPENAI"
             settings.dualModelA = "model-a"
@@ -158,7 +101,7 @@ final class ChatRepositoryDualTests: XCTestCase {
         XCTAssertEqual(result.modelAText, "response-model-a")
         XCTAssertEqual(
             result.modelBText,
-            L10n.format("エラー: %@", #"HTTP 500: {"error":"forced failure"}"#)
+            L10n.format("エラー: %@", "Response parse failed: forced failure")
         )
         let rows = try fixture.conversations.fetchDualMessages(conversationId: conversationID)
         XCTAssertEqual(rows.count, 2)
@@ -166,7 +109,7 @@ final class ChatRepositoryDualTests: XCTestCase {
     }
 
     private func makeFixture(
-        httpClient: HTTPClientProtocol,
+        runtime: PiStreamSpy? = nil,
         configureSettings: ((inout AppSettings) -> Void)? = nil
     ) throws -> (
         repository: ChatRepository,
@@ -185,13 +128,23 @@ final class ChatRepositoryDualTests: XCTestCase {
             try settings.save(current)
         }
 
+        let runtime = runtime ?? Self.responseRuntime()
         let repository = ChatRepositoryTestSupport.makeRepository(
             dbQueue: dbQueue,
             settings: settings,
             conversations: conversations,
             credentials: credentials,
-            httpClient: httpClient
+            piStream: runtime.stream
         )
         return (repository, conversations, credentials)
+    }
+
+    private static func responseRuntime(failingModels: Set<String> = []) -> PiStreamSpy {
+        PiStreamSpy { request, _ in
+            if failingModels.contains(request.model) {
+                throw ProviderClientError.parseFailure("forced failure")
+            }
+            return [.completed(ProviderResponse(text: "response-\(request.model)"))]
+        }
     }
 }

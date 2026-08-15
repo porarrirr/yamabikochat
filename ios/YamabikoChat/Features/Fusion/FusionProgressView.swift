@@ -55,8 +55,6 @@ struct FusionProgressView: View {
             return Color(red: 0.55, green: 0.36, blue: 0.96)
         case .synthesizer:
             return Color(red: 0.06, green: 0.73, blue: 0.51)
-        case .fallback:
-            return Color(red: 0.96, green: 0.62, blue: 0.04)
         }
     }
 
@@ -68,8 +66,6 @@ struct FusionProgressView: View {
             return "scale.3d"
         case .synthesizer:
             return "arrow.triangle.merge"
-        case .fallback:
-            return "arrow.uturn.right"
         }
     }
 }

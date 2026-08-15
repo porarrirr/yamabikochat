@@ -52,8 +52,13 @@
 	    </array>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>YamabikoChat uses speech recognition to turn your voice into message text.</string>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>YamabikoChat uses the microphone only for voice input in the message composer.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>YamabikoChat uses the microphone only for voice input in the message composer.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>YamabikoChat uses photo library access to attach selected or recent images to conversations.</string>
     <key>ITSAppUsesNonExemptEncryption</key>

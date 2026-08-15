@@ -97,8 +97,7 @@ final class ChatViewModelAttachmentTests: XCTestCase {
         let credentials = ChatViewModelAttachmentCredentialStore()
         let providers = ProviderGateway(
             settingsRepository: settings,
-            credentialStore: credentials,
-            httpClient: URLSessionHTTPClient()
+            credentialStore: credentials
         )
         let modelService = OpenRouterModelService(credentialStore: credentials)
         let codexAuth = CodexAuthRepository(credentialStore: credentials)
@@ -107,8 +106,7 @@ final class ChatViewModelAttachmentTests: XCTestCase {
             dbQueue: dbQueue,
             settings: settings,
             conversations: conversations,
-            credentials: credentials,
-            httpClient: URLSessionHTTPClient()
+            credentials: credentials
         )
         return (repository, conversations)
     }

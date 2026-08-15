@@ -13,8 +13,7 @@ final class FusionServiceTests: XCTestCase {
         )
         let gateway = ProviderGateway(
             settingsRepository: settings,
-            credentialStore: credentials,
-            httpClient: NoopHTTPClient()
+            credentialStore: credentials
         )
         return FusionService(
             settingsRepository: settings,
@@ -198,16 +197,6 @@ final class FusionServiceTests: XCTestCase {
         XCTAssertEqual(panel.metadata["codexWebSearchContextSize"], "high")
         XCTAssertEqual(judge.metadata["codexWebSearchEnabled"], "true")
         XCTAssertTrue(judge.tools.isEmpty)
-    }
-}
-
-private struct NoopHTTPClient: HTTPClientProtocol {
-    func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
-        throw ProviderClientError.parseFailure("noop")
-    }
-
-    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
-        throw ProviderClientError.parseFailure("noop")
     }
 }
 

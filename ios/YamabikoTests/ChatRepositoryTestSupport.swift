@@ -25,7 +25,7 @@ enum ChatRepositoryTestSupport {
         settings: SettingsRepository,
         conversations: ConversationRepository,
         credentials: SecureCredentialStore,
-        httpClient: HTTPClientProtocol,
+        piStream: @escaping PiAgentStream = PiStreamSpy().stream,
         modelService: OpenRouterModelService? = nil,
         pricingRepository: (any LiteLlmPricingEstimating)? = nil
     ) -> ChatRepository {
@@ -36,8 +36,8 @@ enum ChatRepositoryTestSupport {
         let providers = ProviderGateway(
             settingsRepository: settings,
             credentialStore: credentials,
-            httpClient: httpClient,
-            superGrokAuthRepository: superGrokAuth
+            superGrokAuthRepository: superGrokAuth,
+            piStream: piStream
         )
         let fusionTraceStore = FusionTraceStore(dbQueue: dbQueue)
         let fusionService = FusionService(

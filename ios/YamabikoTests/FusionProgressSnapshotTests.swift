@@ -12,7 +12,6 @@ final class FusionProgressSnapshotTests: XCTestCase {
             ],
             judgeModel: PanelModelConfig(modelId: "judge", provider: "OPENAI"),
             synthesizerModel: PanelModelConfig(modelId: "synth", provider: "OPENAI"),
-            fallbackModel: nil,
             preset: "quality",
             timeoutMs: 5_000,
             allowWebSearch: false,

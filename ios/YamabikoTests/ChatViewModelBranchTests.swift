@@ -91,8 +91,7 @@ final class ChatViewModelBranchTests: XCTestCase {
         let credentials = ViewModelBranchCredentialStore()
         let providers = ProviderGateway(
             settingsRepository: settings,
-            credentialStore: credentials,
-            httpClient: URLSessionHTTPClient()
+            credentialStore: credentials
         )
         let modelService = OpenRouterModelService(credentialStore: credentials)
         let codexAuth = CodexAuthRepository(credentialStore: credentials)
@@ -101,8 +100,7 @@ final class ChatViewModelBranchTests: XCTestCase {
             dbQueue: dbQueue,
             settings: settings,
             conversations: conversations,
-            credentials: credentials,
-            httpClient: URLSessionHTTPClient()
+            credentials: credentials
         )
         return (repository, conversations)
     }

@@ -32,8 +32,6 @@ enum FusionTracePresentation {
             return L10n.text("ジャッジ")
         case .synthesizer:
             return L10n.text("合成")
-        case .fallback:
-            return L10n.text("フォールバック")
         }
     }
 
@@ -49,8 +47,6 @@ enum FusionTracePresentation {
             return L10n.text("ジャッジ中")
         case .synthesizer:
             return L10n.text("回答を合成中")
-        case .fallback:
-            return L10n.text("フォールバックで回答中")
         }
     }
 

@@ -5,11 +5,12 @@ This directory contains the native iOS implementation for YamabikoChat.
 ## Requirements
 - macOS with Xcode 16+
 - XcodeGen (`brew install xcodegen`)
+- Node.js 24
 
 ## Bootstrap
 ```bash
 cd ios
-xcodegen generate
+./bootstrap.sh
 open YamabikoChat.xcodeproj
 ```
 

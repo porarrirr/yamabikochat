@@ -74,7 +74,7 @@ struct FusionDetailSheet: View {
             }
             if let synthesis = trace.synthesisResult {
                 pipelineRow(
-                    phase: synthesis.usedFallback ? .fallback : .synthesizer,
+                    phase: .synthesizer,
                     latencyMs: synthesis.latencyMs,
                     detail: FusionTracePresentation.shortModelLabel(synthesis.modelId)
                 )
@@ -186,9 +186,6 @@ struct FusionDetailSheet: View {
                 L10n.text("Status"),
                 value: synthesis.success ? "OK" : "FAIL"
             )
-            if synthesis.usedFallback {
-                LabeledContent(L10n.text("Fallback"), value: L10n.text("使用"))
-            }
             LabeledContent(
                 L10n.text("Latency"),
                 value: FusionTracePresentation.formatLatency(ms: synthesis.latencyMs)

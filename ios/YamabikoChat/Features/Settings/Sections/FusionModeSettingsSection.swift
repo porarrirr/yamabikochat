@@ -138,24 +138,6 @@ struct FusionModeSettingsSection: View {
             )
         }
 
-        Section(L10n.text("Fallback")) {
-            FusionModelSlotForm(
-                providerTitleKey: "Provider",
-                provider: fallbackProviderBinding,
-                modelTitleKey: "Model",
-                model: fallbackModelBinding,
-                providerPresets: chatVisibleProviderPresets,
-                catalogProviders: viewModel.modelsDevCatalogState.providers,
-                onProviderPresetSelected: { preset in
-                    viewModel.updateFusionFallbackModel(provider: preset.apiProvider, modelId: preset.model)
-                },
-                openRouterModels: viewModel.openRouterModels,
-                openRouterModelsLoading: viewModel.openRouterModelsLoading,
-                openRouterModelsError: viewModel.openRouterModelsError,
-                onRefreshOpenRouterModels: refreshOpenRouterModels,
-                onProviderChanged: handleProviderChanged
-            )
-        }
     }
 
     private func refreshOpenRouterModels() {
@@ -235,29 +217,4 @@ struct FusionModeSettingsSection: View {
         )
     }
 
-    private var fallbackProviderBinding: Binding<String> {
-        Binding(
-            get: { viewModel.fusionCustomPreset.fallbackModel?.provider ?? viewModel.fusionCustomPreset.synthesizerModel.provider },
-            set: {
-                viewModel.updateFusionFallbackModel(
-                    provider: $0,
-                    modelId: viewModel.fusionCustomPreset.fallbackModel?.modelId
-                        ?? viewModel.fusionCustomPreset.synthesizerModel.modelId
-                )
-            }
-        )
-    }
-
-    private var fallbackModelBinding: Binding<String> {
-        Binding(
-            get: { viewModel.fusionCustomPreset.fallbackModel?.modelId ?? viewModel.fusionCustomPreset.synthesizerModel.modelId },
-            set: {
-                viewModel.updateFusionFallbackModel(
-                    provider: viewModel.fusionCustomPreset.fallbackModel?.provider
-                        ?? viewModel.fusionCustomPreset.synthesizerModel.provider,
-                    modelId: $0
-                )
-            }
-        )
-    }
 }

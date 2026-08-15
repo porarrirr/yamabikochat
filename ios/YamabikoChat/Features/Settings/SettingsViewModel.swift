@@ -48,7 +48,6 @@ final class SettingsViewModel: ObservableObject {
     @Published var tokenUsageState: TokenUsageUiState = .init()
     @Published private(set) var installedAgentSkills: [InstalledAgentSkill] = []
     @Published var agentSkillInstallPreview: AgentSkillInstallPreview?
-    @Published private(set) var openAIHostedSkillExecutionEnabled = false
 
     private var repository: ChatRepository?
     private var credentialStore: SecureCredentialStore?
@@ -74,8 +73,6 @@ final class SettingsViewModel: ObservableObject {
         self.credentialStore = credentialStore
         self.modelsDevCatalogRepository = modelsDevCatalogRepository
         self.skillRepository = skillRepository
-        openAIHostedSkillExecutionEnabled = skillRepository?.openAIHostedExecutionEnabled ?? false
-
         skillRepository?.skillsPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.installedAgentSkills = $0 }
@@ -230,17 +227,6 @@ final class SettingsViewModel: ObservableObject {
             try skillRepository?.delete(name: name)
             statusMessage = "Agent Skillを削除しました。一時コンテナは遅くとも20分で失効します。"
         } catch { errorMessage = error.localizedDescription }
-    }
-
-    func confirmOpenAIHostedSkillExecution() {
-        skillRepository?.openAIHostedExecutionEnabled = true
-        openAIHostedSkillExecutionEnabled = true
-        statusMessage = "OpenAI hosted Skill実行を有効にしました。"
-    }
-
-    func disableOpenAIHostedSkillExecution() {
-        skillRepository?.openAIHostedExecutionEnabled = false
-        openAIHostedSkillExecutionEnabled = false
     }
 
     func modelsDevField(providerID: String, fieldName: String) -> String {
@@ -872,18 +858,6 @@ final class SettingsViewModel: ObservableObject {
         var preset = fusionCustomPreset
         preset.synthesizerModel.provider = provider.uppercased()
         preset.synthesizerModel.modelId = modelId
-        saveFusionCustomPreset(preset)
-    }
-
-    func updateFusionFallbackModel(provider: String, modelId: String) {
-        var preset = fusionCustomPreset
-        preset.fallbackModel = PanelModelConfig(
-            modelId: modelId,
-            provider: provider.uppercased(),
-            temperature: preset.fallbackModel?.temperature ?? preset.synthesizerModel.temperature,
-            timeoutMs: preset.fallbackModel?.timeoutMs ?? preset.synthesizerModel.timeoutMs,
-            role: preset.fallbackModel?.role
-        )
         saveFusionCustomPreset(preset)
     }
 

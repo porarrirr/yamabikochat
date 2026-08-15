@@ -40,7 +40,7 @@ iOS:
 
 ```bash
 cd ios
-xcodegen generate
+./bootstrap.sh
 open YamabikoChat.xcodeproj
 ```
 

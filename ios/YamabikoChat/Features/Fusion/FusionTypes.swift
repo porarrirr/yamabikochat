@@ -4,7 +4,6 @@ enum FusionPhase: String, Codable, Sendable {
     case panel
     case judge
     case synthesizer
-    case fallback
 }
 
 enum FusionPanelChipState: String, Sendable, Equatable {
@@ -106,7 +105,6 @@ struct FusionRequest: Codable, Sendable, Equatable {
     var panelModels: [PanelModelConfig]
     var judgeModel: PanelModelConfig
     var synthesizerModel: PanelModelConfig
-    var fallbackModel: PanelModelConfig?
     var preset: String
     /// Legacy preset field retained for compatibility; Fusion does not enforce it.
     var timeoutMs: Int
@@ -189,7 +187,6 @@ struct SynthesisPhaseResult: Codable, Sendable, Equatable {
     var outputTokens: Int?
     var cost: Double?
     var error: String?
-    var usedFallback: Bool
 }
 
 struct FusionTrace: Codable, Sendable, Equatable {
@@ -271,7 +268,6 @@ struct FusionJudgeOutcome: Sendable {
     var synthesisRequest: ProviderRequest
     var synthesizerProvider: String
     var synthesizerModel: PanelModelConfig
-    var staticFallbackAnswer: String
     var panelTokenUsages: [(provider: String, model: String, usage: ProviderUsage?, requestType: String)]
     var judgeTokenUsage: (provider: String, model: String, usage: ProviderUsage?)?
 }
@@ -280,6 +276,7 @@ enum FusionError: LocalizedError, Sendable {
     case allPanelsFailed(panelResults: [PanelResult])
     case presetNotFound(String)
     case invalidPreset(String)
+    case recursionLimitExceeded
     case serviceDeallocated
 
     var errorDescription: String? {
@@ -290,6 +287,8 @@ enum FusionError: LocalizedError, Sendable {
             return L10n.format("Fusion: プリセット '%@' が見つかりません。", name)
         case let .invalidPreset(reason):
             return L10n.format("Fusion: 無効なプリセット — %@", reason)
+        case .recursionLimitExceeded:
+            return L10n.text("Fusion: 再帰実行の上限に達しました。")
         case .serviceDeallocated:
             return L10n.text("Fusion: サービスが解放されました。")
         }

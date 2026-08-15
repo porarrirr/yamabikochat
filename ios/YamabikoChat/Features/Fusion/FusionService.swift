@@ -8,7 +8,6 @@ final class FusionService {
     private let pricingRepository: any LiteLlmPricingEstimating
     private let traceStore: FusionTraceStore
     private let orchestrator: FusionOrchestrator
-    private let localToolRegistry: LocalToolRegistry
     private let requestSettingsResolver: ProviderRequestSettingsResolver
     private let skillRepository: AgentSkillRepository?
 
@@ -19,9 +18,6 @@ final class FusionService {
         traceStore: FusionTraceStore,
         requestSettingsResolver: ProviderRequestSettingsResolver,
         skillRepository: AgentSkillRepository? = nil,
-        localToolRegistry: LocalToolRegistry = LocalToolRegistry(
-            executors: [WebSearchTool(), FetchUrlTool()]
-        ),
         orchestrator: FusionOrchestrator = FusionOrchestrator()
     ) {
         self.settingsRepository = settingsRepository
@@ -30,7 +26,6 @@ final class FusionService {
         self.traceStore = traceStore
         self.requestSettingsResolver = requestSettingsResolver
         self.skillRepository = skillRepository
-        self.localToolRegistry = localToolRegistry
         self.orchestrator = orchestrator
     }
 
@@ -62,85 +57,53 @@ final class FusionService {
         )
 
         let synthStarted = Date()
-        do {
-            let response = try await invoke(
-                request: {
-                    var req = outcome.synthesisRequest
-                    req.stream = false
-                    return req
-                }(),
-                provider: outcome.synthesizerProvider,
-                phase: .synthesizer
-            )
-            guard let answer = response.text.trimmedNonEmpty else {
-                throw ProviderClientError.parseFailure(
-                    L10n.text("Fusion synthesizer returned no answer text.")
-                )
-            }
-            let latencyMs = Int64(Date().timeIntervalSince(synthStarted) * 1000)
-            let usage = response.usage?.normalizedNonEmpty()
-            let cost = await estimateCost(
-                provider: outcome.synthesizerModel.provider,
-                model: outcome.synthesizerModel.modelId,
-                usage: usage
-            )
-            let synthesisResult = SynthesisPhaseResult(
-                modelId: outcome.synthesizerModel.modelId,
-                provider: outcome.synthesizerModel.provider.uppercased(),
-                success: true,
-                content: answer,
-                latencyMs: latencyMs,
-                inputTokens: usage?.inputTokens,
-                outputTokens: usage?.outputTokens,
-                cost: cost,
-                error: nil,
-                usedFallback: false
-            )
-            let trace = orchestrator.finalizeTrace(
-                trace: outcome.trace,
-                synthesisResult: synthesisResult,
-                finalAnswer: answer,
-                logPrompts: context.logPrompts
-            )
-            try traceStore.save(trace: trace, conversationId: context.conversationId)
-            return FusionRunResult(
-                finalAnswer: answer,
-                traceId: trace.requestId,
-                judgeAnalysis: options.debugMode ? trace.judgeResult?.analysis : nil,
-                rawPanelResults: options.debugMode ? trace.panelResults : nil,
-                totalLatencyMs: trace.totalLatencyMs,
-                totalCost: trace.totalCost
-            )
-        } catch {
-            let fallback = outcome.staticFallbackAnswer
-            let synthesisResult = SynthesisPhaseResult(
-                modelId: outcome.synthesizerModel.modelId,
-                provider: outcome.synthesizerModel.provider.uppercased(),
-                success: false,
-                content: fallback,
-                latencyMs: Int64(Date().timeIntervalSince(synthStarted) * 1000),
-                inputTokens: nil,
-                outputTokens: nil,
-                cost: nil,
-                error: error.localizedDescription,
-                usedFallback: true
-            )
-            let trace = orchestrator.finalizeTrace(
-                trace: outcome.trace,
-                synthesisResult: synthesisResult,
-                finalAnswer: fallback,
-                logPrompts: context.logPrompts
-            )
-            try traceStore.save(trace: trace, conversationId: context.conversationId)
-            return FusionRunResult(
-                finalAnswer: fallback,
-                traceId: trace.requestId,
-                judgeAnalysis: options.debugMode ? trace.judgeResult?.analysis : nil,
-                rawPanelResults: options.debugMode ? trace.panelResults : nil,
-                totalLatencyMs: trace.totalLatencyMs,
-                totalCost: trace.totalCost
+        let response = try await invoke(
+            request: {
+                var req = outcome.synthesisRequest
+                req.stream = false
+                return req
+            }(),
+            provider: outcome.synthesizerProvider,
+            phase: .synthesizer
+        )
+        guard let answer = response.text.trimmedNonEmpty else {
+            throw ProviderClientError.parseFailure(
+                L10n.text("Fusion synthesizer returned no answer text.")
             )
         }
+        let latencyMs = Int64(Date().timeIntervalSince(synthStarted) * 1000)
+        let usage = response.usage?.normalizedNonEmpty()
+        let cost = await estimateCost(
+            provider: outcome.synthesizerModel.provider,
+            model: outcome.synthesizerModel.modelId,
+            usage: usage
+        )
+        let synthesisResult = SynthesisPhaseResult(
+            modelId: outcome.synthesizerModel.modelId,
+            provider: outcome.synthesizerModel.provider.uppercased(),
+            success: true,
+            content: answer,
+            latencyMs: latencyMs,
+            inputTokens: usage?.inputTokens,
+            outputTokens: usage?.outputTokens,
+            cost: cost,
+            error: nil
+        )
+        let trace = orchestrator.finalizeTrace(
+            trace: outcome.trace,
+            synthesisResult: synthesisResult,
+            finalAnswer: answer,
+            logPrompts: context.logPrompts
+        )
+        try traceStore.save(trace: trace, conversationId: context.conversationId)
+        return FusionRunResult(
+            finalAnswer: answer,
+            traceId: trace.requestId,
+            judgeAnalysis: options.debugMode ? trace.judgeResult?.analysis : nil,
+            rawPanelResults: options.debugMode ? trace.panelResults : nil,
+            totalLatencyMs: trace.totalLatencyMs,
+            totalCost: trace.totalCost
+        )
     }
 
     func runThroughJudge(
@@ -334,16 +297,7 @@ final class FusionService {
         while true {
             try Task.checkCancellation()
             let response: ProviderResponse
-            if phase == .panel, !currentRequest.tools.isEmpty {
-                let toolOrchestrator = ToolCallingOrchestrator(registry: localToolRegistry)
-                let outcome = try await toolOrchestrator.run(request: currentRequest) { req, _ in
-                    try Task.checkCancellation()
-                    return try await self.providerGateway.generate(request: req, providerID: provider)
-                }
-                response = outcome.response
-            } else {
-                response = try await providerGateway.generate(request: currentRequest, providerID: provider)
-            }
+            response = try await providerGateway.generate(request: currentRequest, providerID: provider)
 
             if let usage = response.usage {
                 accumulatedUsage = accumulatedUsage?.adding(usage) ?? usage
@@ -385,7 +339,7 @@ final class FusionService {
         switch phase {
         case .judge:
             return "Continue the same response and return only the required JSON now."
-        case .panel, .synthesizer, .fallback:
+        case .panel, .synthesizer:
             return "Continue the same response and provide the answer text now."
         }
     }

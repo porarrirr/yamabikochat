@@ -2,35 +2,6 @@ import XCTest
 import GRDB
 @testable import YamabikoChat
 
-private final class ShortcutHTTPClient: HTTPClientProtocol {
-    private(set) var sentRequests: [HTTPRequest] = []
-    private let body: String
-    private let statusCode: Int
-
-    init(body: String, statusCode: Int = 200) {
-        self.body = body
-        self.statusCode = statusCode
-    }
-
-    func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
-        sentRequests.append(request)
-        let data = body.data(using: .utf8) ?? Data()
-        let response = HTTPURLResponse(
-            url: request.url,
-            statusCode: statusCode,
-            httpVersion: nil,
-            headerFields: nil
-        )!
-        return (data, response)
-    }
-
-    func stream(_ request: HTTPRequest) async throws -> (AsyncThrowingStream<String, Error>, HTTPURLResponse) {
-        XCTFail("Shortcut runs should not stream")
-        let stream = AsyncThrowingStream<String, Error> { $0.finish() }
-        return (stream, HTTPURLResponse(url: request.url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
-    }
-}
-
 private final class TestCredentialStore: SecureCredentialStore {
     private var storage: [String: String] = [:]
 
@@ -70,16 +41,9 @@ private struct NoopPricingRepository: LiteLlmPricingEstimating {
 }
 
 final class ShortcutRunTests: XCTestCase {
-    private let successPayload = #"""
-    {
-      "choices":[{"message":{"content":"shortcut answer","reasoning_content":"shortcut thinking"}}],
-      "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}
-    }
-    """#
-
     func testRunShortcutAskOnlyReturnsTextWithoutPersistingConversation() async throws {
-        let httpClient = ShortcutHTTPClient(body: successPayload)
-        let fixture = try makeFixture(httpClient: httpClient) { settings in
+        let runtime = successRuntime()
+        let fixture = try makeFixture(runtime: runtime) { settings in
             settings.apiProvider = "OPENROUTER"
             settings.defaultModel = "openai/gpt-4o-mini"
             settings.isStreamingEnabled = true
@@ -108,20 +72,14 @@ final class ShortcutRunTests: XCTestCase {
         }
         XCTAssertEqual(conversationCountAfter, conversationCountBefore)
 
-        let request = try XCTUnwrap(
-            httpClient.sentRequests.last(where: { $0.body != nil }),
-            "Expected a provider chat request with a JSON body"
-        )
-        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: XCTUnwrap(request.body)) as? [String: Any])
-        XCTAssertEqual(root["stream"] as? Bool, false)
-        XCTAssertEqual(root["model"] as? String, "openai/gpt-4o-mini")
-        let messages = try XCTUnwrap(root["messages"] as? [[String: Any]])
-        XCTAssertEqual(messages.last?["content"] as? String, "hello shortcut")
+        let request = try XCTUnwrap(runtime.calls.last?.request)
+        XCTAssertFalse(request.stream)
+        XCTAssertEqual(request.model, "openai/gpt-4o-mini")
+        XCTAssertEqual(request.messages.last?.content, "hello shortcut")
     }
 
     func testRunShortcutSaveCreatesConversationMessagesThinkingAndTokenUsage() async throws {
-        let httpClient = ShortcutHTTPClient(body: successPayload)
-        let fixture = try makeFixture(httpClient: httpClient) { settings in
+        let fixture = try makeFixture(runtime: successRuntime()) { settings in
             settings.apiProvider = "OPENROUTER"
             settings.defaultModel = "openai/gpt-4o-mini"
             settings.isStreamingEnabled = false
@@ -166,8 +124,8 @@ final class ShortcutRunTests: XCTestCase {
     }
 
     func testRunShortcutAcceptsCustomModelIDOutsideCatalog() async throws {
-        let httpClient = ShortcutHTTPClient(body: successPayload)
-        let fixture = try makeFixture(httpClient: httpClient) { settings in
+        let runtime = successRuntime()
+        let fixture = try makeFixture(runtime: runtime) { settings in
             settings.apiProvider = "OPENROUTER"
             settings.defaultModel = "openai/gpt-4o-mini"
             settings.isStreamingEnabled = false
@@ -182,12 +140,7 @@ final class ShortcutRunTests: XCTestCase {
         )
 
         XCTAssertEqual(result.text, "shortcut answer")
-        let request = try XCTUnwrap(
-            httpClient.sentRequests.last(where: { $0.body != nil }),
-            "Expected a provider chat request with a JSON body"
-        )
-        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: XCTUnwrap(request.body)) as? [String: Any])
-        XCTAssertEqual(root["model"] as? String, "vendor/custom-model-id")
+        XCTAssertEqual(runtime.calls.last?.request.model, "vendor/custom-model-id")
     }
 
     func testRunShortcutRejectsEmptyPrompt() async throws {
@@ -248,8 +201,10 @@ final class ShortcutRunTests: XCTestCase {
     }
 
     func testRunShortcutPropagatesProviderHTTPError() async throws {
-        let httpClient = ShortcutHTTPClient(body: "provider failed", statusCode: 500)
-        let fixture = try makeFixture(httpClient: httpClient) { settings in
+        let runtime = PiStreamSpy { _, _ in
+            throw ProviderClientError.httpStatus(500, "provider failed")
+        }
+        let fixture = try makeFixture(runtime: runtime) { settings in
             settings.apiProvider = "OPENROUTER"
             settings.defaultModel = "openai/gpt-4o-mini"
             settings.isStreamingEnabled = false
@@ -270,7 +225,7 @@ final class ShortcutRunTests: XCTestCase {
     }
 
     private func makeFixture(
-        httpClient: HTTPClientProtocol = ShortcutHTTPClient(body: #"{ "choices":[{"message":{"content":"ok"}}] }"#),
+        runtime: PiStreamSpy = PiStreamSpy(),
         configureSettings: ((inout AppSettings) -> Void)? = nil
     ) throws -> (
         repository: ChatRepository,
@@ -284,14 +239,6 @@ final class ShortcutRunTests: XCTestCase {
         let settings = SettingsRepository(dbQueue: dbQueue)
         let conversations = ConversationRepository(dbQueue: dbQueue)
         let credentials = TestCredentialStore()
-        let providers = ProviderGateway(
-            settingsRepository: settings,
-            credentialStore: credentials,
-            httpClient: httpClient
-        )
-        let modelService = OpenRouterModelService(credentialStore: credentials, httpClient: httpClient)
-        let codexAuth = CodexAuthRepository(credentialStore: credentials)
-
         if configureSettings != nil {
             var current = try settings.load()
             configureSettings?(&current)
@@ -303,9 +250,19 @@ final class ShortcutRunTests: XCTestCase {
             settings: settings,
             conversations: conversations,
             credentials: credentials,
-            httpClient: httpClient,
+            piStream: runtime.stream,
             pricingRepository: NoopPricingRepository()
         )
         return (repository, conversations, credentials, dbQueue)
+    }
+
+    private func successRuntime() -> PiStreamSpy {
+        PiStreamSpy { _, _ in
+            [.completed(ProviderResponse(
+                text: "shortcut answer",
+                reasoningSummary: "shortcut thinking",
+                usage: ProviderUsage(inputTokens: 10, outputTokens: 5, totalTokens: 15)
+            ))]
+        }
     }
 }
