@@ -77,22 +77,87 @@ final class ProviderGateway {
         request: ProviderRequest,
         providerID: String
     ) async throws -> AsyncThrowingStream<ProviderStreamEvent, Error> {
-        let settings = try settingsRepository.load()
+        let requestID = UUID().uuidString
+        let normalizedProvider = providerID.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        DiagnosticsLogger.log(
+            "Provider gateway entered",
+            category: .network,
+            requestID: requestID,
+            metadata: [
+                "provider": normalizedProvider,
+                "model": request.model,
+                "messages": String(request.messages.count),
+                "tools": request.tools.map(\.type).joined(separator: ","),
+                "stream": String(request.stream)
+            ]
+        )
+        let settings: AppSettings
+        do {
+            settings = try settingsRepository.load()
+        } catch {
+            DiagnosticsLogger.log(
+                "Provider gateway settings load failed",
+                category: .network,
+                requestID: requestID,
+                metadata: ["provider": normalizedProvider, "model": request.model],
+                error: error
+            )
+            throw error
+        }
         if knownProvider(providerID) == .appleIntelligence {
             return appleIntelligence.stream(request: request)
         }
 
-        let configuration = try await configuration(
-            providerID: providerID,
-            request: request,
-            settings: settings
-        )
+        let piConfiguration: PiAgentConfiguration
+        do {
+            piConfiguration = try await configuration(
+                providerID: providerID,
+                request: request,
+                settings: settings
+            )
+        } catch {
+            DiagnosticsLogger.log(
+                "Pi agent configuration failed",
+                category: .network,
+                requestID: requestID,
+                metadata: ["provider": normalizedProvider, "model": request.model],
+                error: error
+            )
+            throw error
+        }
         DiagnosticsLogger.log(
-            "Pi agent request",
+            "Pi agent configuration ready",
             category: .network,
-            metadata: ["provider": providerID, "model": request.model, "api": configuration.api]
+            requestID: requestID,
+            metadata: [
+                "provider": normalizedProvider,
+                "piProvider": piConfiguration.provider,
+                "model": piConfiguration.model,
+                "api": piConfiguration.api,
+                "baseURL": piConfiguration.baseURL,
+                "credential": piConfiguration.apiKey.isEmpty ? "missing" : "present",
+                "thinkingLevel": piConfiguration.thinkingLevel ?? "none"
+            ]
         )
-        return try await piStream(request, configuration, localTools)
+        do {
+            let stream = try await piStream(request, piConfiguration, localTools)
+            DiagnosticsLogger.log(
+                "Pi agent stream created",
+                category: .network,
+                requestID: requestID,
+                metadata: ["provider": normalizedProvider, "model": request.model]
+            )
+            return stream
+        } catch {
+            DiagnosticsLogger.log(
+                "Pi agent stream creation failed",
+                category: .network,
+                requestID: requestID,
+                metadata: ["provider": normalizedProvider, "model": request.model],
+                error: error
+            )
+            throw error
+        }
     }
 
     private func configuration(
@@ -175,25 +240,22 @@ final class ProviderGateway {
             guard let auth = await codexAuthRepository?.getBearerToken() else {
                 throw ProviderClientError.missingCredential(LLMProvider.codexAuth.rawValue)
             }
-            api = auth.isAPIKey ? "openai-responses" : "openai-codex-responses"
-            piProvider = auth.isAPIKey ? "openai" : "openai-codex"
-            baseURL = auth.isAPIKey
-                ? normalizedBaseURL(settings.resolvedOpenAIBaseURL())
-                : "https://chatgpt.com/backend-api/codex"
+            api = "openai-codex-responses"
+            piProvider = "openai-codex"
+            baseURL = "https://chatgpt.com/backend-api/codex"
             apiKey = auth.token
             headers["originator"] = "codex_cli_rs"
             if let accountID = auth.accountId?.trimmedNonEmpty {
                 headers["ChatGPT-Account-ID"] = accountID
             }
         case .superGrok:
-            if let repository = superGrokAuthRepository,
-               case let .failure(error) = await repository.refreshIfNeeded() { throw error }
-            guard let token = try credentialStore.superGrokAccessToken()?.trimmedNonEmpty else {
+            guard let auth = await superGrokAuthRepository?.getBearerToken() else {
                 throw ProviderClientError.missingCredential(LLMProvider.superGrok.rawValue)
             }
-            piProvider = "xai"
+            api = "openai-responses"
+            piProvider = "xai-oauth"
             baseURL = normalizedBaseURL(AppConstants.defaultSuperGrokBaseURL.absoluteString)
-            apiKey = token
+            apiKey = auth.token
         case .appleIntelligence:
             preconditionFailure("Apple Intelligence is handled before Pi configuration")
         }

@@ -13,6 +13,7 @@
 
 # Package Files #
 *.jar
+!/gradle/wrapper/gradle-wrapper.jar
 *.war
 *.nar
 *.ear
@@ -23,9 +24,6 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
-
-# Kotlin Gradle plugin data, see https://kotlinlang.org/docs/whatsnew20.html#new-directory-for-kotlin-data-in-gradle-projects
-.kotlin/
 
 # Android Studio and Gradle files
 .gradle/
@@ -49,7 +47,7 @@ Pods/
 *.xctest/
 .swiftpm/
 ios/Vendor/
-ios/PiRuntime/node_modules/
+node_modules/
 
 # IDE files
 .idea/
@@ -94,15 +92,16 @@ dist/
 
 # Claude Code settings (local only)
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # Accidental local home mirror
-~/
+/~/
 
 # Local OpenCode reference clone (not part of this repo)
-opencode/
+/opencode/
 
 # Local Codex reference clone (not part of this repo)
-codex/
+/codex/
 
 # Temporary and patch files
 .tmp/

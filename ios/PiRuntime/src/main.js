@@ -1,16 +1,30 @@
 import http from "node:http";
 import { Agent } from "@earendil-works/pi-agent-core";
+import { createModels, InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { streamSimple as streamOpenAICompletions } from "@earendil-works/pi-ai/api/openai-completions";
 import { streamSimple as streamOpenAIResponses } from "@earendil-works/pi-ai/api/openai-responses";
 import { streamSimple as streamOpenAICodex } from "@earendil-works/pi-ai/api/openai-codex-responses";
 import { streamSimple as streamAnthropic } from "@earendil-works/pi-ai/api/anthropic-messages";
 import { streamSimple as streamGoogle } from "@earendil-works/pi-ai/api/google-generative-ai";
+import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
+import * as grokOAuth from "pi-grok/oauth.ts";
+import { buildProxyHeaders, CLI_PROXY_BASE_URL } from "pi-grok/models.ts";
+import { sanitizePayload as sanitizeGrokPayload } from "pi-grok/sanitize.ts";
 
 const port = Number(process.argv[2]);
 const token = process.argv[3];
 const runs = new Map();
 const pendingTools = new Map();
+const authCredentials = new InMemoryCredentialStore();
+const authModels = createModels({ credentials: authCredentials });
+authModels.setProvider(openaiCodexProvider());
+let activeAuthLogin = null;
+
+const AUTH_PROVIDER_IDS = {
+  codex: "openai-codex",
+  supergrok: "xai-oauth"
+};
 
 if (!Number.isInteger(port) || port < 1 || !token) {
   throw new Error("Pi runtime requires a loopback port and authentication token");
@@ -32,19 +46,194 @@ function send(res, event) {
   res.write(`${JSON.stringify(event)}\n`);
 }
 
+function oauthCredential(value) {
+  if (!value || typeof value !== "object" || !value.access || !value.refresh || !Number.isFinite(value.expires)) {
+    throw new Error("Pi OAuth credential is missing required fields");
+  }
+  return { ...value, type: "oauth" };
+}
+
+function decodeJwtPayload(token) {
+  if (!token || typeof token !== "string") return null;
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    return JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function authProfile(provider, credential) {
+  const payload = decodeJwtPayload(provider === "supergrok" ? credential.idToken : credential.access) || {};
+  const openAIAuth = payload["https://api.openai.com/auth"] || {};
+  return {
+    email: typeof payload.email === "string" ? payload.email : null,
+    planType: provider === "codex" && typeof openAIAuth.chatgpt_plan_type === "string"
+      ? openAIAuth.chatgpt_plan_type
+      : null,
+    accountId: provider === "codex"
+      ? (credential.accountId || openAIAuth.chatgpt_account_id || null)
+      : null
+  };
+}
+
+function authProviderId(provider) {
+  const providerId = AUTH_PROVIDER_IDS[provider];
+  if (!providerId) throw new Error(`Unsupported Pi OAuth provider: ${provider}`);
+  return providerId;
+}
+
+function waitForPromptAbort(prompt) {
+  return new Promise((_, reject) => {
+    const signal = prompt?.signal;
+    if (signal?.aborted) return reject(new Error("Login cancelled"));
+    signal?.addEventListener("abort", () => reject(new Error("Login cancelled")), { once: true });
+  });
+}
+
+function codexInteraction(method, res, signal) {
+  return {
+    signal,
+    notify(event) {
+      if (event.type === "auth_url") send(res, { type: "auth_url", url: event.url, instructions: event.instructions });
+      if (event.type === "device_code") {
+        send(res, {
+          type: "device_code",
+          userCode: event.userCode,
+          verificationUri: event.verificationUri,
+          intervalSeconds: event.intervalSeconds,
+          expiresInSeconds: event.expiresInSeconds
+        });
+      }
+      if (event.type === "progress" || event.type === "info") {
+        send(res, { type: "auth_progress", message: event.message });
+      }
+    },
+    prompt(prompt) {
+      if (prompt.type === "select") return Promise.resolve(method === "device" ? "device_code" : "browser");
+      return waitForPromptAbort(prompt);
+    }
+  };
+}
+
+function grokCallbacks(res, signal) {
+  return {
+    signal,
+    onAuth(info) {
+      send(res, { type: "auth_url", url: info.url, instructions: info.instructions });
+    },
+    onDeviceCode(info) {
+      send(res, {
+        type: "device_code",
+        userCode: info.userCode,
+        verificationUri: info.verificationUri,
+        intervalSeconds: info.intervalSeconds,
+        expiresInSeconds: info.expiresInSeconds
+      });
+    },
+    onProgress(message) {
+      send(res, { type: "auth_progress", message });
+    },
+    onPrompt: waitForPromptAbort,
+    onSelect: async (prompt) => prompt.options?.[0]?.id
+  };
+}
+
+async function withGrokBrowserLogin(operation) {
+  const previous = process.env.PI_XAI_LOGIN_METHOD;
+  process.env.PI_XAI_LOGIN_METHOD = "callback";
+  try {
+    return await operation();
+  } finally {
+    if (previous === undefined) delete process.env.PI_XAI_LOGIN_METHOD;
+    else process.env.PI_XAI_LOGIN_METHOD = previous;
+  }
+}
+
+async function loginOAuth(provider, method, res) {
+  if (activeAuthLogin) throw new Error("Another Pi OAuth login is already running");
+  const controller = new AbortController();
+  activeAuthLogin = controller;
+  try {
+    let credential;
+    if (provider === "codex") {
+      credential = await authModels.login(
+        authProviderId(provider),
+        "oauth",
+        codexInteraction(method, res, controller.signal)
+      );
+    } else if (provider === "supergrok") {
+      const callbacks = grokCallbacks(res, controller.signal);
+      credential = method === "browser"
+        ? await withGrokBrowserLogin(() => grokOAuth.login(callbacks))
+        : await grokOAuth.loginDeviceCode(callbacks);
+      credential = oauthCredential(credential);
+      await authCredentials.modify(authProviderId(provider), async () => credential);
+    } else {
+      throw new Error(`Unsupported Pi OAuth provider: ${provider}`);
+    }
+    const normalized = oauthCredential(credential);
+    send(res, { type: "auth_completed", credential: normalized, profile: authProfile(provider, normalized) });
+  } finally {
+    activeAuthLogin = null;
+  }
+}
+
+async function resolveOAuth(provider, rawCredential, force) {
+  const providerId = authProviderId(provider);
+  let credential = oauthCredential(rawCredential);
+  if (force) credential = { ...credential, expires: 0 };
+  await authCredentials.modify(providerId, async () => credential);
+
+  if (provider === "codex") {
+    const resolved = await authModels.getAuth(providerId);
+    if (!resolved?.auth?.apiKey) throw new Error("Pi did not resolve Codex OAuth credentials");
+  } else {
+    const expiresSoon = Date.now() + 5 * 60 * 1000 >= credential.expires;
+    if (expiresSoon) {
+      credential = oauthCredential(await grokOAuth.refresh(credential));
+      await authCredentials.modify(providerId, async () => credential);
+    }
+  }
+
+  const updated = oauthCredential(await authCredentials.read(providerId));
+  const profile = authProfile(provider, updated);
+  return {
+    credential: updated,
+    accessToken: updated.access,
+    accountId: provider === "codex" ? (updated.accountId || profile.accountId) : null,
+    profile
+  };
+}
+
+function diagnostic(res, runId, stage, message, metadata = {}) {
+  send(res, { type: "diagnostic", runId, stage, message, metadata });
+}
+
+function effectiveBaseURL(config) {
+  return config.provider === "xai-oauth" ? CLI_PROXY_BASE_URL : config.baseURL;
+}
+
+function effectiveHeaders(config) {
+  return config.provider === "xai-oauth"
+    ? { ...buildProxyHeaders(config.model), ...(config.headers || {}) }
+    : config.headers;
+}
+
 function modelFrom(config) {
   return {
     id: config.model,
     name: config.model,
     api: config.api,
     provider: config.provider,
-    baseUrl: config.baseURL,
+    baseUrl: effectiveBaseURL(config),
     reasoning: Boolean(config.reasoning),
     input: config.supportsImages ? ["text", "image"] : ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: config.contextWindow || 128000,
     maxTokens: config.maxTokens || 8192,
-    headers: config.headers || undefined,
+    headers: effectiveHeaders(config) || undefined,
     compat: config.compat || undefined
   };
 }
@@ -190,7 +379,7 @@ function timeoutMs(request) {
     : undefined;
 }
 
-function streamFunction(request, config) {
+function streamFunction(request, config, report) {
   const implementation = {
     "openai-completions": streamOpenAICompletions,
     "openai-responses": streamOpenAIResponses,
@@ -202,11 +391,35 @@ function streamFunction(request, config) {
   return (model, context, options = {}) => implementation(model, context, {
     ...options,
     apiKey: config.apiKey,
-    headers: config.headers,
+    headers: config.provider === "xai-oauth" && (request.metadata?.promptCacheKey || request.metadata?.codexSessionId)
+      ? {
+          ...effectiveHeaders(config),
+          "x-grok-conv-id": request.metadata?.promptCacheKey || request.metadata?.codexSessionId
+        }
+      : effectiveHeaders(config),
     timeoutMs: timeoutMs(request),
     reasoning: config.thinkingLevel,
     sessionId: request.metadata?.promptCacheKey || request.metadata?.codexSessionId,
-    onPayload: (payload) => mutatePayload(payload, request, config)
+    onPayload: (payload) => {
+      const mutated = mutatePayload(payload, request, config);
+      report("provider_request", "Pi provider request payload prepared", {
+        api: config.api,
+        provider: config.provider,
+        model: config.model,
+        hasSystemPrompt: String(Boolean(request.systemPrompt)),
+        messageCount: String(request.messages?.length || 0),
+        toolTypes: (request.tools || []).map((tool) => tool.type).join(","),
+        thinkingLevel: config.thinkingLevel || "none"
+      });
+      return config.provider === "xai-oauth"
+        ? sanitizeGrokPayload(
+            mutated,
+            config.model,
+            request.metadata?.promptCacheKey || request.metadata?.codexSessionId,
+            Boolean(config.reasoning)
+          )
+        : mutated;
+    }
   });
 }
 
@@ -245,6 +458,11 @@ function makeTools(request, runId, res) {
 function finalResponse(agent) {
   const assistants = agent.state.messages.filter((message) => message.role === "assistant");
   const last = assistants.at(-1);
+  if (!last) throw new Error("Pi provider returned no assistant message");
+  if (last.stopReason === "error" || last.errorMessage) {
+    const detail = last.errorMessage || last.rawStopReason || "unknown provider error";
+    throw new Error(`Pi provider failed: ${detail}`);
+  }
   const text = (last?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
   const reasoning = (last?.content || []).filter((part) => part.type === "thinking").map((part) => part.thinking).join("");
   const totals = assistants.reduce((sum, message) => {
@@ -264,6 +482,9 @@ function finalResponse(agent) {
       argumentsJSON: JSON.stringify(part.arguments || {}),
       providerMetadata: null
     })));
+  if (!text && !reasoning && !toolCalls.length) {
+    throw new Error(`Pi provider completed without content (stopReason=${last.stopReason || "unknown"})`);
+  }
   return {
     text,
     reasoningSummary: reasoning || null,
@@ -274,6 +495,15 @@ function finalResponse(agent) {
 
 async function runAgent(envelope, res) {
   const { runId, request, config } = envelope;
+  const report = (stage, message, metadata) => diagnostic(res, runId, stage, message, metadata);
+  report("received", "Pi runtime accepted request", {
+    api: config.api,
+    provider: config.provider,
+    model: config.model,
+    hasCredential: String(Boolean(config.apiKey)),
+    messageCount: String(request.messages?.length || 0),
+    toolTypes: (request.tools || []).map((tool) => tool.type).join(",")
+  });
   const agent = new Agent({
     initialState: {
       systemPrompt: request.systemPrompt || "",
@@ -282,7 +512,7 @@ async function runAgent(envelope, res) {
       tools: makeTools(request, runId, res),
       messages: messagesFrom(request, config)
     },
-    streamFn: streamFunction(request, config),
+    streamFn: streamFunction(request, config, report),
     toolExecution: "sequential",
     maxRetryDelayMs: 60000
   });
@@ -299,8 +529,24 @@ async function runAgent(envelope, res) {
     }
   });
   try {
+    report("agent_start", "Pi agent execution starting");
     await agent.continue();
-    send(res, { type: "completed", response: finalResponse(agent) });
+    const last = agent.state.messages.filter((message) => message.role === "assistant").at(-1);
+    report("provider_result", "Pi provider stream finished", {
+      stopReason: last?.stopReason || "missing",
+      rawStopReason: last?.rawStopReason || "none",
+      contentTypes: (last?.content || []).map((part) => part.type).join(","),
+      errorMessage: last?.errorMessage || "none"
+    });
+    const response = finalResponse(agent);
+    report("agent_complete", "Pi agent execution completed");
+    send(res, { type: "completed", response });
+  } catch (error) {
+    report("agent_error", "Pi agent execution failed", {
+      errorName: error?.name || "Error",
+      errorMessage: error?.message || String(error)
+    });
+    throw error;
   } finally {
     runs.delete(runId);
   }
@@ -310,6 +556,17 @@ const server = http.createServer(async (req, res) => {
   if (req.headers.authorization !== `Bearer ${token}`) return json(res, 401, { error: "unauthorized" });
   try {
     if (req.method === "GET" && req.url === "/health") return json(res, 200, { ok: true, node: process.versions.node });
+    if (req.method === "POST" && req.url === "/v1/auth/login") {
+      const value = await body(req);
+      res.writeHead(200, { "content-type": "application/x-ndjson", "cache-control": "no-store" });
+      try { await loginOAuth(value.provider, value.method || "browser", res); res.end(); }
+      catch (error) { send(res, { type: "error", message: error?.message || String(error) }); res.end(); }
+      return;
+    }
+    if (req.method === "POST" && req.url === "/v1/auth/resolve") {
+      const value = await body(req);
+      return json(res, 200, await resolveOAuth(value.provider, value.credential, Boolean(value.force)));
+    }
     if (req.method === "POST" && req.url === "/v1/tool-result") {
       const result = await body(req);
       const complete = pendingTools.get(result.requestId);
@@ -327,7 +584,7 @@ const server = http.createServer(async (req, res) => {
       const envelope = await body(req);
       res.writeHead(200, { "content-type": "application/x-ndjson", "cache-control": "no-store" });
       try { await runAgent(envelope, res); res.end(); }
-      catch (error) { send(res, { type: "error", message: error?.message || String(error) }); res.end(); }
+      catch (error) { send(res, { type: "error", stage: "run", message: error?.message || String(error) }); res.end(); }
       return;
     }
     json(res, 404, { error: "not found" });

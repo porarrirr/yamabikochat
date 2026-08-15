@@ -17,7 +17,7 @@ enum AppConstants {
     static let defaultAlibabaCodingPlanBaseURL = URL(string: "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/")!
     static let defaultMiniMaxBaseURL = URL(string: "https://api.minimax.io/v1/")!
     static let defaultZAICodingPlanBaseURL = URL(string: "https://api.z.ai/api/coding/paas/v4/")!
-    static let defaultSuperGrokBaseURL = URL(string: "https://api.x.ai/v1/")!
+    static let defaultSuperGrokBaseURL = URL(string: "https://cli-chat-proxy.grok.com/v1/")!
 
     /// GitHub Pages (`docs/`). Enable Pages on the repo before App Store submission.
     static let marketingURL = URL(string: "https://porarrirr.github.io/yamabikochat/")!

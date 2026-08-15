@@ -1200,7 +1200,7 @@ struct SettingsScreen: View {
                     }
                     .disabled(!viewModel.settings.superGrokReasoningEnabled)
 
-                    Text("SuperGrok / X Premium+ サブスクリプションの OAuth トークンで xAI API に接続します。")
+                    Text("pi-grok の OAuth 経路で SuperGrok / X Premium+ サブスクリプションに接続します。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -1259,7 +1259,7 @@ struct SettingsScreen: View {
                     .font(.caption2)
             }
 
-            Text("Browser ログインは \(SuperGrokAuthConstants.redirectURI) を使います。OpenCode / Grok CLI と同時起動するとポートが競合します。")
+            Text("認証・トークン更新・リクエスト整形は pi-grok が処理します。Device Code ログインではローカル待受ポートを使用しません。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -1269,6 +1269,10 @@ struct SettingsScreen: View {
         Section("Codex Auth") {
             Text(codexSummary)
                 .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text("Codex OAuth は Pi 標準の openai-codex 認証を使用します。")
+                .font(.caption2)
                 .foregroundStyle(.secondary)
 
             HStack {

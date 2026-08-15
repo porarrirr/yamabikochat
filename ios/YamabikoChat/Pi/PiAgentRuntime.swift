@@ -1,5 +1,6 @@
 import Foundation
 import UniformTypeIdentifiers
+import UIKit
 
 private final class PiRuntimeBundleToken: NSObject {}
 
@@ -52,13 +53,55 @@ private struct PiRunEnvelope: Codable, Sendable {
 
 private struct PiRuntimeEvent: Decodable {
     var type: String
+    var runId: String?
+    var stage: String?
     var delta: String?
     var message: String?
+    var metadata: [String: String]?
     var requestId: String?
     var toolCallId: String?
     var name: String?
     var arguments: JSONValue?
     var response: ProviderResponse?
+    var url: String?
+    var userCode: String?
+    var verificationUri: String?
+    var credential: JSONValue?
+    var profile: PiOAuthProfile?
+}
+
+enum PiOAuthProvider: String, Codable, Sendable {
+    case codex
+    case supergrok
+}
+
+enum PiOAuthLoginMethod: String, Codable, Sendable {
+    case browser
+    case device
+}
+
+struct PiOAuthProfile: Codable, Equatable, Sendable {
+    var email: String?
+    var planType: String?
+    var accountId: String?
+}
+
+struct PiOAuthResolution: Codable, Equatable, Sendable {
+    var credential: JSONValue
+    var accessToken: String
+    var accountId: String?
+    var profile: PiOAuthProfile
+}
+
+private struct PiOAuthLoginRequest: Encodable {
+    var provider: PiOAuthProvider
+    var method: PiOAuthLoginMethod
+}
+
+private struct PiOAuthResolveRequest: Encodable {
+    var provider: PiOAuthProvider
+    var credential: JSONValue
+    var force: Bool
 }
 
 private struct PiToolResultEnvelope: Encodable {
@@ -79,11 +122,114 @@ actor PiAgentRuntime {
         _ = try await startIfNeeded()
     }
 
+    func loginOAuth(
+        provider: PiOAuthProvider,
+        method: PiOAuthLoginMethod,
+        onDeviceCode: (@Sendable (SuperGrokDeviceCodeChallenge) async -> Void)? = nil
+    ) async throws -> PiOAuthResolution {
+        let (endpoint, token) = try await startIfNeeded()
+        var request = URLRequest(url: endpoint.appendingPathComponent("v1/auth/login"))
+        request.httpMethod = "POST"
+        request.httpBody = try JSONEncoder().encode(PiOAuthLoginRequest(provider: provider, method: method))
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let backgroundTask = await MainActor.run {
+            UIApplication.shared.beginBackgroundTask(withName: "PiOAuthLogin")
+        }
+        defer {
+            Task { @MainActor in
+                if backgroundTask != .invalid {
+                    UIApplication.shared.endBackgroundTask(backgroundTask)
+                }
+            }
+        }
+
+        let (bytes, response) = try await URLSession(configuration: .ephemeral).bytes(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw ProviderClientError.invalidResponse
+        }
+        for try await line in bytes.lines where !line.isEmpty {
+            let event = try JSONDecoder().decode(PiRuntimeEvent.self, from: Data(line.utf8))
+            switch event.type {
+            case "auth_url":
+                guard let value = event.url, let url = URL(string: value) else {
+                    throw ProviderClientError.parseFailure("Pi OAuth returned an invalid authorization URL")
+                }
+                try await Self.openBrowser(url)
+            case "device_code":
+                guard let value = event.verificationUri,
+                      let url = URL(string: value),
+                      let userCode = event.userCode else {
+                    throw ProviderClientError.parseFailure("Pi OAuth returned an invalid device code")
+                }
+                await onDeviceCode?(
+                    SuperGrokDeviceCodeChallenge(
+                        verificationURI: value,
+                        userCode: userCode,
+                        browserURL: value
+                    )
+                )
+                try await Self.openBrowser(url)
+            case "auth_completed":
+                guard let credential = event.credential, let profile = event.profile else {
+                    throw ProviderClientError.parseFailure("Pi OAuth completed without credentials")
+                }
+                let object = credential.objectValue
+                guard let accessToken = object?["access"]?.stringValue else {
+                    throw ProviderClientError.parseFailure("Pi OAuth credential has no access token")
+                }
+                return PiOAuthResolution(
+                    credential: credential,
+                    accessToken: accessToken,
+                    accountId: object?["accountId"]?.stringValue ?? profile.accountId,
+                    profile: profile
+                )
+            case "error":
+                throw ProviderClientError.parseFailure(event.message ?? "Pi OAuth login failed")
+            default:
+                continue
+            }
+        }
+        throw ProviderClientError.parseFailure("Pi OAuth login ended without credentials")
+    }
+
+    func resolveOAuth(
+        provider: PiOAuthProvider,
+        credentialJSON: String,
+        force: Bool
+    ) async throws -> PiOAuthResolution {
+        let (endpoint, token) = try await startIfNeeded()
+        let credential = try JSONDecoder().decode(JSONValue.self, from: Data(credentialJSON.utf8))
+        let envelope = PiOAuthResolveRequest(provider: provider, credential: credential, force: force)
+        var request = URLRequest(url: endpoint.appendingPathComponent("v1/auth/resolve"))
+        request.httpMethod = "POST"
+        request.httpBody = try JSONEncoder().encode(envelope)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let message = (try? JSONDecoder().decode([String: String].self, from: data)["error"])
+                ?? "Pi OAuth refresh failed"
+            throw ProviderClientError.parseFailure(message)
+        }
+        return try JSONDecoder().decode(PiOAuthResolution.self, from: data)
+    }
+
     func stream(
         request: ProviderRequest,
         configuration: PiAgentConfiguration,
         tools: LocalToolRegistry
     ) async throws -> AsyncThrowingStream<ProviderStreamEvent, Error> {
+        DiagnosticsLogger.log(
+            "Pi runtime stream requested",
+            category: .network,
+            metadata: [
+                "provider": configuration.provider,
+                "model": configuration.model,
+                "api": configuration.api
+            ]
+        )
         let (endpoint, token) = try await startIfNeeded()
         let runID = UUID().uuidString
         let piRequest = try Self.makeRequest(request, supportsImages: configuration.supportsImages)
@@ -95,6 +241,18 @@ actor PiAgentRuntime {
         urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let session = URLSession(configuration: .ephemeral)
+        DiagnosticsLogger.log(
+            "Pi runtime bridge request starting",
+            category: .network,
+            requestID: runID,
+            metadata: [
+                "provider": configuration.provider,
+                "model": configuration.model,
+                "api": configuration.api,
+                "messages": String(request.messages.count),
+                "tools": request.tools.map(\.type).joined(separator: ",")
+            ]
+        )
 
         return AsyncThrowingStream { continuation in
             let task = Task {
@@ -108,6 +266,16 @@ actor PiAgentRuntime {
                         guard !line.isEmpty else { continue }
                         let event = try JSONDecoder().decode(PiRuntimeEvent.self, from: Data(line.utf8))
                         switch event.type {
+                        case "diagnostic":
+                            DiagnosticsLogger.log(
+                                event.message ?? "Pi runtime diagnostic",
+                                category: .network,
+                                requestID: event.runId ?? runID,
+                                metadata: (event.metadata ?? [:]).merging(
+                                    ["stage": event.stage ?? "unknown"],
+                                    uniquingKeysWith: { current, _ in current }
+                                )
+                            )
                         case "text_delta":
                             continuation.yield(.textDelta(event.delta ?? ""))
                         case "reasoning_delta":
@@ -125,18 +293,54 @@ actor PiAgentRuntime {
                             guard let response = event.response else {
                                 throw ProviderClientError.parseFailure("Pi completed without a response")
                             }
+                            DiagnosticsLogger.log(
+                                "Pi runtime request completed",
+                                category: .network,
+                                requestID: runID,
+                                metadata: [
+                                    "provider": configuration.provider,
+                                    "model": configuration.model,
+                                    "hasText": String(!response.text.isEmpty)
+                                ]
+                            )
                             continuation.yield(.completed(response))
                         case "error":
-                            throw ProviderClientError.parseFailure(event.message ?? "Pi agent failed")
+                            let error = ProviderClientError.parseFailure(event.message ?? "Pi agent failed")
+                            DiagnosticsLogger.log(
+                                "Pi runtime reported an error",
+                                category: .network,
+                                requestID: event.runId ?? runID,
+                                metadata: [
+                                    "provider": configuration.provider,
+                                    "model": configuration.model,
+                                    "stage": event.stage ?? "unknown"
+                                ],
+                                error: error
+                            )
+                            throw error
                         default:
                             continue
                         }
                     }
                     continuation.finish()
                 } catch is CancellationError {
+                    DiagnosticsLogger.log(
+                        "Pi runtime request cancelled",
+                        level: .warning,
+                        category: .network,
+                        requestID: runID,
+                        metadata: ["provider": configuration.provider, "model": configuration.model]
+                    )
                     await Self.abort(runID: runID, endpoint: endpoint, token: token)
                     continuation.finish(throwing: CancellationError())
                 } catch {
+                    DiagnosticsLogger.log(
+                        "Pi runtime bridge failed",
+                        category: .network,
+                        requestID: runID,
+                        metadata: ["provider": configuration.provider, "model": configuration.model],
+                        error: error
+                    )
                     continuation.finish(throwing: error)
                 }
             }
@@ -147,30 +351,55 @@ actor PiAgentRuntime {
     }
 
     private func startIfNeeded() async throws -> (URL, String) {
-        if let endpoint, let token { return (endpoint, token) }
-        if let startupTask { return try await startupTask.value }
+        if let endpoint, let token {
+            DiagnosticsLogger.log("Pi runtime already ready", category: .network)
+            return (endpoint, token)
+        }
+        if let startupTask {
+            DiagnosticsLogger.log("Pi runtime startup already in progress", category: .network)
+            return try await startupTask.value
+        }
 
         let task = Task<(URL, String), Error> {
             let resources = Bundle(for: PiRuntimeBundleToken.self)
             guard let script = resources.url(forResource: "main", withExtension: "js") else {
-                throw ProviderClientError.parseFailure("Bundled Pi runtime was not found")
+                let error = ProviderClientError.parseFailure("Bundled Pi runtime was not found")
+                DiagnosticsLogger.log("Pi runtime bundle lookup failed", category: .network, error: error)
+                throw error
             }
             let port = Int.random(in: 49_152 ... 59_999)
             let token = UUID().uuidString.replacingOccurrences(of: "-", with: "")
             let endpoint = URL(string: "http://127.0.0.1:\(port)/")!
+            DiagnosticsLogger.log(
+                "Pi runtime engine starting",
+                category: .network,
+                metadata: ["script": script.lastPathComponent, "port": String(port)]
+            )
             PiNodeRunner.startEngine(withArguments: ["node", script.path, String(port), token])
 
             var health = URLRequest(url: endpoint.appendingPathComponent("health"))
             health.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            for _ in 0 ..< 100 {
+            for attempt in 0 ..< 100 {
                 try Task.checkCancellation()
                 if let (_, response) = try? await URLSession.shared.data(for: health),
                    (response as? HTTPURLResponse)?.statusCode == 200 {
+                    DiagnosticsLogger.log(
+                        "Pi runtime health check succeeded",
+                        category: .network,
+                        metadata: ["attempt": String(attempt + 1), "port": String(port)]
+                    )
                     return (endpoint, token)
                 }
                 try await Task.sleep(for: .milliseconds(100))
             }
-            throw ProviderClientError.parseFailure("Pi agent runtime did not start")
+            let error = ProviderClientError.parseFailure("Pi agent runtime did not start")
+            DiagnosticsLogger.log(
+                "Pi runtime health check timed out",
+                category: .network,
+                metadata: ["attempts": "100", "port": String(port)],
+                error: error
+            )
+            throw error
         }
         startupTask = task
         do {
@@ -181,6 +410,7 @@ actor PiAgentRuntime {
             return result
         } catch {
             startupTask = nil
+            DiagnosticsLogger.log("Pi runtime startup failed", category: .network, error: error)
             throw error
         }
     }
@@ -258,5 +488,37 @@ actor PiAgentRuntime {
         guard let data = try? JSONEncoder().encode(value),
               let string = String(data: data, encoding: .utf8) else { return "{}" }
         return string
+    }
+
+    static func credentialJSONString(_ value: JSONValue) throws -> String {
+        String(decoding: try JSONEncoder().encode(value), as: UTF8.self)
+    }
+
+    private static func openBrowser(_ url: URL) async throws {
+        let canOpen = await MainActor.run { UIApplication.shared.canOpenURL(url) }
+        guard canOpen else { throw ProviderClientError.invalidBaseURL(url.absoluteString) }
+        try await withCheckedThrowingContinuation { continuation in
+            Task { @MainActor in
+                UIApplication.shared.open(url, options: [:]) { opened in
+                    if opened {
+                        continuation.resume(returning: ())
+                    } else {
+                        continuation.resume(throwing: ProviderClientError.invalidBaseURL(url.absoluteString))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private extension JSONValue {
+    var objectValue: [String: JSONValue]? {
+        guard case let .object(value) = self else { return nil }
+        return value
+    }
+
+    var stringValue: String? {
+        guard case let .string(value) = self else { return nil }
+        return value
     }
 }

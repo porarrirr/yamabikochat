@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import UIKit
 
 enum DiagnosticsLogLevel: String {
@@ -20,6 +21,10 @@ enum DiagnosticsLogger {
     private static let fileName = "yamabiko_diagnostics.log"
     private static let maxBytes = 512 * 1024
     private static let lock = NSLock()
+    private static let systemLogger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.porarri.yamabikochat.ios",
+        category: "Diagnostics"
+    )
 
     private static let formatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -84,7 +89,16 @@ enum DiagnosticsLogger {
                 lines.append("debug=\(debugDescription)")
             }
         }
-        append(lines.joined(separator: "\n") + "\n")
+        let entry = lines.joined(separator: "\n")
+        switch resolvedLevel {
+        case .info:
+            systemLogger.info("\(entry, privacy: .public)")
+        case .warning:
+            systemLogger.warning("\(entry, privacy: .public)")
+        case .error:
+            systemLogger.error("\(entry, privacy: .public)")
+        }
+        append(entry + "\n")
     }
 
     static func read() -> String {

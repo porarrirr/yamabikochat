@@ -36,8 +36,6 @@ final class SettingsViewModel: ObservableObject {
     @Published var isSuperGrokAuthActionRunning: Bool = false
     @Published var superGrokEmailInput: String = ""
 
-    @Published var codexApiKeyInput: String = ""
-    @Published var codexAccessTokenInput: String = ""
     @Published var codexAccountIdInput: String = ""
     @Published var codexEmailInput: String = ""
     @Published var codexPlanTypeInput: String = ""

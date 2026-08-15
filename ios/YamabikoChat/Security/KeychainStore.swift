@@ -110,22 +110,6 @@ extension SecureCredentialStore {
         try saveSecret(value, key: "provider_key_\(provider.rawValue)")
     }
 
-    func codexAccessToken() throws -> String? {
-        try readSecret(key: "codex_access_token")
-    }
-
-    func setCodexAccessToken(_ value: String?) throws {
-        try saveSecret(value, key: "codex_access_token")
-    }
-
-    func superGrokAccessToken() throws -> String? {
-        try readSecret(key: "supergrok_access_token")
-    }
-
-    func setSuperGrokAccessToken(_ value: String?) throws {
-        try saveSecret(value, key: "supergrok_access_token")
-    }
-
     func setOpenAICompatAPIKey(name: String, value: String?) throws {
         let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }

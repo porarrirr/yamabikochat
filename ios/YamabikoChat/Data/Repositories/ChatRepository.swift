@@ -1404,22 +1404,6 @@ final class ChatRepository {
         codexAuthRepository.state
     }
 
-    func loginCodexAuth(
-        apiKey: String?,
-        accessToken: String?,
-        email: String?,
-        planType: String?,
-        accountId: String?
-    ) async -> Result<CodexAuthState, Error> {
-        await codexAuthRepository.login(
-            apiKey: apiKey,
-            accessToken: accessToken,
-            email: email,
-            planType: planType,
-            accountId: accountId
-        )
-    }
-
     func loginCodexAuthWithBrowser() async -> Result<CodexAuthState, Error> {
         await codexAuthRepository.loginWithBrowser()
     }

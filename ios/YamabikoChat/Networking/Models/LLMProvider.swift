@@ -26,11 +26,6 @@ enum LLMProvider: String, Codable, CaseIterable, Sendable {
     }
 
     var supportsClientWebSearchTool: Bool {
-        switch self {
-        case .openRouter, .openAI, .openAICompat, .miniMax, .zai, .clinePass, .alibabaCodingPlan, .gemini:
-            return true
-        case .openCodeGo, .codexAuth, .superGrok, .appleIntelligence:
-            return false
-        }
+        self != .appleIntelligence
     }
 }

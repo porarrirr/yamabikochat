@@ -65,6 +65,44 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         XCTAssertFalse(resolved.tools.contains { $0.payload["name"] == FetchUrlTool.name })
     }
 
+    func testClientWebSearchToolsAreAvailableForEveryPiProvider() async throws {
+        let resolver = makeResolver()
+        var settings = AppSettings()
+        settings.clientWebSearchToolEnabled = true
+
+        for provider in LLMProvider.allCases where provider != .appleIntelligence {
+            let resolved = try await resolver.resolve(
+                settings: settings,
+                provider: provider.rawValue,
+                model: "test-model"
+            )
+
+            XCTAssertTrue(
+                resolved.tools.containsWebSearchTool,
+                "Expected web_search for \(provider.rawValue)"
+            )
+            XCTAssertTrue(
+                resolved.tools.contains { $0.payload["name"] == FetchUrlTool.name },
+                "Expected fetch_url for \(provider.rawValue)"
+            )
+        }
+    }
+
+    func testAppleIntelligenceOmitsClientToolsBecauseItDoesNotUsePiAgent() async throws {
+        let resolver = makeResolver()
+        var settings = AppSettings()
+        settings.clientWebSearchToolEnabled = true
+
+        let resolved = try await resolver.resolve(
+            settings: settings,
+            provider: LLMProvider.appleIntelligence.rawValue,
+            model: "apple-on-device"
+        )
+
+        XCTAssertFalse(resolved.tools.containsWebSearchTool)
+        XCTAssertFalse(resolved.tools.contains { $0.payload["name"] == FetchUrlTool.name })
+    }
+
     func testOpenRouterGlobalRoutingIsResolvedForEveryMode() async throws {
         let resolver = makeResolver()
         var settings = AppSettings()

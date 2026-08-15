@@ -23,6 +23,24 @@ final class PiAgentGatewayTests: XCTestCase {
         try await PiAgentRuntime.shared.verifyReady()
     }
 
+    func testBundledPiResolvesFreshCodexCredential() async throws {
+        let credential = JSONValue.object([
+            "type": .string("oauth"),
+            "access": .string("pi-access-token"),
+            "refresh": .string("pi-refresh-token"),
+            "expires": .number(4_102_444_800_000),
+            "accountId": .string("acc_pi")
+        ])
+        let resolution = try await PiAgentRuntime.shared.resolveOAuth(
+            provider: .codex,
+            credentialJSON: try PiAgentRuntime.credentialJSONString(credential),
+            force: false
+        )
+
+        XCTAssertEqual(resolution.accessToken, "pi-access-token")
+        XCTAssertEqual(resolution.accountId, "acc_pi")
+    }
+
     func testNetworkProvidersFailBeforeStartingPiWhenCredentialIsMissing() async throws {
         let database = try DatabaseQueue()
         try AppDatabase.migrator.migrate(database)
@@ -99,5 +117,39 @@ final class PiAgentGatewayTests: XCTestCase {
         XCTAssertEqual(configuration.api, "google-generative-ai")
         XCTAssertEqual(configuration.provider, "google")
         XCTAssertEqual(configuration.thinkingLevel, "high")
+    }
+
+    func testSuperGrokUsesPiGrokResponsesProvider() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.saveSecret(
+            try PiAgentRuntime.credentialJSONString(oauthResolution(accountID: nil).credential),
+            key: "pi_oauth_supergrok_v1"
+        )
+        let auth = SuperGrokAuthRepository(
+            credentialStore: credentials,
+            loginHandler: { _, _, _ in oauthResolution(accountID: nil) },
+            resolveHandler: { _, _, _ in oauthResolution(accountID: nil) }
+        )
+        let pi = PiStreamSpy()
+        let gateway = ProviderGateway(
+            settingsRepository: SettingsRepository(dbQueue: database),
+            credentialStore: credentials,
+            superGrokAuthRepository: auth,
+            piStream: pi.stream
+        )
+
+        _ = try await gateway.stream(
+            request: ProviderRequest(
+                model: "grok-4.5",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")]
+            ),
+            provider: .superGrok
+        )
+
+        let configuration = try XCTUnwrap(pi.calls.first?.configuration)
+        XCTAssertEqual(configuration.api, "openai-responses")
+        XCTAssertEqual(configuration.provider, "xai-oauth")
     }
 }
