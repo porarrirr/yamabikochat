@@ -190,11 +190,17 @@ class ChatRepository(
 
     suspend fun saveSettings(settings: Settings) = databaseRepository.saveSettings(settings)
 
-    suspend fun saveToolActivities(messageId: Long, stepsJSON: String) =
-        databaseRepository.saveToolActivities(messageId, stepsJSON)
+    suspend fun saveToolActivities(
+        messageId: Long,
+        stepsJSON: String,
+        providerTranscriptJSON: String? = null
+    ) = databaseRepository.saveToolActivities(messageId, stepsJSON, providerTranscriptJSON)
 
-    suspend fun saveToolActivitiesForVariant(variantId: Long, stepsJSON: String) =
-        databaseRepository.saveToolActivitiesForVariant(variantId, stepsJSON)
+    suspend fun saveToolActivitiesForVariant(
+        variantId: Long,
+        stepsJSON: String,
+        providerTranscriptJSON: String? = null
+    ) = databaseRepository.saveToolActivitiesForVariant(variantId, stepsJSON, providerTranscriptJSON)
 
     suspend fun getToolActivityForMessage(messageId: Long) =
         databaseRepository.getToolActivityForMessage(messageId)

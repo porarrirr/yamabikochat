@@ -4,6 +4,51 @@ import GRDB
 @testable import YamabikoChat
 
 final class ConversationVariantSelectionTests: XCTestCase {
+    func testProviderHistoryReplaysToolTranscriptBeforeFinalAnswerAndNextUserMessage() throws {
+        let repository = try makeRepository()
+        let conversationId = try repository.createConversation(
+            title: "Cache",
+            model: "model",
+            provider: "OPENAI"
+        )
+        _ = try repository.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "user", text: "search")
+        )
+        let assistantId = try repository.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "model", text: "final answer")
+        )
+        let call = ToolCall(
+            id: "call-1",
+            name: "web_search",
+            argumentsJSON: #"{"query":"large query"}"#,
+            providerMetadata: nil
+        )
+        try repository.saveToolActivities(
+            messageId: assistantId,
+            steps: [toolActivityStep(id: "call-1", detail: "large query")],
+            providerTranscript: [
+                ProviderRequestMessage(role: "assistant", content: "", toolCalls: [call]),
+                ProviderRequestMessage(
+                    role: "tool",
+                    content: "large raw result",
+                    toolCallId: "call-1",
+                    toolName: "web_search"
+                )
+            ]
+        )
+        _ = try repository.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "user", text: "thanks")
+        )
+
+        let messages = try repository.fetchProviderHistory(conversationId: conversationId)
+            .flatMap(\.providerMessages)
+        XCTAssertEqual(messages.map(\.role), ["user", "assistant", "tool", "assistant", "user"])
+        XCTAssertEqual(messages[1].toolCalls?.first?.argumentsJSON, #"{"query":"large query"}"#)
+        XCTAssertEqual(messages[2].content, "large raw result")
+        XCTAssertEqual(messages[3].content, "final answer")
+        XCTAssertEqual(messages[4].content, "thanks")
+    }
+
     func testFetchProviderHistoryUsesSelectedVariantContent() throws {
         let repository = try makeRepository()
         let conversationId = try repository.createConversation(
@@ -130,11 +175,13 @@ final class ConversationVariantSelectionTests: XCTestCase {
 
         try repository.saveToolActivities(
             messageId: assistantId,
-            steps: [toolActivityStep(id: "base", detail: "base search")]
+            steps: [toolActivityStep(id: "base", detail: "base search")],
+            providerTranscript: [ProviderRequestMessage(role: "tool", content: "base result")]
         )
         try repository.saveToolActivities(
             variantId: variantId,
-            steps: [toolActivityStep(id: "variant", detail: "variant search")]
+            steps: [toolActivityStep(id: "variant", detail: "variant search")],
+            providerTranscript: [ProviderRequestMessage(role: "tool", content: "variant result")]
         )
 
         try repository.updateMessageSelectedVariantIndex(messageId: assistantId, variantIndex: variant.variantIndex)
@@ -142,11 +189,19 @@ final class ConversationVariantSelectionTests: XCTestCase {
             try repository.fetchFullMessage(id: assistantId)?.displayToolActivity?.steps.first?.detail,
             "variant search"
         )
+        XCTAssertEqual(
+            try repository.fetchProviderHistory(conversationId: conversationId).last?.toolTranscript.first?.content,
+            "variant result"
+        )
 
         try repository.updateMessageSelectedVariantIndex(messageId: assistantId, variantIndex: 0)
         XCTAssertEqual(
             try repository.fetchFullMessage(id: assistantId)?.displayToolActivity?.steps.first?.detail,
             "base search"
+        )
+        XCTAssertEqual(
+            try repository.fetchProviderHistory(conversationId: conversationId).last?.toolTranscript.first?.content,
+            "base result"
         )
     }
 

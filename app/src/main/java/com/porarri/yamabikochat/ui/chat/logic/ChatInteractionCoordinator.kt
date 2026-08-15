@@ -389,11 +389,12 @@ class ChatInteractionCoordinator(
             existingMessageId
         }
 
-        fun publishActivities(steps: List<ToolActivityStep>) {
+        fun publishActivities(steps: List<ToolActivityStep>, providerTranscriptJSON: String?) {
             val activity = ChatMessageToolActivity(
                 messageId = if (activeVariant == null) messageId else null,
                 variantId = activeVariant?.id,
-                stepsJSON = ToolActivityStep.encodeSteps(steps)
+                stepsJSON = ToolActivityStep.encodeSteps(steps),
+                providerTranscriptJSON = providerTranscriptJSON
             )
             fullMessagesState.update { currentMap ->
                 val existing = currentMap[messageId] ?: return@update currentMap
@@ -413,19 +414,24 @@ class ChatInteractionCoordinator(
                 baseRequest = request,
                 model = model,
                 provider = provider,
-                onActivitiesChanged = { steps ->
+                onProgressChanged = { progress ->
+                    val transcriptJSON = ChatMessageToolActivity.encodeProviderTranscript(
+                        progress.replayContents
+                    )
                     if (activeVariant != null) {
                         repository.saveToolActivitiesForVariant(
                             variantId = activeVariant!!.id,
-                            stepsJSON = ToolActivityStep.encodeSteps(steps)
+                            stepsJSON = ToolActivityStep.encodeSteps(progress.activities),
+                            providerTranscriptJSON = transcriptJSON
                         )
                     } else {
                         repository.saveToolActivities(
                             messageId = messageId,
-                            stepsJSON = ToolActivityStep.encodeSteps(steps)
+                            stepsJSON = ToolActivityStep.encodeSteps(progress.activities),
+                            providerTranscriptJSON = transcriptJSON
                         )
                     }
-                    publishActivities(steps)
+                    publishActivities(progress.activities, transcriptJSON)
                 }
             )
 
@@ -453,7 +459,10 @@ class ChatInteractionCoordinator(
                 if (result.activities.isNotEmpty()) {
                     repository.saveToolActivitiesForVariant(
                         variantId = updated.id,
-                        stepsJSON = ToolActivityStep.encodeSteps(result.activities)
+                        stepsJSON = ToolActivityStep.encodeSteps(result.activities),
+                        providerTranscriptJSON = ChatMessageToolActivity.encodeProviderTranscript(
+                            result.replayContents
+                        )
                     )
                 }
             } else {
@@ -472,7 +481,10 @@ class ChatInteractionCoordinator(
                 if (result.activities.isNotEmpty()) {
                     repository.saveToolActivities(
                         messageId = messageId,
-                        stepsJSON = ToolActivityStep.encodeSteps(result.activities)
+                        stepsJSON = ToolActivityStep.encodeSteps(result.activities),
+                        providerTranscriptJSON = ChatMessageToolActivity.encodeProviderTranscript(
+                            result.replayContents
+                        )
                     )
                 }
             }

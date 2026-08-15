@@ -22,7 +22,7 @@ import androidx.room.TypeConverters
         AutoConversationMessage::class,
         TokenUsageRecord::class
     ],
-    version = 54,
+    version = 55,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

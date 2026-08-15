@@ -1,10 +1,34 @@
 package com.porarri.yamabikochat.data.local
 
+import com.porarri.yamabikochat.data.remote.Content
+import com.porarri.yamabikochat.data.remote.FunctionCall
+import com.porarri.yamabikochat.data.remote.Part
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class FullChatMessageTest {
+
+    @Test
+    fun providerTranscriptRoundTripsWithoutDroppingToolPayload() {
+        val transcript = listOf(
+            Content(
+                role = "model",
+                parts = listOf(
+                    Part(functionCall = FunctionCall("web_search", JsonPrimitive("large query")))
+                )
+            ),
+            Content(role = "user", parts = listOf(Part(text = "large raw result")))
+        )
+        val activity = ChatMessageToolActivity(
+            messageId = 1L,
+            stepsJSON = "[]",
+            providerTranscriptJSON = ChatMessageToolActivity.encodeProviderTranscript(transcript)
+        )
+
+        assertEquals(transcript, activity.providerTranscript)
+    }
 
     @Test
     fun selectedVariantWithoutThinkingDoesNotExposeBaseThinking() {

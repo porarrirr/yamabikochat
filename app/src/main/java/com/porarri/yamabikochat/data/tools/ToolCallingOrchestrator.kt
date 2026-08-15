@@ -13,13 +13,15 @@ class ToolCallingOrchestrator(
     suspend fun run(
         request: ToolTurnRequest,
         invoke: suspend (ToolTurnRequest, Int) -> ToolTurnResponse,
-        onActivitiesChanged: (suspend (List<ToolActivityStep>) -> Unit)? = null
+        onActivitiesChanged: (suspend (List<ToolActivityStep>) -> Unit)? = null,
+        onProgressChanged: (suspend (ToolCallingProgress) -> Unit)? = null
     ): ToolCallingOutcome {
         val working = ToolTurnRequest(messages = request.messages.toMutableList())
         val activities = mutableListOf<ToolActivityStep>()
         var sources = emptyList<ToolSource>()
         val seenCalls = mutableSetOf<String>()
         var combinedUsage: TokenUsageSnapshot? = null
+        val replayMessages = mutableListOf<ToolTurnMessage>()
         val roundLimit = maxOf(1, maxRounds)
 
         for (round in 1..roundLimit) {
@@ -33,24 +35,28 @@ class ToolCallingOrchestrator(
                     response = response,
                     activities = activities.toList(),
                     sources = sources,
-                    rounds = round
+                    rounds = round,
+                    replayMessages = replayMessages.toList()
                 )
             }
 
-            working.messages.add(
-                ToolTurnMessage(
+            val assistantToolMessage = ToolTurnMessage(
                     role = "assistant",
                     content = response.text,
                     reasoningContent = response.reasoningSummary,
                     toolCalls = response.toolCalls
                 )
-            )
+            working.messages.add(assistantToolMessage)
+            val completedRoundMessages = mutableListOf(assistantToolMessage)
 
             for (call in response.toolCalls) {
                 val duplicateKey = duplicateKey(call)
                 var step = ToolActivityStep.started(call = call, round = round)
                 activities.add(step)
                 onActivitiesChanged?.invoke(activities.toList())
+                onProgressChanged?.invoke(
+                    ToolCallingProgress(activities.toList(), replayMessages.toList())
+                )
 
                 val result = if (seenCalls.contains(duplicateKey)) {
                     ToolResult(
@@ -69,16 +75,24 @@ class ToolCallingOrchestrator(
                 sources = mergedSources(sources, result.sources)
                 onActivitiesChanged?.invoke(activities.toList())
 
-                working.messages.add(
-                    ToolTurnMessage(
+                val toolMessage = ToolTurnMessage(
                         role = "tool",
                         content = result.content,
                         toolCallId = result.callId,
                         toolName = result.name,
                         toolResultIsError = result.isError
                     )
+                working.messages.add(toolMessage)
+                completedRoundMessages.add(toolMessage)
+                onProgressChanged?.invoke(
+                    ToolCallingProgress(activities.toList(), replayMessages.toList())
                 )
             }
+
+            replayMessages.addAll(completedRoundMessages)
+            onProgressChanged?.invoke(
+                ToolCallingProgress(activities.toList(), replayMessages.toList())
+            )
 
             if (round == roundLimit) {
                 val message = "Web検索ツールは最大ラウンド数に達したため停止しました。"
@@ -90,7 +104,8 @@ class ToolCallingOrchestrator(
                     response = response.copy(text = finalText, toolCalls = emptyList()),
                     activities = activities.toList(),
                     sources = sources,
-                    rounds = round
+                    rounds = round,
+                    replayMessages = replayMessages.toList()
                 )
             }
         }

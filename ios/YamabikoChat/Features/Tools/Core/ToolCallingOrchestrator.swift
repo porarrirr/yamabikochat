@@ -5,6 +5,13 @@ struct ToolCallingOutcome: Sendable, Equatable {
     var activities: [ToolActivityStep]
     var sources: [ToolSource]
     var rounds: Int
+    var replayMessages: [ProviderRequestMessage]
+}
+
+struct ToolCallingProgress: Sendable, Equatable {
+    var activities: [ToolActivityStep]
+    /// Only complete assistant-tool/result rounds are exposed for durable replay.
+    var replayMessages: [ProviderRequestMessage]
 }
 
 struct ToolCallingOrchestrator: Sendable {
@@ -16,13 +23,15 @@ struct ToolCallingOrchestrator: Sendable {
     func run(
         request initialRequest: ProviderRequest,
         invoke: @Sendable (ProviderRequest, Int) async throws -> ProviderResponse,
-        onActivitiesChanged: (@Sendable ([ToolActivityStep]) async -> Void)? = nil
+        onActivitiesChanged: (@Sendable ([ToolActivityStep]) async -> Void)? = nil,
+        onProgressChanged: (@Sendable (ToolCallingProgress) async -> Void)? = nil
     ) async throws -> ToolCallingOutcome {
         var request = initialRequest
         var activities: [ToolActivityStep] = []
         var sources: [ToolSource] = []
         var seenCalls: Set<String> = []
         var combinedUsage: ProviderUsage?
+        var replayMessages: [ProviderRequestMessage] = []
         let roundLimit = max(1, maxRounds)
 
         for round in 1 ... roundLimit {
@@ -36,24 +45,29 @@ struct ToolCallingOrchestrator: Sendable {
                     response: response,
                     activities: activities,
                     sources: sources,
-                    rounds: round
+                    rounds: round,
+                    replayMessages: replayMessages
                 )
             }
 
-            request.messages.append(
-                ProviderRequestMessage(
+            let assistantToolMessage = ProviderRequestMessage(
                     role: "assistant",
                     content: response.text,
                     reasoningContent: response.reasoningSummary,
                     toolCalls: response.toolCalls
                 )
-            )
+            request.messages.append(assistantToolMessage)
+            var completedRoundMessages = [assistantToolMessage]
 
             for call in response.toolCalls {
                 let duplicateKey = Self.duplicateKey(for: call)
                 var step = ToolActivityStep.started(call: call, round: round)
                 activities.append(step)
                 await onActivitiesChanged?(activities)
+                await onProgressChanged?(ToolCallingProgress(
+                    activities: activities,
+                    replayMessages: replayMessages
+                ))
 
                 let result: ToolResult
                 if seenCalls.contains(duplicateKey) {
@@ -90,18 +104,28 @@ struct ToolCallingOrchestrator: Sendable {
                 step.finish(with: result)
                 activities[activities.count - 1] = step
                 sources = Self.mergedSources(sources, result.sources)
-                await onActivitiesChanged?(activities)
 
-                request.messages.append(
-                    ProviderRequestMessage(
+                let toolMessage = ProviderRequestMessage(
                         role: "tool",
                         content: result.content,
                         toolCallId: result.callId,
                         toolName: result.name,
                         toolResultIsError: result.isError
                     )
-                )
+                request.messages.append(toolMessage)
+                completedRoundMessages.append(toolMessage)
+                await onActivitiesChanged?(activities)
+                await onProgressChanged?(ToolCallingProgress(
+                    activities: activities,
+                    replayMessages: replayMessages
+                ))
             }
+
+            replayMessages.append(contentsOf: completedRoundMessages)
+            await onProgressChanged?(ToolCallingProgress(
+                activities: activities,
+                replayMessages: replayMessages
+            ))
 
             if round == roundLimit {
                 let message = L10n.text("Web検索ツールは最大ラウンド数に達したため停止しました。")
@@ -117,7 +141,8 @@ struct ToolCallingOrchestrator: Sendable {
                     response: response,
                     activities: activities,
                     sources: sources,
-                    rounds: round
+                    rounds: round,
+                    replayMessages: replayMessages
                 )
             }
         }

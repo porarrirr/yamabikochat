@@ -156,6 +156,10 @@ final class ToolCallingOrchestratorTests: XCTestCase {
         XCTAssertEqual(requests[1].messages.suffix(2).first?.role, "assistant")
         XCTAssertEqual(requests[1].messages.last?.role, "tool")
         XCTAssertEqual(requests[1].messages.last?.toolCallId, "call-1")
+        XCTAssertEqual(outcome.replayMessages.count, 2)
+        XCTAssertEqual(outcome.replayMessages[0].toolCalls?.first?.argumentsJSON, #"{"query":"swift"}"#)
+        XCTAssertEqual(outcome.replayMessages[1].content, requests[1].messages.last?.content)
+        XCTAssertEqual(outcome.replayMessages[1].toolCallId, "call-1")
     }
 
     func testToolFailureBecomesErrorResultAndTurnContinues() async throws {

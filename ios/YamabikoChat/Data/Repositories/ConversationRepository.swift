@@ -630,18 +630,51 @@ final class ConversationRepository {
         }
     }
 
-    func saveToolActivities(messageId: Int64, steps: [ToolActivityStep]) throws {
-        try saveToolActivities(messageId: messageId, variantId: nil, steps: steps)
+    func saveToolActivities(
+        messageId: Int64,
+        steps: [ToolActivityStep],
+        providerTranscript: [ProviderRequestMessage]? = nil
+    ) throws {
+        try saveToolActivities(
+            messageId: messageId,
+            variantId: nil,
+            steps: steps,
+            providerTranscript: providerTranscript
+        )
     }
 
-    func saveToolActivities(variantId: Int64, steps: [ToolActivityStep]) throws {
-        try saveToolActivities(messageId: nil, variantId: variantId, steps: steps)
+    func saveToolActivities(
+        variantId: Int64,
+        steps: [ToolActivityStep],
+        providerTranscript: [ProviderRequestMessage]? = nil
+    ) throws {
+        try saveToolActivities(
+            messageId: nil,
+            variantId: variantId,
+            steps: steps,
+            providerTranscript: providerTranscript
+        )
     }
 
-    private func saveToolActivities(messageId: Int64?, variantId: Int64?, steps: [ToolActivityStep]) throws {
+    private func saveToolActivities(
+        messageId: Int64?,
+        variantId: Int64?,
+        steps: [ToolActivityStep],
+        providerTranscript: [ProviderRequestMessage]?
+    ) throws {
         let data = try JSONEncoder().encode(steps)
         guard let json = String(data: data, encoding: .utf8) else {
             throw ProviderClientError.parseFailure("Tool activity JSON encoding failed")
+        }
+        let transcriptJSON: String?
+        if let providerTranscript {
+            let transcriptData = try JSONEncoder().encode(providerTranscript)
+            guard let encoded = String(data: transcriptData, encoding: .utf8) else {
+                throw ProviderClientError.parseFailure("Provider tool transcript JSON encoding failed")
+            }
+            transcriptJSON = encoded
+        } else {
+            transcriptJSON = nil
         }
         try dbQueue.write { db in
             let request: QueryInterfaceRequest<ChatMessageToolActivity>
@@ -659,12 +692,16 @@ final class ConversationRepository {
 
             if var existing = try request.fetchOne(db) {
                 existing.stepsJSON = json
+                if let transcriptJSON {
+                    existing.providerTranscriptJSON = transcriptJSON
+                }
                 try existing.update(db)
             } else {
                 var activity = ChatMessageToolActivity(
                     messageId: messageId,
                     variantId: variantId,
-                    stepsJSON: json
+                    stepsJSON: json,
+                    providerTranscriptJSON: transcriptJSON
                 )
                 try activity.insert(db)
             }
@@ -688,16 +725,49 @@ final class ConversationRepository {
                     .fetchAll(db)
             }
             let thinkingByMessageID = Dictionary(uniqueKeysWithValues: thinkingRows.map { ($0.messageId, $0.thinkingStream) })
+            let variantIds = variantsByMessageID.values.flatMap { $0 }.compactMap(\.id)
+            let activityRows = messageIds.isEmpty ? [] : try ChatMessageToolActivity
+                .filter(messageIds.contains(Column("messageId")))
+                .filter(Column("variantId") == nil)
+                .fetchAll(db)
+            let variantActivityRows = variantIds.isEmpty ? [] : try ChatMessageToolActivity
+                .filter(variantIds.contains(Column("variantId")))
+                .fetchAll(db)
+            let activityByMessageID = Dictionary(
+                uniqueKeysWithValues: activityRows.compactMap { activity in
+                    activity.messageId.map { ($0, activity) }
+                }
+            )
+            let activityByVariantID = Dictionary(
+                uniqueKeysWithValues: variantActivityRows.compactMap { activity in
+                    activity.variantId.map { ($0, activity) }
+                }
+            )
 
             return messages.compactMap { message in
                 guard let messageId = message.id else { return nil }
                 let resolved = resolveMessageContent(message: message, variantsByMessageID: variantsByMessageID)
+                let selectedVariant = message.selectedVariantIndex > 0
+                    ? variantsByMessageID[messageId]?.first(where: { $0.variantIndex == message.selectedVariantIndex })
+                    : nil
+                let activity = selectedVariant?.id.flatMap { activityByVariantID[$0] }
+                    ?? activityByMessageID[messageId]
+                let providerTranscript = activity?.providerTranscript
+                if let activity, !activity.steps.isEmpty, providerTranscript == nil {
+                    DiagnosticsLogger.log(
+                        "Stored tool activity has no replayable provider transcript",
+                        level: .warning,
+                        category: .chat,
+                        metadata: ["message": String(messageId)]
+                    )
+                }
                 return ProviderHistoryMessage(
                     messageId: messageId,
                     role: message.role == "model" ? "assistant" : message.role,
                     text: resolved.text,
                     attachments: decodeArray(resolved.attachmentsJSON),
-                    thinkingStream: resolved.thinkingStream ?? thinkingByMessageID[messageId]
+                    thinkingStream: resolved.thinkingStream ?? thinkingByMessageID[messageId],
+                    toolTranscript: providerTranscript ?? []
                 )
             }
         }

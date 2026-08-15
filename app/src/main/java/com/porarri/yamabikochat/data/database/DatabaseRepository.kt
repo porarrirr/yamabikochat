@@ -213,17 +213,35 @@ class DatabaseRepository(private val chatDao: ChatDao) {
     suspend fun saveSettings(settings: Settings) =
         chatDao.saveSettings(settings.normalizedForPersistence())
 
-    suspend fun saveToolActivities(messageId: Long, stepsJSON: String) {
+    suspend fun saveToolActivities(
+        messageId: Long,
+        stepsJSON: String,
+        providerTranscriptJSON: String? = null
+    ) {
+        val existingTranscript = chatDao.getToolActivityForMessage(messageId)?.providerTranscriptJSON
         chatDao.deleteToolActivityForMessage(messageId)
         chatDao.insertToolActivity(
-            ChatMessageToolActivity(messageId = messageId, stepsJSON = stepsJSON)
+            ChatMessageToolActivity(
+                messageId = messageId,
+                stepsJSON = stepsJSON,
+                providerTranscriptJSON = providerTranscriptJSON ?: existingTranscript
+            )
         )
     }
 
-    suspend fun saveToolActivitiesForVariant(variantId: Long, stepsJSON: String) {
+    suspend fun saveToolActivitiesForVariant(
+        variantId: Long,
+        stepsJSON: String,
+        providerTranscriptJSON: String? = null
+    ) {
+        val existingTranscript = chatDao.getToolActivityForVariant(variantId)?.providerTranscriptJSON
         chatDao.deleteToolActivityForVariant(variantId)
         chatDao.insertToolActivity(
-            ChatMessageToolActivity(variantId = variantId, stepsJSON = stepsJSON)
+            ChatMessageToolActivity(
+                variantId = variantId,
+                stepsJSON = stepsJSON,
+                providerTranscriptJSON = providerTranscriptJSON ?: existingTranscript
+            )
         )
     }
 

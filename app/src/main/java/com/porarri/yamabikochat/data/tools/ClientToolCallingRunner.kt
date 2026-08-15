@@ -24,14 +24,21 @@ class ClientToolCallingRunner(
         val text: String,
         val thinking: String,
         val activities: List<ToolActivityStep>,
-        val usage: TokenUsageSnapshot?
+        val usage: TokenUsageSnapshot?,
+        val replayContents: List<Content>
+    )
+
+    data class Progress(
+        val activities: List<ToolActivityStep>,
+        val replayContents: List<Content>
     )
 
     suspend fun run(
         baseRequest: GenerateContentRequest,
         model: String,
         provider: String,
-        onActivitiesChanged: (suspend (List<ToolActivityStep>) -> Unit)? = null
+        onActivitiesChanged: (suspend (List<ToolActivityStep>) -> Unit)? = null,
+        onProgressChanged: (suspend (Progress) -> Unit)? = null
     ): Result {
         val orchestrator = ToolCallingOrchestrator(registry = registry, maxRounds = maxRounds)
         var workingTools = baseRequest.tools
@@ -79,14 +86,23 @@ class ClientToolCallingRunner(
                     ?: throw ClientToolCallingException("Empty response body from ${provider.uppercase()}")
                 parseGenerateContentResponse(body)
             },
-            onActivitiesChanged = onActivitiesChanged
+            onActivitiesChanged = onActivitiesChanged,
+            onProgressChanged = { progress ->
+                onProgressChanged?.invoke(
+                    Progress(
+                        activities = progress.activities,
+                        replayContents = toolMessagesToContents(progress.replayMessages)
+                    )
+                )
+            }
         )
 
         return Result(
             text = outcome.response.text,
             thinking = outcome.response.reasoningSummary.orEmpty(),
             activities = outcome.activities,
-            usage = outcome.response.usage
+            usage = outcome.response.usage,
+            replayContents = toolMessagesToContents(outcome.replayMessages)
         )
     }
 

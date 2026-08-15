@@ -33,6 +33,17 @@ struct ProviderHistoryMessage: Equatable {
     var text: String
     var attachments: [String]
     var thinkingStream: String?
+    var toolTranscript: [ProviderRequestMessage] = []
+
+    var providerMessages: [ProviderRequestMessage] {
+        let finalMessage = ProviderRequestMessage(
+            role: role,
+            content: text,
+            attachments: attachments,
+            reasoningContent: thinkingStream
+        )
+        return role == "assistant" ? toolTranscript + [finalMessage] : [finalMessage]
+    }
 }
 
 struct FullChatMessage: Identifiable, Equatable {

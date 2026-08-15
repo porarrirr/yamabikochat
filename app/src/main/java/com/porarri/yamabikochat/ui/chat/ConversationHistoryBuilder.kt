@@ -7,6 +7,7 @@ import com.porarri.yamabikochat.data.local.DualChatMessage
 import com.porarri.yamabikochat.data.remote.Content
 import com.porarri.yamabikochat.data.remote.Part
 import com.porarri.yamabikochat.data.local.FullChatMessage
+import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -42,14 +43,26 @@ class ConversationHistoryBuilder(
         val combinedMessages = existingFullMessages + fetched
         val sessionAttachmentCache = mutableMapOf<String, Part?>()
 
-        val history = limitedSummaries.mapNotNull { summary ->
-            val fullMessage = combinedMessages[summary.id] ?: return@mapNotNull null
+        val history = limitedSummaries.flatMap { summary ->
+            val fullMessage = combinedMessages[summary.id] ?: return@flatMap emptyList()
             val parts = resolveStoredMessageParts(
                 message = fullMessage,
                 sessionCache = sessionAttachmentCache,
                 includeThoughts = includeModelThoughts
             )
-            Content(role = fullMessage.chatMessage.role, parts = parts)
+            val finalContent = Content(role = fullMessage.chatMessage.role, parts = parts)
+            if (fullMessage.chatMessage.role == "model") {
+                val activity = fullMessage.displayToolActivity
+                val providerTranscript = activity?.providerTranscript
+                if (activity != null && activity.steps.isNotEmpty() && providerTranscript == null) {
+                    DiagnosticsLogger.log(
+                        "Stored tool activity has no replayable provider transcript message=${summary.id}"
+                    )
+                }
+                providerTranscript.orEmpty() + finalContent
+            } else {
+                listOf(finalContent)
+            }
         }.toMutableList()
 
         val userMessageParts = buildNewMessageParts(text, attachmentsToSend)

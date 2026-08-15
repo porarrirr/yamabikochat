@@ -759,6 +759,16 @@ enum AppDatabase {
             }
         }
 
+        migrator.registerMigration("v16_tool_provider_transcript") { db in
+            let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(chat_message_tool_activity)")
+            let columns = Set(rows.compactMap { ($0["name"] as String?)?.lowercased() })
+            if !columns.contains("providertranscriptjson") {
+                try db.alter(table: "chat_message_tool_activity") { t in
+                    t.add(column: "providerTranscriptJSON", .text)
+                }
+            }
+        }
+
         return migrator
     }
 
@@ -769,6 +779,7 @@ enum AppDatabase {
                 messageId INTEGER REFERENCES chat_messages(id) ON DELETE CASCADE,
                 variantId INTEGER REFERENCES chat_message_variants(id) ON DELETE CASCADE,
                 stepsJSON TEXT NOT NULL DEFAULT '[]',
+                providerTranscriptJSON TEXT,
                 CHECK (
                     (messageId IS NOT NULL AND variantId IS NULL)
                     OR (messageId IS NULL AND variantId IS NOT NULL)

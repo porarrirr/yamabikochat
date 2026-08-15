@@ -8,12 +8,20 @@ struct ChatMessageToolActivity: Codable, FetchableRecord, MutablePersistableReco
     var messageId: Int64?
     var variantId: Int64?
     var stepsJSON: String
+    var providerTranscriptJSON: String?
 
-    init(id: Int64? = nil, messageId: Int64? = nil, variantId: Int64? = nil, stepsJSON: String) {
+    init(
+        id: Int64? = nil,
+        messageId: Int64? = nil,
+        variantId: Int64? = nil,
+        stepsJSON: String,
+        providerTranscriptJSON: String? = nil
+    ) {
         self.id = id
         self.messageId = messageId
         self.variantId = variantId
         self.stepsJSON = stepsJSON
+        self.providerTranscriptJSON = providerTranscriptJSON
     }
 
     mutating func didInsert(_ inserted: InsertionSuccess) {
@@ -23,6 +31,13 @@ struct ChatMessageToolActivity: Codable, FetchableRecord, MutablePersistableReco
     var steps: [ToolActivityStep] {
         guard let data = stepsJSON.data(using: .utf8) else { return [] }
         return (try? JSONDecoder().decode([ToolActivityStep].self, from: data)) ?? []
+    }
+
+    var providerTranscript: [ProviderRequestMessage]? {
+        guard let providerTranscriptJSON,
+              let data = providerTranscriptJSON.data(using: .utf8)
+        else { return nil }
+        return try? JSONDecoder().decode([ProviderRequestMessage].self, from: data)
     }
 }
 

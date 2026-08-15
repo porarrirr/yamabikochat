@@ -198,7 +198,13 @@ data class ToolCallingOutcome(
     val response: ToolTurnResponse,
     val activities: List<ToolActivityStep>,
     val sources: List<ToolSource>,
-    val rounds: Int
+    val rounds: Int,
+    val replayMessages: List<ToolTurnMessage>
+)
+
+data class ToolCallingProgress(
+    val activities: List<ToolActivityStep>,
+    val replayMessages: List<ToolTurnMessage>
 )
 
 object ToolArguments {

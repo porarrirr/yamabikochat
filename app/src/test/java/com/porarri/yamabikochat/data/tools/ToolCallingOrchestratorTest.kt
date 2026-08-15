@@ -59,6 +59,12 @@ class ToolCallingOrchestratorTest {
         assertEquals(1, outcome.activities.size)
         assertEquals(ToolActivityStep.Status.completed, outcome.activities.single().status)
         assertTrue(outcome.rounds >= 2)
+        assertEquals(2, outcome.replayMessages.size)
+        assertEquals("assistant", outcome.replayMessages[0].role)
+        assertEquals("""{"q":"hello"}""", outcome.replayMessages[0].toolCalls?.single()?.argumentsJSON)
+        assertEquals("tool", outcome.replayMessages[1].role)
+        assertEquals("call-0-echo", outcome.replayMessages[1].toolCallId)
+        assertEquals("""{"ok":true,"echo":{"q":"hello"}}""", outcome.replayMessages[1].content)
     }
 
     @Test

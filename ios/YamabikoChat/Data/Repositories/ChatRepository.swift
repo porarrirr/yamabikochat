@@ -482,9 +482,7 @@ final class ChatRepository {
         }
 
         let targetMessageID = history[targetIndex].messageId
-        let requestMessages = Array(history.prefix(targetIndex)).map {
-            ProviderRequestMessage(role: $0.role, content: $0.text, attachments: $0.attachments)
-        }
+        let requestMessages = Array(history.prefix(targetIndex)).flatMap(\.providerMessages)
         let request = try await buildProviderRequest(
             conversation: conversation,
             settings: settings,
@@ -626,14 +624,7 @@ final class ChatRepository {
             resolvedMessages = providerMessages
         } else {
             let history = try conversations.fetchProviderHistory(conversationId: conversationId)
-            resolvedMessages = history.map {
-                ProviderRequestMessage(
-                    role: $0.role,
-                    content: $0.text,
-                    attachments: $0.attachments,
-                    reasoningContent: $0.thinkingStream
-                )
-            }
+            resolvedMessages = history.flatMap(\.providerMessages)
         }
 
         let resolvedSettings = try await requestSettingsResolver.resolve(
@@ -728,10 +719,14 @@ final class ChatRepository {
                         )
                     }
                 },
-                onActivitiesChanged: { [self] activities in
+                onProgressChanged: { [self] progress in
                     guard persistResults else { return }
                     do {
-                        try saveToolActivities(kind: persistenceKind, steps: activities)
+                        try saveToolActivities(
+                            kind: persistenceKind,
+                            steps: progress.activities,
+                            providerTranscript: progress.replayMessages
+                        )
                     } catch {
                         DiagnosticsLogger.log(
                             "Tool activity persistence failed",
@@ -829,13 +824,22 @@ final class ChatRepository {
 
     private func saveToolActivities(
         kind: ChatStreamPersistenceKind,
-        steps: [ToolActivityStep]
+        steps: [ToolActivityStep],
+        providerTranscript: [ProviderRequestMessage]
     ) throws {
         switch kind {
         case let .message(messageId):
-            try conversations.saveToolActivities(messageId: messageId, steps: steps)
+            try conversations.saveToolActivities(
+                messageId: messageId,
+                steps: steps,
+                providerTranscript: providerTranscript
+            )
         case let .variant(variantId, _):
-            try conversations.saveToolActivities(variantId: variantId, steps: steps)
+            try conversations.saveToolActivities(
+                variantId: variantId,
+                steps: steps,
+                providerTranscript: providerTranscript
+            )
         }
     }
 
@@ -1076,13 +1080,8 @@ final class ChatRepository {
             throw error
         }
 
-        let history = try conversations.fetchProviderHistory(conversationId: conversationId).map {
-            ProviderRequestMessage(
-                role: $0.role,
-                content: $0.text,
-                attachments: $0.attachments
-            )
-        }
+        let history = try conversations.fetchProviderHistory(conversationId: conversationId)
+            .flatMap(\.providerMessages)
 
         let context = FusionContext(
             fusionDepth: 0,
@@ -2391,14 +2390,9 @@ final class ChatRepository {
         dualMessages: [DualChatMessage],
         modelSide: DualHistorySide
     ) throws -> [ProviderRequestMessage] {
-        var messages: [ProviderRequestMessage] = try conversations.fetchProviderHistory(conversationId: conversationId).map {
-            ProviderRequestMessage(
-                role: $0.role,
-                content: $0.text,
-                attachments: $0.attachments,
-                reasoningContent: $0.thinkingStream
-            )
-        }
+        var messages: [ProviderRequestMessage] = try conversations
+            .fetchProviderHistory(conversationId: conversationId)
+            .flatMap(\.providerMessages)
 
         let sortedDual = dualMessages.sorted {
             if $0.createdAtMs == $1.createdAtMs {
