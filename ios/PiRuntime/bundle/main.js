@@ -9227,6 +9227,37 @@ var require_ignore = __commonJS({
   }
 });
 
+// node_modules/@earendil-works/pi-ai/dist/utils/provider-env.js
+function getBunSandboxEnvValue(name) {
+  if (typeof process === "undefined" || !process.versions?.bun || Object.keys(process.env).length > 0) {
+    return void 0;
+  }
+  if (procEnvCache === null) {
+    procEnvCache = /* @__PURE__ */ new Map();
+    try {
+      const { readFileSync: readFileSync3 } = __require("node:fs");
+      const data = readFileSync3("/proc/self/environ", "utf-8");
+      for (const entry of data.split("\0")) {
+        const idx = entry.indexOf("=");
+        if (idx > 0) {
+          procEnvCache.set(entry.slice(0, idx), entry.slice(idx + 1));
+        }
+      }
+    } catch {
+    }
+  }
+  return procEnvCache.get(name);
+}
+function getProviderEnvValue(name, env) {
+  return env?.[name] || (typeof process !== "undefined" ? process.env[name] : void 0) || getBunSandboxEnvValue(name) || void 0;
+}
+var procEnvCache;
+var init_provider_env = __esm({
+  "node_modules/@earendil-works/pi-ai/dist/utils/provider-env.js"() {
+    procEnvCache = null;
+  }
+});
+
 // node_modules/@earendil-works/pi-ai/dist/utils/error-body.js
 function normalizeProviderError(error) {
   if (!(error instanceof Error)) {
@@ -9352,37 +9383,6 @@ function providerHeadersToRecord(headers) {
 }
 var init_headers = __esm({
   "node_modules/@earendil-works/pi-ai/dist/utils/headers.js"() {
-  }
-});
-
-// node_modules/@earendil-works/pi-ai/dist/utils/provider-env.js
-function getBunSandboxEnvValue(name) {
-  if (typeof process === "undefined" || !process.versions?.bun || Object.keys(process.env).length > 0) {
-    return void 0;
-  }
-  if (procEnvCache === null) {
-    procEnvCache = /* @__PURE__ */ new Map();
-    try {
-      const { readFileSync: readFileSync3 } = __require("node:fs");
-      const data = readFileSync3("/proc/self/environ", "utf-8");
-      for (const entry of data.split("\0")) {
-        const idx = entry.indexOf("=");
-        if (idx > 0) {
-          procEnvCache.set(entry.slice(0, idx), entry.slice(idx + 1));
-        }
-      }
-    } catch {
-    }
-  }
-  return procEnvCache.get(name);
-}
-function getProviderEnvValue(name, env) {
-  return env?.[name] || (typeof process !== "undefined" ? process.env[name] : void 0) || getBunSandboxEnvValue(name) || void 0;
-}
-var procEnvCache;
-var init_provider_env = __esm({
-  "node_modules/@earendil-works/pi-ai/dist/utils/provider-env.js"() {
-    procEnvCache = null;
   }
 });
 
@@ -10832,7 +10832,7 @@ function validateRetryDelayMs(delayMs, options) {
   }
   return delayMs;
 }
-function sleep2(ms2, signal) {
+function sleep3(ms2, signal) {
   return new Promise((resolve4, reject) => {
     if (signal?.aborted) {
       reject(new Error("Request was aborted"));
@@ -11665,7 +11665,7 @@ function extractAccountId(token2) {
     if (parts.length !== 3)
       throw new Error("Invalid token");
     const payload = JSON.parse(atob(parts[1]));
-    const accountId = payload?.[JWT_CLAIM_PATH]?.chatgpt_account_id;
+    const accountId = payload?.[JWT_CLAIM_PATH2]?.chatgpt_account_id;
     if (!accountId)
       throw new Error("No account ID in token");
     return accountId;
@@ -11710,7 +11710,7 @@ function buildWebSocketHeaders(initHeaders, additionalHeaders, accountId, token2
   headers.set("session-id", requestId);
   return headers;
 }
-var DEFAULT_CODEX_BASE_URL, JWT_CLAIM_PATH, DEFAULT_MAX_RETRIES, BASE_DELAY_MS, DEFAULT_MAX_RETRY_DELAY_MS2, DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS, REQUEST_COMPRESSION_ZSTD_LEVEL, CODEX_TOOL_CALL_PROVIDERS, WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE, WEBSOCKET_CONNECTION_LIMIT_REACHED_CODE, PREVIOUS_RESPONSE_NOT_FOUND_CODE, CODEX_RESPONSE_STATUSES, RetryDelayExceededError, stream3, streamSimple3, CodexApiError, CodexProtocolError, OPENAI_BETA_RESPONSES_WEBSOCKETS, SESSION_WEBSOCKET_CACHE_TTL_MS, SESSION_WEBSOCKET_MAX_AGE_MS, websocketSessionCache, websocketDebugStats, websocketSseFallbackSessions, _cachedWebsocket, WebSocketCloseError;
+var DEFAULT_CODEX_BASE_URL, JWT_CLAIM_PATH2, DEFAULT_MAX_RETRIES, BASE_DELAY_MS, DEFAULT_MAX_RETRY_DELAY_MS2, DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS, REQUEST_COMPRESSION_ZSTD_LEVEL, CODEX_TOOL_CALL_PROVIDERS, WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE, WEBSOCKET_CONNECTION_LIMIT_REACHED_CODE, PREVIOUS_RESPONSE_NOT_FOUND_CODE, CODEX_RESPONSE_STATUSES, RetryDelayExceededError, stream3, streamSimple3, CodexApiError, CodexProtocolError, OPENAI_BETA_RESPONSES_WEBSOCKETS, SESSION_WEBSOCKET_CACHE_TTL_MS, SESSION_WEBSOCKET_MAX_AGE_MS, websocketSessionCache, websocketDebugStats, websocketSseFallbackSessions, _cachedWebsocket, WebSocketCloseError;
 var init_openai_codex_responses = __esm({
   "node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js"() {
     init_models();
@@ -11729,7 +11729,7 @@ var init_openai_codex_responses = __esm({
     init_openai_responses_shared();
     init_simple_options();
     DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api";
-    JWT_CLAIM_PATH = "https://api.openai.com/auth";
+    JWT_CLAIM_PATH2 = "https://api.openai.com/auth";
     DEFAULT_MAX_RETRIES = 0;
     BASE_DELAY_MS = 1e3;
     DEFAULT_MAX_RETRY_DELAY_MS2 = 6e4;
@@ -11889,7 +11889,7 @@ var init_openai_codex_responses = __esm({
               if (attempt < maxRetries && isRetryableError(response.status, errorText)) {
                 const retryAfterDelayMs = getRetryAfterDelayMs(response.headers);
                 const delayMs = retryAfterDelayMs === void 0 ? BASE_DELAY_MS * 2 ** attempt : validateRetryDelayMs(retryAfterDelayMs, options);
-                await sleep2(delayMs, options?.signal);
+                await sleep3(delayMs, options?.signal);
                 continue;
               }
               const fakeResponse = new Response(errorText, {
@@ -11907,7 +11907,7 @@ var init_openai_codex_responses = __esm({
               lastError = error instanceof Error ? error : new Error(String(error));
               if (attempt < maxRetries && !(lastError instanceof RetryDelayExceededError) && !lastError.message.includes("usage limit")) {
                 const delayMs = BASE_DELAY_MS * 2 ** attempt;
-                await sleep2(delayMs, options?.signal);
+                await sleep3(delayMs, options?.signal);
                 continue;
               }
               throw lastError;
@@ -24672,30 +24672,30 @@ var require_oauth2client = __commonJS({
        * @param refresh_token Existing refresh token.
        * @private
        */
-      async refreshToken(refreshToken) {
-        if (!refreshToken) {
-          return this.refreshTokenNoCache(refreshToken);
+      async refreshToken(refreshToken2) {
+        if (!refreshToken2) {
+          return this.refreshTokenNoCache(refreshToken2);
         }
-        if (this.refreshTokenPromises.has(refreshToken)) {
-          return this.refreshTokenPromises.get(refreshToken);
+        if (this.refreshTokenPromises.has(refreshToken2)) {
+          return this.refreshTokenPromises.get(refreshToken2);
         }
-        const p = this.refreshTokenNoCache(refreshToken).then((r3) => {
-          this.refreshTokenPromises.delete(refreshToken);
+        const p = this.refreshTokenNoCache(refreshToken2).then((r3) => {
+          this.refreshTokenPromises.delete(refreshToken2);
           return r3;
         }, (e3) => {
-          this.refreshTokenPromises.delete(refreshToken);
+          this.refreshTokenPromises.delete(refreshToken2);
           throw e3;
         });
-        this.refreshTokenPromises.set(refreshToken, p);
+        this.refreshTokenPromises.set(refreshToken2, p);
         return p;
       }
-      async refreshTokenNoCache(refreshToken) {
-        if (!refreshToken) {
+      async refreshTokenNoCache(refreshToken2) {
+        if (!refreshToken2) {
           throw new Error("No refresh token is set.");
         }
         const url = this.endpoints.oauth2TokenUrl.toString();
         const data = {
-          refresh_token: refreshToken,
+          refresh_token: refreshToken2,
           client_id: this._clientId,
           client_secret: this._clientSecret,
           grant_type: "refresh_token"
@@ -26811,11 +26811,11 @@ var require_refreshclient = __commonJS({
        * @param eagerRefreshThresholdMillis **@DEPRECATED**. Provide a {@link UserRefreshClientOptions `UserRefreshClientOptions`} object in the first parameter instead.
        * @param forceRefreshOnFailure **@DEPRECATED**. Provide a {@link UserRefreshClientOptions `UserRefreshClientOptions`} object in the first parameter instead.
        */
-      constructor(optionsOrClientId, clientSecret, refreshToken, eagerRefreshThresholdMillis, forceRefreshOnFailure) {
+      constructor(optionsOrClientId, clientSecret, refreshToken2, eagerRefreshThresholdMillis, forceRefreshOnFailure) {
         const opts = optionsOrClientId && typeof optionsOrClientId === "object" ? optionsOrClientId : {
           clientId: optionsOrClientId,
           clientSecret,
-          refreshToken,
+          refreshToken: refreshToken2,
           eagerRefreshThresholdMillis,
           forceRefreshOnFailure
         };
@@ -29031,7 +29031,7 @@ var require_externalAccountAuthorizedUserClient = __commonJS({
        * @return A promise that resolves with the token refresh response containing
        *   the requested access token and its expiration time.
        */
-      async refreshToken(refreshToken, headers) {
+      async refreshToken(refreshToken2, headers) {
         const opts = {
           ..._ExternalAccountAuthorizedUserHandler.RETRY_CONFIG,
           url: this.#tokenRefreshEndpoint,
@@ -29039,7 +29039,7 @@ var require_externalAccountAuthorizedUserClient = __commonJS({
           headers,
           data: new URLSearchParams({
             grant_type: "refresh_token",
-            refresh_token: refreshToken
+            refresh_token: refreshToken2
           }),
           responseType: "json"
         };
@@ -36468,10 +36468,10 @@ var init_values = __esm({
 });
 
 // node_modules/@earendil-works/pi-coding-agent/node_modules/@anthropic-ai/sdk/internal/utils/sleep.mjs
-var sleep5;
+var sleep6;
 var init_sleep = __esm({
   "node_modules/@earendil-works/pi-coding-agent/node_modules/@anthropic-ai/sdk/internal/utils/sleep.mjs"() {
-    sleep5 = (ms2) => new Promise((resolve4) => setTimeout(resolve4, ms2));
+    sleep6 = (ms2) => new Promise((resolve4) => setTimeout(resolve4, ms2));
   }
 });
 
@@ -42824,7 +42824,7 @@ var init_client = __esm({
           const maxRetries = options.maxRetries ?? this.maxRetries;
           timeoutMillis = this.calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries);
         }
-        await sleep5(timeoutMillis);
+        await sleep6(timeoutMillis);
         return this.makeRequest(options, retriesRemaining - 1, requestLogID);
       }
       calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries) {
@@ -43124,7 +43124,7 @@ function createAbortError2() {
   error.name = "AbortError";
   return error;
 }
-function abortableSleep2(ms2, signal) {
+function abortableSleep3(ms2, signal) {
   return new Promise((resolve4, reject) => {
     if (signal?.aborted) {
       reject(createAbortError2());
@@ -43154,7 +43154,7 @@ async function retryProviderRequest2(request, options = {}) {
         throw error;
       const retryIndex = maxRetries - retriesRemaining;
       retriesRemaining--;
-      await abortableSleep2(getRetryDelayMs2(error, retryIndex, options.maxRetryDelayMs), options.signal);
+      await abortableSleep3(getRetryDelayMs2(error, retryIndex, options.maxRetryDelayMs), options.signal);
     }
   }
 }
@@ -44980,10 +44980,10 @@ var init_values2 = __esm({
 });
 
 // node_modules/@earendil-works/pi-coding-agent/node_modules/openai/internal/utils/sleep.mjs
-var sleep6;
+var sleep7;
 var init_sleep2 = __esm({
   "node_modules/@earendil-works/pi-coding-agent/node_modules/openai/internal/utils/sleep.mjs"() {
-    sleep6 = (ms2) => new Promise((resolve4) => setTimeout(resolve4, ms2));
+    sleep7 = (ms2) => new Promise((resolve4) => setTimeout(resolve4, ms2));
   }
 });
 
@@ -52111,7 +52111,7 @@ var init_runs = __esm({
                   }
                 }
               }
-              await sleep6(sleepInterval);
+              await sleep7(sleepInterval);
               break;
             //We return the run in any terminal state.
             case "requires_action":
@@ -52846,7 +52846,7 @@ var init_files3 = __esm({
         const start = Date.now();
         let file = await this.retrieve(id);
         while (!file.status || !TERMINAL_STATES.has(file.status)) {
-          await sleep6(pollInterval);
+          await sleep7(pollInterval);
           file = await this.retrieve(id);
           if (Date.now() - start > maxWait) {
             throw new APIConnectionTimeoutError5({
@@ -54451,7 +54451,7 @@ var init_file_batches = __esm({
                   }
                 }
               }
-              await sleep6(sleepInterval);
+              await sleep7(sleepInterval);
               break;
             case "failed":
             case "cancelled":
@@ -54601,7 +54601,7 @@ var init_files4 = __esm({
                   }
                 }
               }
-              await sleep6(sleepInterval);
+              await sleep7(sleepInterval);
               break;
             case "failed":
             case "completed":
@@ -55461,7 +55461,7 @@ var init_client2 = __esm({
           const maxRetries = options.maxRetries ?? this.maxRetries;
           timeoutMillis = this.calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries);
         }
-        await sleep6(timeoutMillis);
+        await sleep7(timeoutMillis);
         return this.makeRequest(options, retriesRemaining - 1, requestLogID);
       }
       calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries) {
@@ -69366,30 +69366,30 @@ var require_oauth2client2 = __commonJS({
        * @param refresh_token Existing refresh token.
        * @private
        */
-      async refreshToken(refreshToken) {
-        if (!refreshToken) {
-          return this.refreshTokenNoCache(refreshToken);
+      async refreshToken(refreshToken2) {
+        if (!refreshToken2) {
+          return this.refreshTokenNoCache(refreshToken2);
         }
-        if (this.refreshTokenPromises.has(refreshToken)) {
-          return this.refreshTokenPromises.get(refreshToken);
+        if (this.refreshTokenPromises.has(refreshToken2)) {
+          return this.refreshTokenPromises.get(refreshToken2);
         }
-        const p = this.refreshTokenNoCache(refreshToken).then((r3) => {
-          this.refreshTokenPromises.delete(refreshToken);
+        const p = this.refreshTokenNoCache(refreshToken2).then((r3) => {
+          this.refreshTokenPromises.delete(refreshToken2);
           return r3;
         }, (e3) => {
-          this.refreshTokenPromises.delete(refreshToken);
+          this.refreshTokenPromises.delete(refreshToken2);
           throw e3;
         });
-        this.refreshTokenPromises.set(refreshToken, p);
+        this.refreshTokenPromises.set(refreshToken2, p);
         return p;
       }
-      async refreshTokenNoCache(refreshToken) {
-        if (!refreshToken) {
+      async refreshTokenNoCache(refreshToken2) {
+        if (!refreshToken2) {
           throw new Error("No refresh token is set.");
         }
         const url = this.endpoints.oauth2TokenUrl.toString();
         const data = {
-          refresh_token: refreshToken,
+          refresh_token: refreshToken2,
           client_id: this._clientId,
           client_secret: this._clientSecret,
           grant_type: "refresh_token"
@@ -71505,11 +71505,11 @@ var require_refreshclient2 = __commonJS({
        * @param eagerRefreshThresholdMillis **@DEPRECATED**. Provide a {@link UserRefreshClientOptions `UserRefreshClientOptions`} object in the first parameter instead.
        * @param forceRefreshOnFailure **@DEPRECATED**. Provide a {@link UserRefreshClientOptions `UserRefreshClientOptions`} object in the first parameter instead.
        */
-      constructor(optionsOrClientId, clientSecret, refreshToken, eagerRefreshThresholdMillis, forceRefreshOnFailure) {
+      constructor(optionsOrClientId, clientSecret, refreshToken2, eagerRefreshThresholdMillis, forceRefreshOnFailure) {
         const opts = optionsOrClientId && typeof optionsOrClientId === "object" ? optionsOrClientId : {
           clientId: optionsOrClientId,
           clientSecret,
-          refreshToken,
+          refreshToken: refreshToken2,
           eagerRefreshThresholdMillis,
           forceRefreshOnFailure
         };
@@ -73725,7 +73725,7 @@ var require_externalAccountAuthorizedUserClient2 = __commonJS({
        * @return A promise that resolves with the token refresh response containing
        *   the requested access token and its expiration time.
        */
-      async refreshToken(refreshToken, headers) {
+      async refreshToken(refreshToken2, headers) {
         const opts = {
           ..._ExternalAccountAuthorizedUserHandler.RETRY_CONFIG,
           url: this.#tokenRefreshEndpoint,
@@ -73733,7 +73733,7 @@ var require_externalAccountAuthorizedUserClient2 = __commonJS({
           headers,
           data: new URLSearchParams({
             grant_type: "refresh_token",
-            refresh_token: refreshToken
+            refresh_token: refreshToken2
           }),
           responseType: "json"
         };
@@ -89420,7 +89420,7 @@ async function uploadBlobInternal2(file, uploadUrl, apiClient, httpOptions) {
         break;
       }
       retryCount++;
-      await sleep7(currentDelayMs);
+      await sleep8(currentDelayMs);
       currentDelayMs = currentDelayMs * DELAY_MULTIPLIER2;
     }
     offset += chunkSize;
@@ -89437,7 +89437,7 @@ async function getBlobStat2(file) {
   const fileStat = { size: file.size, type: file.type };
   return fileStat;
 }
-function sleep7(ms2) {
+function sleep8(ms2) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, ms2));
 }
 function resolveCloudFlag2(options) {
@@ -96554,7 +96554,7 @@ ${underline}`);
                 break;
               }
               retryCount++;
-              await sleep7(currentDelayMs);
+              await sleep8(currentDelayMs);
               currentDelayMs = currentDelayMs * DELAY_MULTIPLIER2;
             }
             offset += bytesRead;
@@ -98742,7 +98742,7 @@ function validateRetryDelayMs2(delayMs, options) {
   }
   return delayMs;
 }
-function sleep8(ms2, signal) {
+function sleep9(ms2, signal) {
   return new Promise((resolve4, reject) => {
     if (signal?.aborted) {
       reject(new Error("Request was aborted"));
@@ -99575,7 +99575,7 @@ function extractAccountId2(token2) {
     if (parts.length !== 3)
       throw new Error("Invalid token");
     const payload = JSON.parse(atob(parts[1]));
-    const accountId = payload?.[JWT_CLAIM_PATH2]?.chatgpt_account_id;
+    const accountId = payload?.[JWT_CLAIM_PATH3]?.chatgpt_account_id;
     if (!accountId)
       throw new Error("No account ID in token");
     return accountId;
@@ -99620,7 +99620,7 @@ function buildWebSocketHeaders2(initHeaders, additionalHeaders, accountId, token
   headers.set("session-id", requestId);
   return headers;
 }
-var DEFAULT_CODEX_BASE_URL2, JWT_CLAIM_PATH2, DEFAULT_MAX_RETRIES2, BASE_DELAY_MS2, DEFAULT_MAX_RETRY_DELAY_MS4, DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS2, REQUEST_COMPRESSION_ZSTD_LEVEL2, CODEX_TOOL_CALL_PROVIDERS2, WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE2, WEBSOCKET_CONNECTION_LIMIT_REACHED_CODE2, PREVIOUS_RESPONSE_NOT_FOUND_CODE2, CODEX_RESPONSE_STATUSES2, RetryDelayExceededError2, stream11, streamSimple11, CodexApiError2, CodexProtocolError2, OPENAI_BETA_RESPONSES_WEBSOCKETS2, SESSION_WEBSOCKET_CACHE_TTL_MS2, SESSION_WEBSOCKET_MAX_AGE_MS2, websocketSessionCache2, websocketDebugStats2, websocketSseFallbackSessions2, _cachedWebsocket2, WebSocketCloseError2;
+var DEFAULT_CODEX_BASE_URL2, JWT_CLAIM_PATH3, DEFAULT_MAX_RETRIES2, BASE_DELAY_MS2, DEFAULT_MAX_RETRY_DELAY_MS4, DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS2, REQUEST_COMPRESSION_ZSTD_LEVEL2, CODEX_TOOL_CALL_PROVIDERS2, WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE2, WEBSOCKET_CONNECTION_LIMIT_REACHED_CODE2, PREVIOUS_RESPONSE_NOT_FOUND_CODE2, CODEX_RESPONSE_STATUSES2, RetryDelayExceededError2, stream11, streamSimple11, CodexApiError2, CodexProtocolError2, OPENAI_BETA_RESPONSES_WEBSOCKETS2, SESSION_WEBSOCKET_CACHE_TTL_MS2, SESSION_WEBSOCKET_MAX_AGE_MS2, websocketSessionCache2, websocketDebugStats2, websocketSseFallbackSessions2, _cachedWebsocket2, WebSocketCloseError2;
 var init_openai_codex_responses2 = __esm({
   "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js"() {
     init_models2();
@@ -99639,7 +99639,7 @@ var init_openai_codex_responses2 = __esm({
     init_openai_responses_shared2();
     init_simple_options2();
     DEFAULT_CODEX_BASE_URL2 = "https://chatgpt.com/backend-api";
-    JWT_CLAIM_PATH2 = "https://api.openai.com/auth";
+    JWT_CLAIM_PATH3 = "https://api.openai.com/auth";
     DEFAULT_MAX_RETRIES2 = 0;
     BASE_DELAY_MS2 = 1e3;
     DEFAULT_MAX_RETRY_DELAY_MS4 = 6e4;
@@ -99799,7 +99799,7 @@ var init_openai_codex_responses2 = __esm({
               if (attempt < maxRetries && isRetryableError2(response.status, errorText)) {
                 const retryAfterDelayMs = getRetryAfterDelayMs2(response.headers);
                 const delayMs = retryAfterDelayMs === void 0 ? BASE_DELAY_MS2 * 2 ** attempt : validateRetryDelayMs2(retryAfterDelayMs, options);
-                await sleep8(delayMs, options?.signal);
+                await sleep9(delayMs, options?.signal);
                 continue;
               }
               const fakeResponse = new Response(errorText, {
@@ -99817,7 +99817,7 @@ var init_openai_codex_responses2 = __esm({
               lastError = error instanceof Error ? error : new Error(String(error));
               if (attempt < maxRetries && !(lastError instanceof RetryDelayExceededError2) && !lastError.message.includes("usage limit")) {
                 const delayMs = BASE_DELAY_MS2 * 2 ** attempt;
-                await sleep8(delayMs, options?.signal);
+                await sleep9(delayMs, options?.signal);
                 continue;
               }
               throw lastError;
@@ -148582,7 +148582,7 @@ Did you specify these with the most recent transformation maps first?`);
           }, __toCommonJS = (e6) => __copyProps2(t5({}, "__esModule", { value: true }), e6), i3 = {};
           ((e6, r6) => {
             for (var n9 in r6) t5(e6, n9, { get: r6[n9], enumerable: true });
-          })(i3, { decode: () => decode, decodeGeneratedRanges: () => decodeGeneratedRanges, decodeOriginalScopes: () => decodeOriginalScopes, encode: () => encode3, encodeGeneratedRanges: () => encodeGeneratedRanges, encodeOriginalScopes: () => encodeOriginalScopes }), e5.exports = __toCommonJS(i3);
+          })(i3, { decode: () => decode3, decodeGeneratedRanges: () => decodeGeneratedRanges, decodeOriginalScopes: () => decodeOriginalScopes, encode: () => encode3, encodeGeneratedRanges: () => encodeGeneratedRanges, encodeOriginalScopes: () => encodeOriginalScopes }), e5.exports = __toCommonJS(i3);
           var o = ",".charCodeAt(0), a = ";".charCodeAt(0), l3 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", p = new Uint8Array(64), c = new Uint8Array(128);
           for (let e6 = 0; e6 < l3.length; e6++) {
             const t6 = l3.charCodeAt(e6);
@@ -148764,7 +148764,7 @@ Did you specify these with the most recent transformation maps first?`);
               e6.write(a);
             } while (++t6 < r6);
           }
-          function decode(e6) {
+          function decode3(e6) {
             const { length: t6 } = e6, r6 = new m4(e6), n9 = [];
             let s4 = 0, i4 = 0, o2 = 0, a2 = 0, l4 = 0;
             do {
@@ -209539,15 +209539,15 @@ function Get2() {
 
 // node_modules/typebox/build/type/types/_codec.mjs
 var EncodeBuilder = class {
-  constructor(type, decode) {
+  constructor(type, decode3) {
     this.type = type;
-    this.decode = decode;
+    this.decode = decode3;
   }
   Encode(callback) {
     const type = this.type;
-    const decode = IsCodec(type) ? (value2) => this.decode(type["~codec"].decode(value2)) : this.decode;
+    const decode3 = IsCodec(type) ? (value2) => this.decode(type["~codec"].decode(value2)) : this.decode;
     const encode3 = IsCodec(type) ? (value2) => type["~codec"].encode(callback(value2)) : callback;
-    const codec = { decode, encode: encode3 };
+    const codec = { decode: decode3, encode: encode3 };
     return memory_exports.Update(this.type, { "~codec": codec }, {});
   }
 };
@@ -219347,6 +219347,2200 @@ var writeSchema = typebox_exports.Object({
   content: typebox_exports.String({ description: "Content to write to the file" })
 });
 
+// node_modules/@earendil-works/pi-ai/dist/auth/oauth/anthropic.js
+init_provider_env();
+
+// node_modules/@earendil-works/pi-ai/dist/auth/oauth/oauth-page.js
+var LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" aria-hidden="true"><path fill="#fff" fill-rule="evenodd" d="M165.29 165.29 H517.36 V400 H400 V517.36 H282.65 V634.72 H165.29 Z M282.65 282.65 V400 H400 V282.65 Z"/><path fill="#fff" d="M517.36 400 H634.72 V634.72 H517.36 Z"/></svg>`;
+function escapeHtml(value2) {
+  return value2.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+}
+function renderPage(options) {
+  const title = escapeHtml(options.title);
+  const heading = escapeHtml(options.heading);
+  const message = escapeHtml(options.message);
+  const details = options.details ? escapeHtml(options.details) : void 0;
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${title}</title>
+  <style>
+    :root {
+      --text: #fafafa;
+      --text-dim: #a1a1aa;
+      --page-bg: #09090b;
+      --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    * { box-sizing: border-box; }
+    html { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: var(--page-bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      text-align: center;
+    }
+    main {
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .logo {
+      width: 72px;
+      height: 72px;
+      display: block;
+      margin-bottom: 24px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 28px;
+      line-height: 1.15;
+      font-weight: 650;
+      color: var(--text);
+    }
+    p {
+      margin: 0;
+      line-height: 1.7;
+      color: var(--text-dim);
+      font-size: 15px;
+    }
+    .details {
+      margin-top: 16px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--text-dim);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="logo">${LOGO_SVG}</div>
+    <h1>${heading}</h1>
+    <p>${message}</p>
+    ${details ? `<div class="details">${details}</div>` : ""}
+  </main>
+</body>
+</html>`;
+}
+function oauthSuccessHtml(message) {
+  return renderPage({
+    title: "Authentication successful",
+    heading: "Authentication successful",
+    message
+  });
+}
+function oauthErrorHtml(message, details) {
+  return renderPage({
+    title: "Authentication failed",
+    heading: "Authentication failed",
+    message,
+    details
+  });
+}
+
+// node_modules/@earendil-works/pi-ai/dist/auth/oauth/pkce.js
+function base64urlEncode(bytes) {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+async function generatePKCE() {
+  const verifierBytes = new Uint8Array(32);
+  crypto.getRandomValues(verifierBytes);
+  const verifier = base64urlEncode(verifierBytes);
+  const encoder3 = new TextEncoder();
+  const data = encoder3.encode(verifier);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const challenge = base64urlEncode(new Uint8Array(hashBuffer));
+  return { verifier, challenge };
+}
+
+// node_modules/@earendil-works/pi-ai/dist/auth/oauth/anthropic.js
+var nodeApis = null;
+var nodeApisPromise = null;
+var decode = (s3) => atob(s3);
+var CLIENT_ID = decode("OWQxYzI1MGEtZTYxYi00NGQ5LTg4ZWQtNTk0NGQxOTYyZjVl");
+var AUTHORIZE_URL = "https://claude.ai/oauth/authorize";
+var TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
+var CALLBACK_HOST = getProviderEnvValue("PI_OAUTH_CALLBACK_HOST") || "127.0.0.1";
+var CALLBACK_PORT = 53692;
+var CALLBACK_PATH = "/callback";
+var REDIRECT_URI = `http://localhost:${CALLBACK_PORT}${CALLBACK_PATH}`;
+var SCOPES = "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload";
+async function getNodeApis() {
+  if (nodeApis)
+    return nodeApis;
+  if (!nodeApisPromise) {
+    if (typeof process === "undefined" || !process.versions?.node && !process.versions?.bun) {
+      throw new Error("Anthropic OAuth is only available in Node.js environments");
+    }
+    nodeApisPromise = import("node:http").then((httpModule) => ({
+      createServer: httpModule.createServer
+    }));
+  }
+  nodeApis = await nodeApisPromise;
+  return nodeApis;
+}
+function parseAuthorizationInput(input) {
+  const value2 = input.trim();
+  if (!value2)
+    return {};
+  try {
+    const url = new URL(value2);
+    return {
+      code: url.searchParams.get("code") ?? void 0,
+      state: url.searchParams.get("state") ?? void 0
+    };
+  } catch {
+  }
+  if (value2.includes("#")) {
+    const [code, state3] = value2.split("#", 2);
+    return { code, state: state3 };
+  }
+  if (value2.includes("code=")) {
+    const params = new URLSearchParams(value2);
+    return {
+      code: params.get("code") ?? void 0,
+      state: params.get("state") ?? void 0
+    };
+  }
+  return { code: value2 };
+}
+function formatErrorDetails(error) {
+  if (error instanceof Error) {
+    const details = [`${error.name}: ${error.message}`];
+    const errorWithCode = error;
+    if (errorWithCode.code)
+      details.push(`code=${errorWithCode.code}`);
+    if (typeof errorWithCode.errno !== "undefined")
+      details.push(`errno=${String(errorWithCode.errno)}`);
+    if (typeof error.cause !== "undefined") {
+      details.push(`cause=${formatErrorDetails(error.cause)}`);
+    }
+    if (error.stack) {
+      details.push(`stack=${error.stack}`);
+    }
+    return details.join("; ");
+  }
+  return String(error);
+}
+async function startCallbackServer(expectedState) {
+  const { createServer: createServer3 } = await getNodeApis();
+  return new Promise((resolve4, reject) => {
+    let settleWait;
+    const waitForCodePromise = new Promise((resolveWait) => {
+      let settled = false;
+      settleWait = (value2) => {
+        if (settled)
+          return;
+        settled = true;
+        resolveWait(value2);
+      };
+    });
+    const server2 = createServer3((req, res) => {
+      try {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== CALLBACK_PATH) {
+          res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(oauthErrorHtml("Callback route not found."));
+          return;
+        }
+        const code = url.searchParams.get("code");
+        const state3 = url.searchParams.get("state");
+        const error = url.searchParams.get("error");
+        if (error) {
+          res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(oauthErrorHtml("Anthropic authentication did not complete.", `Error: ${error}`));
+          return;
+        }
+        if (!code || !state3) {
+          res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(oauthErrorHtml("Missing code or state parameter."));
+          return;
+        }
+        if (state3 !== expectedState) {
+          res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(oauthErrorHtml("State mismatch."));
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(oauthSuccessHtml("Anthropic authentication completed. You can close this window."));
+        settleWait?.({ code, state: state3 });
+      } catch {
+        res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("Internal error");
+      }
+    });
+    server2.on("error", (err3) => {
+      reject(err3);
+    });
+    server2.listen(CALLBACK_PORT, CALLBACK_HOST, () => {
+      resolve4({
+        server: server2,
+        redirectUri: REDIRECT_URI,
+        cancelWait: () => {
+          settleWait?.(null);
+        },
+        waitForCode: () => waitForCodePromise
+      });
+    });
+  });
+}
+async function postJson(url, body2, signal) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify(body2),
+    signal: AbortSignal.any([signal, AbortSignal.timeout(3e4)])
+  });
+  const responseBody = await response.text();
+  if (!response.ok) {
+    throw new Error(`HTTP request failed. status=${response.status}; url=${url}; body=${responseBody}`);
+  }
+  return responseBody;
+}
+async function exchangeAuthorizationCode(code, state3, verifier, redirectUri, signal) {
+  let responseBody;
+  try {
+    responseBody = await postJson(TOKEN_URL, {
+      grant_type: "authorization_code",
+      client_id: CLIENT_ID,
+      code,
+      state: state3,
+      redirect_uri: redirectUri,
+      code_verifier: verifier
+    }, signal);
+  } catch (error) {
+    throw new Error(`Token exchange request failed. url=${TOKEN_URL}; redirect_uri=${redirectUri}; response_type=authorization_code; details=${formatErrorDetails(error)}`);
+  }
+  let tokenData;
+  try {
+    tokenData = JSON.parse(responseBody);
+  } catch (error) {
+    throw new Error(`Token exchange returned invalid JSON. url=${TOKEN_URL}; body=${responseBody}; details=${formatErrorDetails(error)}`);
+  }
+  return {
+    type: "oauth",
+    refresh: tokenData.refresh_token,
+    access: tokenData.access_token,
+    expires: Date.now() + tokenData.expires_in * 1e3 - 5 * 60 * 1e3
+  };
+}
+async function loginAnthropic(interaction) {
+  const { verifier, challenge } = await generatePKCE();
+  const server2 = await startCallbackServer(verifier);
+  const manualAbort = new AbortController();
+  const onAbort = () => server2.cancelWait();
+  interaction.signal.addEventListener("abort", onAbort, { once: true });
+  if (interaction.signal.aborted)
+    onAbort();
+  let code;
+  let state3;
+  let manualInput;
+  let manualError;
+  try {
+    const authParams = new URLSearchParams({
+      code: "true",
+      client_id: CLIENT_ID,
+      response_type: "code",
+      redirect_uri: REDIRECT_URI,
+      scope: SCOPES,
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      state: verifier
+    });
+    interaction.notify({
+      type: "auth_url",
+      url: `${AUTHORIZE_URL}?${authParams.toString()}`,
+      instructions: "Complete login in your browser. If the browser is on another machine, paste the final redirect URL here."
+    });
+    const manualPromise = interaction.prompt({
+      type: "manual_code",
+      message: "Complete login in your browser, or paste the authorization code / redirect URL here:",
+      placeholder: REDIRECT_URI,
+      signal: manualAbort.signal
+    }).then((input) => {
+      manualInput = input;
+      server2.cancelWait();
+    }).catch((error) => {
+      manualError = error instanceof Error ? error : new Error(String(error));
+      server2.cancelWait();
+    });
+    const result = await server2.waitForCode();
+    if (manualError)
+      throw manualError;
+    if (result?.code) {
+      code = result.code;
+      state3 = result.state;
+    } else if (manualInput) {
+      const parsed = parseAuthorizationInput(manualInput);
+      if (parsed.state && parsed.state !== verifier)
+        throw new Error("OAuth state mismatch");
+      code = parsed.code;
+      state3 = parsed.state ?? verifier;
+    }
+    if (!code) {
+      await manualPromise;
+      if (manualError)
+        throw manualError;
+      if (manualInput) {
+        const parsed = parseAuthorizationInput(manualInput);
+        if (parsed.state && parsed.state !== verifier)
+          throw new Error("OAuth state mismatch");
+        code = parsed.code;
+        state3 = parsed.state ?? verifier;
+      }
+    }
+    if (!code)
+      throw new Error("Missing authorization code");
+    if (!state3)
+      throw new Error("Missing OAuth state");
+    interaction.notify({ type: "progress", message: "Exchanging authorization code for tokens..." });
+    return exchangeAuthorizationCode(code, state3, verifier, REDIRECT_URI, interaction.signal);
+  } finally {
+    interaction.signal.removeEventListener("abort", onAbort);
+    manualAbort.abort();
+    server2.server.close();
+  }
+}
+async function refreshAnthropicToken(refreshToken2, signal) {
+  let responseBody;
+  try {
+    responseBody = await postJson(TOKEN_URL, {
+      grant_type: "refresh_token",
+      client_id: CLIENT_ID,
+      refresh_token: refreshToken2
+    }, signal);
+  } catch (error) {
+    throw new Error(`Anthropic token refresh request failed. url=${TOKEN_URL}; details=${formatErrorDetails(error)}`);
+  }
+  let data;
+  try {
+    data = JSON.parse(responseBody);
+  } catch (error) {
+    throw new Error(`Anthropic token refresh returned invalid JSON. url=${TOKEN_URL}; body=${responseBody}; details=${formatErrorDetails(error)}`);
+  }
+  return {
+    type: "oauth",
+    refresh: data.refresh_token,
+    access: data.access_token,
+    expires: Date.now() + data.expires_in * 1e3 - 5 * 60 * 1e3
+  };
+}
+var anthropicOAuth = {
+  name: "Anthropic (Claude Pro/Max)",
+  isSubscription: true,
+  login: loginAnthropic,
+  refresh: (credential, signal) => refreshAnthropicToken(credential.refresh, signal),
+  async toAuth(credential) {
+    return { apiKey: credential.access };
+  }
+};
+
+// node_modules/@earendil-works/pi-ai/dist/providers/data/github-copilot.json
+var github_copilot_default = { "anthropic-messages": { "claude-haiku-4.5": { id: "claude-haiku-4.5", name: "Claude Haiku 4.5 (latest)", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 }, contextWindow: 2e5, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsEagerToolInputStreaming: false } }, "claude-opus-4.5": { id: "claude-opus-4.5", name: "Claude Opus 4.5 (latest)", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 2e5, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" } }, "claude-opus-4.6": { id: "claude-opus-4.6", name: "Claude Opus 4.6", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 1e6, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { max: "max" }, compat: { forceAdaptiveThinking: true } }, "claude-opus-4.7": { id: "claude-opus-4.7", name: "Claude Opus 4.7", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 1e6, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" }, compat: { forceAdaptiveThinking: true, supportsTemperature: false } }, "claude-opus-4.8": { id: "claude-opus-4.8", name: "Claude Opus 4.8", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" }, compat: { forceAdaptiveThinking: true, supportsTemperature: false } }, "claude-opus-5": { id: "claude-opus-5", name: "Claude Opus 5", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" }, compat: { forceAdaptiveThinking: true, supportsTemperature: false } }, "claude-sonnet-4": { id: "claude-sonnet-4", name: "Claude Sonnet 4 (latest)", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }, contextWindow: 216e3, maxTokens: 16e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsEagerToolInputStreaming: false } }, "claude-sonnet-4.5": { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5 (latest)", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }, contextWindow: 2e5, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsEagerToolInputStreaming: false } }, "claude-sonnet-4.6": { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }, contextWindow: 1e6, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { max: "max", minimal: "low" }, compat: { forceAdaptiveThinking: true } }, "claude-sonnet-5": { id: "claude-sonnet-5", name: "Claude Sonnet 5", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { xhigh: "xhigh", max: "max" }, compat: { forceAdaptiveThinking: true } } }, "openai-completions": { "claude-fable-5": { id: "claude-fable-5", name: "Claude Fable 5", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false }, thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" } }, "gemini-3.1-pro-preview": { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 0, tiers: [{ inputTokensAbove: 2e5, input: 4, output: 18, cacheRead: 0.4, cacheWrite: 0 }] }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "gemini-3.5-flash": { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.5, output: 9, cacheRead: 0.15, cacheWrite: 0 }, contextWindow: 2e5, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "gemini-3.6-flash": { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.5, output: 7.5, cacheRead: 0.15, cacheWrite: 0 }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "gemini-3.7-flash": { id: "gemini-3.7-flash", name: "Gemini 3.7 Flash", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.75, output: 3.75, cacheRead: 0.075, cacheWrite: 0 }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "gpt-4.1": { id: "gpt-4.1", name: "GPT-4.1", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: false, input: ["text", "image"], cost: { input: 2, output: 8, cacheRead: 0.5, cacheWrite: 0 }, contextWindow: 128e3, maxTokens: 16384, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "kimi-k2.7-code": { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.95, output: 4, cacheRead: 0.19, cacheWrite: 0 }, contextWindow: 256e3, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "kimi-k3": { id: "kimi-k3", name: "Kimi K3", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 131072, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } } }, "openai-responses": { "gpt-5-mini": { id: "gpt-5-mini", name: "GPT-5 Mini", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.25, output: 2, cacheRead: 0.025, cacheWrite: 0 }, contextWindow: 264e3, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: null, max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.2": { id: "gpt-5.2", name: "GPT-5.2", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 }, contextWindow: 4e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", xhigh: "xhigh" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.2-codex": { id: "gpt-5.2-codex", name: "GPT-5.2 Codex", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 }, contextWindow: 4e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", xhigh: "xhigh" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.3-codex": { id: "gpt-5.3-codex", name: "GPT-5.3 Codex", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.4": { id: "gpt-5.4", name: "GPT-5.4", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 0, tiers: [{ inputTokensAbove: 272e3, input: 5, output: 22.5, cacheRead: 0.5, cacheWrite: 0 }] }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.4-mini": { id: "gpt-5.4-mini", name: "GPT-5.4 mini", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.75, output: 4.5, cacheRead: 0.075, cacheWrite: 0 }, contextWindow: 4e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.4-nano": { id: "gpt-5.4-nano", name: "GPT-5.4 nano", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.2, output: 1.25, cacheRead: 0.02, cacheWrite: 0 }, contextWindow: 4e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", xhigh: "xhigh" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.5": { id: "gpt-5.5", name: "GPT-5.5", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 0, tiers: [{ inputTokensAbove: 272e3, input: 10, output: 45, cacheRead: 1, cacheWrite: 0 }] }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.6-luna": { id: "gpt-5.6-luna", name: "GPT-5.6 Luna", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0, tiers: [{ inputTokensAbove: 2e5, input: 0.4, output: 1.8, cacheRead: 0.04, cacheWrite: 0 }] }, contextWindow: 105e4, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.6-sol": { id: "gpt-5.6-sol", name: "GPT-5.6 Sol", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25, tiers: [{ inputTokensAbove: 272e3, input: 10, output: 45, cacheRead: 1, cacheWrite: 12.5 }] }, contextWindow: 105e4, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.6-terra": { id: "gpt-5.6-terra", name: "GPT-5.6 Terra", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 0, tiers: [{ inputTokensAbove: 272e3, input: 4, output: 18, cacheRead: 0.4, cacheWrite: 0 }] }, contextWindow: 105e4, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" }, compat: { supportsOpenAIGrammarTools: true } }, "grok-4.5": { id: "grok-4.5", name: "Grok 4.5", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 6, cacheRead: 0.5, cacheWrite: 0, tiers: [{ inputTokensAbove: 2e5, input: 4, output: 12, cacheRead: 1, cacheWrite: 0 }] }, contextWindow: 5e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: null, low: "low", medium: "medium", high: "high", xhigh: null, max: null } }, "mai-code-1-flash-picker": { id: "mai-code-1-flash-picker", name: "MAI-Code-1-Flash", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text"], cost: { input: 0.75, output: 4.5, cacheRead: 0.075, cacheWrite: 0 }, contextWindow: 256e3, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: null, low: "low", medium: "medium", high: "high", xhigh: null, max: null } }, "mai-code-1.1-flash": { id: "mai-code-1.1-flash", name: "MAI-Code-1.1-Flash", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0 }, contextWindow: 256e3, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: null, low: "low", medium: "medium", high: "high", xhigh: null, max: null } } } };
+
+// node_modules/@earendil-works/pi-ai/dist/model-catalog.js
+function flattenModelCatalog(_provider, groups) {
+  return Object.assign({}, ...Object.values(groups));
+}
+
+// node_modules/@earendil-works/pi-ai/dist/providers/github-copilot.models.js
+var GITHUB_COPILOT_MODELS = flattenModelCatalog("github-copilot", github_copilot_default);
+
+// node_modules/@earendil-works/pi-ai/dist/auth/oauth/device-code.js
+var CANCEL_MESSAGE = "Login cancelled";
+var TIMEOUT_MESSAGE = "Device flow timed out";
+var SLOW_DOWN_TIMEOUT_MESSAGE = "Device flow timed out after one or more slow_down responses. This is often caused by clock drift in WSL or VM environments. Please sync or restart the VM clock and try again.";
+var MINIMUM_INTERVAL_MS = 1e3;
+var DEFAULT_POLL_INTERVAL_SECONDS = 5;
+var SLOW_DOWN_INTERVAL_INCREMENT_MS = 5e3;
+function abortableSleep(ms2, signal, cancelMessage) {
+  return new Promise((resolve4, reject) => {
+    if (signal.aborted) {
+      reject(new Error(cancelMessage));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(new Error(cancelMessage));
+    };
+    const timeout = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve4();
+    }, ms2);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+async function pollOAuthDeviceCodeFlow(options) {
+  const deadline = typeof options.expiresInSeconds === "number" ? Date.now() + options.expiresInSeconds * 1e3 : Number.POSITIVE_INFINITY;
+  let intervalMs = Math.max(MINIMUM_INTERVAL_MS, Math.floor((options.intervalSeconds ?? DEFAULT_POLL_INTERVAL_SECONDS) * 1e3));
+  let slowDownResponses = 0;
+  if (options.waitBeforeFirstPoll) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs > 0) {
+      await abortableSleep(Math.min(intervalMs, remainingMs), options.signal, CANCEL_MESSAGE);
+    }
+  }
+  while (Date.now() < deadline) {
+    if (options.signal.aborted) {
+      throw new Error(CANCEL_MESSAGE);
+    }
+    const result = await options.poll();
+    if (result.status === "complete") {
+      return result.value;
+    }
+    if (result.status === "failed") {
+      throw new Error(result.message);
+    }
+    if (result.status === "slow_down") {
+      slowDownResponses += 1;
+      intervalMs = typeof result.intervalSeconds === "number" && Number.isFinite(result.intervalSeconds) && result.intervalSeconds > 0 ? Math.max(MINIMUM_INTERVAL_MS, Math.floor(result.intervalSeconds * 1e3)) : Math.max(MINIMUM_INTERVAL_MS, intervalMs + SLOW_DOWN_INTERVAL_INCREMENT_MS);
+    }
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      break;
+    }
+    await abortableSleep(Math.min(intervalMs, remainingMs), options.signal, CANCEL_MESSAGE);
+  }
+  throw new Error(slowDownResponses > 0 ? SLOW_DOWN_TIMEOUT_MESSAGE : TIMEOUT_MESSAGE);
+}
+
+// node_modules/@earendil-works/pi-ai/dist/auth/oauth/github-copilot.js
+var decode2 = (s3) => atob(s3);
+var CLIENT_ID2 = decode2("SXYxLmI1MDdhMDhjODdlY2ZlOTg=");
+var COPILOT_HEADERS = {
+  "User-Agent": "GitHubCopilotChat/0.35.0",
+  "Editor-Version": "vscode/1.107.0",
+  "Editor-Plugin-Version": "copilot-chat/0.35.0",
+  "Copilot-Integration-Id": "vscode-chat"
+};
+var COPILOT_API_VERSION = "2026-06-01";
+var COPILOT_POLICY_CONCURRENCY = 4;
+function normalizeDomain(input) {
+  const trimmed = input.trim();
+  if (!trimmed)
+    return null;
+  try {
+    const url = trimmed.includes("://") ? new URL(trimmed) : new URL(`https://${trimmed}`);
+    return url.hostname;
+  } catch {
+    return null;
+  }
+}
+function getUrls(domain) {
+  return {
+    deviceCodeUrl: `https://${domain}/login/device/code`,
+    accessTokenUrl: `https://${domain}/login/oauth/access_token`,
+    copilotTokenUrl: `https://api.${domain}/copilot_internal/v2/token`
+  };
+}
+function getBaseUrlFromToken(token2) {
+  const match2 = token2.match(/proxy-ep=([^;]+)/);
+  if (!match2)
+    return null;
+  const proxyHost = match2[1];
+  const apiHost = proxyHost.replace(/^proxy\./, "api.");
+  return `https://${apiHost}`;
+}
+function getGitHubCopilotBaseUrl(token2, enterpriseDomain) {
+  if (token2) {
+    const urlFromToken = getBaseUrlFromToken(token2);
+    if (urlFromToken)
+      return urlFromToken;
+  }
+  if (enterpriseDomain)
+    return `https://copilot-api.${enterpriseDomain}`;
+  return "https://api.individual.githubcopilot.com";
+}
+function asRecord(value2) {
+  return value2 && typeof value2 === "object" ? value2 : void 0;
+}
+function parseAvailableCopilotModelIds(raw, allowPolicyFallback) {
+  const data = asRecord(raw)?.data;
+  if (!Array.isArray(data)) {
+    throw new Error("Invalid Copilot models response");
+  }
+  const pickerIds = [];
+  const policyEnabledIds = [];
+  for (const rawItem of data) {
+    const item = asRecord(rawItem);
+    const id = item?.id;
+    if (!item || typeof id !== "string")
+      continue;
+    const capabilities = asRecord(item.capabilities);
+    const supports = asRecord(capabilities?.supports);
+    if (supports?.tool_calls === false)
+      continue;
+    const policy = asRecord(item.policy);
+    if (item.model_picker_enabled === true && policy?.state !== "disabled")
+      pickerIds.push(id);
+    if (policy?.state === "enabled")
+      policyEnabledIds.push(id);
+  }
+  return pickerIds.length > 0 || !allowPolicyFallback ? pickerIds : policyEnabledIds;
+}
+async function fetchAvailableGitHubCopilotModelIds(copilotToken, enterpriseDomain, signal) {
+  const baseUrl = getGitHubCopilotBaseUrl(copilotToken, enterpriseDomain);
+  const allowPolicyFallback = baseUrl === "https://api.individual.githubcopilot.com";
+  const raw = await fetchJson(`${baseUrl}/models`, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${copilotToken}`,
+      ...COPILOT_HEADERS,
+      "X-GitHub-Api-Version": COPILOT_API_VERSION
+    },
+    signal: AbortSignal.any([signal, AbortSignal.timeout(5e3)])
+  });
+  return parseAvailableCopilotModelIds(raw, allowPolicyFallback);
+}
+async function fetchJson(url, init) {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`${response.status} ${response.statusText}: ${text}`);
+  }
+  return response.json();
+}
+async function startDeviceFlow(domain, signal) {
+  const urls = getUrls(domain);
+  const data = await fetchJson(urls.deviceCodeUrl, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "GitHubCopilotChat/0.35.0"
+    },
+    body: new URLSearchParams({
+      client_id: CLIENT_ID2,
+      scope: "read:user"
+    }),
+    signal
+  });
+  if (!data || typeof data !== "object") {
+    throw new Error("Invalid device code response");
+  }
+  const deviceCode = data.device_code;
+  const userCode = data.user_code;
+  const verificationUri = data.verification_uri;
+  const interval = data.interval;
+  const expiresIn = data.expires_in;
+  if (typeof deviceCode !== "string" || typeof userCode !== "string" || typeof verificationUri !== "string" || interval !== void 0 && typeof interval !== "number" || typeof expiresIn !== "number") {
+    throw new Error("Invalid device code response fields");
+  }
+  let parsedUri;
+  try {
+    parsedUri = new URL(verificationUri);
+  } catch {
+    throw new Error("Untrusted verification_uri in device code response");
+  }
+  if (parsedUri.protocol !== "https:" && parsedUri.protocol !== "http:") {
+    throw new Error("Untrusted verification_uri in device code response");
+  }
+  return {
+    device_code: deviceCode,
+    user_code: userCode,
+    verification_uri: parsedUri.href,
+    interval,
+    expires_in: expiresIn
+  };
+}
+async function pollForGitHubAccessToken(domain, device, signal) {
+  const urls = getUrls(domain);
+  return pollOAuthDeviceCodeFlow({
+    intervalSeconds: device.interval,
+    expiresInSeconds: device.expires_in,
+    waitBeforeFirstPoll: true,
+    signal,
+    poll: async () => {
+      const raw = await fetchJson(urls.accessTokenUrl, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "GitHubCopilotChat/0.35.0"
+        },
+        body: new URLSearchParams({
+          client_id: CLIENT_ID2,
+          device_code: device.device_code,
+          grant_type: "urn:ietf:params:oauth:grant-type:device_code"
+        }),
+        signal
+      });
+      if (raw && typeof raw === "object" && typeof raw.access_token === "string") {
+        return { status: "complete", value: raw.access_token };
+      }
+      if (raw && typeof raw === "object" && typeof raw.error === "string") {
+        const { error, error_description: description, interval } = raw;
+        if (error === "authorization_pending") {
+          return { status: "pending" };
+        }
+        if (error === "slow_down") {
+          return { status: "slow_down", intervalSeconds: typeof interval === "number" ? interval : void 0 };
+        }
+        const descriptionSuffix = description ? `: ${description}` : "";
+        return { status: "failed", message: `Device flow failed: ${error}${descriptionSuffix}` };
+      }
+      return { status: "failed", message: "Invalid device token response" };
+    }
+  });
+}
+async function refreshGitHubCopilotAccessToken(refreshToken2, enterpriseDomain, signal) {
+  const domain = enterpriseDomain || "github.com";
+  const urls = getUrls(domain);
+  const raw = await fetchJson(urls.copilotTokenUrl, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${refreshToken2}`,
+      ...COPILOT_HEADERS
+    },
+    signal
+  });
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Invalid Copilot token response");
+  }
+  const token2 = raw.token;
+  const expiresAt = raw.expires_at;
+  if (typeof token2 !== "string" || typeof expiresAt !== "number") {
+    throw new Error("Invalid Copilot token response fields");
+  }
+  return {
+    type: "oauth",
+    refresh: refreshToken2,
+    access: token2,
+    expires: expiresAt * 1e3 - 5 * 60 * 1e3,
+    enterpriseUrl: enterpriseDomain
+  };
+}
+async function refreshGitHubCopilotToken(refreshToken2, enterpriseDomain, signal) {
+  const credentials = await refreshGitHubCopilotAccessToken(refreshToken2, enterpriseDomain, signal);
+  return {
+    ...credentials,
+    availableModelIds: await fetchAvailableGitHubCopilotModelIds(credentials.access, enterpriseDomain, signal)
+  };
+}
+async function enableGitHubCopilotModel(token2, modelId, enterpriseDomain, signal) {
+  const baseUrl = getGitHubCopilotBaseUrl(token2, enterpriseDomain);
+  const url = `${baseUrl}/models/${modelId}/policy`;
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token2}`,
+        ...COPILOT_HEADERS,
+        "openai-intent": "chat-policy",
+        "x-interaction-type": "chat-policy"
+      },
+      body: JSON.stringify({ state: "enabled" }),
+      signal
+    });
+    return response.ok;
+  } catch (error) {
+    if (signal.aborted)
+      throw error;
+    return false;
+  }
+}
+async function enableAllGitHubCopilotModels(token2, enterpriseDomain, signal) {
+  const models = Object.values(GITHUB_COPILOT_MODELS);
+  for (let index5 = 0; index5 < models.length; index5 += COPILOT_POLICY_CONCURRENCY) {
+    await Promise.all(models.slice(index5, index5 + COPILOT_POLICY_CONCURRENCY).map(async (model) => {
+      await enableGitHubCopilotModel(token2, model.id, enterpriseDomain, signal);
+    }));
+  }
+}
+async function loginGitHubCopilot(interaction) {
+  const input = await interaction.prompt({
+    type: "text",
+    message: "GitHub Enterprise URL/domain (blank for github.com)",
+    placeholder: "company.ghe.com"
+  });
+  if (interaction.signal.aborted)
+    throw new Error("Login cancelled");
+  const trimmed = input.trim();
+  const enterpriseDomain = normalizeDomain(input);
+  if (trimmed && !enterpriseDomain)
+    throw new Error("Invalid GitHub Enterprise URL/domain");
+  const domain = enterpriseDomain || "github.com";
+  const device = await startDeviceFlow(domain, interaction.signal);
+  interaction.notify({
+    type: "device_code",
+    userCode: device.user_code,
+    verificationUri: device.verification_uri,
+    intervalSeconds: device.interval,
+    expiresInSeconds: device.expires_in
+  });
+  const githubAccessToken = await pollForGitHubAccessToken(domain, device, interaction.signal);
+  const credentials = await refreshGitHubCopilotAccessToken(githubAccessToken, enterpriseDomain ?? void 0, interaction.signal);
+  interaction.notify({ type: "progress", message: "Enabling models..." });
+  await enableAllGitHubCopilotModels(credentials.access, enterpriseDomain ?? void 0, interaction.signal);
+  return {
+    ...credentials,
+    availableModelIds: await fetchAvailableGitHubCopilotModelIds(credentials.access, enterpriseDomain ?? void 0, interaction.signal)
+  };
+}
+function copilotEnterpriseDomain(credential) {
+  const enterpriseUrl = credential.enterpriseUrl;
+  if (typeof enterpriseUrl !== "string" || !enterpriseUrl)
+    return void 0;
+  return normalizeDomain(enterpriseUrl) ?? void 0;
+}
+var githubCopilotOAuth = {
+  name: "GitHub Copilot",
+  isSubscription: true,
+  login: loginGitHubCopilot,
+  refresh: (credential, signal) => refreshGitHubCopilotToken(credential.refresh, copilotEnterpriseDomain(credential), signal),
+  /** Derive the credential-specific proxy endpoint for each request. */
+  async toAuth(credential) {
+    return {
+      apiKey: credential.access,
+      baseUrl: getGitHubCopilotBaseUrl(credential.access, copilotEnterpriseDomain(credential))
+    };
+  }
+};
+
+// node_modules/@earendil-works/pi-ai/dist/auth/oauth/kimi-coding.js
+init_provider_env();
+var CLIENT_ID3 = "17e5f671-d194-4dfb-9706-5516cb48c098";
+var DEFAULT_OAUTH_HOST = "https://auth.kimi.com";
+var DEVICE_CODE_TIMEOUT_SECONDS = 15 * 60;
+var DEFAULT_POLL_INTERVAL_SECONDS2 = 5;
+var REQUEST_TIMEOUT_MS = 30 * 1e3;
+var REFRESH_MAX_RETRIES = 3;
+function getOauthHost() {
+  const override = getProviderEnvValue("KIMI_CODE_OAUTH_HOST") || getProviderEnvValue("KIMI_OAUTH_HOST");
+  return (override || DEFAULT_OAUTH_HOST).replace(/\/+$/, "");
+}
+function requestSignal(signal) {
+  return AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), signal]);
+}
+function formUrlEncode(fields) {
+  return new URLSearchParams(fields).toString();
+}
+async function readJson(response) {
+  try {
+    const json2 = await response.json();
+    return json2 && typeof json2 === "object" ? json2 : null;
+  } catch {
+    return null;
+  }
+}
+function trustedHttpUrl(value2) {
+  if (typeof value2 !== "string" || !value2)
+    return null;
+  try {
+    const url = new URL(value2);
+    if (url.protocol !== "https:" && url.protocol !== "http:")
+      return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+async function startDeviceAuthorization(oauthHost, signal) {
+  const response = await fetch(`${oauthHost}/api/oauth/device_authorization`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json"
+    },
+    body: formUrlEncode({ client_id: CLIENT_ID3 }),
+    signal: requestSignal(signal)
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Kimi Code device authorization failed with status ${response.status}${text ? `: ${text}` : ""}`);
+  }
+  const json2 = await readJson(response);
+  const deviceCode = json2?.device_code;
+  const userCode = json2?.user_code;
+  const verificationUri = json2?.verification_uri;
+  const verificationUriComplete = json2?.verification_uri_complete;
+  if (typeof deviceCode !== "string" || typeof userCode !== "string" || typeof verificationUri !== "string" || typeof verificationUriComplete !== "string" || !trustedHttpUrl(verificationUriComplete) || !trustedHttpUrl(verificationUri)) {
+    throw new Error(`Invalid Kimi Code device authorization response: ${JSON.stringify(json2)}`);
+  }
+  const interval = json2?.interval;
+  const expiresIn = json2?.expires_in;
+  return {
+    deviceCode,
+    userCode,
+    verificationUri,
+    verificationUriComplete,
+    intervalSeconds: typeof interval === "number" && Number.isFinite(interval) && interval > 0 ? interval : DEFAULT_POLL_INTERVAL_SECONDS2,
+    expiresInSeconds: typeof expiresIn === "number" && Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : DEVICE_CODE_TIMEOUT_SECONDS
+  };
+}
+function parseTokenResponse(json2, operation) {
+  const accessToken = json2?.access_token;
+  const refreshToken2 = json2?.refresh_token;
+  const expiresIn = json2?.expires_in;
+  if (typeof accessToken !== "string" || !accessToken || typeof refreshToken2 !== "string" || !refreshToken2 || typeof expiresIn !== "number" || !Number.isFinite(expiresIn) || expiresIn <= 0) {
+    throw new Error(`Kimi Code token ${operation} response missing fields: ${JSON.stringify(json2)}`);
+  }
+  return {
+    access: accessToken,
+    refresh: refreshToken2,
+    expires: Date.now() + expiresIn * 1e3
+  };
+}
+async function pollForToken(oauthHost, device, signal) {
+  return pollOAuthDeviceCodeFlow({
+    intervalSeconds: device.intervalSeconds,
+    expiresInSeconds: device.expiresInSeconds,
+    waitBeforeFirstPoll: true,
+    signal,
+    poll: async () => {
+      const response = await fetch(`${oauthHost}/api/oauth/token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json"
+        },
+        body: formUrlEncode({
+          client_id: CLIENT_ID3,
+          device_code: device.deviceCode,
+          grant_type: "urn:ietf:params:oauth:grant-type:device_code"
+        }),
+        signal: requestSignal(signal)
+      });
+      if (response.status >= 500) {
+        const text = await response.text().catch(() => "");
+        return {
+          status: "failed",
+          message: `Kimi Code device token request failed with status ${response.status}${text ? `: ${text}` : ""}`
+        };
+      }
+      const json2 = await readJson(response);
+      if (response.ok && typeof json2?.access_token === "string") {
+        try {
+          return { status: "complete", value: parseTokenResponse(json2, "poll") };
+        } catch (error2) {
+          return { status: "failed", message: error2 instanceof Error ? error2.message : String(error2) };
+        }
+      }
+      const error = json2?.error;
+      const description = typeof json2?.error_description === "string" ? `: ${json2.error_description}` : "";
+      if (error === "authorization_pending") {
+        return { status: "pending" };
+      }
+      if (error === "slow_down") {
+        const interval = json2?.interval;
+        return {
+          status: "slow_down",
+          intervalSeconds: typeof interval === "number" && interval > 0 ? interval : void 0
+        };
+      }
+      if (error === "expired_token") {
+        return { status: "failed", message: "Kimi Code device authorization expired. Please restart login." };
+      }
+      if (error === "access_denied") {
+        return { status: "failed", message: "Kimi Code login was denied." };
+      }
+      return {
+        status: "failed",
+        message: `Kimi Code device token request failed (status ${response.status})${typeof error === "string" ? `: ${error}${description}` : ""}`
+      };
+    }
+  });
+}
+function sleep(ms2, signal) {
+  return new Promise((resolve4, reject) => {
+    signal.throwIfAborted();
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(signal.reason);
+    };
+    const timeout = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve4();
+    }, ms2);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+function isRetryableRefreshFailure(response) {
+  return response.status === 429 || response.status >= 500;
+}
+async function refreshToken(oauthHost, refreshTokenValue, signal) {
+  let lastError;
+  for (let attempt = 0; attempt <= REFRESH_MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      await sleep(1e3 * 2 ** (attempt - 1), signal);
+    }
+    if (signal.aborted) {
+      throw new Error("Kimi Code token refresh aborted");
+    }
+    let response;
+    try {
+      response = await fetch(`${oauthHost}/api/oauth/token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json"
+        },
+        body: formUrlEncode({
+          client_id: CLIENT_ID3,
+          grant_type: "refresh_token",
+          refresh_token: refreshTokenValue
+        }),
+        signal: requestSignal(signal)
+      });
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      continue;
+    }
+    const json2 = await readJson(response);
+    if (response.ok) {
+      return parseTokenResponse(json2, "refresh");
+    }
+    if (response.status === 401 || response.status === 403 || json2?.error === "invalid_grant") {
+      const description = typeof json2?.error_description === "string" ? `: ${json2.error_description}` : "";
+      throw new Error(`Kimi Code token refresh unauthorized (status ${response.status})${description}`);
+    }
+    if (isRetryableRefreshFailure(response) && attempt < REFRESH_MAX_RETRIES) {
+      lastError = new Error(`Kimi Code token refresh failed with status ${response.status}`);
+      continue;
+    }
+    const text = JSON.stringify(json2);
+    throw new Error(`Kimi Code token refresh failed with status ${response.status}${text ? `: ${text}` : ""}`);
+  }
+  throw lastError ?? new Error("Kimi Code token refresh failed");
+}
+async function loginKimiCoding(interaction) {
+  const oauthHost = getOauthHost();
+  const device = await startDeviceAuthorization(oauthHost, interaction.signal);
+  interaction.notify({
+    type: "device_code",
+    userCode: device.userCode,
+    verificationUri: device.verificationUriComplete,
+    intervalSeconds: device.intervalSeconds,
+    expiresInSeconds: device.expiresInSeconds
+  });
+  const token2 = await pollForToken(oauthHost, device, interaction.signal);
+  return { type: "oauth", access: token2.access, refresh: token2.refresh, expires: token2.expires };
+}
+var kimiCodingOAuth = {
+  name: "Kimi Code (subscription)",
+  isSubscription: true,
+  loginLabel: "Sign in with Kimi Code",
+  login: loginKimiCoding,
+  refresh: async (credential, signal) => {
+    const token2 = await refreshToken(getOauthHost(), credential.refresh, signal);
+    return { type: "oauth", access: token2.access, refresh: token2.refresh, expires: token2.expires };
+  },
+  async toAuth(credential) {
+    return { headers: { Authorization: `Bearer ${credential.access}` } };
+  }
+};
+
+// node_modules/@earendil-works/pi-ai/dist/auth/oauth/load.js
+var __rewriteRelativeImportExtension2 = function(path10, preserveJsx) {
+  if (typeof path10 === "string" && /^\.\.?\//.test(path10)) {
+    return path10.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function(m4, tsx, d2, ext2, cm) {
+      return tsx ? preserveJsx ? ".jsx" : ".js" : d2 && (!ext2 || !cm) ? m4 : d2 + ext2 + "." + cm.toLowerCase() + "js";
+    });
+  }
+  return path10;
+};
+var importOAuthModule = (specifier) => {
+  const runtimeSpecifier = import.meta.url.endsWith(".js") ? specifier.replace(/\.ts$/, ".js") : specifier;
+  return import(__rewriteRelativeImportExtension2(runtimeSpecifier));
+};
+var bundledLoaders;
+function registerBundledOAuthFlowLoaders(loaders) {
+  bundledLoaders = loaders;
+}
+var loadOpenAICodexOAuth = async () => {
+  if (bundledLoaders)
+    return bundledLoaders.openaiCodex();
+  return (await importOAuthModule("./openai-codex.ts")).openaiCodexOAuth;
+};
+
+// node_modules/@earendil-works/pi-ai/dist/auth/oauth/openai-codex.js
+init_provider_env();
+var _randomBytes = null;
+var _http = null;
+if (typeof process !== "undefined" && (process.versions?.node || process.versions?.bun)) {
+  import("node:crypto").then((m4) => {
+    _randomBytes = m4.randomBytes;
+  });
+  import("node:http").then((m4) => {
+    _http = m4;
+  });
+}
+var CLIENT_ID4 = "app_EMoamEEZ73f0CkXaXp7hrann";
+var AUTH_BASE_URL = "https://auth.openai.com";
+var AUTHORIZE_URL2 = `${AUTH_BASE_URL}/oauth/authorize`;
+var TOKEN_URL2 = `${AUTH_BASE_URL}/oauth/token`;
+var REDIRECT_URI2 = "http://localhost:1455/auth/callback";
+var DEVICE_USER_CODE_URL = `${AUTH_BASE_URL}/api/accounts/deviceauth/usercode`;
+var DEVICE_TOKEN_URL = `${AUTH_BASE_URL}/api/accounts/deviceauth/token`;
+var DEVICE_VERIFICATION_URI = `${AUTH_BASE_URL}/codex/device`;
+var DEVICE_REDIRECT_URI = `${AUTH_BASE_URL}/deviceauth/callback`;
+var DEVICE_CODE_TIMEOUT_SECONDS2 = 15 * 60;
+var OPENAI_CODEX_BROWSER_LOGIN_METHOD = "browser";
+var OPENAI_CODEX_DEVICE_CODE_LOGIN_METHOD = "device_code";
+var SCOPE = "openid profile email offline_access";
+var JWT_CLAIM_PATH = "https://api.openai.com/auth";
+function getCallbackHost() {
+  return getProviderEnvValue("PI_OAUTH_CALLBACK_HOST") || "127.0.0.1";
+}
+function createState() {
+  if (!_randomBytes) {
+    throw new Error("OpenAI Codex OAuth is only available in Node.js environments");
+  }
+  return _randomBytes(16).toString("hex");
+}
+function parseAuthorizationInput2(input) {
+  const value2 = input.trim();
+  if (!value2)
+    return {};
+  try {
+    const url = new URL(value2);
+    return {
+      code: url.searchParams.get("code") ?? void 0,
+      state: url.searchParams.get("state") ?? void 0
+    };
+  } catch {
+  }
+  if (value2.includes("#")) {
+    const [code, state3] = value2.split("#", 2);
+    return { code, state: state3 };
+  }
+  if (value2.includes("code=")) {
+    const params = new URLSearchParams(value2);
+    return {
+      code: params.get("code") ?? void 0,
+      state: params.get("state") ?? void 0
+    };
+  }
+  return { code: value2 };
+}
+function decodeJwt(token2) {
+  try {
+    const parts = token2.split(".");
+    if (parts.length !== 3)
+      return null;
+    const payload = parts[1] ?? "";
+    const decoded = atob(payload);
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+async function fetchWithLoginCancellation(input, init) {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    if (init.signal?.aborted) {
+      throw new Error("Login cancelled");
+    }
+    throw error;
+  }
+}
+async function readTokenResponse(response, operation) {
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`OpenAI Codex token ${operation} failed (${response.status}): ${text || response.statusText}`);
+  }
+  const rawJson = await response.json();
+  const json2 = rawJson;
+  if (!json2?.access_token || !json2.refresh_token || typeof json2.expires_in !== "number") {
+    throw new Error(`OpenAI Codex token ${operation} response missing fields: ${JSON.stringify(json2)}`);
+  }
+  return {
+    access: json2.access_token,
+    refresh: json2.refresh_token,
+    expires: Date.now() + json2.expires_in * 1e3
+  };
+}
+async function exchangeAuthorizationCode2(code, verifier, redirectUri, signal) {
+  const response = await fetchWithLoginCancellation(TOKEN_URL2, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: CLIENT_ID4,
+      code,
+      code_verifier: verifier,
+      redirect_uri: redirectUri
+    }),
+    signal
+  });
+  return readTokenResponse(response, "exchange");
+}
+async function refreshAccessToken(refreshToken2, signal) {
+  let response;
+  try {
+    response = await fetch(TOKEN_URL2, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken2,
+        client_id: CLIENT_ID4
+      }),
+      signal
+    });
+  } catch (error) {
+    throw new Error(`OpenAI Codex token refresh error: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return readTokenResponse(response, "refresh");
+}
+async function startOpenAICodexDeviceAuth(signal) {
+  const response = await fetchWithLoginCancellation(DEVICE_USER_CODE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ client_id: CLIENT_ID4 }),
+    signal
+  });
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error("OpenAI Codex device code login is not enabled for this server. Use browser login or verify the server URL.");
+    }
+    const responseBody = await response.text().catch(() => "");
+    throw new Error(`OpenAI Codex device code request failed with status ${response.status}${responseBody ? `: ${responseBody}` : ""}`);
+  }
+  const rawJson = await response.json();
+  const json2 = rawJson;
+  const intervalSeconds = typeof json2?.interval === "string" ? Number(json2.interval.trim()) : json2?.interval;
+  if (!json2?.device_auth_id || !json2.user_code || typeof intervalSeconds !== "number" || !Number.isFinite(intervalSeconds) || intervalSeconds < 0) {
+    throw new Error(`Invalid OpenAI Codex device code response: ${JSON.stringify(json2)}`);
+  }
+  return {
+    deviceAuthId: json2.device_auth_id,
+    userCode: json2.user_code,
+    intervalSeconds
+  };
+}
+async function pollOpenAICodexDeviceAuth(device, signal) {
+  return pollOAuthDeviceCodeFlow({
+    intervalSeconds: device.intervalSeconds,
+    expiresInSeconds: DEVICE_CODE_TIMEOUT_SECONDS2,
+    signal,
+    poll: async () => {
+      const response = await fetchWithLoginCancellation(DEVICE_TOKEN_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          device_auth_id: device.deviceAuthId,
+          user_code: device.userCode
+        }),
+        signal
+      });
+      if (response.ok) {
+        const rawJson = await response.json();
+        const json2 = rawJson;
+        if (!json2?.authorization_code || !json2.code_verifier) {
+          return {
+            status: "failed",
+            message: `Invalid OpenAI Codex device auth token response: ${JSON.stringify(json2)}`
+          };
+        }
+        return {
+          status: "complete",
+          value: { authorizationCode: json2.authorization_code, codeVerifier: json2.code_verifier }
+        };
+      }
+      if (response.status === 403 || response.status === 404) {
+        return { status: "pending" };
+      }
+      const responseBody = await response.text().catch(() => "");
+      let errorCode;
+      try {
+        const json2 = JSON.parse(responseBody);
+        const error = json2?.error;
+        errorCode = typeof error === "object" ? error?.code : error;
+      } catch {
+      }
+      if (errorCode === "deviceauth_authorization_pending") {
+        return { status: "pending" };
+      }
+      if (errorCode === "slow_down") {
+        return { status: "slow_down" };
+      }
+      return {
+        status: "failed",
+        message: `OpenAI Codex device auth failed with status ${response.status}${responseBody ? `: ${responseBody}` : ""}`
+      };
+    }
+  });
+}
+async function createAuthorizationFlow(originator = "pi") {
+  const { verifier, challenge } = await generatePKCE();
+  const state3 = createState();
+  const url = new URL(AUTHORIZE_URL2);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("client_id", CLIENT_ID4);
+  url.searchParams.set("redirect_uri", REDIRECT_URI2);
+  url.searchParams.set("scope", SCOPE);
+  url.searchParams.set("code_challenge", challenge);
+  url.searchParams.set("code_challenge_method", "S256");
+  url.searchParams.set("state", state3);
+  url.searchParams.set("id_token_add_organizations", "true");
+  url.searchParams.set("codex_cli_simplified_flow", "true");
+  url.searchParams.set("originator", originator);
+  return { verifier, state: state3, url: url.toString() };
+}
+function startLocalOAuthServer(state3) {
+  if (!_http) {
+    throw new Error("OpenAI Codex OAuth is only available in Node.js environments");
+  }
+  let settleWait;
+  const waitForCodePromise = new Promise((resolve4) => {
+    let settled = false;
+    settleWait = (value2) => {
+      if (settled)
+        return;
+      settled = true;
+      resolve4(value2);
+    };
+  });
+  const server2 = _http.createServer((req, res) => {
+    try {
+      const url = new URL(req.url || "", "http://localhost");
+      if (url.pathname !== "/auth/callback") {
+        res.statusCode = 404;
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.end(oauthErrorHtml("Callback route not found."));
+        return;
+      }
+      if (url.searchParams.get("state") !== state3) {
+        res.statusCode = 400;
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.end(oauthErrorHtml("State mismatch."));
+        return;
+      }
+      const code = url.searchParams.get("code");
+      if (!code) {
+        res.statusCode = 400;
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.end(oauthErrorHtml("Missing authorization code."));
+        return;
+      }
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.end(oauthSuccessHtml("OpenAI authentication completed. You can close this window."));
+      settleWait?.({ code });
+    } catch {
+      res.statusCode = 500;
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.end(oauthErrorHtml("Internal error while processing OAuth callback."));
+    }
+  });
+  return new Promise((resolve4) => {
+    server2.listen(1455, getCallbackHost(), () => {
+      resolve4({
+        close: () => server2.close(),
+        cancelWait: () => {
+          settleWait?.(null);
+        },
+        waitForCode: () => waitForCodePromise
+      });
+    }).on("error", (_err) => {
+      settleWait?.(null);
+      resolve4({
+        close: () => {
+          try {
+            server2.close();
+          } catch {
+          }
+        },
+        cancelWait: () => {
+        },
+        waitForCode: async () => null
+      });
+    });
+  });
+}
+function getAccountId(accessToken) {
+  const payload = decodeJwt(accessToken);
+  const auth = payload?.[JWT_CLAIM_PATH];
+  const accountId = auth?.chatgpt_account_id;
+  return typeof accountId === "string" && accountId.length > 0 ? accountId : null;
+}
+function credentialsFromToken(token2) {
+  const accountId = getAccountId(token2.access);
+  if (!accountId) {
+    throw new Error("Failed to extract accountId from token");
+  }
+  return {
+    type: "oauth",
+    access: token2.access,
+    refresh: token2.refresh,
+    expires: token2.expires,
+    accountId
+  };
+}
+async function exchangeAuthorizationCodeForCredentials(code, verifier, redirectUri, signal) {
+  return credentialsFromToken(await exchangeAuthorizationCode2(code, verifier, redirectUri, signal));
+}
+async function loginOpenAICodexDeviceCode(interaction) {
+  const device = await startOpenAICodexDeviceAuth(interaction.signal);
+  interaction.notify({
+    type: "device_code",
+    userCode: device.userCode,
+    verificationUri: DEVICE_VERIFICATION_URI,
+    intervalSeconds: device.intervalSeconds,
+    expiresInSeconds: DEVICE_CODE_TIMEOUT_SECONDS2
+  });
+  const code = await pollOpenAICodexDeviceAuth(device, interaction.signal);
+  return exchangeAuthorizationCodeForCredentials(code.authorizationCode, code.codeVerifier, DEVICE_REDIRECT_URI, interaction.signal);
+}
+async function loginOpenAICodex(interaction) {
+  const { verifier, state: state3, url } = await createAuthorizationFlow();
+  const server2 = await startLocalOAuthServer(state3);
+  const manualAbort = new AbortController();
+  const onAbort = () => server2.cancelWait();
+  interaction.signal.addEventListener("abort", onAbort, { once: true });
+  if (interaction.signal.aborted)
+    onAbort();
+  let code;
+  let manualCode;
+  let manualError;
+  interaction.notify({
+    type: "auth_url",
+    url,
+    instructions: "A browser window should open. Complete login to finish."
+  });
+  try {
+    const manualPromise = interaction.prompt({
+      type: "manual_code",
+      message: "Complete login in your browser, or paste the authorization code / redirect URL here:",
+      placeholder: REDIRECT_URI2,
+      signal: manualAbort.signal
+    }).then((input) => {
+      manualCode = input;
+      server2.cancelWait();
+    }).catch((error) => {
+      manualError = error instanceof Error ? error : new Error(String(error));
+      server2.cancelWait();
+    });
+    const result = await server2.waitForCode();
+    if (manualError)
+      throw manualError;
+    if (result?.code) {
+      code = result.code;
+    } else if (manualCode) {
+      const parsed = parseAuthorizationInput2(manualCode);
+      if (parsed.state && parsed.state !== state3)
+        throw new Error("State mismatch");
+      code = parsed.code;
+    }
+    if (!code) {
+      await manualPromise;
+      if (manualError)
+        throw manualError;
+      if (manualCode) {
+        const parsed = parseAuthorizationInput2(manualCode);
+        if (parsed.state && parsed.state !== state3)
+          throw new Error("State mismatch");
+        code = parsed.code;
+      }
+    }
+    if (!code)
+      throw new Error("Missing authorization code");
+    return exchangeAuthorizationCodeForCredentials(code, verifier, REDIRECT_URI2, interaction.signal);
+  } finally {
+    interaction.signal.removeEventListener("abort", onAbort);
+    manualAbort.abort();
+    server2.close();
+  }
+}
+async function refreshOpenAICodexToken(refreshToken2, signal) {
+  return credentialsFromToken(await refreshAccessToken(refreshToken2, signal));
+}
+var openaiCodexOAuth = {
+  name: "OpenAI (ChatGPT Plus/Pro)",
+  isSubscription: true,
+  async login(interaction) {
+    const method = await interaction.prompt({
+      type: "select",
+      message: "Select OpenAI Codex login method:",
+      options: [
+        { id: OPENAI_CODEX_BROWSER_LOGIN_METHOD, label: "Browser login (default)" },
+        { id: OPENAI_CODEX_DEVICE_CODE_LOGIN_METHOD, label: "Device code login (headless)" }
+      ]
+    });
+    if (method === OPENAI_CODEX_DEVICE_CODE_LOGIN_METHOD) {
+      return loginOpenAICodexDeviceCode(interaction);
+    }
+    if (method !== OPENAI_CODEX_BROWSER_LOGIN_METHOD) {
+      throw new Error(`Unknown OpenAI Codex login method: ${method}`);
+    }
+    return loginOpenAICodex(interaction);
+  },
+  refresh: (credential, signal) => refreshOpenAICodexToken(credential.refresh, signal),
+  async toAuth(credential) {
+    return { apiKey: credential.access };
+  }
+};
+
+// node_modules/@earendil-works/pi-ai/dist/auth/oauth/openrouter.js
+init_provider_env();
+import { createServer } from "node:http";
+var AUTHORIZE_URL3 = "https://openrouter.ai/auth";
+var TOKEN_URL3 = "https://openrouter.ai/api/v1/auth/keys";
+var LOGIN_TIMEOUT_MS = 5 * 60 * 1e3;
+var TOKEN_EXCHANGE_TIMEOUT_MS = 3e4;
+function getCallbackHost2() {
+  return getProviderEnvValue("PI_OAUTH_CALLBACK_HOST") || "127.0.0.1";
+}
+function sendHtml(response, status, html) {
+  response.statusCode = status;
+  response.setHeader("content-type", "text/html; charset=utf-8");
+  response.setHeader("cache-control", "no-store");
+  response.end(html);
+}
+function parseAuthorizationInput3(input) {
+  const value2 = input.trim();
+  if (!value2)
+    return void 0;
+  try {
+    return new URL(value2).searchParams.get("code") ?? void 0;
+  } catch {
+  }
+  if (value2.includes("code=")) {
+    return new URLSearchParams(value2).get("code") ?? void 0;
+  }
+  return value2;
+}
+function errorDetail(body2) {
+  if (typeof body2.error_description === "string")
+    return body2.error_description;
+  if (typeof body2.message === "string")
+    return body2.message;
+  if (typeof body2.error === "string")
+    return body2.error;
+  if (body2.error && typeof body2.error === "object" && !Array.isArray(body2.error)) {
+    const message = body2.error.message;
+    if (typeof message === "string")
+      return message;
+  }
+  return void 0;
+}
+async function exchangeAuthorizationCode3(code, verifier, signal) {
+  if (signal.aborted)
+    throw new Error("Login cancelled");
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(signal.reason);
+  signal.addEventListener("abort", onAbort, { once: true });
+  const timeout = setTimeout(() => controller.abort(new Error("OpenRouter OAuth token exchange timed out")), TOKEN_EXCHANGE_TIMEOUT_MS);
+  let response;
+  let body2 = {};
+  try {
+    response = await fetch(TOKEN_URL3, {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: JSON.stringify({ code, code_verifier: verifier, code_challenge_method: "S256" }),
+      signal: controller.signal
+    });
+    try {
+      const parsed = await response.json();
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+        body2 = parsed;
+    } catch {
+      if (response.ok)
+        throw new Error("OpenRouter OAuth returned invalid JSON");
+    }
+  } catch (error) {
+    if (signal.aborted)
+      throw new Error("Login cancelled");
+    if (controller.signal.aborted)
+      throw new Error("OpenRouter OAuth token exchange timed out");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener("abort", onAbort);
+  }
+  if (!response.ok) {
+    const detail = errorDetail(body2);
+    throw new Error(`OpenRouter OAuth key exchange failed (HTTP ${response.status})${detail ? `: ${detail}` : ""}`);
+  }
+  if (typeof body2.key !== "string" || body2.key.length === 0) {
+    throw new Error('OpenRouter OAuth response carries no "key"');
+  }
+  return {
+    type: "oauth",
+    access: body2.key,
+    refresh: "",
+    expires: Number.MAX_SAFE_INTEGER
+  };
+}
+async function startCallbackServer2(callbackPath, verifier, signal) {
+  if (signal.aborted)
+    throw new Error("Login cancelled");
+  const callbackHost = getCallbackHost2();
+  let resolveCredential = () => {
+  };
+  let rejectCredential = () => {
+  };
+  const credential = new Promise((resolve4, reject) => {
+    resolveCredential = resolve4;
+    rejectCredential = reject;
+  });
+  let server2;
+  let claimed = false;
+  let settled = false;
+  let timeout;
+  let onAbort;
+  const close = () => {
+    if (timeout)
+      clearTimeout(timeout);
+    if (onAbort)
+      signal.removeEventListener("abort", onAbort);
+    server2.close();
+  };
+  const finish = (result) => {
+    if (settled)
+      return;
+    settled = true;
+    close();
+    if ("credential" in result)
+      resolveCredential(result.credential);
+    else
+      rejectCredential(result.error);
+  };
+  server2 = createServer((request, response) => {
+    void (async () => {
+      const requestUrl = new URL(request.url ?? "/", `http://${callbackHost}`);
+      if (request.method !== "GET" || requestUrl.pathname !== callbackPath) {
+        sendHtml(response, 404, oauthErrorHtml("OAuth callback route not found."));
+        return;
+      }
+      if (claimed || settled) {
+        sendHtml(response, 409, oauthErrorHtml("This OAuth callback has already been used."));
+        return;
+      }
+      const oauthError = requestUrl.searchParams.get("error");
+      if (oauthError) {
+        const description = requestUrl.searchParams.get("error_description") ?? oauthError;
+        sendHtml(response, 400, oauthErrorHtml("OpenRouter authorization was denied.", description));
+        finish({ error: new Error(`OpenRouter authorization failed: ${description}`) });
+        return;
+      }
+      const code = requestUrl.searchParams.get("code");
+      if (!code) {
+        sendHtml(response, 400, oauthErrorHtml("OpenRouter returned no authorization code."));
+        return;
+      }
+      claimed = true;
+      try {
+        const result = await exchangeAuthorizationCode3(code, verifier, signal);
+        sendHtml(response, 200, oauthSuccessHtml("Signed in to OpenRouter. You may now close this page."));
+        finish({ credential: result });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown token exchange error";
+        sendHtml(response, 502, oauthErrorHtml("OpenRouter key exchange failed.", message));
+        finish({ error: error instanceof Error ? error : new Error(message) });
+      }
+    })();
+  });
+  await new Promise((resolve4, reject) => {
+    server2.once("error", reject);
+    server2.listen(0, callbackHost, () => {
+      server2.removeListener("error", reject);
+      resolve4();
+    });
+  });
+  server2.on("error", (error) => finish({ error }));
+  onAbort = () => finish({ error: new Error("Login cancelled") });
+  signal.addEventListener("abort", onAbort, { once: true });
+  if (signal.aborted) {
+    close();
+    throw new Error("Login cancelled");
+  }
+  timeout = setTimeout(() => finish({ error: new Error("OpenRouter OAuth login timed out") }), LOGIN_TIMEOUT_MS);
+  const address = server2.address();
+  if (!address || typeof address === "string") {
+    close();
+    throw new Error("Could not determine the OpenRouter OAuth callback port");
+  }
+  return {
+    callbackUrl: `http://${callbackHost}:${address.port}${callbackPath}`,
+    close,
+    // A claimed callback is already exchanging its code; let that exchange settle the login.
+    cancelWait: () => {
+      if (!claimed)
+        finish({ credential: null });
+    },
+    waitForCredential: () => credential
+  };
+}
+async function loginOpenRouter(interaction) {
+  const { verifier, challenge } = await generatePKCE();
+  const callbackPath = `/oauth/callback/${crypto.randomUUID()}`;
+  const callback = await startCallbackServer2(callbackPath, verifier, interaction.signal);
+  const manualAbort = new AbortController();
+  let manualInput;
+  let manualError;
+  try {
+    const authorizeUrl = new URL(AUTHORIZE_URL3);
+    authorizeUrl.search = new URLSearchParams({
+      callback_url: callback.callbackUrl,
+      code_challenge: challenge,
+      code_challenge_method: "S256"
+    }).toString();
+    interaction.notify({
+      type: "progress",
+      message: `Listening for OpenRouter OAuth callback on ${callback.callbackUrl}`
+    });
+    interaction.notify({
+      type: "auth_url",
+      url: authorizeUrl.toString(),
+      instructions: "Complete sign-in in your browser. If the browser is on another machine, paste the final redirect URL here."
+    });
+    const manualPromise = interaction.prompt({
+      type: "manual_code",
+      message: "Complete sign-in in your browser, or paste the authorization code / redirect URL here:",
+      placeholder: callback.callbackUrl,
+      signal: manualAbort.signal
+    }).then((input) => {
+      manualInput = input;
+      callback.cancelWait();
+    }).catch((error) => {
+      manualError = error instanceof Error ? error : new Error(String(error));
+      callback.cancelWait();
+    });
+    const credential = await callback.waitForCredential();
+    if (manualError)
+      throw manualError;
+    if (credential)
+      return credential;
+    await manualPromise;
+    if (manualError)
+      throw manualError;
+    const code = manualInput ? parseAuthorizationInput3(manualInput) : void 0;
+    if (!code)
+      throw new Error("Missing authorization code");
+    interaction.notify({ type: "progress", message: "Exchanging authorization code for an API key..." });
+    return await exchangeAuthorizationCode3(code, verifier, interaction.signal);
+  } finally {
+    manualAbort.abort();
+    callback.close();
+  }
+}
+var openRouterOAuth = {
+  name: "OpenRouter OAuth",
+  loginLabel: "Sign in with OpenRouter",
+  login: loginOpenRouter,
+  async refresh(credential, _signal) {
+    return credential;
+  },
+  async toAuth(credential) {
+    return { apiKey: credential.access };
+  }
+};
+
+// node_modules/@earendil-works/pi-ai/dist/providers/radius-config.js
+function normalizeRadiusGatewayUrl(value2) {
+  const withScheme = /^https?:\/\//iu.test(value2) ? value2 : `https://${value2}`;
+  return withScheme.replace(/\/+$/u, "");
+}
+
+// node_modules/@earendil-works/pi-ai/dist/auth/oauth/radius.js
+var _http2 = null;
+if (typeof process !== "undefined" && (process.versions?.node || process.versions?.bun)) {
+  import("node:http").then((m4) => {
+    _http2 = m4;
+  });
+}
+var CALLBACK_HOST2 = "127.0.0.1";
+var CALLBACK_PORT2 = 1456;
+var CALLBACK_PATH2 = "/oauth/callback";
+var REDIRECT_URI3 = `http://${CALLBACK_HOST2}:${CALLBACK_PORT2}${CALLBACK_PATH2}`;
+var TOKEN_EXPIRY_SKEW_MS = 6e4;
+var LOGIN_METHOD_BROWSER = "browser";
+var LOGIN_METHOD_DEVICE_CODE = "device-code";
+var OAUTH_CLIENT_ID = "pi-gateway";
+var OAUTH_SCOPE = "gateway offline_access";
+var OAUTH_DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
+async function loadRadiusOAuthDiscovery(gateway, signal) {
+  const response = await fetch(new URL("/v1/oauth", gateway), {
+    headers: { accept: "application/json" },
+    signal
+  });
+  if (!response.ok) {
+    throw new Error(`Could not load Radius OAuth config from ${gateway}: ${response.status} ${await response.text()}`);
+  }
+  const discovery = await response.json();
+  if (typeof discovery.authorizationEndpoint !== "string") {
+    throw new Error(`Invalid Radius OAuth config from ${gateway}`);
+  }
+  return { authorizationEndpoint: discovery.authorizationEndpoint };
+}
+var OAuthResponseError = class extends Error {
+  status;
+  oauthError;
+  constructor(status, oauthError, description, message) {
+    const detail = oauthError ? description ? `${oauthError}: ${description}` : oauthError : description || String(status);
+    super(`${message}: ${detail}`);
+    this.status = status;
+    this.oauthError = oauthError;
+  }
+};
+async function readOAuthResponseError(response, message) {
+  const text = await response.text().catch(() => "");
+  let oauthError;
+  let description;
+  if (text) {
+    try {
+      const data = JSON.parse(text);
+      oauthError = typeof data.error === "string" ? data.error : void 0;
+      description = typeof data.error_description === "string" ? data.error_description : void 0;
+    } catch {
+      description = text;
+    }
+  }
+  return new OAuthResponseError(response.status, oauthError, description, message);
+}
+async function requestOAuthToken(gateway, body2, signal) {
+  let response;
+  try {
+    response = await fetch(new URL("/v1/oauth/token", gateway), {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/x-www-form-urlencoded" },
+      body: body2,
+      signal
+    });
+  } catch (error) {
+    if (signal.aborted) {
+      throw new Error("Login cancelled");
+    }
+    throw error;
+  }
+  if (!response.ok) {
+    throw await readOAuthResponseError(response, "Radius OAuth token request failed");
+  }
+  const data = await response.json();
+  return {
+    type: "oauth",
+    access: data.access_token,
+    refresh: data.refresh_token,
+    expires: Date.now() + data.expires_in * 1e3 - TOKEN_EXPIRY_SKEW_MS,
+    scope: data.scope
+  };
+}
+function startOAuthCallbackServer(expectedState, signal) {
+  if (!_http2) {
+    throw new Error("Radius OAuth is only available in Node.js environments");
+  }
+  let settle = () => {
+  };
+  let settled = false;
+  const wait = new Promise((resolve4) => {
+    settle = resolve4;
+  });
+  const finish = (code) => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    signal.removeEventListener("abort", onAbort);
+    settle(code);
+  };
+  const onAbort = () => finish(null);
+  signal.addEventListener("abort", onAbort, { once: true });
+  const sendPage = (response, status, html) => {
+    response.statusCode = status;
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.end(html);
+  };
+  const server2 = _http2.createServer((request, response) => {
+    const url = new URL(request.url ?? "/", REDIRECT_URI3);
+    if (url.pathname !== CALLBACK_PATH2) {
+      sendPage(response, 404, oauthErrorHtml("Callback route not found."));
+      return;
+    }
+    if (url.searchParams.get("state") !== expectedState) {
+      sendPage(response, 400, oauthErrorHtml("OAuth state mismatch."));
+      return;
+    }
+    const error = url.searchParams.get("error");
+    if (error) {
+      sendPage(response, 400, oauthErrorHtml(url.searchParams.get("error_description") ?? error));
+      finish(null);
+      return;
+    }
+    const code = url.searchParams.get("code");
+    if (!code) {
+      sendPage(response, 400, oauthErrorHtml("Missing authorization code."));
+      return;
+    }
+    sendPage(response, 200, oauthSuccessHtml("Signed in to Radius. You may now close this page."));
+    finish(code);
+  });
+  return new Promise((resolve4) => {
+    server2.listen(CALLBACK_PORT2, CALLBACK_HOST2, () => {
+      resolve4({
+        waitForCode: () => wait,
+        close: () => {
+          finish(null);
+          server2.close();
+        }
+      });
+    }).once("error", () => {
+      finish(null);
+      resolve4({ waitForCode: async () => null, close: () => {
+      } });
+    });
+  });
+}
+async function loginWithBrowser(gateway, authorizationEndpoint, interaction) {
+  const { verifier, challenge } = await generatePKCE();
+  const state3 = crypto.randomUUID();
+  const authorizeUrl = new URL(authorizationEndpoint);
+  authorizeUrl.search = new URLSearchParams({
+    response_type: "code",
+    client_id: OAUTH_CLIENT_ID,
+    redirect_uri: REDIRECT_URI3,
+    scope: OAUTH_SCOPE,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    handoff: "url",
+    state: state3
+  }).toString();
+  const callbackServer = await startOAuthCallbackServer(state3, interaction.signal);
+  interaction.notify({ type: "progress", message: `Listening for OAuth callback on ${REDIRECT_URI3}` });
+  interaction.notify({
+    type: "auth_url",
+    url: authorizeUrl.toString(),
+    instructions: "Continue in your browser."
+  });
+  try {
+    const code = await callbackServer.waitForCode();
+    if (!code) {
+      if (interaction.signal.aborted) {
+        throw new Error("Login cancelled");
+      }
+      throw new Error("OAuth callback did not complete.");
+    }
+    return await requestOAuthToken(gateway, new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: OAUTH_CLIENT_ID,
+      redirect_uri: REDIRECT_URI3,
+      code,
+      code_verifier: verifier
+    }), interaction.signal);
+  } finally {
+    callbackServer.close();
+  }
+}
+async function requestDeviceAuthorization(gateway, signal) {
+  let response;
+  try {
+    response = await fetch(new URL("/v1/oauth/device", gateway), {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ client_id: OAUTH_CLIENT_ID, scope: OAUTH_SCOPE }),
+      signal
+    });
+  } catch (error) {
+    if (signal.aborted) {
+      throw new Error("Login cancelled");
+    }
+    throw error;
+  }
+  if (!response.ok) {
+    throw await readOAuthResponseError(response, "Radius OAuth device authorization failed");
+  }
+  const data = await response.json();
+  if (!data.device_code || !data.user_code || !data.verification_uri || !data.expires_in) {
+    throw new Error("Radius OAuth device authorization response is missing required fields");
+  }
+  return {
+    device_code: data.device_code,
+    user_code: data.user_code,
+    verification_uri: data.verification_uri,
+    expires_in: data.expires_in,
+    interval: data.interval
+  };
+}
+async function loginWithDeviceCode(gateway, interaction) {
+  const device = await requestDeviceAuthorization(gateway, interaction.signal);
+  interaction.notify({
+    type: "device_code",
+    userCode: device.user_code,
+    verificationUri: device.verification_uri,
+    intervalSeconds: device.interval,
+    expiresInSeconds: device.expires_in
+  });
+  return pollOAuthDeviceCodeFlow({
+    intervalSeconds: device.interval,
+    expiresInSeconds: device.expires_in,
+    signal: interaction.signal,
+    poll: async () => {
+      try {
+        const credentials = await requestOAuthToken(gateway, new URLSearchParams({
+          grant_type: OAUTH_DEVICE_CODE_GRANT_TYPE,
+          client_id: OAUTH_CLIENT_ID,
+          device_code: device.device_code
+        }), interaction.signal);
+        return { status: "complete", value: credentials };
+      } catch (error) {
+        if (!(error instanceof OAuthResponseError)) {
+          throw error;
+        }
+        switch (error.oauthError) {
+          case "authorization_pending":
+            return { status: "pending" };
+          case "slow_down":
+            return { status: "slow_down" };
+          case "expired_token":
+            return { status: "failed", message: "Device authorization expired." };
+          case "access_denied":
+            return { status: "failed", message: "Device authorization was denied." };
+          default:
+            throw error;
+        }
+      }
+    }
+  });
+}
+function createRadiusOAuth(options) {
+  const gateway = normalizeRadiusGatewayUrl(options.gateway);
+  return {
+    name: options.name,
+    async login(interaction) {
+      const loginMethod = await interaction.prompt({
+        type: "select",
+        message: `Sign in to ${options.name}:`,
+        options: [
+          { id: LOGIN_METHOD_BROWSER, label: "Sign in with browser (recommended)" },
+          {
+            id: LOGIN_METHOD_DEVICE_CODE,
+            label: "Sign in with device code (when signing in from another device)"
+          }
+        ]
+      });
+      if (loginMethod === LOGIN_METHOD_DEVICE_CODE) {
+        return loginWithDeviceCode(gateway, interaction);
+      }
+      if (loginMethod === LOGIN_METHOD_BROWSER) {
+        const discovery = await loadRadiusOAuthDiscovery(gateway, interaction.signal);
+        return loginWithBrowser(gateway, discovery.authorizationEndpoint, interaction);
+      }
+      throw new Error(`Unknown ${options.name} sign-in method: ${loginMethod}`);
+    },
+    async refresh(credential, signal) {
+      const refreshed = await requestOAuthToken(gateway, new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: OAUTH_CLIENT_ID,
+        refresh_token: credential.refresh
+      }), signal);
+      return refreshed;
+    },
+    async toAuth(credential) {
+      return { apiKey: credential.access };
+    }
+  };
+}
+
+// node_modules/@earendil-works/pi-ai/dist/auth/oauth/xai.js
+var XAI_CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";
+var XAI_SCOPE = "openid profile email offline_access grok-cli:access api:access";
+var XAI_DEVICE_CODE_URL = "https://auth.x.ai/oauth2/device/code";
+var XAI_TOKEN_URL = "https://auth.x.ai/oauth2/token";
+var REFRESH_SKEW_MS = 5 * 60 * 1e3;
+var DEFAULT_TOKEN_LIFETIME_SECONDS = 3600;
+function requiredString(body2, field) {
+  const value2 = body2[field];
+  if (typeof value2 !== "string" || value2.length === 0) {
+    throw new Error(`Invalid xAI OAuth response field: ${field}`);
+  }
+  return value2;
+}
+function positiveNumber(body2, field) {
+  const value2 = body2[field];
+  if (typeof value2 !== "number" || !Number.isFinite(value2) || value2 <= 0) {
+    throw new Error(`Invalid xAI OAuth response field: ${field}`);
+  }
+  return value2;
+}
+function validateVerificationUri(raw) {
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error("Untrusted verification URI in xAI OAuth response");
+  }
+  if (url.protocol !== "https:") {
+    throw new Error("Untrusted verification URI in xAI OAuth response");
+  }
+  return url.href;
+}
+async function postForm(url, fields, signal) {
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: new URLSearchParams(fields),
+      signal
+    });
+  } catch (error) {
+    if (signal.aborted) {
+      throw new Error("Login cancelled");
+    }
+    throw error;
+  }
+  let body2;
+  try {
+    const parsed = await response.json();
+    body2 = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    if (signal.aborted) {
+      throw new Error("Login cancelled");
+    }
+    throw new Error(`xAI OAuth returned invalid JSON (HTTP ${response.status})`);
+  }
+  return {
+    ok: response.ok,
+    status: response.status,
+    body: body2
+  };
+}
+function requestFailure(action, response) {
+  const error = typeof response.body.error === "string" ? response.body.error : void 0;
+  const description = typeof response.body.error_description === "string" ? response.body.error_description : void 0;
+  const detail = [error, description].filter(Boolean).join(": ");
+  return new Error(`xAI OAuth ${action} failed (HTTP ${response.status})${detail ? `: ${detail}` : ""}`);
+}
+function parseDeviceCode(body2) {
+  const interval = body2.interval;
+  const intervalSeconds = typeof interval === "number" && Number.isFinite(interval) && interval > 0 ? interval : void 0;
+  const verificationUriComplete = typeof body2.verification_uri_complete === "string" && body2.verification_uri_complete.length > 0 ? validateVerificationUri(body2.verification_uri_complete) : void 0;
+  return {
+    deviceCode: requiredString(body2, "device_code"),
+    userCode: requiredString(body2, "user_code"),
+    verificationUri: validateVerificationUri(requiredString(body2, "verification_uri")),
+    verificationUriComplete,
+    intervalSeconds,
+    expiresInSeconds: positiveNumber(body2, "expires_in")
+  };
+}
+function credentialsFromTokenResponse(body2, previousRefreshToken) {
+  const access = requiredString(body2, "access_token");
+  const refresh2 = body2.refresh_token === void 0 && previousRefreshToken ? previousRefreshToken : requiredString(body2, "refresh_token");
+  const expiresInSeconds = body2.expires_in === void 0 ? DEFAULT_TOKEN_LIFETIME_SECONDS : positiveNumber(body2, "expires_in");
+  return {
+    type: "oauth",
+    access,
+    refresh: refresh2,
+    expires: Date.now() + expiresInSeconds * 1e3 - REFRESH_SKEW_MS
+  };
+}
+async function requestDeviceCode(signal) {
+  const response = await postForm(XAI_DEVICE_CODE_URL, {
+    client_id: XAI_CLIENT_ID,
+    scope: XAI_SCOPE,
+    referrer: "pi"
+  }, signal);
+  if (!response.ok) {
+    throw requestFailure("device authorization", response);
+  }
+  return parseDeviceCode(response.body);
+}
+async function pollForTokens(device, signal) {
+  return pollOAuthDeviceCodeFlow({
+    intervalSeconds: device.intervalSeconds,
+    expiresInSeconds: device.expiresInSeconds,
+    waitBeforeFirstPoll: true,
+    signal,
+    poll: async () => {
+      const response = await postForm(XAI_TOKEN_URL, {
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+        client_id: XAI_CLIENT_ID,
+        device_code: device.deviceCode
+      }, signal);
+      if (response.ok) {
+        return { status: "complete", value: credentialsFromTokenResponse(response.body) };
+      }
+      const error = response.body.error;
+      if (error === "authorization_pending") {
+        return { status: "pending" };
+      }
+      if (error === "slow_down") {
+        const interval = response.body.interval;
+        return { status: "slow_down", intervalSeconds: typeof interval === "number" ? interval : void 0 };
+      }
+      if (error === "access_denied" || error === "authorization_denied") {
+        return { status: "failed", message: "xAI device authorization was denied" };
+      }
+      if (error === "expired_token") {
+        return { status: "failed", message: "xAI device code expired" };
+      }
+      return { status: "failed", message: requestFailure("device token polling", response).message };
+    }
+  });
+}
+async function loginXai(interaction) {
+  const device = await requestDeviceCode(interaction.signal);
+  interaction.notify({
+    type: "device_code",
+    userCode: device.userCode,
+    verificationUri: device.verificationUriComplete ?? device.verificationUri,
+    intervalSeconds: device.intervalSeconds,
+    expiresInSeconds: device.expiresInSeconds
+  });
+  return pollForTokens(device, interaction.signal);
+}
+async function refreshXaiToken(refreshToken2, signal) {
+  const response = await postForm(XAI_TOKEN_URL, {
+    grant_type: "refresh_token",
+    client_id: XAI_CLIENT_ID,
+    refresh_token: refreshToken2
+  }, signal);
+  if (!response.ok) {
+    throw requestFailure("token refresh", response);
+  }
+  return credentialsFromTokenResponse(response.body, refreshToken2);
+}
+var xaiOAuth = {
+  name: "xAI (Grok/X subscription)",
+  isSubscription: true,
+  loginLabel: "Sign in with SuperGrok or X Premium",
+  login: loginXai,
+  refresh: (credential, signal) => refreshXaiToken(credential.refresh, signal),
+  async toAuth(credential) {
+    return { apiKey: credential.access };
+  }
+};
+
+// node_modules/@earendil-works/pi-ai/dist/bun-oauth.js
+function registerBunOAuthFlows() {
+  registerBundledOAuthFlowLoaders({
+    anthropic: () => anthropicOAuth,
+    openaiCodex: () => openaiCodexOAuth,
+    githubCopilot: () => githubCopilotOAuth,
+    openrouter: () => openRouterOAuth,
+    kimiCoding: () => kimiCodingOAuth,
+    xai: () => xaiOAuth,
+    radius: createRadiusOAuth
+  });
+}
+
 // node_modules/openai/internal/tslib.mjs
 function __classPrivateFieldSet(receiver, state3, value2, kind, f5) {
   if (kind === "m")
@@ -219586,7 +221780,7 @@ var safeJSON = (text) => {
 };
 
 // node_modules/openai/internal/utils/sleep.mjs
-var sleep = (ms2) => new Promise((resolve4) => setTimeout(resolve4, ms2));
+var sleep2 = (ms2) => new Promise((resolve4) => setTimeout(resolve4, ms2));
 
 // node_modules/openai/version.mjs
 var VERSION = "6.40.0";
@@ -226060,7 +228254,7 @@ var Runs = class extends APIResource {
               }
             }
           }
-          await sleep(sleepInterval);
+          await sleep2(sleepInterval);
           break;
         //We return the run in any terminal state.
         case "requires_action":
@@ -226667,7 +228861,7 @@ var Files2 = class extends APIResource {
     const start = Date.now();
     let file = await this.retrieve(id);
     while (!file.status || !TERMINAL_STATES.has(file.status)) {
-      await sleep(pollInterval);
+      await sleep2(pollInterval);
       file = await this.retrieve(id);
       if (Date.now() - start > maxWait) {
         throw new APIConnectionTimeoutError({
@@ -228037,7 +230231,7 @@ var FileBatches = class extends APIResource {
               }
             }
           }
-          await sleep(sleepInterval);
+          await sleep2(sleepInterval);
           break;
         case "failed":
         case "cancelled":
@@ -228177,7 +230371,7 @@ var Files3 = class extends APIResource {
               }
             }
           }
-          await sleep(sleepInterval);
+          await sleep2(sleepInterval);
           break;
         case "failed":
         case "completed":
@@ -228901,7 +231095,7 @@ var OpenAI = class {
       const maxRetries = options.maxRetries ?? this.maxRetries;
       timeoutMillis = this.calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries);
     }
-    await sleep(timeoutMillis);
+    await sleep2(timeoutMillis);
     return this.makeRequest(options, retriesRemaining - 1, requestLogID);
   }
   calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries) {
@@ -229116,7 +231310,7 @@ function createAbortError() {
   error.name = "AbortError";
   return error;
 }
-function abortableSleep(ms2, signal) {
+function abortableSleep2(ms2, signal) {
   return new Promise((resolve4, reject) => {
     if (signal?.aborted) {
       reject(createAbortError());
@@ -229146,7 +231340,7 @@ async function retryProviderRequest(request, options = {}) {
         throw error;
       const retryIndex = maxRetries - retriesRemaining;
       retriesRemaining--;
-      await abortableSleep(getRetryDelayMs(error, retryIndex, options.maxRetryDelayMs), options.signal);
+      await abortableSleep2(getRetryDelayMs(error, retryIndex, options.maxRetryDelayMs), options.signal);
     }
   }
 }
@@ -230721,7 +232915,7 @@ var safeJSON2 = (text) => {
 };
 
 // node_modules/@anthropic-ai/sdk/internal/utils/sleep.mjs
-var sleep3 = (ms2) => new Promise((resolve4) => setTimeout(resolve4, ms2));
+var sleep4 = (ms2) => new Promise((resolve4) => setTimeout(resolve4, ms2));
 
 // node_modules/@anthropic-ai/sdk/version.mjs
 var VERSION2 = "0.91.1";
@@ -236629,7 +238823,7 @@ var BaseAnthropic = class {
       const maxRetries = options.maxRetries ?? this.maxRetries;
       timeoutMillis = this.calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries);
     }
-    await sleep3(timeoutMillis);
+    await sleep4(timeoutMillis);
     return this.makeRequest(options, retriesRemaining - 1, requestLogID);
   }
   calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries) {
@@ -255338,7 +257532,7 @@ async function uploadBlobInternal(file, uploadUrl, apiClient, httpOptions) {
         break;
       }
       retryCount++;
-      await sleep4(currentDelayMs);
+      await sleep5(currentDelayMs);
       currentDelayMs = currentDelayMs * DELAY_MULTIPLIER;
     }
     offset += chunkSize;
@@ -255355,7 +257549,7 @@ async function getBlobStat(file) {
   const fileStat = { size: file.size, type: file.type };
   return fileStat;
 }
-function sleep4(ms2) {
+function sleep5(ms2) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, ms2));
 }
 var NodeUploader = class {
@@ -255540,7 +257734,7 @@ var NodeUploader = class {
             break;
           }
           retryCount++;
-          await sleep4(currentDelayMs);
+          await sleep5(currentDelayMs);
           currentDelayMs = currentDelayMs * DELAY_MULTIPLIER;
         }
         offset += bytesRead;
@@ -256412,36 +258606,11 @@ function getGoogleBudget(model, effort, customBudgets) {
 init_lazy();
 var openAICodexResponsesApi = () => lazyApi(() => Promise.resolve().then(() => (init_openai_codex_responses(), openai_codex_responses_exports)));
 
-// node_modules/@earendil-works/pi-ai/dist/auth/oauth/load.js
-var __rewriteRelativeImportExtension2 = function(path10, preserveJsx) {
-  if (typeof path10 === "string" && /^\.\.?\//.test(path10)) {
-    return path10.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function(m4, tsx, d2, ext2, cm) {
-      return tsx ? preserveJsx ? ".jsx" : ".js" : d2 && (!ext2 || !cm) ? m4 : d2 + ext2 + "." + cm.toLowerCase() + "js";
-    });
-  }
-  return path10;
-};
-var importOAuthModule = (specifier) => {
-  const runtimeSpecifier = import.meta.url.endsWith(".js") ? specifier.replace(/\.ts$/, ".js") : specifier;
-  return import(__rewriteRelativeImportExtension2(runtimeSpecifier));
-};
-var bundledLoaders;
-var loadOpenAICodexOAuth = async () => {
-  if (bundledLoaders)
-    return bundledLoaders.openaiCodex();
-  return (await importOAuthModule("./openai-codex.ts")).openaiCodexOAuth;
-};
-
 // node_modules/@earendil-works/pi-ai/dist/providers/openai-codex.js
 init_models();
 
 // node_modules/@earendil-works/pi-ai/dist/providers/data/openai-codex.json
 var openai_codex_default = { "openai-codex-responses": { "gpt-5.3-codex-spark": { id: "gpt-5.3-codex-spark", name: "GPT-5.3 Codex Spark", api: "openai-codex-responses", provider: "openai-codex", baseUrl: "https://chatgpt.com/backend-api", reasoning: true, input: ["text"], cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 }, contextWindow: 128e3, maxTokens: 128e3, thinkingLevelMap: { xhigh: "xhigh", minimal: "low" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.4": { id: "gpt-5.4", name: "GPT-5.4", api: "openai-codex-responses", provider: "openai-codex", baseUrl: "https://chatgpt.com/backend-api", reasoning: true, input: ["text", "image"], cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 0, tiers: [{ inputTokensAbove: 272e3, input: 5, output: 22.5, cacheRead: 0.5, cacheWrite: 0 }] }, contextWindow: 272e3, maxTokens: 128e3, thinkingLevelMap: { xhigh: "xhigh", minimal: "low" }, compat: { supportsOpenAIGrammarTools: true, supportsToolSearch: true } }, "gpt-5.4-mini": { id: "gpt-5.4-mini", name: "GPT-5.4 mini", api: "openai-codex-responses", provider: "openai-codex", baseUrl: "https://chatgpt.com/backend-api", reasoning: true, input: ["text", "image"], cost: { input: 0.75, output: 4.5, cacheRead: 0.075, cacheWrite: 0 }, contextWindow: 272e3, maxTokens: 128e3, thinkingLevelMap: { xhigh: "xhigh", minimal: "low" }, compat: { supportsOpenAIGrammarTools: true, supportsToolSearch: true } }, "gpt-5.5": { id: "gpt-5.5", name: "GPT-5.5", api: "openai-codex-responses", provider: "openai-codex", baseUrl: "https://chatgpt.com/backend-api", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 0, tiers: [{ inputTokensAbove: 272e3, input: 10, output: 45, cacheRead: 1, cacheWrite: 0 }] }, contextWindow: 272e3, maxTokens: 128e3, thinkingLevelMap: { xhigh: "xhigh", minimal: "low" }, compat: { supportsOpenAIGrammarTools: true, supportsToolSearch: true } }, "gpt-5.6-luna": { id: "gpt-5.6-luna", name: "GPT-5.6 Luna", api: "openai-codex-responses", provider: "openai-codex", baseUrl: "https://chatgpt.com/backend-api", reasoning: true, input: ["text", "image"], cost: { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0.25, tiers: [{ inputTokensAbove: 272e3, input: 0.4, output: 1.8, cacheRead: 0.04, cacheWrite: 0.5 }] }, contextWindow: 272e3, maxTokens: 128e3, thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" }, compat: { supportsOpenAIGrammarTools: true, supportsAdditionalTools: true, supportsToolSearch: true } }, "gpt-5.6-sol": { id: "gpt-5.6-sol", name: "GPT-5.6 Sol", api: "openai-codex-responses", provider: "openai-codex", baseUrl: "https://chatgpt.com/backend-api", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25, tiers: [{ inputTokensAbove: 272e3, input: 10, output: 45, cacheRead: 1, cacheWrite: 12.5 }] }, contextWindow: 272e3, maxTokens: 128e3, thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" }, compat: { supportsOpenAIGrammarTools: true, supportsAdditionalTools: true, supportsToolSearch: true } }, "gpt-5.6-terra": { id: "gpt-5.6-terra", name: "GPT-5.6 Terra", api: "openai-codex-responses", provider: "openai-codex", baseUrl: "https://chatgpt.com/backend-api", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 2.5, tiers: [{ inputTokensAbove: 272e3, input: 4, output: 18, cacheRead: 0.4, cacheWrite: 5 }] }, contextWindow: 272e3, maxTokens: 128e3, thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" }, compat: { supportsOpenAIGrammarTools: true, supportsAdditionalTools: true, supportsToolSearch: true } } } };
-
-// node_modules/@earendil-works/pi-ai/dist/model-catalog.js
-function flattenModelCatalog(_provider, groups) {
-  return Object.assign({}, ...Object.values(groups));
-}
 
 // node_modules/@earendil-works/pi-ai/dist/providers/openai-codex.models.js
 var OPENAI_CODEX_MODELS = flattenModelCatalog("openai-codex", openai_codex_default);
@@ -256465,7 +258634,7 @@ function openaiCodexProvider() {
 }
 
 // node_modules/pi-grok/oauth.ts
-import { createServer } from "node:http";
+import { createServer as createServer2 } from "node:http";
 
 // node_modules/pi-grok/errors.ts
 var XaiErrorCode = {
@@ -256646,16 +258815,16 @@ var DEFAULT_BASE_URL = "https://api.x.ai/v1";
 var ISSUER = "https://auth.x.ai";
 var DISCOVERY_URL = `${ISSUER}/.well-known/openid-configuration`;
 var DEVICE_CODE_URL = `${ISSUER}/oauth2/device/code`;
-var DEVICE_TOKEN_URL = `${ISSUER}/oauth2/token`;
+var DEVICE_TOKEN_URL2 = `${ISSUER}/oauth2/token`;
 var DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 var CLIENT_VERSION = process.env.PI_XAI_CLIENT_VERSION || "0.2.101";
-var CLIENT_ID = process.env.PI_XAI_OAUTH_CLIENT_ID || "b1a00492-073a-47ea-816f-4c329264a828";
-var SCOPE = process.env.PI_XAI_OAUTH_SCOPE || "openid profile email offline_access grok-cli:access api:access conversations:read conversations:write";
-var CALLBACK_HOST = process.env.PI_XAI_OAUTH_CALLBACK_HOST || "127.0.0.1";
+var CLIENT_ID5 = process.env.PI_XAI_OAUTH_CLIENT_ID || "b1a00492-073a-47ea-816f-4c329264a828";
+var SCOPE2 = process.env.PI_XAI_OAUTH_SCOPE || "openid profile email offline_access grok-cli:access api:access conversations:read conversations:write";
+var CALLBACK_HOST3 = process.env.PI_XAI_OAUTH_CALLBACK_HOST || "127.0.0.1";
 var DEFAULT_CALLBACK_PORT = 56121;
-var CALLBACK_PORT = parseCallbackPort(process.env.PI_XAI_OAUTH_CALLBACK_PORT);
-var CALLBACK_PATH = "/callback";
-var REFRESH_SKEW_MS = 5 * 60 * 1e3;
+var CALLBACK_PORT3 = parseCallbackPort(process.env.PI_XAI_OAUTH_CALLBACK_PORT);
+var CALLBACK_PATH3 = "/callback";
+var REFRESH_SKEW_MS2 = 5 * 60 * 1e3;
 var ID_TOKEN_CLOCK_SKEW_MS = 3e4;
 var AUTH_MAX_RESPONSE_BYTES = 64 * 1024;
 function parseCallbackPort(raw) {
@@ -256677,7 +258846,7 @@ function base64Url(buffer) {
   for (const b2 of bytes) binary += String.fromCharCode(b2);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
-async function generatePKCE() {
+async function generatePKCE2() {
   const verifier = base64Url(crypto.getRandomValues(new Uint8Array(32)));
   const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
   return { verifier, challenge: base64Url(hash) };
@@ -256808,13 +258977,13 @@ function raceCallback(callbackPromise, timeoutMs2, signal) {
     );
   });
 }
-function startCallbackServer() {
+function startCallbackServer3() {
   let settle;
   let served = false;
   const callbackPromise = new Promise((resolve4) => {
     settle = resolve4;
   });
-  const server2 = createServer((req, res) => {
+  const server2 = createServer2((req, res) => {
     try {
       const origin = req.headers.origin;
       if (origin === "https://accounts.x.ai" || origin === "https://auth.x.ai") {
@@ -256829,8 +258998,8 @@ function startCallbackServer() {
         res.end();
         return;
       }
-      const url = new URL(req.url ?? "/", `http://${CALLBACK_HOST}`);
-      if (url.pathname !== CALLBACK_PATH) {
+      const url = new URL(req.url ?? "/", `http://${CALLBACK_HOST3}`);
+      if (url.pathname !== CALLBACK_PATH3) {
         res.statusCode = 404;
         res.end("Not found");
         return;
@@ -256861,7 +259030,7 @@ function startCallbackServer() {
   const listen = (port2) => new Promise((resolve4, reject) => {
     const onError = (err3) => reject(err3);
     server2.once("error", onError);
-    server2.listen(port2, CALLBACK_HOST, () => {
+    server2.listen(port2, CALLBACK_HOST3, () => {
       server2.removeListener("error", onError);
       const addr = server2.address();
       resolve4(typeof addr === "object" && addr ? addr.port : port2);
@@ -256870,7 +259039,7 @@ function startCallbackServer() {
   return (async () => {
     let actualPort;
     try {
-      actualPort = await listen(CALLBACK_PORT);
+      actualPort = await listen(CALLBACK_PORT3);
     } catch {
       actualPort = await listen(0);
     }
@@ -256883,7 +259052,7 @@ function startCallbackServer() {
     server2.unref();
     server2.requestTimeout = 1e4;
     server2.headersTimeout = 12e3;
-    const redirectUri = `http://${CALLBACK_HOST}:${actualPort}${CALLBACK_PATH}`;
+    const redirectUri = `http://${CALLBACK_HOST3}:${actualPort}${CALLBACK_PATH3}`;
     return {
       server: server2,
       redirectUri,
@@ -256911,10 +259080,10 @@ function decodeJwtExp(token2) {
   return typeof claims.exp === "number" ? claims.exp : null;
 }
 function computeExpires(accessToken, expiresInSec) {
-  const fromExpiresIn = Date.now() + expiresInSec * 1e3 - REFRESH_SKEW_MS;
+  const fromExpiresIn = Date.now() + expiresInSec * 1e3 - REFRESH_SKEW_MS2;
   const exp = decodeJwtExp(accessToken);
   if (exp === null) return fromExpiresIn;
-  return Math.min(fromExpiresIn, exp * 1e3 - REFRESH_SKEW_MS);
+  return Math.min(fromExpiresIn, exp * 1e3 - REFRESH_SKEW_MS2);
 }
 function validateIdToken(idToken, expectedNonce) {
   const claims = decodeIdToken(idToken);
@@ -256937,7 +259106,7 @@ function validateIdToken(idToken, expectedNonce) {
     );
   }
   const aud = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-  if (!aud.some((a) => a === CLIENT_ID)) {
+  if (!aud.some((a) => a === CLIENT_ID5)) {
     throw new XaiOAuthError(
       "xAI id_token audience does not include our client_id.",
       XaiErrorCode.ID_TOKEN_INVALID
@@ -257138,7 +259307,7 @@ async function exchangeCode(tokenEndpoint, code, redirectUri, verifier, expected
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: CLIENT_ID,
+      client_id: CLIENT_ID5,
       code,
       redirect_uri: redirectUri,
       code_verifier: verifier
@@ -257198,10 +259367,10 @@ async function exchangeCode(tokenEndpoint, code, redirectUri, verifier, expected
     baseUrl: getBaseUrl2()
   };
 }
-async function requestDeviceCode(signal) {
+async function requestDeviceCode2(signal) {
   const body2 = new URLSearchParams({
-    client_id: CLIENT_ID,
-    scope: SCOPE,
+    client_id: CLIENT_ID5,
+    scope: SCOPE2,
     referrer: "grok-build"
   });
   const response = await safeFetch(DEVICE_CODE_URL, {
@@ -257241,7 +259410,7 @@ async function loginDeviceCode(callbacks) {
   const { signal } = callbacks;
   if (signal?.aborted) throw outcomeToError({ kind: "cancelled" });
   const discovery = await discover();
-  const device = await requestDeviceCode(signal);
+  const device = await requestDeviceCode2(signal);
   const display = device.verification_uri_complete ?? device.verification_uri;
   const cb = callbacks;
   if (typeof cb.onDeviceCode === "function") {
@@ -257263,7 +259432,7 @@ async function loginDeviceCode(callbacks) {
   }
   let interval = Math.max(1, device.interval ?? 5);
   const deadline = Date.now() + Math.max(device.expires_in, 60) * 1e3;
-  const sleep10 = (ms2) => {
+  const sleep11 = (ms2) => {
     if (signal?.aborted) return Promise.reject(outcomeToError({ kind: "cancelled" }));
     return new Promise((resolve4, reject) => {
       const onAbort = () => {
@@ -257278,7 +259447,7 @@ async function loginDeviceCode(callbacks) {
     });
   };
   for (; ; ) {
-    await sleep10(interval * 1e3);
+    await sleep11(interval * 1e3);
     if (Date.now() > deadline) {
       throw new XaiOAuthError(
         "xAI device code expired. Restart /login.",
@@ -257286,7 +259455,7 @@ async function loginDeviceCode(callbacks) {
         true
       );
     }
-    const response = await safeFetch(DEVICE_TOKEN_URL, {
+    const response = await safeFetch(DEVICE_TOKEN_URL2, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -257296,7 +259465,7 @@ async function loginDeviceCode(callbacks) {
       body: new URLSearchParams({
         grant_type: DEVICE_GRANT_TYPE,
         device_code: device.device_code,
-        client_id: CLIENT_ID
+        client_id: CLIENT_ID5
       }),
       signal: AbortSignal.any([AbortSignal.timeout(15e3), ...signal ? [signal] : []])
     });
@@ -257311,7 +259480,7 @@ async function loginDeviceCode(callbacks) {
           true
         );
       }
-      return await shapeDeviceToken(payload, DEVICE_TOKEN_URL, discovery.jwks_uri);
+      return await shapeDeviceToken(payload, DEVICE_TOKEN_URL2, discovery.jwks_uri);
     }
     let errBody = {};
     const errText = await readBoundedText(response, AUTH_MAX_RESPONSE_BYTES).catch(() => "");
@@ -257386,16 +259555,16 @@ async function login(callbacks) {
     return loginDeviceCode(callbacks);
   }
   const discovery = await discover();
-  const { verifier, challenge } = await generatePKCE();
+  const { verifier, challenge } = await generatePKCE2();
   const state3 = base64Url(crypto.getRandomValues(new Uint8Array(16)));
   const nonce = base64Url(crypto.getRandomValues(new Uint8Array(16)));
-  const callback = await startCallbackServer();
+  const callback = await startCallbackServer3();
   try {
     const authUrl = new URL(discovery.authorization_endpoint);
     authUrl.searchParams.set("response_type", "code");
-    authUrl.searchParams.set("client_id", CLIENT_ID);
+    authUrl.searchParams.set("client_id", CLIENT_ID5);
     authUrl.searchParams.set("redirect_uri", callback.redirectUri);
-    authUrl.searchParams.set("scope", SCOPE);
+    authUrl.searchParams.set("scope", SCOPE2);
     authUrl.searchParams.set("code_challenge", challenge);
     authUrl.searchParams.set("code_challenge_method", "S256");
     authUrl.searchParams.set("state", state3);
@@ -257517,7 +259686,7 @@ async function refreshOnce(credentials) {
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: new URLSearchParams({
       grant_type: "refresh_token",
-      client_id: CLIENT_ID,
+      client_id: CLIENT_ID5,
       refresh_token: credentials.refresh
     }),
     signal: AbortSignal.timeout(15e3)
@@ -258923,15 +261092,15 @@ function Get6() {
 
 // node_modules/@earendil-works/pi-coding-agent/node_modules/typebox/build/type/types/_codec.mjs
 var EncodeBuilder2 = class {
-  constructor(type, decode) {
+  constructor(type, decode3) {
     this.type = type;
-    this.decode = decode;
+    this.decode = decode3;
   }
   Encode(callback) {
     const type = this.type;
-    const decode = IsCodec2(type) ? (value2) => this.decode(type["~codec"].decode(value2)) : this.decode;
+    const decode3 = IsCodec2(type) ? (value2) => this.decode(type["~codec"].decode(value2)) : this.decode;
     const encode3 = IsCodec2(type) ? (value2) => type["~codec"].encode(callback(value2)) : callback;
-    const codec = { decode, encode: encode3 };
+    const codec = { decode: decode3, encode: encode3 };
     return memory_exports2.Update(this.type, { "~codec": codec }, {});
   }
 };
@@ -266972,10 +269141,10 @@ var fireworks_default = { "anthropic-messages": { "accounts/fireworks/models/dee
 var FIREWORKS_MODELS = flattenModelCatalog2("fireworks", fireworks_default);
 
 // node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/providers/data/github-copilot.json
-var github_copilot_default = { "anthropic-messages": { "claude-haiku-4.5": { id: "claude-haiku-4.5", name: "Claude Haiku 4.5 (latest)", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 }, contextWindow: 2e5, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsEagerToolInputStreaming: false } }, "claude-opus-4.5": { id: "claude-opus-4.5", name: "Claude Opus 4.5 (latest)", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 2e5, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" } }, "claude-opus-4.6": { id: "claude-opus-4.6", name: "Claude Opus 4.6", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 1e6, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { max: "max" }, compat: { forceAdaptiveThinking: true } }, "claude-opus-4.7": { id: "claude-opus-4.7", name: "Claude Opus 4.7", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 1e6, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" }, compat: { forceAdaptiveThinking: true, supportsTemperature: false } }, "claude-opus-4.8": { id: "claude-opus-4.8", name: "Claude Opus 4.8", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" }, compat: { forceAdaptiveThinking: true, supportsTemperature: false } }, "claude-opus-5": { id: "claude-opus-5", name: "Claude Opus 5", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" }, compat: { forceAdaptiveThinking: true, supportsTemperature: false } }, "claude-sonnet-4": { id: "claude-sonnet-4", name: "Claude Sonnet 4 (latest)", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }, contextWindow: 216e3, maxTokens: 16e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsEagerToolInputStreaming: false } }, "claude-sonnet-4.5": { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5 (latest)", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }, contextWindow: 2e5, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsEagerToolInputStreaming: false } }, "claude-sonnet-4.6": { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }, contextWindow: 1e6, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { max: "max", minimal: "low" }, compat: { forceAdaptiveThinking: true } }, "claude-sonnet-5": { id: "claude-sonnet-5", name: "Claude Sonnet 5", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { xhigh: "xhigh", max: "max" }, compat: { forceAdaptiveThinking: true } } }, "openai-completions": { "claude-fable-5": { id: "claude-fable-5", name: "Claude Fable 5", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false }, thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" } }, "gemini-3.1-pro-preview": { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 0, tiers: [{ inputTokensAbove: 2e5, input: 4, output: 18, cacheRead: 0.4, cacheWrite: 0 }] }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "gemini-3.5-flash": { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.5, output: 9, cacheRead: 0.15, cacheWrite: 0 }, contextWindow: 2e5, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "gemini-3.6-flash": { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.5, output: 7.5, cacheRead: 0.15, cacheWrite: 0 }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "gemini-3.7-flash": { id: "gemini-3.7-flash", name: "Gemini 3.7 Flash", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.75, output: 3.75, cacheRead: 0.075, cacheWrite: 0 }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "gpt-4.1": { id: "gpt-4.1", name: "GPT-4.1", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: false, input: ["text", "image"], cost: { input: 2, output: 8, cacheRead: 0.5, cacheWrite: 0 }, contextWindow: 128e3, maxTokens: 16384, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "kimi-k2.7-code": { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.95, output: 4, cacheRead: 0.19, cacheWrite: 0 }, contextWindow: 256e3, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "kimi-k3": { id: "kimi-k3", name: "Kimi K3", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 131072, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } } }, "openai-responses": { "gpt-5-mini": { id: "gpt-5-mini", name: "GPT-5 Mini", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.25, output: 2, cacheRead: 0.025, cacheWrite: 0 }, contextWindow: 264e3, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: null, max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.2": { id: "gpt-5.2", name: "GPT-5.2", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 }, contextWindow: 4e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", xhigh: "xhigh" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.2-codex": { id: "gpt-5.2-codex", name: "GPT-5.2 Codex", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 }, contextWindow: 4e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", xhigh: "xhigh" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.3-codex": { id: "gpt-5.3-codex", name: "GPT-5.3 Codex", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.4": { id: "gpt-5.4", name: "GPT-5.4", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 0, tiers: [{ inputTokensAbove: 272e3, input: 5, output: 22.5, cacheRead: 0.5, cacheWrite: 0 }] }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.4-mini": { id: "gpt-5.4-mini", name: "GPT-5.4 mini", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.75, output: 4.5, cacheRead: 0.075, cacheWrite: 0 }, contextWindow: 4e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.4-nano": { id: "gpt-5.4-nano", name: "GPT-5.4 nano", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.2, output: 1.25, cacheRead: 0.02, cacheWrite: 0 }, contextWindow: 4e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", xhigh: "xhigh" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.5": { id: "gpt-5.5", name: "GPT-5.5", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 0, tiers: [{ inputTokensAbove: 272e3, input: 10, output: 45, cacheRead: 1, cacheWrite: 0 }] }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.6-luna": { id: "gpt-5.6-luna", name: "GPT-5.6 Luna", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0, tiers: [{ inputTokensAbove: 2e5, input: 0.4, output: 1.8, cacheRead: 0.04, cacheWrite: 0 }] }, contextWindow: 105e4, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.6-sol": { id: "gpt-5.6-sol", name: "GPT-5.6 Sol", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25, tiers: [{ inputTokensAbove: 272e3, input: 10, output: 45, cacheRead: 1, cacheWrite: 12.5 }] }, contextWindow: 105e4, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.6-terra": { id: "gpt-5.6-terra", name: "GPT-5.6 Terra", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 0, tiers: [{ inputTokensAbove: 272e3, input: 4, output: 18, cacheRead: 0.4, cacheWrite: 0 }] }, contextWindow: 105e4, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" }, compat: { supportsOpenAIGrammarTools: true } }, "grok-4.5": { id: "grok-4.5", name: "Grok 4.5", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 6, cacheRead: 0.5, cacheWrite: 0, tiers: [{ inputTokensAbove: 2e5, input: 4, output: 12, cacheRead: 1, cacheWrite: 0 }] }, contextWindow: 5e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: null, low: "low", medium: "medium", high: "high", xhigh: null, max: null } }, "mai-code-1-flash-picker": { id: "mai-code-1-flash-picker", name: "MAI-Code-1-Flash", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text"], cost: { input: 0.75, output: 4.5, cacheRead: 0.075, cacheWrite: 0 }, contextWindow: 256e3, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: null, low: "low", medium: "medium", high: "high", xhigh: null, max: null } }, "mai-code-1.1-flash": { id: "mai-code-1.1-flash", name: "MAI-Code-1.1-Flash", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0 }, contextWindow: 256e3, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: null, low: "low", medium: "medium", high: "high", xhigh: null, max: null } } } };
+var github_copilot_default2 = { "anthropic-messages": { "claude-haiku-4.5": { id: "claude-haiku-4.5", name: "Claude Haiku 4.5 (latest)", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 }, contextWindow: 2e5, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsEagerToolInputStreaming: false } }, "claude-opus-4.5": { id: "claude-opus-4.5", name: "Claude Opus 4.5 (latest)", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 2e5, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" } }, "claude-opus-4.6": { id: "claude-opus-4.6", name: "Claude Opus 4.6", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 1e6, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { max: "max" }, compat: { forceAdaptiveThinking: true } }, "claude-opus-4.7": { id: "claude-opus-4.7", name: "Claude Opus 4.7", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 1e6, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" }, compat: { forceAdaptiveThinking: true, supportsTemperature: false } }, "claude-opus-4.8": { id: "claude-opus-4.8", name: "Claude Opus 4.8", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" }, compat: { forceAdaptiveThinking: true, supportsTemperature: false } }, "claude-opus-5": { id: "claude-opus-5", name: "Claude Opus 5", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" }, compat: { forceAdaptiveThinking: true, supportsTemperature: false } }, "claude-sonnet-4": { id: "claude-sonnet-4", name: "Claude Sonnet 4 (latest)", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }, contextWindow: 216e3, maxTokens: 16e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsEagerToolInputStreaming: false } }, "claude-sonnet-4.5": { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5 (latest)", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }, contextWindow: 2e5, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsEagerToolInputStreaming: false } }, "claude-sonnet-4.6": { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }, contextWindow: 1e6, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { max: "max", minimal: "low" }, compat: { forceAdaptiveThinking: true } }, "claude-sonnet-5": { id: "claude-sonnet-5", name: "Claude Sonnet 5", api: "anthropic-messages", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { xhigh: "xhigh", max: "max" }, compat: { forceAdaptiveThinking: true } } }, "openai-completions": { "claude-fable-5": { id: "claude-fable-5", name: "Claude Fable 5", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false }, thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" } }, "gemini-3.1-pro-preview": { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 0, tiers: [{ inputTokensAbove: 2e5, input: 4, output: 18, cacheRead: 0.4, cacheWrite: 0 }] }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "gemini-3.5-flash": { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.5, output: 9, cacheRead: 0.15, cacheWrite: 0 }, contextWindow: 2e5, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "gemini-3.6-flash": { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.5, output: 7.5, cacheRead: 0.15, cacheWrite: 0 }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "gemini-3.7-flash": { id: "gemini-3.7-flash", name: "Gemini 3.7 Flash", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.75, output: 3.75, cacheRead: 0.075, cacheWrite: 0 }, contextWindow: 1e6, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "gpt-4.1": { id: "gpt-4.1", name: "GPT-4.1", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: false, input: ["text", "image"], cost: { input: 2, output: 8, cacheRead: 0.5, cacheWrite: 0 }, contextWindow: 128e3, maxTokens: 16384, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "kimi-k2.7-code": { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.95, output: 4, cacheRead: 0.19, cacheWrite: 0 }, contextWindow: 256e3, maxTokens: 32e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } }, "kimi-k3": { id: "kimi-k3", name: "Kimi K3", api: "openai-completions", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 131072, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false } } }, "openai-responses": { "gpt-5-mini": { id: "gpt-5-mini", name: "GPT-5 Mini", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.25, output: 2, cacheRead: 0.025, cacheWrite: 0 }, contextWindow: 264e3, maxTokens: 64e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: null, max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.2": { id: "gpt-5.2", name: "GPT-5.2", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 }, contextWindow: 4e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", xhigh: "xhigh" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.2-codex": { id: "gpt-5.2-codex", name: "GPT-5.2 Codex", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 }, contextWindow: 4e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", xhigh: "xhigh" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.3-codex": { id: "gpt-5.3-codex", name: "GPT-5.3 Codex", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.4": { id: "gpt-5.4", name: "GPT-5.4", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 0, tiers: [{ inputTokensAbove: 272e3, input: 5, output: 22.5, cacheRead: 0.5, cacheWrite: 0 }] }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.4-mini": { id: "gpt-5.4-mini", name: "GPT-5.4 mini", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.75, output: 4.5, cacheRead: 0.075, cacheWrite: 0 }, contextWindow: 4e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.4-nano": { id: "gpt-5.4-nano", name: "GPT-5.4 nano", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.2, output: 1.25, cacheRead: 0.02, cacheWrite: 0 }, contextWindow: 4e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", xhigh: "xhigh" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.5": { id: "gpt-5.5", name: "GPT-5.5", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 0, tiers: [{ inputTokensAbove: 272e3, input: 10, output: 45, cacheRead: 1, cacheWrite: 0 }] }, contextWindow: 1e6, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.6-luna": { id: "gpt-5.6-luna", name: "GPT-5.6 Luna", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0, tiers: [{ inputTokensAbove: 2e5, input: 0.4, output: 1.8, cacheRead: 0.04, cacheWrite: 0 }] }, contextWindow: 105e4, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.6-sol": { id: "gpt-5.6-sol", name: "GPT-5.6 Sol", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25, tiers: [{ inputTokensAbove: 272e3, input: 10, output: 45, cacheRead: 1, cacheWrite: 12.5 }] }, contextWindow: 105e4, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" }, compat: { supportsOpenAIGrammarTools: true } }, "gpt-5.6-terra": { id: "gpt-5.6-terra", name: "GPT-5.6 Terra", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 0, tiers: [{ inputTokensAbove: 272e3, input: 4, output: 18, cacheRead: 0.4, cacheWrite: 0 }] }, contextWindow: 105e4, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" }, compat: { supportsOpenAIGrammarTools: true } }, "grok-4.5": { id: "grok-4.5", name: "Grok 4.5", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 6, cacheRead: 0.5, cacheWrite: 0, tiers: [{ inputTokensAbove: 2e5, input: 4, output: 12, cacheRead: 1, cacheWrite: 0 }] }, contextWindow: 5e5, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: null, low: "low", medium: "medium", high: "high", xhigh: null, max: null } }, "mai-code-1-flash-picker": { id: "mai-code-1-flash-picker", name: "MAI-Code-1-Flash", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text"], cost: { input: 0.75, output: 4.5, cacheRead: 0.075, cacheWrite: 0 }, contextWindow: 256e3, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: null, low: "low", medium: "medium", high: "high", xhigh: null, max: null } }, "mai-code-1.1-flash": { id: "mai-code-1.1-flash", name: "MAI-Code-1.1-Flash", api: "openai-responses", provider: "github-copilot", baseUrl: "https://api.individual.githubcopilot.com", reasoning: true, input: ["text", "image"], cost: { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0 }, contextWindow: 256e3, maxTokens: 128e3, headers: { "User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0", "Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat" }, thinkingLevelMap: { off: null, minimal: null, low: "low", medium: "medium", high: "high", xhigh: null, max: null } } } };
 
 // node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/providers/github-copilot.models.js
-var GITHUB_COPILOT_MODELS = flattenModelCatalog2("github-copilot", github_copilot_default);
+var GITHUB_COPILOT_MODELS2 = flattenModelCatalog2("github-copilot", github_copilot_default2);
 
 // node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/providers/data/google.json
 var google_default = { "google-generative-ai": { "deep-research-max-preview-04-2026": { id: "deep-research-max-preview-04-2026", name: "Deep Research Max Preview (Apr-21-2026)", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 0 }, contextWindow: 131072, maxTokens: 65536 }, "deep-research-preview-04-2026": { id: "deep-research-preview-04-2026", name: "Deep Research Preview (Apr-21-2026)", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 0 }, contextWindow: 131072, maxTokens: 65536 }, "gemini-2.5-computer-use-preview-10-2025": { id: "gemini-2.5-computer-use-preview-10-2025", name: "Gemini 2.5 Computer Use Preview 10-2025", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 1.25, output: 10, cacheRead: 0, cacheWrite: 0 }, contextWindow: 131072, maxTokens: 65536 }, "gemini-2.5-flash": { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 0.3, output: 2.5, cacheRead: 0.03, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 65536 }, "gemini-2.5-flash-lite": { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash-Lite", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 0.1, output: 0.4, cacheRead: 0.01, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 65536 }, "gemini-2.5-pro": { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 1.25, output: 10, cacheRead: 0.125, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 65536 }, "gemini-3-flash-preview": { id: "gemini-3-flash-preview", name: "Gemini 3 Flash Preview", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 0.5, output: 3, cacheRead: 0.05, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 65536, thinkingLevelMap: { off: null } }, "gemini-3.1-flash-lite": { id: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash Lite", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 0.25, output: 1.5, cacheRead: 0.025, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 65536, thinkingLevelMap: { off: null } }, "gemini-3.1-flash-lite-image": { id: "gemini-3.1-flash-lite-image", name: "Nano Banana 2 Lite", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 0.25, output: 30, cacheRead: 0, cacheWrite: 0 }, contextWindow: 65536, maxTokens: 65536, thinkingLevelMap: { off: null } }, "gemini-3.1-flash-lite-preview": { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite Preview", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 0.25, output: 1.5, cacheRead: 0.025, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 65536, thinkingLevelMap: { off: null } }, "gemini-3.1-flash-live-preview": { id: "gemini-3.1-flash-live-preview", name: "Gemini 3.1 Flash Live Preview", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 0.75, output: 4.5, cacheRead: 0, cacheWrite: 0 }, contextWindow: 131072, maxTokens: 65536, thinkingLevelMap: { off: null } }, "gemini-3.1-pro-preview": { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 65536, thinkingLevelMap: { off: null, minimal: null, low: "LOW", medium: null, high: "HIGH" } }, "gemini-3.1-pro-preview-customtools": { id: "gemini-3.1-pro-preview-customtools", name: "Gemini 3.1 Pro Preview Custom Tools", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 65536, thinkingLevelMap: { off: null, minimal: null, low: "LOW", medium: null, high: "HIGH" } }, "gemini-3.5-flash": { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 1.5, output: 9, cacheRead: 0.15, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 65536, thinkingLevelMap: { off: null } }, "gemini-3.5-flash-lite": { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash Lite", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 0.3, output: 2.5, cacheRead: 0.03, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 65536, thinkingLevelMap: { off: null } }, "gemini-3.6-flash": { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 1.5, output: 7.5, cacheRead: 0.15, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 65536, thinkingLevelMap: { off: null } }, "gemini-3.7-flash": { id: "gemini-3.7-flash", name: "Gemini 3.7 Flash", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 0.75, output: 3.75, cacheRead: 0.075, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 65536, thinkingLevelMap: { off: null } }, "gemini-flash-latest": { id: "gemini-flash-latest", name: "Gemini Flash Latest", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 1.5, output: 9, cacheRead: 0.15, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 65536, thinkingLevelMap: { off: null } }, "gemini-flash-lite-latest": { id: "gemini-flash-lite-latest", name: "Gemini Flash-Lite Latest", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 0.25, output: 1.5, cacheRead: 0.025, cacheWrite: 0 }, contextWindow: 1048576, maxTokens: 65536, thinkingLevelMap: { off: null } }, "gemini-robotics-er-1.6-preview": { id: "gemini-robotics-er-1.6-preview", name: "Gemini Robotics-ER 1.6 Preview", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 1, output: 5, cacheRead: 0, cacheWrite: 0 }, contextWindow: 131072, maxTokens: 65536 }, "gemma-4-26b-a4b-it": { id: "gemma-4-26b-a4b-it", name: "Gemma 4 26B A4B IT", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 262144, maxTokens: 32768, thinkingLevelMap: { off: null, minimal: "MINIMAL", low: null, medium: null, high: "HIGH" } }, "gemma-4-31b-it": { id: "gemma-4-31b-it", name: "Gemma 4 31B IT", api: "google-generative-ai", provider: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta", reasoning: true, input: ["text", "image"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 262144, maxTokens: 32768, thinkingLevelMap: { off: null, minimal: "MINIMAL", low: null, medium: null, high: "HIGH" } } } };
@@ -267554,7 +269723,7 @@ function githubCopilotProvider() {
       apiKey: envApiKeyAuth("GitHub Copilot token", ["COPILOT_GITHUB_TOKEN"]),
       oauth: lazyOAuth2({ name: "GitHub Copilot", isSubscription: true, load: loadGitHubCopilotOAuth })
     },
-    models: Object.values(GITHUB_COPILOT_MODELS),
+    models: Object.values(GITHUB_COPILOT_MODELS2),
     filterModels: (models, credential) => {
       if (credential?.type !== "oauth")
         return models;
@@ -267938,7 +270107,7 @@ function sanitizeRadiusGatewayConfig(config) {
     models: models.filter(isRadiusGatewayModel).map((model) => ({ ...model }))
   };
 }
-function normalizeRadiusGatewayUrl(value2) {
+function normalizeRadiusGatewayUrl2(value2) {
   const withScheme = /^https?:\/\//iu.test(value2) ? value2 : `https://${value2}`;
   return withScheme.replace(/\/+$/u, "");
 }
@@ -267979,7 +270148,7 @@ async function loadRadiusGatewayConfig(gateway, apiKey, signal) {
 function radiusProvider(options = {}) {
   const id = options.id ?? "radius";
   const name = options.name ?? "Radius";
-  const gateway = normalizeRadiusGatewayUrl(options.gateway ?? DEFAULT_RADIUS_GATEWAY);
+  const gateway = normalizeRadiusGatewayUrl2(options.gateway ?? DEFAULT_RADIUS_GATEWAY);
   let models = getRadiusModels(id, void 0);
   const streams = piMessagesApi();
   return {
@@ -281106,6 +283275,7 @@ var token = process.argv[3];
 var runs = /* @__PURE__ */ new Map();
 var pendingTools = /* @__PURE__ */ new Map();
 var authCredentials = new InMemoryCredentialStore();
+registerBunOAuthFlows();
 var authModels = createModels({ credentials: authCredentials });
 authModels.setProvider(openaiCodexProvider());
 var activeAuthLogin = null;

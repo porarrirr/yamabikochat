@@ -1,6 +1,7 @@
 import http from "node:http";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { createModels, InMemoryCredentialStore } from "@earendil-works/pi-ai";
+import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import { Type } from "typebox";
 import { streamSimple as streamOpenAICompletions } from "@earendil-works/pi-ai/api/openai-completions";
 import { streamSimple as streamOpenAIResponses } from "@earendil-works/pi-ai/api/openai-responses";
@@ -17,6 +18,10 @@ const token = process.argv[3];
 const runs = new Map();
 const pendingTools = new Map();
 const authCredentials = new InMemoryCredentialStore();
+// The iOS app ships one self-contained JS bundle. Register Pi's OAuth modules
+// statically so its intentionally opaque lazy imports do not look for sibling
+// files that are absent from the application bundle.
+registerBunOAuthFlows();
 const authModels = createModels({ credentials: authCredentials });
 authModels.setProvider(openaiCodexProvider());
 let activeAuthLogin = null;
