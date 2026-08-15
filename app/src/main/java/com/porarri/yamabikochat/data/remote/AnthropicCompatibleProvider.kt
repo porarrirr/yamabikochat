@@ -4,6 +4,10 @@ import android.util.Log
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -113,8 +117,31 @@ class AnthropicCompatibleProvider(
             thinking = thinking,
             outputConfig = reasoningEffort?.trim()?.takeIf { it.isNotEmpty() }?.let(::AnthropicOutputConfig),
             mcpServers = mcp?.servers,
-            tools = mcp?.toolsets
+            tools = buildTools(request.tools.orEmpty(), mcp)
         )
+    }
+
+    private fun buildTools(
+        tools: List<Tool>,
+        mcp: McpConfiguration?
+    ) = buildList {
+        addAll(buildFunctionTools(tools))
+        mcp?.toolsets.orEmpty().forEach { toolset ->
+            add(Json.encodeToJsonElement(AnthropicMcpToolset.serializer(), toolset))
+        }
+    }.takeIf { it.isNotEmpty() }
+
+    internal fun buildFunctionTools(tools: List<Tool>) = buildList {
+        tools.flatMap { it.function_declarations.orEmpty() }.forEach { declaration ->
+            add(buildJsonObject {
+                put("name", JsonPrimitive(declaration.name))
+                declaration.description?.let { put("description", JsonPrimitive(it)) }
+                put(
+                    "input_schema",
+                    declaration.parameters ?: buildJsonObject { put("type", JsonPrimitive("object")) }
+                )
+            })
+        }
     }
 
     private fun buildThinking(config: ThinkingConfig?): AnthropicThinking? {
@@ -124,7 +151,7 @@ class AnthropicCompatibleProvider(
         return AnthropicThinking(budgetTokens = budget)
     }
 
-    private fun mapMessages(contents: List<Content>): List<AnthropicMessage> =
+    internal fun mapMessages(contents: List<Content>): List<AnthropicMessage> =
         contents.map { content ->
             AnthropicMessage(
                 role = when (content.role?.trim()?.lowercase()) {
@@ -138,7 +165,27 @@ class AnthropicCompatibleProvider(
         }
 
     private fun mapContentBlock(part: Part): AnthropicContentBlock? {
-        part.text?.let { return AnthropicContentBlock(type = "text", text = it) }
+        part.functionCall?.let { call ->
+            return AnthropicContentBlock(
+                type = "tool_use",
+                id = call.id,
+                name = call.name,
+                input = call.args
+            )
+        }
+        part.functionResponse?.let { response ->
+            return AnthropicContentBlock(
+                type = "tool_result",
+                toolUseId = response.id,
+                content = response.response?.toString() ?: "{}"
+            )
+        }
+        part.text?.let {
+            // Anthropic requires signed thinking blocks for replay. The app only stores a
+            // provider-neutral reasoning summary, so send it as text instead of inventing a
+            // signature while preserving the exact text prefix.
+            return AnthropicContentBlock(type = "text", text = it)
+        }
         val inline = part.inlineData ?: return null
         return AnthropicContentBlock(
             type = "image",
@@ -200,7 +247,26 @@ class AnthropicCompatibleProvider(
             val text = response.content
                 .filter { it.type.equals("text", ignoreCase = true) }
                 .joinToString("") { it.text.orEmpty() }
-            add(ResponsePart(text = text))
+            if (text.isNotEmpty()) {
+                add(ResponsePart(text = text))
+            }
+            response.content
+                .filter { it.type.equals("tool_use", ignoreCase = true) }
+                .forEach { block ->
+                    val name = block.name?.takeIf { it.isNotBlank() } ?: return@forEach
+                    add(
+                        ResponsePart(
+                            functionCall = FunctionCall(
+                                name = name,
+                                args = block.input,
+                                id = block.id
+                            )
+                        )
+                    )
+                }
+            if (isEmpty()) {
+                add(ResponsePart(text = ""))
+            }
         }
         return GenerateContentResponse(
             candidates = listOf(

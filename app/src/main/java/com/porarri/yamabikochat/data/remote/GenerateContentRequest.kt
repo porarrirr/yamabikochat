@@ -34,7 +34,9 @@ data class Part(
     val inlineData: InlineData? = null,
     val fileData: FileData? = null,
     val functionCall: FunctionCall? = null,
-    val functionResponse: FunctionResponse? = null
+    val functionResponse: FunctionResponse? = null,
+    val thought: Boolean? = null,
+    val thoughtSignature: String? = null
 )
 
 @Serializable
@@ -138,7 +140,8 @@ data class McpToolset(
 @Serializable
 data class FunctionCall(
     val name: String,
-    val args: JsonElement? = null
+    val args: JsonElement? = null,
+    val id: String? = null
 )
 
 @Serializable

@@ -79,7 +79,8 @@ class DefaultClientToolCallingRunner(
                                     name = call.name,
                                     args = runCatching {
                                         json.parseToJsonElement(call.argumentsJSON)
-                                    }.getOrNull()
+                                    }.getOrNull(),
+                                    id = call.id
                                 )
                             )
                         )

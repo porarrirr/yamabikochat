@@ -119,11 +119,14 @@ class ClientToolCallingRunner(
             }
         }
 
-        val toolCalls = parts.mapNotNull { it.functionCall }.mapIndexed { index, call ->
+        val toolCalls = parts.mapNotNull { part ->
+            part.functionCall?.let { call -> part to call }
+        }.mapIndexed { index, (part, call) ->
             ToolCall(
-                id = "call-$index-${call.name}",
+                id = call.id ?: "call-$index-${call.name}",
                 name = call.name,
-                argumentsJSON = call.args?.toString() ?: "{}"
+                argumentsJSON = call.args?.toString() ?: "{}",
+                providerMetadata = part.thoughtSignature?.let { mapOf("thoughtSignature" to it) }
             )
         }
 
@@ -143,7 +146,9 @@ class ClientToolCallingRunner(
         val messages = mutableListOf<ToolTurnMessage>()
         for (content in contents) {
             val role = content.role ?: "user"
-            val text = content.parts.mapNotNull { it.text }.joinToString("\n")
+            val text = content.parts.filter { it.thought != true }.mapNotNull { it.text }.joinToString("\n")
+            val reasoning = content.parts.filter { it.thought == true }.mapNotNull { it.text }
+                .joinToString("\n").takeIf { it.isNotBlank() }
             val functionCalls = content.parts.mapNotNull { it.functionCall }
             val functionResponses = content.parts.mapNotNull { it.functionResponse }
 
@@ -165,15 +170,19 @@ class ClientToolCallingRunner(
                     functionCalls.isNotEmpty() -> {
                     val toolCalls = functionCalls.mapIndexed { index, call ->
                         ToolCall(
-                            id = "call-$index-${call.name}",
+                            id = call.id ?: "call-$index-${call.name}",
                             name = call.name,
-                            argumentsJSON = call.args?.toString() ?: "{}"
+                            argumentsJSON = call.args?.toString() ?: "{}",
+                            providerMetadata = content.parts.firstOrNull { it.functionCall === call }
+                                ?.thoughtSignature
+                                ?.let { mapOf("thoughtSignature" to it) }
                         )
                     }.takeIf { it.isNotEmpty() }
                     messages.add(
                         ToolTurnMessage(
                             role = "assistant",
                             content = text,
+                            reasoningContent = reasoning,
                             toolCalls = toolCalls
                         )
                     )
@@ -191,6 +200,9 @@ class ClientToolCallingRunner(
             when (message.role) {
                 "assistant" -> {
                     val parts = mutableListOf<Part>()
+                    message.reasoningContent?.takeIf { it.isNotBlank() }?.let {
+                        parts.add(Part(text = it, thought = true))
+                    }
                     if (message.content.isNotBlank()) {
                         parts.add(Part(text = message.content))
                     }
@@ -199,8 +211,10 @@ class ClientToolCallingRunner(
                             Part(
                                 functionCall = FunctionCall(
                                     name = call.name,
-                                    args = parseJsonElementOrNull(call.argumentsJSON)
-                                )
+                                    args = parseJsonElementOrNull(call.argumentsJSON),
+                                    id = call.id
+                                ),
+                                thoughtSignature = call.providerMetadata?.get("thoughtSignature")
                             )
                         )
                     }

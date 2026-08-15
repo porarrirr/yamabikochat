@@ -1,6 +1,7 @@
 package com.porarri.yamabikochat.data.remote
 
 import com.porarri.yamabikochat.TestLogUtils
+import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -91,6 +92,97 @@ class RequestConverterTest {
         val converted = RequestConverter.geminiToOpenRouter(request, "claude-sonnet-4.6")
         assertTrue(converted is OpenRouterMultiModalRequest)
         assertEquals("ephemeral", (converted as OpenRouterMultiModalRequest).cacheControl?.type)
+    }
+
+    @Test
+    fun geminiToOpenRouter_preservesReplayToolCallIdResultAndReasoning() {
+        val request = GenerateContentRequest(
+            contents = listOf(
+                Content(
+                    role = "model",
+                    parts = listOf(
+                        Part(text = "kept reasoning", thought = true),
+                        Part(
+                            functionCall = FunctionCall(
+                                name = "web_search",
+                                args = Json.parseToJsonElement("""{"query":"large"}"""),
+                                id = "call-1"
+                            )
+                        )
+                    )
+                ),
+                Content(
+                    role = "user",
+                    parts = listOf(
+                        Part(
+                            functionResponse = FunctionResponse(
+                                name = "web_search",
+                                response = Json.parseToJsonElement("""{"results":[1]}"""),
+                                id = "call-1"
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+        val converted = RequestConverter.geminiToOpenRouter(request, "openai/gpt-5a")
+            as OpenRouterRequest
+
+        assertEquals("call-1", converted.messages[0].tool_calls?.single()?.id)
+        assertEquals("kept reasoning", converted.messages[0].reasoningContent)
+        assertEquals("call-1", converted.messages[1].toolCallId)
+        assertEquals("tool", converted.messages[1].role)
+    }
+
+    @Test
+    fun geminiToOpenRouter_preservesToolTranscriptWhenHistoryContainsAnImage() {
+        val request = GenerateContentRequest(
+            contents = listOf(
+                Content(
+                    role = "user",
+                    parts = listOf(
+                        Part(text = "image"),
+                        Part(inlineData = InlineData("image/png", "AAAA"))
+                    )
+                ),
+                Content(
+                    role = "model",
+                    parts = listOf(
+                        Part(
+                            functionCall = FunctionCall(
+                                name = "web_search",
+                                args = Json.parseToJsonElement("""{"query":"large"}"""),
+                                id = "call-image-1"
+                            )
+                        )
+                    )
+                ),
+                Content(
+                    role = "user",
+                    parts = listOf(
+                        Part(
+                            functionResponse = FunctionResponse(
+                                name = "web_search",
+                                response = Json.parseToJsonElement("""{"raw":"large result"}"""),
+                                id = "call-image-1"
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+        val converted = RequestConverter.geminiToOpenRouter(request, "openai/gpt-5a")
+            as OpenRouterMultiModalRequest
+
+        assertEquals("call-image-1", converted.messages[1].tool_calls?.single()?.id)
+        assertEquals("tool", converted.messages[2].role)
+        assertEquals("call-image-1", converted.messages[2].toolCallId)
+        assertEquals(
+            "{\"raw\":\"large result\"}",
+            (converted.messages[2].content?.single() as OpenRouterContentPart.TextPart).text
+        )
     }
 
     @Test

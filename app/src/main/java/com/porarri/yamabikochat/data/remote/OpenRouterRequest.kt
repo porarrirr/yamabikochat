@@ -74,13 +74,21 @@ data class OpenRouterMessage(
     val tool_calls: List<OpenAIToolCall>? = null,
     @SerialName("tool_call_id")
     val toolCallId: String? = null,
-    val name: String? = null // for tool role
+    val name: String? = null, // for tool role
+    @SerialName("reasoning_content")
+    val reasoningContent: String? = null
 )
 
 @Serializable
 data class OpenRouterMultiModalMessage(
     val role: String,
-    val content: List<OpenRouterContentPart>
+    val content: List<OpenRouterContentPart>? = null,
+    val tool_calls: List<OpenAIToolCall>? = null,
+    @SerialName("tool_call_id")
+    val toolCallId: String? = null,
+    val name: String? = null,
+    @SerialName("reasoning_content")
+    val reasoningContent: String? = null
 )
 
 @Serializable

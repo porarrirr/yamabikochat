@@ -2,6 +2,7 @@ package com.porarri.yamabikochat.data.remote
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class AnthropicMessageRequest(
@@ -16,7 +17,7 @@ data class AnthropicMessageRequest(
     val outputConfig: AnthropicOutputConfig? = null,
     @SerialName("mcp_servers")
     val mcpServers: List<AnthropicMcpServer>? = null,
-    val tools: List<AnthropicMcpToolset>? = null
+    val tools: List<JsonElement>? = null
 )
 
 @Serializable
@@ -29,7 +30,15 @@ data class AnthropicMessage(
 data class AnthropicContentBlock(
     val type: String,
     val text: String? = null,
-    val source: AnthropicImageSource? = null
+    val source: AnthropicImageSource? = null,
+    val id: String? = null,
+    val name: String? = null,
+    val input: JsonElement? = null,
+    @SerialName("tool_use_id")
+    val toolUseId: String? = null,
+    val content: String? = null,
+    @SerialName("is_error")
+    val isError: Boolean? = null
 )
 
 @Serializable
@@ -89,7 +98,10 @@ data class AnthropicMessageResponse(
 data class AnthropicResponseContentBlock(
     val type: String,
     val text: String? = null,
-    val thinking: String? = null
+    val thinking: String? = null,
+    val id: String? = null,
+    val name: String? = null,
+    val input: JsonElement? = null
 )
 
 @Serializable
@@ -106,7 +118,7 @@ data class AnthropicUsage(
     fun toTokenUsageSnapshot(): TokenUsageSnapshot {
         val input = (inputTokens ?: 0).coerceAtLeast(0)
         val output = (outputTokens ?: 0).coerceAtLeast(0)
-        val cached = ((cacheReadInputTokens ?: 0) + (cacheCreationInputTokens ?: 0)).coerceAtLeast(0)
+        val cached = (cacheReadInputTokens ?: 0).coerceAtLeast(0)
         return TokenUsageSnapshot(
             inputTokens = input,
             outputTokens = output,

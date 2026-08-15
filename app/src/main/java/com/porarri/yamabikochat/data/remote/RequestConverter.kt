@@ -89,16 +89,7 @@ object RequestConverter {
 
         return if (hasMultiModal) {
             // マルチモーダルリクエスト
-            val messages = geminiRequest.contents.map { content ->
-                OpenRouterMultiModalMessage(
-                    role = when (content.role) {
-                        "user" -> "user"
-                        "model" -> "assistant"
-                        else -> content.role ?: "user"
-                    },
-                    content = convertToMultiModalParts(content.parts)
-                )
-            }
+            val messages = geminiRequest.contents.flatMap(::convertToMultiModalMessages)
 
             val allMessages = buildList {
                 geminiRequest.system_instruction?.let { systemInstruction ->
@@ -174,10 +165,19 @@ object RequestConverter {
     private fun convertContentsToOpenRouterMessages(contents: List<Content>): List<OpenRouterMessage> {
         val messages = mutableListOf<OpenRouterMessage>()
         contents.forEach { content ->
-            val textContent = content.parts.mapNotNull { it.text }.joinToString("\n").ifBlank { null }
+            val textContent = content.parts
+                .filter { it.thought != true }
+                .mapNotNull { it.text }
+                .joinToString("\n")
+                .ifBlank { null }
+            val reasoningContent = content.parts
+                .filter { it.thought == true }
+                .mapNotNull { it.text }
+                .joinToString("\n")
+                .ifBlank { null }
             val toolCalls = content.parts.mapNotNull { it.functionCall }.mapIndexed { index, call ->
                 OpenAIToolCall(
-                    id = "call-$index-${call.name}",
+                    id = call.id ?: "call-$index-${call.name}",
                     function = OpenAIToolCallFunction(
                         name = call.name,
                         arguments = call.args?.toString() ?: "{}"
@@ -204,7 +204,8 @@ object RequestConverter {
                         OpenRouterMessage(
                             role = "assistant",
                             content = textContent,
-                            tool_calls = toolCalls
+                            tool_calls = toolCalls,
+                            reasoningContent = reasoningContent
                         )
                     )
                 }
@@ -216,7 +217,8 @@ object RequestConverter {
                                 "model" -> "assistant"
                                 else -> content.role ?: "user"
                             },
-                            content = textContent.orEmpty()
+                            content = textContent.orEmpty(),
+                            reasoningContent = reasoningContent
                         )
                     )
                 }
@@ -241,6 +243,53 @@ object RequestConverter {
                 else -> null
             }
         }
+    }
+
+    private fun convertToMultiModalMessages(content: Content): List<OpenRouterMultiModalMessage> {
+        val functionResponses = content.parts.mapNotNull { it.functionResponse }
+        if (functionResponses.isNotEmpty()) {
+            return functionResponses.map { response ->
+                OpenRouterMultiModalMessage(
+                    role = "tool",
+                    content = listOf(
+                        OpenRouterContentPart.TextPart(
+                            response.response?.toString() ?: "{}"
+                        )
+                    ),
+                    toolCallId = response.id ?: "call-0-${response.name}",
+                    name = response.name
+                )
+            }
+        }
+
+        val role = when (content.role) {
+            "model" -> "assistant"
+            "user" -> "user"
+            else -> content.role ?: "user"
+        }
+        val toolCalls = content.parts.mapNotNull { it.functionCall }.mapIndexed { index, call ->
+            OpenAIToolCall(
+                id = call.id ?: "call-$index-${call.name}",
+                function = OpenAIToolCallFunction(
+                    name = call.name,
+                    arguments = call.args?.toString() ?: "{}"
+                )
+            )
+        }.takeIf { it.isNotEmpty() }
+        val visibleParts = content.parts.filter { it.thought != true }
+        val reasoningContent = content.parts
+            .filter { it.thought == true }
+            .mapNotNull { it.text }
+            .joinToString("\n")
+            .ifBlank { null }
+        return listOf(
+            OpenRouterMultiModalMessage(
+                role = role,
+                content = convertToMultiModalParts(visibleParts).takeIf { it.isNotEmpty() },
+                tool_calls = toolCalls,
+                reasoningContent = reasoningContent
+            )
+        )
     }
 
     /**
@@ -283,7 +332,8 @@ object RequestConverter {
                     ResponsePart(
                         functionCall = FunctionCall(
                             name = toolCall.function.name,
-                            args = args
+                            args = args,
+                            id = toolCall.id
                         )
                     )
                 )

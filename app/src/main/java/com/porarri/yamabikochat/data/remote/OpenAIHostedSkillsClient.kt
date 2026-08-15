@@ -154,9 +154,14 @@ class OpenAIHostedSkillsClient(
                 }
             }
             if (blocks.length() > 0) input.put(JSONObject().put("role", role).put("content", blocks))
-            var callIndex = 0
             content.parts.mapNotNull { it.functionCall }.forEach { call ->
-                input.put(JSONObject().put("type", "function_call").put("call_id", "call-${callIndex++}-${call.name}").put("name", call.name).put("arguments", call.args?.toString() ?: "{}"))
+                input.put(
+                    JSONObject()
+                        .put("type", "function_call")
+                        .put("call_id", call.id ?: "call-0-${call.name}")
+                        .put("name", call.name)
+                        .put("arguments", call.args?.toString() ?: "{}")
+                )
             }
             content.parts.mapNotNull { it.functionResponse }.forEach { response ->
                 input.put(JSONObject().put("type", "function_call_output").put("call_id", response.id ?: "call-0-${response.name}").put("output", response.response?.toString() ?: "{}"))
@@ -181,7 +186,13 @@ class OpenAIHostedSkillsClient(
             when (item.optString("type")) {
                 "message" -> item.optJSONArray("content")?.let { content -> for (i in 0 until content.length()) content.optJSONObject(i)?.optString("text")?.takeIf { it.isNotBlank() }?.let { parts += ResponsePart(text = it) } }
                 "reasoning" -> item.optJSONArray("summary")?.let { summary -> for (i in 0 until summary.length()) summary.optJSONObject(i)?.optString("text")?.takeIf { it.isNotBlank() }?.let { parts += ResponsePart(text = it, thought = true) } }
-                "function_call" -> parts += ResponsePart(functionCall = FunctionCall(item.optString("name"), kotlinx.serialization.json.Json.parseToJsonElement(item.optString("arguments", "{}"))))
+                "function_call" -> parts += ResponsePart(
+                    functionCall = FunctionCall(
+                        name = item.optString("name"),
+                        args = kotlinx.serialization.json.Json.parseToJsonElement(item.optString("arguments", "{}")),
+                        id = item.optString("call_id").takeIf { it.isNotBlank() }
+                    )
+                )
                 "shell_call", "shell_call_output" -> DiagnosticsLogger.log("OpenAI hosted shell activity type=${item.optString("type")} exit=${item.optInt("exit_code", 0)} timedOut=${item.optBoolean("timed_out", false)}")
             }
         }

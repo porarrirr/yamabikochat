@@ -16,7 +16,15 @@ class FullChatMessageTest {
             Content(
                 role = "model",
                 parts = listOf(
-                    Part(functionCall = FunctionCall("web_search", JsonPrimitive("large query")))
+                    Part(text = "reasoning", thought = true),
+                    Part(
+                        functionCall = FunctionCall(
+                            "web_search",
+                            JsonPrimitive("large query"),
+                            id = "call-1"
+                        ),
+                        thoughtSignature = "signature-1"
+                    )
                 )
             ),
             Content(role = "user", parts = listOf(Part(text = "large raw result")))

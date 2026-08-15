@@ -50,7 +50,8 @@ data class ResponsePart(
     val fileData: FileData? = null,
     val functionCall: FunctionCall? = null,
     val functionResponse: FunctionResponse? = null,
-    val thought: Boolean? = null
+    val thought: Boolean? = null,
+    val thoughtSignature: String? = null
 )
 
 @Serializable
