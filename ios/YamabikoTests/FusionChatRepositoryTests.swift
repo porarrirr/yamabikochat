@@ -140,6 +140,9 @@ private final class FusionReasoningContinuationHTTPClient: HTTPClientProtocol {
         } else if body.contains("provide the answer text now") {
             content = body.contains("analysis panel") ? "continued panel answer" : "continued final answer"
             reasoning = nil
+        } else if body.contains("Write the final answer") || body.contains("Raw panel outputs") {
+            content = "continued final answer"
+            reasoning = nil
         } else {
             content = ""
             reasoning = body.contains("judge comparing") || body.contains("Compare these answers")

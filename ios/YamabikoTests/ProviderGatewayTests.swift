@@ -419,13 +419,13 @@ final class ProviderGatewayTests: XCTestCase {
         XCTAssertTrue(fixture.httpClient.sentRequests.isEmpty)
     }
 
-    func testOpenCodeGoStreamContinuesReasoningOnlyResponsesUntilAnswerArrives() async throws {
+    func testOpenCodeGoStreamRetriesNonStreamingWhenStreamReturnsNoAnswerText() async throws {
         let fixture = try makeFixture()
         try fixture.credentials.setCredential("opencode-key", for: .openCodeGo)
 
         fixture.httpClient.streamResponder = { request in
             let stream = AsyncThrowingStream<String, Error> { continuation in
-                continuation.yield(#"data: {"choices":[{"delta":{"reasoning_content":"first reasoning"}}]}"#)
+                continuation.yield(#"data: {"choices":[{"delta":{"reasoning_content":"streamed reasoning"}}]}"#)
                 continuation.yield("")
                 continuation.yield("data: [DONE]")
                 continuation.yield("")
@@ -433,14 +433,9 @@ final class ProviderGatewayTests: XCTestCase {
             }
             return (stream, Self.httpResponse(url: request.url, statusCode: 200))
         }
-        let counter = CallCounter()
         fixture.httpClient.sendResponder = { request in
-            counter.count += 1
-            let payload = counter.count == 1
-                ? #"{"choices":[{"message":{"content":"","reasoning_content":"second reasoning"}}]}"#
-                : #"{"choices":[{"message":{"content":"continued answer"}}]}"#
-            let data = payload
-                .data(using: .utf8)!
+            let payload = #"{"choices":[{"message":{"content":"fallback answer","reasoning_content":"streamed reasoning"}}]}"#
+            let data = payload.data(using: .utf8)!
             return (data, Self.httpResponse(url: request.url, statusCode: 200))
         }
 
@@ -461,50 +456,33 @@ final class ProviderGatewayTests: XCTestCase {
         }
 
         XCTAssertEqual(fixture.httpClient.streamedRequests.count, 1)
-        XCTAssertEqual(fixture.httpClient.sentRequests.count, 2)
-        XCTAssertEqual(completedResponses.last?.text, "continued answer")
-        XCTAssertEqual(completedResponses.last?.reasoningSummary, "first reasoning\n\nsecond reasoning")
+        XCTAssertEqual(fixture.httpClient.sentRequests.count, 1, "Should issue exactly 1 non-streaming fallback request when stream has no answer text")
+        XCTAssertEqual(completedResponses.last?.text, "fallback answer")
+        XCTAssertEqual(completedResponses.last?.reasoningSummary, "streamed reasoning")
 
-        let streamBody = try XCTUnwrap(fixture.httpClient.streamedRequests.first?.body)
-        let streamRoot = try XCTUnwrap(try JSONSerialization.jsonObject(with: streamBody) as? [String: Any])
-        XCTAssertEqual(streamRoot["stream"] as? Bool, true)
-        XCTAssertNotNil(streamRoot["stream_options"])
-
-        let firstContinuationBody = try XCTUnwrap(fixture.httpClient.sentRequests.first?.body)
-        let firstContinuationRoot = try XCTUnwrap(
-            try JSONSerialization.jsonObject(with: firstContinuationBody) as? [String: Any]
+        let fallbackBody = try XCTUnwrap(fixture.httpClient.sentRequests.first?.body)
+        let fallbackRoot = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: fallbackBody) as? [String: Any]
         )
-        XCTAssertEqual(firstContinuationRoot["stream"] as? Bool, false)
-        let firstMessages = try XCTUnwrap(firstContinuationRoot["messages"] as? [[String: Any]])
-        XCTAssertEqual(firstMessages[firstMessages.count - 2]["reasoning_content"] as? String, "first reasoning")
-        XCTAssertTrue((firstMessages.last?["content"] as? String)?.contains("provide the answer text") == true)
-
-        let secondContinuationBody = try XCTUnwrap(fixture.httpClient.sentRequests.last?.body)
-        let secondContinuationRoot = try XCTUnwrap(
-            try JSONSerialization.jsonObject(with: secondContinuationBody) as? [String: Any]
-        )
-        let secondMessages = try XCTUnwrap(secondContinuationRoot["messages"] as? [[String: Any]])
-        XCTAssertEqual(secondMessages[secondMessages.count - 2]["reasoning_content"] as? String, "second reasoning")
+        XCTAssertEqual(fallbackRoot["stream"] as? Bool, false)
+        let messages = try XCTUnwrap(fallbackRoot["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages.count, 1)
+        XCTAssertEqual(messages.first?["content"] as? String, "hello")
     }
 
-    func testOpenCodeGoStreamStopsAfterReasoningContinuationLimit() async throws {
+    func testOpenCodeGoStreamDoesNotRetryWhenStreamDeliversAnswerText() async throws {
         let fixture = try makeFixture()
         try fixture.credentials.setCredential("opencode-key", for: .openCodeGo)
 
         fixture.httpClient.streamResponder = { request in
             let stream = AsyncThrowingStream<String, Error> { continuation in
-                continuation.yield(#"data: {"choices":[{"delta":{"reasoning_content":"initial reasoning"}}]}"#)
+                continuation.yield(#"data: {"choices":[{"delta":{"content":"direct streamed answer"}}]}"#)
                 continuation.yield("")
                 continuation.yield("data: [DONE]")
                 continuation.yield("")
                 continuation.finish()
             }
             return (stream, Self.httpResponse(url: request.url, statusCode: 200))
-        }
-        fixture.httpClient.sendResponder = { request in
-            let data = #"{"choices":[{"message":{"content":"","reasoning_content":"more reasoning"}}]}"#
-                .data(using: .utf8)!
-            return (data, Self.httpResponse(url: request.url, statusCode: 200))
         }
 
         let stream = try await fixture.gateway.stream(
@@ -516,13 +494,16 @@ final class ProviderGatewayTests: XCTestCase {
             provider: .openCodeGo
         )
 
-        do {
-            for try await _ in stream {}
-            XCTFail("Expected reasoning continuation limit error")
-        } catch {
-            XCTAssertTrue(error.localizedDescription.contains("continuation requests"))
+        var textDeltas: [String] = []
+        for try await event in stream {
+            if case let .textDelta(delta) = event {
+                textDeltas.append(delta)
+            }
         }
-        XCTAssertEqual(fixture.httpClient.sentRequests.count, ProviderGateway.reasoningContinuationLimit)
+
+        XCTAssertEqual(fixture.httpClient.streamedRequests.count, 1)
+        XCTAssertEqual(fixture.httpClient.sentRequests.count, 0, "Non-streaming fallback must not trigger when stream delivered answer text")
+        XCTAssertEqual(textDeltas, ["direct streamed answer"])
     }
 
     func testHostedSkillsRejectUnsupportedModelBeforeNetworkRequest() async throws {

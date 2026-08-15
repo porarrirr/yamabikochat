@@ -14,7 +14,6 @@ final class ProviderGateway {
     /// succeeds, so this is treated as transient rather than surfaced immediately.
     private static let transientGeminiRetryLimit = 2
     private static let transientGeminiRetryDelayNanoseconds: UInt64 = 400_000_000
-    static let reasoningContinuationLimit = 3
 
     private let geminiRotationStateLock = NSLock()
     private var lastGoodGeminiRotationCandidate: GeminiRotationCandidate?
@@ -397,69 +396,35 @@ final class ProviderGateway {
 
                         if provider.retriesNonStreamingWhenStreamReturnsNoText, !streamHadAnswerText {
                             DiagnosticsLogger.log(
-                                "Stream completed with reasoning only; continuing response",
+                                "Stream completed without text; retrying non-streaming",
                                 category: .network,
                                 metadata: [
                                     "provider": provider.rawValue,
                                     "model": currentRequest.model
                                 ]
                             )
-                            guard var latestReasoning = streamReasoning.trimmedNonEmpty else {
-                                throw ProviderClientError.parseFailure(
-                                    "Provider stream returned no answer text or reasoning."
-                                )
-                            }
-                            var continuationRequest = currentRequest
-                            var accumulatedReasoning = [latestReasoning]
-                            var accumulatedUsage = streamUsage
-                            var continuationRounds = 0
-
-                            while true {
-                                try Task.checkCancellation()
-                                guard continuationRounds < Self.reasoningContinuationLimit else {
-                                    throw ProviderClientError.parseFailure(
-                                        "Provider returned reasoning without answer text after \(Self.reasoningContinuationLimit) continuation requests."
-                                    )
-                                }
-                                continuationRounds += 1
-                                continuationRequest.messages.append(
-                                    ProviderRequestMessage(
-                                        role: "assistant",
-                                        content: "",
-                                        reasoningContent: latestReasoning
+                            let fallback = try await client.generate(
+                                request: currentRequest,
+                                settings: settings,
+                                credentialStore: currentCredentialStore,
+                                httpClient: httpClient
+                            )
+                            let mergedReasoning = fallback.reasoningSummary?.trimmedNonEmpty
+                                ?? streamReasoning.trimmedNonEmpty
+                            let mergedUsage = fallback.usage ?? streamUsage
+                            continuation.yield(
+                                .completed(
+                                    ProviderResponse(
+                                        text: fallback.text,
+                                        reasoningSummary: mergedReasoning,
+                                        raw: fallback.raw,
+                                        usage: mergedUsage,
+                                        toolCalls: fallback.toolCalls,
+                                        generatedFiles: fallback.generatedFiles,
+                                        serverActivities: fallback.serverActivities
                                     )
                                 )
-                                continuationRequest.messages.append(
-                                    ProviderRequestMessage(
-                                        role: "user",
-                                        content: "Continue the same response and provide the answer text now."
-                                    )
-                                )
-                                var completed = try await client.generate(
-                                    request: continuationRequest,
-                                    settings: settings,
-                                    credentialStore: currentCredentialStore,
-                                    httpClient: httpClient
-                                )
-                                if let usage = completed.usage {
-                                    accumulatedUsage = accumulatedUsage?.adding(usage) ?? usage
-                                }
-                                if let reasoning = completed.reasoningSummary?.trimmedNonEmpty {
-                                    latestReasoning = reasoning
-                                    accumulatedReasoning.append(reasoning)
-                                }
-                                if completed.text.trimmedNonEmpty != nil || !completed.toolCalls.isEmpty {
-                                    completed.usage = accumulatedUsage
-                                    completed.reasoningSummary = accumulatedReasoning.joined(separator: "\n\n")
-                                    continuation.yield(.completed(completed))
-                                    break
-                                }
-                                guard completed.reasoningSummary?.trimmedNonEmpty != nil else {
-                                    throw ProviderClientError.parseFailure(
-                                        "Provider continuation returned no answer text or reasoning."
-                                    )
-                                }
-                            }
+                            )
                         }
                         if rotationActive {
                             rememberGoodGeminiRotationCandidate(rotationCandidates[candidateIndex])

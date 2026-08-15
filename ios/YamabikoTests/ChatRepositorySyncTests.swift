@@ -371,7 +371,7 @@ final class ChatRepositorySyncTests: XCTestCase {
         XCTAssertEqual(totals.totalCostUsd, 0.42, accuracy: 0.000_001)
     }
 
-    func testOpenCodeGoEmptyStreamWithoutReasoningFailsDirectly() async throws {
+    func testOpenCodeGoEmptyStreamRecoversWithNonStreamingResponse() async throws {
         let payload = #"""
         {
           "choices":[{"message":{"content":"fallback ok","reasoning_content":"fallback reasoning"}}],
@@ -391,22 +391,85 @@ final class ChatRepositorySyncTests: XCTestCase {
         try fixture.credentials.setCredential("opencode-go-key", for: .openCodeGo)
 
         let conversationID = try fixture.repository.createConversation(title: "New Chat")
-        do {
-            _ = try await fixture.repository.sendMessage(
-                conversationId: conversationID,
-                text: "hello",
-                attachments: []
-            )
-            XCTFail("Expected a content-free stream to fail without a fallback request.")
-        } catch let error as ProviderClientError {
-            guard case let .parseFailure(message) = error else {
-                return XCTFail("Expected parseFailure, got \(error).")
-            }
-            XCTAssertEqual(message, "Provider stream returned no answer text or reasoning.")
-        }
+        let result = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "hello",
+            attachments: []
+        )
 
+        XCTAssertEqual(result.response.text, "fallback ok")
+        XCTAssertEqual(result.response.reasoningSummary, "fallback reasoning")
         XCTAssertEqual(httpClient.streamCallCount, 1)
-        XCTAssertEqual(httpClient.sendCallCount, 0)
+        XCTAssertEqual(httpClient.sendCallCount, 1, "Non-streaming fallback should be invoked when OpenCode Go stream has zero answer text.")
+
+        let saved = try fixture.conversations.fetchFullMessage(id: result.assistantMessageId)
+        XCTAssertEqual(saved?.displayText, "fallback ok")
+    }
+
+    func testOpenCodeGoNormalStreamDoesNotTriggerNonStreamingFallback() async throws {
+        let streamPayload = #"data: {"choices":[{"delta":{"content":"normal stream text"}}]}"#
+        let nonStreamPayload = #"""
+        {
+          "choices":[{"message":{"content":"fallback text"}}],
+          "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}
+        }
+        """#
+        let httpClient = GeminiStreamFallbackHTTPClient(
+            streamLines: [streamPayload, "data: [DONE]", ""],
+            nonStreamingBody: nonStreamPayload
+        )
+        let fixture = try makeFixture(httpClient: httpClient) { settings in
+            settings.apiProvider = "OPENCODE_GO"
+            settings.defaultModel = "deepseek-v4-flash"
+            settings.providerDefaultModelsJSON = #"{"OPENCODE_GO":"deepseek-v4-flash"}"#
+            settings.isStreamingEnabled = true
+        }
+        try fixture.credentials.setCredential("opencode-go-key", for: .openCodeGo)
+
+        let conversationID = try fixture.repository.createConversation(title: "New Chat")
+        let result = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "hello",
+            attachments: []
+        )
+
+        XCTAssertEqual(result.response.text, "normal stream text")
+        XCTAssertEqual(httpClient.streamCallCount, 1)
+        XCTAssertEqual(httpClient.sendCallCount, 0, "Non-streaming fallback must NOT trigger when stream delivers answer text.")
+
+        let saved = try fixture.conversations.fetchFullMessage(id: result.assistantMessageId)
+        XCTAssertEqual(saved?.displayText, "normal stream text")
+    }
+
+    func testOtherProviderEmptyStreamDoesNotTriggerNonStreamingFallback() async throws {
+        let nonStreamPayload = #"""
+        {
+          "choices":[{"message":{"content":"fallback text"}}],
+          "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}
+        }
+        """#
+        let httpClient = GeminiStreamFallbackHTTPClient(
+            streamLines: ["data: [DONE]", ""],
+            nonStreamingBody: nonStreamPayload
+        )
+        let fixture = try makeFixture(httpClient: httpClient) { settings in
+            settings.apiProvider = "OPENROUTER"
+            settings.defaultModel = "openai/gpt-4o-mini"
+            settings.providerDefaultModelsJSON = #"{"OPENROUTER":"openai/gpt-4o-mini"}"#
+            settings.isStreamingEnabled = true
+        }
+        try fixture.credentials.setCredential("openrouter-key", for: .openRouter)
+
+        let conversationID = try fixture.repository.createConversation(title: "New Chat")
+        let result = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "hello",
+            attachments: []
+        )
+
+        XCTAssertEqual(result.response.text, "")
+        XCTAssertEqual(httpClient.streamCallCount, 1)
+        XCTAssertEqual(httpClient.sendCallCount, 0, "Non-streaming fallback must NOT trigger for non-OpenCodeGo providers.")
     }
 
     private func makeFixture(

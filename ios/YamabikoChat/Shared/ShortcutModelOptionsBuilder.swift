@@ -24,6 +24,11 @@ enum ShortcutModelOptionsBuilder {
             appendUnique(settings.defaultModel)
         }
 
+        if let data = settings.providerDefaultModelsJSON.data(using: .utf8),
+           let rawMap = try? JSONDecoder().decode([String: String].self, from: data) {
+            appendUnique(rawMap[normalizedProvider])
+        }
+
         appendUnique(settings.providerModelMap()[normalizedProvider])
 
         switch normalizedProvider {
