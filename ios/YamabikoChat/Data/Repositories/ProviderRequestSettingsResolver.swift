@@ -185,7 +185,32 @@ final class ProviderRequestSettingsResolver {
         if toolScope.allowsAgentSkills, supportsClientWebSearch {
             tools.append(contentsOf: AgentSkillTools.definitions(repository: skillRepository).map(\.providerTool))
         }
-        return tools
+        return deduplicatedFunctionTools(from: tools)
+    }
+
+    /// Provider APIs reject duplicate function tool names. The resolver composes
+    /// tools from several sources, so keep function names unique as a final guard.
+    private func deduplicatedFunctionTools(from tools: [ProviderTool]) -> [ProviderTool] {
+        var seen = Set<String>()
+        var result: [ProviderTool] = []
+        result.reserveCapacity(tools.count)
+        for tool in tools {
+            guard tool.type == "function", let name = tool.payload["name"], !name.isEmpty else {
+                result.append(tool)
+                continue
+            }
+            if seen.insert(name).inserted {
+                result.append(tool)
+            } else {
+                DiagnosticsLogger.log(
+                    "Duplicate provider function tool omitted",
+                    level: .warning,
+                    category: .settings,
+                    metadata: ["tool": name]
+                )
+            }
+        }
+        return result
     }
 
     private func metadataForProvider(

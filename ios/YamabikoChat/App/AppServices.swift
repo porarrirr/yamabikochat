@@ -36,13 +36,20 @@ final class AppServices {
         attachmentRepository = AttachmentRepository()
         skillRepository = AgentSkillRepository()
         openRouterModelService = OpenRouterModelService(credentialStore: credentialStore)
+        // The resolver receives only the client web tools. Agent Skill tools are
+        // appended by the resolver itself; the Pi runtime registry below includes
+        // their executors so `activate_skill` / `read_skill_resource` calls can be
+        // dispatched without sending duplicate tool definitions to providers.
+        let clientWebTools = LocalToolRegistry(
+            executors: [WebSearchTool(), FetchUrlTool()]
+        )
         let localTools = LocalToolRegistry(
             executors: [WebSearchTool(), FetchUrlTool()] + AgentSkillTools.executors(repository: skillRepository)
         )
         requestSettingsResolver = ProviderRequestSettingsResolver(
             modelService: openRouterModelService,
             skillRepository: skillRepository,
-            localToolRegistry: localTools
+            localToolRegistry: clientWebTools
         )
         modelsDevCatalogRepository = ModelsDevCatalogRepository()
         codexAuthRepository = CodexAuthRepository(credentialStore: credentialStore)

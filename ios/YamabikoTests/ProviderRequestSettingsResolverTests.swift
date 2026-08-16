@@ -122,6 +122,47 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         XCTAssertEqual(resolved.routing?.requireParameters, true)
     }
 
+    func testAgentSkillFunctionToolsAreSentOnlyOnceWhenLocalRegistryAlsoContainsExecutors() async throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent("provider-resolver-skill-tests-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: root) }
+
+        let repository = AgentSkillRepository(rootURL: root.appendingPathComponent("installed"))
+        let source = root.appendingPathComponent("source", isDirectory: true)
+        try fileManager.createDirectory(at: source, withIntermediateDirectories: true)
+        let markdown = "---\nname: resolver-skill\ndescription: Test skill\n---\nFollow the resolver test instructions.\n"
+        try Data(markdown.utf8).write(to: source.appendingPathComponent("SKILL.md"))
+        let preview = try repository.inspect(sourceURL: source)
+        _ = try repository.install(preview, trusted: true, allowReplacement: false)
+
+        let localTools = LocalToolRegistry(
+            executors: [WebSearchTool(), FetchUrlTool()] + AgentSkillTools.executors(repository: repository)
+        )
+        let resolver = ProviderRequestSettingsResolver(
+            modelService: OpenRouterModelService(credentialStore: ResolverCredentialStore()),
+            skillRepository: repository,
+            localToolRegistry: localTools
+        )
+        var settings = AppSettings()
+        settings.clientWebSearchToolEnabled = true
+
+        let resolved = try await resolver.resolve(
+            settings: settings,
+            provider: "OPENAI",
+            model: "gpt-5.6"
+        )
+
+        let functionNames = resolved.tools.compactMap { tool -> String? in
+            guard tool.type == "function" else { return nil }
+            return tool.payload["name"]
+        }
+        XCTAssertEqual(functionNames.count, Set(functionNames).count)
+        XCTAssertEqual(functionNames.filter { $0 == AgentSkillTools.activateName }.count, 1)
+        XCTAssertEqual(functionNames.filter { $0 == AgentSkillTools.readResourceName }.count, 1)
+    }
+
     private func makeResolver() -> ProviderRequestSettingsResolver {
         ProviderRequestSettingsResolver(
             modelService: OpenRouterModelService(credentialStore: ResolverCredentialStore())
