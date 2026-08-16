@@ -50,6 +50,10 @@ targets:
         embed: true
       - target: YamabikoShareExtension
         embed: true
+    preBuildScripts:
+      - name: Copy legal notices
+        script: scripts/copy-legal-notices.sh
+        basedOnDependencyAnalysis: false
     postBuildScripts:
       - name: Set build-time version
         script: scripts/set-build-version.sh read

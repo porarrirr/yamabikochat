@@ -492,6 +492,11 @@ struct SettingsScreen: View {
             Link(destination: AppConstants.supportURL) {
                 Label(L10n.text("サポート"), systemImage: "questionmark.circle")
             }
+            NavigationLink {
+                OpenSourceLicensesView()
+            } label: {
+                Label(L10n.text("オープンソースライセンス"), systemImage: "doc.badge.gearshape")
+            }
         }
     }
 

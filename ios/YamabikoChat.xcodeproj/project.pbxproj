@@ -94,6 +94,7 @@
 		696478CAFDBA3D897D3DE015 /* SvgPreviewWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0668334AA8F62D1F58F6B2F6 /* SvgPreviewWebView.swift */; };
 		69A868E7A0FE2AB17FD68584 /* LiteLlmPricingRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 354A655F2DAC30AF82690AAD /* LiteLlmPricingRepositoryTests.swift */; };
 		6D56F5169DA7F64A5C33EF37 /* SystemPromptComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1886F2DB993356F8E685640F /* SystemPromptComposer.swift */; };
+		6F065F7EA8B6667AE3CC3BCA /* OpenSourceLicensesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E1D0EFA706A16A6042D477B /* OpenSourceLicensesView.swift */; };
 		7179A8C00CF9D83B795B0E21 /* ShareImportViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1669165723BD89D5FC791F /* ShareImportViewController.swift */; };
 		73E2661F0342C7184867B14D /* ChatRepositoryDualTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CE95A107E6CAC3E8A4BC48 /* ChatRepositoryDualTests.swift */; };
 		75A2EA0F497E1594294270B3 /* FusionTraceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECD5042A0D83A58D6DBE82D8 /* FusionTraceStore.swift */; };
@@ -328,6 +329,7 @@
 		3BB73A6E778AA23087EEB852 /* ConversationListScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListScreen.swift; sourceTree = "<group>"; };
 		3C19A7AE41E0E5052471F871 /* AlibabaCodingPlanModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlibabaCodingPlanModelCatalog.swift; sourceTree = "<group>"; };
 		3CADE94861B9B35E0399D0B8 /* FusionPanelRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionPanelRunner.swift; sourceTree = "<group>"; };
+		3E1D0EFA706A16A6042D477B /* OpenSourceLicensesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenSourceLicensesView.swift; sourceTree = "<group>"; };
 		41CC56251ECE1833FCA591E2 /* openrouter-glm-5-2-endpoints.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "openrouter-glm-5-2-endpoints.json"; sourceTree = "<group>"; };
 		425C9F974B954BB239A10CA5 /* ChatProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatProject.swift; sourceTree = "<group>"; };
 		46EC372D26102F3D22DE62C6 /* LiteLlmPricingRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteLlmPricingRepository.swift; sourceTree = "<group>"; };
@@ -531,6 +533,7 @@
 			isa = PBXGroup;
 			children = (
 				32B877B5A57F5D09C71601E2 /* AgentSkillInstallReview.swift */,
+				3E1D0EFA706A16A6042D477B /* OpenSourceLicensesView.swift */,
 				DB870EF06AABC09F6C08A140 /* SettingsScreen.swift */,
 				A5E00C2C05164977DE56584F /* SettingsViewModel.swift */,
 				06119D2CA5E9AE0441DB5CDA /* Sections */,
@@ -1043,6 +1046,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 22B0C31F749280BD1E4EF6F8 /* Build configuration list for PBXNativeTarget "YamabikoChat" */;
 			buildPhases = (
+				09CBC926CE89485964094EBD /* Copy legal notices */,
 				3267E8155895DFF610029068 /* Sources */,
 				E253B5C8992D434DCF0FBE3E /* Resources */,
 				3BCE835AB20804B68F2E52B2 /* Frameworks */,
@@ -1191,6 +1195,25 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		09CBC926CE89485964094EBD /* Copy legal notices */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy legal notices";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "scripts/copy-legal-notices.sh";
+		};
 		5C713D9F3A7E66A6C621949D /* Set build-time version */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -1398,6 +1421,7 @@
 				ECF51BE8733840FBB3DE8298 /* OpenRouterModelPickerField.swift in Sources */,
 				B9CBE41E5D9DEFC79C81DE9C /* OpenRouterModelService.swift in Sources */,
 				2EAD672EDECBCA4C9DFEFC96 /* OpenRouterModels.swift in Sources */,
+				6F065F7EA8B6667AE3CC3BCA /* OpenSourceLicensesView.swift in Sources */,
 				AA8DCC77B7AF53AE101C5313 /* PiAgentRuntime.swift in Sources */,
 				10FF1A71E46475590469FFC7 /* PiNodeRunner.mm in Sources */,
 				674D06E4C49E2F3F7B6B3B6A /* ProviderDisplay.swift in Sources */,

@@ -18,6 +18,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.stringResource
@@ -62,6 +63,7 @@ import com.porarri.yamabikochat.ui.settings.sections.mathRenderingSettingsSectio
 import com.porarri.yamabikochat.ui.settings.sections.modelPresetsSection
 import com.porarri.yamabikochat.ui.settings.sections.openRouterAdvancedSettingsSection
 import com.porarri.yamabikochat.ui.settings.sections.openRouterReasoningSection
+import com.porarri.yamabikochat.AppConstants
 import com.porarri.yamabikochat.R
 import com.porarri.yamabikochat.utils.MiniMaxUtils
 import com.porarri.yamabikochat.utils.ModelUtils
@@ -80,6 +82,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.Locale
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 
@@ -237,6 +240,13 @@ fun SettingsScreen(
         val isCurrentModelFree = isCurrentModelFree()
         var geminiAdvancedExpanded by remember { mutableStateOf(false) }        
         var showAdvancedSettings by rememberSaveable { mutableStateOf(false) }
+        var showLicenses by rememberSaveable { mutableStateOf(false) }
+        BackHandler(enabled = showLicenses || showAdvancedSettings) {
+            when {
+                showLicenses -> showLicenses = false
+                showAdvancedSettings -> showAdvancedSettings = false
+            }
+        }
         val globalPresets = settings?.buildGlobalProviderPresets().orEmpty()    
         val globalPresetsInChat = globalPresets.filter { preset ->
             val providerKey = preset.apiProvider.uppercase()
@@ -665,14 +675,22 @@ fun SettingsScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("設定") },
+                    title = {
+                        Text(
+                            if (showLicenses) {
+                                stringResource(R.string.open_source_licenses)
+                            } else {
+                                "設定"
+                            }
+                        )
+                    },
                     navigationIcon = {
                         IconButton(
                             onClick = {
-                                if (showAdvancedSettings) {
-                                    showAdvancedSettings = false
-                                } else {
-                                    onBackClick()
+                                when {
+                                    showLicenses -> showLicenses = false
+                                    showAdvancedSettings -> showAdvancedSettings = false
+                                    else -> onBackClick()
                                 }
                             }
                         ) {
@@ -683,7 +701,14 @@ fun SettingsScreen(
             },
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         ) { padding ->
-            if (!showAdvancedSettings) {
+            if (showLicenses) {
+                OpenSourceLicensesScreen(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                )
+            } else if (!showAdvancedSettings) {
                 SettingsHomeContent(
                     modifier = Modifier
                         .fillMaxSize()
@@ -692,7 +717,8 @@ fun SettingsScreen(
                     onOpenTab = { tabIndex ->
                         selectedTab = tabIndex
                         showAdvancedSettings = true
-                    }
+                    },
+                    onOpenLicenses = { showLicenses = true }
                 )
             } else {
                 Column(
@@ -2940,8 +2966,10 @@ fun SettingsScreen(
 @Composable
 private fun SettingsHomeContent(
     modifier: Modifier = Modifier,
-    onOpenTab: (Int) -> Unit
+    onOpenTab: (Int) -> Unit,
+    onOpenLicenses: () -> Unit
 ) {
+    val uriHandler = LocalUriHandler.current
     LazyColumn(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -2981,6 +3009,34 @@ private fun SettingsHomeContent(
                     icon = Icons.Default.Palette,
                     title = stringResource(R.string.settings_tab_appearance),
                     onClick = { onOpenTab(3) }
+                )
+            }
+        }
+
+        item {
+            SettingsHomeSection(title = stringResource(R.string.settings_legal_section)) {
+                SettingsHomeRow(
+                    icon = Icons.Default.PrivacyTip,
+                    title = stringResource(R.string.privacy_policy),
+                    onClick = { uriHandler.openUri(AppConstants.PRIVACY_POLICY_URL) }
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                SettingsHomeRow(
+                    icon = Icons.Default.Description,
+                    title = stringResource(R.string.terms_of_use),
+                    onClick = { uriHandler.openUri(AppConstants.TERMS_OF_USE_URL) }
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                SettingsHomeRow(
+                    icon = Icons.Default.Help,
+                    title = stringResource(R.string.support),
+                    onClick = { uriHandler.openUri(AppConstants.SUPPORT_URL) }
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                SettingsHomeRow(
+                    icon = Icons.Default.Article,
+                    title = stringResource(R.string.open_source_licenses),
+                    onClick = onOpenLicenses
                 )
             }
         }

@@ -10,6 +10,7 @@ Static pages for App Store Connect and in-app legal links.
 | Privacy Policy | `privacy.html` | **Privacy Policy URL** (required) |
 | Support | `support.html` | **Support URL** (required) |
 | Terms of Use | `terms.html` | In-app link (recommended) |
+| Licenses | `licenses.html` | Open-source notices |
 
 ## Publish with GitHub Pages
 
@@ -27,5 +28,6 @@ After Pages is live:
 - Privacy Policy: `https://porarrirr.github.io/yamabikochat/privacy.html`
 - Support: `https://porarrirr.github.io/yamabikochat/support.html`
 - Terms: `https://porarrirr.github.io/yamabikochat/terms.html`
+- Licenses: `https://porarrirr.github.io/yamabikochat/licenses.html`
 
 Update `ios/YamabikoChat/Shared/AppConstants.swift` if you use a custom domain.

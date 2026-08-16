@@ -354,6 +354,12 @@
 "プライバシーポリシー" = "Politique de confidentialité";
 "利用規約" = "Conditions d'utilisation";
 "サポート" = "Support";
+"オープンソースライセンス" = "Licences open source";
+"YamabikoChat ライセンス" = "Licence YamabikoChat";
+"第三者ソフトウェア" = "Logiciels tiers";
+"Pi runtime npm ライセンス" = "Licences npm du runtime Pi";
+"Node.js / NodeMobile ライセンス" = "Licence Node.js / NodeMobile";
+"ライセンスファイルを読み込めませんでした" = "Impossible de charger le fichier de licence.";
 "Provider A" = "Fournisseur A";
 "Provider B" = "Fournisseur B";
 "Auto provider A" = "Fournisseur auto A";

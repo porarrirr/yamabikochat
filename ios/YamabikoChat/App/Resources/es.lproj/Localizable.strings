@@ -357,6 +357,12 @@
 "プライバシーポリシー" = "Politica de privacidad";
 "利用規約" = "Terminos de uso";
 "サポート" = "Soporte";
+"オープンソースライセンス" = "Licencias de codigo abierto";
+"YamabikoChat ライセンス" = "Licencia de YamabikoChat";
+"第三者ソフトウェア" = "Software de terceros";
+"Pi runtime npm ライセンス" = "Licencias npm de Pi runtime";
+"Node.js / NodeMobile ライセンス" = "Licencia de Node.js / NodeMobile";
+"ライセンスファイルを読み込めませんでした" = "No se pudo cargar el archivo de licencia.";
 "Provider A" = "Proveedor A";
 "Provider B" = "Proveedor B";
 "Auto provider A" = "Proveedor auto A";

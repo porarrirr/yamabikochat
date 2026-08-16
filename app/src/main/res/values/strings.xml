@@ -57,4 +57,14 @@
     <string name="user_facing_error_fallback">応答を取得できませんでした</string>
     <string name="user_facing_error_details">詳細</string>
     <string name="user_facing_error_dismiss">閉じる</string>
+    <string name="settings_legal_section">法的情報</string>
+    <string name="privacy_policy">プライバシーポリシー</string>
+    <string name="terms_of_use">利用規約</string>
+    <string name="support">サポート</string>
+    <string name="open_source_licenses">オープンソースライセンス</string>
+    <string name="license_yamabiko">YamabikoChat ライセンス</string>
+    <string name="license_third_party">第三者ソフトウェア</string>
+    <string name="license_npm">Pi runtime npm ライセンス</string>
+    <string name="license_nodejs">Node.js / NodeMobile ライセンス</string>
+    <string name="license_load_failed">ライセンスファイルを読み込めませんでした</string>
 </resources>

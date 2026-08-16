@@ -167,3 +167,22 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }
+
+val legalAssetsDir = layout.buildDirectory.dir("generated/legalAssets")
+val copyLegalAssets by tasks.registering(Copy::class) {
+    from(rootProject.file("LICENSE")) {
+        rename { "LICENSE.txt" }
+    }
+    from(rootProject.file("THIRD_PARTY_NOTICES.md"))
+    from(rootProject.file("third_party/nodejs-mobile/LICENSE")) {
+        rename { "NODEJS_LICENSE.txt" }
+    }
+    from(rootProject.file("third_party/npm-licenses.md"))
+    into(legalAssetsDir.map { it.dir("legal") })
+}
+
+android.sourceSets.getByName("main").assets.srcDir(legalAssetsDir)
+
+tasks.named("preBuild").configure {
+    dependsOn(copyLegalAssets)
+}

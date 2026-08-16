@@ -357,6 +357,12 @@
 "プライバシーポリシー" = "隐私政策";
 "利用規約" = "使用条款";
 "サポート" = "支持";
+"オープンソースライセンス" = "开源许可证";
+"YamabikoChat ライセンス" = "YamabikoChat 许可证";
+"第三者ソフトウェア" = "第三方软件";
+"Pi runtime npm ライセンス" = "Pi runtime npm 许可证";
+"Node.js / NodeMobile ライセンス" = "Node.js / NodeMobile 许可证";
+"ライセンスファイルを読み込めませんでした" = "无法读取许可证文件。";
 "Provider A" = "提供商 A";
 "Provider B" = "提供商 B";
 "Auto provider A" = "自动对话提供商 A";
