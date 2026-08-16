@@ -278,6 +278,27 @@ class CodeExtractorUtilsTest {
     }
 
     @Test
+    fun `unlabeled HTML document should be treated as html`() {
+        val unlabeledHtml = """
+            ```
+            <!DOCTYPE html>
+            <html>
+            <head><title>Page</title></head>
+            <body><p>hello</p></body>
+            </html>
+            ```
+        """.trimIndent()
+
+        val result = CodeExtractorUtils.extractCodeBlocks(unlabeledHtml)
+
+        assertEquals(1, result.size)
+        assertEquals("html", result[0].language)
+        assertTrue(result[0].isHtml)
+        assertFalse(result[0].isSvg)
+        assertTrue(result[0].filename.endsWith(".html"))
+    }
+
+    @Test
     fun `inline SVG inside unfenced HTML document should not be extracted`() {
         val htmlDocument = """
             <!DOCTYPE html>

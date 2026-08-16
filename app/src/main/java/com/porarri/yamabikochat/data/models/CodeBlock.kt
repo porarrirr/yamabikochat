@@ -66,12 +66,15 @@ data class CodeBlock(
      */
     val isSvg: Boolean
         get() = language.equals("svg", ignoreCase = true)
+
+    val isHtml: Boolean
+        get() = language.lowercase() in listOf("html", "htm", "xhtml")
     
     /**
      * プレビュー表示が可能かどうかを判定
      */
     val isPreviewable: Boolean
-        get() = isSvg
+        get() = isSvg || isHtml
     
     /**
      * SVGの場合の解析結果を取得

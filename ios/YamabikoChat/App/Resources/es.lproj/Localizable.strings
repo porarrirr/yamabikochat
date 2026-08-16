@@ -96,6 +96,9 @@
 "デュアルモードでは再生成できません。" = "No se puede regenerar en modo dual.";
 "SVGのダウンロードに失敗しました" = "Error al descargar SVG";
 "SVGをダウンロード" = "Descargar SVG";
+"HTMLのダウンロードに失敗しました" = "Error al descargar HTML";
+"HTMLをダウンロード" = "Descargar HTML";
+"HTMLを表示" = "Mostrar HTML";
 "デュアルモードでは本文または添付を入力してください。" = "En modo dual, introduce texto o adjunta un archivo.";
 "デュアルモードと自動会話は同時に有効化できません。" = "El modo dual y la conversación automática no pueden activarse al mismo tiempo.";
 "デュアルをOFF" = "Desactivar dual";

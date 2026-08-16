@@ -75,13 +75,13 @@ object CodeExtractorUtils {
             .map { codeBlock ->
                 when {
                     isHtmlDocument(codeBlock.content) -> {
-                        if (codeBlock.language.equals("svg", ignoreCase = true)) {
+                        if (codeBlock.language.equals("html", ignoreCase = true)) {
+                            codeBlock
+                        } else {
                             codeBlock.copy(
                                 language = "html",
                                 filename = generateFilename("html", codeBlock.content)
                             )
-                        } else {
-                            codeBlock
                         }
                     }
                     shouldPromoteToSvg(codeBlock.language, codeBlock.content) -> {

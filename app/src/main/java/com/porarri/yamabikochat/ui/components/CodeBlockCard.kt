@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -54,6 +55,7 @@ fun CodeBlockCard(
     var isExporting by remember { mutableStateOf(false) }
     var showFullCode by remember { mutableStateOf(false) }
     var showSvgPreview by remember { mutableStateOf(false) }
+    var showHtmlPreview by remember { mutableStateOf(false) }
     var showActionMenu by remember { mutableStateOf(false) }
     
     // SVG解析結果をキャッシュ
@@ -111,7 +113,11 @@ fun CodeBlockCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = if (codeBlock.isSvg) Icons.Default.Image else Icons.Default.Code,
+                        imageVector = when {
+                            codeBlock.isSvg -> Icons.Default.Image
+                            codeBlock.isHtml -> Icons.Default.Language
+                            else -> Icons.Default.Code
+                        },
                         contentDescription = null,
                         tint = getLanguageColor(codeBlock.language),
                         modifier = Modifier.size(20.dp)
@@ -229,6 +235,38 @@ fun CodeBlockCard(
                 }
             }
             
+            // HTMLプレビュー（内部ブラウザシート）
+            if (codeBlock.isHtml) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "HTMLプレビュー",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    TextButton(
+                        onClick = { showHtmlPreview = true }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Visibility,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "表示",
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+            }
+
             // SVGプレビューセクション
             if (codeBlock.isSvg) {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -438,6 +476,14 @@ fun CodeBlockCard(
                 )
             }
         }
+    }
+
+    if (showHtmlPreview && codeBlock.isHtml) {
+        HtmlPreviewBottomSheet(
+            htmlContent = codeBlock.content,
+            title = codeBlock.filename,
+            onDismissRequest = { showHtmlPreview = false }
+        )
     }
 }
 

@@ -1212,9 +1212,17 @@ private struct MessageBubble: View {
                     }
 
                     let svgBlocks = SvgCodeExtractor.extract(from: responseText)
-                    let markdownText = SvgCodeExtractor.removeExtractedBlocks(from: responseText, blocks: svgBlocks)
+                    let htmlBlocks = HtmlCodeExtractor.extract(from: responseText)
+                    let mediaBlocks = (
+                        svgBlocks.map(ExtractedMediaBlock.svg) +
+                        htmlBlocks.map(ExtractedMediaBlock.html)
+                    ).sorted { $0.startIndex < $1.startIndex }
+                    let markdownText = ExtractedFenceRemover.remove(
+                        from: responseText,
+                        ranges: mediaBlocks.map { (start: $0.startIndex, end: $0.endIndex) }
+                    )
                     let hasAssistantBubbleContent = !attachmentItems.isEmpty
-                        || !svgBlocks.isEmpty
+                        || !mediaBlocks.isEmpty
                         || !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
                     if hasAssistantBubbleContent {
@@ -1235,9 +1243,14 @@ private struct MessageBubble: View {
                                     )
                                 }
 
-                                if !svgBlocks.isEmpty {
-                                    ForEach(svgBlocks) { block in
-                                        SvgPreviewCard(block: block)
+                                if !mediaBlocks.isEmpty {
+                                    ForEach(mediaBlocks) { block in
+                                        switch block {
+                                        case .html(let htmlBlock):
+                                            HtmlPreviewCard(block: htmlBlock)
+                                        case .svg(let svgBlock):
+                                            SvgPreviewCard(block: svgBlock)
+                                        }
                                     }
                                 }
 
@@ -1581,6 +1594,38 @@ private struct MessageBubbleContextMenuModifier: ViewModifier {
             }
         } else {
             content
+        }
+    }
+}
+
+private enum ExtractedMediaBlock: Identifiable {
+    case svg(ExtractedSvgBlock)
+    case html(ExtractedHtmlBlock)
+
+    var id: String {
+        switch self {
+        case .svg(let block):
+            return "svg-\(block.id)"
+        case .html(let block):
+            return "html-\(block.id)"
+        }
+    }
+
+    var startIndex: Int {
+        switch self {
+        case .svg(let block):
+            return block.startIndex
+        case .html(let block):
+            return block.startIndex
+        }
+    }
+
+    var endIndex: Int {
+        switch self {
+        case .svg(let block):
+            return block.endIndex
+        case .html(let block):
+            return block.endIndex
         }
     }
 }
