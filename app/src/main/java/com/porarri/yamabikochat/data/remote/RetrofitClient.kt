@@ -2,7 +2,6 @@ package com.porarri.yamabikochat.data.remote
 
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.serialization.json.Json
-import okhttp3.CertificatePinner
 import okhttp3.ConnectionSpec
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -12,10 +11,7 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
 
-    private const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/"
     private const val OPENROUTER_BASE_URL = "https://openrouter.ai/api/"
-    private const val ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
-    private const val OPENAI_BASE_URL = "https://api.openai.com/v1/"
     private const val LITELLM_PRICING_BASE_URL = "https://raw.githubusercontent.com/"
 
     private val json = Json {

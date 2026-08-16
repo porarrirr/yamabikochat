@@ -166,6 +166,7 @@ fun ChatScreen(
     val isFusionRunning by viewModel.isFusionRunning.collectAsState()
     val editingMessage by viewModel.editingMessage.collectAsState()
     val attachments by viewModel.attachments.collectAsState()
+    val canAttachImages by viewModel.canAttachImages.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val isAutoConversationRunning by viewModel.isAutoConversationRunning.collectAsState()
     val autoConversationStatus by viewModel.autoConversationStatus.collectAsState()
@@ -618,6 +619,7 @@ fun ChatScreen(
             isAutoConversationEnabled = settings?.isAutoConversationEnabled ?: false,
             contextLabel = inputContextLabel,
             isSecretMode = isSecretChat,
+            canAttachImages = canAttachImages,
             skillSuggestions = run {
                 val prefix = Regex("(?:^|\\s)\\$([a-z0-9-]*)$").find(text)?.groupValues?.getOrNull(1)
                 if (prefix == null) emptyList() else enabledSkillNames.filter { it.startsWith(prefix) }.take(6)

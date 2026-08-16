@@ -205,7 +205,8 @@ class ChatInteractionCoordinator(
             model = settings.dualModelA,
             messages = historyA,
             systemPrompt = settings.dualSystemPromptA ?: conversation.systemPrompt ?: settings.systemPrompt,
-            context = Settings.ReasoningContext.DUAL_A
+            context = Settings.ReasoningContext.DUAL_A,
+            promptCacheKey = "conversation-${conversationId}-dual-a"
         )
 
         val requestB = repository.buildProviderRequest(
@@ -215,7 +216,8 @@ class ChatInteractionCoordinator(
             model = settings.dualModelB,
             messages = historyB,
             systemPrompt = settings.dualSystemPromptB ?: conversation.systemPrompt ?: settings.systemPrompt,
-            context = Settings.ReasoningContext.DUAL_B
+            context = Settings.ReasoningContext.DUAL_B,
+            promptCacheKey = "conversation-${conversationId}-dual-b"
         )
 
         val modelDualMessage = DualChatMessage(

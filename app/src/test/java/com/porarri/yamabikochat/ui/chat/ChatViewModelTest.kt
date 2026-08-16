@@ -48,6 +48,7 @@ class ChatViewModelTest {
         coEvery { repository.upsertConversation(any()) } returns 1L
         coEvery { repository.getConversationById(any()) } returns createDefaultConversation()
         coEvery { repository.saveSettings(any()) } just runs
+        coEvery { repository.resolveCanAttachImages(any(), any(), any()) } returns true
 
         viewModel = ChatViewModel(repository, savedStateHandle)
     }
@@ -463,6 +464,29 @@ class ChatViewModelTest {
         assertTrue("Should contain second valid attachment", attachments.contains(uri2))
         assertFalse("Should not contain invalid attachment", attachments.contains(uri3))
         assertEquals("Should have exactly 2 valid attachments", 2, attachments.size)
+    }
+
+    @Test
+    fun `addAttachment rejects images when model does not support vision`() = runTest {
+        coEvery { repository.resolveCanAttachImages(any(), any(), any()) } returns false
+        settingsFlow.value = createDefaultSettings().copy(defaultModel = "text-only")
+        advanceUntilIdle()
+
+        val imageUri = mockk<Uri>()
+        val fileUri = mockk<Uri>()
+        coEvery { repository.validateFile(imageUri) } returns
+            FileValidationUtils.FileValidationResult.Valid("image/png", 512L)
+        coEvery { repository.validateFile(fileUri) } returns
+            FileValidationUtils.FileValidationResult.Valid("application/pdf", 2048L)
+
+        viewModel.addAttachment(imageUri)
+        advanceUntilIdle()
+        assertFalse(viewModel.attachments.value.contains(imageUri))
+        assertEquals("このモデルは画像入力に対応していません。", viewModel.errorMessage.value)
+
+        viewModel.addAttachment(fileUri)
+        advanceUntilIdle()
+        assertTrue(viewModel.attachments.value.contains(fileUri))
     }
     
     @Test

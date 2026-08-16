@@ -61,6 +61,7 @@ fun ChatMessageInputBar(
     isAutoConversationEnabled: Boolean,
     contextLabel: String?,
     isSecretMode: Boolean,
+    canAttachImages: Boolean = true,
     skillSuggestions: List<String> = emptyList(),
     onSkillSelected: (String) -> Unit = {}
 ) {
@@ -111,14 +112,16 @@ fun ChatMessageInputBar(
                     expanded = showAttachmentMenu,
                     onDismissRequest = { showAttachmentMenu = false }
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("画像") },
-                        leadingIcon = { Icon(Icons.Default.Image, null) },
-                        onClick = {
-                            showAttachmentMenu = false
-                            onImagePick()
-                        }
-                    )
+                    if (canAttachImages) {
+                        DropdownMenuItem(
+                            text = { Text("画像") },
+                            leadingIcon = { Icon(Icons.Default.Image, null) },
+                            onClick = {
+                                showAttachmentMenu = false
+                                onImagePick()
+                            }
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text("ファイル") },
                         leadingIcon = { Icon(Icons.Default.Description, null) },

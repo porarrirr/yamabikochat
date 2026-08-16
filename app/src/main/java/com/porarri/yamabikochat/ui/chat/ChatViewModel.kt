@@ -149,6 +149,9 @@ class ChatViewModel(
     private val _attachments = MutableStateFlow<List<Uri>>(emptyList())
     val attachments: StateFlow<List<Uri>> = _attachments.asStateFlow()
 
+    private val _canAttachImages = MutableStateFlow(false)
+    val canAttachImages: StateFlow<Boolean> = _canAttachImages.asStateFlow()
+
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
@@ -239,6 +242,7 @@ class ChatViewModel(
                 _conversation.value = repository.getConversationById(resolvedConversationId)
                 val currentSettings = repository.getSettings().first() ?: Settings()
                 syncNewChatWithSettingsIfEmpty(currentSettings)
+                refreshVisionSupport()
             } else {
                 conversationIdFlow.value = conversationId
                 autoConversationTargetConversationId = conversationId
@@ -246,6 +250,7 @@ class ChatViewModel(
                 _conversation.value = repository.getConversationById(conversationId)
                 val currentSettings = repository.getSettings().first() ?: Settings()
                 syncNewChatWithSettingsIfEmpty(currentSettings)
+                refreshVisionSupport()
             }
         }
 
@@ -297,6 +302,7 @@ class ChatViewModel(
                     )
                     _isDualModeActive.value = settings.isDualModeEnabled
                     syncNewChatWithSettingsIfEmpty(settings)
+                    refreshVisionSupport()
                 }
             }
         }
@@ -325,6 +331,10 @@ class ChatViewModel(
         viewModelScope.launch {
             when (val result = repository.validateFile(uri)) {
                 is FileValidationUtils.FileValidationResult.Valid -> {
+                    if (result.mimeType.startsWith("image/") && !_canAttachImages.value) {
+                        _errorMessage.value = "このモデルは画像入力に対応していません。"
+                        return@launch
+                    }
                     _attachments.update { it + uri }
                     _errorMessage.value = null
                 }
@@ -363,6 +373,27 @@ class ChatViewModel(
     private fun clearAttachments() {
         _attachments.value = emptyList()
         _errorMessage.value = null
+    }
+
+    private suspend fun refreshVisionSupport() {
+        val currentSettings = settings.value ?: repository.getSettings().first() ?: Settings()
+        val conversation = _conversation.value
+        val supportsVision = repository.resolveCanAttachImages(
+            settings = currentSettings,
+            conversationProvider = conversation?.apiProvider ?: currentSettings.apiProvider,
+            conversationModel = conversation?.model?.ifBlank { null } ?: currentSettings.getCurrentModel()
+        )
+        _canAttachImages.value = supportsVision
+        if (!supportsVision && _attachments.value.isNotEmpty()) {
+            val kept = _attachments.value.filter { uri ->
+                when (val result = repository.validateFile(uri)) {
+                    is FileValidationUtils.FileValidationResult.Valid ->
+                        !result.mimeType.startsWith("image/")
+                    else -> true
+                }
+            }
+            _attachments.value = kept
+        }
     }
 
     fun sendMessage(text: String) {
@@ -657,6 +688,7 @@ class ChatViewModel(
                     else -> baseThinkingUpdate
                 }
                 repository.saveSettings(updatedSettings)
+                refreshVisionSupport()
             }
         }
     }

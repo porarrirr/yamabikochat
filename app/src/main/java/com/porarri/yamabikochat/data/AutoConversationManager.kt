@@ -189,7 +189,8 @@ class AutoConversationManager(
                             provider,
                             systemPrompt,
                             conversationHistory,
-                            if (currentSpeaker == "A") Settings.ReasoningContext.AUTO_A else Settings.ReasoningContext.AUTO_B
+                            if (currentSpeaker == "A") Settings.ReasoningContext.AUTO_A else Settings.ReasoningContext.AUTO_B,
+                            promptCacheKey = "auto-conversation-$conversationId-$currentSpeaker"
                         )
                     } catch (e: Exception) {
                         Log.e(TAG, "API呼び出しエラー", e)

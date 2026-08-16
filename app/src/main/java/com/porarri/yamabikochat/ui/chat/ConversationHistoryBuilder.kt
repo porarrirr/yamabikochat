@@ -17,8 +17,7 @@ data class HistoryPreparation(
 
 class ConversationHistoryBuilder(
     private val repository: ChatRepository,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val maxHistoryMessages: Int = DEFAULT_MAX_HISTORY_MESSAGES
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     suspend fun buildStandardHistory(
         text: String,
@@ -27,17 +26,11 @@ class ConversationHistoryBuilder(
         existingFullMessages: Map<Long, FullChatMessage>,
         includeModelThoughts: Boolean = false
     ): HistoryPreparation = withContext(ioDispatcher) {
-        val limitedSummaries = if (messageSummaries.size > maxHistoryMessages) {
-            messageSummaries.takeLast(maxHistoryMessages)
-        } else {
-            messageSummaries
-        }
-
-        val missingIds = limitedSummaries.map { it.id }.filterNot { existingFullMessages.containsKey(it) }
+        val missingIds = messageSummaries.map { it.id }.filterNot { existingFullMessages.containsKey(it) }
         val fetched = repository.getFullMessagesByIds(missingIds)
         val combinedMessages = existingFullMessages + fetched
 
-        val history = limitedSummaries.mapNotNull { summary ->
+        val history = messageSummaries.mapNotNull { summary ->
             val full = combinedMessages[summary.id] ?: return@mapNotNull null
             val role = if (full.chatMessage.role == "model" || full.chatMessage.role == "assistant") "assistant" else "user"
             val effectiveText = full.displayText
@@ -97,9 +90,5 @@ class ConversationHistoryBuilder(
         historyB.add(userMsg)
 
         Pair(historyA, historyB)
-    }
-
-    companion object {
-        const val DEFAULT_MAX_HISTORY_MESSAGES = 100
     }
 }

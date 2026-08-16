@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlin.math.max
 
@@ -14,8 +15,10 @@ class LiteLlmPricingRepository(
     private val apiService: LiteLlmPricingApiService
 ) {
     private val cacheMutex = Mutex()
-    private var cachedPrices: Map<String, LiteLlmModelPrice> = emptyMap()
+    private var cachedCatalog: Map<String, LiteLlmModelCatalogEntry> = emptyMap()
+    private var visionByBasename: Map<String, Boolean> = emptyMap()
     private var lastFetchedAtMs: Long = 0L
+    private var catalogOverriddenForTests: Boolean = false
 
     suspend fun estimateCostUsd(
         provider: String,
@@ -36,24 +39,48 @@ class LiteLlmPricingRepository(
         return@withContext if (total.isFinite() && total >= 0.0) total else null
     }
 
-    private suspend fun resolvePrice(provider: String, model: String): LiteLlmModelPrice? {
+    suspend fun modelSupportsVision(provider: String, model: String): Boolean = withContext(Dispatchers.IO) {
         ensureCatalogLoaded()
-        if (cachedPrices.isEmpty()) return null
+        if (cachedCatalog.isEmpty()) return@withContext false
+
         val candidates = buildLookupCandidates(provider, model)
         for (candidate in candidates) {
-            cachedPrices[candidate]?.let { return it }
+            cachedCatalog[candidate]?.let { entry ->
+                return@withContext entry.supportsVision == true
+            }
+        }
+
+        if (provider.trim().uppercase() == "SUPERGROK") {
+            SuperGrokModelCatalog.modelFor(model)?.let { catalogModel ->
+                return@withContext catalogModel.supportsVision
+            }
+        }
+
+        val basename = modelBasename(model)
+        if (basename.isEmpty()) return@withContext false
+        return@withContext visionByBasename[basename] == true
+    }
+
+    private suspend fun resolvePrice(provider: String, model: String): LiteLlmModelPrice? {
+        ensureCatalogLoaded()
+        if (cachedCatalog.isEmpty()) return null
+        val candidates = buildLookupCandidates(provider, model)
+        for (candidate in candidates) {
+            val entry = cachedCatalog[candidate] ?: continue
+            if (entry.hasPricing) return entry.price
         }
         return null
     }
 
     private suspend fun ensureCatalogLoaded(forceRefresh: Boolean = false) {
+        if (catalogOverriddenForTests) return
         val now = System.currentTimeMillis()
-        if (!forceRefresh && cachedPrices.isNotEmpty() && (now - lastFetchedAtMs) < CACHE_TTL_MS) {
+        if (!forceRefresh && cachedCatalog.isNotEmpty() && (now - lastFetchedAtMs) < CACHE_TTL_MS) {
             return
         }
         cacheMutex.withLock {
             val freshNow = System.currentTimeMillis()
-            if (!forceRefresh && cachedPrices.isNotEmpty() && (freshNow - lastFetchedAtMs) < CACHE_TTL_MS) {
+            if (!forceRefresh && cachedCatalog.isNotEmpty() && (freshNow - lastFetchedAtMs) < CACHE_TTL_MS) {
                 return
             }
             runCatching {
@@ -64,8 +91,9 @@ class LiteLlmPricingRepository(
                 response.body().orEmpty()
             }.onSuccess { json ->
                 val parsed = parseCatalog(json)
-                if (parsed.isNotEmpty()) {
-                    cachedPrices = parsed
+                if (parsed.catalog.isNotEmpty()) {
+                    cachedCatalog = parsed.catalog
+                    visionByBasename = parsed.visionByBasename
                     lastFetchedAtMs = System.currentTimeMillis()
                 }
             }.onFailure { err ->
@@ -74,8 +102,9 @@ class LiteLlmPricingRepository(
         }
     }
 
-    private fun parseCatalog(root: JsonObject): Map<String, LiteLlmModelPrice> {
-        val output = mutableMapOf<String, LiteLlmModelPrice>()
+    internal fun parseCatalog(root: JsonObject): ParsedCatalog {
+        val output = mutableMapOf<String, LiteLlmModelCatalogEntry>()
+        val visionByBasename = mutableMapOf<String, Boolean>()
         root.forEach { (rawKey, rawValue) ->
             val key = rawKey.trim().lowercase()
             if (key == "sample_spec") return@forEach
@@ -85,11 +114,32 @@ class LiteLlmPricingRepository(
                 outputCostPerToken = obj.doubleValue("output_cost_per_token"),
                 outputCostPerReasoningToken = obj.doubleValue("output_cost_per_reasoning_token")
             )
-            if (price.inputCostPerToken != null || price.outputCostPerToken != null || price.outputCostPerReasoningToken != null) {
-                output[key] = price
+            val supportsVision = obj.boolValue("supports_vision")
+            val hasPricing =
+                price.inputCostPerToken != null ||
+                    price.outputCostPerToken != null ||
+                    price.outputCostPerReasoningToken != null
+            if (!hasPricing && supportsVision == null) return@forEach
+
+            output[key] = LiteLlmModelCatalogEntry(price = price, supportsVision = supportsVision)
+            if (supportsVision == true) {
+                val basename = modelBasename(key)
+                if (basename.isNotEmpty()) {
+                    visionByBasename[basename] = true
+                }
             }
         }
-        return output
+        return ParsedCatalog(catalog = output, visionByBasename = visionByBasename)
+    }
+
+    internal fun replaceCatalogForTests(
+        catalog: Map<String, LiteLlmModelCatalogEntry>,
+        visionByBasename: Map<String, Boolean> = emptyMap()
+    ) {
+        cachedCatalog = catalog
+        this.visionByBasename = visionByBasename
+        lastFetchedAtMs = System.currentTimeMillis()
+        catalogOverriddenForTests = true
     }
 
     private fun buildLookupCandidates(provider: String, model: String): List<String> {
@@ -153,9 +203,27 @@ class LiteLlmPricingRepository(
         }
     }
 
+    private fun modelBasename(model: String): String {
+        val cleaned = model.trim().removePrefix("/").lowercase()
+        if (cleaned.isEmpty()) return ""
+        val canonical = cleaned.substringBefore("@")
+        val withoutVariant = canonical.substringBefore(":")
+        return withoutVariant.substringAfterLast('/').ifEmpty { withoutVariant }
+    }
+
     private fun JsonObject.doubleValue(key: String): Double? {
         val primitive = this[key] as? JsonPrimitive ?: return null
         return primitive.contentOrNull?.toDoubleOrNull()
+    }
+
+    private fun JsonObject.boolValue(key: String): Boolean? {
+        val primitive = this[key] as? JsonPrimitive ?: return null
+        primitive.booleanOrNull?.let { return it }
+        return when (primitive.contentOrNull?.trim()?.lowercase()) {
+            "true" -> true
+            "false" -> false
+            else -> null
+        }
     }
 
     private fun JsonObject?.orEmpty(): JsonObject = this ?: JsonObject(emptyMap())
@@ -169,4 +237,19 @@ data class LiteLlmModelPrice(
     val inputCostPerToken: Double?,
     val outputCostPerToken: Double?,
     val outputCostPerReasoningToken: Double?
+)
+
+data class LiteLlmModelCatalogEntry(
+    val price: LiteLlmModelPrice,
+    val supportsVision: Boolean?
+) {
+    val hasPricing: Boolean
+        get() = price.inputCostPerToken != null ||
+            price.outputCostPerToken != null ||
+            price.outputCostPerReasoningToken != null
+}
+
+data class ParsedCatalog(
+    val catalog: Map<String, LiteLlmModelCatalogEntry>,
+    val visionByBasename: Map<String, Boolean>
 )

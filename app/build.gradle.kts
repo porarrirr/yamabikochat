@@ -139,10 +139,9 @@ dependencies {
 
     // Retrofit for Networking
     implementation(libs.retrofit)
-    implementation(libs.retrofit.converter.gson)
     implementation(libs.retrofit.kotlinx.serialization.converter)
     implementation(libs.okhttp)
-    implementation(libs.okhttp.dnsoverhttps)
+    implementation(libs.gson)
     implementation(libs.kotlinx.serialization.json)
 
     // Room for Database

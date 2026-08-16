@@ -20,6 +20,7 @@ class FusionService(
     private val settingsProvider: suspend () -> Settings,
     private val providerGateway: ProviderGateway,
     private val estimateCost: suspend (provider: String, model: String, usage: ProviderUsage?) -> Double? = { _, _, _ -> null },
+    private val modelSupportsVision: suspend (provider: String, model: String) -> Boolean = { _, _ -> false },
     private val traceStore: FusionTraceStore? = null,
     private val requestSettingsResolver: ProviderRequestSettingsResolver,
     private val skillRepository: AgentSkillRepository? = null,
@@ -132,6 +133,9 @@ class FusionService(
         onProgress: FusionOrchestratorProgressHandler? = null
     ): FusionJudgeOutcome {
         val settings = settingsProvider()
+        val visionSupportByModel = request.panelModels.associate { panel ->
+            panel.modelId to modelSupportsVision(panel.provider, panel.modelId)
+        }
         return orchestrator.runThroughJudge(
             request = request,
             context = context,
@@ -148,6 +152,7 @@ class FusionService(
                         ProviderRequestMessage(role = it.role, content = it.text, attachments = it.attachments)
                     },
                     userAttachments = userAttachments,
+                    supportsVision = visionSupportByModel[model.modelId] ?: false,
                     conversationId = context.conversationId?.toString()
                 )
             },

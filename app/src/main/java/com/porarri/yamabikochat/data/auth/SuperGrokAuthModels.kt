@@ -1,35 +1,11 @@
 package com.porarri.yamabikochat.data.auth
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.util.Base64
-
-@Serializable
-data class SuperGrokAuthJson(
-    val tokens: SuperGrokTokenData? = null,
-    @SerialName("expires_at_epoch_ms")
-    val expiresAtEpochMs: Long? = null,
-    @SerialName("last_refresh")
-    val lastRefresh: String? = null
-)
-
-@Serializable
-data class SuperGrokTokenData(
-    @SerialName("id_token")
-    val idToken: String? = null,
-    @SerialName("access_token")
-    val accessToken: String,
-    @SerialName("refresh_token")
-    val refreshToken: String,
-    @SerialName("token_type")
-    val tokenType: String? = null,
-    val scope: String? = null
-)
 
 data class SuperGrokIdTokenInfo(
     val email: String? = null
@@ -157,54 +133,3 @@ data class SuperGrokAuthState(
     val lastRefreshIso8601: String? = null,
     val pendingDeviceCode: SuperGrokDeviceCodeChallenge? = null
 )
-
-@Serializable
-data class SuperGrokDeviceCodeResponse(
-    @SerialName("device_code")
-    val deviceCode: String,
-    @SerialName("user_code")
-    val userCode: String,
-    @SerialName("verification_uri")
-    val verificationUri: String,
-    @SerialName("verification_uri_complete")
-    val verificationUriComplete: String? = null,
-    @SerialName("expires_in")
-    val expiresIn: Int? = null,
-    val interval: Int? = null
-)
-
-@Serializable
-data class SuperGrokTokenResponse(
-    @SerialName("access_token")
-    val accessToken: String,
-    @SerialName("refresh_token")
-    val refreshToken: String,
-    @SerialName("id_token")
-    val idToken: String? = null,
-    @SerialName("token_type")
-    val tokenType: String? = null,
-    @SerialName("expires_in")
-    val expiresIn: Int? = null,
-    val scope: String? = null
-)
-
-@Serializable
-data class SuperGrokDeviceTokenErrorBody(
-    val error: String? = null,
-    @SerialName("error_description")
-    val errorDescription: String? = null
-)
-
-class SuperGrokAuthCallbackError(
-    override val message: String
-) : IllegalStateException(message) {
-    companion object {
-        fun portInUse(): SuperGrokAuthCallbackError = SuperGrokAuthCallbackError(
-            "SuperGrok OAuth callback port 56121 is in use. Close OpenCode or other Grok clients and try again."
-        )
-
-        fun portMismatch(expected: Int, actual: Int): SuperGrokAuthCallbackError = SuperGrokAuthCallbackError(
-            "SuperGrok OAuth requires port $expected but bound to $actual. Please try again."
-        )
-    }
-}

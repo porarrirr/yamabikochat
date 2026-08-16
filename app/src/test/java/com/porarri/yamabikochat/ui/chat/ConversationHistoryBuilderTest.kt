@@ -42,6 +42,39 @@ class ConversationHistoryBuilderTest {
         assertEquals("next question", result.messages[2].content)
     }
 
+    @Test
+    fun keepsMoreThanOneHundredHistoryMessages() = runBlocking {
+        val summaries = (1L..120L).map { id ->
+            val role = if (id % 2L == 1L) "user" else "model"
+            val message = ChatMessage(id = id, conversationId = 10, role = role, text = "m$id")
+            summary(message)
+        }
+        val fullMessages = summaries.associate { item ->
+            val message = ChatMessage(
+                id = item.id,
+                conversationId = item.conversationId,
+                role = item.role,
+                text = item.textPreview
+            )
+            item.id to FullChatMessage(chatMessage = message)
+        }
+        val builder = ConversationHistoryBuilder(
+            repository = mockk<ChatRepository>(relaxed = true),
+            ioDispatcher = Dispatchers.Unconfined
+        )
+
+        val result = builder.buildStandardHistory(
+            text = "latest",
+            attachmentsToSend = emptyList(),
+            messageSummaries = summaries,
+            existingFullMessages = fullMessages
+        )
+
+        assertEquals(121, result.messages.size)
+        assertEquals("m1", result.messages.first().content)
+        assertEquals("latest", result.messages.last().content)
+    }
+
     private fun summary(message: ChatMessage) = ChatMessageSummary(
         id = message.id,
         conversationId = message.conversationId,

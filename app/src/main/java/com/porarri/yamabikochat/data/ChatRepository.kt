@@ -50,7 +50,6 @@ import com.porarri.yamabikochat.data.modelsdev.CatalogLoadState
 import com.porarri.yamabikochat.data.modelsdev.ModelsDevCatalogRepository
 import com.porarri.yamabikochat.data.modelsdev.ProviderReference
 import com.porarri.yamabikochat.data.remote.LiteLlmPricingRepository
-import com.porarri.yamabikochat.data.remote.ProviderCatalog
 import com.porarri.yamabikochat.data.repositories.ProviderGateway
 import com.porarri.yamabikochat.data.repositories.ProviderRequestSettingsResolver
 import com.porarri.yamabikochat.data.skills.AgentSkillPromptComposer
@@ -95,6 +94,9 @@ class ChatRepository(
                 outputTokens = usage?.outputTokens ?: 0,
                 reasoningTokens = usage?.reasoningTokens
             )
+        },
+        modelSupportsVision = { provider, model ->
+            pricingRepository.modelSupportsVision(provider, model)
         },
         traceStore = fusionTraceStore,
         requestSettingsResolver = requestSettingsResolver,
@@ -317,6 +319,32 @@ class ChatRepository(
         databaseRepository.observeTokenUsageDaily(sinceEpochMs)
     // endregion
 
+    suspend fun resolveCanAttachImages(
+        settings: Settings,
+        conversationProvider: String,
+        conversationModel: String
+    ): Boolean {
+        if (settings.isDualModeEnabled) {
+            val supportsA = pricingRepository.modelSupportsVision(settings.dualProviderA, settings.dualModelA)
+            val supportsB = pricingRepository.modelSupportsVision(settings.dualProviderB, settings.dualModelB)
+            return supportsA && supportsB
+        }
+        if (settings.isAutoConversationEnabled) {
+            val supportsA = pricingRepository.modelSupportsVision(settings.autoProviderA, settings.autoModelA)
+            val supportsB = pricingRepository.modelSupportsVision(settings.autoProviderB, settings.autoModelB)
+            return supportsA && supportsB
+        }
+        if (settings.isFusionModeEnabled) {
+            val preset = runCatching {
+                FusionPresetLoader.resolveDefinition(settings.fusionCustomPresetJSON)
+            }.getOrNull() ?: return false
+            return preset.panelModels.all { panel ->
+                pricingRepository.modelSupportsVision(panel.provider, panel.modelId)
+            }
+        }
+        return pricingRepository.modelSupportsVision(conversationProvider, conversationModel)
+    }
+
     // region Provider Gateway Operations
     suspend fun buildProviderRequest(
         conversation: Conversation,
@@ -325,7 +353,8 @@ class ChatRepository(
         model: String,
         messages: List<ProviderRequestMessage>,
         systemPrompt: String?,
-        context: Settings.ReasoningContext = Settings.ReasoningContext.DEFAULT
+        context: Settings.ReasoningContext = Settings.ReasoningContext.DEFAULT,
+        promptCacheKey: String? = null
     ): ProviderRequest {
         val resolved = requestSettingsResolver.resolve(
             settings = settings,
@@ -334,17 +363,24 @@ class ChatRepository(
             context = context
         )
 
+        val cacheKey = promptCacheKey?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "conversation-${conversation.id}"
         val supportsTools = ProviderReference(provider).isModelsDev ||
                 LLMProvider.fromRawOrDefault(provider).supportsClientWebSearchTool
         val skillApplied = AgentSkillPromptComposer.apply(
             repository = agentSkillRepository,
             messages = messages,
-            conversationId = "conversation-${conversation.id}",
+            conversationId = cacheKey,
             clientToolsSupported = supportsTools
         )
 
         val metadata = resolved.metadata.toMutableMap()
-        metadata["promptCacheKey"] = "conversation-${conversation.id}"
+        metadata["provider"] = provider
+        metadata["promptCacheKey"] = cacheKey
+        metadata["supportsVision"] = visionMetadataFlag(provider, model)
+        if (provider.equals("CODEX_AUTH", ignoreCase = true)) {
+            metadata["codexSessionId"] = databaseRepository.getOrCreateCodexSessionId(conversation.id)
+        }
 
         return ProviderRequest(
             model = model,
@@ -375,7 +411,8 @@ class ChatRepository(
         provider: String,
         systemPrompt: String,
         conversationHistory: List<ProviderRequestMessage>,
-        reasoningContext: Settings.ReasoningContext
+        reasoningContext: Settings.ReasoningContext,
+        promptCacheKey: String? = null
     ): ProviderResponse {
         val settings = databaseRepository.getLatestSettings() ?: Settings()
         val resolved = requestSettingsResolver.resolve(
@@ -384,6 +421,10 @@ class ChatRepository(
             model = model,
             context = reasoningContext
         )
+        val metadata = resolved.metadata.toMutableMap()
+        metadata["provider"] = provider
+        promptCacheKey?.trim()?.takeIf { it.isNotEmpty() }?.let { metadata["promptCacheKey"] = it }
+        metadata["supportsVision"] = visionMetadataFlag(provider, model)
         val request = ProviderRequest(
             model = model,
             messages = conversationHistory,
@@ -392,10 +433,13 @@ class ChatRepository(
             tools = resolved.tools,
             thinking = resolved.thinking,
             provider = resolved.routing,
-            metadata = resolved.metadata
+            metadata = metadata
         )
         return providerGateway.generate(request, provider)
     }
+
+    private suspend fun visionMetadataFlag(provider: String, model: String): String =
+        if (pricingRepository.modelSupportsVision(provider, model)) "true" else "false"
     // endregion
 
     // region Fusion
