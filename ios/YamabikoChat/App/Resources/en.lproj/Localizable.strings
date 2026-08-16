@@ -61,6 +61,7 @@
 "あなたは親しみやすい日本語AIアシスタントです。自然で温かみのある会話を心がけてください。" = "You are a friendly Japanese AI assistant. Keep the conversation natural and warm.";
 "あなたは論理的で分析的なAIアシスタントです。深く考えながら詳細に回答してください。" = "You are a logical, analytical AI assistant. Think deeply and answer in detail.";
 "アクセントカラー" = "Accent Color";
+"エラー" = "Error";
 "エラー: %@" = "Error: %@";
 "オレンジ" = "Orange";
 "キャンセル" = "Cancel";
@@ -480,3 +481,10 @@
 "%@ tok/s" = "%@ tok/s";
 "キャッシュヒット %d%%" = "Cache hit %d%%";
 "入力 %@ tok · 出力 %@ tok" = "Input %@ tok · Output %@ tok";
+"利用上限に達しました" = "Usage limit reached";
+"プランまたは課金設定を確認してください。" = "Check your plan or billing settings.";
+"認証に失敗しました" = "Authentication failed";
+"ログインまたはAPIキーを確認してください。" = "Check your sign-in or API key.";
+"サーバーエラー" = "Server error";
+"しばらくしてから再試行してください。" = "Please try again in a moment.";
+"応答を取得できませんでした" = "Couldn't get a response";

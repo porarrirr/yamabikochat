@@ -54,6 +54,9 @@ import com.porarri.yamabikochat.ui.settings.SettingsViewModel
 import com.porarri.yamabikochat.ui.components.DualResponseDisplay
 import com.porarri.yamabikochat.ui.chat.MarkdownText
 import com.porarri.yamabikochat.ui.chat.components.ChatMessageInputBar
+import com.porarri.yamabikochat.ui.chat.components.ChatErrorCard
+import com.porarri.yamabikochat.ui.chat.components.rememberUserFacingErrorCopy
+import com.porarri.yamabikochat.utils.UserFacingErrorFormatter
 import com.porarri.yamabikochat.ui.fusion.FusionDetailSheet
 import com.porarri.yamabikochat.ui.fusion.FusionMessageSummary
 import com.porarri.yamabikochat.ui.fusion.FusionProgressView
@@ -170,6 +173,7 @@ fun ChatScreen(
     var text by rememberSaveable { mutableStateOf(initialPrompt ?: "") }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val errorCopy = rememberUserFacingErrorCopy()
 
     val imagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents(),
@@ -195,9 +199,10 @@ fun ChatScreen(
     // エラーメッセージ表示用のSnackbar
     LaunchedEffect(errorMessage) {
         errorMessage?.let { message ->
+            val formatted = UserFacingErrorFormatter.format(message, errorCopy)
             snackbarHostState.showSnackbar(
-                message = message,
-                actionLabel = "閉じる"
+                message = formatted.summary,
+                actionLabel = errorCopy.dismiss
             )
             viewModel.clearErrorMessage()
         }
@@ -1179,6 +1184,34 @@ fun ChatMessageItemLegacy(
                                 }
                             }
                         }
+                    } else if (UserFacingErrorFormatter.looksLikeChatError(
+                            if (autoConvInfo.isAutoConversation) autoConvInfo.cleanContent else displayText
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            ChatErrorCard(
+                                text = if (autoConvInfo.isAutoConversation) {
+                                    autoConvInfo.cleanContent
+                                } else {
+                                    displayText
+                                }
+                            )
+                            IconButton(
+                                onClick = { showMenu = true },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(24.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.MoreVert,
+                                    contentDescription = "More options",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
                     } else {
                         Box(
                             modifier = Modifier.fillMaxWidth()
@@ -1590,6 +1623,8 @@ fun ChatMessageItem(
                                             Text("Save")
                                         }
                                     }
+                                } else if (UserFacingErrorFormatter.looksLikeChatError(contentText)) {
+                                    ChatErrorCard(text = contentText)
                                 } else {
                                     MarkdownText(
                                         markdown = contentText,

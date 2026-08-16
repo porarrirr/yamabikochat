@@ -15,6 +15,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import com.porarri.yamabikochat.data.local.SplitLayoutType
 import com.porarri.yamabikochat.ui.chat.MarkdownText
+import com.porarri.yamabikochat.ui.chat.components.ChatErrorCard
+import com.porarri.yamabikochat.utils.UserFacingErrorFormatter
 
 @Composable
 fun DualSplitLayout(
@@ -289,6 +291,11 @@ private fun ResponsePanel(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxSize()
+                )
+            } else if (UserFacingErrorFormatter.looksLikeChatError(content)) {
+                ChatErrorCard(
+                    text = content,
+                    modifier = Modifier.fillMaxWidth()
                 )
             } else {
                 LazyColumn(

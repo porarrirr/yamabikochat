@@ -63,7 +63,7 @@ final class ChatStreamSessionTests: XCTestCase {
             let messages = try conversations.fetchMessages(conversationId: conversationId)
             XCTAssertEqual(
                 messages.last?.text,
-                L10n.format("エラー: %@", streamError.localizedDescription)
+                UserFacingErrorFormatter.placeholder(for: streamError)
             )
         } catch {
             XCTFail("Unexpected error: \(error)")

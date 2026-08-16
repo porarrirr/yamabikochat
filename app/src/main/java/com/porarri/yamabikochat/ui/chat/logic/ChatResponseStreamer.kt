@@ -8,6 +8,7 @@ import com.porarri.yamabikochat.data.local.FullChatMessage
 import com.porarri.yamabikochat.data.model.ProviderRequest
 import com.porarri.yamabikochat.data.model.ProviderStreamEvent
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
+import com.porarri.yamabikochat.utils.UserFacingErrorFormatter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -171,7 +172,7 @@ class ChatResponseStreamer(
                 }
             } catch (e: Exception) {
                 DiagnosticsLogger.log("Streaming failed messageId=$messageId", e)
-                val errText = textAccumulator.ifBlank { "エラー: ${e.message ?: "通信に失敗しました"}" }
+                val errText = textAccumulator.ifBlank { UserFacingErrorFormatter.placeholder(e) }
                 if (activeVariant != null) {
                     repository.updateMessageVariant(activeVariant!!.copy(text = errText))
                 } else {

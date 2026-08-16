@@ -47,4 +47,14 @@
     <string name="integrated_possible">統合可能</string>
     <string name="system_prompt_enter">システムプロンプトを入力してください。</string>
     <string name="api_model">API / モデル</string>
+    <string name="user_facing_error_title">エラー</string>
+    <string name="user_facing_error_quota_title">利用上限に達しました</string>
+    <string name="user_facing_error_quota_summary">プランまたは課金設定を確認してください。</string>
+    <string name="user_facing_error_auth_title">認証に失敗しました</string>
+    <string name="user_facing_error_auth_summary">ログインまたはAPIキーを確認してください。</string>
+    <string name="user_facing_error_server_title">サーバーエラー</string>
+    <string name="user_facing_error_server_summary">しばらくしてから再試行してください。</string>
+    <string name="user_facing_error_fallback">応答を取得できませんでした</string>
+    <string name="user_facing_error_details">詳細</string>
+    <string name="user_facing_error_dismiss">閉じる</string>
 </resources>

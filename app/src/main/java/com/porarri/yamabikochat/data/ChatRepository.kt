@@ -59,6 +59,7 @@ import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import com.porarri.yamabikochat.utils.FileValidationUtils
 import com.porarri.yamabikochat.utils.SecurePreferencesManager
 import com.porarri.yamabikochat.utils.SqlLikeUtils
+import com.porarri.yamabikochat.utils.UserFacingErrorFormatter
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -516,7 +517,7 @@ class ChatRepository(
             val response = try {
                 providerGateway.generate(fallbackRequest, fallbackModel.provider)
             } catch (err: Exception) {
-                ProviderResponse(text = "エラー: ${err.message ?: "通信に失敗しました"}")
+                ProviderResponse(text = UserFacingErrorFormatter.placeholder(err))
             }
             val finalText = response.text.ifBlank { "Fusion フォールバックに失敗しました。" }
             val existing = databaseRepository.getFullMessageById(assistantMessageId)?.chatMessage
@@ -624,7 +625,7 @@ class ChatRepository(
                 usedFallback = false
             )
         } catch (e: Exception) {
-            finalText = judgeOutcome.staticFallbackAnswer.ifBlank { "エラー: ${e.message ?: e}" }
+            finalText = judgeOutcome.staticFallbackAnswer.ifBlank { UserFacingErrorFormatter.placeholder(e) }
             synthesisResult = SynthesisPhaseResult(
                 modelId = judgeOutcome.synthesizerModel.modelId,
                 provider = judgeOutcome.synthesizerModel.provider.uppercase(),

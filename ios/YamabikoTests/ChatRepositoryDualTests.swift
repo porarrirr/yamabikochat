@@ -101,7 +101,7 @@ final class ChatRepositoryDualTests: XCTestCase {
         XCTAssertEqual(result.modelAText, "response-model-a")
         XCTAssertEqual(
             result.modelBText,
-            L10n.format("エラー: %@", "Response parse failed: forced failure")
+            UserFacingErrorFormatter.placeholder(for: ProviderClientError.parseFailure("forced failure"))
         )
         let rows = try fixture.conversations.fetchDualMessages(conversationId: conversationID)
         XCTAssertEqual(rows.count, 2)

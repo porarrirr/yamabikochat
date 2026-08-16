@@ -264,6 +264,10 @@ final class ChatViewModel: ObservableObject {
         errorMessage = nil
     }
 
+    func clearErrorMessage() {
+        errorMessage = nil
+    }
+
     func clearAttachments() {
         attachments.removeAll()
         errorMessage = nil

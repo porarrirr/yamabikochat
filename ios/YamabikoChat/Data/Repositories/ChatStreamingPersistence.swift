@@ -76,7 +76,7 @@ struct ChatStreamSessionTarget {
     }
 
     func writeErrorPlaceholder(_ error: Error) throws {
-        let placeholder = L10n.format("エラー: %@", error.localizedDescription)
+        let placeholder = UserFacingErrorFormatter.placeholder(for: error)
         switch kind {
         case let .message(messageId):
             try conversations.updateMessageText(messageId: messageId, text: placeholder)

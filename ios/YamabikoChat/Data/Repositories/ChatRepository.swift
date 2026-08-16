@@ -2147,7 +2147,7 @@ final class ChatRepository {
             )
         } catch {
             return DualSideResult(
-                text: L10n.format("エラー: %@", error.localizedDescription),
+                text: UserFacingErrorFormatter.placeholder(for: error),
                 reasoning: nil,
                 usage: nil,
                 usageSamples: nil,

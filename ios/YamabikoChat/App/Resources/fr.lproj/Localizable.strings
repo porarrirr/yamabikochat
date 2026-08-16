@@ -61,6 +61,7 @@
 "あなたは親しみやすい日本語AIアシスタントです。自然で温かみのある会話を心がけてください。" = "Vous êtes un assistant IA japonais amical. Gardez la conversation naturelle et chaleureuse.";
 "あなたは論理的で分析的なAIアシスタントです。深く考えながら詳細に回答してください。" = "Vous êtes un assistant IA logique et analytique. Réfléchissez profondément et répondez en détail.";
 "アクセントカラー" = "Couleur d'accentuation";
+"エラー" = "Erreur";
 "エラー: %@" = "Erreur : %@";
 "オレンジ" = "Orange";
 "キャンセル" = "Annuler";
@@ -437,3 +438,11 @@
 "%@ tok/s" = "%@ tok/s";
 "キャッシュヒット %d%%" = "Cache %d%%";
 "入力 %@ tok · 出力 %@ tok" = "Entrée %@ tok · Sortie %@ tok";
+"利用上限に達しました" = "Limite d’utilisation atteinte";
+"プランまたは課金設定を確認してください。" = "Vérifiez votre forfait ou les paramètres de facturation.";
+"認証に失敗しました" = "Échec de l’authentification";
+"ログインまたはAPIキーを確認してください。" = "Vérifiez la connexion ou la clé API.";
+"サーバーエラー" = "Erreur serveur";
+"しばらくしてから再試行してください。" = "Veuillez réessayer dans un instant.";
+"応答を取得できませんでした" = "Impossible d’obtenir une réponse";
+"詳細" = "Détails";

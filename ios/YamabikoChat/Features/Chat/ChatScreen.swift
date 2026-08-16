@@ -205,6 +205,16 @@ struct ChatScreen: View {
                         .padding(.top, 5)
                 }
 
+                if let error = viewModel.errorMessage {
+                    ChatErrorToast(
+                        formatted: UserFacingErrorFormatter.format(error),
+                        onDismiss: { viewModel.clearErrorMessage() }
+                    )
+                    .id(error)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                }
+
                 composerBar
                     .padding(.horizontal, 12)
                     .padding(.top, 8)
@@ -253,19 +263,6 @@ struct ChatScreen: View {
             guard !items.isEmpty else { return }
             Task {
                 await importSelectedPhotos(items)
-            }
-        }
-        .overlay(alignment: .bottomLeading) {
-            if let error = viewModel.errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.red.opacity(0.86))
-                    .clipShape(Capsule())
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 86)
             }
         }
     }
@@ -1211,17 +1208,21 @@ private struct MessageBubble: View {
                         .buttonStyle(.plain)
                     }
 
-                    let svgBlocks = SvgCodeExtractor.extract(from: responseText)
-                    let htmlBlocks = HtmlCodeExtractor.extract(from: responseText)
+                    let isChatError = UserFacingErrorFormatter.looksLikeChatError(responseText)
+                    let svgBlocks = isChatError ? [] : SvgCodeExtractor.extract(from: responseText)
+                    let htmlBlocks = isChatError ? [] : HtmlCodeExtractor.extract(from: responseText)
                     let mediaBlocks = (
                         svgBlocks.map(ExtractedMediaBlock.svg) +
                         htmlBlocks.map(ExtractedMediaBlock.html)
                     ).sorted { $0.startIndex < $1.startIndex }
-                    let markdownText = ExtractedFenceRemover.remove(
-                        from: responseText,
-                        ranges: mediaBlocks.map { (start: $0.startIndex, end: $0.endIndex) }
-                    )
-                    let hasAssistantBubbleContent = !attachmentItems.isEmpty
+                    let markdownText = isChatError
+                        ? ""
+                        : ExtractedFenceRemover.remove(
+                            from: responseText,
+                            ranges: mediaBlocks.map { (start: $0.startIndex, end: $0.endIndex) }
+                        )
+                    let hasAssistantBubbleContent = isChatError
+                        || !attachmentItems.isEmpty
                         || !mediaBlocks.isEmpty
                         || !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
@@ -1243,24 +1244,28 @@ private struct MessageBubble: View {
                                     )
                                 }
 
-                                if !mediaBlocks.isEmpty {
-                                    ForEach(mediaBlocks) { block in
-                                        switch block {
-                                        case .html(let htmlBlock):
-                                            HtmlPreviewCard(block: htmlBlock)
-                                        case .svg(let svgBlock):
-                                            SvgPreviewCard(block: svgBlock)
+                                if isChatError {
+                                    ChatErrorCard(text: responseText)
+                                } else {
+                                    if !mediaBlocks.isEmpty {
+                                        ForEach(mediaBlocks) { block in
+                                            switch block {
+                                            case .html(let htmlBlock):
+                                                HtmlPreviewCard(block: htmlBlock)
+                                            case .svg(let svgBlock):
+                                                SvgPreviewCard(block: svgBlock)
+                                            }
                                         }
                                     }
-                                }
 
-                                if !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    MathMarkdownView(
-                                        markdownText: markdownText,
-                                        mathRenderingEnabled: mathRenderingEnabled,
-                                        isStreaming: isActivelyStreaming
-                                    )
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    if !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        MathMarkdownView(
+                                            markdownText: markdownText,
+                                            mathRenderingEnabled: mathRenderingEnabled,
+                                            isStreaming: isActivelyStreaming
+                                        )
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1442,14 +1447,22 @@ private struct DualMessageCard: View {
                     Text("A · \(ProviderCatalog.displayName(for: message.providerA)) · \(message.modelAName)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text(modelAText)
-                        .textSelection(.enabled)
+                    if UserFacingErrorFormatter.looksLikeChatError(modelAText) {
+                        ChatErrorCard(text: modelAText)
+                    } else {
+                        Text(modelAText)
+                            .textSelection(.enabled)
+                    }
                     Divider()
                     Text("B · \(ProviderCatalog.displayName(for: message.providerB)) · \(message.modelBName)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text(modelBText)
-                        .textSelection(.enabled)
+                    if UserFacingErrorFormatter.looksLikeChatError(modelBText) {
+                        ChatErrorCard(text: modelBText)
+                    } else {
+                        Text(modelBText)
+                            .textSelection(.enabled)
+                    }
                 }
                 .padding(12)
                 .background(Color.chatDualCard)
@@ -1539,12 +1552,16 @@ private struct DualResponsePane: View {
                 }
             }
 
-            MathMarkdownView(
-                markdownText: content,
-                mathRenderingEnabled: mathRenderingEnabled,
-                isStreaming: false
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
+            if UserFacingErrorFormatter.looksLikeChatError(content) {
+                ChatErrorCard(text: content)
+            } else {
+                MathMarkdownView(
+                    markdownText: content,
+                    mathRenderingEnabled: mathRenderingEnabled,
+                    isStreaming: false
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
         .padding(10)

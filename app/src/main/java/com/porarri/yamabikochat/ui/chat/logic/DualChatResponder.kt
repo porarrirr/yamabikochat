@@ -4,6 +4,7 @@ import com.porarri.yamabikochat.data.ChatRepository
 import com.porarri.yamabikochat.data.model.ProviderRequest
 import com.porarri.yamabikochat.data.model.ProviderStreamEvent
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
+import com.porarri.yamabikochat.utils.UserFacingErrorFormatter
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
@@ -40,7 +41,7 @@ class DualChatResponder(
             )
         } catch (e: Exception) {
             DiagnosticsLogger.log("Dual generate request failed", e)
-            DualResponseResult.Failure(e.message ?: "通信に失敗しました")
+            DualResponseResult.Failure(UserFacingErrorFormatter.placeholder(e))
         }
     }
 
@@ -103,7 +104,7 @@ class DualChatResponder(
                     }
                 } catch (e: Exception) {
                     DiagnosticsLogger.log("Dual stream side A failed", e)
-                    textA.set(textA.get().ifBlank { "エラー: ${e.message ?: "通信に失敗しました"}" })
+                    textA.set(textA.get().ifBlank { UserFacingErrorFormatter.placeholder(e) })
                 }
             }
 
@@ -130,7 +131,7 @@ class DualChatResponder(
                     }
                 } catch (e: Exception) {
                     DiagnosticsLogger.log("Dual stream side B failed", e)
-                    textB.set(textB.get().ifBlank { "エラー: ${e.message ?: "通信に失敗しました"}" })
+                    textB.set(textB.get().ifBlank { UserFacingErrorFormatter.placeholder(e) })
                 }
             }
 
@@ -146,7 +147,7 @@ class DualChatResponder(
             )
         } catch (e: Exception) {
             DiagnosticsLogger.log("Dual stream request failed", e)
-            DualResponseResult.Failure(e.message ?: "通信に失敗しました")
+            DualResponseResult.Failure(UserFacingErrorFormatter.placeholder(e))
         }
     }
 
