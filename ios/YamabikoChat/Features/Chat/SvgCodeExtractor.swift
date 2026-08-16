@@ -71,8 +71,7 @@ enum SvgCodeExtractor {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard !content.isEmpty else { continue }
 
-            let isSvg = language.lowercased() == "svg" || isSvgContent(content)
-            guard isSvg else { continue }
+            guard shouldExtractFencedBlockAsSvg(language: language, content: content) else { continue }
 
             let start = match.range.location
             let end = match.range.location + match.range.length
@@ -118,6 +117,9 @@ enum SvgCodeExtractor {
             if isWithinCodeFence(text, startIndex: start) {
                 continue
             }
+            if isInsideHtmlDocument(text, startIndex: start) {
+                continue
+            }
             if overlapsExisting(range: match.range, existingBlocks: existingBlocks + blocks) {
                 continue
             }
@@ -161,9 +163,30 @@ enum SvgCodeExtractor {
         return fenceCount % 2 == 1
     }
 
-    private static func isSvgContent(_ content: String) -> Bool {
+    private static func shouldExtractFencedBlockAsSvg(language: String, content: String) -> Bool {
+        if isHtmlDocument(content) { return false }
+        guard isStandaloneSvg(content) else { return false }
+        if language.lowercased() == "svg" { return true }
+        return hasSvgGraphicsMarkers(content)
+    }
+
+    private static func isHtmlDocument(_ content: String) -> Bool {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = trimmed.lowercased()
+        if lower.contains("<!doctype html") { return true }
+        if firstMarkupTag(in: trimmed) == "html" { return true }
+        return lower.contains("<head")
+            && (lower.contains("<body") || lower.contains("<title") || lower.contains("<meta"))
+    }
+
+    private static func isStandaloneSvg(_ content: String) -> Bool {
         let lower = content.lowercased()
         guard lower.contains("<svg"), lower.contains("</svg>") else { return false }
+        return firstMarkupTag(in: content) == "svg"
+    }
+
+    private static func hasSvgGraphicsMarkers(_ content: String) -> Bool {
+        let lower = content.lowercased()
         return lower.contains("xmlns")
             || lower.contains("viewbox")
             || lower.contains("<path")
@@ -172,6 +195,83 @@ enum SvgCodeExtractor {
             || lower.contains("<line")
             || lower.contains("<polygon")
             || lower.contains("<polyline")
+    }
+
+    private static func firstMarkupTag(in content: String) -> String? {
+        var remaining = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if remaining.hasPrefix("\u{FEFF}") {
+            remaining.removeFirst()
+            remaining = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        while !remaining.isEmpty {
+            remaining = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lower = remaining.lowercased()
+            if lower.hasPrefix("<?xml") {
+                guard let end = remaining.range(of: "?>") else { return nil }
+                remaining = String(remaining[end.upperBound...])
+                continue
+            }
+            if remaining.hasPrefix("<!--") {
+                guard let end = remaining.range(of: "-->") else { return nil }
+                remaining = String(remaining[end.upperBound...])
+                continue
+            }
+            if lower.hasPrefix("<!doctype") {
+                guard let end = remaining.range(of: ">") else { return nil }
+                remaining = String(remaining[end.upperBound...])
+                continue
+            }
+            guard remaining.hasPrefix("<") else { return nil }
+
+            let nameStart = remaining.index(after: remaining.startIndex)
+            var nameEnd = nameStart
+            while nameEnd < remaining.endIndex {
+                let character = remaining[nameEnd]
+                if character.isWhitespace || character == ">" || character == "/" {
+                    break
+                }
+                nameEnd = remaining.index(after: nameEnd)
+            }
+            let name = remaining[nameStart..<nameEnd]
+            return name.isEmpty ? nil : name.lowercased()
+        }
+        return nil
+    }
+
+    private static func isInsideHtmlDocument(_ text: String, startIndex: Int) -> Bool {
+        guard startIndex > 0 else { return false }
+        let nsText = text as NSString
+        let before = nsText.substring(to: min(startIndex, nsText.length)).lowercased()
+        let after = startIndex < nsText.length
+            ? nsText.substring(from: min(startIndex, nsText.length)).lowercased()
+            : ""
+
+        if isOpenHtmlElement(in: before) {
+            return true
+        }
+
+        guard let doctypeRange = before.range(of: "<!doctype html") else {
+            return false
+        }
+        let afterDoctype = String(before[doctypeRange.lowerBound...])
+        guard !afterDoctype.contains("</html") else { return false }
+        return afterDoctype.contains("<head")
+            || afterDoctype.contains("<body")
+            || afterDoctype.contains("<title")
+            || afterDoctype.contains("<meta")
+            || after.contains("</html")
+            || after.contains("</body")
+    }
+
+    private static func isOpenHtmlElement(in before: String) -> Bool {
+        guard let open = before.range(of: "<html", options: .backwards) else {
+            return false
+        }
+        if let close = before.range(of: "</html", options: .backwards) {
+            return open.lowerBound > close.lowerBound
+        }
+        return true
     }
 
     private static func generateFilename(from content: String) -> String {

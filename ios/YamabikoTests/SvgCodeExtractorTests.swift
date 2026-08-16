@@ -90,4 +90,98 @@ final class SvgCodeExtractorTests: XCTestCase {
         XCTAssertTrue(first[0].filename.hasPrefix("Preview_"))
         XCTAssertTrue(first[0].filename.hasSuffix(".svg"))
     }
+
+    func testDoesNotExtractFencedHtmlWithNestedSvg() {
+        let text = """
+        ```html
+        <!DOCTYPE html>
+        <html lang="ja">
+        <head>
+        <title>解説 2008 物理</title>
+        </head>
+        <body>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+            <circle cx="5" cy="5" r="4" />
+        </svg>
+        </body>
+        </html>
+        ```
+        """
+
+        let blocks = SvgCodeExtractor.extract(from: text)
+
+        XCTAssertTrue(blocks.isEmpty)
+    }
+
+    func testDoesNotExtractHtmlDocumentLabeledAsSvg() {
+        let text = """
+        ```svg
+        <!DOCTYPE html>
+        <html lang="ja">
+        <head>
+        <meta charset="UTF-8">
+        <title>【解説】2008 甲南大 物理 (一部)- 電気力線と電場</title>
+        </head>
+        <body>
+        <p>ると、</p>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 20">
+            <text x="0" y="15">4\\pi k_0 q</text>
+        </svg>
+        </body>
+        </html>
+        ```
+        """
+
+        let blocks = SvgCodeExtractor.extract(from: text)
+
+        XCTAssertTrue(blocks.isEmpty)
+    }
+
+    func testDoesNotExtractInlineSvgInsideUnfencedHtmlDocument() {
+        let text = """
+        <!DOCTYPE html>
+        <html>
+        <head><title>2008 physics</title></head>
+        <body>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+            <rect width="10" height="10" />
+        </svg>
+        </body>
+        </html>
+        """
+
+        let blocks = SvgCodeExtractor.extract(from: text)
+
+        XCTAssertTrue(blocks.isEmpty)
+    }
+
+    func testExtractsStandaloneSvgAfterClosedHtmlDocument() {
+        let text = """
+        <html><body><p>page</p></body></html>
+        <svg viewBox="0 0 10 10"><rect width="10" height="10" /></svg>
+        """
+
+        let blocks = SvgCodeExtractor.extract(from: text)
+
+        XCTAssertEqual(blocks.count, 1)
+        XCTAssertEqual(blocks[0].extractionMethod, "inline_svg")
+    }
+
+    func testExtractsSvgWithXmlDeclaration() {
+        let text = """
+        ```xml
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!-- icon -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+            <circle cx="5" cy="5" r="4" />
+        </svg>
+        ```
+        """
+
+        let blocks = SvgCodeExtractor.extract(from: text)
+
+        XCTAssertEqual(blocks.count, 1)
+        XCTAssertEqual(blocks[0].language, "svg")
+        XCTAssertEqual(blocks[0].extractionMethod, "markdown")
+    }
 }

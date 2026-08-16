@@ -73,14 +73,24 @@ object CodeExtractorUtils {
             .distinctBy { "${it.startIndex}-${it.endIndex}-${it.content}" }
             .sortedBy { it.startIndex }
             .map { codeBlock ->
-                // SVGの場合、内容を検証して必要に応じて言語を修正
-                if (isSvgContent(codeBlock.content) && !codeBlock.language.equals("svg", ignoreCase = true)) {
-                    codeBlock.copy(
-                        language = "svg",
-                        filename = generateFilename("svg", codeBlock.content)
-                    )
-                } else {
-                    codeBlock
+                when {
+                    isHtmlDocument(codeBlock.content) -> {
+                        if (codeBlock.language.equals("svg", ignoreCase = true)) {
+                            codeBlock.copy(
+                                language = "html",
+                                filename = generateFilename("html", codeBlock.content)
+                            )
+                        } else {
+                            codeBlock
+                        }
+                    }
+                    shouldPromoteToSvg(codeBlock.language, codeBlock.content) -> {
+                        codeBlock.copy(
+                            language = "svg",
+                            filename = generateFilename("svg", codeBlock.content)
+                        )
+                    }
+                    else -> codeBlock
                 }
             }
     }
@@ -274,8 +284,10 @@ object CodeExtractorUtils {
             val startIndex = match.range.first
             val endIndex = match.range.last + 1
             
-            // マークダウンコードブロック内やカスタムタグ内のSVGは除外
-            if (!isWithinCodeBlock(text, startIndex, endIndex)) {
+            // マークダウンコードブロック内、カスタムタグ内、HTML文書内のSVGは除外
+            if (!isWithinCodeBlock(text, startIndex, endIndex) &&
+                !isInsideHtmlDocument(text, startIndex)
+            ) {
                 val filename = generateFilename("svg", fullSvgContent)
                 codeBlocks.add(
                     CodeBlock(
@@ -316,22 +328,106 @@ object CodeExtractorUtils {
     }
     
     /**
-     * コンテンツがSVGかどうかを判定
+     * 他言語のコードブロックをスタンドアロンSVGとして扱うべきか判定
      */
-    private fun isSvgContent(content: String): Boolean {
-        val trimmedContent = content.trim()
-        
-        // 基本的なSVGの特徴をチェック
-        return trimmedContent.contains("<svg", ignoreCase = true) &&
-                trimmedContent.contains("</svg>", ignoreCase = true) &&
-                (trimmedContent.contains("xmlns", ignoreCase = true) || 
-                 trimmedContent.contains("viewBox", ignoreCase = true) ||
-                 trimmedContent.contains("<path", ignoreCase = true) ||
-                 trimmedContent.contains("<circle", ignoreCase = true) ||
-                 trimmedContent.contains("<rect", ignoreCase = true) ||
-                 trimmedContent.contains("<line", ignoreCase = true) ||
-                 trimmedContent.contains("<polygon", ignoreCase = true) ||
-                 trimmedContent.contains("<polyline", ignoreCase = true))
+    private fun shouldPromoteToSvg(language: String, content: String): Boolean {
+        if (language.equals("svg", ignoreCase = true)) return false
+        if (isHtmlDocument(content)) return false
+        if (!isStandaloneSvg(content)) return false
+        return hasSvgGraphicsMarkers(content)
+    }
+
+    private fun isHtmlDocument(content: String): Boolean {
+        val trimmed = content.trim()
+        val lower = trimmed.lowercase()
+        if (lower.contains("<!doctype html")) return true
+        if (firstMarkupTag(trimmed) == "html") return true
+        return lower.contains("<head") &&
+            (lower.contains("<body") || lower.contains("<title") || lower.contains("<meta"))
+    }
+
+    private fun isStandaloneSvg(content: String): Boolean {
+        val lower = content.lowercase()
+        if (!lower.contains("<svg") || !lower.contains("</svg>")) return false
+        return firstMarkupTag(content) == "svg"
+    }
+
+    private fun hasSvgGraphicsMarkers(content: String): Boolean {
+        val lower = content.lowercase()
+        return lower.contains("xmlns") ||
+            lower.contains("viewbox") ||
+            lower.contains("<path") ||
+            lower.contains("<circle") ||
+            lower.contains("<rect") ||
+            lower.contains("<line") ||
+            lower.contains("<polygon") ||
+            lower.contains("<polyline")
+    }
+
+    private fun firstMarkupTag(content: String): String? {
+        var remaining = content.trim().trimStart('\uFEFF').trim()
+        while (remaining.isNotEmpty()) {
+            remaining = remaining.trim()
+            val lower = remaining.lowercase()
+            when {
+                lower.startsWith("<?xml") -> {
+                    val end = remaining.indexOf("?>")
+                    if (end < 0) return null
+                    remaining = remaining.substring(end + 2)
+                }
+                remaining.startsWith("<!--") -> {
+                    val end = remaining.indexOf("-->")
+                    if (end < 0) return null
+                    remaining = remaining.substring(end + 3)
+                }
+                lower.startsWith("<!doctype") -> {
+                    val end = remaining.indexOf('>')
+                    if (end < 0) return null
+                    remaining = remaining.substring(end + 1)
+                }
+                remaining.startsWith("<") -> {
+                    val nameStart = 1
+                    var nameEnd = nameStart
+                    while (nameEnd < remaining.length) {
+                        val character = remaining[nameEnd]
+                        if (character.isWhitespace() || character == '>' || character == '/') {
+                            break
+                        }
+                        nameEnd++
+                    }
+                    if (nameEnd == nameStart) return null
+                    return remaining.substring(nameStart, nameEnd).lowercase()
+                }
+                else -> return null
+            }
+        }
+        return null
+    }
+
+    private fun isInsideHtmlDocument(text: String, startIndex: Int): Boolean {
+        if (startIndex <= 0) return false
+        val before = text.substring(0, minOf(startIndex, text.length)).lowercase()
+        val after = if (startIndex < text.length) text.substring(startIndex).lowercase() else ""
+
+        val lastHtmlOpen = before.lastIndexOf("<html")
+        val lastHtmlClose = before.lastIndexOf("</html")
+        if (lastHtmlOpen >= 0 && lastHtmlOpen > lastHtmlClose) {
+            return true
+        }
+
+        val doctypeIndex = before.lastIndexOf("<!doctype html")
+        if (doctypeIndex >= 0) {
+            val afterDoctype = before.substring(doctypeIndex)
+            if (!afterDoctype.contains("</html")) {
+                return afterDoctype.contains("<head") ||
+                    afterDoctype.contains("<body") ||
+                    afterDoctype.contains("<title") ||
+                    afterDoctype.contains("<meta") ||
+                    after.contains("</html") ||
+                    after.contains("</body")
+            }
+        }
+        return false
     }
     
     /**

@@ -223,6 +223,113 @@ class CodeExtractorUtilsTest {
     }
 
     @Test
+    fun `HTML with nested SVG should stay html`() {
+        val htmlWithSvg = """
+            ```html
+            <!DOCTYPE html>
+            <html lang="ja">
+            <head>
+            <title>解説 2008 物理</title>
+            </head>
+            <body>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+                <circle cx="5" cy="5" r="4" />
+            </svg>
+            </body>
+            </html>
+            ```
+        """.trimIndent()
+
+        val result = CodeExtractorUtils.extractCodeBlocks(htmlWithSvg)
+
+        assertEquals(1, result.size)
+        assertEquals("html", result[0].language)
+        assertFalse(result[0].isSvg)
+        assertTrue(result[0].content.contains("<svg"))
+        assertTrue(result[0].filename.endsWith(".html"))
+    }
+
+    @Test
+    fun `HTML document labeled as svg should be treated as html`() {
+        val htmlLabeledSvg = """
+            ```svg
+            <!DOCTYPE html>
+            <html lang="ja">
+            <head>
+            <meta charset="UTF-8">
+            <title>【解説】2008 甲南大 物理 (一部)- 電気力線と電場</title>
+            </head>
+            <body>
+            <p>ると、</p>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 20">
+                <text x="0" y="15">4\pi k_0 q</text>
+            </svg>
+            </body>
+            </html>
+            ```
+        """.trimIndent()
+
+        val result = CodeExtractorUtils.extractCodeBlocks(htmlLabeledSvg)
+
+        assertEquals(1, result.size)
+        assertEquals("html", result[0].language)
+        assertFalse(result[0].isSvg)
+        assertTrue(result[0].filename.endsWith(".html"))
+    }
+
+    @Test
+    fun `inline SVG inside unfenced HTML document should not be extracted`() {
+        val htmlDocument = """
+            <!DOCTYPE html>
+            <html>
+            <head><title>2008 physics</title></head>
+            <body>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+                <rect width="10" height="10" />
+            </svg>
+            </body>
+            </html>
+        """.trimIndent()
+
+        val result = CodeExtractorUtils.extractCodeBlocks(htmlDocument)
+
+        assertTrue(result.none { it.isSvg })
+    }
+
+    @Test
+    fun `inline SVG after closed HTML document should still be extracted`() {
+        val text = """
+            <html><body><p>page</p></body></html>
+            <svg viewBox="0 0 10 10"><rect width="10" height="10" /></svg>
+        """.trimIndent()
+
+        val result = CodeExtractorUtils.extractCodeBlocks(text)
+
+        assertEquals(1, result.size)
+        assertEquals("svg", result[0].language)
+        assertEquals("inline_svg", result[0].extractionMethod)
+    }
+
+    @Test
+    fun `SVG with XML declaration should still be promoted from xml`() {
+        val xmlWithSvg = """
+            ```xml
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!-- icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+                <circle cx="5" cy="5" r="4" />
+            </svg>
+            ```
+        """.trimIndent()
+
+        val result = CodeExtractorUtils.extractCodeBlocks(xmlWithSvg)
+
+        assertEquals(1, result.size)
+        assertEquals("svg", result[0].language)
+        assertTrue(result[0].isSvg)
+    }
+
+    @Test
     fun `getCodeBlockStats should return correct statistics`() {
         val codeBlocks = listOf(
             CodeBlock(
