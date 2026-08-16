@@ -165,6 +165,7 @@
 		BEB75013CC194BC6481ECAE4 /* AutoConversationRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D45BDA96C2B777C80AA6387 /* AutoConversationRepositoryTests.swift */; };
 		BED03F66911A731D3E8A4D32 /* AgentSkillRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA31C0AF27B8264A75B1F868 /* AgentSkillRepository.swift */; };
 		C1C66AC4B6097B776287A099 /* SharePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E5EC327A302F432B8A4083 /* SharePayload.swift */; };
+		C3087DD5EC12E6FECC903EE5 /* LegalMarkdownParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8C62E150759B38B2CA27A9 /* LegalMarkdownParserTests.swift */; };
 		C87C65B5CBF14396F4EEA0EF /* DiagnosticsLogSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05C37D0D1E0B6B81B135B457 /* DiagnosticsLogSanitizerTests.swift */; };
 		C912D70FEA5AD0AAB1133DC4 /* DualChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B5936D9B9C6967F14740D01 /* DualChatMessage.swift */; };
 		C95EBEEE38A3DB89CA703642 /* ChatRepositoryTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0EDF115D91DB6320D9ABDFB /* ChatRepositoryTestSupport.swift */; };
@@ -183,6 +184,7 @@
 		DDE4E6DCF39AAF68347D6DB1 /* YamabikoShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 875043B225A7D44033DFD07D /* YamabikoShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E00E1BEED00E37AA48679DBC /* ProviderEnumTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF7CF673D03C83995B954FE0 /* ProviderEnumTests.swift */; };
 		E06F6B142947E79244C240DE /* ConversationListScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BB73A6E778AA23087EEB852 /* ConversationListScreen.swift */; };
+		E15C72C0BC59E3E071F707C9 /* LegalMarkdownParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01D935EEC1AA59D41CD535CC /* LegalMarkdownParser.swift */; };
 		E173E3DC9211F34C1685F700 /* AppStoreScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C16A2CA6FB5AD4BB4C5E21CF /* AppStoreScreenshotTests.swift */; };
 		E27A6862F9650B6AA7DBDCA4 /* ChatWorkspaceScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37FA26435A6801B2A3687B6C /* ChatWorkspaceScreen.swift */; };
 		E2A1B28A639545AE6CCE732B /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 73BA993BC9257C4A41707F4E /* InfoPlist.strings */; };
@@ -272,6 +274,7 @@
 /* Begin PBXFileReference section */
 		0034572985CEC32177512AA8 /* SettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModelTests.swift; sourceTree = "<group>"; };
 		00BE476866FB6887397FFD9C /* SharePayloadStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharePayloadStorageTests.swift; sourceTree = "<group>"; };
+		01D935EEC1AA59D41CD535CC /* LegalMarkdownParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMarkdownParser.swift; sourceTree = "<group>"; };
 		02841C260164C20D9258C6B7 /* YamabikoShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YamabikoShareExtension.entitlements; sourceTree = "<group>"; };
 		05C37D0D1E0B6B81B135B457 /* DiagnosticsLogSanitizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsLogSanitizerTests.swift; sourceTree = "<group>"; };
 		0668334AA8F62D1F58F6B2F6 /* SvgPreviewWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgPreviewWebView.swift; sourceTree = "<group>"; };
@@ -493,6 +496,7 @@
 		EFA8FC2F705B5D8D61A79B26 /* HTMLTextExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLTextExtractor.swift; sourceTree = "<group>"; };
 		F5E76571802BD1DCDB737AD8 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		FD8C62E150759B38B2CA27A9 /* LegalMarkdownParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMarkdownParserTests.swift; sourceTree = "<group>"; };
 		FDFB9E3E80818460DA5CDA5A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		FF047B35C735D75B50DB5BAD /* ProviderRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderRequest.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -589,6 +593,7 @@
 			isa = PBXGroup;
 			children = (
 				4AD5BFFA938AB90157FB5E3F /* BackgroundTaskGuard.swift */,
+				01D935EEC1AA59D41CD535CC /* LegalMarkdownParser.swift */,
 				54DB2C1D3F5C4C02F1C2632F /* SpeechRecognitionService.swift */,
 				101B08A2D2CD8B5AA943CE83 /* UserFacingErrorFormatter.swift */,
 			);
@@ -919,6 +924,7 @@
 				7824746250F630294D76127F /* GeminiModelUtilsTests.swift */,
 				EEE60932C8C8B154A6CECA4D /* HtmlCodeExtractorTests.swift */,
 				D0ECBBD2AF0D92B4AD566ECF /* JudgeAnalysisViewTests.swift */,
+				FD8C62E150759B38B2CA27A9 /* LegalMarkdownParserTests.swift */,
 				354A655F2DAC30AF82690AAD /* LiteLlmPricingRepositoryTests.swift */,
 				961BCEE0B9725B362F606EA0 /* MathMarkdownViewTests.swift */,
 				7077367178B8D0B29308F183 /* ModelsDevCatalogTests.swift */,
@@ -1287,6 +1293,7 @@
 				68C5E943C2E9603B736DDE83 /* GeminiModelUtilsTests.swift in Sources */,
 				AAD993DF8C7E60DEF9C46DEA /* HtmlCodeExtractorTests.swift in Sources */,
 				8EE2EADE33F5409E52596DBD /* JudgeAnalysisViewTests.swift in Sources */,
+				C3087DD5EC12E6FECC903EE5 /* LegalMarkdownParserTests.swift in Sources */,
 				69A868E7A0FE2AB17FD68584 /* LiteLlmPricingRepositoryTests.swift in Sources */,
 				D63F06CADBC32DCDED7D808E /* MathMarkdownViewTests.swift in Sources */,
 				AE52105AF8D4506C8B4FFC3D /* ModelsDevCatalogTests.swift in Sources */,
@@ -1411,6 +1418,7 @@
 				962D63DC04F87D3F8083C055 /* KeychainStore.swift in Sources */,
 				849D27D7F89B502B1F05E424 /* L10n.swift in Sources */,
 				9EFE66AD7151E071A14BEB4A /* LLMProvider.swift in Sources */,
+				E15C72C0BC59E3E071F707C9 /* LegalMarkdownParser.swift in Sources */,
 				2A8999A902854B3C516715B5 /* LiteLlmPricingRepository.swift in Sources */,
 				179EE6035B35FBC617EED27F /* LocalToolRegistry.swift in Sources */,
 				9BD931169E39B228157F7725 /* MathMarkdownView.swift in Sources */,
