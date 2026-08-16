@@ -171,4 +171,34 @@ class SettingsReasoningTest {
         assertNull(config.exclude)
         assertEquals(true, config.includeThoughts)
     }
+
+    @Test
+    fun geminiGemma4UsesThinkingLevelWithoutBudget() = runBlocking {
+        val resolver = createResolver()
+        val enabled = resolver.resolve(
+            settings = Settings(
+                geminiThinkingEnabled = true,
+                geminiThinkingBudget = 2048,
+                geminiThinkingLevel = "high"
+            ),
+            provider = "GEMINI",
+            model = "gemma-4-31b-it",
+            toolScope = ProviderRequestToolScope.None
+        )
+        assertNull(enabled.thinking?.budget)
+        assertEquals("high", enabled.metadata["geminiThinkingLevel"])
+
+        val disabled = resolver.resolve(
+            settings = Settings(
+                geminiThinkingEnabled = false,
+                geminiThinkingBudget = 2048,
+                geminiThinkingLevel = "high"
+            ),
+            provider = "GEMINI",
+            model = "gemma-4-26b-a4b-it",
+            toolScope = ProviderRequestToolScope.None
+        )
+        assertNull(disabled.thinking?.budget)
+        assertEquals("minimal", disabled.metadata["geminiThinkingLevel"])
+    }
 }

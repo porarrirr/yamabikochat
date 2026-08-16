@@ -7,6 +7,7 @@ package com.porarri.yamabikochat.utils
 object ModelUtils {
     private val GEMINI_2_5_REGEX = Regex("(?i)gemini[-_/]2\\.5(?:[-_/]|$)")
     private val GEMINI_3_REGEX = Regex("(?i)gemini[-_/]3(?:[-_/]|$)")
+    private val GEMMA_4_REGEX = Regex("(?i)gemma[-_/]?4(?:[-_/]|$)")
 
     private fun isGemini25(model: String): Boolean {
         return GEMINI_2_5_REGEX.containsMatchIn(model)
@@ -16,11 +17,16 @@ object ModelUtils {
         return GEMINI_3_REGEX.containsMatchIn(model)
     }
 
+    private fun isGemma4(model: String): Boolean {
+        return GEMMA_4_REGEX.containsMatchIn(model)
+    }
+
     fun isThinkingLevelSupported(model: String): Boolean {
-        return isGemini3(model)
+        return isGemini3(model) || isGemma4(model)
     }
 
     fun getThinkingLevelOptions(model: String): List<String> {
+        if (isGemma4(model)) return listOf("minimal", "high")
         if (!isGemini3(model)) return emptyList()
         return if (model.contains("flash", ignoreCase = true)) {
             listOf("minimal", "low", "medium", "high")
@@ -30,11 +36,15 @@ object ModelUtils {
     }
 
     fun getDefaultThinkingLevel(model: String): String {
-        return if (isGemini3(model)) "high" else ""
+        return if (isThinkingLevelSupported(model)) "high" else ""
     }
 
     fun getMinimalThinkingLevel(model: String): String? {
-        return if (isGemini3(model) && model.contains("flash", ignoreCase = true)) "minimal" else null
+        return when {
+            isGemma4(model) -> "minimal"
+            isGemini3(model) && model.contains("flash", ignoreCase = true) -> "minimal"
+            else -> null
+        }
     }
 
     fun normalizeThinkingLevel(model: String, level: String?): String? {
@@ -50,7 +60,7 @@ object ModelUtils {
      * @return thinking機能サポートの有無
      */
     fun isThinkingSupported(model: String): Boolean {
-        return isGemini25(model) || isGemini3(model)
+        return isGemini25(model) || isGemini3(model) || isGemma4(model)
     }
     
     /**
@@ -83,7 +93,7 @@ object ModelUtils {
      */
     fun getThinkingBudgetRange(model: String): Pair<Int, Int>? {
         return when {
-            !isThinkingSupported(model) -> null
+            !isThinkingSupported(model) || isGemma4(model) -> null
             isThinkingAlwaysOn(model) -> Pair(128, 32768) // 2.5/3 Pro
             isGemini3(model) && model.contains("flash", ignoreCase = true) -> Pair(0, 24576) // 3 Flash
             model.contains("flash-lite", ignoreCase = true) -> Pair(0, 24576) // 2.5 Flash-Lite
@@ -101,6 +111,7 @@ object ModelUtils {
         return when {
             !isThinkingSupported(model) -> "このモデルはthinking機能をサポートしていません"
             isThinkingAlwaysOn(model) -> "このモデルはthinking機能が常時ONです（Google仕様）"
+            isGemma4(model) -> "Gemma 4はthinkingのON/OFF（high / minimal）が可能です"
             isGemini3(model) && model.contains("flash", ignoreCase = true) ->
                 "Gemini 3 Flashはthinkingレベル（minimal〜high）を調整できます"
             canDisableThinking(model) -> "thinking機能のON/OFFとbudget調整が可能です"
@@ -121,7 +132,7 @@ object ModelUtils {
         userThinkingBudget: Int
     ): Int? {
         return when {
-            !isThinkingSupported(model) -> null // thinking非対応モデル
+            !isThinkingSupported(model) || isGemma4(model) -> null
             isThinkingAlwaysOn(model) -> userThinkingBudget // Pro: 常時ON、budgetのみ適用
             userThinkingEnabled -> userThinkingBudget // Flash: ユーザー設定通り
             else -> 0 // Flash: 明示的にOFF

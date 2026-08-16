@@ -50,6 +50,31 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         XCTAssertFalse(resolved.tools.contains { $0.type == "google_search" })
     }
 
+    func testGemma4UsesThinkingLevelWithoutBudget() async throws {
+        let resolver = makeResolver()
+        var settings = AppSettings()
+        settings.geminiThinkingEnabled = true
+        settings.geminiThinkingBudget = 2048
+        settings.geminiThinkingLevel = "high"
+
+        let enabled = try await resolver.resolve(
+            settings: settings,
+            provider: "GEMINI",
+            model: "gemma-4-31b-it"
+        )
+        XCTAssertNil(enabled.thinking?.budget)
+        XCTAssertEqual(enabled.metadata["geminiThinkingLevel"], "high")
+
+        settings.geminiThinkingEnabled = false
+        let disabled = try await resolver.resolve(
+            settings: settings,
+            provider: "GEMINI",
+            model: "gemma-4-26b-a4b-it"
+        )
+        XCTAssertNil(disabled.thinking?.budget)
+        XCTAssertEqual(disabled.metadata["geminiThinkingLevel"], "minimal")
+    }
+
     func testClientWebSearchToolsAreOmittedWhenSettingIsDisabled() async throws {
         let resolver = makeResolver()
         var settings = AppSettings()

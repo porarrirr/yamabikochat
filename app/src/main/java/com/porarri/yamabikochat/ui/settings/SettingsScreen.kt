@@ -651,7 +651,7 @@ fun SettingsScreen(
                                     "minimal" -> "Minimal (ほぼOFF)"
                                     "low" -> "Low"
                                     "medium" -> "Medium"
-                                    else -> "\u30B7\u30B9\u30C6\u30E0\u306B\u5F93\u3046"
+                                    else -> "High"
                                 }
                             )
                         },
@@ -2668,7 +2668,7 @@ fun SettingsScreen(
                                 "minimal" -> "Minimal (ほぼOFF)"
                                 "low" -> "Low"
                                 "medium" -> "Medium"
-                                else -> "\u30B7\u30B9\u30C6\u30E0\u306B\u5F93\u3046"
+                                else -> "High"
                             }
                             YamabikoSelectRow(
                                 title = "Thinking Level",

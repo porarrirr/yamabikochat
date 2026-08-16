@@ -283601,11 +283601,15 @@ function mutatePayload(payload, request, config) {
       } catch {
       }
     }
-    value2.config.thinkingConfig ||= {};
-    if (request.thinking?.budget != null) value2.config.thinkingConfig.thinkingBudget = request.thinking.budget;
-    if (request.thinking?.includeThoughts != null) value2.config.thinkingConfig.includeThoughts = request.thinking.includeThoughts;
-    if (metadata.geminiThinkingLevel) value2.config.thinkingConfig.thinkingLevel = metadata.geminiThinkingLevel;
-    if (!Object.keys(value2.config.thinkingConfig).length) delete value2.config.thinkingConfig;
+    const thinkingLevel = String(config.thinkingLevel || "").toLowerCase();
+    const usesThinkingLevel = ["minimal", "low", "medium", "high"].includes(thinkingLevel);
+    if (!usesThinkingLevel) {
+      value2.config.thinkingConfig ||= {};
+      if (request.thinking?.budget != null) value2.config.thinkingConfig.thinkingBudget = request.thinking.budget;
+      if (request.thinking?.includeThoughts != null) value2.config.thinkingConfig.includeThoughts = request.thinking.includeThoughts;
+      if (metadata.geminiThinkingLevel) value2.config.thinkingConfig.thinkingLevel = metadata.geminiThinkingLevel;
+      if (!Object.keys(value2.config.thinkingConfig).length) delete value2.config.thinkingConfig;
+    }
   }
   if (config.api === "openai-responses" || config.api === "openai-codex-responses") {
     if (metadata.codexReasoningSummary) {

@@ -266,4 +266,29 @@ class ModelUtilsTest {
         assertEquals("low", ModelUtils.normalizeThinkingLevel("gemini-3-pro-preview", "LOW"))
         assertNull(ModelUtils.normalizeThinkingLevel("gemini-3-pro-preview", "medium"))
     }
+
+    @Test
+    fun `thinking helpers work for Gemma 4 models`() {
+        val models = listOf("gemma-4-31b-it", "gemma-4-26b-a4b-it", "models/gemma-4-31b-it")
+        for (model in models) {
+            assertTrue(ModelUtils.isThinkingSupported(model))
+            assertTrue(ModelUtils.isThinkingLevelSupported(model))
+            assertFalse(ModelUtils.isThinkingAlwaysOn(model))
+            assertEquals(listOf("minimal", "high"), ModelUtils.getThinkingLevelOptions(model))
+            assertEquals("high", ModelUtils.getDefaultThinkingLevel(model))
+            assertEquals("minimal", ModelUtils.getMinimalThinkingLevel(model))
+            assertEquals("high", ModelUtils.normalizeThinkingLevel(model, "HIGH"))
+            assertNull(ModelUtils.normalizeThinkingLevel(model, "low"))
+            assertNull(ModelUtils.getThinkingBudgetRange(model))
+            assertNull(ModelUtils.calculateEffectiveThinkingBudget(model, true, 1024))
+            assertEquals(
+                "Gemma 4はthinkingのON/OFF（high / minimal）が可能です",
+                ModelUtils.getThinkingDescription(model)
+            )
+        }
+
+        assertFalse(ModelUtils.isThinkingSupported("gemma-3"))
+        assertFalse(ModelUtils.isThinkingLevelSupported("gemma-3"))
+        assertNull(ModelUtils.calculateEffectiveThinkingBudget("gemma-3", true, 1024))
+    }
 }

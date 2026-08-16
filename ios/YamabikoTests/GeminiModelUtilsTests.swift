@@ -59,4 +59,26 @@ final class GeminiModelUtilsTests: XCTestCase {
             )
         }
     }
+
+    func testGemma4SupportsToggleableThinkingLevels() {
+        let models = ["gemma-4-31b-it", "gemma-4-26b-a4b-it", "models/gemma-4-31b-it"]
+
+        for model in models {
+            XCTAssertTrue(GeminiModelUtils.isThinkingSupported(model: model))
+            XCTAssertTrue(GeminiModelUtils.isThinkingLevelSupported(model: model))
+            XCTAssertFalse(GeminiModelUtils.isThinkingAlwaysOn(model: model))
+            XCTAssertEqual(GeminiModelUtils.getThinkingLevelOptions(model: model), ["minimal", "high"])
+            XCTAssertEqual(GeminiModelUtils.getDefaultThinkingLevel(model: model), "high")
+            XCTAssertEqual(GeminiModelUtils.getMinimalThinkingLevel(model: model), "minimal")
+            XCTAssertEqual(GeminiModelUtils.normalizeThinkingLevel(model: model, level: "HIGH"), "high")
+            XCTAssertNil(GeminiModelUtils.normalizeThinkingLevel(model: model, level: "low"))
+            XCTAssertNil(
+                GeminiModelUtils.calculateEffectiveThinkingBudget(
+                    model: model,
+                    userThinkingEnabled: true,
+                    userThinkingBudget: 1024
+                )
+            )
+        }
+    }
 }

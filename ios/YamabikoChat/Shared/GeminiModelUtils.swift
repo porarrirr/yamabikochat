@@ -3,12 +3,14 @@ import Foundation
 enum GeminiModelUtils {
     private static let gemini25Pattern = #"(?i)gemini[-_/]2\.5(?:[-_/]|$)"#
     private static let gemini3Pattern = #"(?i)gemini[-_/]3(?:[._/-]|$)"#
+    private static let gemma4Pattern = #"(?i)gemma[-_/]?4(?:[-_/]|$)"#
 
     static func isThinkingLevelSupported(model: String) -> Bool {
-        isGemini3(model: model)
+        isGemini3(model: model) || isGemma4(model: model)
     }
 
     static func getThinkingLevelOptions(model: String) -> [String] {
+        if isGemma4(model: model) { return ["minimal", "high"] }
         guard isGemini3(model: model) else { return [] }
         if model.localizedCaseInsensitiveContains("flash") {
             return ["minimal", "low", "medium", "high"]
@@ -17,10 +19,11 @@ enum GeminiModelUtils {
     }
 
     static func getDefaultThinkingLevel(model: String) -> String {
-        isGemini3(model: model) ? "high" : ""
+        isThinkingLevelSupported(model: model) ? "high" : ""
     }
 
     static func getMinimalThinkingLevel(model: String) -> String? {
+        if isGemma4(model: model) { return "minimal" }
         if isGemini3(model: model), model.localizedCaseInsensitiveContains("flash") {
             return "minimal"
         }
@@ -35,7 +38,7 @@ enum GeminiModelUtils {
     }
 
     static func isThinkingSupported(model: String) -> Bool {
-        isGemini25(model: model) || isGemini3(model: model)
+        isGemini25(model: model) || isGemini3(model: model) || isGemma4(model: model)
     }
 
     static func isThinkingAlwaysOn(model: String) -> Bool {
@@ -55,6 +58,9 @@ enum GeminiModelUtils {
         if isThinkingAlwaysOn(model: model) {
             return L10n.text("このモデルはthinking機能が常時ONです（Google仕様）")
         }
+        if isGemma4(model: model) {
+            return L10n.text("Gemma 4はthinkingのON/OFF（high / minimal）が可能です")
+        }
         if isGemini3(model: model), model.localizedCaseInsensitiveContains("flash") {
             return L10n.text("Gemini 3 Flashはthinkingレベル（minimal〜high）を調整できます")
         }
@@ -69,7 +75,7 @@ enum GeminiModelUtils {
         userThinkingEnabled: Bool,
         userThinkingBudget: Int
     ) -> Int? {
-        if !isThinkingSupported(model: model) {
+        if !isThinkingSupported(model: model) || isGemma4(model: model) {
             return nil
         }
         if isThinkingAlwaysOn(model: model) {
@@ -87,6 +93,10 @@ enum GeminiModelUtils {
 
     private static func isGemini3(model: String) -> Bool {
         matches(pattern: gemini3Pattern, text: model)
+    }
+
+    private static func isGemma4(model: String) -> Bool {
+        matches(pattern: gemma4Pattern, text: model)
     }
 
     private static func matches(pattern: String, text: String) -> Bool {

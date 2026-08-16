@@ -370,11 +370,15 @@ function mutatePayload(payload, request, config) {
     if (metadata.geminiResponseJSONSchema) {
       try { value.config.responseJsonSchema = JSON.parse(metadata.geminiResponseJSONSchema); } catch {}
     }
-    value.config.thinkingConfig ||= {};
-    if (request.thinking?.budget != null) value.config.thinkingConfig.thinkingBudget = request.thinking.budget;
-    if (request.thinking?.includeThoughts != null) value.config.thinkingConfig.includeThoughts = request.thinking.includeThoughts;
-    if (metadata.geminiThinkingLevel) value.config.thinkingConfig.thinkingLevel = metadata.geminiThinkingLevel;
-    if (!Object.keys(value.config.thinkingConfig).length) delete value.config.thinkingConfig;
+    const thinkingLevel = String(config.thinkingLevel || "").toLowerCase();
+    const usesThinkingLevel = ["minimal", "low", "medium", "high"].includes(thinkingLevel);
+    if (!usesThinkingLevel) {
+      value.config.thinkingConfig ||= {};
+      if (request.thinking?.budget != null) value.config.thinkingConfig.thinkingBudget = request.thinking.budget;
+      if (request.thinking?.includeThoughts != null) value.config.thinkingConfig.includeThoughts = request.thinking.includeThoughts;
+      if (metadata.geminiThinkingLevel) value.config.thinkingConfig.thinkingLevel = metadata.geminiThinkingLevel;
+      if (!Object.keys(value.config.thinkingConfig).length) delete value.config.thinkingConfig;
+    }
   }
   if (config.api === "openai-responses" || config.api === "openai-codex-responses") {
     if (metadata.codexReasoningSummary) {
