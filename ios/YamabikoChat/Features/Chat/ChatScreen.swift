@@ -38,6 +38,7 @@ private struct ChatBottomAnchorMaxYPreferenceKey: PreferenceKey {
 
 private let chatTimelineHorizontalPadding: CGFloat = 20
 private let chatTimelineVerticalPadding: CGFloat = 24
+private let maximumPhotoSelectionCount = 10
 
 struct ChatScreen: View {
     @ObservedObject var viewModel: ChatViewModel
@@ -53,6 +54,7 @@ struct ChatScreen: View {
     @State private var isUserDraggingScroll = false
     @State private var scrollInteractionToken = 0
     @State private var addingRecentPhotoIDs: Set<String> = []
+    @State private var recentPhotoSelection = RecentPhotoSelection(limit: maximumPhotoSelectionCount)
     @StateObject private var recentPhotoLibrary = RecentPhotoLibrary()
     @FocusState private var isComposerFocused: Bool
     private let bottomAnchorID = "chat-bottom-anchor"
@@ -256,7 +258,8 @@ struct ChatScreen: View {
         .photosPicker(
             isPresented: $showPhotoPicker,
             selection: $photoItems,
-            maxSelectionCount: 10,
+            maxSelectionCount: maximumPhotoSelectionCount,
+            selectionBehavior: .ordered,
             matching: .images
         )
         .onChange(of: photoItems) { _, items in
@@ -268,7 +271,13 @@ struct ChatScreen: View {
     }
 
     private var canSend: Bool {
-        !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !viewModel.attachments.isEmpty
+        guard !isPreparingPhotoAttachments else { return false }
+        return !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !viewModel.attachments.isEmpty
+    }
+
+    private var isPreparingPhotoAttachments: Bool {
+        !recentPhotoSelection.isEmpty || !addingRecentPhotoIDs.isEmpty || !photoItems.isEmpty
     }
 
     private var emptyStateTitle: String {
@@ -389,7 +398,7 @@ struct ChatScreen: View {
 
                 Button {
                     if canSend {
-                        isAttachmentPanelVisible = false
+                        hideAttachmentPanel()
                         viewModel.sendMessage()
                     }
                 } label: {
@@ -497,12 +506,19 @@ struct ChatScreen: View {
         if recentPhotoLibrary.canShowRecentPhotos, !recentPhotoLibrary.items.isEmpty {
             RecentPhotoStrip(
                 items: recentPhotoLibrary.items,
+                selection: recentPhotoSelection,
                 loadingIDs: addingRecentPhotoIDs,
                 onOpenLibrary: {
                     openPhotoPicker()
                 },
-                onSelect: { item in
-                    addRecentPhoto(item)
+                onToggleSelection: { item in
+                    recentPhotoSelection.toggle(item.id)
+                },
+                onClearSelection: {
+                    recentPhotoSelection.removeAll()
+                },
+                onAddSelected: {
+                    addSelectedRecentPhotos()
                 }
             )
         } else if recentPhotoLibrary.isLoading {
@@ -567,14 +583,18 @@ struct ChatScreen: View {
         for item in items {
             do {
                 let attachment = try await loadTemporaryPhotoAttachment(from: item)
-                await MainActor.run {
+                let wasAdded = await MainActor.run {
                     viewModel.addAttachment(
                         url: attachment.url,
                         displayName: attachment.displayName,
                         deleteSourceWhenHandled: true
                     )
                 }
-                importedCount += 1
+                if wasAdded {
+                    importedCount += 1
+                } else {
+                    failedCount += 1
+                }
             } catch {
                 failedCount += 1
                 DiagnosticsLogger.log("Photos picker import failed", category: .chat, error: error)
@@ -584,7 +604,7 @@ struct ChatScreen: View {
         await MainActor.run {
             photoItems = []
             if importedCount > 0 {
-                isAttachmentPanelVisible = false
+                hideAttachmentPanel()
             }
             if failedCount > 0 {
                 viewModel.errorMessage = importedCount == 0
@@ -610,27 +630,56 @@ struct ChatScreen: View {
         return (fileURL, "photo.\(preferredExtension)")
     }
 
-    private func addRecentPhoto(_ item: RecentPhotoItem) {
-        guard !addingRecentPhotoIDs.contains(item.id) else { return }
-        addingRecentPhotoIDs.insert(item.id)
+    private func addSelectedRecentPhotos() {
+        let itemsByID = Dictionary(
+            uniqueKeysWithValues: recentPhotoLibrary.items.map { ($0.id, $0) }
+        )
+        let selectedItems = recentPhotoSelection.orderedIDs.compactMap { itemsByID[$0] }
+        guard !selectedItems.isEmpty, addingRecentPhotoIDs.isEmpty else { return }
+
+        addingRecentPhotoIDs.formUnion(selectedItems.map(\.id))
         Task {
-            do {
-                let fileURL = try await recentPhotoLibrary.exportFileURL(for: item.asset)
-                await MainActor.run {
-                    viewModel.addAttachment(
-                        url: fileURL,
-                        displayName: recentPhotoLibrary.suggestedFilename(for: item.asset),
-                        deleteSourceWhenHandled: true
+            var importedCount = 0
+            var failedCount = 0
+
+            for item in selectedItems {
+                do {
+                    let fileURL = try await recentPhotoLibrary.exportFileURL(for: item.asset)
+                    let wasAdded = await MainActor.run {
+                        viewModel.addAttachment(
+                            url: fileURL,
+                            displayName: recentPhotoLibrary.suggestedFilename(for: item.asset),
+                            deleteSourceWhenHandled: true
+                        )
+                    }
+                    if wasAdded {
+                        importedCount += 1
+                    } else {
+                        failedCount += 1
+                    }
+                } catch {
+                    failedCount += 1
+                    DiagnosticsLogger.log(
+                        "Recent photo import failed asset=\(item.id)",
+                        category: .chat,
+                        error: error
                     )
-                    isAttachmentPanelVisible = false
                 }
-            } catch {
                 await MainActor.run {
-                    viewModel.errorMessage = L10n.text("写真を読み込めませんでした。")
+                    _ = addingRecentPhotoIDs.remove(item.id)
                 }
             }
+
             await MainActor.run {
-                _ = addingRecentPhotoIDs.remove(item.id)
+                recentPhotoSelection.removeAll()
+                if importedCount > 0 {
+                    hideAttachmentPanel()
+                }
+                if failedCount > 0 {
+                    viewModel.errorMessage = importedCount == 0
+                        ? L10n.text("写真を読み込めませんでした。")
+                        : L10n.text("一部の写真を読み込めませんでした。")
+                }
             }
         }
     }
@@ -641,25 +690,32 @@ struct ChatScreen: View {
     }
 
     private func toggleAttachmentPanel() {
-        isAttachmentPanelVisible.toggle()
         if isAttachmentPanelVisible {
+            hideAttachmentPanel()
+        } else {
+            isAttachmentPanelVisible = true
             recentPhotoLibrary.refresh()
         }
     }
 
     private func openPhotoPicker() {
-        isAttachmentPanelVisible = false
+        hideAttachmentPanel()
         showPhotoPicker = true
     }
 
     private func openFileImporter() {
-        isAttachmentPanelVisible = false
+        hideAttachmentPanel()
         showFileImporter = true
     }
 
     private func dismissComposerChrome() {
         isComposerFocused = false
+        hideAttachmentPanel()
+    }
+
+    private func hideAttachmentPanel() {
         isAttachmentPanelVisible = false
+        recentPhotoSelection.removeAll()
     }
 
     private func beginScrollInteraction() {
@@ -874,9 +930,16 @@ private struct AttachmentImageCard: View {
 
 private struct RecentPhotoStrip: View {
     let items: [RecentPhotoItem]
+    let selection: RecentPhotoSelection
     let loadingIDs: Set<String>
     let onOpenLibrary: () -> Void
-    let onSelect: (RecentPhotoItem) -> Void
+    let onToggleSelection: (RecentPhotoItem) -> Void
+    let onClearSelection: () -> Void
+    let onAddSelected: () -> Void
+
+    private var isAdding: Bool {
+        !loadingIDs.isEmpty
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -889,6 +952,7 @@ private struct RecentPhotoStrip: View {
                     onOpenLibrary()
                 }
                 .font(.caption.weight(.semibold))
+                .disabled(isAdding)
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -913,19 +977,72 @@ private struct RecentPhotoStrip: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .disabled(isAdding)
 
                     ForEach(items) { item in
+                        let selectionIndex = selection.selectionIndex(for: item.id)
                         RecentPhotoButton(
                             asset: item.asset,
+                            selectionIndex: selectionIndex,
                             isLoading: loadingIDs.contains(item.id),
+                            isSelectionDisabled: isAdding || (selection.isAtLimit && selectionIndex == nil),
                             onTap: {
-                                onSelect(item)
+                                onToggleSelection(item)
                             }
                         )
                     }
                 }
                 .padding(.horizontal, 2)
                 .padding(.vertical, 2)
+            }
+
+            if !selection.isEmpty {
+                HStack(spacing: 8) {
+                    HStack(spacing: 4) {
+                        Text("選択中")
+                        Text("\(selection.count)/\(selection.limit)")
+                            .monospacedDigit()
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                    Spacer(minLength: 4)
+
+                    Button {
+                        onClearSelection()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(isAdding)
+                    .accessibilityLabel(Text("選択を解除"))
+
+                    Button {
+                        onAddSelected()
+                    } label: {
+                        HStack(spacing: 6) {
+                            if isAdding {
+                                ProgressView()
+                                    .tint(.white)
+                                    .controlSize(.mini)
+                            } else {
+                                Image(systemName: "plus")
+                            }
+                            Text("写真を追加")
+                            Text("\(selection.count)")
+                                .font(.caption2.bold().monospacedDigit())
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(.white.opacity(0.22))
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(isAdding)
+                }
             }
         }
         .padding(.horizontal, 10)
@@ -937,31 +1054,62 @@ private struct RecentPhotoStrip: View {
 
 private struct RecentPhotoButton: View {
     let asset: PHAsset
+    let selectionIndex: Int?
     let isLoading: Bool
+    let isSelectionDisabled: Bool
     let onTap: () -> Void
 
     var body: some View {
         Button {
             onTap()
         } label: {
-                ZStack {
-                    RecentPhotoThumbnail(asset: asset, sideLength: 68)
+            ZStack(alignment: .topTrailing) {
+                RecentPhotoThumbnail(asset: asset, sideLength: 68)
+
                 if isLoading {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(.black.opacity(0.28))
                     ProgressView()
                         .tint(.white)
                         .controlSize(.small)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ZStack {
+                        Circle()
+                            .fill(selectionIndex == nil ? .black.opacity(0.28) : Color.chatAccent)
+                        Circle()
+                            .stroke(.white, lineWidth: 1.5)
+                        if let selectionIndex {
+                            Text("\(selectionIndex)")
+                                .font(.caption2.bold().monospacedDigit())
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .frame(width: 22, height: 22)
+                    .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+                    .padding(5)
                 }
             }
             .frame(width: 68, height: 68)
             .overlay {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.chatBubbleBorder.opacity(0.35), lineWidth: 1)
+                    .stroke(
+                        selectionIndex == nil ? Color.chatBubbleBorder.opacity(0.35) : Color.chatAccent,
+                        lineWidth: selectionIndex == nil ? 1 : 3
+                    )
             }
+            .opacity(isSelectionDisabled && selectionIndex == nil ? 0.45 : 1)
         }
         .buttonStyle(.plain)
-        .disabled(isLoading)
+        .disabled(isLoading || isSelectionDisabled)
+        .accessibilityLabel(Text("写真"))
+        .accessibilityValue(
+            Text(
+                selectionIndex.map { L10n.format("%d番目に選択中", $0) }
+                    ?? L10n.text("未選択")
+            )
+        )
+        .accessibilityAddTraits(selectionIndex == nil ? [] : .isSelected)
     }
 }
 

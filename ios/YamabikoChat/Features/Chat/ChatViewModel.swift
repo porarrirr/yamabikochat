@@ -205,11 +205,12 @@ final class ChatViewModel: ObservableObject {
         inputText = text
     }
 
+    @discardableResult
     func addAttachment(
         url: URL,
         displayName: String? = nil,
         deleteSourceWhenHandled: Bool = false
-    ) {
+    ) -> Bool {
         defer {
             if deleteSourceWhenHandled {
                 try? FileManager.default.removeItem(at: url)
@@ -222,13 +223,13 @@ final class ChatViewModel: ObservableObject {
                 level: .warning,
                 category: .chat
             )
-            return
+            return false
         }
         switch attachmentRepository.validate(url: url) {
         case .valid:
             if attachmentRepository.requiresVision(url: url), !canAttachImages {
                 errorMessage = L10n.text("このモデルは画像入力に対応していません。")
-                return
+                return false
             }
             do {
                 let persistedURL = try attachmentRepository.persistAttachment(url: url)
@@ -236,6 +237,7 @@ final class ChatViewModel: ObservableObject {
                     AttachmentDraft(url: persistedURL, displayName: displayName ?? url.lastPathComponent)
                 )
                 errorMessage = nil
+                return true
             } catch {
                 errorMessage = L10n.text("ファイルを読み込めませんでした。")
                 DiagnosticsLogger.log(
@@ -243,7 +245,7 @@ final class ChatViewModel: ObservableObject {
                     category: .chat,
                     error: error
                 )
-                return
+                return false
             }
         case let .tooLarge(sizeBytes):
             let sizeMB = Double(sizeBytes) / (1024 * 1024)
@@ -262,6 +264,7 @@ final class ChatViewModel: ObservableObject {
                 error: ProviderClientError.parseFailure(errorMessage)
             )
         }
+        return false
     }
 
     func removeAttachment(id: UUID) {

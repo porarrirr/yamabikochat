@@ -181,7 +181,12 @@
 "AIへの指示…" = "Instructions pour l'IA…";
 "待機中" = "En attente";
 "実行中" = "En cours d'exécution";
+"%d番目に選択中" = "Sélection n° %d";
+"写真" = "Photo";
 "写真を追加" = "Ajouter une photo";
+"未選択" = "Non sélectionnée";
+"選択中" = "Sélectionnées";
+"選択を解除" = "Effacer la sélection";
 "取り込み済みGemini OAuth設定のクリアに失敗しました" = "Échec de la suppression de la configuration OAuth Gemini importée";
 "取り込み済みGemini OAuth設定をクリアしました" = "Configuration OAuth Gemini importée supprimée";
 "取り込み設定をクリア" = "Effacer la configuration importée";

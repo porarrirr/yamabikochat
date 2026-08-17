@@ -10,6 +10,48 @@ struct RecentPhotoItem: Identifiable {
     }
 }
 
+struct RecentPhotoSelection: Equatable {
+    let limit: Int
+    private(set) var orderedIDs: [String] = []
+
+    init(limit: Int) {
+        precondition(limit > 0)
+        self.limit = limit
+    }
+
+    var count: Int {
+        orderedIDs.count
+    }
+
+    var isEmpty: Bool {
+        orderedIDs.isEmpty
+    }
+
+    var isAtLimit: Bool {
+        orderedIDs.count >= limit
+    }
+
+    func selectionIndex(for id: String) -> Int? {
+        orderedIDs.firstIndex(of: id).map { $0 + 1 }
+    }
+
+    @discardableResult
+    mutating func toggle(_ id: String) -> Bool {
+        if let index = orderedIDs.firstIndex(of: id) {
+            orderedIDs.remove(at: index)
+            return true
+        }
+
+        guard !isAtLimit else { return false }
+        orderedIDs.append(id)
+        return true
+    }
+
+    mutating func removeAll() {
+        orderedIDs.removeAll()
+    }
+}
+
 @MainActor
 final class RecentPhotoLibrary: ObservableObject {
     @Published private(set) var authorizationStatus: PHAuthorizationStatus

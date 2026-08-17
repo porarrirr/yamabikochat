@@ -29,7 +29,7 @@ final class ChatViewModelAttachmentTests: XCTestCase {
         let file = try makeTemporaryFile(name: "unbound.txt", text: "draft")
         defer { try? FileManager.default.removeItem(at: file) }
 
-        viewModel.addAttachment(url: file)
+        XCTAssertFalse(viewModel.addAttachment(url: file))
 
         XCTAssertEqual(viewModel.attachments.count, 0)
         XCTAssertEqual(viewModel.errorMessage, L10n.text("チャット初期化中です。少し待ってから再試行してください。"))
@@ -47,7 +47,7 @@ final class ChatViewModelAttachmentTests: XCTestCase {
         let source = try makeTemporaryFile(name: "valid.txt", text: "attachment body")
         defer { try? FileManager.default.removeItem(at: source) }
 
-        viewModel.addAttachment(url: source)
+        XCTAssertTrue(viewModel.addAttachment(url: source))
 
         XCTAssertEqual(viewModel.attachments.count, 1)
         XCTAssertEqual(viewModel.attachments.first?.displayName, "valid.txt")
@@ -69,7 +69,7 @@ final class ChatViewModelAttachmentTests: XCTestCase {
 
         let source = try makeTemporaryFile(name: "owned.txt", text: "temporary attachment")
 
-        viewModel.addAttachment(url: source, deleteSourceWhenHandled: true)
+        XCTAssertTrue(viewModel.addAttachment(url: source, deleteSourceWhenHandled: true))
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
         XCTAssertEqual(viewModel.attachments.count, 1)
@@ -109,5 +109,46 @@ final class ChatViewModelAttachmentTests: XCTestCase {
             credentials: credentials
         )
         return (repository, conversations)
+    }
+}
+
+final class RecentPhotoSelectionTests: XCTestCase {
+    func testTogglePreservesSelectionOrderAndRenumbersAfterDeselection() {
+        var selection = RecentPhotoSelection(limit: 3)
+
+        XCTAssertTrue(selection.toggle("first"))
+        XCTAssertTrue(selection.toggle("second"))
+        XCTAssertEqual(selection.orderedIDs, ["first", "second"])
+        XCTAssertEqual(selection.selectionIndex(for: "first"), 1)
+        XCTAssertEqual(selection.selectionIndex(for: "second"), 2)
+
+        XCTAssertTrue(selection.toggle("first"))
+        XCTAssertEqual(selection.orderedIDs, ["second"])
+        XCTAssertNil(selection.selectionIndex(for: "first"))
+        XCTAssertEqual(selection.selectionIndex(for: "second"), 1)
+    }
+
+    func testToggleRejectsNewSelectionAtLimitButStillAllowsDeselection() {
+        var selection = RecentPhotoSelection(limit: 2)
+
+        XCTAssertTrue(selection.toggle("first"))
+        XCTAssertTrue(selection.toggle("second"))
+        XCTAssertTrue(selection.isAtLimit)
+        XCTAssertFalse(selection.toggle("third"))
+        XCTAssertEqual(selection.orderedIDs, ["first", "second"])
+
+        XCTAssertTrue(selection.toggle("first"))
+        XCTAssertFalse(selection.isAtLimit)
+        XCTAssertEqual(selection.orderedIDs, ["second"])
+    }
+
+    func testRemoveAllClearsSelection() {
+        var selection = RecentPhotoSelection(limit: 2)
+        selection.toggle("first")
+
+        selection.removeAll()
+
+        XCTAssertTrue(selection.isEmpty)
+        XCTAssertEqual(selection.count, 0)
     }
 }

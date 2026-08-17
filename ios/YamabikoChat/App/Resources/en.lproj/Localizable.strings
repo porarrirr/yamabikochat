@@ -181,7 +181,12 @@
 "AIへの指示…" = "Instructions for AI…";
 "待機中" = "Idle";
 "実行中" = "Running";
+"%d番目に選択中" = "Selected %d";
+"写真" = "Photo";
 "写真を追加" = "Add Photo";
+"未選択" = "Not selected";
+"選択中" = "Selected";
+"選択を解除" = "Clear selection";
 "取り込み済みGemini OAuth設定のクリアに失敗しました" = "Failed to clear imported Gemini OAuth settings";
 "取り込み済みGemini OAuth設定をクリアしました" = "Cleared imported Gemini OAuth settings";
 "取り込み設定をクリア" = "Clear imported settings";
