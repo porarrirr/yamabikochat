@@ -16,6 +16,8 @@ struct TokenUsageRecord: Codable, FetchableRecord, MutablePersistableRecord, Ide
     var reasoningTokens: Int?
     var cachedInputTokens: Int?
     var cacheCreationInputTokens: Int?
+    var contextTokens: Int?
+    var contextWindow: Int?
     var costUsd: Double?
 
     init(
@@ -31,6 +33,8 @@ struct TokenUsageRecord: Codable, FetchableRecord, MutablePersistableRecord, Ide
         reasoningTokens: Int? = nil,
         cachedInputTokens: Int? = nil,
         cacheCreationInputTokens: Int? = nil,
+        contextTokens: Int? = nil,
+        contextWindow: Int? = nil,
         costUsd: Double? = nil
     ) {
         self.id = id
@@ -45,6 +49,8 @@ struct TokenUsageRecord: Codable, FetchableRecord, MutablePersistableRecord, Ide
         self.reasoningTokens = reasoningTokens
         self.cachedInputTokens = cachedInputTokens
         self.cacheCreationInputTokens = cacheCreationInputTokens
+        self.contextTokens = contextTokens
+        self.contextWindow = contextWindow
         self.costUsd = costUsd
     }
 

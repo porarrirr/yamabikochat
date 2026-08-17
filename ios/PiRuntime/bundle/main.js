@@ -283462,11 +283462,14 @@ function modelFrom(config) {
     reasoning: Boolean(config.reasoning),
     input: config.supportsImages ? ["text", "image"] : ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: config.contextWindow || 128e3,
+    contextWindow: knownContextWindow(config) || 128e3,
     maxTokens: config.maxTokens || 8192,
     headers: effectiveHeaders(config) || void 0,
     compat: config.compat || void 0
   };
+}
+function knownContextWindow(config) {
+  return config.contextWindow || authModels.getModel(config.provider, config.model)?.contextWindow || null;
 }
 function contentFor(message) {
   const blocks = [];
@@ -283721,7 +283724,7 @@ function makeTools(request, runId, res) {
     };
   });
 }
-function finalResponse(assistants) {
+function finalResponse(assistants, contextUsage) {
   const last = assistants.at(-1);
   if (!last) throw new Error("Pi provider returned no assistant message");
   if (last.stopReason === "error" || last.errorMessage) {
@@ -283748,11 +283751,24 @@ function finalResponse(assistants) {
   if (!text && !reasoning && !toolCalls.length) {
     throw new Error(`Pi provider completed without content (stopReason=${last.stopReason || "unknown"})`);
   }
+  const aggregateUsage = assistants.length ? totals : null;
+  const usageSamples = assistants.map((message) => providerUsage(message.usage)).filter(Boolean);
+  if (contextUsage) {
+    if (aggregateUsage) {
+      aggregateUsage.contextTokens = contextUsage.tokens;
+      aggregateUsage.contextWindow = contextUsage.contextWindow;
+    }
+    const lastSample = usageSamples.at(-1);
+    if (lastSample) {
+      lastSample.contextTokens = contextUsage.tokens;
+      lastSample.contextWindow = contextUsage.contextWindow;
+    }
+  }
   return {
     text,
     reasoningSummary: reasoning || null,
-    usage: assistants.length ? totals : null,
-    usageSamples: assistants.map((message) => providerUsage(message.usage)).filter(Boolean),
+    usage: aggregateUsage,
+    usageSamples,
     toolCalls
   };
 }
@@ -283817,7 +283833,9 @@ async function runAgent(envelope, res) {
       contentTypes: (last?.content || []).map((part) => part.type).join(","),
       errorMessage: last?.errorMessage || "none"
     });
-    const response = finalResponse(runAssistants);
+    const contextWindow = knownContextWindow(config);
+    const contextEstimate = contextWindow && last?.usage ? { tokens: last.usage.totalTokens, contextWindow } : null;
+    const response = finalResponse(runAssistants, contextEstimate);
     report("agent_complete", "Pi agent execution completed");
     send(res, { type: "completed", response });
   } catch (error) {

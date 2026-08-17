@@ -108,7 +108,10 @@ final class PiAgentGatewayTests: XCTestCase {
                     includeThoughts: true,
                     exclude: nil
                 ),
-                metadata: ["geminiThinkingLevel": "high"]
+                metadata: [
+                    "geminiThinkingLevel": "high",
+                    "contextWindow": "1048576"
+                ]
             ),
             provider: .gemini
         )
@@ -117,6 +120,7 @@ final class PiAgentGatewayTests: XCTestCase {
         XCTAssertEqual(configuration.api, "google-generative-ai")
         XCTAssertEqual(configuration.provider, "google")
         XCTAssertEqual(configuration.thinkingLevel, "high")
+        XCTAssertEqual(configuration.contextWindow, 1_048_576)
     }
 
     func testGemma4ThinkingLevelIsPassedThroughPiConfiguration() async throws {

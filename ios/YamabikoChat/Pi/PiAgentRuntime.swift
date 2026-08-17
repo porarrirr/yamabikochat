@@ -14,7 +14,7 @@ struct PiAgentConfiguration: Codable, Sendable {
     var reasoning: Bool
     var thinkingLevel: String?
     var supportsImages: Bool
-    var contextWindow: Int
+    var contextWindow: Int?
     var maxTokens: Int
     var mcpAuthorizationToken: String? = nil
 }

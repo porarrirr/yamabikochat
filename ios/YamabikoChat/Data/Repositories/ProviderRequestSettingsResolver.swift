@@ -80,7 +80,16 @@ final class ProviderRequestSettingsResolver {
         context: AppSettings.ReasoningContext = .default,
         toolScope: ProviderRequestToolScope = .all
     ) async throws -> ProviderRequestResolvedSettings {
-        ProviderRequestResolvedSettings(
+        var metadata = metadataForProvider(
+            settings: settings,
+            provider: provider,
+            model: model,
+            context: context
+        )
+        if let contextWindow = modelService.resolveContextLength(modelID: model, providerID: provider) {
+            metadata["contextWindow"] = String(contextWindow)
+        }
+        return ProviderRequestResolvedSettings(
             tools: toolsForProvider(
                 settings: settings,
                 provider: provider,
@@ -98,12 +107,7 @@ final class ProviderRequestSettingsResolver {
                 provider: provider,
                 model: model
             ),
-            metadata: metadataForProvider(
-                settings: settings,
-                provider: provider,
-                model: model,
-                context: context
-            )
+            metadata: metadata
         )
     }
 

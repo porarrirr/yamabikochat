@@ -168,6 +168,33 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         XCTAssertEqual(resolved.routing?.requireParameters, true)
     }
 
+    func testResolvedModelContextWindowIsPassedToPiMetadata() async throws {
+        let modelService = OpenRouterModelService(credentialStore: ResolverCredentialStore())
+        modelService.replaceCachedModels([
+            SimpleModel(
+                id: "google/gemini-test",
+                name: "Gemini Test",
+                provider: "google",
+                topProvider: "google",
+                contextLength: 1_048_576,
+                promptPricePerMillion: 0,
+                completionPricePerMillion: 0,
+                isFree: true,
+                availableProviders: ["google"],
+                availableQuantizations: []
+            )
+        ])
+        let resolver = ProviderRequestSettingsResolver(modelService: modelService)
+
+        let resolved = try await resolver.resolve(
+            settings: AppSettings(),
+            provider: "GEMINI",
+            model: "gemini-test"
+        )
+
+        XCTAssertEqual(resolved.metadata["contextWindow"], "1048576")
+    }
+
     func testAgentSkillFunctionToolsAreSentOnlyOnceWhenLocalRegistryAlsoContainsExecutors() async throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory

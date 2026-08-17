@@ -61,6 +61,30 @@ struct ConversationStats: Equatable, Sendable {
     }
 }
 
+/// Context pressure calculated by Pi's official context estimator.
+struct ContextUsage: Equatable, Sendable {
+    let usedTokens: Int
+    let contextWindow: Int
+
+    init?(record: TokenUsageRecord?) {
+        guard let record,
+              let contextTokens = record.contextTokens,
+              let contextWindow = record.contextWindow,
+              contextTokens >= 0,
+              contextWindow > 0 else { return nil }
+        usedTokens = contextTokens
+        self.contextWindow = contextWindow
+    }
+
+    var percent: Int {
+        min(100, Int((Double(usedTokens) / Double(contextWindow) * 100).rounded()))
+    }
+
+    var fraction: Double {
+        min(1, Double(usedTokens) / Double(contextWindow))
+    }
+}
+
 enum ChatStatsField: String, Codable, CaseIterable, Identifiable {
     case turns
     case steps

@@ -36,6 +36,9 @@ final class AppServices {
         attachmentRepository = AttachmentRepository()
         skillRepository = AgentSkillRepository()
         openRouterModelService = OpenRouterModelService(credentialStore: credentialStore)
+        Task { [openRouterModelService] in
+            _ = await openRouterModelService.getAvailableModels()
+        }
         // The resolver receives only the client web tools. Agent Skill tools are
         // appended by the resolver itself; the Pi runtime registry below includes
         // their executors so `activate_skill` / `read_skill_resource` calls can be

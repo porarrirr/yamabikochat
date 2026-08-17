@@ -1605,41 +1605,6 @@ final class ChatRepository {
         )
     }
 
-    func resolveContextLimit(provider: String, model: String) async -> Int? {
-        let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedModel.isEmpty else { return nil }
-
-        if let direct = modelService.getModelById(normalizedModel)?.contextLength, direct > 0 {
-            return direct
-        }
-
-        let lowerModel = normalizedModel.lowercased()
-        let withoutVariant = lowerModel.components(separatedBy: ":").first ?? lowerModel
-        let suffix = withoutVariant.split(separator: "/").dropFirst().joined(separator: "/")
-
-        let refresh = modelService.currentModels().isEmpty
-        let available = await modelService.getAvailableModels(forceRefresh: refresh)
-        if let exact = available.first(where: { $0.id.lowercased() == lowerModel }), exact.contextLength > 0 {
-            return exact.contextLength
-        }
-        if !suffix.isEmpty,
-           let loose = available.first(where: { model in
-               let candidate = model.id.lowercased().components(separatedBy: ":").first ?? model.id.lowercased()
-               return candidate == withoutVariant || candidate.hasSuffix("/\(suffix)")
-           }),
-           loose.contextLength > 0 {
-            return loose.contextLength
-        }
-
-        let providerKey = provider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        if providerKey == "OPENROUTER",
-           let fallback = modelService.getModelById(normalizedModel)?.contextLength,
-           fallback > 0 {
-            return fallback
-        }
-        return nil
-    }
-
     func getProvidersDirectory() async -> ProviderDirectory {
         await modelService.getProvidersDirectory()
     }
@@ -2009,6 +1974,8 @@ final class ChatRepository {
                     reasoningTokens: normalized.reasoningTokens,
                     cachedInputTokens: normalized.cachedInputTokens,
                     cacheCreationInputTokens: normalized.cacheCreationInputTokens,
+                    contextTokens: normalized.contextTokens,
+                    contextWindow: normalized.contextWindow,
                     costUsd: costUsd
                 )
             )

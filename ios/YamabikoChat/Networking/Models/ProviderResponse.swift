@@ -7,6 +7,8 @@ struct ProviderUsage: Codable, Sendable, Equatable {
     var reasoningTokens: Int? = nil
     var cachedInputTokens: Int? = nil
     var cacheCreationInputTokens: Int? = nil
+    var contextTokens: Int? = nil
+    var contextWindow: Int? = nil
 
     var isEmpty: Bool {
         let input = max(0, inputTokens ?? 0)
@@ -26,7 +28,9 @@ struct ProviderUsage: Codable, Sendable, Equatable {
             totalTokens: total,
             reasoningTokens: reasoningTokens.map { max(0, $0) },
             cachedInputTokens: cachedInputTokens.map { max(0, $0) },
-            cacheCreationInputTokens: cacheCreationInputTokens.map { max(0, $0) }
+            cacheCreationInputTokens: cacheCreationInputTokens.map { max(0, $0) },
+            contextTokens: contextTokens.map { max(0, $0) },
+            contextWindow: contextWindow.flatMap { $0 > 0 ? $0 : nil }
         )
     }
 
@@ -60,7 +64,9 @@ extension ProviderUsage {
             totalTokens: sum(totalTokens, other.totalTokens),
             reasoningTokens: sum(reasoningTokens, other.reasoningTokens),
             cachedInputTokens: sum(cachedInputTokens, other.cachedInputTokens),
-            cacheCreationInputTokens: sum(cacheCreationInputTokens, other.cacheCreationInputTokens)
+            cacheCreationInputTokens: sum(cacheCreationInputTokens, other.cacheCreationInputTokens),
+            contextTokens: other.contextTokens ?? contextTokens,
+            contextWindow: other.contextWindow ?? contextWindow
         )
     }
 }

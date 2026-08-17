@@ -365,6 +365,44 @@ final class OpenRouterModelService {
         modelsSubject.value.first(where: { $0.id == modelId })
     }
 
+    func resolveContextLength(modelID: String, providerID: String) -> Int? {
+        let normalized = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+
+        if let direct = getModelById(normalized)?.contextLength, direct > 0 {
+            return direct
+        }
+
+        let lowerModel = normalized.lowercased()
+        let withoutVariant = lowerModel.components(separatedBy: ":").first ?? lowerModel
+        let targetLeaf = withoutVariant.split(separator: "/").last.map(String.init) ?? withoutVariant
+        let providerPrefix: String? = switch providerID.uppercased() {
+        case "GEMINI": "google"
+        case "OPENAI", "CODEX_AUTH": "openai"
+        case "MINIMAX": "minimax"
+        case "ZAI": "z-ai"
+        case "SUPERGROK": "x-ai"
+        case "ALIBABA_CODING_PLAN": "qwen"
+        default: nil
+        }
+        let available = currentModels()
+
+        if let exact = available.first(where: { $0.id.lowercased() == lowerModel }),
+           exact.contextLength > 0 {
+            return exact.contextLength
+        }
+        if let loose = available.first(where: { model in
+               let candidate = model.id.lowercased().components(separatedBy: ":").first ?? model.id.lowercased()
+               let candidateLeaf = candidate.split(separator: "/").last.map(String.init) ?? candidate
+               let prefixMatches = providerPrefix.map { candidate.hasPrefix("\($0)/") } ?? true
+               return prefixMatches && (candidate == withoutVariant || candidateLeaf == targetLeaf)
+           }),
+           loose.contextLength > 0 {
+            return loose.contextLength
+        }
+        return nil
+    }
+
     func clearCache() {
         cachedModels = nil
         lastFetch = nil

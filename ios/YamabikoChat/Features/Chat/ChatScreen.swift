@@ -383,6 +383,10 @@ struct ChatScreen: View {
                 .disabled(viewModel.isSending)
                 .accessibilityLabel(Text("音声入力"))
 
+                if let contextUsage = viewModel.visibleContextUsage {
+                    ContextUsageMeter(usage: contextUsage)
+                }
+
                 Button {
                     if canSend {
                         isAttachmentPanelVisible = false
@@ -414,6 +418,54 @@ struct ChatScreen: View {
             .overlay {
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
                     .stroke(Color.chatBubbleBorder.opacity(0.16), lineWidth: 1)
+            }
+        }
+    }
+
+    private struct ContextUsageMeter: View {
+        let usage: ContextUsage
+        @State private var showsDetails = false
+
+        var body: some View {
+            Button {
+                showsDetails.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    ZStack {
+                        Circle()
+                            .stroke(Color.chatComposerIcon.opacity(0.2), lineWidth: 2)
+                        Circle()
+                            .trim(from: 0, to: usage.fraction)
+                            .stroke(Color.chatAccent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                    }
+                    .frame(width: 14, height: 14)
+
+                    Text("\(usage.percent)%")
+                        .font(.caption2.monospacedDigit().weight(.semibold))
+                }
+                .foregroundStyle(Color.chatComposerIcon)
+                .frame(minWidth: 42, minHeight: 42)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(L10n.format("コンテキストの%d%%を使用中", usage.percent)))
+            .popover(isPresented: $showsDetails) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(L10n.text("コンテキスト使用量"))
+                        .font(.headline)
+                    Text("\(usage.percent)%")
+                        .font(.title2.monospacedDigit().bold())
+                    Text(L10n.format(
+                        "最新リクエスト: %@ / %@ token",
+                        ChatStatsFormatter.tokens(Int64(usage.usedTokens)),
+                        ChatStatsFormatter.tokens(Int64(usage.contextWindow))
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                .padding(16)
+                .presentationCompactAdaptation(.popover)
             }
         }
     }

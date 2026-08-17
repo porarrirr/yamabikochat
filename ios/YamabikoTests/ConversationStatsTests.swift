@@ -57,6 +57,47 @@ final class ConversationStatsTests: XCTestCase {
         XCTAssertNil(stats.cacheHitPercent)
     }
 
+    func testContextUsageUsesPiOfficialEstimate() throws {
+        let usage = try XCTUnwrap(ContextUsage(
+            record: TokenUsageRecord(
+                provider: "OPENAI",
+                model: "gpt-test",
+                inputTokens: 25,
+                outputTokens: 40_000,
+                totalTokens: 40_100,
+                reasoningTokens: 30_000,
+                cachedInputTokens: 70,
+                cacheCreationInputTokens: 5,
+                contextTokens: 100,
+                contextWindow: 400
+            )
+        ))
+
+        XCTAssertEqual(usage.usedTokens, 100)
+        XCTAssertEqual(usage.percent, 25)
+        XCTAssertEqual(usage.fraction, 0.25)
+    }
+
+    func testContextUsageRequiresCapacityAndClampsDisplayAtOneHundredPercent() throws {
+        let record = TokenUsageRecord(
+            provider: "OPENAI",
+            model: "gpt-test",
+            inputTokens: 500
+        )
+
+        XCTAssertNil(ContextUsage(record: record))
+
+        let usage = try XCTUnwrap(ContextUsage(record: TokenUsageRecord(
+            provider: "OPENAI",
+            model: "gpt-test",
+            inputTokens: 500,
+            contextTokens: 500,
+            contextWindow: 100
+        )))
+        XCTAssertEqual(usage.percent, 100)
+        XCTAssertEqual(usage.fraction, 1)
+    }
+
     func testPiAgentEventsRecordEachLLMStepAndMatchedToolDirectly() throws {
         let sink = ConversationMetricSink()
         let context = ProviderMetricsContext(

@@ -763,6 +763,19 @@ enum AppDatabase {
             }
         }
 
+        migrator.registerMigration("v17_pi_context_usage") { db in
+            let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(token_usage_records)")
+            let columns = Set(rows.compactMap { ($0["name"] as String?)?.lowercased() })
+            try db.alter(table: "token_usage_records") { t in
+                if !columns.contains("contexttokens") {
+                    t.add(column: "contextTokens", .integer)
+                }
+                if !columns.contains("contextwindow") {
+                    t.add(column: "contextWindow", .integer)
+                }
+            }
+        }
+
         return migrator
     }
 

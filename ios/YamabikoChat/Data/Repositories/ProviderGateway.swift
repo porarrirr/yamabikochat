@@ -273,7 +273,7 @@ final class ProviderGateway {
                 geminiLevel: provider == .gemini ? request.metadata["geminiThinkingLevel"] : nil
             ),
             supportsImages: request.metadata["supportsVision"] == "true",
-            contextWindow: 128_000,
+            contextWindow: Int(request.metadata["contextWindow"] ?? ""),
             maxTokens: max(1024, Int(request.metadata["max_output_tokens"] ?? "") ?? 8192),
             mcpAuthorizationToken: mcpAuthorizationToken
         )
