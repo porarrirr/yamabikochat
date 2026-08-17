@@ -312,7 +312,10 @@ final class ChatViewModel: ObservableObject {
         Task {
             defer { isSending = false }
             do {
-                let attachmentPaths = attachmentDrafts.map { $0.url.absoluteString }
+                // Provider requests use filesystem paths. Serializing these URLs with
+                // absoluteString would produce `file:///...`, which is not a path and
+                // causes the Pi runtime to look for a non-existent file.
+                let attachmentPaths = attachmentDrafts.map { $0.url.path }
 
                 if settings.isFusionModeEnabled {
                     guard !text.isEmpty || !attachmentPaths.isEmpty else {

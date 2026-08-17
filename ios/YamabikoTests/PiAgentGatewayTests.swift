@@ -19,6 +19,22 @@ private final class PiGatewayCredentialStore: SecureCredentialStore {
 }
 
 final class PiAgentGatewayTests: XCTestCase {
+    func testAttachmentFileURLResolvesFilesystemPath() {
+        let path = "/tmp/Yamabiko Chat/photo.png"
+
+        let resolved = PiAgentRuntime.attachmentFileURL(from: path)
+
+        XCTAssertEqual(resolved.path, path)
+    }
+
+    func testAttachmentFileURLResolvesPersistedFileURL() {
+        let fileURL = URL(fileURLWithPath: "/tmp/Yamabiko Chat/photo.png")
+
+        let resolved = PiAgentRuntime.attachmentFileURL(from: fileURL.absoluteString)
+
+        XCTAssertEqual(resolved.path, fileURL.path)
+    }
+
     func testBundledPiRuntimeStarts() async throws {
         try await PiAgentRuntime.shared.verifyReady()
     }

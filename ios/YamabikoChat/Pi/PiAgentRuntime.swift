@@ -561,7 +561,7 @@ actor PiAgentRuntime {
     }
 
     private static func loadImageAttachment(_ path: String) throws -> PiAttachment? {
-        let url = URL(fileURLWithPath: path)
+        let url = attachmentFileURL(from: path)
         let values = try url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey])
         guard (values.fileSize ?? 0) <= AppConstants.maxAttachmentSizeBytes else {
             throw ProviderClientError.parseFailure("Attachment exceeds the 10 MB limit")
@@ -570,6 +570,16 @@ actor PiAgentRuntime {
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
         let type = values.contentType?.preferredMIMEType ?? "image/jpeg"
         return PiAttachment(data: data.base64EncodedString(), mimeType: type)
+    }
+
+    /// Resolves the attachment representation persisted in conversation history.
+    /// New messages contain filesystem paths, while messages created before the
+    /// path-serialization fix contain file URLs.
+    static func attachmentFileURL(from value: String) -> URL {
+        if let url = URL(string: value), url.isFileURL {
+            return url.standardizedFileURL
+        }
+        return URL(fileURLWithPath: value).standardizedFileURL
     }
 
     private static func submitToolResult(
