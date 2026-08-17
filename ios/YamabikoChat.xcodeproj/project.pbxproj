@@ -210,11 +210,13 @@
 		F433C294C36D3EE17D2A09BA /* FusionDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EEDB52857CBB57D89EE2520 /* FusionDetailSheet.swift */; };
 		F59F98D988ECB2F6244F94F8 /* SuperGrokAuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B87B752F42B76EA2490112 /* SuperGrokAuthModels.swift */; };
 		F69F0939F13B693EE461FF79 /* AppStoreScreenshotDemoSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A338F8BAA2B2E3E8F2D0096A /* AppStoreScreenshotDemoSeeder.swift */; };
+		F748208B581CA725BC4C76F9 /* CameraPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C0EB557B6A96FE9A47038F8 /* CameraPicker.swift */; };
 		F7E8A6A4B495FAF9230EB610 /* RelevantPageReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E64092198F686EF08BC626FC /* RelevantPageReader.swift */; };
 		F83EFAD8650B49B29FD63F50 /* AutoConversationMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E0AF024AFDE4AE3554BA68 /* AutoConversationMessage.swift */; };
 		F96F8931673091505236216B /* ModelsDevCatalogRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA315FEF3D504A495B8F5F2B /* ModelsDevCatalogRepository.swift */; };
 		F97C698E6296C53CE1574499 /* ClinePassModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE99330C07C20D5A185F5F8 /* ClinePassModelCatalog.swift */; };
 		F9D736C50BFE0923A5D98C63 /* ChatViewModelBranchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC2326E949464E12375DC82 /* ChatViewModelBranchTests.swift */; };
+		FA1D27A88BDF2C8CDD2C0384 /* RecentPhotoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FC8486AA5F99F999DB590DB /* RecentPhotoSheet.swift */; };
 		FB8023BF030CF91406A9FC78 /* YamabikoShortcutsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3B92874748EC47367013A00 /* YamabikoShortcutsProvider.swift */; };
 		FD6EBD60BE58614CFCB92BDF /* RunAndSaveYamabikoModelIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71DC31B6287DA4F2579AD285 /* RunAndSaveYamabikoModelIntent.swift */; };
 		FE885E027AF3F3D2CC499BAE /* FusionMessageSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 785CD68949277725AACBCB47 /* FusionMessageSummary.swift */; };
@@ -367,6 +369,7 @@
 		675569E061B2D501C62AC37B /* ChatRepositoryBranchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepositoryBranchTests.swift; sourceTree = "<group>"; };
 		68417249749E064D56E23ACE /* tex-svg.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "tex-svg.js"; sourceTree = "<group>"; };
 		68E251DA917600FC2DF85D85 /* ChatMessageToolActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageToolActivity.swift; sourceTree = "<group>"; };
+		6C0EB557B6A96FE9A47038F8 /* CameraPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPicker.swift; sourceTree = "<group>"; };
 		7077367178B8D0B29308F183 /* ModelsDevCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsDevCatalogTests.swift; sourceTree = "<group>"; };
 		71DC31B6287DA4F2579AD285 /* RunAndSaveYamabikoModelIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunAndSaveYamabikoModelIntent.swift; sourceTree = "<group>"; };
 		71E38ECB6FCC39AB8BABE949 /* RecentPhotoLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentPhotoLibrary.swift; sourceTree = "<group>"; };
@@ -413,6 +416,7 @@
 		9B1630BEBD1C1648F035DAA9 /* SystemPromptComposerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPromptComposerTests.swift; sourceTree = "<group>"; };
 		9E7DA902C4E31F43AC67F6DE /* ProjectFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectFeatureTests.swift; sourceTree = "<group>"; };
 		9F7728CEBDE28C87D739A44F /* CatalogPickerFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogPickerFields.swift; sourceTree = "<group>"; };
+		9FC8486AA5F99F999DB590DB /* RecentPhotoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentPhotoSheet.swift; sourceTree = "<group>"; };
 		A0E39A438B710CF8BB0B6199 /* LLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProvider.swift; sourceTree = "<group>"; };
 		A338F8BAA2B2E3E8F2D0096A /* AppStoreScreenshotDemoSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotDemoSeeder.swift; sourceTree = "<group>"; };
 		A394920B0293DB363D2D092D /* CodexModelPresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexModelPresets.swift; sourceTree = "<group>"; };
@@ -824,6 +828,7 @@
 			isa = PBXGroup;
 			children = (
 				16BB3545343C24FCACEF4EE7 /* AutoConversationTrigger.swift */,
+				6C0EB557B6A96FE9A47038F8 /* CameraPicker.swift */,
 				74634042F6B9EDD034B7F7A3 /* ChatErrorViews.swift */,
 				DEE1F7C1D36E90F3AC5C8C74 /* ChatScreen.swift */,
 				1DDFDE867E825EB89B66D36A /* ChatViewModel.swift */,
@@ -833,6 +838,7 @@
 				12D11ABE6D40DCFD9C7D73B1 /* HtmlPreviewCard.swift */,
 				E24B2D0E1B8B5D9D45FF6161 /* MathMarkdownView.swift */,
 				71E38ECB6FCC39AB8BABE949 /* RecentPhotoLibrary.swift */,
+				9FC8486AA5F99F999DB590DB /* RecentPhotoSheet.swift */,
 				25418095A457767B82727AED /* SvgCodeExtractor.swift */,
 				2BD71648A1094DBA64CF4949 /* SvgPreviewCard.swift */,
 				0668334AA8F62D1F58F6B2F6 /* SvgPreviewWebView.swift */,
@@ -1359,6 +1365,7 @@
 				E63C987D58BF59A7019846BD /* AutoConversationSettingsSection.swift in Sources */,
 				462026B74A52B7004D1904E0 /* AutoConversationTrigger.swift in Sources */,
 				14BF6506C9D8F6C2BE2A7AD8 /* BackgroundTaskGuard.swift in Sources */,
+				F748208B581CA725BC4C76F9 /* CameraPicker.swift in Sources */,
 				5FB0ABA85BA603C945A86C68 /* CatalogPickerFields.swift in Sources */,
 				41BF3185D2B34E5B0A13897E /* ChatErrorViews.swift in Sources */,
 				162459CC3F5A69C2E4423019 /* ChatMessage.swift in Sources */,
@@ -1436,6 +1443,7 @@
 				420A27134573C14D0C25C8D4 /* ProviderResponse.swift in Sources */,
 				67A83D5BBD97B63A244F9AE9 /* QueryModels.swift in Sources */,
 				F21ED9977B4C899512D10E80 /* RecentPhotoLibrary.swift in Sources */,
+				FA1D27A88BDF2C8CDD2C0384 /* RecentPhotoSheet.swift in Sources */,
 				F7E8A6A4B495FAF9230EB610 /* RelevantPageReader.swift in Sources */,
 				7ECFAF36ED62E3488F99484B /* RootView.swift in Sources */,
 				FD6EBD60BE58614CFCB92BDF /* RunAndSaveYamabikoModelIntent.swift in Sources */,

@@ -61,6 +61,8 @@
 	</dict>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>YamabikoChat uses photo library access to attach selected or recent images to conversations.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>YamabikoChat uses camera access to take and attach photos to conversations.</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>CFBundleURLTypes</key>

@@ -1,3 +1,4 @@
 "NSMicrophoneUsageDescription" = "YamabikoChat 仅在消息输入框中进行语音输入时使用麦克风。";
 "NSSpeechRecognitionUsageDescription" = "YamabikoChat 使用语音识别将你的语音转换为消息文本。";
 "NSPhotoLibraryUsageDescription" = "YamabikoChat 使用照片图库权限，将你选择的照片或最近的照片添加到对话中。";
+"NSCameraUsageDescription" = "YamabikoChat 使用相机权限拍摄照片并将其添加到对话中。";

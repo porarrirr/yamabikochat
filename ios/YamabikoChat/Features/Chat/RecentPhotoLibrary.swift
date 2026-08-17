@@ -1,12 +1,23 @@
 import Foundation
 import Photos
+import UIKit
 import UniformTypeIdentifiers
 
-struct RecentPhotoItem: Identifiable {
+struct RecentPhotoItem: Identifiable, Equatable {
     let asset: PHAsset
 
     var id: String {
         asset.localIdentifier
+    }
+
+    var aspectRatio: CGFloat {
+        let width = CGFloat(max(asset.pixelWidth, 1))
+        let height = CGFloat(max(asset.pixelHeight, 1))
+        return width / height
+    }
+
+    static func == (lhs: RecentPhotoItem, rhs: RecentPhotoItem) -> Bool {
+        lhs.id == rhs.id
     }
 }
 
@@ -53,6 +64,67 @@ struct RecentPhotoSelection: Equatable {
 }
 
 @MainActor
+final class RecentPhotoThumbnailCache {
+    static let shared = RecentPhotoThumbnailCache()
+    private let cache = NSCache<NSString, UIImage>()
+    private let imageManager = PHCachingImageManager()
+
+    init() {
+        cache.countLimit = 400
+    }
+
+    func cachedThumbnail(for localIdentifier: String, targetSize: CGSize) -> UIImage? {
+        let key = "\(localIdentifier)_\(Int(targetSize.width))x\(Int(targetSize.height))" as NSString
+        return cache.object(forKey: key)
+    }
+
+    func thumbnail(for asset: PHAsset, targetSize: CGSize) async -> UIImage? {
+        let key = "\(asset.localIdentifier)_\(Int(targetSize.width))x\(Int(targetSize.height))" as NSString
+        if let cached = cache.object(forKey: key) {
+            return cached
+        }
+
+        return await withCheckedContinuation { continuation in
+            let options = PHImageRequestOptions()
+            options.deliveryMode = .opportunistic
+            options.resizeMode = .fast
+            options.isNetworkAccessAllowed = true
+
+            var didResume = false
+            imageManager.requestImage(
+                for: asset,
+                targetSize: targetSize,
+                contentMode: .aspectFill,
+                options: options
+            ) { [weak self] image, info in
+                let isCancelled = (info?[PHImageCancelledKey] as? NSNumber)?.boolValue ?? false
+                let isDegraded = (info?[PHImageResultIsDegradedKey] as? NSNumber)?.boolValue ?? false
+                if isCancelled {
+                    if !didResume {
+                        didResume = true
+                        continuation.resume(returning: nil)
+                    }
+                    return
+                }
+
+                if let image {
+                    if !isDegraded {
+                        self?.cache.setObject(image, forKey: key)
+                    }
+                    if !didResume {
+                        didResume = true
+                        continuation.resume(returning: image)
+                    }
+                } else if !didResume {
+                    didResume = true
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+}
+
+@MainActor
 final class RecentPhotoLibrary: ObservableObject {
     @Published private(set) var authorizationStatus: PHAuthorizationStatus
     @Published private(set) var items: [RecentPhotoItem] = []
@@ -71,11 +143,11 @@ final class RecentPhotoLibrary: ObservableObject {
     }
 
     init() {
-        authorizationStatus = PHPhotoLibrary.authorizationStatus()
+        authorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
     }
 
     func refresh() {
-        authorizationStatus = PHPhotoLibrary.authorizationStatus()
+        authorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         guard canShowRecentPhotos else {
             isLoading = false
             items = []
@@ -85,14 +157,14 @@ final class RecentPhotoLibrary: ObservableObject {
     }
 
     func requestAuthorization() {
-        let currentStatus = PHPhotoLibrary.authorizationStatus()
+        let currentStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         authorizationStatus = currentStatus
         guard currentStatus == .notDetermined else {
             refresh()
             return
         }
 
-        PHPhotoLibrary.requestAuthorization { [weak self] status in
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { [weak self] status in
             Task { @MainActor in
                 self?.authorizationStatus = status
                 self?.refresh()
@@ -131,7 +203,7 @@ final class RecentPhotoLibrary: ObservableObject {
         return sanitizedFilename(for: resource)
     }
 
-    private func loadRecentPhotos(limit: Int = 12) {
+    private func loadRecentPhotos(limit: Int = 120) {
         isLoading = true
         Task.detached(priority: .userInitiated) { [weak self] in
             let fetchOptions = PHFetchOptions()
@@ -144,7 +216,7 @@ final class RecentPhotoLibrary: ObservableObject {
                 assets.append(RecentPhotoItem(asset: asset))
             }
 
-            await MainActor.run {
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.items = assets
                 self.isLoading = false

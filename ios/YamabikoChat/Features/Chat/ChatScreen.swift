@@ -47,7 +47,8 @@ struct ChatScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var showFileImporter = false
     @State private var showPhotoPicker = false
-    @State private var isAttachmentPanelVisible = false
+    @State private var showRecentPhotoSheet = false
+    @State private var showCameraPicker = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var isUserNearBottom = true
     @State private var bottomAnchorMaxY: CGFloat = .infinity
@@ -268,6 +269,29 @@ struct ChatScreen: View {
                 await importSelectedPhotos(items)
             }
         }
+        .sheet(isPresented: $showRecentPhotoSheet) {
+            RecentPhotoSheet(
+                library: recentPhotoLibrary,
+                selection: $recentPhotoSelection,
+                isAdding: !addingRecentPhotoIDs.isEmpty,
+                onAddSelected: {
+                    addSelectedRecentPhotos()
+                },
+                onOpenFullLibrary: {
+                    openPhotoPicker()
+                }
+            )
+            .presentationDetents([.fraction(0.55), .large])
+            .presentationDragIndicator(.hidden)
+            .presentationCornerRadius(26)
+            .presentationBackground(Color.chatScreenBackground)
+        }
+        .fullScreenCover(isPresented: $showCameraPicker) {
+            CameraPicker(isPresented: $showCameraPicker) { capturedImage in
+                handleCapturedCameraImage(capturedImage)
+            }
+            .ignoresSafeArea()
+        }
     }
 
     private var canSend: Bool {
@@ -339,10 +363,6 @@ struct ChatScreen: View {
                 .padding(.horizontal, 10)
             }
 
-            if viewModel.canAttachImages, isAttachmentPanelVisible {
-                attachmentPanel
-            }
-
             if !viewModel.skillAutocompleteSuggestions.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
@@ -358,10 +378,28 @@ struct ChatScreen: View {
 
             HStack(alignment: .bottom, spacing: 8) {
                 if viewModel.canAttachImages {
-                    Button {
-                        toggleAttachmentPanel()
+                    Menu {
+                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                            Button {
+                                openCamera()
+                            } label: {
+                                Label(L10n.text("カメラ"), systemImage: "camera")
+                            }
+                        }
+
+                        Button {
+                            openRecentPhotosSheet()
+                        } label: {
+                            Label(L10n.text("写真"), systemImage: "photo")
+                        }
+
+                        Button {
+                            openFileImporter()
+                        } label: {
+                            Label(L10n.text("ファイル"), systemImage: "paperclip")
+                        }
                     } label: {
-                        Image(systemName: isAttachmentPanelVisible ? "xmark" : "plus")
+                        Image(systemName: "plus")
                             .font(.system(size: 20, weight: .regular))
                             .foregroundStyle(Color.chatComposerIcon)
                             .frame(width: 42, height: 42)
@@ -369,7 +407,7 @@ struct ChatScreen: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(Text(isAttachmentPanelVisible ? "添付を閉じる" : "添付を追加"))
+                    .accessibilityLabel(Text("添付を追加"))
                 }
 
                 TextField(viewModel.composerPlaceholder, text: $viewModel.inputText, axis: .vertical)
@@ -398,7 +436,6 @@ struct ChatScreen: View {
 
                 Button {
                     if canSend {
-                        hideAttachmentPanel()
                         viewModel.sendMessage()
                     }
                 } label: {
@@ -479,103 +516,6 @@ struct ChatScreen: View {
         }
     }
 
-    @ViewBuilder
-    private var attachmentPanel: some View {
-        Button {
-            openFileImporter()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "paperclip")
-                Text("ファイルを追加")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-            }
-            .foregroundStyle(Color.chatComposerIcon)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color.chatInputBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-        .buttonStyle(.plain)
-
-        recentPhotoStrip
-    }
-
-    @ViewBuilder
-    private var recentPhotoStrip: some View {
-        if recentPhotoLibrary.canShowRecentPhotos, !recentPhotoLibrary.items.isEmpty {
-            RecentPhotoStrip(
-                items: recentPhotoLibrary.items,
-                selection: recentPhotoSelection,
-                loadingIDs: addingRecentPhotoIDs,
-                onOpenLibrary: {
-                    openPhotoPicker()
-                },
-                onToggleSelection: { item in
-                    recentPhotoSelection.toggle(item.id)
-                },
-                onClearSelection: {
-                    recentPhotoSelection.removeAll()
-                },
-                onAddSelected: {
-                    addSelectedRecentPhotos()
-                }
-            )
-        } else if recentPhotoLibrary.isLoading {
-            HStack(spacing: 10) {
-                ProgressView()
-                    .controlSize(.small)
-                Text("最近の写真を読み込み中...")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(Color.chatInputBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        } else if recentPhotoLibrary.needsAuthorizationPrompt {
-            HStack(spacing: 10) {
-                Image(systemName: "photo.stack")
-                    .foregroundStyle(Color.chatAccent)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("最近の写真を表示")
-                        .font(.subheadline.weight(.semibold))
-                    Text("許可するとここからすぐ添付できます。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 8)
-                Button("許可する") {
-                    recentPhotoLibrary.requestAuthorization()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color.chatInputBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        } else if recentPhotoLibrary.isAccessDenied {
-            HStack(spacing: 10) {
-                Image(systemName: "photo.stack")
-                    .foregroundStyle(.secondary)
-                Text("写真アクセスを許可すると、最近の写真をここに表示できます。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 8)
-                Button("設定") {
-                    openAppSettings()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color.chatInputBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-    }
-
     private func importSelectedPhotos(_ items: [PhotosPickerItem]) async {
         var importedCount = 0
         var failedCount = 0
@@ -603,9 +543,6 @@ struct ChatScreen: View {
 
         await MainActor.run {
             photoItems = []
-            if importedCount > 0 {
-                hideAttachmentPanel()
-            }
             if failedCount > 0 {
                 viewModel.errorMessage = importedCount == 0
                     ? L10n.text("写真を読み込めませんでした。")
@@ -673,7 +610,7 @@ struct ChatScreen: View {
             await MainActor.run {
                 recentPhotoSelection.removeAll()
                 if importedCount > 0 {
-                    hideAttachmentPanel()
+                    showRecentPhotoSheet = false
                 }
                 if failedCount > 0 {
                     viewModel.errorMessage = importedCount == 0
@@ -684,38 +621,53 @@ struct ChatScreen: View {
         }
     }
 
+    private func handleCapturedCameraImage(_ image: UIImage) {
+        guard let data = image.jpegData(compressionQuality: 0.85) else { return }
+        let temporaryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + ".jpg")
+        do {
+            try data.write(to: temporaryURL)
+            viewModel.addAttachment(
+                url: temporaryURL,
+                displayName: "photo.jpg",
+                deleteSourceWhenHandled: true
+            )
+        } catch {
+            DiagnosticsLogger.log("Camera image capture write failed", category: .chat, error: error)
+            viewModel.errorMessage = L10n.text("写真を読み込めませんでした。")
+        }
+    }
+
     private func openAppSettings() {
         guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(settingsURL)
     }
 
-    private func toggleAttachmentPanel() {
-        if isAttachmentPanelVisible {
-            hideAttachmentPanel()
-        } else {
-            isAttachmentPanelVisible = true
-            recentPhotoLibrary.refresh()
-        }
+    private func openRecentPhotosSheet() {
+        isComposerFocused = false
+        recentPhotoLibrary.refresh()
+        showRecentPhotoSheet = true
+    }
+
+    private func openCamera() {
+        isComposerFocused = false
+        showCameraPicker = true
     }
 
     private func openPhotoPicker() {
-        hideAttachmentPanel()
-        showPhotoPicker = true
+        showRecentPhotoSheet = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            showPhotoPicker = true
+        }
     }
 
     private func openFileImporter() {
-        hideAttachmentPanel()
+        isComposerFocused = false
         showFileImporter = true
     }
 
     private func dismissComposerChrome() {
         isComposerFocused = false
-        hideAttachmentPanel()
-    }
-
-    private func hideAttachmentPanel() {
-        isAttachmentPanelVisible = false
-        recentPhotoSelection.removeAll()
     }
 
     private func beginScrollInteraction() {
@@ -782,23 +734,24 @@ private struct AttachmentPreviewRow: View {
                 ForEach(attachments) { item in
                     if item.url.isImageAttachment {
                         ZStack(alignment: .topTrailing) {
-                            AttachmentThumbnail(url: item.url, sideLength: 82)
+                            AttachmentThumbnail(url: item.url, sideLength: 78)
                                 .overlay {
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(Color.chatBubbleBorder.opacity(0.45), lineWidth: 1)
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(Color.chatBubbleBorder.opacity(0.35), lineWidth: 1)
                                 }
 
                             Button {
                                 onRemove(item.id)
                             } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 18))
-                                    .symbolRenderingMode(.hierarchical)
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 10, weight: .bold))
                                     .foregroundStyle(.white)
-                                    .shadow(radius: 1.5, y: 0.5)
+                                    .frame(width: 20, height: 20)
+                                    .background(Color.black.opacity(0.6))
+                                    .clipShape(Circle())
+                                    .padding(4)
                             }
                             .buttonStyle(.plain)
-                            .offset(x: 4, y: -4)
                         }
                     } else {
                         HStack(spacing: 6) {
@@ -928,274 +881,6 @@ private struct AttachmentImageCard: View {
     }
 }
 
-private struct RecentPhotoStrip: View {
-    let items: [RecentPhotoItem]
-    let selection: RecentPhotoSelection
-    let loadingIDs: Set<String>
-    let onOpenLibrary: () -> Void
-    let onToggleSelection: (RecentPhotoItem) -> Void
-    let onClearSelection: () -> Void
-    let onAddSelected: () -> Void
-
-    private var isAdding: Bool {
-        !loadingIDs.isEmpty
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text("最近の写真")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("すべての写真") {
-                    onOpenLibrary()
-                }
-                .font(.caption.weight(.semibold))
-                .disabled(isAdding)
-            }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    Button {
-                        onOpenLibrary()
-                    } label: {
-                        VStack(spacing: 6) {
-                            Image(systemName: "photo.on.rectangle.angled")
-                                .font(.system(size: 20, weight: .medium))
-                                .foregroundStyle(Color.chatComposerIcon)
-                            Text("すべて")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(width: 68, height: 68)
-                        .background(Color.chatInputChipBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(Color.chatBubbleBorder.opacity(0.45), lineWidth: 1)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isAdding)
-
-                    ForEach(items) { item in
-                        let selectionIndex = selection.selectionIndex(for: item.id)
-                        RecentPhotoButton(
-                            asset: item.asset,
-                            selectionIndex: selectionIndex,
-                            isLoading: loadingIDs.contains(item.id),
-                            isSelectionDisabled: isAdding || (selection.isAtLimit && selectionIndex == nil),
-                            onTap: {
-                                onToggleSelection(item)
-                            }
-                        )
-                    }
-                }
-                .padding(.horizontal, 2)
-                .padding(.vertical, 2)
-            }
-
-            if !selection.isEmpty {
-                HStack(spacing: 8) {
-                    HStack(spacing: 4) {
-                        Text("選択中")
-                        Text("\(selection.count)/\(selection.limit)")
-                            .monospacedDigit()
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                    Spacer(minLength: 4)
-
-                    Button {
-                        onClearSelection()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .frame(width: 20, height: 20)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(isAdding)
-                    .accessibilityLabel(Text("選択を解除"))
-
-                    Button {
-                        onAddSelected()
-                    } label: {
-                        HStack(spacing: 6) {
-                            if isAdding {
-                                ProgressView()
-                                    .tint(.white)
-                                    .controlSize(.mini)
-                            } else {
-                                Image(systemName: "plus")
-                            }
-                            Text("写真を追加")
-                            Text("\(selection.count)")
-                                .font(.caption2.bold().monospacedDigit())
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(.white.opacity(0.22))
-                                .clipShape(Capsule())
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(isAdding)
-                }
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 10)
-        .background(Color.chatInputBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-}
-
-private struct RecentPhotoButton: View {
-    let asset: PHAsset
-    let selectionIndex: Int?
-    let isLoading: Bool
-    let isSelectionDisabled: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Button {
-            onTap()
-        } label: {
-            ZStack(alignment: .topTrailing) {
-                RecentPhotoThumbnail(asset: asset, sideLength: 68)
-
-                if isLoading {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(.black.opacity(0.28))
-                    ProgressView()
-                        .tint(.white)
-                        .controlSize(.small)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    ZStack {
-                        Circle()
-                            .fill(selectionIndex == nil ? .black.opacity(0.28) : Color.chatAccent)
-                        Circle()
-                            .stroke(.white, lineWidth: 1.5)
-                        if let selectionIndex {
-                            Text("\(selectionIndex)")
-                                .font(.caption2.bold().monospacedDigit())
-                                .foregroundStyle(.white)
-                        }
-                    }
-                    .frame(width: 22, height: 22)
-                    .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
-                    .padding(5)
-                }
-            }
-            .frame(width: 68, height: 68)
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(
-                        selectionIndex == nil ? Color.chatBubbleBorder.opacity(0.35) : Color.chatAccent,
-                        lineWidth: selectionIndex == nil ? 1 : 3
-                    )
-            }
-            .opacity(isSelectionDisabled && selectionIndex == nil ? 0.45 : 1)
-        }
-        .buttonStyle(.plain)
-        .disabled(isLoading || isSelectionDisabled)
-        .accessibilityLabel(Text("写真"))
-        .accessibilityValue(
-            Text(
-                selectionIndex.map { L10n.format("%d番目に選択中", $0) }
-                    ?? L10n.text("未選択")
-            )
-        )
-        .accessibilityAddTraits(selectionIndex == nil ? [] : .isSelected)
-    }
-}
-
-private struct RecentPhotoThumbnail: View {
-    @Environment(\.displayScale) private var displayScale
-    let asset: PHAsset
-    let sideLength: CGFloat
-    @State private var image: UIImage?
-    @State private var didAttemptLoad = false
-
-    var body: some View {
-        Group {
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else if didAttemptLoad {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.chatInputChipBackground)
-                    Image(systemName: "photo")
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.chatInputChipBackground)
-                    ProgressView()
-                        .controlSize(.small)
-                }
-            }
-        }
-        .frame(width: sideLength, height: sideLength)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .task(id: asset.localIdentifier) {
-            guard image == nil else { return }
-            image = await RecentPhotoThumbnailLoader.thumbnail(
-                for: asset,
-                maxPixelSize: sideLength * displayScale * 1.6
-            )
-            didAttemptLoad = true
-        }
-    }
-}
-
-private enum RecentPhotoThumbnailLoader {
-    static func thumbnail(for asset: PHAsset, maxPixelSize: CGFloat) async -> UIImage? {
-        await withCheckedContinuation { continuation in
-            let options = PHImageRequestOptions()
-            options.deliveryMode = .highQualityFormat
-            options.resizeMode = .fast
-            options.isNetworkAccessAllowed = true
-
-            let target = CGSize(
-                width: max(maxPixelSize, 48),
-                height: max(maxPixelSize, 48)
-            )
-
-            var didResume = false
-            PHImageManager.default().requestImage(
-                for: asset,
-                targetSize: target,
-                contentMode: .aspectFill,
-                options: options
-            ) { image, info in
-                guard !didResume else { return }
-                let isCancelled = (info?[PHImageCancelledKey] as? NSNumber)?.boolValue ?? false
-                let isDegraded = (info?[PHImageResultIsDegradedKey] as? NSNumber)?.boolValue ?? false
-                if isCancelled {
-                    didResume = true
-                    continuation.resume(returning: nil)
-                    return
-                }
-                if let error = info?[PHImageErrorKey] as? Error {
-                    didResume = true
-                    DiagnosticsLogger.log("Recent photo thumbnail load failed", category: .chat, error: error)
-                    continuation.resume(returning: nil)
-                    return
-                }
-                guard !isDegraded else { return }
-                didResume = true
-                continuation.resume(returning: image)
-            }
-        }
-    }
-}
 
 private struct AttachmentThumbnail: View {
     @Environment(\.displayScale) private var displayScale
@@ -1847,7 +1532,7 @@ private enum ExtractedMediaBlock: Identifiable {
     }
 }
 
-private extension Color {
+extension Color {
     static let chatScreenBackground = Color(uiColor: .systemBackground)
     static let chatInputBackground = Color(uiColor: .systemBackground)
     static let chatInputChipBackground = Color(uiColor: .tertiarySystemFill)

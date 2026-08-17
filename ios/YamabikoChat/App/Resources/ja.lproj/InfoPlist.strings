@@ -1,3 +1,4 @@
 "NSMicrophoneUsageDescription" = "音声入力でメッセージ本文を入力するためにマイクを使用します。";
 "NSSpeechRecognitionUsageDescription" = "音声入力をメッセージ本文に変換するために音声認識を使用します。";
 "NSPhotoLibraryUsageDescription" = "選択した写真や最近の写真を会話に添付するために写真ライブラリを使用します。";
+"NSCameraUsageDescription" = "撮影した写真を会話に添付するためにカメラを使用します。";
