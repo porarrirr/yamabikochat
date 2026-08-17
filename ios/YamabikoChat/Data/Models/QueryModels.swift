@@ -36,13 +36,23 @@ struct ProviderHistoryMessage: Equatable {
     var toolTranscript: [ProviderRequestMessage] = []
 
     var providerMessages: [ProviderRequestMessage] {
+        // Persisted thinking is display data, not a replayable Pi thinking block. The
+        // database stores only its text and cannot preserve the provider signatures
+        // required to replay native reasoning safely. Keep it available to the UI via
+        // `thinkingStream`, but continue the conversation from the assistant's answer.
         let finalMessage = ProviderRequestMessage(
             role: role,
             content: text,
-            attachments: attachments,
-            reasoningContent: thinkingStream
+            attachments: attachments
         )
-        return role == "assistant" ? toolTranscript + [finalMessage] : [finalMessage]
+        guard role == "assistant" else { return [finalMessage] }
+
+        let replayableTranscript = toolTranscript.map { message in
+            var message = message
+            message.reasoningContent = nil
+            return message
+        }
+        return replayableTranscript + [finalMessage]
     }
 }
 

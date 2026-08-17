@@ -120,6 +120,34 @@ final class ConversationVariantSelectionTests: XCTestCase {
         XCTAssertEqual(history.last?.thinkingStream, "variant reasoning")
     }
 
+    func testProviderHistoryDoesNotReplayUnsignedThinkingThroughPi() throws {
+        let repository = try makeRepository()
+        let conversationId = try repository.createConversation(
+            title: "Legacy conversation",
+            model: "gemini-2.5-flash",
+            provider: "GEMINI"
+        )
+
+        _ = try repository.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "user", text: "question")
+        )
+        let assistantId = try repository.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "model", text: "answer")
+        )
+        try repository.saveThinking(messageId: assistantId, stream: "unsigned legacy thinking")
+        _ = try repository.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "user", text: "continue")
+        )
+
+        let history = try repository.fetchProviderHistory(conversationId: conversationId)
+        let assistant = try XCTUnwrap(history.first(where: { $0.role == "assistant" }))
+
+        XCTAssertEqual(assistant.thinkingStream, "unsigned legacy thinking")
+        XCTAssertEqual(assistant.providerMessages.count, 1)
+        XCTAssertEqual(assistant.providerMessages[0].content, "answer")
+        XCTAssertNil(assistant.providerMessages[0].reasoningContent)
+    }
+
     func testChangingSelectedVariantIndexUpdatesHistoryAndSummaryPreview() throws {
         let repository = try makeRepository()
         let conversationId = try repository.createConversation(

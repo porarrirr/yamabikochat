@@ -36,6 +36,12 @@
 - Never commit secrets or keystores. Use `local.properties.example` as the template for local config.
 - Keep signing credentials (`YAMABIKO_KEY_ALIAS`, `YAMABIKO_KEY_PASSWORD`, `YAMABIKO_STORE_PASSWORD`) local/CI-secret only.
 
+## Pi Agents Standard Path
+- Treat the standard Pi Agents execution path as the single source of truth for AI execution, API communication, token usage, and context management.
+- Do not create, extend, or use custom paths that bypass, replace, or reimplement Pi Agents.
+- If the standard path cannot satisfy a requirement, stop before implementing an alternative and report the reason and required change to the user.
+- Technical necessity does not grant permission for a custom implementation; proceed only after explicit user approval.
+
 ## iOS Development Best Practices
 - Keep iOS implementation under `ios/YamabikoChat/` and treat `ios/project.yml` as the source of truth; regenerate the Xcode project with `xcodegen` after structural file changes.
 - Preserve Android parity for provider labels/order, default model presets, auth behavior, and settings semantics unless explicitly requested otherwise.
@@ -46,4 +52,3 @@
 - Route network/auth failures through `DiagnosticsLogger` with category/metadata so issues can be inspected from the app without Xcode.
 - Add or update unit tests in `ios/YamabikoTests/` for settings normalization, auth repositories, and other non-UI business logic when behavior changes.
 - For CI IPA output, rely on `.github/workflows/ios-ci.yml` (unsigned IPA artifact/release) and keep TestFlight signing/upload concerns isolated in `ios-testflight.yml`.
-
