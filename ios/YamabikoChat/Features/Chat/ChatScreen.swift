@@ -219,17 +219,10 @@ struct ChatScreen: View {
                 }
 
                 composerBar
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-                    .padding(.bottom, 10)
-                    .background {
-                        Rectangle()
-                            .fill(Color.chatInputBackground)
-                            .overlay(alignment: .top) {
-                                Divider()
-                                    .opacity(0.14)
-                            }
-                    }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 4)
+                    .padding(.bottom, 8)
+                    .background(Color.chatScreenBackground)
             }
             .frame(width: rootGeometry.size.width, height: rootGeometry.size.height)
             .background(Color.chatScreenBackground)
@@ -318,6 +311,10 @@ struct ChatScreen: View {
             : L10n.text("メッセージを入力して会話を開始してください。")
     }
 
+    private var isComposerExpanded: Bool {
+        isComposerFocused || !viewModel.inputText.isEmpty || !viewModel.attachments.isEmpty
+    }
+
     private var composerBar: some View {
         VStack(alignment: .leading, spacing: 8) {
             if viewModel.isSecretConversation {
@@ -376,96 +373,162 @@ struct ChatScreen: View {
                 }
             }
 
-            HStack(alignment: .bottom, spacing: 8) {
-                if viewModel.canAttachImages {
-                    Menu {
-                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                            Button {
-                                openCamera()
-                            } label: {
-                                Label(L10n.text("カメラ"), systemImage: "camera")
-                            }
-                        }
+            composerInputCard
+        }
+    }
 
-                        Button {
-                            openRecentPhotosSheet()
-                        } label: {
-                            Label(L10n.text("写真"), systemImage: "photo")
-                        }
-
-                        Button {
-                            openFileImporter()
-                        } label: {
-                            Label(L10n.text("ファイル"), systemImage: "paperclip")
-                        }
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 20, weight: .regular))
-                            .foregroundStyle(Color.chatComposerIcon)
-                            .frame(width: 42, height: 42)
-                            .background(Color.chatInputChipBackground)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text("添付を追加"))
+    private var composerInputCard: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: isComposerExpanded ? .top : .center, spacing: 8) {
+                if !isComposerExpanded {
+                    composerPlusMenuButton
                 }
 
                 TextField(viewModel.composerPlaceholder, text: $viewModel.inputText, axis: .vertical)
-                    .lineLimit(1 ... 6)
+                    .lineLimit(isComposerExpanded ? 8 : 1)
                     .focused($isComposerFocused)
-                    .padding(.vertical, 11)
+                    .font(.system(size: 16))
+                    .padding(.horizontal, isComposerExpanded ? 14 : 0)
+                    .padding(.top, isComposerExpanded ? 12 : 9)
+                    .padding(.bottom, isComposerExpanded ? 6 : 9)
                     .foregroundStyle(Color.chatComposerText)
-                    .tint(Color.chatAccent)
+                    .tint(Color.chatOrange)
 
-                Button {
-                    viewModel.toggleSpeechRecognition()
-                } label: {
-                    Image(systemName: viewModel.isSpeechRecording ? "mic.fill" : "mic")
-                        .font(.system(size: 22, weight: .regular))
-                        .foregroundStyle(viewModel.isSpeechRecording ? Color.red : Color.chatComposerIcon)
-                        .symbolEffect(.pulse, isActive: viewModel.isSpeechRecording)
-                        .frame(width: 38, height: 42)
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isSending)
-                .accessibilityLabel(Text("音声入力"))
-
-                if let contextUsage = viewModel.visibleContextUsage {
-                    ContextUsageMeter(usage: contextUsage)
-                }
-
-                Button {
-                    if canSend {
-                        viewModel.sendMessage()
+                if !isComposerExpanded {
+                    if let contextUsage = viewModel.visibleContextUsage {
+                        ContextUsageMeter(usage: contextUsage)
                     }
-                } label: {
-                    if viewModel.isSending {
-                        ProgressView()
-                            .tint(.white)
-                            .controlSize(.small)
-                            .frame(width: 42, height: 42)
-                    } else {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 42, height: 42)
-                    }
+
+                    composerCollapsedVoiceButton
                 }
-                .background(canSend ? Color.chatAccent : Color.chatSendDisabled)
-                .clipShape(Circle())
-                .disabled(viewModel.isSending || !canSend)
-                .accessibilityLabel(Text("送信"))
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(Color.chatInputBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .shadow(color: .black.opacity(0.08), radius: 18, x: 0, y: 6)
-            .overlay {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(Color.chatBubbleBorder.opacity(0.16), lineWidth: 1)
+            .padding(.horizontal, isComposerExpanded ? 0 : 8)
+            .padding(.vertical, isComposerExpanded ? 0 : 2)
+
+            if isComposerExpanded {
+                HStack(alignment: .center, spacing: 8) {
+                    composerPlusMenuButton
+
+                    Spacer(minLength: 4)
+
+                    if let contextUsage = viewModel.visibleContextUsage {
+                        ContextUsageMeter(usage: contextUsage)
+                    }
+
+                    composerMicButton
+
+                    composerExpandedSendButton
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 8)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
+        .background(Color.chatInputCardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: isComposerExpanded ? 22 : 26, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: isComposerExpanded ? 22 : 26, style: .continuous)
+                .stroke(Color.chatBubbleBorder.opacity(0.14), lineWidth: 1)
+        }
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: isComposerExpanded)
+    }
+
+    @ViewBuilder
+    private var composerPlusMenuButton: some View {
+        if viewModel.canAttachImages {
+            Menu {
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    Button {
+                        openCamera()
+                    } label: {
+                        Label(L10n.text("カメラ"), systemImage: "camera")
+                    }
+                }
+
+                Button {
+                    openRecentPhotosSheet()
+                } label: {
+                    Label(L10n.text("写真"), systemImage: "photo")
+                }
+
+                Button {
+                    openFileImporter()
+                } label: {
+                    Label(L10n.text("ファイル"), systemImage: "paperclip")
+                }
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(Color.chatComposerIcon)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("添付を追加"))
+        }
+    }
+
+    private var composerMicButton: some View {
+        Button {
+            viewModel.toggleSpeechRecognition()
+        } label: {
+            Image(systemName: viewModel.isSpeechRecording ? "mic.fill" : "mic")
+                .font(.system(size: 20, weight: .regular))
+                .foregroundStyle(viewModel.isSpeechRecording ? Color.red : Color.chatComposerIcon)
+                .symbolEffect(.pulse, isActive: viewModel.isSpeechRecording)
+                .frame(width: 36, height: 36)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isSending)
+        .accessibilityLabel(Text("音声入力"))
+    }
+
+    private var composerCollapsedVoiceButton: some View {
+        Button {
+            viewModel.toggleSpeechRecognition()
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(viewModel.isSpeechRecording ? Color.red : Color.chatOrange)
+                    .frame(width: 36, height: 36)
+
+                Image(systemName: viewModel.isSpeechRecording ? "waveform" : "mic.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .symbolEffect(.pulse, isActive: viewModel.isSpeechRecording)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isSending)
+        .accessibilityLabel(Text("音声入力"))
+    }
+
+    private var composerExpandedSendButton: some View {
+        Button {
+            if canSend {
+                viewModel.sendMessage()
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(canSend ? Color.chatOrange : Color.chatSendDisabled)
+                    .frame(width: 36, height: 36)
+
+                if viewModel.isSending {
+                    ProgressView()
+                        .tint(.white)
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isSending || !canSend)
+        .accessibilityLabel(Text("送信"))
     }
 
     private struct ContextUsageMeter: View {
@@ -482,7 +545,7 @@ struct ChatScreen: View {
                             .stroke(Color.chatComposerIcon.opacity(0.2), lineWidth: 2)
                         Circle()
                             .trim(from: 0, to: usage.fraction)
-                            .stroke(Color.chatAccent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                            .stroke(Color.chatOrange, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                             .rotationEffect(.degrees(-90))
                     }
                     .frame(width: 14, height: 14)
@@ -491,7 +554,7 @@ struct ChatScreen: View {
                         .font(.caption2.monospacedDigit().weight(.semibold))
                 }
                 .foregroundStyle(Color.chatComposerIcon)
-                .frame(minWidth: 42, minHeight: 42)
+                .frame(minWidth: 32, minHeight: 36)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -1535,15 +1598,17 @@ private enum ExtractedMediaBlock: Identifiable {
 extension Color {
     static let chatScreenBackground = Color(uiColor: .systemBackground)
     static let chatInputBackground = Color(uiColor: .systemBackground)
+    static let chatInputCardBackground = Color(uiColor: .secondarySystemBackground)
     static let chatInputChipBackground = Color(uiColor: .tertiarySystemFill)
     static let chatUserBubble = Color(uiColor: .secondarySystemFill)
     static let chatUserText = Color(uiColor: .label)
     static let chatAccent = Color(uiColor: .systemBlue)
+    static let chatOrange = Color(red: 235 / 255, green: 94 / 255, blue: 40 / 255)
     static let chatDualCard = Color(uiColor: .secondarySystemBackground)
     static let chatComposerText = Color(uiColor: .label)
-    static let chatComposerIcon = Color(uiColor: .label)
+    static let chatComposerIcon = Color(uiColor: .secondaryLabel)
     static let chatAssistantBubble = Color(uiColor: .systemBackground)
     static let chatAssistantMark = Color(uiColor: .secondaryLabel)
     static let chatBubbleBorder = Color(uiColor: .separator)
-    static let chatSendDisabled = Color(uiColor: .systemGray3)
+    static let chatSendDisabled = Color(uiColor: .systemGray4)
 }
