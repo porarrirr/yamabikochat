@@ -263,8 +263,6 @@
 "B: Thinking level override" = "B: Thinking 级别覆盖";
 "B: URL Context" = "B: URL 上下文";
 "budget" = "预算";
-"Cache min length" = "缓存最小长度";
-"Cache Type" = "缓存类型";
 "China" = "China";
 "Code Execution" = "代码执行";
 "Codex Auth" = "Codex 认证";
@@ -335,10 +333,8 @@
 "Response MIME Type" = "响应 MIME 类型";
 "Save API key" = "保存 API 密钥";
 "Save/Update Preset" = "保存/更新预设";
-"Search Context Size" = "搜索上下文大小";
 "Selected preset" = "已选预设";
 "Settings tab" = "设置标签";
-"Show Reasoning Summary" = "显示推理摘要";
 "Sign in" = "登录";
 "Sign out" = "退出登录";
 "Split layout" = "分割布局";
@@ -351,9 +347,7 @@
 "Thinking" = "Thinking";
 "throughput" = "吞吐量";
 "URL Context" = "URL 上下文";
-"User-Agent Preset" = "User-Agent 预设";
 "Verbosity" = "详细程度";
-"Web Search (Codex)" = "网页搜索（Codex）";
 "プライバシーポリシー" = "隐私政策";
 "利用規約" = "使用条款";
 "サポート" = "支持";

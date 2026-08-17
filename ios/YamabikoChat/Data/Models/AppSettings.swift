@@ -187,18 +187,12 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var alibabaMCPServerName: String
     var alibabaMCPAllowedToolsCSV: String
 
-    var codexUserAgentPreset: String
     var codexReasoningEnabled: Bool
     var codexReasoningEffort: String
     var codexReasoningSummary: String
     var codexVerbosity: String
     var codexSupportsReasoningSummaries: Bool
-    var codexShowReasoningSummary: Bool
-    var codexWebSearchEnabled: Bool
-    var codexWebSearchContextSize: String
     var codexPromptCacheEnabled: Bool
-    var codexPromptCacheMinLength: Int
-    var codexPromptCacheType: String
 
     var superGrokReasoningEnabled: Bool
     var superGrokReasoningEffort: String
@@ -347,18 +341,12 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         alibabaMCPServerName = AppConstants.alibabaMCPDefaultServerName
         alibabaMCPAllowedToolsCSV = ""
 
-        codexUserAgentPreset = "ANDROID"
         codexReasoningEnabled = true
         codexReasoningEffort = "medium"
         codexReasoningSummary = "auto"
         codexVerbosity = "medium"
         codexSupportsReasoningSummaries = false
-        codexShowReasoningSummary = true
-        codexWebSearchEnabled = false
-        codexWebSearchContextSize = "medium"
         codexPromptCacheEnabled = true
-        codexPromptCacheMinLength = 512
-        codexPromptCacheType = "ephemeral"
 
         superGrokReasoningEnabled = true
         superGrokReasoningEffort = "medium"

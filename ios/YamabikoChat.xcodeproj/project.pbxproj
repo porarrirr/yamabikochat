@@ -18,7 +18,6 @@
 		0A42EE2FDB1E0DE652107EC3 /* ToolDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = C093FE561B4B20D9C6ADF796 /* ToolDefinition.swift */; };
 		0A9A0767EFB4003076BD5FDC /* ProviderRequestSettingsResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80F31D5E7F475FAFCC7CD957 /* ProviderRequestSettingsResolverTests.swift */; };
 		0C3BB6177F58002E5A66449A /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = A830A97218DEF74E9FA3C2AF /* AppConstants.swift */; };
-		0CDA21EA006C871E5AC3164F /* CodexUserAgentCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63E141DD6CBBC6B7BD021B42 /* CodexUserAgentCatalog.swift */; };
 		0FBA8B52EBD213B2EDEF1A99 /* NodeMobile.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B3D8A5EF7A77209D4FC05951 /* NodeMobile.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		108090779CD14C0F53061E79 /* AppServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9668A67F5C25A97F7F0AC48 /* AppServices.swift */; };
 		10D322B8F73405F360B85BBE /* OpenCodeGoModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60224F6EBCC6491A82E063D /* OpenCodeGoModelCatalog.swift */; };
@@ -362,7 +361,6 @@
 		5EEDB52857CBB57D89EE2520 /* FusionDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionDetailSheet.swift; sourceTree = "<group>"; };
 		5F3C0A089956FC64E1E501FD /* FusionPresetLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionPresetLoader.swift; sourceTree = "<group>"; };
 		6116B1ECB916D417EE404728 /* DualAutoModelSideForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualAutoModelSideForm.swift; sourceTree = "<group>"; };
-		63E141DD6CBBC6B7BD021B42 /* CodexUserAgentCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUserAgentCatalog.swift; sourceTree = "<group>"; };
 		649A758B922A87BCDED9F80D /* AppGroupShareStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroupShareStorage.swift; sourceTree = "<group>"; };
 		652A626C556E53B0EB120BFD /* SettingsFormHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsFormHelpers.swift; sourceTree = "<group>"; };
 		65438877F0411D1956AB70FB /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
@@ -645,7 +643,6 @@
 				CAF47F360F8B2274F4651393 /* AppleIntelligenceModelCatalog.swift */,
 				BDE99330C07C20D5A185F5F8 /* ClinePassModelCatalog.swift */,
 				A394920B0293DB363D2D092D /* CodexModelPresets.swift */,
-				63E141DD6CBBC6B7BD021B42 /* CodexUserAgentCatalog.swift */,
 				D43C7CD5EB5CC05FED3F202A /* DiagnosticsLogger.swift */,
 				2CA72EEADA1AFB25A6BF0819 /* DiagnosticsLogSanitizer.swift */,
 				CEAC567088AC21851EC5F65E /* GeminiModelCatalog.swift */,
@@ -1377,7 +1374,6 @@
 				F97C698E6296C53CE1574499 /* ClinePassModelCatalog.swift in Sources */,
 				7AA55F94D1771B63F74DAE98 /* CodexAuthRepository.swift in Sources */,
 				315256D3D28F249024506BD1 /* CodexModelPresets.swift in Sources */,
-				0CDA21EA006C871E5AC3164F /* CodexUserAgentCatalog.swift in Sources */,
 				9B7C6CCA982CA1EE8E0230D0 /* Conversation.swift in Sources */,
 				E06F6B142947E79244C240DE /* ConversationListScreen.swift in Sources */,
 				E8DA2924C68103B34BDA3BBF /* ConversationListViewModel.swift in Sources */,

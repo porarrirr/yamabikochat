@@ -161,13 +161,11 @@ final class FusionServiceTests: XCTestCase {
         XCTAssertFalse(request.systemPrompt?.contains("web_search") == true)
     }
 
-    func testFusionCodexGlobalReasoningAndNativeWebSearchApplyToAllPhases() async throws {
+    func testFusionCodexGlobalReasoningAppliesToAllPhases() async throws {
         let service = makeService()
         var settings = AppSettings()
         settings.codexReasoningEnabled = true
         settings.codexReasoningEffort = "high"
-        settings.codexWebSearchEnabled = true
-        settings.codexWebSearchContextSize = "high"
         let model = PanelModelConfig(modelId: "gpt-5.6-sol", provider: "CODEX_AUTH")
 
         let panel = try await service.buildProviderRequest(
@@ -193,9 +191,6 @@ final class FusionServiceTests: XCTestCase {
 
         XCTAssertEqual(panel.thinking?.effort, "high")
         XCTAssertEqual(judge.thinking?.effort, "high")
-        XCTAssertEqual(panel.metadata["codexWebSearchEnabled"], "true")
-        XCTAssertEqual(panel.metadata["codexWebSearchContextSize"], "high")
-        XCTAssertEqual(judge.metadata["codexWebSearchEnabled"], "true")
         XCTAssertTrue(judge.tools.isEmpty)
     }
 }

@@ -263,8 +263,6 @@
 "B: Thinking level override" = "B: Thinking level override";
 "B: URL Context" = "B: URL Context";
 "budget" = "budget";
-"Cache min length" = "Cache min length";
-"Cache Type" = "Cache Type";
 "China" = "China";
 "Code Execution" = "Code Execution";
 "Codex Auth" = "Codex Auth";
@@ -335,10 +333,8 @@
 "Response MIME Type" = "Response MIME Type";
 "Save API key" = "Save API key";
 "Save/Update Preset" = "Save/Update Preset";
-"Search Context Size" = "Search Context Size";
 "Selected preset" = "Selected preset";
 "Settings tab" = "Settings tab";
-"Show Reasoning Summary" = "Show Reasoning Summary";
 "Sign in" = "Sign in";
 "Sign out" = "Sign out";
 "Split layout" = "Split layout";
@@ -351,9 +347,7 @@
 "Thinking" = "Thinking";
 "throughput" = "throughput";
 "URL Context" = "URL Context";
-"User-Agent Preset" = "User-Agent Preset";
 "Verbosity" = "Verbosity";
-"Web Search (Codex)" = "Web Search (Codex)";
 "プライバシーポリシー" = "Privacy Policy";
 "利用規約" = "Terms of Use";
 "サポート" = "Support";

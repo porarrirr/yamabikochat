@@ -102,8 +102,7 @@ final class ProviderRequestSettingsResolver {
                 settings: settings,
                 provider: provider,
                 model: model,
-                context: context,
-                toolScope: toolScope
+                context: context
             )
         )
     }
@@ -217,8 +216,7 @@ final class ProviderRequestSettingsResolver {
         settings: AppSettings,
         provider: String,
         model: String,
-        context: AppSettings.ReasoningContext,
-        toolScope: ProviderRequestToolScope
+        context: AppSettings.ReasoningContext
     ) -> [String: String] {
         switch provider.uppercased() {
         case "CODEX_AUTH":
@@ -234,15 +232,8 @@ final class ProviderRequestSettingsResolver {
 
             let verbosity = settings.codexVerbosity.resolvedIfBlank("medium").lowercased()
             let verbosityToSend = CodexModelCatalog.supportsTextVerbosity(model) ? verbosity : nil
-            let webSearchEnabled = toolScope.allowsNativeWebSearch && settings.codexWebSearchEnabled
-
             var metadata: [String: String] = [
-                "codexUserAgentPreset": settings.codexUserAgentPreset.resolvedIfBlank(CodexUserAgentPresetCatalog.presetAndroid),
-                "codexWebSearchEnabled": webSearchEnabled ? "true" : "false",
-                "codexWebSearchContextSize": settings.codexWebSearchContextSize.resolvedIfBlank("medium"),
-                "codexPromptCacheEnabled": settings.codexPromptCacheEnabled ? "true" : "false",
-                "codexPromptCacheMinLength": String(max(0, settings.codexPromptCacheMinLength)),
-                "codexPromptCacheType": settings.codexPromptCacheType.resolvedIfBlank("ephemeral")
+                "codexPromptCacheEnabled": settings.codexPromptCacheEnabled ? "true" : "false"
             ]
             if let summaryToSend {
                 metadata["codexReasoningSummary"] = summaryToSend

@@ -986,15 +986,6 @@ struct SettingsScreen: View {
         Group {
             if currentProviderKey == "CODEX_AUTH" {
                 Section("Codex Settings") {
-                    Picker("User-Agent Preset", selection: Binding(
-                        get: { viewModel.settings.codexUserAgentPreset.ifBlank(CodexUserAgentPresetCatalog.presetAndroid) },
-                        set: { viewModel.settings.codexUserAgentPreset = $0 }
-                    )) {
-                        ForEach(CodexUserAgentPresetCatalog.options) { option in
-                            Text(option.title).tag(option.key)
-                        }
-                    }
-
                     Toggle("Reasoning", isOn: Binding(
                         get: { viewModel.settings.codexReasoningEnabled },
                         set: { viewModel.settings.codexReasoningEnabled = $0 }
@@ -1014,23 +1005,6 @@ struct SettingsScreen: View {
                         get: { viewModel.settings.codexPromptCacheEnabled },
                         set: { viewModel.settings.codexPromptCacheEnabled = $0 }
                     ))
-                    if viewModel.settings.codexPromptCacheEnabled {
-                        TextField("Cache min length", text: Binding(
-                            get: { String(viewModel.settings.codexPromptCacheMinLength) },
-                            set: { value in
-                                if let intValue = Int(value) {
-                                    viewModel.settings.codexPromptCacheMinLength = max(0, intValue)
-                                }
-                            }
-                        ))
-                        Picker("Cache Type", selection: Binding(
-                            get: { viewModel.settings.codexPromptCacheType.ifBlank("ephemeral") },
-                            set: { viewModel.settings.codexPromptCacheType = $0 }
-                        )) {
-                            Text("ephemeral").tag("ephemeral")
-                            Text("persistent").tag("persistent")
-                        }
-                    }
 
                     Picker("Reasoning Summary", selection: Binding(
                         get: { viewModel.settings.codexReasoningSummary.ifBlank("auto") },
@@ -1041,12 +1015,6 @@ struct SettingsScreen: View {
                         Text("detailed").tag("detailed")
                         Text("none").tag("none")
                     }
-                    .disabled(!viewModel.settings.codexReasoningEnabled)
-
-                    Toggle("Show Reasoning Summary", isOn: Binding(
-                        get: { viewModel.settings.codexShowReasoningSummary },
-                        set: { viewModel.settings.codexShowReasoningSummary = $0 }
-                    ))
                     .disabled(!viewModel.settings.codexReasoningEnabled)
 
                     Toggle("Assume model supports summaries", isOn: Binding(
@@ -1061,21 +1029,6 @@ struct SettingsScreen: View {
                         Text("low").tag("low")
                         Text("medium").tag("medium")
                         Text("high").tag("high")
-                    }
-
-                    Toggle("Web Search (Codex)", isOn: Binding(
-                        get: { viewModel.settings.codexWebSearchEnabled },
-                        set: { viewModel.settings.codexWebSearchEnabled = $0 }
-                    ))
-                    if viewModel.settings.codexWebSearchEnabled {
-                        Picker("Search Context Size", selection: Binding(
-                            get: { viewModel.settings.codexWebSearchContextSize.ifBlank("medium") },
-                            set: { viewModel.settings.codexWebSearchContextSize = $0 }
-                        )) {
-                            Text("low").tag("low")
-                            Text("medium").tag("medium")
-                            Text("high").tag("high")
-                        }
                     }
                 }
             }
@@ -1316,10 +1269,6 @@ struct SettingsScreen: View {
                     .font(.caption2)
                     .textSelection(.enabled)
             }
-            Text("User-Agent: \(CodexUserAgentPresetCatalog.displayName(for: viewModel.settings.codexUserAgentPreset.ifBlank(CodexUserAgentPresetCatalog.presetAndroid)))")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-
             Button("使用量を取得") {
                 Task { await viewModel.retrieveCodexUsage() }
             }

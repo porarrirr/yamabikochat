@@ -226,14 +226,21 @@ final class CodexAuthRepository {
 
     private func buildDefaultUserAgent() -> String {
         let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        return CodexUserAgentPresetCatalog.buildUserAgent(
-            originator: Constants.originator,
-            cliVersion: CodexUserAgentPresetCatalog.defaultCodexCLIVersion,
-            preset: CodexUserAgentPresetCatalog.presetAndroid,
-            mobileOSVersion: UIDevice.current.systemVersion,
-            mobileArch: CodexUserAgentPresetCatalog.currentArchitecture(),
-            appID: Bundle.main.bundleIdentifier,
-            appVersion: appVersion
-        )
+        let version = appVersion?.trimmingCharacters(in: .whitespacesAndNewlines).trimmedNonEmpty ?? "unknown"
+        let appID = Bundle.main.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines).trimmedNonEmpty
+            ?? "com.porarri.yamabikochat"
+        return "YamabikoChat/\(version) (iOS \(UIDevice.current.systemVersion); \(Self.currentArchitecture())) \(appID)"
+    }
+
+    private static func currentArchitecture() -> String {
+        #if arch(arm64)
+        return "arm64"
+        #elseif arch(x86_64)
+        return "x86_64"
+        #elseif arch(arm)
+        return "arm"
+        #else
+        return "unknown"
+        #endif
     }
 }

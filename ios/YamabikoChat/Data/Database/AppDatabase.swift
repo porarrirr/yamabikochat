@@ -247,18 +247,12 @@ enum AppDatabase {
                 t.column("alibabaMCPServerName", .text).notNull().defaults(to: "firecrawl")
                 t.column("alibabaMCPAllowedToolsCSV", .text).notNull().defaults(to: "")
 
-                t.column("codexUserAgentPreset", .text).notNull().defaults(to: "ANDROID")
                 t.column("codexReasoningEnabled", .boolean).notNull().defaults(to: true)
                 t.column("codexReasoningEffort", .text).notNull().defaults(to: "medium")
                 t.column("codexReasoningSummary", .text).notNull().defaults(to: "auto")
                 t.column("codexVerbosity", .text).notNull().defaults(to: "medium")
                 t.column("codexSupportsReasoningSummaries", .boolean).notNull().defaults(to: false)
-                t.column("codexShowReasoningSummary", .boolean).notNull().defaults(to: true)
-                t.column("codexWebSearchEnabled", .boolean).notNull().defaults(to: false)
-                t.column("codexWebSearchContextSize", .text).notNull().defaults(to: "medium")
                 t.column("codexPromptCacheEnabled", .boolean).notNull().defaults(to: true)
-                t.column("codexPromptCacheMinLength", .integer).notNull().defaults(to: 512)
-                t.column("codexPromptCacheType", .text).notNull().defaults(to: "ephemeral")
 
                 t.column("superGrokReasoningEnabled", .boolean).notNull().defaults(to: true)
                 t.column("superGrokReasoningEffort", .text).notNull().defaults(to: "medium")

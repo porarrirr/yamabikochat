@@ -113,6 +113,27 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         }
     }
 
+    func testCodexMetadataContainsOnlySettingsConsumedByPiRuntime() async throws {
+        let resolver = makeResolver()
+        var settings = AppSettings()
+        settings.codexReasoningEnabled = true
+        settings.codexReasoningSummary = "detailed"
+        settings.codexVerbosity = "high"
+        settings.codexPromptCacheEnabled = false
+
+        let resolved = try await resolver.resolve(
+            settings: settings,
+            provider: "CODEX_AUTH",
+            model: "gpt-5.6-sol"
+        )
+
+        XCTAssertEqual(resolved.metadata, [
+            "codexPromptCacheEnabled": "false",
+            "codexReasoningSummary": "detailed",
+            "codexVerbosity": "high"
+        ])
+    }
+
     func testAppleIntelligenceOmitsClientToolsBecauseItDoesNotUsePiAgent() async throws {
         let resolver = makeResolver()
         var settings = AppSettings()
