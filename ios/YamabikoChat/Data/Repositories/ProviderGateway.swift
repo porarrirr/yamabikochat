@@ -197,7 +197,10 @@ final class ProviderGateway {
             piProvider = "openrouter"
             baseURL = "https://openrouter.ai/api/v1"
             apiKey = try credential(.openRouter)
-            headers = ["HTTP-Referer": "https://yamabikochat.app", "X-Title": "YamabikoChat iOS"]
+            headers = [
+                "HTTP-Referer": "https://apps.apple.com/jp/app/yamabikochat-ai%E3%83%81%E3%83%A3%E3%83%83%E3%83%88/id6771687018",
+                "X-Title": "YamabikoChat iOS"
+            ]
         case .openAI:
             api = "openai-responses"
             piProvider = "openai"
