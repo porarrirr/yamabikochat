@@ -29,6 +29,11 @@ struct FusionProgressView: View {
                     }
                 }
             }
+            if let activity = snapshot.panels
+                .compactMap(\.toolActivity)
+                .last(where: { !$0.steps.isEmpty }) {
+                ToolActivityDisclosure(steps: activity.steps)
+            }
         }
         .padding(.horizontal, 10)
     }
@@ -78,6 +83,10 @@ private struct FusionPanelChipView: View {
             stateIcon
             Text(FusionTracePresentation.shortModelLabel(panel.modelId))
                 .lineLimit(1)
+            if panel.toolActivity?.steps.contains(where: { $0.status == .running }) == true {
+                Image(systemName: "globe")
+                    .font(.system(size: 10))
+            }
         }
         .font(.caption2)
         .padding(.horizontal, 8)

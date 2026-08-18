@@ -145,14 +145,15 @@ final class FusionService {
                     conversationID: context.conversationId.map(String.init)
                 )
             },
-            invoke: { [weak self] providerRequest, provider, phase in
+            invoke: { [weak self] providerRequest, provider, phase, onToolActivity in
                 guard let self else {
                     throw FusionError.serviceDeallocated
                 }
                 return try await self.invoke(
                     request: providerRequest,
                     provider: provider,
-                    phase: phase
+                    phase: phase,
+                    onToolActivity: onToolActivity
                 )
             },
             estimateCost: { [weak self] provider, model, usage in
@@ -287,17 +288,26 @@ final class FusionService {
     private func invoke(
         request: ProviderRequest,
         provider: String,
-        phase: FusionPhase
+        phase: FusionPhase,
+        onToolActivity: (@Sendable (ToolActivityPayload) -> Void)? = nil
     ) async throws -> ProviderResponse {
         var currentRequest = request
         var accumulatedUsage: ProviderUsage?
         var accumulatedReasoning: [String] = []
         var continuationRounds = 0
+        let activityAccumulator = FusionToolActivityAccumulator()
 
         while true {
             try Task.checkCancellation()
             let response: ProviderResponse
-            response = try await providerGateway.generate(request: currentRequest, providerID: provider)
+            response = try await providerGateway.generate(
+                request: currentRequest,
+                providerID: provider,
+                onStreamEvent: { event in
+                    guard case let .toolActivity(toolEvent) = event else { return }
+                    onToolActivity?(activityAccumulator.apply(toolEvent))
+                }
+            )
 
             if let usage = response.usage {
                 accumulatedUsage = accumulatedUsage?.adding(usage) ?? usage
@@ -356,5 +366,18 @@ final class FusionService {
             cacheCreationInputTokens: normalized.cacheCreationInputTokens,
             reasoningTokens: normalized.reasoningTokens
         )
+    }
+}
+
+private final class FusionToolActivityAccumulator: @unchecked Sendable {
+    private let lock = NSLock()
+    private var payload = ToolActivityPayload()
+
+    func apply(_ event: ToolActivityEvent) -> ToolActivityPayload {
+        lock.lock()
+        payload.apply(event)
+        let value = payload
+        lock.unlock()
+        return value
     }
 }

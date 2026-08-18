@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.CallMerge
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,6 +34,7 @@ import com.porarri.yamabikochat.data.fusion.FusionPanelChipState
 import com.porarri.yamabikochat.data.fusion.FusionPanelChipStatus
 import com.porarri.yamabikochat.data.fusion.FusionPhase
 import com.porarri.yamabikochat.data.fusion.FusionProgressSnapshot
+import com.porarri.yamabikochat.ui.chat.ToolActivityDisclosure
 
 @Composable
 fun FusionProgressView(
@@ -99,6 +101,9 @@ fun FusionProgressView(
                 }
             }
         }
+        snapshot.panels.mapNotNull { it.toolActivity }.lastOrNull { it.steps.isNotEmpty() }?.let {
+            ToolActivityDisclosure(steps = it.steps)
+        }
     }
 }
 
@@ -137,6 +142,9 @@ private fun FusionPanelChip(panel: FusionPanelChipStatus) {
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1
             )
+            if (panel.toolActivity?.steps?.any { it.status == com.porarri.yamabikochat.data.local.ToolActivityStep.Status.running } == true) {
+                Icon(Icons.Default.Language, null, Modifier.size(11.dp))
+            }
         }
     }
 }

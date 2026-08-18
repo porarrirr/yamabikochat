@@ -17,6 +17,7 @@ struct FusionPanelChipStatus: Sendable, Equatable {
     var modelId: String
     var provider: String
     var state: FusionPanelChipState
+    var toolActivity: ToolActivityPayload? = nil
 }
 
 struct FusionProgressSnapshot: Sendable, Equatable {
@@ -73,6 +74,7 @@ struct FusionProgressSnapshot: Sendable, Equatable {
         var updatedPanels = panels
         if let index = updatedPanels.firstIndex(where: { $0.modelId == result.modelId }) {
             updatedPanels[index].state = result.success ? .succeeded : .failed
+            updatedPanels[index].toolActivity = result.toolActivity
         }
         return Self.panelPhase(panels: updatedPanels, substatus: substatus)
     }
@@ -124,6 +126,7 @@ struct PanelResult: Codable, Sendable, Equatable {
     var outputTokens: Int?
     var cost: Double?
     var toolCalls: [ToolCall]?
+    var toolActivity: ToolActivityPayload? = nil
     var finishReason: String?
     var role: String?
 }

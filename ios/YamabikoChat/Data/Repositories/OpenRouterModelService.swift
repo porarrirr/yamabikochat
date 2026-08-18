@@ -278,7 +278,13 @@ final class OpenRouterModelService {
                     providerName: providerName,
                     quantization: quantization,
                     supportedParameters: endpoint.supportedParameters ?? [],
-                    status: endpoint.status
+                    status: endpoint.status,
+                    promptPricePerMillion: endpoint.pricing?.prompt
+                        .flatMap(Double.init)
+                        .map { $0 * 1_000_000 },
+                    completionPricePerMillion: endpoint.pricing?.completion
+                        .flatMap(Double.init)
+                        .map { $0 * 1_000_000 }
                 )
             )
         }

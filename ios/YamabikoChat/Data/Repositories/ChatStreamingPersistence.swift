@@ -5,6 +5,7 @@ struct ChatStreamingSnapshot: Sendable, Equatable {
     var targetId: Int64
     var text: String
     var thinking: String
+    var toolActivity: ToolActivityPayload?
     var isFinal: Bool
 }
 
@@ -84,6 +85,15 @@ struct ChatStreamSessionTarget {
             try conversations.updateMessageVariantText(variantId: variantId, text: placeholder)
         }
     }
+
+    func persistToolActivity(_ payload: ToolActivityPayload) throws {
+        switch kind {
+        case let .message(messageId):
+            try conversations.saveToolActivity(messageId: messageId, variantId: nil, payload: payload)
+        case let .variant(variantId, _):
+            try conversations.saveToolActivity(messageId: nil, variantId: variantId, payload: payload)
+        }
+    }
 }
 
 struct ChatStreamSessionResult {
@@ -92,6 +102,7 @@ struct ChatStreamSessionResult {
     var usage: ProviderUsage?
     var usageSamples: [ProviderUsage]?
     var toolCalls: [ToolCall]
+    var toolActivity: ToolActivityPayload?
 }
 
 enum ChatStreamSession {
@@ -108,6 +119,7 @@ enum ChatStreamSession {
         var finalUsage: ProviderUsage?
         var finalUsageSamples: [ProviderUsage]?
         var finalToolCalls: [ToolCall] = []
+        var toolActivity = ToolActivityPayload()
         var coordinator = ChatStreamingPersistenceCoordinator()
         do {
             for try await event in stream {
@@ -119,18 +131,24 @@ enum ChatStreamSession {
                     finalUsage: &finalUsage,
                     finalUsageSamples: &finalUsageSamples,
                     finalToolCalls: &finalToolCalls,
+                    toolActivity: &toolActivity,
                     coordinator: &coordinator,
                     onStreamEvent: onStreamEvent,
                     onStreamingSnapshot: onStreamingSnapshot
                 )
             }
         } catch {
+            toolActivity.failRunning(message: L10n.text("ツールの実行が中断されました"))
+            if !toolActivity.steps.isEmpty {
+                try? target.persistToolActivity(toolActivity)
+            }
             if fullText.isEmpty, reasoningText.isEmpty {
                 try? target.writeErrorPlaceholder(error)
             }
             publishStreamingSnapshot(
                 targetId: target.snapshotMessageId,
                 coordinator: coordinator,
+                toolActivity: toolActivity,
                 isFinal: true,
                 onStreamingSnapshot: onStreamingSnapshot
             )
@@ -138,9 +156,13 @@ enum ChatStreamSession {
         }
 
         try coordinator.apply(text: fullText, thinking: reasoningText, force: true, persist: target.persist)
+        if !toolActivity.steps.isEmpty {
+            try target.persistToolActivity(toolActivity)
+        }
         publishStreamingSnapshot(
             targetId: target.snapshotMessageId,
             coordinator: coordinator,
+            toolActivity: toolActivity,
             isFinal: true,
             onStreamingSnapshot: onStreamingSnapshot
         )
@@ -150,7 +172,8 @@ enum ChatStreamSession {
             reasoningText: reasoningText,
             usage: finalUsage,
             usageSamples: finalUsageSamples,
-            toolCalls: finalToolCalls
+            toolCalls: finalToolCalls,
+            toolActivity: toolActivity.steps.isEmpty ? nil : toolActivity
         )
     }
 
@@ -162,6 +185,7 @@ enum ChatStreamSession {
         finalUsage: inout ProviderUsage?,
         finalUsageSamples: inout [ProviderUsage]?,
         finalToolCalls: inout [ToolCall],
+        toolActivity: inout ToolActivityPayload,
         coordinator: inout ChatStreamingPersistenceCoordinator,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
@@ -175,6 +199,7 @@ enum ChatStreamSession {
                 coordinator: &coordinator,
                 fullText: fullText,
                 reasoningText: reasoningText,
+                toolActivity: toolActivity,
                 force: false,
                 onStreamingSnapshot: onStreamingSnapshot
             )
@@ -185,7 +210,17 @@ enum ChatStreamSession {
                 coordinator: &coordinator,
                 fullText: fullText,
                 reasoningText: reasoningText,
+                toolActivity: toolActivity,
                 force: false,
+                onStreamingSnapshot: onStreamingSnapshot
+            )
+        case let .toolActivity(event):
+            toolActivity.apply(event)
+            publishStreamingSnapshot(
+                targetId: target.snapshotMessageId,
+                coordinator: coordinator,
+                toolActivity: toolActivity,
+                isFinal: false,
                 onStreamingSnapshot: onStreamingSnapshot
             )
         case let .completed(response):
@@ -203,6 +238,7 @@ enum ChatStreamSession {
                 coordinator: &coordinator,
                 fullText: fullText,
                 reasoningText: reasoningText,
+                toolActivity: toolActivity,
                 force: true,
                 onStreamingSnapshot: onStreamingSnapshot
             )
@@ -214,6 +250,7 @@ enum ChatStreamSession {
         coordinator: inout ChatStreamingPersistenceCoordinator,
         fullText: String,
         reasoningText: String,
+        toolActivity: ToolActivityPayload,
         force: Bool,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
     ) throws {
@@ -221,6 +258,7 @@ enum ChatStreamSession {
         publishStreamingSnapshot(
             targetId: target.snapshotMessageId,
             coordinator: coordinator,
+            toolActivity: toolActivity,
             isFinal: false,
             onStreamingSnapshot: onStreamingSnapshot
         )
@@ -229,6 +267,7 @@ enum ChatStreamSession {
     private static func publishStreamingSnapshot(
         targetId: Int64,
         coordinator: ChatStreamingPersistenceCoordinator,
+        toolActivity: ToolActivityPayload?,
         isFinal: Bool,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
     ) {
@@ -237,6 +276,7 @@ enum ChatStreamSession {
                 targetId: targetId,
                 text: coordinator.text,
                 thinking: coordinator.thinking,
+                toolActivity: toolActivity,
                 isFinal: isFinal
             )
         )

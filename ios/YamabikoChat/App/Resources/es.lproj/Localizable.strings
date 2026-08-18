@@ -334,6 +334,8 @@
 "Preset Name" = "Nombre del preset";
 "Preset name" = "Nombre del preset";
 "price" = "precio";
+"Input %@ · Output %@ / 1M tokens" = "Entrada %@ · Salida %@ / 1 M de tokens";
+"Price unavailable" = "Precio no disponible";
 "Project ID" = "ID de proyecto";
 "Prompt Cache" = "Cache de prompts";
 "provider selection max" = "maximo de seleccion de proveedor";

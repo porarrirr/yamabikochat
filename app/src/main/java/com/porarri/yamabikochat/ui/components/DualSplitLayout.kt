@@ -14,7 +14,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import com.porarri.yamabikochat.data.local.SplitLayoutType
+import com.porarri.yamabikochat.data.local.ToolActivityStep
 import com.porarri.yamabikochat.ui.chat.MarkdownText
+import com.porarri.yamabikochat.ui.chat.ToolActivityDisclosure
 import com.porarri.yamabikochat.ui.chat.components.ChatErrorCard
 import com.porarri.yamabikochat.utils.UserFacingErrorFormatter
 
@@ -174,7 +176,9 @@ fun DualResponseDisplay(
     modelAProvider: String,
     modelBProvider: String,
     thinkingA: String? = null,
-    thinkingB: String? = null
+    thinkingB: String? = null,
+    toolStepsA: List<ToolActivityStep> = emptyList(),
+    toolStepsB: List<ToolActivityStep> = emptyList()
 ) {
     DualSplitLayout(
         modifier = modifier,
@@ -187,6 +191,7 @@ fun DualResponseDisplay(
                 provider = modelAProvider,
                 content = modelAContent,
                 thinking = thinkingA,
+                toolSteps = toolStepsA,
                 isLeft = true
             )
         },
@@ -196,6 +201,7 @@ fun DualResponseDisplay(
                 provider = modelBProvider,
                 content = modelBContent,
                 thinking = thinkingB,
+                toolSteps = toolStepsB,
                 isLeft = false
             )
         }
@@ -208,6 +214,7 @@ private fun ResponsePanel(
     provider: String,
     content: String,
     thinking: String?,
+    toolSteps: List<ToolActivityStep>,
     isLeft: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -256,6 +263,11 @@ private fun ResponsePanel(
                         color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 }
+            }
+
+            if (toolSteps.isNotEmpty()) {
+                ToolActivityDisclosure(steps = toolSteps)
+                Spacer(modifier = Modifier.height(6.dp))
             }
             
             Spacer(modifier = Modifier.height(8.dp))

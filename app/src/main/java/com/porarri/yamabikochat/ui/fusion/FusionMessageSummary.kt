@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.porarri.yamabikochat.data.fusion.FusionTrace
+import com.porarri.yamabikochat.ui.chat.ToolActivityDisclosure
 
 @Composable
 fun FusionMessageSummary(
@@ -34,7 +35,10 @@ fun FusionMessageSummary(
     onShowDetails: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val toolSteps = trace.panelResults.mapNotNull { it.toolActivity }.flatMap { it.steps }
+        if (toolSteps.isNotEmpty()) ToolActivityDisclosure(steps = toolSteps)
+        Surface(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onShowDetails),
@@ -61,6 +65,7 @@ fun FusionMessageSummary(
             TextButton(onClick = onShowDetails) {
                 Text("詳細")
             }
+        }
         }
     }
 }
@@ -112,6 +117,9 @@ fun FusionDetailSheet(
                         "${if (panel.success) "OK" else "FAIL"} · " +
                         FusionTracePresentation.formatLatency(panel.latencyMs)
                 )
+                panel.toolActivity?.steps?.takeIf { it.isNotEmpty() }?.let {
+                    ToolActivityDisclosure(steps = it)
+                }
             }
         }
     }

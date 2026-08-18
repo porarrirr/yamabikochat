@@ -376,7 +376,13 @@ final class OpenRouterModelTests: XCTestCase {
         {
           "data": {
             "endpoints": [
-              { "name": "Alibaba FP8", "provider_name": "Alibaba", "tag": "alibaba/fp8", "quantization": "fp8" },
+              {
+                "name": "Alibaba FP8",
+                "provider_name": "Alibaba",
+                "tag": "alibaba/fp8",
+                "quantization": "fp8",
+                "pricing": { "prompt": "0.00000075", "completion": "0.00000225" }
+              },
               { "name": "Alibaba FP8 duplicate", "provider_name": "Alibaba", "tag": "alibaba/fp8", "quantization": "fp8" },
               { "name": "Alibaba Fast", "provider_name": "Alibaba", "tag": "alibaba/fast", "quantization": "fp8" },
               { "name": "Missing tag", "provider_name": "Mystery", "quantization": "fp4" }
@@ -394,6 +400,8 @@ final class OpenRouterModelTests: XCTestCase {
         XCTAssertEqual(options.endpoints.count, 4)
         XCTAssertEqual(options.providerEndpoints.map(\.tag), ["alibaba/fp8", "alibaba/fast"])
         XCTAssertEqual(options.quantizations, ["fp8"])
+        XCTAssertEqual(options.providerEndpoints.first?.promptPricePerMillion, 0.75)
+        XCTAssertEqual(options.providerEndpoints.first?.completionPricePerMillion, 2.25)
     }
 
     func testSupersededEndpointResponseCannotOverwriteLatestCache() async throws {

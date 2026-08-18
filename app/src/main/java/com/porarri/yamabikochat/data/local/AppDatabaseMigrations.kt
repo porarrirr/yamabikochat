@@ -5,7 +5,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 object AppDatabaseMigrations {
     private const val LEGACY_TARGET_VERSION = 27
-    private const val LATEST_VERSION = 55
+    private const val LATEST_VERSION = 56
 
     private val legacyRebuildMigrations: List<Migration> = (1 until LEGACY_TARGET_VERSION).map { startVersion ->
         object : Migration(startVersion, LEGACY_TARGET_VERSION) {
@@ -407,6 +407,13 @@ object AppDatabaseMigrations {
         }
     }
 
+    private val migration55To56 = object : Migration(55, 56) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            ensureColumn(db, "dual_chat_messages", Column("modelAToolActivityJSON", "TEXT"))
+            ensureColumn(db, "dual_chat_messages", Column("modelBToolActivityJSON", "TEXT"))
+        }
+    }
+
     val ALL_MIGRATIONS: Array<Migration> =
         (legacyRebuildMigrations + listOf(
             migration27To28,
@@ -436,7 +443,8 @@ object AppDatabaseMigrations {
             migration51To52,
             migration52To53,
             migration53To54,
-            migration54To55
+            migration54To55,
+            migration55To56
         )).toTypedArray()
 
     private fun rebuildSchema(db: SupportSQLiteDatabase) {
@@ -1005,7 +1013,9 @@ object AppDatabaseMigrations {
                 `timestamp` INTEGER NOT NULL DEFAULT 0,
                 `modelAThinking` TEXT,
                 `modelBThinking` TEXT,
-                `attachments` TEXT NOT NULL DEFAULT '[]'
+                `attachments` TEXT NOT NULL DEFAULT '[]',
+                `modelAToolActivityJSON` TEXT,
+                `modelBToolActivityJSON` TEXT
             )
             """.trimIndent()
         )
@@ -1020,6 +1030,8 @@ object AppDatabaseMigrations {
         ensureColumn(db, "dual_chat_messages", Column("modelAThinking", "TEXT"))
         ensureColumn(db, "dual_chat_messages", Column("modelBThinking", "TEXT"))
         ensureColumn(db, "dual_chat_messages", Column("attachments", "TEXT", notNull = true, defaultValue = "'[]'"))
+        ensureColumn(db, "dual_chat_messages", Column("modelAToolActivityJSON", "TEXT"))
+        ensureColumn(db, "dual_chat_messages", Column("modelBToolActivityJSON", "TEXT"))
     }
 
     private fun createAutoConversations(db: SupportSQLiteDatabase) {

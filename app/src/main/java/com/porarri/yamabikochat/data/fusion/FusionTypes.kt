@@ -4,6 +4,7 @@ import com.porarri.yamabikochat.data.model.ProviderRequest
 import com.porarri.yamabikochat.data.model.ProviderRequestMessage
 import com.porarri.yamabikochat.data.model.ProviderUsage
 import com.porarri.yamabikochat.data.model.ToolCall
+import com.porarri.yamabikochat.data.local.ToolActivityPayload
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -25,7 +26,8 @@ enum class FusionPanelChipState {
 data class FusionPanelChipStatus(
     val modelId: String,
     val provider: String,
-    val state: FusionPanelChipState
+    val state: FusionPanelChipState,
+    val toolActivity: ToolActivityPayload? = null
 )
 
 data class FusionProgressSnapshot(
@@ -87,7 +89,8 @@ data class FusionProgressSnapshot(
                         FusionPanelChipState.succeeded
                     } else {
                         FusionPanelChipState.failed
-                    }
+                    },
+                    toolActivity = result.toolActivity
                 )
             } else {
                 chip
@@ -172,6 +175,7 @@ data class PanelResult(
     val outputTokens: Int? = null,
     val cost: Double? = null,
     val toolCalls: List<SerializableToolCall>? = null,
+    val toolActivity: ToolActivityPayload? = null,
     val finishReason: String? = null,
     val role: String = "generalist"
 )

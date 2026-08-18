@@ -816,12 +816,16 @@ struct SettingsScreen: View {
                             HStack(spacing: 6) {
                                 Text(verbatim: endpoint.tag)
                                     .font(.caption2.monospaced())
-                                if let quantization = endpoint.quantization {
+                                if let quantization = endpoint.quantization,
+                                   quantization != "unknown" {
                                     Text(verbatim: quantization)
                                         .font(.caption2.monospaced())
                                         .foregroundStyle(.secondary)
                                 }
                             }
+                            Text(openRouterEndpointPricingText(endpoint))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -1936,6 +1940,26 @@ struct SettingsScreen: View {
     private func trimPreferredProvidersToSelectionMax() {
         let current = viewModel.settings.preferredProvidersList()
         viewModel.settings.setPreferredProvidersList(current)
+    }
+
+    private func openRouterEndpointPricingText(_ endpoint: OpenRouterEndpointOption) -> String {
+        guard endpoint.promptPricePerMillion != nil || endpoint.completionPricePerMillion != nil else {
+            return L10n.text("Price unavailable")
+        }
+        let prompt = endpoint.promptPricePerMillion.map(formatOpenRouterPrice) ?? "—"
+        let completion = endpoint.completionPricePerMillion.map(formatOpenRouterPrice) ?? "—"
+        return L10n.format("Input %@ · Output %@ / 1M tokens", prompt, completion)
+    }
+
+    private func formatOpenRouterPrice(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.currencySymbol = "$"
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 6
+        return formatter.string(from: NSNumber(value: value)) ?? String(format: "$%.6f", value)
     }
 
     private var themeModeOptions: [AppearanceOption] {

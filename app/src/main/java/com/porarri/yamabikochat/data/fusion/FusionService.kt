@@ -1,6 +1,7 @@
 package com.porarri.yamabikochat.data.fusion
 
 import com.porarri.yamabikochat.data.local.Settings
+import com.porarri.yamabikochat.data.local.ToolActivityPayload
 import com.porarri.yamabikochat.data.model.LLMProvider
 import com.porarri.yamabikochat.data.model.ProviderRequest
 import com.porarri.yamabikochat.data.model.ProviderRequestMessage
@@ -156,11 +157,12 @@ class FusionService(
                     conversationId = context.conversationId?.toString()
                 )
             },
-            invoke = { bundle, phase ->
+            invoke = { bundle, phase, onToolActivity ->
                 invoke(
                     request = bundle.request,
                     provider = bundle.provider,
-                    phase = phase
+                    phase = phase,
+                    onToolActivity = onToolActivity
                 )
             },
             estimateCost = { provider, model, usage ->
@@ -244,9 +246,19 @@ class FusionService(
     private suspend fun invoke(
         request: ProviderRequest,
         provider: String,
-        phase: FusionPhase
+        phase: FusionPhase,
+        onToolActivity: ((ToolActivityPayload) -> Unit)? = null
     ): ProviderResponse {
-        return providerGateway.generate(request = request, providerID = provider)
+        val accumulator = FusionToolActivityAccumulator()
+        return providerGateway.generate(
+            request = request,
+            providerID = provider,
+            onStreamEvent = { event ->
+                if (event is ProviderStreamEvent.ToolActivity) {
+                    onToolActivity?.invoke(accumulator.apply(event.event))
+                }
+            }
+        )
     }
 
     suspend fun streamInvoke(
@@ -288,4 +300,12 @@ class FusionService(
         finalAnswer = finalAnswer,
         logPrompts = logPrompts
     )
+}
+
+private class FusionToolActivityAccumulator {
+    private var payload = ToolActivityPayload()
+    @Synchronized fun apply(event: com.porarri.yamabikochat.data.model.ToolActivityEvent): ToolActivityPayload {
+        payload = payload.applying(event)
+        return payload
+    }
 }

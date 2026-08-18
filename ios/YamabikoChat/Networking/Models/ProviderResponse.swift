@@ -47,6 +47,7 @@ struct ProviderResponse: Codable, Sendable, Equatable {
     var usage: ProviderUsage?
     var usageSamples: [ProviderUsage]? = nil
     var toolCalls: [ToolCall] = []
+    var toolActivity: ToolActivityPayload? = nil
 }
 
 extension ProviderUsage {
@@ -74,6 +75,7 @@ extension ProviderUsage {
 enum ProviderStreamEvent: Sendable, Equatable {
     case textDelta(String)
     case reasoningDelta(String)
+    case toolActivity(ToolActivityEvent)
     case completed(ProviderResponse)
 }
 
@@ -86,7 +88,7 @@ extension ProviderStreamEvent {
             return delta.trimmedNonEmpty != nil
         case let .completed(response):
             return response.text.trimmedNonEmpty != nil
-        case .reasoningDelta:
+        case .reasoningDelta, .toolActivity:
             return false
         }
     }

@@ -3,6 +3,7 @@ package com.porarri.yamabikochat.data.repositories
 import com.porarri.yamabikochat.data.auth.CodexAuthRepository
 import com.porarri.yamabikochat.data.auth.SuperGrokAuthRepository
 import com.porarri.yamabikochat.data.local.Settings
+import com.porarri.yamabikochat.data.local.ToolActivityPayload
 import com.porarri.yamabikochat.data.model.LLMProvider
 import com.porarri.yamabikochat.data.model.ProviderClientError
 import com.porarri.yamabikochat.data.model.ProviderRequest
@@ -45,16 +46,23 @@ class ProviderGateway(
         return generate(request, provider.rawValue)
     }
 
-    suspend fun generate(request: ProviderRequest, providerID: String): ProviderResponse {
+    suspend fun generate(
+        request: ProviderRequest,
+        providerID: String,
+        onStreamEvent: ((ProviderStreamEvent) -> Unit)? = null
+    ): ProviderResponse {
         val streamFlow = stream(request, providerID)
         var completed: ProviderResponse? = null
         var text = ""
         var reasoning = ""
+        var toolActivity = ToolActivityPayload()
 
         streamFlow.collect { event ->
+            onStreamEvent?.invoke(event)
             when (event) {
                 is ProviderStreamEvent.TextDelta -> text += event.delta
                 is ProviderStreamEvent.ReasoningDelta -> reasoning += event.delta
+                is ProviderStreamEvent.ToolActivity -> toolActivity = toolActivity.applying(event.event)
                 is ProviderStreamEvent.Completed -> completed = event.response
             }
         }
@@ -64,6 +72,7 @@ class ProviderGateway(
         if (response.reasoningSummary == null && reasoning.trim().isNotEmpty()) {
             response.reasoningSummary = reasoning.trim()
         }
+        if (toolActivity.steps.isNotEmpty()) response.toolActivity = toolActivity
         return response
     }
 

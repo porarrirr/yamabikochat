@@ -928,7 +928,9 @@ fun DualChatMessageItem(
                 modelAProvider = dualMessage.modelAProvider,
                 modelBProvider = dualMessage.modelBProvider,
                 thinkingA = dualMessage.modelAThinking,
-                thinkingB = dualMessage.modelBThinking
+                thinkingB = dualMessage.modelBThinking,
+                toolStepsA = dualMessage.modelAToolActivity?.steps.orEmpty(),
+                toolStepsB = dualMessage.modelBToolActivity?.steps.orEmpty()
             )
         }
     }

@@ -30,20 +30,24 @@ class ConversationHistoryBuilder(
         val fetched = repository.getFullMessagesByIds(missingIds)
         val combinedMessages = existingFullMessages + fetched
 
-        val history = messageSummaries.mapNotNull { summary ->
-            val full = combinedMessages[summary.id] ?: return@mapNotNull null
+        val history = mutableListOf<ProviderRequestMessage>()
+        messageSummaries.forEach { summary ->
+            val full = combinedMessages[summary.id] ?: return@forEach
             val role = if (full.chatMessage.role == "model" || full.chatMessage.role == "assistant") "assistant" else "user"
             val effectiveText = full.displayText
             val effectiveAttachments = full.displayAttachments
             val effectiveThought = if (includeModelThoughts) full.displayThinkingStream ?: full.chatMessage.thinkingSummary else null
 
-            ProviderRequestMessage(
+            if (role == "assistant") {
+                history.addAll(full.displayToolActivity?.providerTranscript.orEmpty())
+            }
+            history.add(ProviderRequestMessage(
                 role = role,
                 content = effectiveText,
                 attachments = effectiveAttachments,
                 reasoningContent = effectiveThought
-            )
-        }.toMutableList()
+            ))
+        }
 
         val newAttachmentPaths = attachmentsToSend.mapNotNull { repository.saveAttachment(it) }
         history.add(
@@ -81,6 +85,12 @@ class ConversationHistoryBuilder(
                 "modelB" -> {
                     historyA.add(ProviderRequestMessage(role = "user", content = message.modelBText))
                     historyB.add(ProviderRequestMessage(role = "assistant", content = message.modelBText, reasoningContent = message.modelBThinking))
+                }
+                "dual_model" -> {
+                    historyA.addAll(message.modelAToolActivity?.providerTranscript.orEmpty())
+                    historyB.addAll(message.modelBToolActivity?.providerTranscript.orEmpty())
+                    historyA.add(ProviderRequestMessage(role = "assistant", content = message.modelAText))
+                    historyB.add(ProviderRequestMessage(role = "assistant", content = message.modelBText))
                 }
             }
         }

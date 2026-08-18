@@ -77,7 +77,7 @@ struct OpenRouterReasoningCapabilities: Codable, Sendable, Equatable {
 }
 
 struct OpenRouterModel: Codable, Sendable {
-    struct Pricing: Codable, Sendable {
+    struct Pricing: Codable, Sendable, Equatable {
         var prompt: String?
         var completion: String?
         var request: String?
@@ -164,6 +164,7 @@ struct ModelEndpoint: Codable, Sendable, Equatable, Identifiable {
     var maxPromptTokens: Double?
     var supportedParameters: [String]?
     var status: Int?
+    var pricing: OpenRouterModel.Pricing?
 
     enum CodingKeys: String, CodingKey {
         case name
@@ -175,6 +176,7 @@ struct ModelEndpoint: Codable, Sendable, Equatable, Identifiable {
         case maxPromptTokens = "max_prompt_tokens"
         case supportedParameters = "supported_parameters"
         case status
+        case pricing
     }
 }
 
@@ -185,6 +187,8 @@ struct OpenRouterEndpointOption: Sendable, Equatable, Identifiable {
     var quantization: String?
     var supportedParameters: [String]
     var status: Int?
+    var promptPricePerMillion: Double? = nil
+    var completionPricePerMillion: Double? = nil
 }
 
 struct OpenRouterModelEndpointOptions: Sendable, Equatable {

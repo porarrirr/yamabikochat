@@ -69,6 +69,8 @@ enum AppDatabase {
                 t.column("modelAThinking", .text)
                 t.column("modelBThinking", .text)
                 t.column("attachmentsJSON", .text).notNull().defaults(to: "[]")
+                t.column("modelAToolActivityJSON", .text)
+                t.column("modelBToolActivityJSON", .text)
                 t.column("createdAtMs", .integer).notNull()
             }
             try db.create(index: "idx_dual_conversation_time", on: "dual_chat_messages", columns: ["conversationId", "createdAtMs"])
@@ -772,6 +774,19 @@ enum AppDatabase {
                 }
                 if !columns.contains("contextwindow") {
                     t.add(column: "contextWindow", .integer)
+                }
+            }
+        }
+
+        migrator.registerMigration("v18_dual_tool_activity") { db in
+            let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(dual_chat_messages)")
+            let columns = Set(rows.compactMap { ($0["name"] as String?)?.lowercased() })
+            try db.alter(table: "dual_chat_messages") { t in
+                if !columns.contains("modelatoolactivityjson") {
+                    t.add(column: "modelAToolActivityJSON", .text)
+                }
+                if !columns.contains("modelbtoolactivityjson") {
+                    t.add(column: "modelBToolActivityJSON", .text)
                 }
             }
         }

@@ -32,6 +32,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,26 +52,38 @@ fun ToolActivityDisclosure(
 
     var expanded by remember { mutableStateOf(false) }
     val isRunning = steps.any { it.status == ToolActivityStep.Status.running }
+    val hasFailure = steps.any { it.status == ToolActivityStep.Status.failed }
+    val currentStep = steps.lastOrNull { it.status == ToolActivityStep.Status.running }
+    val statusLabel = if (isRunning) {
+        if (currentStep?.toolName == "fetch_url") "確認中：${currentStep.detail}"
+        else "検索中：${currentStep?.detail.orEmpty()}"
+    } else {
+        "Web検索・${steps.size}ステップ"
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { expanded = !expanded }
+                .semantics {
+                    role = Role.Button
+                    contentDescription = statusLabel
+                    stateDescription = if (expanded) "展開中" else "折りたたみ中"
+                }
                 .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Default.Language,
+                imageVector = when {
+                    isRunning -> Icons.Default.Language
+                    hasFailure -> Icons.Default.Error
+                    else -> Icons.Default.CheckCircle
+                },
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Web検索",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = if (hasFailure && !isRunning) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.width(8.dp))
             if (isRunning) {
@@ -74,17 +91,28 @@ fun ToolActivityDisclosure(
                     modifier = Modifier.size(12.dp),
                     strokeWidth = 1.5.dp
                 )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = statusLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
             } else {
                 Text(
-                    text = "${steps.size}ステップ",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = statusLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f)
                 )
             }
-            Spacer(modifier = Modifier.weight(1f))
+            if (!isRunning) Spacer(modifier = Modifier.width(8.dp))
             Icon(
                 imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                contentDescription = if (expanded) "Collapse" else "Expand",
+                contentDescription = null,
                 modifier = Modifier.size(16.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )

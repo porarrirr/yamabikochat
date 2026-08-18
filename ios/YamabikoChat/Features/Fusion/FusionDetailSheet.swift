@@ -102,6 +102,9 @@ struct FusionDetailSheet: View {
         Section(L10n.text("Panel outputs")) {
             ForEach(Array(trace.panelResults.enumerated()), id: \.offset) { _, panel in
                 DisclosureGroup {
+                    if let steps = panel.toolActivity?.steps, !steps.isEmpty {
+                        ToolActivityDisclosure(steps: steps)
+                    }
                     if let error = panel.error {
                         Text(error)
                             .font(.caption)

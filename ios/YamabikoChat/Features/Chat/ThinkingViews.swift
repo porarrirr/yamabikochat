@@ -60,6 +60,14 @@ struct ToolActivityDisclosure: View {
         steps.contains(where: { $0.status == .running })
     }
 
+    private var currentStep: ToolActivityStep? {
+        steps.last(where: { $0.status == .running })
+    }
+
+    private var hasFailure: Bool {
+        steps.contains(where: { $0.status == .failed })
+    }
+
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: 10) {
@@ -90,26 +98,45 @@ struct ToolActivityDisclosure: View {
                         }
                     }
                 }
+                let sources = deduplicatedSources
+                if !sources.isEmpty {
+                    ToolSourcesView(sources: sources)
+                }
             }
             .padding(.top, 8)
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: "globe")
+                Image(systemName: isRunning ? "globe" : (hasFailure ? "exclamationmark.circle.fill" : "checkmark.circle.fill"))
                     .font(.caption)
-                Text(L10n.text("Web検索"))
-                    .font(.caption)
+                    .foregroundStyle(hasFailure && !isRunning ? Color.red : Color.secondary)
                 if isRunning {
                     ProgressView()
                         .controlSize(.mini)
+                    Text(runningLabel)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 } else {
-                    Text(L10n.format("%dステップ", steps.count))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    Text(L10n.format("Web検索・%dステップ", steps.count))
+                        .font(.caption)
+                        .lineLimit(1)
                 }
             }
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
+        .accessibilityLabel(isRunning ? runningLabel : L10n.format("Web検索、%dステップ", steps.count))
+    }
+
+    private var runningLabel: String {
+        guard let currentStep else { return L10n.text("検索中") }
+        let prefix = currentStep.toolName == FetchUrlTool.name ? L10n.text("確認中") : L10n.text("検索中")
+        return "\(prefix)：\(currentStep.detail)"
+    }
+
+    private var deduplicatedSources: [ToolSource] {
+        var seen: Set<String> = []
+        return steps.flatMap(\.sources).filter { seen.insert($0.url).inserted }
     }
 
     @ViewBuilder

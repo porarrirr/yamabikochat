@@ -8,6 +8,7 @@ import com.porarri.yamabikochat.data.model.ProviderClientError
 import com.porarri.yamabikochat.data.model.ProviderRequest
 import com.porarri.yamabikochat.data.model.ProviderResponse
 import com.porarri.yamabikochat.data.model.ProviderStreamEvent
+import com.porarri.yamabikochat.data.model.ToolActivityEvent
 import com.porarri.yamabikochat.data.model.ToolCall
 import com.porarri.yamabikochat.data.model.ToolResult
 import com.porarri.yamabikochat.data.tools.LocalToolRegistry
@@ -207,7 +208,24 @@ class PiAgentRuntime private constructor(private val context: Context) {
                         if (reqId != null && callId != null && toolName != null) {
                             val argumentsString = event.arguments?.let { json.encodeToString(it) } ?: "{}"
                             val toolCall = ToolCall(id = callId, name = toolName, argumentsJSON = argumentsString)
+                            val createdAtMs = event.timeMs ?: System.currentTimeMillis()
+                            val reportsActivity = toolName == "web_search" || toolName == "fetch_url"
+                            if (reportsActivity) {
+                                emit(ProviderStreamEvent.ToolActivity(ToolActivityEvent(
+                                    phase = ToolActivityEvent.Phase.started,
+                                    call = toolCall,
+                                    createdAtMs = createdAtMs
+                                )))
+                            }
                             val toolResult = tools.execute(toolCall)
+                            if (reportsActivity) {
+                                emit(ProviderStreamEvent.ToolActivity(ToolActivityEvent(
+                                    phase = ToolActivityEvent.Phase.finished,
+                                    call = toolCall,
+                                    result = toolResult,
+                                    createdAtMs = createdAtMs
+                                )))
+                            }
                             submitToolResult(toolResult, reqId, endpoint, token)
                         }
                     }

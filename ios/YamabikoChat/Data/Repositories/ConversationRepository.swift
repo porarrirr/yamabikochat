@@ -630,6 +630,29 @@ final class ConversationRepository {
         }
     }
 
+    func saveToolActivity(
+        messageId: Int64?,
+        variantId: Int64?,
+        payload: ToolActivityPayload
+    ) throws {
+        let stepsData = try JSONEncoder().encode(payload.steps)
+        let transcriptData = try JSONEncoder().encode(payload.providerTranscript)
+        var activity = ChatMessageToolActivity(
+            messageId: messageId,
+            variantId: variantId,
+            stepsJSON: String(decoding: stepsData, as: UTF8.self),
+            providerTranscriptJSON: String(decoding: transcriptData, as: UTF8.self)
+        )
+        try dbQueue.write { db in
+            if let messageId {
+                try ChatMessageToolActivity.filter(Column("messageId") == messageId).deleteAll(db)
+            } else if let variantId {
+                try ChatMessageToolActivity.filter(Column("variantId") == variantId).deleteAll(db)
+            }
+            try activity.insert(db)
+        }
+    }
+
     func fetchProviderHistory(conversationId: Int64) throws -> [ProviderHistoryMessage] {
         try dbQueue.read { db in
             let messages = try ChatMessage

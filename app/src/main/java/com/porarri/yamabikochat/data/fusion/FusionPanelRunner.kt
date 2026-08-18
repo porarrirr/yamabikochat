@@ -3,14 +3,16 @@ package com.porarri.yamabikochat.data.fusion
 import com.porarri.yamabikochat.data.model.ProviderRequest
 import com.porarri.yamabikochat.data.model.ProviderResponse
 import com.porarri.yamabikochat.data.model.ProviderUsage
+import com.porarri.yamabikochat.data.local.ToolActivityPayload
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicReference
 
 typealias FusionPanelInvoke =
-    suspend (FusionPanelRunner.GenerateRequestBundle, FusionPhase) -> ProviderResponse
+    suspend (FusionPanelRunner.GenerateRequestBundle, FusionPhase, (ToolActivityPayload) -> Unit) -> ProviderResponse
 typealias FusionPanelCostEstimator =
     suspend (provider: String, model: String, usage: ProviderUsage?) -> Double?
 typealias FusionPanelProgressHandler = (FusionProgressSnapshot) -> Unit
@@ -32,8 +34,11 @@ object FusionPanelRunner {
         estimateCost: FusionPanelCostEstimator,
         onProgress: FusionPanelProgressHandler? = null
     ): List<PanelResult> = coroutineScope {
-        var chipPanels = FusionProgressSnapshot.initialPanels(from = request)
-        onProgress?.invoke(FusionProgressSnapshot.panelPhase(panels = chipPanels))
+        val progressState = FusionPanelToolProgressState(
+            FusionProgressSnapshot.initialPanels(from = request),
+            onProgress
+        )
+        progressState.emit()
         val mutex = Mutex()
 
         request.panelModels.map { panel ->
@@ -43,13 +48,11 @@ object FusionPanelRunner {
                     panelSystemPrompt = panelSystemPrompt,
                     buildPanelRequest = buildPanelRequest,
                     invoke = invoke,
-                    estimateCost = estimateCost
+                    estimateCost = estimateCost,
+                    onToolActivity = { progressState.update(panel.modelId, it) }
                 )
                 mutex.withLock {
-                    val snapshot = FusionProgressSnapshot.panelPhase(panels = chipPanels)
-                        .applyingPanelResult(result)
-                    chipPanels = snapshot.panels
-                    onProgress?.invoke(snapshot)
+                    progressState.finish(result)
                 }
                 result
             }
@@ -61,12 +64,18 @@ object FusionPanelRunner {
         panelSystemPrompt: String,
         buildPanelRequest: FusionPanelRequestBuilder,
         invoke: FusionPanelInvoke,
-        estimateCost: FusionPanelCostEstimator
+        estimateCost: FusionPanelCostEstimator,
+        onToolActivity: (ToolActivityPayload) -> Unit
     ): PanelResult {
         val started = System.currentTimeMillis()
+        val activity = AtomicReference(ToolActivityPayload())
+        val publishActivity: (ToolActivityPayload) -> Unit = {
+            activity.set(it)
+            onToolActivity(it)
+        }
         return try {
             val bundle = buildPanelRequest(panel, panelSystemPrompt)
-            val response = invoke(bundle, FusionPhase.panel)
+            val response = invoke(bundle, FusionPhase.panel, publishActivity)
             val latencyMs = System.currentTimeMillis() - started
             val cost = estimateCost(
                 panel.provider,
@@ -84,11 +93,16 @@ object FusionPanelRunner {
                 outputTokens = response.usage?.outputTokens,
                 cost = cost,
                 toolCalls = response.toolCalls.map { it.toSerializable() },
+                toolActivity = response.toolActivity ?: activity.get().takeIf { it.steps.isNotEmpty() },
                 finishReason = null,
                 role = panel.role ?: "generalist"
             )
         } catch (e: Exception) {
             val latencyMs = System.currentTimeMillis() - started
+            val failedActivity = activity.get()
+                .failRunning("ツールの実行が中断されました")
+                .takeIf { it.steps.isNotEmpty() }
+            failedActivity?.let(onToolActivity)
             PanelResult(
                 modelId = panel.modelId,
                 provider = panel.provider.uppercase(),
@@ -100,9 +114,38 @@ object FusionPanelRunner {
                 outputTokens = null,
                 cost = null,
                 toolCalls = null,
+                toolActivity = failedActivity,
                 finishReason = null,
                 role = panel.role ?: "generalist"
             )
         }
+    }
+}
+
+private class FusionPanelToolProgressState(
+    panels: List<FusionPanelChipStatus>,
+    private val onProgress: FusionPanelProgressHandler?
+) {
+    private var panels = panels
+
+    @Synchronized fun emit() = publish()
+
+    @Synchronized fun update(modelId: String, activity: ToolActivityPayload) {
+        panels = panels.map { if (it.modelId == modelId) it.copy(toolActivity = activity) else it }
+        publish()
+    }
+
+    @Synchronized fun finish(result: PanelResult) {
+        panels = panels.map {
+            if (it.modelId == result.modelId) it.copy(
+                state = if (result.success) FusionPanelChipState.succeeded else FusionPanelChipState.failed,
+                toolActivity = result.toolActivity
+            ) else it
+        }
+        publish()
+    }
+
+    private fun publish() {
+        onProgress?.invoke(FusionProgressSnapshot.panelPhase(panels = panels))
     }
 }

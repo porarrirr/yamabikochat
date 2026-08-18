@@ -244,7 +244,9 @@ class ChatInteractionCoordinator(
                     modelAText = partial.textA,
                     modelBText = partial.textB,
                     modelAThinking = partial.thinkingA,
-                    modelBThinking = partial.thinkingB
+                    modelBThinking = partial.thinkingB,
+                    modelAToolActivityJSON = DualChatMessage.encodeToolActivity(partial.toolActivityA),
+                    modelBToolActivityJSON = DualChatMessage.encodeToolActivity(partial.toolActivityB)
                 )
                 repository.updateDualMessage(partialMsg)
             }
@@ -255,7 +257,9 @@ class ChatInteractionCoordinator(
                     modelAText = response.textA,
                     modelBText = response.textB,
                     modelAThinking = response.thinkingA,
-                    modelBThinking = response.thinkingB
+                    modelBThinking = response.thinkingB,
+                    modelAToolActivityJSON = DualChatMessage.encodeToolActivity(response.toolActivityA),
+                    modelBToolActivityJSON = DualChatMessage.encodeToolActivity(response.toolActivityB)
                 )
                 repository.updateDualMessage(updatedMessage)
             }

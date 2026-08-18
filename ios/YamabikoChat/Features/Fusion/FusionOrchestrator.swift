@@ -1,7 +1,7 @@
 import Foundation
 
 struct FusionOrchestrator: Sendable {
-    typealias Invoke = @Sendable (ProviderRequest, String, FusionPhase) async throws -> ProviderResponse
+    typealias Invoke = @Sendable (ProviderRequest, String, FusionPhase, @escaping @Sendable (ToolActivityPayload) -> Void) async throws -> ProviderResponse
     typealias CostEstimator = @Sendable (String, String, ProviderUsage?) async -> Double?
     typealias RequestBuilder = @Sendable (
         PanelModelConfig,
@@ -204,7 +204,8 @@ struct FusionOrchestrator: Sendable {
                     userContent: judgeUserContent
                 ),
                 provider,
-                .judge
+                .judge,
+                { _ in }
             )
             let latencyMs = Int64(Date().timeIntervalSince(started) * 1000)
             let usage = response.usage?.normalizedNonEmpty()
@@ -230,7 +231,8 @@ struct FusionOrchestrator: Sendable {
                     userContent: FusionPrompts.jsonRepairPrompt(invalidJSON: response.text)
                 ),
                 provider,
-                .judge
+                .judge,
+                { _ in }
             )
             let repairLatency = Int64(Date().timeIntervalSince(repairStarted) * 1000)
             let repairUsage = repairResponse.usage?.normalizedNonEmpty()

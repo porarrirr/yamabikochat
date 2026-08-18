@@ -334,6 +334,8 @@
 "Preset Name" = "プリセット名";
 "Preset name" = "プリセット名";
 "price" = "価格";
+"Input %@ · Output %@ / 1M tokens" = "入力 %@ · 出力 %@ / 100万トークン";
+"Price unavailable" = "価格情報なし";
 "Project ID" = "プロジェクトID";
 "Prompt Cache" = "プロンプトキャッシュ";
 "provider selection max" = "provider選択上限";

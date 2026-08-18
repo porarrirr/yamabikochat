@@ -4,7 +4,10 @@ import android.util.Log
 import com.porarri.yamabikochat.data.ChatRepository
 import com.porarri.yamabikochat.data.local.ChatMessage
 import com.porarri.yamabikochat.data.local.ChatMessageVariant
+import com.porarri.yamabikochat.data.local.ChatMessageToolActivity
 import com.porarri.yamabikochat.data.local.FullChatMessage
+import com.porarri.yamabikochat.data.local.ToolActivityPayload
+import com.porarri.yamabikochat.data.local.ToolActivityStep
 import com.porarri.yamabikochat.data.model.ProviderRequest
 import com.porarri.yamabikochat.data.model.ProviderStreamEvent
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
@@ -65,7 +68,8 @@ class ChatResponseStreamer(
                 text: String,
                 attachments: List<String>,
                 thinkingSummary: String?,
-                thinkingStream: String
+                thinkingStream: String,
+                toolPayload: ToolActivityPayload
             ) {
                 fullMessages.update { currentMap ->
                     val existing = currentMap[messageId]
@@ -80,7 +84,10 @@ class ChatResponseStreamer(
                             val updatedFull = existing.copy(
                                 chatMessage = existing.chatMessage.copy(selectedVariantIndex = updatedVariant.variantIndex),
                                 variants = (existing.variants.filterNot { it.variantIndex == updatedVariant.variantIndex } + updatedVariant)
-                                    .sortedBy { it.variantIndex }
+                                    .sortedBy { it.variantIndex },
+                                variantToolActivities = liveActivity(null, updatedVariant.id, toolPayload)?.let {
+                                    existing.variantToolActivities + (updatedVariant.id to it)
+                                } ?: existing.variantToolActivities
                             )
                             currentMap + (messageId to updatedFull)
                         } else {
@@ -90,7 +97,8 @@ class ChatResponseStreamer(
                                     attachments = attachments,
                                     thinkingSummary = thinkingSummary
                                 ),
-                                thinkingStream = thinkingStream.takeIf { it.isNotBlank() }
+                                thinkingStream = thinkingStream.takeIf { it.isNotBlank() },
+                                toolActivity = liveActivity(messageId, null, toolPayload)
                             )
                             currentMap + (messageId to updatedFull)
                         }
@@ -102,6 +110,7 @@ class ChatResponseStreamer(
 
             var textAccumulator = ""
             var thinkingAccumulator = ""
+            var toolPayload = ToolActivityPayload()
             var lastUiUpdateMs = 0L
 
             try {
@@ -112,6 +121,16 @@ class ChatResponseStreamer(
                         }
                         is ProviderStreamEvent.ReasoningDelta -> {
                             thinkingAccumulator += event.delta
+                        }
+                        is ProviderStreamEvent.ToolActivity -> {
+                            toolPayload = toolPayload.applying(event.event)
+                            updateFullMessageState(
+                                textAccumulator,
+                                emptyList(),
+                                null,
+                                thinkingAccumulator,
+                                toolPayload
+                            )
                         }
                         is ProviderStreamEvent.Completed -> {
                             val response = event.response
@@ -154,7 +173,8 @@ class ChatResponseStreamer(
                                 text = textAccumulator,
                                 attachments = emptyList(),
                                 thinkingSummary = thinkingSummary,
-                                thinkingStream = thinkingAccumulator
+                                thinkingStream = thinkingAccumulator,
+                                toolPayload = toolPayload
                             )
                         }
                     }
@@ -166,7 +186,8 @@ class ChatResponseStreamer(
                             text = textAccumulator,
                             attachments = emptyList(),
                             thinkingSummary = null,
-                            thinkingStream = thinkingAccumulator
+                            thinkingStream = thinkingAccumulator,
+                            toolPayload = toolPayload
                         )
                     }
                 }
@@ -181,8 +202,30 @@ class ChatResponseStreamer(
                         repository.updateMessage(full.chatMessage.copy(text = errText))
                     }
                 }
-                updateFullMessageState(errText, emptyList(), null, thinkingAccumulator)
+                toolPayload = toolPayload.failRunning("ツールの実行が中断されました")
+                if (toolPayload.steps.isNotEmpty()) {
+                    activeVariant?.id?.let { repository.saveToolActivityForVariant(it, toolPayload) }
+                        ?: repository.saveToolActivity(messageId, toolPayload)
+                }
+                updateFullMessageState(errText, emptyList(), null, thinkingAccumulator, toolPayload)
+            }
+            if (toolPayload.steps.isNotEmpty()) {
+                activeVariant?.id?.let { repository.saveToolActivityForVariant(it, toolPayload) }
+                    ?: repository.saveToolActivity(messageId, toolPayload)
             }
         }
+    }
+
+    private fun liveActivity(
+        messageId: Long?,
+        variantId: Long?,
+        payload: ToolActivityPayload
+    ): ChatMessageToolActivity? = payload.steps.takeIf { it.isNotEmpty() }?.let {
+        ChatMessageToolActivity(
+            messageId = messageId,
+            variantId = variantId,
+            stepsJSON = ToolActivityStep.encodeSteps(it),
+            providerTranscriptJSON = ChatMessageToolActivity.encodeProviderTranscript(payload.providerTranscript)
+        )
     }
 }

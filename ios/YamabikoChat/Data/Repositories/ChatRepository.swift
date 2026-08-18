@@ -718,7 +718,8 @@ final class ChatRepository {
                 raw: nil,
                 usage: session.usage,
                 usageSamples: session.usageSamples,
-                toolCalls: session.toolCalls
+                toolCalls: session.toolCalls,
+                toolActivity: session.toolActivity
             )
             if persistResults {
                 try persistProviderResponse(response, kind: persistenceKind)
@@ -742,6 +743,9 @@ final class ChatRepository {
             text: response.text,
             thinking: response.reasoningSummary ?? ""
         )
+        if let activity = response.toolActivity, !activity.steps.isEmpty {
+            try target.persistToolActivity(activity)
+        }
     }
 
     func sendDualMessage(conversationId: Int64, text: String, attachments: [String] = []) async throws -> DualChatMessage {
@@ -834,16 +838,39 @@ final class ChatRepository {
         )
         let modelRowId = try conversations.insertDualMessage(modelRow)
         modelRow.id = modelRowId
+        let dualActivityQueue = DispatchQueue(label: "com.porarri.yamabikochat.dual-tool-activity.\(modelRowId)")
 
         async let outcomeA = generateDualSideResponse(
             request: requestA,
             provider: settings.dualProviderA,
-            model: settings.dualModelA
+            model: settings.dualModelA,
+            onToolActivity: { [conversations] event in
+                dualActivityQueue.sync {
+                    try? Self.persistDualToolEvent(
+                        event,
+                        side: .a,
+                        rowId: modelRowId,
+                        conversationId: conversationId,
+                        conversations: conversations
+                    )
+                }
+            }
         )
         async let outcomeB = generateDualSideResponse(
             request: requestB,
             provider: settings.dualProviderB,
-            model: settings.dualModelB
+            model: settings.dualModelB,
+            onToolActivity: { [conversations] event in
+                dualActivityQueue.sync {
+                    try? Self.persistDualToolEvent(
+                        event,
+                        side: .b,
+                        rowId: modelRowId,
+                        conversationId: conversationId,
+                        conversations: conversations
+                    )
+                }
+            }
         )
         let (resultA, resultB) = await (outcomeA, outcomeB)
 
@@ -868,6 +895,8 @@ final class ChatRepository {
         modelRow.modelBText = resultB.text
         modelRow.modelAThinking = resultA.reasoning
         modelRow.modelBThinking = resultB.reasoning
+        modelRow.modelAToolActivityJSON = DualChatMessage.encodeToolActivity(resultA.toolActivity)
+        modelRow.modelBToolActivityJSON = DualChatMessage.encodeToolActivity(resultB.toolActivity)
         try conversations.updateDualMessage(modelRow)
 
         if let errA = resultA.error {
@@ -2092,32 +2121,42 @@ final class ChatRepository {
         var reasoning: String?
         var usage: ProviderUsage?
         var usageSamples: [ProviderUsage]?
+        var toolActivity: ToolActivityPayload?
         var error: Error?
     }
 
     private func generateDualSideResponse(
         request: ProviderRequest,
         provider: String,
-        model: String
+        model: String,
+        onToolActivity: (@Sendable (ToolActivityEvent) -> Void)? = nil
     ) async -> DualSideResult {
+        let activityState = DualToolActivityState()
         do {
             let response = try await generateNonStreamingResponse(
                 request: request,
-                provider: provider
+                provider: provider,
+                onToolActivity: { event in
+                    activityState.apply(event)
+                    onToolActivity?(event)
+                }
             )
             return DualSideResult(
                 text: response.text,
                 reasoning: response.reasoningSummary,
                 usage: response.usage,
                 usageSamples: response.usageSamples,
+                toolActivity: response.toolActivity ?? activityState.snapshot(),
                 error: nil
             )
         } catch {
+            let failedActivity = activityState.failRunning()
             return DualSideResult(
                 text: UserFacingErrorFormatter.placeholder(for: error),
                 reasoning: nil,
                 usage: nil,
                 usageSamples: nil,
+                toolActivity: failedActivity,
                 error: error
             )
         }
@@ -2125,9 +2164,37 @@ final class ChatRepository {
 
     private func generateNonStreamingResponse(
         request: ProviderRequest,
-        provider: String
+        provider: String,
+        onToolActivity: (@Sendable (ToolActivityEvent) -> Void)? = nil
     ) async throws -> ProviderResponse {
-        try await providers.generate(request: request, providerID: provider)
+        try await providers.generate(
+            request: request,
+            providerID: provider,
+            onStreamEvent: { event in
+                guard case let .toolActivity(activity) = event else { return }
+                onToolActivity?(activity)
+            }
+        )
+    }
+
+    private static func persistDualToolEvent(
+        _ event: ToolActivityEvent,
+        side: DualHistorySide,
+        rowId: Int64,
+        conversationId: Int64,
+        conversations: ConversationRepository
+    ) throws {
+        guard var row = try conversations.fetchDualMessages(conversationId: conversationId)
+            .first(where: { $0.id == rowId }) else { return }
+        var payload = side == .a ? (row.modelAToolActivity ?? ToolActivityPayload()) :
+            (row.modelBToolActivity ?? ToolActivityPayload())
+        payload.apply(event)
+        if side == .a {
+            row.modelAToolActivityJSON = DualChatMessage.encodeToolActivity(payload)
+        } else {
+            row.modelBToolActivityJSON = DualChatMessage.encodeToolActivity(payload)
+        }
+        try conversations.updateDualMessage(row)
     }
 
     private func buildDualHistory(
@@ -2160,6 +2227,8 @@ final class ChatRepository {
                 }
             case .dualModel:
                 let content = modelSide == .a ? dual.modelAText : dual.modelBText
+                let activity = modelSide == .a ? dual.modelAToolActivity : dual.modelBToolActivity
+                messages.append(contentsOf: activity?.providerTranscript ?? [])
                 let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     messages.append(
@@ -2286,6 +2355,32 @@ final class ChatRepository {
             return projectPrompt
         }
         return fallbackPrompt
+    }
+}
+
+private final class DualToolActivityState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var activity = ToolActivityPayload()
+
+    func apply(_ event: ToolActivityEvent) {
+        lock.lock()
+        activity.apply(event)
+        lock.unlock()
+    }
+
+    func snapshot() -> ToolActivityPayload? {
+        lock.lock()
+        let value = activity
+        lock.unlock()
+        return value.steps.isEmpty ? nil : value
+    }
+
+    func failRunning() -> ToolActivityPayload? {
+        lock.lock()
+        activity.failRunning(message: L10n.text("ツールの実行が中断されました"))
+        let value = activity
+        lock.unlock()
+        return value.steps.isEmpty ? nil : value
     }
 }
 

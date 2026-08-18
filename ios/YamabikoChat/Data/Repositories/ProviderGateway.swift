@@ -46,15 +46,22 @@ final class ProviderGateway {
         try await generate(request: request, providerID: provider.rawValue)
     }
 
-    func generate(request: ProviderRequest, providerID: String) async throws -> ProviderResponse {
+    func generate(
+        request: ProviderRequest,
+        providerID: String,
+        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil
+    ) async throws -> ProviderResponse {
         let stream = try await stream(request: request, providerID: providerID)
         var completed: ProviderResponse?
         var text = ""
         var reasoning = ""
+        var toolActivity = ToolActivityPayload()
         for try await event in stream {
+            onStreamEvent?(event)
             switch event {
             case let .textDelta(delta): text += delta
             case let .reasoningDelta(delta): reasoning += delta
+            case let .toolActivity(activity): toolActivity.apply(activity)
             case let .completed(response): completed = response
             }
         }
@@ -63,6 +70,7 @@ final class ProviderGateway {
         }
         if response.text.isEmpty { response.text = text }
         if response.reasoningSummary == nil { response.reasoningSummary = reasoning.trimmedNonEmpty }
+        if !toolActivity.steps.isEmpty { response.toolActivity = toolActivity }
         return response
     }
 

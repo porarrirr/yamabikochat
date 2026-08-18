@@ -1093,7 +1093,10 @@ private struct MessageBubble: View {
     }
 
     private var toolActivitySteps: [ToolActivityStep] {
-        message.displayToolActivity?.steps ?? []
+        if let live = streamingSnapshot?.toolActivity?.steps, !live.isEmpty {
+            return live
+        }
+        return message.displayToolActivity?.steps ?? []
     }
 
     private var toolSources: [ToolSource] {
@@ -1218,10 +1221,6 @@ private struct MessageBubble: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                    }
-
-                    if !toolSources.isEmpty {
-                        ToolSourcesView(sources: toolSources)
                     }
 
                     if let fusionTrace, !isActivelyStreaming {
@@ -1367,6 +1366,7 @@ private struct DualMessageCard: View {
                             title: "A · \(ProviderCatalog.displayName(for: message.providerA)) · \(message.modelAName)",
                             content: modelAText.isEmpty ? L10n.text("（応答待ち）") : modelAText,
                             thinking: message.modelAThinking,
+                            toolSteps: message.modelAToolActivity?.steps ?? [],
                             showThinking: $showThinkingA,
                             mathRenderingEnabled: mathRenderingEnabled
                         )
@@ -1375,6 +1375,7 @@ private struct DualMessageCard: View {
                             title: "B · \(ProviderCatalog.displayName(for: message.providerB)) · \(message.modelBName)",
                             content: modelBText.isEmpty ? L10n.text("（応答待ち）") : modelBText,
                             thinking: message.modelBThinking,
+                            toolSteps: message.modelBToolActivity?.steps ?? [],
                             showThinking: $showThinkingB,
                             mathRenderingEnabled: mathRenderingEnabled
                         )
@@ -1464,6 +1465,7 @@ private struct DualResponsePane: View {
     let title: String
     let content: String
     let thinking: String?
+    let toolSteps: [ToolActivityStep]
     @Binding var showThinking: Bool
     let mathRenderingEnabled: Bool
 
@@ -1475,6 +1477,10 @@ private struct DualResponsePane: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.85)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !toolSteps.isEmpty {
+                ToolActivityDisclosure(steps: toolSteps)
+            }
 
             if let thinking = thinking?.trimmingCharacters(in: .whitespacesAndNewlines),
                !thinking.isEmpty {

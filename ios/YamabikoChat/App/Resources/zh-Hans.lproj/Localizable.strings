@@ -334,6 +334,8 @@
 "Preset Name" = "预设名称";
 "Preset name" = "预设名称";
 "price" = "价格";
+"Input %@ · Output %@ / 1M tokens" = "输入 %@ · 输出 %@ / 100万 token";
+"Price unavailable" = "价格不可用";
 "Project ID" = "项目 ID";
 "Prompt Cache" = "提示词缓存";
 "provider selection max" = "provider 选择上限";

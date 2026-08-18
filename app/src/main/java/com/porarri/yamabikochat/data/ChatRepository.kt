@@ -23,6 +23,9 @@ import com.porarri.yamabikochat.data.local.AutoConversation
 import com.porarri.yamabikochat.data.local.AutoConversationConfig
 import com.porarri.yamabikochat.data.local.AutoConversationMessage
 import com.porarri.yamabikochat.data.local.ChatMessage
+import com.porarri.yamabikochat.data.local.ChatMessageToolActivity
+import com.porarri.yamabikochat.data.local.ToolActivityPayload
+import com.porarri.yamabikochat.data.local.ToolActivityStep
 import com.porarri.yamabikochat.data.local.ChatMessageSummary
 import com.porarri.yamabikochat.data.local.ChatMessageVariant
 import com.porarri.yamabikochat.data.local.ChatProject
@@ -406,6 +409,22 @@ class ChatRepository(
     ): ProviderResponse =
         providerGateway.generate(request, provider)
 
+    suspend fun saveToolActivity(messageId: Long, payload: ToolActivityPayload) {
+        databaseRepository.saveToolActivities(
+            messageId,
+            ToolActivityStep.encodeSteps(payload.steps),
+            ChatMessageToolActivity.encodeProviderTranscript(payload.providerTranscript)
+        )
+    }
+
+    suspend fun saveToolActivityForVariant(variantId: Long, payload: ToolActivityPayload) {
+        databaseRepository.saveToolActivitiesForVariant(
+            variantId,
+            ToolActivityStep.encodeSteps(payload.steps),
+            ChatMessageToolActivity.encodeProviderTranscript(payload.providerTranscript)
+        )
+    }
+
     suspend fun generateAutoConversationResponse(
         model: String,
         provider: String,
@@ -636,6 +655,7 @@ class ChatRepository(
                         synthUsage = event.response.usage
                     }
                     is ProviderStreamEvent.ReasoningDelta -> {}
+                    is ProviderStreamEvent.ToolActivity -> {}
                 }
                 val now = System.currentTimeMillis()
                 if (now - lastPersistMs >= 100L) {

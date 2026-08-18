@@ -404,7 +404,26 @@ actor PiAgentRuntime {
                                 throw ProviderClientError.parseFailure("Pi emitted an invalid tool request")
                             }
                             let arguments = Self.jsonString(event.arguments ?? .object([:]))
-                            let result = await tools.execute(call: ToolCall(id: callID, name: name, argumentsJSON: arguments))
+                            let call = ToolCall(id: callID, name: name, argumentsJSON: arguments)
+                            let createdAtMs = event.timeMs ?? nowMs()
+                            let reportsActivity = name == WebSearchTool.name || name == FetchUrlTool.name
+                            if reportsActivity {
+                                continuation.yield(.toolActivity(ToolActivityEvent(
+                                    phase: .started,
+                                    call: call,
+                                    result: nil,
+                                    createdAtMs: createdAtMs
+                                )))
+                            }
+                            let result = await tools.execute(call: call)
+                            if reportsActivity {
+                                continuation.yield(.toolActivity(ToolActivityEvent(
+                                    phase: .finished,
+                                    call: call,
+                                    result: result,
+                                    createdAtMs: createdAtMs
+                                )))
+                            }
                             try await Self.submitToolResult(result, requestID: requestID, endpoint: endpoint, token: token)
                         case "completed":
                             guard let response = event.response else {

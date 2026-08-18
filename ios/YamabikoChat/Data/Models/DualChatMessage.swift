@@ -23,6 +23,8 @@ struct DualChatMessage: Codable, FetchableRecord, MutablePersistableRecord, Iden
     var modelAThinking: String?
     var modelBThinking: String?
     var attachmentsJSON: String
+    var modelAToolActivityJSON: String?
+    var modelBToolActivityJSON: String?
     var createdAtMs: Int64
 
     init(
@@ -39,6 +41,8 @@ struct DualChatMessage: Codable, FetchableRecord, MutablePersistableRecord, Iden
         modelAThinking: String? = nil,
         modelBThinking: String? = nil,
         attachmentsJSON: String = "[]",
+        modelAToolActivityJSON: String? = nil,
+        modelBToolActivityJSON: String? = nil,
         createdAtMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
     ) {
         self.id = id
@@ -54,6 +58,8 @@ struct DualChatMessage: Codable, FetchableRecord, MutablePersistableRecord, Iden
         self.modelAThinking = modelAThinking
         self.modelBThinking = modelBThinking
         self.attachmentsJSON = attachmentsJSON
+        self.modelAToolActivityJSON = modelAToolActivityJSON
+        self.modelBToolActivityJSON = modelBToolActivityJSON
         self.createdAtMs = createdAtMs
     }
 
@@ -73,5 +79,18 @@ struct DualChatMessage: Codable, FetchableRecord, MutablePersistableRecord, Iden
             return []
         }
         return values
+    }
+
+    var modelAToolActivity: ToolActivityPayload? { Self.decodeToolActivity(modelAToolActivityJSON) }
+    var modelBToolActivity: ToolActivityPayload? { Self.decodeToolActivity(modelBToolActivityJSON) }
+
+    static func encodeToolActivity(_ payload: ToolActivityPayload?) -> String? {
+        guard let payload, !payload.steps.isEmpty, let data = try? JSONEncoder().encode(payload) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private static func decodeToolActivity(_ raw: String?) -> ToolActivityPayload? {
+        guard let data = raw?.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(ToolActivityPayload.self, from: data)
     }
 }

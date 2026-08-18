@@ -3,6 +3,7 @@ package com.porarri.yamabikochat.ui.chat.logic
 import com.porarri.yamabikochat.data.ChatRepository
 import com.porarri.yamabikochat.data.model.ProviderRequest
 import com.porarri.yamabikochat.data.model.ProviderStreamEvent
+import com.porarri.yamabikochat.data.local.ToolActivityPayload
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import com.porarri.yamabikochat.utils.UserFacingErrorFormatter
 import kotlinx.coroutines.async
@@ -37,7 +38,9 @@ class DualChatResponder(
                 textA = resA.text.ifBlank { FALLBACK_MESSAGE },
                 textB = resB.text.ifBlank { FALLBACK_MESSAGE },
                 thinkingA = resA.reasoningSummary?.ifBlank { null },
-                thinkingB = resB.reasoningSummary?.ifBlank { null }
+                thinkingB = resB.reasoningSummary?.ifBlank { null },
+                toolActivityA = resA.toolActivity,
+                toolActivityB = resB.toolActivity
             )
         } catch (e: Exception) {
             DiagnosticsLogger.log("Dual generate request failed", e)
@@ -59,6 +62,8 @@ class DualChatResponder(
         val textB = AtomicReference("")
         val thinkingA = AtomicReference("")
         val thinkingB = AtomicReference("")
+        val toolActivityA = AtomicReference(ToolActivityPayload())
+        val toolActivityB = AtomicReference(ToolActivityPayload())
 
         val lastEmitMs = AtomicLong(0L)
         val emitMutex = Mutex()
@@ -74,7 +79,9 @@ class DualChatResponder(
                         textA = textA.get(),
                         textB = textB.get(),
                         thinkingA = thinkingA.get().ifBlank { null },
-                        thinkingB = thinkingB.get().ifBlank { null }
+                        thinkingB = thinkingB.get().ifBlank { null },
+                        toolActivityA = toolActivityA.get().takeIf { it.steps.isNotEmpty() },
+                        toolActivityB = toolActivityB.get().takeIf { it.steps.isNotEmpty() }
                     )
                 )
             }
@@ -93,6 +100,10 @@ class DualChatResponder(
                                 thinkingA.set(thinkingA.get() + event.delta)
                                 emitPartial(false)
                             }
+                            is ProviderStreamEvent.ToolActivity -> {
+                                toolActivityA.set(toolActivityA.get().applying(event.event))
+                                emitPartial(true)
+                            }
                             is ProviderStreamEvent.Completed -> {
                                 if (event.response.text.isNotBlank()) textA.set(event.response.text)
                                 event.response.reasoningSummary?.let { thinkingA.set(it) }
@@ -104,7 +115,9 @@ class DualChatResponder(
                     }
                 } catch (e: Exception) {
                     DiagnosticsLogger.log("Dual stream side A failed", e)
+                    toolActivityA.set(toolActivityA.get().failRunning("ツールの実行が中断されました"))
                     textA.set(textA.get().ifBlank { UserFacingErrorFormatter.placeholder(e) })
+                    emitPartial(true)
                 }
             }
 
@@ -120,6 +133,10 @@ class DualChatResponder(
                                 thinkingB.set(thinkingB.get() + event.delta)
                                 emitPartial(false)
                             }
+                            is ProviderStreamEvent.ToolActivity -> {
+                                toolActivityB.set(toolActivityB.get().applying(event.event))
+                                emitPartial(true)
+                            }
                             is ProviderStreamEvent.Completed -> {
                                 if (event.response.text.isNotBlank()) textB.set(event.response.text)
                                 event.response.reasoningSummary?.let { thinkingB.set(it) }
@@ -131,7 +148,9 @@ class DualChatResponder(
                     }
                 } catch (e: Exception) {
                     DiagnosticsLogger.log("Dual stream side B failed", e)
+                    toolActivityB.set(toolActivityB.get().failRunning("ツールの実行が中断されました"))
                     textB.set(textB.get().ifBlank { UserFacingErrorFormatter.placeholder(e) })
+                    emitPartial(true)
                 }
             }
 
@@ -143,7 +162,9 @@ class DualChatResponder(
                 textA = textA.get().ifBlank { FALLBACK_MESSAGE },
                 textB = textB.get().ifBlank { FALLBACK_MESSAGE },
                 thinkingA = thinkingA.get().ifBlank { null },
-                thinkingB = thinkingB.get().ifBlank { null }
+                thinkingB = thinkingB.get().ifBlank { null },
+                toolActivityA = toolActivityA.get().takeIf { it.steps.isNotEmpty() },
+                toolActivityB = toolActivityB.get().takeIf { it.steps.isNotEmpty() }
             )
         } catch (e: Exception) {
             DiagnosticsLogger.log("Dual stream request failed", e)
@@ -156,7 +177,9 @@ class DualChatResponder(
             val textA: String,
             val textB: String,
             val thinkingA: String?,
-            val thinkingB: String?
+            val thinkingB: String?,
+            val toolActivityA: ToolActivityPayload? = null,
+            val toolActivityB: ToolActivityPayload? = null
         ) : DualResponseResult()
 
         data class Failure(val message: String) : DualResponseResult()
@@ -172,5 +195,7 @@ data class DualPartialProgress(
     val textA: String,
     val textB: String,
     val thinkingA: String?,
-    val thinkingB: String?
+    val thinkingB: String?,
+    val toolActivityA: ToolActivityPayload? = null,
+    val toolActivityB: ToolActivityPayload? = null
 )

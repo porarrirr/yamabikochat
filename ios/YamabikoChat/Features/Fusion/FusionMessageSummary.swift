@@ -5,7 +5,12 @@ struct FusionMessageSummary: View {
     let onShowDetails: () -> Void
 
     var body: some View {
-        Button(action: onShowDetails) {
+        VStack(alignment: .leading, spacing: 6) {
+            let steps = trace.panelResults.compactMap(\.toolActivity).flatMap(\.steps)
+            if !steps.isEmpty {
+                ToolActivityDisclosure(steps: steps)
+            }
+            Button(action: onShowDetails) {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.triangle.merge")
                     .font(.caption.weight(.semibold))
@@ -27,7 +32,8 @@ struct FusionMessageSummary: View {
             .padding(.vertical, 8)
             .background(Color(uiColor: .tertiarySystemFill))
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 }

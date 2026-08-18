@@ -154,7 +154,7 @@ final class FusionOrchestratorTests: XCTestCase {
                 request: request,
                 context: FusionContext(),
                 buildRequest: buildRequest,
-                invoke: { _, _, _ in
+                invoke: { _, _, _, _ in
                     ProviderResponse(text: "", reasoningSummary: "unfinished reasoning")
                 },
                 estimateCost: { _, _, _ in nil }
@@ -342,7 +342,8 @@ final class FusionOrchestratorTests: XCTestCase {
     private func mockInvoke(
         request: ProviderRequest,
         provider: String,
-        phase: FusionPhase
+        phase: FusionPhase,
+        onToolActivity: @escaping @Sendable (ToolActivityPayload) -> Void
     ) async throws -> ProviderResponse {
         switch phase {
         case .panel:
@@ -360,19 +361,21 @@ final class FusionOrchestratorTests: XCTestCase {
     private func slowInvoke(
         request: ProviderRequest,
         provider: String,
-        phase: FusionPhase
+        phase: FusionPhase,
+        onToolActivity: @escaping @Sendable (ToolActivityPayload) -> Void
     ) async throws -> ProviderResponse {
         if phase == .panel {
             try await Task.sleep(nanoseconds: 200_000_000)
             return ProviderResponse(text: "late")
         }
-        return try await mockInvoke(request: request, provider: provider, phase: phase)
+        return try await mockInvoke(request: request, provider: provider, phase: phase, onToolActivity: onToolActivity)
     }
 
     private func invalidJudgeInvoke(
         request: ProviderRequest,
         provider: String,
-        phase: FusionPhase
+        phase: FusionPhase,
+        onToolActivity: @escaping @Sendable (ToolActivityPayload) -> Void
     ) async throws -> ProviderResponse {
         if phase == .judge {
             if request.messages.first?.content.contains("Repair") == true {
@@ -380,6 +383,6 @@ final class FusionOrchestratorTests: XCTestCase {
             }
             return ProviderResponse(text: "{invalid", usage: ProviderUsage(inputTokens: 1, outputTokens: 1))
         }
-        return try await mockInvoke(request: request, provider: provider, phase: phase)
+        return try await mockInvoke(request: request, provider: provider, phase: phase, onToolActivity: onToolActivity)
     }
 }

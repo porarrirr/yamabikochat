@@ -7,7 +7,7 @@ import com.porarri.yamabikochat.data.model.ProviderUsage
 import java.util.UUID
 
 typealias FusionOrchestratorInvoke =
-    suspend (FusionPanelRunner.GenerateRequestBundle, FusionPhase) -> ProviderResponse
+    suspend (FusionPanelRunner.GenerateRequestBundle, FusionPhase, (com.porarri.yamabikochat.data.local.ToolActivityPayload) -> Unit) -> ProviderResponse
 typealias FusionOrchestratorCostEstimator =
     suspend (provider: String, model: String, usage: ProviderUsage?) -> Double?
 typealias FusionOrchestratorRequestBuilder = suspend (
@@ -238,7 +238,8 @@ class FusionOrchestrator {
         return try {
             val response = invoke(
                 makeJudgeRequest(FusionPrompts.judgeSystemPrompt(), judgeUserContent),
-                FusionPhase.judge
+                FusionPhase.judge,
+                {}
             )
             val latencyMs = System.currentTimeMillis() - started
             val cost = estimateCost(
@@ -267,7 +268,8 @@ class FusionOrchestrator {
                     FusionPrompts.judgeSystemPrompt(),
                     FusionPrompts.jsonRepairPrompt(invalidJSON = response.text)
                 ),
-                FusionPhase.judge
+                FusionPhase.judge,
+                {}
             )
             val repairLatency = System.currentTimeMillis() - repairStarted
             val repairCost = estimateCost(
@@ -340,7 +342,7 @@ class FusionOrchestrator {
             request = genRequest
         )
         val started = System.currentTimeMillis()
-        val response = invoke(bundle, FusionPhase.fallback)
+        val response = invoke(bundle, FusionPhase.fallback) {}
         val latencyMs = System.currentTimeMillis() - started
         val cost = estimateCost(fallback.provider, fallback.modelId, response.usage)
 

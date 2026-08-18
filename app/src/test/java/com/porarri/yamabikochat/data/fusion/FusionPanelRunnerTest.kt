@@ -44,7 +44,7 @@ class FusionPanelRunnerTest {
                     )
                 )
             },
-            invoke = { _, _ ->
+            invoke = { _, _, _ ->
                 delay(100)
                 ProviderResponse(text = "completed")
             },

@@ -2,6 +2,9 @@ package com.porarri.yamabikochat.data.local
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import androidx.room.Ignore
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 @Entity(tableName = "dual_chat_messages")
 data class DualChatMessage(
@@ -19,8 +22,23 @@ data class DualChatMessage(
     val timestamp: Long = System.currentTimeMillis(),
     val modelAThinking: String? = null, // モデルAのthinking
     val modelBThinking: String? = null, // モデルBのthinking
-    val attachments: List<String> = emptyList() // ファイル添付のパス
-)
+    val attachments: List<String> = emptyList(), // ファイル添付のパス
+    val modelAToolActivityJSON: String? = null,
+    val modelBToolActivityJSON: String? = null
+) {
+    @get:Ignore val modelAToolActivity: ToolActivityPayload?
+        get() = decodeToolActivity(modelAToolActivityJSON)
+    @get:Ignore val modelBToolActivity: ToolActivityPayload?
+        get() = decodeToolActivity(modelBToolActivityJSON)
+
+    companion object {
+        private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+        fun encodeToolActivity(payload: ToolActivityPayload?): String? =
+            payload?.takeIf { it.steps.isNotEmpty() }?.let { json.encodeToString(it) }
+        private fun decodeToolActivity(raw: String?): ToolActivityPayload? =
+            raw?.let { runCatching { json.decodeFromString<ToolActivityPayload>(it) }.getOrNull() }
+    }
+}
 
 data class DualChatSettings(
     val isDualModeEnabled: Boolean = false,

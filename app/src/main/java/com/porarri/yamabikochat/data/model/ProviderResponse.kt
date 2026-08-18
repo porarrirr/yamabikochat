@@ -1,5 +1,6 @@
 package com.porarri.yamabikochat.data.model
 
+import com.porarri.yamabikochat.data.local.ToolActivityPayload
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -63,18 +64,29 @@ data class ProviderResponse(
     var raw: String? = null,
     var usage: ProviderUsage? = null,
     var usageSamples: List<ProviderUsage>? = null,
-    var toolCalls: List<ToolCall> = emptyList()
+    var toolCalls: List<ToolCall> = emptyList(),
+    var toolActivity: ToolActivityPayload? = null
 )
 
 sealed interface ProviderStreamEvent {
     data class TextDelta(val delta: String) : ProviderStreamEvent
     data class ReasoningDelta(val delta: String) : ProviderStreamEvent
+    data class ToolActivity(val event: ToolActivityEvent) : ProviderStreamEvent
     data class Completed(val response: ProviderResponse) : ProviderStreamEvent
 
     val includesNonEmptyAnswerText: Boolean
         get() = when (this) {
             is TextDelta -> delta.trim().isNotEmpty()
             is Completed -> response.text.trim().isNotEmpty()
-            is ReasoningDelta -> false
+            is ReasoningDelta, is ToolActivity -> false
         }
+}
+
+data class ToolActivityEvent(
+    val phase: Phase,
+    val call: ToolCall,
+    val result: ToolResult? = null,
+    val createdAtMs: Long = System.currentTimeMillis()
+) {
+    enum class Phase { started, finished }
 }

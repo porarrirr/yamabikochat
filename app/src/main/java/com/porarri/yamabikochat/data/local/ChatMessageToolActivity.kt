@@ -5,10 +5,16 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.porarri.yamabikochat.data.model.ProviderRequestMessage
+import com.porarri.yamabikochat.data.model.ToolActivityEvent
 import com.porarri.yamabikochat.data.model.ToolSource
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.net.URI
 
 @Serializable
 data class ToolActivityStep(
@@ -87,5 +93,78 @@ data class ChatMessageToolActivity(
 
         fun encodeProviderTranscript(contents: List<ProviderRequestMessage>): String =
             transcriptCodec.encodeToString(contents)
+    }
+}
+
+@Serializable
+data class ToolActivityPayload(
+    val steps: List<ToolActivityStep> = emptyList(),
+    val providerTranscript: List<ProviderRequestMessage> = emptyList()
+) {
+    fun applying(event: ToolActivityEvent): ToolActivityPayload {
+        val previous = steps.firstOrNull { it.id == event.call.id }
+        val updatedStep = stepFor(event).copy(
+            round = previous?.round ?: ((steps.maxOfOrNull { it.round } ?: 0) + 1)
+        )
+        val updatedSteps = (steps.filterNot { it.id == updatedStep.id } + updatedStep)
+            .sortedBy { it.round }
+        if (event.phase != ToolActivityEvent.Phase.finished || event.result == null) {
+            return copy(steps = updatedSteps)
+        }
+        val callId = event.call.id
+        val transcript = providerTranscript.filterNot { message ->
+            message.toolCallId == callId || message.toolCalls?.any { it.id == callId } == true
+        } + listOf(
+            ProviderRequestMessage(role = "assistant", content = "", toolCalls = listOf(event.call)),
+            ProviderRequestMessage(
+                role = "tool",
+                content = event.result.content,
+                toolCallId = callId,
+                toolName = event.call.name,
+                toolResultIsError = event.result.isError
+            )
+        )
+        return copy(steps = updatedSteps, providerTranscript = transcript)
+    }
+
+    fun failRunning(message: String): ToolActivityPayload = copy(
+        steps = steps.map {
+            if (it.status == ToolActivityStep.Status.running) {
+                it.copy(status = ToolActivityStep.Status.failed, errorMessage = message)
+            } else it
+        }
+    )
+
+    private fun stepFor(event: ToolActivityEvent): ToolActivityStep {
+        val arguments = runCatching { payloadJson.parseToJsonElement(event.call.argumentsJSON).jsonObject }.getOrNull()
+        val isSearch = event.call.name == "web_search"
+        val query = arguments?.get("query")?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+        val goal = arguments?.get("goal")?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+        val host = arguments?.get("url")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { URI(it).host }.getOrNull() }
+        val detail = if (isSearch) query.ifBlank { "検索語を確認中" }
+        else listOfNotNull(host, goal.takeIf { it.isNotBlank() }).joinToString(" — ").ifBlank { "ページを確認中" }
+        val resultObject = event.result?.let { runCatching { payloadJson.parseToJsonElement(it.content).jsonObject }.getOrNull() }
+        val resultCount = resultObject?.get("results")?.let { runCatching { it.jsonArray.size }.getOrNull() }
+        val error = if (event.result?.isError == true) {
+            resultObject?.get("error")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                ?: "ツールの実行に失敗しました"
+        } else null
+        return ToolActivityStep(
+            id = event.call.id,
+            toolName = event.call.name,
+            title = if (isSearch) "Webを検索" else "ページを確認",
+            detail = detail,
+            status = if (event.phase == ToolActivityEvent.Phase.started) ToolActivityStep.Status.running
+                else if (event.result?.isError == true) ToolActivityStep.Status.failed else ToolActivityStep.Status.completed,
+            resultCount = resultCount,
+            sources = event.result?.sources.orEmpty().distinctBy { it.url },
+            errorMessage = error,
+            createdAtMs = event.createdAtMs
+        )
+    }
+
+    companion object {
+        private val payloadJson = Json { ignoreUnknownKeys = true; isLenient = true }
     }
 }
