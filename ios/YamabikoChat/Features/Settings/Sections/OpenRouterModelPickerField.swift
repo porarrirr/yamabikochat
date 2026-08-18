@@ -105,6 +105,8 @@ private struct OpenRouterModelListView: View {
                                     .foregroundStyle(Color.accentColor)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
