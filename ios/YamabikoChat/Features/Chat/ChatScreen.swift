@@ -493,15 +493,21 @@ struct ChatScreen: View {
                     .fill(viewModel.isSpeechRecording ? Color.red : Color.chatOrange)
                     .frame(width: 36, height: 36)
 
-                Image(systemName: viewModel.isSpeechRecording ? "waveform" : "mic.fill")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .symbolEffect(.pulse, isActive: viewModel.isSpeechRecording)
+                if viewModel.isSending {
+                    ProgressView()
+                        .tint(.white)
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: viewModel.isSpeechRecording ? "waveform" : "mic.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .symbolEffect(.pulse, isActive: viewModel.isSpeechRecording)
+                }
             }
         }
         .buttonStyle(.plain)
         .disabled(viewModel.isSending)
-        .accessibilityLabel(Text("音声入力"))
+        .accessibilityLabel(viewModel.isSending ? Text("生成中") : Text("音声入力"))
     }
 
     private var composerExpandedSendButton: some View {
