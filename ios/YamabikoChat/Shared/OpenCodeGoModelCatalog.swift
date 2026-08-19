@@ -4,6 +4,14 @@ enum OpenCodeGoEndpointKind: String, Sendable {
     case chatCompletions
     case responses
     case messages
+
+    var piAPI: String {
+        switch self {
+        case .chatCompletions: "openai-completions"
+        case .responses: "openai-responses"
+        case .messages: "anthropic-messages"
+        }
+    }
 }
 
 struct OpenCodeGoModel: Identifiable, Equatable, Sendable {

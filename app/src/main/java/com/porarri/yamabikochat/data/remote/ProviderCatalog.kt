@@ -86,10 +86,10 @@ object ProviderCatalog {
     }
 }
 
-enum class OpenCodeGoEndpointKind {
-    CHAT_COMPLETIONS,
-    RESPONSES,
-    MESSAGES
+enum class OpenCodeGoEndpointKind(val piApi: String) {
+    CHAT_COMPLETIONS("openai-completions"),
+    RESPONSES("openai-responses"),
+    MESSAGES("anthropic-messages")
 }
 
 data class OpenCodeGoModel(

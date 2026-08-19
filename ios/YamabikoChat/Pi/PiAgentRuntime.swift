@@ -5,18 +5,51 @@ import UIKit
 private final class PiRuntimeBundleToken: NSObject {}
 
 struct PiAgentConfiguration: Codable, Sendable {
+    var contractVersion: Int = 2
     var provider: String
     var model: String
-    var api: String
-    var baseURL: String
-    var apiKey: String
-    var headers: [String: String]
-    var reasoning: Bool
+    var apiKey: String?
+    var headers: [String: String] = [:]
+    var env: [String: String] = [:]
+    var catalogContract: PiCatalogModelContract? = nil
     var thinkingLevel: String?
-    var supportsImages: Bool
-    var contextWindow: Int?
-    var maxTokens: Int
     var mcpAuthorizationToken: String? = nil
+}
+
+struct PiCatalogModelContract: Codable, Sendable {
+    var npm: String?
+    var api: String?
+    var shape: String?
+    var toolCall: Bool?
+}
+
+struct PiModelResolution: Codable, Equatable, Sendable {
+    var supported: Bool
+    var reason: String?
+    var provider: String?
+    var model: String?
+    var api: String?
+    var source: String?
+    var reasoning: Bool?
+    var input: [String]?
+    var contextWindow: Int?
+    var maxTokens: Int?
+    var toolCall: Bool?
+    var message: String?
+}
+
+private struct PiModelResolutionEnvelope: Codable {
+    var models: [PiAgentConfiguration]
+}
+
+private struct PiModelResolutionResponse: Codable {
+    var contractVersion: Int
+    var models: [PiModelResolution]
+}
+
+private struct PiHealthResponse: Decodable {
+    var ok: Bool
+    var contractVersion: Int
 }
 
 private struct PiAttachment: Codable, Sendable {
@@ -203,6 +236,37 @@ actor PiAgentRuntime {
         _ = try await startIfNeeded()
     }
 
+    func resolveModels(_ configurations: [PiAgentConfiguration]) async throws -> [PiModelResolution] {
+        let (endpoint, token) = try await startIfNeeded()
+        var request = URLRequest(url: endpoint.appendingPathComponent("v1/models/resolve"))
+        request.httpMethod = "POST"
+        request.httpBody = try JSONEncoder().encode(PiModelResolutionEnvelope(models: configurations))
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw ProviderClientError.invalidResponse }
+        let resolved = try JSONDecoder().decode(PiModelResolutionResponse.self, from: data)
+        guard resolved.contractVersion == 2 else {
+            throw ProviderClientError.parseFailure("Pi runtime contract mismatch")
+        }
+        for model in resolved.models {
+            DiagnosticsLogger.log(
+                "Pi model contract resolved",
+                category: .network,
+                metadata: [
+                    "contractVersion": String(resolved.contractVersion),
+                    "supported": String(model.supported),
+                    "provider": model.provider ?? "unknown",
+                    "model": model.model ?? "unknown",
+                    "api": model.api ?? "none",
+                    "source": model.source ?? "none",
+                    "reason": model.reason ?? "none"
+                ]
+            )
+        }
+        return resolved.models
+    }
+
     func loginOAuth(
         provider: PiOAuthProvider,
         method: PiOAuthLoginMethod,
@@ -308,12 +372,12 @@ actor PiAgentRuntime {
             metadata: [
                 "provider": configuration.provider,
                 "model": configuration.model,
-                "api": configuration.api
+                "contractVersion": String(configuration.contractVersion)
             ]
         )
         let (endpoint, token) = try await startIfNeeded()
         let runID = UUID().uuidString
-        let piRequest = try Self.makeRequest(request, supportsImages: configuration.supportsImages)
+        let piRequest = try Self.makeRequest(request)
         let envelope = PiRunEnvelope(runId: runID, request: piRequest, config: configuration)
         let body = try JSONEncoder().encode(envelope)
         let metricsContext = ProviderMetricsContext.current
@@ -330,7 +394,7 @@ actor PiAgentRuntime {
             metadata: [
                 "provider": configuration.provider,
                 "model": configuration.model,
-                "api": configuration.api,
+                "contractVersion": String(configuration.contractVersion),
                 "messages": String(request.messages.count),
                 "tools": request.tools.map(\.type).joined(separator: ",")
             ]
@@ -520,8 +584,10 @@ actor PiAgentRuntime {
             health.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             for attempt in 0 ..< 100 {
                 try Task.checkCancellation()
-                if let (_, response) = try? await URLSession.shared.data(for: health),
-                   (response as? HTTPURLResponse)?.statusCode == 200 {
+                if let (data, response) = try? await URLSession.shared.data(for: health),
+                   (response as? HTTPURLResponse)?.statusCode == 200,
+                   let status = try? JSONDecoder().decode(PiHealthResponse.self, from: data),
+                   status.ok, status.contractVersion == 2 {
                     DiagnosticsLogger.log(
                         "Pi runtime health check succeeded",
                         category: .network,
@@ -554,15 +620,13 @@ actor PiAgentRuntime {
         }
     }
 
-    private static func makeRequest(_ request: ProviderRequest, supportsImages: Bool) throws -> PiRequest {
+    private static func makeRequest(_ request: ProviderRequest) throws -> PiRequest {
         PiRequest(
             messages: try request.messages.map { message in
                 PiMessage(
                     role: message.role,
                     content: message.content,
-                    attachments: supportsImages
-                        ? try message.attachments.compactMap(loadImageAttachment)
-                        : [],
+                    attachments: try message.attachments.compactMap(loadImageAttachment),
                     reasoningContent: message.reasoningContent,
                     toolCalls: message.toolCalls,
                     toolCallId: message.toolCallId,

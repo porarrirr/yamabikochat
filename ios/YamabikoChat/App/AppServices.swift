@@ -49,12 +49,19 @@ final class AppServices {
         let localTools = LocalToolRegistry(
             executors: [WebSearchTool(), FetchUrlTool()] + AgentSkillTools.executors(repository: skillRepository)
         )
+        modelsDevCatalogRepository = ModelsDevCatalogRepository()
+        let modelsDevCredentials = credentialStore
         requestSettingsResolver = ProviderRequestSettingsResolver(
             modelService: openRouterModelService,
             skillRepository: skillRepository,
-            localToolRegistry: clientWebTools
+            modelsDevCatalogRepository: modelsDevCatalogRepository,
+            localToolRegistry: clientWebTools,
+            modelsDevReasoningEffort: { providerID, modelID in
+                try? modelsDevCredentials.readSecret(
+                    key: ModelsDevReasoningPreference.storageKey(providerID: providerID, modelID: modelID)
+                )
+            }
         )
-        modelsDevCatalogRepository = ModelsDevCatalogRepository()
         codexAuthRepository = CodexAuthRepository(credentialStore: credentialStore)
         superGrokAuthRepository = SuperGrokAuthRepository(credentialStore: credentialStore)
         providerGateway = ProviderGateway(

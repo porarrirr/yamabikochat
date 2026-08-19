@@ -41,7 +41,10 @@ import com.porarri.yamabikochat.data.remote.ZaiCodingPlanModelCatalog
 import com.porarri.yamabikochat.data.modelsdev.CatalogAvailability
 import com.porarri.yamabikochat.data.modelsdev.ProviderReference
 import com.porarri.yamabikochat.data.modelsdev.ModelsDevMergedProvider
-import com.porarri.yamabikochat.data.modelsdev.ModelsDevProviderAdapterRegistry
+import com.porarri.yamabikochat.pi.PiAgentConfiguration
+import com.porarri.yamabikochat.pi.PiAgentRuntime
+import com.porarri.yamabikochat.pi.PiCatalogModelContract
+import com.porarri.yamabikochat.pi.PiModelResolution
 import com.porarri.yamabikochat.ui.components.YamabikoOption
 import com.porarri.yamabikochat.ui.components.YamabikoOptionBottomSheet
 import com.porarri.yamabikochat.ui.components.YamabikoSelectRow
@@ -78,6 +81,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -85,6 +89,14 @@ import java.util.Locale
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+
+private fun modelsDevUnsupportedReason(reason: String?): String = when (reason) {
+    "pi_provider_missing" -> "Piにプロバイダー定義がありません"
+    "pi_model_missing" -> "Piにモデル定義がありません"
+    "contract_conflict" -> "models.devとPiの実行契約が一致しません"
+    "runtime_contract_mismatch" -> "アプリとPi Runtimeの契約バージョンが一致しません"
+    else -> "実行契約を確認できません"
+}
 
 private enum class SettingsSheet {
     ThemeColor,
@@ -2075,6 +2087,36 @@ fun SettingsScreen(
                             val catalogProvider = modelsDevCatalogState.providers.firstOrNull {
                                 it.id == catalogId
                             }
+                            var modelResolutions by remember(catalogProvider?.id) {
+                                mutableStateOf<Map<String, PiModelResolution>>(emptyMap())
+                            }
+                            var modelResolutionError by remember(catalogProvider?.id) { mutableStateOf<String?>(null) }
+                            LaunchedEffect(catalogProvider) {
+                                val providerValue = catalogProvider ?: return@LaunchedEffect
+                                runCatching {
+                                    val configs = providerValue.models.map { option ->
+                                        PiAgentConfiguration(
+                                            provider = providerValue.id,
+                                            model = if (providerValue.id == "opencode-go") {
+                                                OpenCodeGoModelCatalog.normalizedModelId(option.id)
+                                            } else option.id,
+                                            catalogContract = PiCatalogModelContract(
+                                                npm = option.providerContract?.npm ?: providerValue.npm,
+                                                api = option.providerContract?.api ?: providerValue.api,
+                                                shape = option.providerContract?.shape,
+                                                toolCall = option.toolCall
+                                            )
+                                        )
+                                    }
+                                    PiAgentRuntime.getInstance(context).resolveModels(configs)
+                                }.onSuccess { values ->
+                                    modelResolutions = providerValue.models.map { it.id }.zip(values).toMap()
+                                    modelResolutionError = null
+                                }.onFailure {
+                                    modelResolutions = emptyMap()
+                                    modelResolutionError = it.localizedMessage
+                                }
+                            }
                             var showModelsDevModelSheet by remember { mutableStateOf(false) }
                             val selectedCatalogModel = catalogProvider?.models?.firstOrNull { it.id == model }
                             YamabikoSelectRow(
@@ -2086,13 +2128,22 @@ fun SettingsScreen(
                                 YamabikoOptionBottomSheet(
                                     title = catalogProvider?.name ?: "Model",
                                     options = catalogProvider?.models.orEmpty().map { option ->
+                                        val resolution = modelResolutions[option.id]
                                         val details = buildList {
                                             option.limits.context?.let { add("context $it") }
-                                            if (option.reasoning) add("reasoning")
-                                            if (option.toolCall) add("tools")
+                                            if (option.reasoning == true) add("reasoning")
+                                            if (option.toolCall == true) add("tools")
                                             option.description?.let { add(it) }
+                                            if (resolution?.supported == false) {
+                                                add(modelsDevUnsupportedReason(resolution.reason))
+                                            }
                                         }.joinToString(" ・ ")
-                                        YamabikoOption(option.id, option.name, details.takeIf { it.isNotBlank() })
+                                        YamabikoOption(
+                                            option.id,
+                                            option.name,
+                                            details.takeIf { it.isNotBlank() },
+                                            enabled = resolution?.supported == true
+                                        )
                                     },
                                     selectedKey = model,
                                     onOptionSelected = { option -> model = option.key },
@@ -2103,6 +2154,13 @@ fun SettingsScreen(
                             }
                             selectedCatalogModel?.description?.let {
                                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            modelResolutionError?.let {
+                                Text(
+                                    "Piモデル契約を確認できません: $it",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
                             }
                             val savedReasoningEffort = selectedCatalogModel
                                 ?.takeIf { ProviderReference(apiProvider).isModelsDev }
@@ -2198,16 +2256,10 @@ fun SettingsScreen(
                     it.id == ProviderReference(apiProvider).modelsDevId
                 }
                 val credentialDrafts = remember(provider?.id) { mutableStateMapOf<String, String>() }
-                val requiresManualUrl = provider?.let {
-                    ModelsDevProviderAdapterRegistry.profile(it).requiresManualBaseUrl
-                } ?: false
                 LaunchedEffect(provider?.id) {
                     credentialDrafts.clear()
                     provider?.env.orEmpty().forEach { field ->
                         credentialDrafts[field] = viewModel.modelsDevField(provider!!.id, field)
-                    }
-                    if (requiresManualUrl) {
-                        credentialDrafts["YAMABIKO_BASE_URL"] = viewModel.modelsDevField(provider!!.id, "YAMABIKO_BASE_URL")
                     }
                 }
                 Card(
@@ -2228,18 +2280,7 @@ fun SettingsScreen(
                                 singleLine = field != "GOOGLE_APPLICATION_CREDENTIALS"
                             )
                         }
-                        if (requiresManualUrl) {
-                            YamabikoTextField(
-                                value = credentialDrafts["YAMABIKO_BASE_URL"].orEmpty(),
-                                onValueChange = { credentialDrafts["YAMABIKO_BASE_URL"] = it },
-                                label = { Text("完成済み Base URL") },
-                                supportingText = { Text("テンプレート変数を展開したURLを入力してください。localhost/LAN接続は安全性を確認してください。") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-                        } else {
-                            Text(provider?.api.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+                        Text(provider?.api.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Button(
                             onClick = { provider?.let { viewModel.saveModelsDevFields(it.id, credentialDrafts.toMap()) } },
                             enabled = provider != null

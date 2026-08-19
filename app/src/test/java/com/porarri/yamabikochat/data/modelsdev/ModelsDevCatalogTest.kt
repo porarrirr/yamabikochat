@@ -26,7 +26,9 @@ class ModelsDevCatalogTest {
 
         assertEquals(listOf("example"), providers.map { it.id })
         assertEquals(listOf("chat"), providers.single().models.map { it.id })
-        assertTrue(providers.single().models.single().toolCall)
+        assertEquals(true, providers.single().models.single().toolCall)
+        assertEquals("@ai-sdk/openai", providers.single().models.single().providerContract?.npm)
+        assertEquals("responses", providers.single().models.single().providerContract?.shape)
         assertEquals(listOf("low", "high"), providers.single().models.single().supportedReasoningEfforts)
     }
 
@@ -36,20 +38,6 @@ class ModelsDevCatalogTest {
 
         assertTrue(model.shouldShowReasoningEffortPreference("high"))
         assertFalse(model.shouldShowReasoningEffortPreference(""))
-    }
-
-    @Test
-    fun allCurrentNpmKindsResolveWithoutUnverifiedCompatibility() {
-        CURRENT_NPM_KINDS.forEach { npm ->
-            val provider = CatalogProvider(
-                id = "fixture", name = "Fixture", npm = npm,
-                models = listOf(CatalogModel(id = "chat", name = "Chat", outputModalities = listOf("text")))
-            )
-            assertTrue("npm kind must be mapped: $npm", ModelsDevProviderAdapterRegistry.profile(provider).isVerifiedMapping)
-        }
-        assertFalse(ModelsDevProviderAdapterRegistry.profile(
-            CatalogProvider(id = "future", name = "Future", npm = "future-sdk", api = "https://example.com/v1", models = listOf(CatalogModel("m", "M")))
-        ).isVerifiedMapping)
     }
 
     @Test
@@ -92,21 +80,11 @@ class ModelsDevCatalogTest {
     }
 
     private companion object {
-        val CURRENT_NPM_KINDS = listOf(
-            "@ai-sdk/amazon-bedrock", "@ai-sdk/anthropic", "@ai-sdk/azure", "@ai-sdk/cerebras",
-            "@ai-sdk/cohere", "@ai-sdk/deepinfra", "@ai-sdk/gateway", "@ai-sdk/google",
-            "@ai-sdk/google-vertex", "@ai-sdk/google-vertex/anthropic", "@ai-sdk/groq",
-            "@ai-sdk/mistral", "@ai-sdk/openai", "@ai-sdk/openai-compatible", "@ai-sdk/perplexity",
-            "@ai-sdk/togetherai", "@ai-sdk/vercel", "@ai-sdk/xai", "@aihubmix/ai-sdk-provider",
-            "@jerome-benoit/sap-ai-provider-v2", "@qvac/ai-sdk-provider", "ai-gateway-provider",
-            "gitlab-ai-provider", "merge-gateway-ai-sdk-provider", "venice-ai-sdk-provider"
-        )
-
         val FIXTURE = """
             {"providers":{
               "openrouter":{"name":"OpenRouter","npm":"@ai-sdk/openai-compatible","models":{"or":{"name":"OR","modalities":{"output":["text"]}}}},
               "example":{"name":"Example","npm":"@ai-sdk/openai-compatible","env":["EXAMPLE_API_KEY"],"models":{
-                "chat":{"name":"Chat","tool_call":true,"reasoning":true,"reasoning_options":[{"type":"effort","values":["low","high"]}],"modalities":{"input":["text"],"output":["text"]}},
+                "chat":{"name":"Chat","tool_call":true,"reasoning":true,"reasoning_options":[{"type":"effort","values":["low","high"]}],"provider":{"npm":"@ai-sdk/openai","shape":"responses"},"modalities":{"input":["text"],"output":["text"]}},
                 "old":{"name":"Old","status":"deprecated","modalities":{"output":["text"]}},
                 "image":{"name":"Image","modalities":{"output":["image"]}}
               }}

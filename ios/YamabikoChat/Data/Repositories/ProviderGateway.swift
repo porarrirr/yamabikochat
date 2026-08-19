@@ -141,9 +141,8 @@ final class ProviderGateway {
                 "provider": normalizedProvider,
                 "piProvider": piConfiguration.provider,
                 "model": piConfiguration.model,
-                "api": piConfiguration.api,
-                "baseURL": piConfiguration.baseURL,
-                "credential": piConfiguration.apiKey.isEmpty ? "missing" : "present",
+                "contractVersion": String(piConfiguration.contractVersion),
+                "credential": piConfiguration.apiKey?.isEmpty == false || !piConfiguration.env.isEmpty ? "present" : "missing",
                 "thinkingLevel": piConfiguration.thinkingLevel ?? "none"
             ]
         )
@@ -180,58 +179,37 @@ final class ProviderGateway {
             throw ProviderClientError.parseFailure("Unknown provider: \(providerID)")
         }
 
-        var api = "openai-completions"
         var piProvider = provider.rawValue.lowercased()
-        var baseURL: String
         var apiKey: String
         var headers: [String: String] = [:]
         var mcpAuthorizationToken: String?
 
         switch provider {
         case .gemini:
-            api = "google-generative-ai"
             piProvider = "google"
-            baseURL = "https://generativelanguage.googleapis.com/v1beta"
             apiKey = try credential(.gemini)
         case .openRouter:
             piProvider = "openrouter"
-            baseURL = "https://openrouter.ai/api/v1"
             apiKey = try credential(.openRouter)
             headers = [
                 "HTTP-Referer": "https://apps.apple.com/jp/app/yamabikochat-ai%E3%83%81%E3%83%A3%E3%83%83%E3%83%88/id6771687018",
                 "X-Title": "YamabikoChat iOS"
             ]
         case .openAI:
-            api = "openai-responses"
             piProvider = "openai"
-            baseURL = normalizedBaseURL(settings.resolvedOpenAIBaseURL())
             apiKey = try credential(.openAI)
         case .openAICompat:
-            let name = settings.selectedOpenAICompatPreset?.trimmedNonEmpty
-            guard let name,
-                  let value = try credentialStore.openAICompatAPIKey(name: name)?.trimmedNonEmpty else {
-                throw ProviderClientError.missingCredential(LLMProvider.openAICompat.rawValue)
-            }
-            baseURL = normalizedBaseURL(
-                settings.selectedCompatBaseURL()?.absoluteString ?? settings.resolvedOpenAIBaseURL()
-            )
-            apiKey = value
+            throw ProviderClientError.unsupportedModel(provider: provider.rawValue, model: request.model)
         case .miniMax:
             piProvider = "minimax"
-            baseURL = normalizedBaseURL(settings.resolvedMiniMaxBaseURL())
             apiKey = try credential(.miniMax)
         case .zai:
             piProvider = "zai"
-            baseURL = normalizedBaseURL(AppConstants.defaultZAICodingPlanBaseURL.absoluteString)
             apiKey = try credential(.zai)
         case .clinePass:
-            piProvider = "cline-pass"
-            baseURL = normalizedBaseURL(AppConstants.defaultClinePassBaseURL.absoluteString)
-            apiKey = try credential(.clinePass)
+            throw ProviderClientError.unsupportedModel(provider: provider.rawValue, model: request.model)
         case .alibabaCodingPlan:
-            api = "anthropic-messages"
             piProvider = "qwen-token-plan"
-            baseURL = normalizedAnthropicBaseURL(AppConstants.defaultAlibabaCodingPlanBaseURL.absoluteString)
             apiKey = try credential(.alibabaCodingPlan)
             if request.tools.contains(where: { $0.type == "mcp_toolset" }) {
                 headers["anthropic-beta"] = "mcp-client-2025-11-20"
@@ -240,27 +218,16 @@ final class ProviderGateway {
                 )?.trimmedNonEmpty
             }
         case .openCodeGo:
-            guard let route = OpenCodeGoModelCatalog.model(for: request.model) else {
+            guard OpenCodeGoModelCatalog.model(for: request.model) != nil else {
                 throw ProviderClientError.invalidBaseURL("Unsupported OpenCode Go model: \(request.model)")
             }
             piProvider = "opencode-go"
-            switch route.endpointKind {
-            case .chatCompletions:
-                api = "openai-completions"
-            case .responses:
-                api = "openai-responses"
-            case .messages:
-                api = "anthropic-messages"
-            }
-            baseURL = normalizedBaseURL(AppConstants.defaultOpenCodeGoBaseURL.absoluteString)
             apiKey = try credential(.openCodeGo)
         case .codexAuth:
             guard let auth = await codexAuthRepository?.getBearerToken() else {
                 throw ProviderClientError.missingCredential(LLMProvider.codexAuth.rawValue)
             }
-            api = "openai-codex-responses"
             piProvider = "openai-codex"
-            baseURL = "https://chatgpt.com/backend-api/codex"
             apiKey = auth.token
             headers["originator"] = "codex_cli_rs"
             if let accountID = auth.accountId?.trimmedNonEmpty {
@@ -270,9 +237,7 @@ final class ProviderGateway {
             guard let auth = await superGrokAuthRepository?.getBearerToken() else {
                 throw ProviderClientError.missingCredential(LLMProvider.superGrok.rawValue)
             }
-            api = "openai-responses"
             piProvider = "xai-oauth"
-            baseURL = normalizedBaseURL(AppConstants.defaultSuperGrokBaseURL.absoluteString)
             apiKey = auth.token
         case .appleIntelligence:
             preconditionFailure("Apple Intelligence is handled before Pi configuration")
@@ -281,18 +246,12 @@ final class ProviderGateway {
         return PiAgentConfiguration(
             provider: piProvider,
             model: normalizedModel(request.model, provider: provider),
-            api: api,
-            baseURL: baseURL,
             apiKey: apiKey,
             headers: headers,
-            reasoning: request.thinking?.enabled != false,
             thinkingLevel: thinkingLevel(
                 request.thinking,
                 geminiLevel: provider == .gemini ? request.metadata["geminiThinkingLevel"] : nil
             ),
-            supportsImages: request.metadata["supportsVision"] == "true",
-            contextWindow: Int(request.metadata["contextWindow"] ?? ""),
-            maxTokens: max(1024, Int(request.metadata["max_output_tokens"] ?? "") ?? 8192),
             mcpAuthorizationToken: mcpAuthorizationToken
         )
     }
@@ -305,53 +264,32 @@ final class ProviderGateway {
               let model = catalog.models.first(where: { $0.id == request.model }) else {
             throw ProviderClientError.parseFailure("models.dev provider or model is unavailable: \(providerID)/\(request.model)")
         }
-        let credentialField = catalog.env.first(where: {
-            $0.contains("API_KEY") || $0.contains("TOKEN") || $0.contains("SECRET") || $0.contains("BEARER")
-        }) ?? catalog.env.first
-        guard let credentialField else { throw ProviderClientError.missingCredential(providerID) }
-        let credentialKey = modelsDevFieldKey(providerID: providerID, fieldName: credentialField)
-        try migrateLegacyCredentialIfNeeded(providerID: providerID, destinationKey: credentialKey)
-        guard let apiKey = try credentialStore.readSecret(key: credentialKey)?.trimmedNonEmpty else {
+        var env: [String: String] = [:]
+        for field in catalog.env {
+            let key = modelsDevFieldKey(providerID: providerID, fieldName: field)
+            try migrateLegacyCredentialIfNeeded(providerID: providerID, destinationKey: key)
+            if let value = try credentialStore.readSecret(key: key)?.trimmedNonEmpty { env[field] = value }
+        }
+        guard !env.isEmpty else {
             throw ProviderClientError.missingCredential(providerID)
         }
-        let manual = try credentialStore.readSecret(
-            key: modelsDevFieldKey(providerID: providerID, fieldName: "YAMABIKO_BASE_URL")
-        )?.trimmedNonEmpty
-        guard let base = catalog.api?.trimmedNonEmpty.flatMap({ $0.contains("${") ? nil : $0 })
-            ?? knownModelsDevBaseURL(providerID)
-            ?? manual else {
-            throw ProviderClientError.invalidBaseURL("A completed base URL is required for \(catalog.name)")
-        }
-        let adapter = ModelsDevProviderAdapterRegistry.profile(for: catalog).adapter
-        guard adapter == .anthropic || Self.isOpenAICompatible(adapter) else {
-            throw ProviderClientError.parseFailure("\(catalog.name) has no Pi-compatible adapter")
-        }
-        var headers: [String: String] = [:]
-        if adapter == .azureOpenAI { headers["api-key"] = apiKey }
-        if adapter == .cloudflareAIGateway { headers["cf-aig-authorization"] = "Bearer \(apiKey)" }
+        let normalizedModel = providerID.caseInsensitiveCompare("opencode-go") == .orderedSame
+            ? OpenCodeGoModelCatalog.normalizedModelID(request.model)
+            : request.model
         return PiAgentConfiguration(
             provider: providerID,
-            model: request.model,
-            api: adapter == .anthropic ? "anthropic-messages" : "openai-completions",
-            baseURL: adapter == .anthropic ? normalizedAnthropicBaseURL(base) : normalizedBaseURL(base),
-            apiKey: apiKey,
-            headers: headers,
-            reasoning: model.reasoning,
+            model: normalizedModel,
+            apiKey: nil,
+            headers: [:],
+            env: env,
+            catalogContract: PiCatalogModelContract(
+                npm: model.providerContract?.npm ?? catalog.npm,
+                api: model.providerContract?.api ?? catalog.api,
+                shape: model.providerContract?.shape,
+                toolCall: model.toolCall
+            ),
             thinkingLevel: thinkingLevel(request.thinking),
-            supportsImages: model.attachment,
-            contextWindow: model.limits.context ?? model.limits.input ?? 128_000,
-            maxTokens: model.limits.output ?? 8192
         )
-    }
-
-    private static func isOpenAICompatible(_ adapter: ProviderAdapterKind) -> Bool {
-        switch adapter {
-        case .openAICompatible, .openAI, .providerSpecific, .cohere, .vercelAI,
-             .cloudflareAIGateway, .azureOpenAI, .unverifiedOpenAICompatible:
-            return true
-        default:
-            return false
-        }
     }
 
     private func credential(_ provider: CredentialProvider) throws -> String {
@@ -389,31 +327,9 @@ final class ProviderGateway {
         return ["minimal", "low", "medium", "high", "xhigh", "max"].contains(value) ? value : nil
     }
 
-    private func normalizedBaseURL(_ value: String) -> String {
-        var result = value.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        for suffix in ["/chat/completions", "/responses"] where result.hasSuffix(suffix) {
-            result.removeLast(suffix.count)
-        }
-        return result
-    }
-
-    private func normalizedAnthropicBaseURL(_ value: String) -> String {
-        var result = normalizedBaseURL(value)
-        for suffix in ["/v1/messages", "/messages", "/v1"] where result.hasSuffix(suffix) {
-            result.removeLast(suffix.count)
-            break
-        }
-        return result
-    }
 
     private func modelsDevFieldKey(providerID: String, fieldName: String) -> String {
-        let provider = providerID.lowercased().replacingOccurrences(
-            of: "[^a-z0-9._-]+", with: "_", options: .regularExpression
-        )
-        let field = fieldName.uppercased().replacingOccurrences(
-            of: "[^A-Z0-9_]+", with: "_", options: .regularExpression
-        )
-        return "models_dev_\(provider)_\(field)"
+        ModelsDevReasoningPreference.fieldKey(providerID: providerID, fieldName: fieldName)
     }
 
     private func migrateLegacyCredentialIfNeeded(providerID: String, destinationKey: String) throws {
@@ -432,15 +348,4 @@ final class ProviderGateway {
         }
     }
 
-    private func knownModelsDevBaseURL(_ providerID: String) -> String? {
-        [
-            "openai": "https://api.openai.com/v1", "anthropic": "https://api.anthropic.com",
-            "xai": "https://api.x.ai/v1", "groq": "https://api.groq.com/openai/v1",
-            "mistral": "https://api.mistral.ai/v1", "togetherai": "https://api.together.xyz/v1",
-            "cerebras": "https://api.cerebras.ai/v1", "deepinfra": "https://api.deepinfra.com/v1/openai",
-            "perplexity": "https://api.perplexity.ai", "cohere": "https://api.cohere.ai/compatibility/v1",
-            "vercel": "https://ai-gateway.vercel.sh/v1", "v0": "https://api.v0.dev/v1",
-            "venice": "https://api.venice.ai/api/v1", "aihubmix": "https://aihubmix.com/v1"
-        ][providerID]
-    }
 }

@@ -15,19 +15,49 @@ import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class PiAgentConfiguration(
+    val contractVersion: Int = 2,
     val provider: String,
     val model: String,
-    val api: String,
-    val baseURL: String,
-    val apiKey: String,
+    val apiKey: String? = null,
     val headers: Map<String, String> = emptyMap(),
-    val reasoning: Boolean = false,
+    val env: Map<String, String> = emptyMap(),
+    val catalogContract: PiCatalogModelContract? = null,
     val thinkingLevel: String? = null,
-    val supportsImages: Boolean = false,
-    val contextWindow: Int = 128000,
-    val maxTokens: Int = 8192,
     val mcpAuthorizationToken: String? = null
 )
+
+@Serializable
+data class PiCatalogModelContract(
+    val npm: String? = null,
+    val api: String? = null,
+    val shape: String? = null,
+    val toolCall: Boolean? = null
+)
+
+@Serializable
+data class PiModelResolution(
+    val supported: Boolean,
+    val reason: String? = null,
+    val provider: String? = null,
+    val model: String? = null,
+    val api: String? = null,
+    val source: String? = null,
+    val reasoning: Boolean? = null,
+    val input: List<String>? = null,
+    val contextWindow: Int? = null,
+    val maxTokens: Int? = null,
+    val toolCall: Boolean? = null,
+    val message: String? = null
+)
+
+@Serializable
+data class PiModelResolutionEnvelope(val models: List<PiAgentConfiguration>)
+
+@Serializable
+data class PiModelResolutionResponse(val contractVersion: Int, val models: List<PiModelResolution>)
+
+@Serializable
+data class PiHealthResponse(val ok: Boolean, val contractVersion: Int)
 
 @Serializable
 data class PiAttachment(

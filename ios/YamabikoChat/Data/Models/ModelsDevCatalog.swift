@@ -46,6 +46,24 @@ enum ModelsDevReasoningPreference {
         let encodedModelID = modelID.utf8.map { String(format: "%02X", $0) }.joined()
         return fieldPrefix + encodedModelID
     }
+
+    static func fieldKey(providerID: String, fieldName: String) -> String {
+        let provider = providerID.lowercased().replacingOccurrences(
+            of: "[^a-z0-9._-]+",
+            with: "_",
+            options: .regularExpression
+        )
+        let field = fieldName.uppercased().replacingOccurrences(
+            of: "[^A-Z0-9_]+",
+            with: "_",
+            options: .regularExpression
+        )
+        return "models_dev_\(provider)_\(field)"
+    }
+
+    static func storageKey(providerID: String, modelID: String) -> String {
+        fieldKey(providerID: providerID, fieldName: fieldName(modelID: modelID))
+    }
 }
 
 struct CatalogLimits: Codable, Equatable, Sendable {
@@ -62,23 +80,30 @@ struct CatalogCost: Codable, Equatable, Sendable {
     var cacheWritePerMillion: Double?
 }
 
+struct CatalogModelProviderContract: Codable, Equatable, Sendable {
+    var npm: String?
+    var api: String?
+    var shape: String?
+}
+
 struct CatalogModel: Codable, Identifiable, Equatable, Sendable {
     let id: String
     let name: String
     var description: String?
     var family: String?
-    var attachment: Bool
-    var reasoning: Bool
+    var attachment: Bool?
+    var reasoning: Bool?
     var reasoningOptions: [CatalogReasoningOption]
-    var toolCall: Bool
-    var structuredOutput: Bool
-    var temperature: Bool
+    var toolCall: Bool?
+    var structuredOutput: Bool?
+    var temperature: Bool?
     var inputModalities: [String]
     var outputModalities: [String]
     var releaseDate: String?
     var lastUpdated: String?
     var limits: CatalogLimits
     var cost: CatalogCost
+    var providerContract: CatalogModelProviderContract? = nil
 
     var supportedReasoningEfforts: [String] {
         var seen = Set<String>()
@@ -119,68 +144,6 @@ struct CatalogProvider: Codable, Identifiable, Equatable, Sendable {
     func matches(_ query: String) -> Bool {
         let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty || id.localizedCaseInsensitiveContains(value) || name.localizedCaseInsensitiveContains(value)
-    }
-}
-
-enum ProviderAdapterKind: String, Codable, Sendable {
-    case openAICompatible
-    case openAI
-    case anthropic
-    case gemini
-    case googleVertex
-    case googleVertexAnthropic
-    case azureOpenAI
-    case amazonBedrock
-    case cohere
-    case sapAICore
-    case gitLabDuo
-    case vercelAI
-    case cloudflareAIGateway
-    case providerSpecific
-    case unverifiedOpenAICompatible
-}
-
-struct ProviderExecutionProfile: Equatable, Sendable {
-    let adapter: ProviderAdapterKind
-    let isVerifiedMapping: Bool
-    let requiresManualBaseURL: Bool
-}
-
-enum ModelsDevProviderAdapterRegistry {
-    private static let resolvedBaseURLProviders: Set<String> = [
-        "openai", "anthropic", "xai", "groq", "mistral", "togetherai", "cerebras",
-        "deepinfra", "perplexity", "cohere", "vercel", "v0", "venice", "aihubmix",
-        "merge-gateway", "azure", "azure-cognitive-services", "cloudflare-ai-gateway"
-    ]
-
-    static func profile(for provider: CatalogProvider) -> ProviderExecutionProfile {
-        let kind: ProviderAdapterKind
-        switch provider.npm {
-        case "@ai-sdk/openai-compatible": kind = .openAICompatible
-        case "@ai-sdk/openai": kind = .openAI
-        case "@ai-sdk/anthropic": kind = .anthropic
-        case "@ai-sdk/google": kind = .gemini
-        case "@ai-sdk/google-vertex": kind = .googleVertex
-        case "@ai-sdk/google-vertex/anthropic": kind = .googleVertexAnthropic
-        case "@ai-sdk/azure": kind = .azureOpenAI
-        case "@ai-sdk/amazon-bedrock": kind = .amazonBedrock
-        case "@ai-sdk/cohere": kind = .cohere
-        case "@jerome-benoit/sap-ai-provider-v2": kind = .sapAICore
-        case "gitlab-ai-provider": kind = .gitLabDuo
-        case "@ai-sdk/gateway", "@ai-sdk/vercel": kind = .vercelAI
-        case "ai-gateway-provider": kind = .cloudflareAIGateway
-        case "@ai-sdk/xai", "@ai-sdk/groq", "@ai-sdk/cerebras", "@ai-sdk/deepinfra",
-             "@ai-sdk/mistral", "@ai-sdk/perplexity", "@ai-sdk/togetherai",
-             "venice-ai-sdk-provider", "@qvac/ai-sdk-provider", "@aihubmix/ai-sdk-provider",
-             "merge-gateway-ai-sdk-provider": kind = .providerSpecific
-        default: kind = .unverifiedOpenAICompatible
-        }
-        return ProviderExecutionProfile(
-            adapter: kind,
-            isVerifiedMapping: kind != .unverifiedOpenAICompatible,
-            requiresManualBaseURL: !resolvedBaseURLProviders.contains(provider.id) &&
-                (provider.api?.trimmedNonEmpty == nil || provider.api?.contains("${") == true)
-        )
     }
 }
 

@@ -143,14 +143,6 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
 
     fun saveModelsDevFields(providerId: String, fields: Map<String, String>) {
         viewModelScope.launch {
-            val baseUrl = fields["YAMABIKO_BASE_URL"]?.trim().orEmpty()
-            if (baseUrl.isNotEmpty()) {
-                val parsed = runCatching { java.net.URI(baseUrl) }.getOrNull()
-                if (parsed?.scheme?.lowercase() != "https" || parsed.host.isNullOrBlank()) {
-                    _secureStorageError.value = "Base URL は有効な HTTPS URL を入力してください"
-                    return@launch
-                }
-            }
             val failed = fields.any { (name, value) ->
                 !repository.saveModelsDevField(providerId, name, value)
             }

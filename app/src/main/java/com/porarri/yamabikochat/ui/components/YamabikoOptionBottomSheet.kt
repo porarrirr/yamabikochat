@@ -34,7 +34,8 @@ import androidx.compose.ui.unit.dp
 data class YamabikoOption(
     val key: String,
     val title: String,
-    val subtitle: String? = null
+    val subtitle: String? = null,
+    val enabled: Boolean = true
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,12 +103,13 @@ fun YamabikoOptionBottomSheet(
                         trailingContent = {
                             RadioButton(
                                 selected = item.key == selectedKey,
-                                onClick = null
+                                onClick = null,
+                                enabled = item.enabled
                             )
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
+                            .clickable(enabled = item.enabled) {
                                 onOptionSelected(item)
                                 onDismissRequest()
                             }

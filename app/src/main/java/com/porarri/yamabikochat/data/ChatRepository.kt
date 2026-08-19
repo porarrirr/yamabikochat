@@ -368,8 +368,7 @@ class ChatRepository(
 
         val cacheKey = promptCacheKey?.trim()?.takeIf { it.isNotEmpty() }
             ?: "conversation-${conversation.id}"
-        val supportsTools = ProviderReference(provider).isModelsDev ||
-                LLMProvider.fromRawOrDefault(provider).supportsClientWebSearchTool
+        val supportsTools = resolved.metadata["supportsClientTools"] == "true"
         val skillApplied = AgentSkillPromptComposer.apply(
             repository = agentSkillRepository,
             messages = messages,

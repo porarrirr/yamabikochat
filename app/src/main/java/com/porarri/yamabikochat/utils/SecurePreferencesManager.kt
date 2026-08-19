@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
+import com.porarri.yamabikochat.data.modelsdev.ModelsDevReasoningPreference
 import javax.crypto.AEADBadTagException
 
 class SecurePreferencesManager private constructor(private val context: Context) {
@@ -325,11 +326,8 @@ class SecurePreferencesManager private constructor(private val context: Context)
     fun getModelsDevField(providerId: String, fieldName: String): String? =
         readEncryptedOnly(modelsDevFieldKey(providerId, fieldName), "models.dev $providerId/$fieldName")
 
-    private fun modelsDevFieldKey(providerId: String, fieldName: String): String {
-        val provider = providerId.lowercase().replace(Regex("[^a-z0-9._-]+"), "_")
-        val field = fieldName.uppercase().replace(Regex("[^A-Z0-9_]+"), "_")
-        return "models_dev_${provider}_$field"
-    }
+    private fun modelsDevFieldKey(providerId: String, fieldName: String): String =
+        ModelsDevReasoningPreference.fieldKey(providerId, fieldName)
 
     fun readSecret(key: String): String? = readString(key, key)
 

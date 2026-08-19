@@ -1,16 +1,13 @@
 import http from "node:http";
 import { Agent } from "@earendil-works/pi-agent-core";
-import { createModels, InMemoryCredentialStore } from "@earendil-works/pi-ai";
+import { createModels, createProvider, envApiKeyAuth, InMemoryCredentialStore } from "@earendil-works/pi-ai";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import { Type } from "typebox";
-import { streamSimple as streamOpenAICompletions } from "@earendil-works/pi-ai/api/openai-completions";
 import { streamSimple as streamOpenAIResponses } from "@earendil-works/pi-ai/api/openai-responses";
-import { streamSimple as streamOpenAICodex } from "@earendil-works/pi-ai/api/openai-codex-responses";
-import { streamSimple as streamAnthropic } from "@earendil-works/pi-ai/api/anthropic-messages";
-import { streamSimple as streamGoogle } from "@earendil-works/pi-ai/api/google-generative-ai";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import * as grokOAuth from "pi-grok/oauth.ts";
-import { buildProxyHeaders, CLI_PROXY_BASE_URL } from "pi-grok/models.ts";
+import { buildProxyHeaders, CLI_PROXY_BASE_URL, FALLBACK_MODELS } from "pi-grok/models.ts";
 import { sanitizePayload as sanitizeGrokPayload } from "pi-grok/sanitize.ts";
 
 const port = Number(process.argv[2]);
@@ -18,13 +15,77 @@ const token = process.argv[3];
 const runs = new Map();
 const pendingTools = new Map();
 const authCredentials = new InMemoryCredentialStore();
+const RUNTIME_CONTRACT_VERSION = 2;
 // The iOS app ships one self-contained JS bundle. Register Pi's OAuth modules
 // statically so its intentionally opaque lazy imports do not look for sibling
 // files that are absent from the application bundle.
 registerBunOAuthFlows();
 const authModels = createModels({ credentials: authCredentials });
 authModels.setProvider(openaiCodexProvider());
+const runtimeModels = builtinModels({ credentials: authCredentials });
 let activeAuthLogin = null;
+
+const VERIFIED_MODEL_SOURCES = new Map();
+
+function zeroCost() {
+  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+}
+
+function installVerifiedOpenCodeGoContracts() {
+  const provider = runtimeModels.getProvider("opencode-go");
+  if (!provider) throw new Error("Pi does not provide the required opencode-go provider");
+  const overrides = [
+    {
+      id: "muse-spark-1.2-contributor",
+      name: "Muse Spark 1.2 Contributor",
+      api: "openai-responses",
+      provider: "opencode-go",
+      baseUrl: "https://opencode.ai/zen/go/v1",
+      reasoning: true,
+      input: ["text", "image"],
+      cost: { input: 0.1, output: 0.2, cacheRead: 0.002, cacheWrite: 0 },
+      contextWindow: 1048576,
+      maxTokens: 131072,
+      thinkingLevelMap: { off: null, minimal: "minimal", low: "low", medium: "medium", high: "high", xhigh: "xhigh" }
+    }
+  ];
+  const originals = provider.getModels();
+  const merged = [...originals];
+  for (const model of overrides) {
+    const index = merged.findIndex((entry) => entry.id === model.id);
+    if (index >= 0) merged[index] = model;
+    else merged.push(model);
+    VERIFIED_MODEL_SOURCES.set(`${model.provider}/${model.id}`, "verified_official_contract");
+  }
+  runtimeModels.setProvider({ ...provider, getModels: () => merged });
+}
+
+function installSuperGrokProvider() {
+  const models = FALLBACK_MODELS.map((model) => ({
+    ...model,
+    api: "openai-responses",
+    provider: "xai-oauth",
+    baseUrl: CLI_PROXY_BASE_URL,
+    cost: model.cost || zeroCost(),
+    headers: buildProxyHeaders(model.id)
+  }));
+  runtimeModels.setProvider(createProvider({
+    id: "xai-oauth",
+    name: "SuperGrok OAuth",
+    auth: { apiKey: envApiKeyAuth("SuperGrok OAuth access token", ["XAI_OAUTH_TOKEN"]) },
+    models,
+    api: {
+      "openai-responses": {
+        stream: streamOpenAIResponses,
+        streamSimple: streamOpenAIResponses
+      }
+    }
+  }));
+  for (const model of models) VERIFIED_MODEL_SOURCES.set(`xai-oauth/${model.id}`, "verified_official_contract");
+}
+
+installVerifiedOpenCodeGoContracts();
+installSuperGrokProvider();
 
 const AUTH_PROVIDER_IDS = {
   codex: "openai-codex",
@@ -216,35 +277,71 @@ function diagnostic(res, runId, stage, message, metadata = {}) {
   send(res, { type: "diagnostic", runId, stage, message, metadata });
 }
 
-function effectiveBaseURL(config) {
-  return config.provider === "xai-oauth" ? CLI_PROXY_BASE_URL : config.baseURL;
-}
-
 function effectiveHeaders(config) {
   return config.provider === "xai-oauth"
     ? { ...buildProxyHeaders(config.model), ...(config.headers || {}) }
     : config.headers;
 }
 
-function modelFrom(config) {
+function expectedApiForShape(shape) {
+  if (shape === "responses") return "openai-responses";
+  if (shape === "completions") return "openai-completions";
+  return null;
+}
+
+function normalizedURL(value) {
+  if (typeof value !== "string" || !value.trim() || value.includes("${")) return null;
+  return value.trim().replace(/\/+$/, "");
+}
+
+function resolutionFor(config) {
+  if (config.contractVersion !== RUNTIME_CONTRACT_VERSION) {
+    throw new Error(`Pi runtime contract mismatch: expected ${RUNTIME_CONTRACT_VERSION}, received ${config.contractVersion ?? "missing"}`);
+  }
+  const provider = runtimeModels.getProvider(config.provider);
+  if (!provider) {
+    return { supported: false, reason: "pi_provider_missing", provider: config.provider, model: config.model };
+  }
+  const model = runtimeModels.getModel(config.provider, config.model);
+  if (!model) {
+    return { supported: false, reason: "pi_model_missing", provider: config.provider, model: config.model };
+  }
+  const contract = config.catalogContract;
+  const expectedApi = expectedApiForShape(contract?.shape);
+  const contractURL = normalizedURL(contract?.api);
+  const modelURL = normalizedURL(model.baseUrl);
+  if ((expectedApi && expectedApi !== model.api) || (contractURL && modelURL && contractURL !== modelURL)) {
+    return {
+      supported: false,
+      reason: "contract_conflict",
+      provider: model.provider,
+      model: model.id,
+      api: model.api,
+      contractApi: expectedApi,
+      contractURL,
+      modelURL
+    };
+  }
   return {
-    id: config.model,
-    name: config.model,
-    api: config.api,
-    provider: config.provider,
-    baseUrl: effectiveBaseURL(config),
-    reasoning: Boolean(config.reasoning),
-    input: config.supportsImages ? ["text", "image"] : ["text"],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: knownContextWindow(config) || 128000,
-    maxTokens: config.maxTokens || 8192,
-    headers: effectiveHeaders(config) || undefined,
-    compat: config.compat || undefined
+    supported: true,
+    provider: model.provider,
+    model: model.id,
+    api: model.api,
+    source: VERIFIED_MODEL_SOURCES.get(`${model.provider}/${model.id}`) || "pi_builtin",
+    reasoning: model.reasoning,
+    input: model.input,
+    contextWindow: model.contextWindow,
+    maxTokens: model.maxTokens,
+    toolCall: contract ? contract.toolCall === true : true
   };
 }
 
-function knownContextWindow(config) {
-  return config.contextWindow || authModels.getModel(config.provider, config.model)?.contextWindow || null;
+function resolveModel(config) {
+  const resolution = resolutionFor(config);
+  if (!resolution.supported) {
+    throw new Error(`Unsupported model contract (${resolution.reason}): ${config.provider}/${config.model}`);
+  }
+  return { model: runtimeModels.getModel(config.provider, config.model), resolution };
 }
 
 function contentFor(message) {
@@ -282,7 +379,7 @@ function providerUsage(value) {
   };
 }
 
-function messagesFrom(request, config) {
+function messagesFrom(request, model) {
   return request.messages.map((message) => {
     if (message.role === "assistant" || message.role === "model") {
       const content = [];
@@ -294,8 +391,8 @@ function messagesFrom(request, config) {
         content.push({ type: "toolCall", id: call.id, name: call.name, arguments: args });
       }
       return {
-        role: "assistant", content, api: config.api, provider: config.provider,
-        model: config.model, usage: usage(message.usage), stopReason: message.toolCalls?.length ? "toolUse" : "stop",
+        role: "assistant", content, api: model.api, provider: model.provider,
+        model: model.id, usage: usage(message.usage), stopReason: message.toolCalls?.length ? "toolUse" : "stop",
         timestamp: Date.now()
       };
     }
@@ -420,18 +517,11 @@ function timeoutMs(request) {
     : undefined;
 }
 
-function streamFunction(request, config, report) {
-  const implementation = {
-    "openai-completions": streamOpenAICompletions,
-    "openai-responses": streamOpenAIResponses,
-    "openai-codex-responses": streamOpenAICodex,
-    "anthropic-messages": streamAnthropic,
-    "google-generative-ai": streamGoogle
-  }[config.api];
-  if (!implementation) throw new Error(`Unsupported Pi API adapter: ${config.api}`);
-  return (model, context, options = {}) => implementation(model, context, {
+function standardStreamFunction(request, config, report) {
+  return (model, context, options = {}) => runtimeModels.streamSimple(model, context, {
     ...options,
     apiKey: config.apiKey,
+    env: config.env || undefined,
     headers: config.provider === "xai-oauth" && (request.metadata?.promptCacheKey || request.metadata?.codexSessionId)
       ? {
           ...effectiveHeaders(config),
@@ -551,24 +641,35 @@ function finalResponse(assistants, contextUsage) {
 
 async function runAgent(envelope, res) {
   const { runId, request, config } = envelope;
+  const { model, resolution } = resolveModel(config);
+  const resolvedConfig = { ...config, api: model.api, provider: model.provider, model: model.id };
   const report = (stage, message, metadata) => diagnostic(res, runId, stage, message, metadata);
   report("received", "Pi runtime accepted request", {
-    api: config.api,
-    provider: config.provider,
-    model: config.model,
+    contractVersion: String(RUNTIME_CONTRACT_VERSION),
+    api: model.api,
+    provider: model.provider,
+    model: model.id,
+    resolutionSource: resolution.source,
     hasCredential: String(Boolean(config.apiKey)),
     messageCount: String(request.messages?.length || 0),
     toolTypes: (request.tools || []).map((tool) => tool.type).join(",")
   });
+  const hasImageAttachments = (request.messages || []).some((message) => (message.attachments || []).length > 0);
+  if (hasImageAttachments && !(model.input || []).includes("image")) {
+    throw new Error(`Model does not support image input: ${model.provider}/${model.id}`);
+  }
+  const effectiveRequest = resolution.toolCall
+    ? request
+    : { ...request, tools: [] };
   const agent = new Agent({
     initialState: {
       systemPrompt: request.systemPrompt || "",
-      model: modelFrom(config),
+      model,
       thinkingLevel: config.thinkingLevel || "off",
-      tools: makeTools(request, runId, res),
-      messages: messagesFrom(request, config)
+      tools: makeTools(effectiveRequest, runId, res),
+      messages: messagesFrom(effectiveRequest, model)
     },
-    streamFn: streamFunction(request, config, report),
+    streamFn: standardStreamFunction(effectiveRequest, resolvedConfig, report),
     toolExecution: "sequential",
     maxRetryDelayMs: 60000
   });
@@ -610,7 +711,7 @@ async function runAgent(envelope, res) {
       contentTypes: (last?.content || []).map((part) => part.type).join(","),
       errorMessage: last?.errorMessage || "none"
     });
-    const contextWindow = knownContextWindow(config);
+    const contextWindow = model.contextWindow || null;
     const contextEstimate = contextWindow && last?.usage
       ? { tokens: last.usage.totalTokens, contextWindow }
       : null;
@@ -631,7 +732,28 @@ async function runAgent(envelope, res) {
 const server = http.createServer(async (req, res) => {
   if (req.headers.authorization !== `Bearer ${token}`) return json(res, 401, { error: "unauthorized" });
   try {
-    if (req.method === "GET" && req.url === "/health") return json(res, 200, { ok: true, node: process.versions.node });
+    if (req.method === "GET" && req.url === "/health") {
+      return json(res, 200, { ok: true, node: process.versions.node, contractVersion: RUNTIME_CONTRACT_VERSION });
+    }
+    if (req.method === "POST" && req.url === "/v1/models/resolve") {
+      const value = await body(req);
+      const configs = Array.isArray(value.models) ? value.models : [value];
+      return json(res, 200, {
+        contractVersion: RUNTIME_CONTRACT_VERSION,
+        models: configs.map((config) => {
+          try { return resolutionFor(config); }
+          catch (error) {
+            return {
+              supported: false,
+              reason: "runtime_contract_mismatch",
+              provider: config?.provider,
+              model: config?.model,
+              message: error?.message || String(error)
+            };
+          }
+        })
+      });
+    }
     if (req.method === "POST" && req.url === "/v1/auth/login") {
       const value = await body(req);
       res.writeHead(200, { "content-type": "application/x-ndjson", "cache-control": "no-store" });

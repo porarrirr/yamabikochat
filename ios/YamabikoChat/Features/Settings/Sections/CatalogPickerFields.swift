@@ -177,11 +177,14 @@ private struct CatalogModelListView: View {
     @Binding var modelID: String
     let provider: CatalogProvider
     @State private var query = ""
+    @State private var resolutions: [String: PiModelResolution] = [:]
+    @State private var resolutionError: String?
 
     private var filtered: [CatalogModel] { provider.models.filter { $0.matches(query) } }
 
     var body: some View {
         List(filtered) { model in
+            let resolution = resolutions[model.id]
             Button {
                 modelID = model.id
                 dismiss()
@@ -193,9 +196,14 @@ private struct CatalogModelListView: View {
                         if let description = model.description { Text(description).font(.caption2).foregroundStyle(.secondary).lineLimit(2) }
                         HStack {
                             if let context = model.limits.context { Text("context \(context)") }
-                            if model.reasoning { Text("reasoning") }
-                            if model.toolCall { Text("tools") }
+                            if model.reasoning == true { Text("reasoning") }
+                            if model.toolCall == true { Text("tools") }
                         }.font(.caption2).foregroundStyle(.secondary)
+                        if resolution?.supported == false {
+                            Text(unsupportedReason(resolution?.reason))
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                        }
                     }
                     Spacer()
                     if model.id == modelID { Image(systemName: "checkmark") }
@@ -204,11 +212,55 @@ private struct CatalogModelListView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(resolution?.supported != true)
         }
         .overlay {
             if filtered.isEmpty { ContentUnavailableView.search(text: query) }
         }
         .navigationTitle(provider.name)
         .searchable(text: $query, prompt: "モデルを検索")
+        .task(id: "\(provider.id):\(provider.models.count)") {
+            do {
+                let configs = provider.models.map { model in
+                    PiAgentConfiguration(
+                        provider: provider.id,
+                        model: provider.id == "opencode-go"
+                            ? OpenCodeGoModelCatalog.normalizedModelID(model.id)
+                            : model.id,
+                        apiKey: nil,
+                        catalogContract: PiCatalogModelContract(
+                            npm: model.providerContract?.npm ?? provider.npm,
+                            api: model.providerContract?.api ?? provider.api,
+                            shape: model.providerContract?.shape,
+                            toolCall: model.toolCall
+                        )
+                    )
+                }
+                let values = try await PiAgentRuntime.shared.resolveModels(configs)
+                resolutions = Dictionary(uniqueKeysWithValues: zip(provider.models.map(\.id), values))
+                resolutionError = nil
+            } catch {
+                resolutions = [:]
+                resolutionError = error.localizedDescription
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let resolutionError {
+                Text("Piモデル契約を確認できません: \(resolutionError)")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(8)
+            }
+        }
+    }
+
+    private func unsupportedReason(_ reason: String?) -> String {
+        switch reason {
+        case "pi_provider_missing": "Piにプロバイダー定義がありません"
+        case "pi_model_missing": "Piにモデル定義がありません"
+        case "contract_conflict": "models.devとPiの実行契約が一致しません"
+        case "runtime_contract_mismatch": "アプリとPi Runtimeの契約バージョンが一致しません"
+        default: "実行契約を確認できません"
+        }
     }
 }

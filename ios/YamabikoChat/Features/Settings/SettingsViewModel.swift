@@ -233,12 +233,6 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func saveModelsDevFields(providerID: String, fields: [String: String]) {
-        if let rawBaseURL = fields["YAMABIKO_BASE_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !rawBaseURL.isEmpty,
-           (URLComponents(string: rawBaseURL)?.scheme?.lowercased() != "https" || URLComponents(string: rawBaseURL)?.host == nil) {
-            errorMessage = L10n.text("Base URL は有効な HTTPS URL を入力してください")
-            return
-        }
         do {
             for (name, value) in fields {
                 try credentialStore?.saveSecret(
@@ -288,9 +282,7 @@ final class SettingsViewModel: ObservableObject {
     }
 
     private func modelsDevFieldKey(providerID: String, fieldName: String) -> String {
-        let provider = providerID.lowercased().replacingOccurrences(of: "[^a-z0-9._-]+", with: "_", options: .regularExpression)
-        let field = fieldName.uppercased().replacingOccurrences(of: "[^A-Z0-9_]+", with: "_", options: .regularExpression)
-        return "models_dev_\(provider)_\(field)"
+        ModelsDevReasoningPreference.fieldKey(providerID: providerID, fieldName: fieldName)
     }
 
     func flushPendingSettingsSave() {

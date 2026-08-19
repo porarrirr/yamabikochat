@@ -220,8 +220,7 @@ class FusionService(
         }
 
         if (phase == FusionPhase.panel && skillRepository != null) {
-            val supportsTools = ProviderReference(model.provider).isModelsDev ||
-                    LLMProvider.fromRawOrDefault(model.provider).supportsClientWebSearchTool
+            val supportsTools = resolvedSettings.metadata["supportsClientTools"] == "true"
             val applied = AgentSkillPromptComposer.apply(
                 repository = skillRepository,
                 messages = messages,

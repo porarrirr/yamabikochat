@@ -53,12 +53,28 @@ data class CatalogReasoningOption(
     val values: List<String> = emptyList()
 )
 
+@Serializable
+data class CatalogModelProviderContract(
+    val npm: String? = null,
+    val api: String? = null,
+    val shape: String? = null
+)
+
 object ModelsDevReasoningPreference {
     private const val FIELD_PREFIX = "YAMABIKO_REASONING_EFFORT_"
 
     fun fieldName(modelId: String): String = FIELD_PREFIX + modelId
         .toByteArray(Charsets.UTF_8)
         .joinToString(separator = "") { byte -> "%02X".format(byte.toInt() and 0xFF) }
+
+    fun fieldKey(providerId: String, fieldName: String): String {
+        val provider = providerId.lowercase().replace(Regex("[^a-z0-9._-]+"), "_")
+        val field = fieldName.uppercase().replace(Regex("[^A-Z0-9_]+"), "_")
+        return "models_dev_${provider}_$field"
+    }
+
+    fun storageKey(providerId: String, modelId: String): String =
+        fieldKey(providerId, fieldName(modelId))
 }
 
 @Serializable
@@ -67,18 +83,19 @@ data class CatalogModel(
     val name: String,
     val description: String? = null,
     val family: String? = null,
-    val attachment: Boolean = false,
-    val reasoning: Boolean = false,
+    val attachment: Boolean? = null,
+    val reasoning: Boolean? = null,
     val reasoningOptions: List<CatalogReasoningOption> = emptyList(),
-    val toolCall: Boolean = false,
-    val structuredOutput: Boolean = false,
-    val temperature: Boolean = true,
+    val toolCall: Boolean? = null,
+    val structuredOutput: Boolean? = null,
+    val temperature: Boolean? = null,
     val inputModalities: List<String> = emptyList(),
     val outputModalities: List<String> = emptyList(),
     val releaseDate: String? = null,
     val lastUpdated: String? = null,
     val limits: CatalogLimits = CatalogLimits(),
-    val cost: CatalogCost = CatalogCost()
+    val cost: CatalogCost = CatalogCost(),
+    val providerContract: CatalogModelProviderContract? = null
 ) {
     val supportedReasoningEfforts: List<String>
         get() = reasoningOptions
@@ -116,70 +133,6 @@ data class CatalogProvider(
     fun matches(query: String): Boolean {
         val normalized = query.trim().lowercase()
         return normalized.isEmpty() || id.lowercase().contains(normalized) || name.lowercase().contains(normalized)
-    }
-}
-
-enum class ProviderAdapterKind {
-    OPEN_AI_COMPATIBLE,
-    OPEN_AI,
-    ANTHROPIC,
-    GEMINI,
-    GOOGLE_VERTEX,
-    GOOGLE_VERTEX_ANTHROPIC,
-    AZURE_OPEN_AI,
-    AMAZON_BEDROCK,
-    COHERE,
-    SAP_AI_CORE,
-    GITLAB_DUO,
-    VERCEL_AI,
-    CLOUDFLARE_AI_GATEWAY,
-    PROVIDER_SPECIFIC,
-    UNVERIFIED_OPEN_AI_COMPATIBLE
-}
-
-data class ProviderExecutionProfile(
-    val adapter: ProviderAdapterKind,
-    val isVerifiedMapping: Boolean,
-    val requiresManualBaseUrl: Boolean
-)
-
-object ModelsDevProviderAdapterRegistry {
-    private val resolvedBaseUrlProviders = setOf(
-        "openai", "anthropic", "xai", "groq", "mistral", "togetherai", "cerebras",
-        "deepinfra", "perplexity", "cohere", "vercel", "v0", "venice", "aihubmix",
-        "merge-gateway", "azure", "azure-cognitive-services", "cloudflare-ai-gateway"
-    )
-    private val openAIWirePackages = setOf(
-        "@ai-sdk/openai-compatible", "@ai-sdk/openai", "@ai-sdk/xai", "@ai-sdk/groq",
-        "@ai-sdk/cerebras", "@ai-sdk/deepinfra", "@ai-sdk/mistral", "@ai-sdk/perplexity",
-        "@ai-sdk/togetherai", "venice-ai-sdk-provider", "@qvac/ai-sdk-provider",
-        "@aihubmix/ai-sdk-provider", "merge-gateway-ai-sdk-provider"
-    )
-
-    fun profile(provider: CatalogProvider): ProviderExecutionProfile {
-        val adapter = when (provider.npm) {
-            "@ai-sdk/openai-compatible" -> ProviderAdapterKind.OPEN_AI_COMPATIBLE
-            "@ai-sdk/openai" -> ProviderAdapterKind.OPEN_AI
-            "@ai-sdk/anthropic" -> ProviderAdapterKind.ANTHROPIC
-            "@ai-sdk/google" -> ProviderAdapterKind.GEMINI
-            "@ai-sdk/google-vertex" -> ProviderAdapterKind.GOOGLE_VERTEX
-            "@ai-sdk/google-vertex/anthropic" -> ProviderAdapterKind.GOOGLE_VERTEX_ANTHROPIC
-            "@ai-sdk/azure" -> ProviderAdapterKind.AZURE_OPEN_AI
-            "@ai-sdk/amazon-bedrock" -> ProviderAdapterKind.AMAZON_BEDROCK
-            "@ai-sdk/cohere" -> ProviderAdapterKind.COHERE
-            "@jerome-benoit/sap-ai-provider-v2" -> ProviderAdapterKind.SAP_AI_CORE
-            "gitlab-ai-provider" -> ProviderAdapterKind.GITLAB_DUO
-            "@ai-sdk/gateway", "@ai-sdk/vercel" -> ProviderAdapterKind.VERCEL_AI
-            "ai-gateway-provider" -> ProviderAdapterKind.CLOUDFLARE_AI_GATEWAY
-            in openAIWirePackages -> ProviderAdapterKind.PROVIDER_SPECIFIC
-            else -> ProviderAdapterKind.UNVERIFIED_OPEN_AI_COMPATIBLE
-        }
-        return ProviderExecutionProfile(
-            adapter = adapter,
-            isVerifiedMapping = adapter != ProviderAdapterKind.UNVERIFIED_OPEN_AI_COMPATIBLE,
-            requiresManualBaseUrl = provider.id !in resolvedBaseUrlProviders &&
-                (provider.api.isNullOrBlank() || provider.api.contains("${'$'}{"))
-        )
     }
 }
 

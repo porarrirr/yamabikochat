@@ -124,6 +124,7 @@ final class ModelsDevCatalogRepository: @unchecked Sendable {
                 guard outputs.contains(where: { $0.caseInsensitiveCompare("text") == .orderedSame }) else { return nil }
                 let limits = model["limit"] as? [String: Any]
                 let cost = model["cost"] as? [String: Any]
+                let modelProvider = model["provider"] as? [String: Any]
                 let reasoningOptions = (model["reasoning_options"] as? [[String: Any]] ?? []).compactMap { option in
                     (option["type"] as? String).map { type in
                         let values = (option["values"] as? [Any] ?? []).compactMap { $0 as? String }
@@ -135,12 +136,12 @@ final class ModelsDevCatalogRepository: @unchecked Sendable {
                     name: model["name"] as? String ?? modelID,
                     description: model["description"] as? String,
                     family: model["family"] as? String,
-                    attachment: model["attachment"] as? Bool ?? false,
-                    reasoning: model["reasoning"] as? Bool ?? false,
+                    attachment: model["attachment"] as? Bool,
+                    reasoning: model["reasoning"] as? Bool,
                     reasoningOptions: reasoningOptions,
-                    toolCall: model["tool_call"] as? Bool ?? false,
-                    structuredOutput: model["structured_output"] as? Bool ?? false,
-                    temperature: model["temperature"] as? Bool ?? true,
+                    toolCall: model["tool_call"] as? Bool,
+                    structuredOutput: model["structured_output"] as? Bool,
+                    temperature: model["temperature"] as? Bool,
                     inputModalities: modalities?["input"] as? [String] ?? [],
                     outputModalities: outputs,
                     releaseDate: model["release_date"] as? String,
@@ -150,7 +151,14 @@ final class ModelsDevCatalogRepository: @unchecked Sendable {
                         inputPerMillion: decimal(cost?["input"]), outputPerMillion: decimal(cost?["output"]),
                         reasoningPerMillion: decimal(cost?["reasoning"]), cacheReadPerMillion: decimal(cost?["cache_read"]),
                         cacheWritePerMillion: decimal(cost?["cache_write"])
-                    )
+                    ),
+                    providerContract: modelProvider.map {
+                        CatalogModelProviderContract(
+                            npm: $0["npm"] as? String,
+                            api: $0["api"] as? String,
+                            shape: $0["shape"] as? String
+                        )
+                    }
                 )
             }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             guard !models.isEmpty else { return nil }

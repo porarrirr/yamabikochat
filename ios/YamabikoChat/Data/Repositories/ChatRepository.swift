@@ -643,7 +643,7 @@ final class ChatRepository {
         let skillApplication = try applySkillContext(
             messages: resolvedMessages,
             conversationID: String(conversationId),
-            provider: conversation.apiProvider
+            clientToolsSupported: resolvedSettings.metadata["supportsClientTools"] == "true"
         )
         return ProviderRequest(
             model: conversation.model,
@@ -2078,7 +2078,7 @@ final class ChatRepository {
         let skillApplication = try applySkillContext(
             messages: baseMessages,
             conversationID: promptCacheKey,
-            provider: provider
+            clientToolsSupported: resolvedSettings.metadata["supportsClientTools"] == "true"
         )
         return ProviderRequest(
             model: model,
@@ -2099,15 +2099,13 @@ final class ChatRepository {
     private func applySkillContext(
         messages: [ProviderRequestMessage],
         conversationID: String?,
-        provider: String
+        clientToolsSupported: Bool
     ) throws -> AgentSkillPromptApplication {
-        let reference = ProviderReference(persistedID: provider)
-        let supportsTools = reference.isModelsDev || LLMProvider(rawOrDefault: provider).supportsClientWebSearchTool
         return try AgentSkillPromptComposer.apply(
             repository: skillRepository,
             to: messages,
             conversationID: conversationID,
-            providerSupportsTools: supportsTools
+            providerSupportsTools: clientToolsSupported
         )
     }
 

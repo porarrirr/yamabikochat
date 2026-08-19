@@ -130,7 +130,8 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         XCTAssertEqual(resolved.metadata, [
             "codexPromptCacheEnabled": "false",
             "codexReasoningSummary": "detailed",
-            "codexVerbosity": "high"
+            "codexVerbosity": "high",
+            "supportsClientTools": "true"
         ])
     }
 
@@ -147,6 +148,88 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
 
         XCTAssertFalse(resolved.tools.containsWebSearchTool)
         XCTAssertFalse(resolved.tools.contains { $0.payload["name"] == FetchUrlTool.name })
+    }
+
+    func testModelsDevToolCapabilityIsNotInventedWhenFalseOrMissing() async throws {
+        let cacheURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("models-dev-tools-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: cacheURL) }
+        let provider = CatalogProvider(
+            id: "example",
+            name: "Example",
+            npm: "example-sdk",
+            api: nil,
+            env: ["EXAMPLE_API_KEY"],
+            models: [
+                catalogModel(id: "disabled", toolCall: false),
+                catalogModel(id: "missing", toolCall: nil),
+                catalogModel(id: "enabled", toolCall: true)
+            ]
+        )
+        try JSONEncoder().encode([provider]).write(to: cacheURL)
+        let repository = ModelsDevCatalogRepository(cacheURL: cacheURL)
+        let resolver = ProviderRequestSettingsResolver(
+            modelService: OpenRouterModelService(credentialStore: ResolverCredentialStore()),
+            modelsDevCatalogRepository: repository
+        )
+        var settings = AppSettings()
+        settings.clientWebSearchToolEnabled = true
+
+        for model in ["disabled", "missing"] {
+            let resolved = try await resolver.resolve(
+                settings: settings,
+                provider: "MODELS_DEV:example",
+                model: model
+            )
+            XCTAssertEqual(resolved.metadata["supportsClientTools"], "false")
+            XCTAssertFalse(resolved.tools.containsWebSearchTool)
+        }
+        let enabled = try await resolver.resolve(
+            settings: settings,
+            provider: "MODELS_DEV:example",
+            model: "enabled"
+        )
+        XCTAssertEqual(enabled.metadata["supportsClientTools"], "true")
+        XCTAssertTrue(enabled.tools.containsWebSearchTool)
+    }
+
+    func testModelsDevSavedReasoningEffortIsAppliedWhenCatalogSupportsIt() async throws {
+        let resolver = try makeOpenCodeGoMuseSparkResolver(savedEffort: "medium")
+        let resolved = try await resolver.resolve(
+            settings: AppSettings(),
+            provider: "MODELS_DEV:opencode-go",
+            model: "muse-spark-1.2-contributor"
+        )
+        XCTAssertEqual(resolved.thinking?.effort, "medium")
+    }
+
+    func testModelsDevBlankReasoningEffortDoesNotInventThinkingConfig() async throws {
+        let resolver = try makeOpenCodeGoMuseSparkResolver(savedEffort: "")
+        let resolved = try await resolver.resolve(
+            settings: AppSettings(),
+            provider: "MODELS_DEV:opencode-go",
+            model: "muse-spark-1.2-contributor"
+        )
+        XCTAssertNil(resolved.thinking)
+    }
+
+    private func catalogModel(id: String, toolCall: Bool?) -> CatalogModel {
+        CatalogModel(
+            id: id,
+            name: id.capitalized,
+            reasoningOptions: [],
+            toolCall: toolCall,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            limits: CatalogLimits(context: nil, input: nil, output: nil),
+            cost: CatalogCost(
+                inputPerMillion: nil,
+                outputPerMillion: nil,
+                reasoningPerMillion: nil,
+                cacheReadPerMillion: nil,
+                cacheWritePerMillion: nil
+            )
+        )
     }
 
     func testOpenRouterGlobalRoutingIsResolvedForEveryMode() async throws {
@@ -239,6 +322,49 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
     private func makeResolver() -> ProviderRequestSettingsResolver {
         ProviderRequestSettingsResolver(
             modelService: OpenRouterModelService(credentialStore: ResolverCredentialStore())
+        )
+    }
+
+    private func makeOpenCodeGoMuseSparkResolver(savedEffort: String) throws -> ProviderRequestSettingsResolver {
+        let cacheURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("models-dev-muse-spark-\(UUID().uuidString).json")
+        addTeardownBlock { try? FileManager.default.removeItem(at: cacheURL) }
+        let provider = CatalogProvider(
+            id: "opencode-go",
+            name: "OpenCode Go",
+            npm: "@ai-sdk/openai-compatible",
+            api: "https://opencode.ai/zen/go/v1",
+            env: ["OPENCODE_API_KEY"],
+            models: [
+                CatalogModel(
+                    id: "muse-spark-1.2-contributor",
+                    name: "Muse Spark 1.2 Contributor",
+                    reasoning: true,
+                    reasoningOptions: [
+                        CatalogReasoningOption(
+                            type: "effort",
+                            values: ["minimal", "low", "medium", "high", "xhigh"]
+                        )
+                    ],
+                    toolCall: true,
+                    inputModalities: ["text", "image"],
+                    outputModalities: ["text"],
+                    limits: CatalogLimits(context: 1_048_576, input: nil, output: 32_768),
+                    cost: CatalogCost(
+                        inputPerMillion: nil,
+                        outputPerMillion: nil,
+                        reasoningPerMillion: nil,
+                        cacheReadPerMillion: nil,
+                        cacheWritePerMillion: nil
+                    )
+                )
+            ]
+        )
+        try JSONEncoder().encode([provider]).write(to: cacheURL)
+        return ProviderRequestSettingsResolver(
+            modelService: OpenRouterModelService(credentialStore: ResolverCredentialStore()),
+            modelsDevCatalogRepository: ModelsDevCatalogRepository(cacheURL: cacheURL),
+            modelsDevReasoningEffort: { _, _ in savedEffort }
         )
     }
 }

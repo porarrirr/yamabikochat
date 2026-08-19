@@ -8,6 +8,7 @@ import com.porarri.yamabikochat.data.model.ProviderRoutingConfig
 import com.porarri.yamabikochat.data.model.ProviderThinkingConfig
 import com.porarri.yamabikochat.data.model.ProviderTool
 import com.porarri.yamabikochat.data.modelsdev.ProviderReference
+import com.porarri.yamabikochat.data.modelsdev.ModelsDevCatalogRepository
 import com.porarri.yamabikochat.data.remote.OpenRouterModelEndpointOptions
 import com.porarri.yamabikochat.data.remote.OpenRouterModelService
 import com.porarri.yamabikochat.data.remote.SuperGrokModelCatalog
@@ -63,9 +64,11 @@ data class ProviderRequestResolvedSettings(
 class ProviderRequestSettingsResolver(
     private val modelService: OpenRouterModelService,
     private val skillRepository: AgentSkillRepository,
+    private val modelsDevCatalogRepository: ModelsDevCatalogRepository? = null,
     private val localToolRegistry: LocalToolRegistry = LocalToolRegistry(
         listOf(WebSearchTool(), FetchUrlTool())
-    )
+    ),
+    private val modelsDevReasoningEffort: (String, String) -> String? = { _, _ -> null }
 ) {
     suspend fun resolve(
         settings: Settings,
@@ -74,10 +77,12 @@ class ProviderRequestSettingsResolver(
         context: Settings.ReasoningContext = Settings.ReasoningContext.DEFAULT,
         toolScope: ProviderRequestToolScope = ProviderRequestToolScope.All
     ): ProviderRequestResolvedSettings {
+        val supportsClientTools = supportsClientTools(provider, model)
         return ProviderRequestResolvedSettings(
             tools = toolsForProvider(
                 settings = settings,
                 provider = provider,
+                model = model,
                 context = context,
                 toolScope = toolScope
             ),
@@ -98,13 +103,14 @@ class ProviderRequestSettingsResolver(
                 model = model,
                 context = context,
                 toolScope = toolScope
-            )
+            ) + ("supportsClientTools" to supportsClientTools.toString())
         )
     }
 
     private fun toolsForProvider(
         settings: Settings,
         provider: String,
+        model: String,
         context: Settings.ReasoningContext,
         toolScope: ProviderRequestToolScope
     ): List<ProviderTool> {
@@ -161,8 +167,7 @@ class ProviderRequestSettingsResolver(
             }
         }
 
-        val supportsClientWebSearch = ProviderReference(provider).isModelsDev ||
-                LLMProvider.fromRawOrDefault(provider).supportsClientWebSearchTool
+        val supportsClientWebSearch = supportsClientTools(provider, model)
         if (toolScope.allowsClientWebSearch && settings.clientWebSearchToolEnabled && supportsClientWebSearch) {
             tools.addAll(localToolRegistry.definitions.map { it.providerTool })
         }
@@ -171,6 +176,15 @@ class ProviderRequestSettingsResolver(
         }
 
         return tools
+    }
+
+    private fun supportsClientTools(provider: String, model: String): Boolean {
+        val reference = ProviderReference(provider)
+        if (reference.isModelsDev) {
+            return modelsDevCatalogRepository?.provider(reference)
+                ?.models?.firstOrNull { it.id == model }?.toolCall == true
+        }
+        return LLMProvider.fromRawOrDefault(provider).supportsClientWebSearchTool
     }
 
     private fun metadataForProvider(
@@ -229,6 +243,10 @@ class ProviderRequestSettingsResolver(
         model: String,
         context: Settings.ReasoningContext
     ): ProviderThinkingConfig? {
+        val reference = ProviderReference(provider)
+        if (reference.isModelsDev) {
+            return modelsDevThinkingConfig(reference.modelsDevId.orEmpty(), model)
+        }
         val overrides = settings.thinkingOverride(context)
         return when (provider.trim().uppercase()) {
             "OPENROUTER" -> buildOpenRouterThinkingConfig(settings, model, context)
@@ -293,6 +311,26 @@ class ProviderRequestSettingsResolver(
             }
             else -> null
         }
+    }
+
+    private fun modelsDevThinkingConfig(providerId: String, model: String): ProviderThinkingConfig? {
+        val catalogModel = modelsDevCatalogRepository
+            ?.provider(ProviderReference.modelsDev(providerId))
+            ?.models
+            ?.firstOrNull { it.id == model }
+        val supported = catalogModel?.supportedReasoningEfforts.orEmpty()
+        val saved = modelsDevReasoningEffort(providerId, model)
+            ?.trim()
+            ?.lowercase()
+            .orEmpty()
+        if (saved.isEmpty() || saved !in supported) return null
+        return ProviderThinkingConfig(
+            enabled = null,
+            budget = null,
+            effort = saved,
+            includeThoughts = true,
+            exclude = null
+        )
     }
 
     private fun buildOpenRouterThinkingConfig(

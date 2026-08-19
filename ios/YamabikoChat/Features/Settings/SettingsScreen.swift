@@ -1758,7 +1758,6 @@ struct SettingsScreen: View {
 
     @ViewBuilder
     private func modelsDevConnectionSection(_ provider: CatalogProvider) -> some View {
-        let profile = ModelsDevProviderAdapterRegistry.profile(for: provider)
         Section("\(provider.name) 接続設定") {
             ForEach(provider.env, id: \.self) { field in
                 let draftKey = modelsDevDraftKey(providerID: provider.id, fieldName: field)
@@ -1772,31 +1771,14 @@ struct SettingsScreen: View {
                     TextField(field, text: binding, axis: field == "GOOGLE_APPLICATION_CREDENTIALS" ? .vertical : .horizontal)
                 }
             }
-            if profile.requiresManualBaseURL {
-                let baseURLDraftKey = modelsDevDraftKey(providerID: provider.id, fieldName: "YAMABIKO_BASE_URL")
-                TextField("完成済み Base URL", text: Binding(
-                    get: { modelsDevFieldDrafts[baseURLDraftKey] ?? viewModel.modelsDevField(providerID: provider.id, fieldName: "YAMABIKO_BASE_URL") },
-                    set: { modelsDevFieldDrafts[baseURLDraftKey] = $0 }
-                ))
-                Text("テンプレート変数を展開したURLを入力してください。localhost/LAN接続は安全性を確認してください。")
-                    .font(.caption2).foregroundStyle(.secondary)
-            } else if let api = provider.api {
+            if let api = provider.api {
                 Text(api).font(.caption2).foregroundStyle(.secondary)
             }
-            if !profile.isVerifiedMapping {
-                Label("未検証・OpenAI互換モード", systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.orange)
-            }
             Button("接続設定をKeychainへ保存") {
-                var fields = Dictionary(uniqueKeysWithValues: provider.env.map { field in
+                let fields = Dictionary(uniqueKeysWithValues: provider.env.map { field in
                     let key = modelsDevDraftKey(providerID: provider.id, fieldName: field)
                     return (field, modelsDevFieldDrafts[key] ?? viewModel.modelsDevField(providerID: provider.id, fieldName: field))
                 })
-                if profile.requiresManualBaseURL {
-                    let key = modelsDevDraftKey(providerID: provider.id, fieldName: "YAMABIKO_BASE_URL")
-                    fields["YAMABIKO_BASE_URL"] = modelsDevFieldDrafts[key]
-                        ?? viewModel.modelsDevField(providerID: provider.id, fieldName: "YAMABIKO_BASE_URL")
-                }
                 viewModel.saveModelsDevFields(providerID: provider.id, fields: fields)
             }
         }

@@ -60,17 +60,23 @@ final class ProviderRequestSettingsResolver {
     private let modelService: OpenRouterModelService
     private let localToolRegistry: LocalToolRegistry
     private let skillRepository: AgentSkillRepository
+    private let modelsDevCatalogRepository: ModelsDevCatalogRepository?
+    private let modelsDevReasoningEffort: (String, String) -> String?
 
     init(
         modelService: OpenRouterModelService,
         skillRepository: AgentSkillRepository = AgentSkillRepository(),
+        modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
         localToolRegistry: LocalToolRegistry = LocalToolRegistry(
             executors: [WebSearchTool(), FetchUrlTool()]
-        )
+        ),
+        modelsDevReasoningEffort: @escaping (String, String) -> String? = { _, _ in nil }
     ) {
         self.modelService = modelService
         self.skillRepository = skillRepository
+        self.modelsDevCatalogRepository = modelsDevCatalogRepository
         self.localToolRegistry = localToolRegistry
+        self.modelsDevReasoningEffort = modelsDevReasoningEffort
     }
 
     func resolve(
@@ -86,6 +92,8 @@ final class ProviderRequestSettingsResolver {
             model: model,
             context: context
         )
+        let supportsClientTools = supportsClientTools(provider: provider, model: model)
+        metadata["supportsClientTools"] = supportsClientTools ? "true" : "false"
         if let contextWindow = modelService.resolveContextLength(modelID: model, providerID: provider) {
             metadata["contextWindow"] = String(contextWindow)
         }
@@ -93,6 +101,7 @@ final class ProviderRequestSettingsResolver {
             tools: toolsForProvider(
                 settings: settings,
                 provider: provider,
+                model: model,
                 context: context,
                 toolScope: toolScope
             ),
@@ -114,6 +123,7 @@ final class ProviderRequestSettingsResolver {
     private func toolsForProvider(
         settings: AppSettings,
         provider: String,
+        model: String,
         context: AppSettings.ReasoningContext,
         toolScope: ProviderRequestToolScope
     ) -> [ProviderTool] {
@@ -178,8 +188,7 @@ final class ProviderRequestSettingsResolver {
             tools = []
         }
 
-        let supportsClientWebSearch = ProviderReference(persistedID: provider).isModelsDev
-            || LLMProvider(rawOrDefault: provider).supportsClientWebSearchTool
+        let supportsClientWebSearch = supportsClientTools(provider: provider, model: model)
         if toolScope.allowsClientWebSearch,
            settings.clientWebSearchToolEnabled,
            supportsClientWebSearch {
@@ -189,6 +198,15 @@ final class ProviderRequestSettingsResolver {
             tools.append(contentsOf: AgentSkillTools.definitions(repository: skillRepository).map(\.providerTool))
         }
         return deduplicatedFunctionTools(from: tools)
+    }
+
+    private func supportsClientTools(provider: String, model: String) -> Bool {
+        let reference = ProviderReference(persistedID: provider)
+        if reference.isModelsDev {
+            return modelsDevCatalogRepository?.provider(for: reference)?
+                .models.first(where: { $0.id == model })?.toolCall == true
+        }
+        return LLMProvider(rawOrDefault: provider).supportsClientWebSearchTool
     }
 
     /// Provider APIs reject duplicate function tool names. The resolver composes
@@ -271,6 +289,10 @@ final class ProviderRequestSettingsResolver {
         model: String,
         context: AppSettings.ReasoningContext
     ) throws -> ProviderThinkingConfig? {
+        let reference = ProviderReference(persistedID: provider)
+        if let providerID = reference.modelsDevID {
+            return modelsDevThinkingConfig(providerID: providerID, model: model)
+        }
         let overrides = settings.thinkingOverride(for: context)
         switch provider.uppercased() {
         case "OPENROUTER":
@@ -337,6 +359,24 @@ final class ProviderRequestSettingsResolver {
         default:
             return nil
         }
+    }
+
+    private func modelsDevThinkingConfig(providerID: String, model: String) -> ProviderThinkingConfig? {
+        let catalogModel = modelsDevCatalogRepository?
+            .provider(for: .modelsDev(providerID))?
+            .models.first(where: { $0.id == model })
+        let supported = catalogModel?.supportedReasoningEfforts ?? []
+        let saved = (modelsDevReasoningEffort(providerID, model) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !saved.isEmpty, supported.contains(saved) else { return nil }
+        return ProviderThinkingConfig(
+            enabled: nil,
+            budget: nil,
+            effort: saved,
+            includeThoughts: true,
+            exclude: nil
+        )
     }
 
     private func buildOpenRouterThinkingConfig(

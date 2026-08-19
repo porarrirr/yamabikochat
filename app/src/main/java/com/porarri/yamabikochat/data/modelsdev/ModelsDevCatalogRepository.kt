@@ -137,17 +137,18 @@ class ModelsDevCatalogRepository(
         }.orEmpty()
         val limit = value["limit"]?.jsonObject
         val cost = value["cost"]?.jsonObject
+        val modelProvider = value["provider"]?.jsonObject
         return CatalogModel(
             id = id,
             name = value.string("name") ?: id,
             description = value.string("description"),
             family = value.string("family"),
-            attachment = value.bool("attachment"),
-            reasoning = value.bool("reasoning"),
+            attachment = value.optionalBool("attachment"),
+            reasoning = value.optionalBool("reasoning"),
             reasoningOptions = reasoningOptions,
-            toolCall = value.bool("tool_call"),
-            structuredOutput = value.bool("structured_output"),
-            temperature = value["temperature"]?.jsonPrimitive?.booleanOrNull ?: true,
+            toolCall = value.optionalBool("tool_call"),
+            structuredOutput = value.optionalBool("structured_output"),
+            temperature = value.optionalBool("temperature"),
             inputModalities = value["modalities"]?.jsonObject?.stringList("input").orEmpty(),
             outputModalities = outputs,
             releaseDate = value.string("release_date"),
@@ -156,7 +157,14 @@ class ModelsDevCatalogRepository(
             cost = CatalogCost(
                 cost?.double("input"), cost?.double("output"), cost?.double("reasoning"),
                 cost?.double("cache_read"), cost?.double("cache_write")
-            )
+            ),
+            providerContract = modelProvider?.let {
+                CatalogModelProviderContract(
+                    npm = it.string("npm"),
+                    api = it.string("api"),
+                    shape = it.string("shape")
+                )
+            }
         )
     }
 
@@ -177,7 +185,7 @@ class ModelsDevCatalogRepository(
     }
 
     private fun JsonObject.string(key: String): String? = this[key]?.jsonPrimitive?.contentOrNull
-    private fun JsonObject.bool(key: String): Boolean = this[key]?.jsonPrimitive?.booleanOrNull ?: false
+    private fun JsonObject.optionalBool(key: String): Boolean? = this[key]?.jsonPrimitive?.booleanOrNull
     private fun JsonObject.long(key: String): Long? = this[key]?.jsonPrimitive?.longOrNull
     private fun JsonObject.double(key: String): Double? = this[key]?.jsonPrimitive?.doubleOrNull
     private fun JsonObject.stringList(key: String): List<String> =

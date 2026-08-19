@@ -65,7 +65,7 @@ final class PiAgentGatewayTests: XCTestCase {
             credentialStore: PiGatewayCredentialStore()
         )
 
-        for provider in [LLMProvider.gemini, .openRouter, .openAI, .miniMax, .zai, .clinePass, .alibabaCodingPlan, .openCodeGo] {
+        for provider in [LLMProvider.gemini, .openRouter, .openAI, .miniMax, .zai, .alibabaCodingPlan, .openCodeGo] {
             let request = ProviderRequest(
                 model: provider == .openCodeGo ? OpenCodeGoModelCatalog.defaultModel : "test-model",
                 messages: [ProviderRequestMessage(role: "user", content: "hello")]
@@ -75,6 +75,31 @@ final class PiAgentGatewayTests: XCTestCase {
                 XCTFail("Expected missing credential for \(provider.rawValue)")
             } catch let ProviderClientError.missingCredential(value) {
                 XCTAssertFalse(value.isEmpty)
+            }
+        }
+    }
+
+    func testProvidersWithoutAnExplicitPiContractAreRejectedBeforeCredentialLookup() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let gateway = ProviderGateway(
+            settingsRepository: SettingsRepository(dbQueue: database),
+            credentialStore: PiGatewayCredentialStore()
+        )
+
+        for provider in [LLMProvider.openAICompat, .clinePass] {
+            do {
+                _ = try await gateway.stream(
+                    request: ProviderRequest(
+                        model: "test-model",
+                        messages: [ProviderRequestMessage(role: "user", content: "hello")]
+                    ),
+                    provider: provider
+                )
+                XCTFail("Expected unsupported model for \(provider.rawValue)")
+            } catch let ProviderClientError.unsupportedModel(actualProvider, model) {
+                XCTAssertEqual(actualProvider, provider.rawValue)
+                XCTAssertEqual(model, "test-model")
             }
         }
     }
@@ -133,10 +158,9 @@ final class PiAgentGatewayTests: XCTestCase {
         )
 
         let configuration = try XCTUnwrap(pi.calls.first?.configuration)
-        XCTAssertEqual(configuration.api, "google-generative-ai")
         XCTAssertEqual(configuration.provider, "google")
         XCTAssertEqual(configuration.thinkingLevel, "high")
-        XCTAssertEqual(configuration.contextWindow, 1_048_576)
+        XCTAssertEqual(configuration.contractVersion, 2)
     }
 
     func testGemma4ThinkingLevelIsPassedThroughPiConfiguration() async throws {
@@ -168,7 +192,6 @@ final class PiAgentGatewayTests: XCTestCase {
         )
 
         let configuration = try XCTUnwrap(pi.calls.first?.configuration)
-        XCTAssertEqual(configuration.api, "google-generative-ai")
         XCTAssertEqual(configuration.provider, "google")
         XCTAssertEqual(configuration.model, "gemma-4-31b-it")
         XCTAssertEqual(configuration.thinkingLevel, "high")
@@ -204,7 +227,6 @@ final class PiAgentGatewayTests: XCTestCase {
         )
 
         let configuration = try XCTUnwrap(pi.calls.first?.configuration)
-        XCTAssertEqual(configuration.api, "openai-responses")
         XCTAssertEqual(configuration.provider, "xai-oauth")
     }
 
@@ -229,8 +251,155 @@ final class PiAgentGatewayTests: XCTestCase {
         )
 
         let configuration = try XCTUnwrap(pi.calls.first?.configuration)
-        XCTAssertEqual(configuration.api, "openai-responses")
         XCTAssertEqual(configuration.provider, "opencode-go")
         XCTAssertEqual(configuration.model, "muse-spark-1.2-contributor")
+    }
+
+    func testModelsDevOpenCodeGoMuseSparkUsesOfficialResponsesRoute() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.saveSecret(
+            "test-opencode-go-key",
+            key: "models_dev_opencode-go_OPENCODE_API_KEY"
+        )
+        let cacheURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("models-dev-opencode-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: cacheURL) }
+        let catalogModel = CatalogModel(
+            id: "muse-spark-1.2-contributor",
+            name: "Muse Spark 1.2 Contributor",
+            attachment: true,
+            reasoning: true,
+            reasoningOptions: [],
+            toolCall: true,
+            structuredOutput: true,
+            temperature: true,
+            inputModalities: ["text", "image"],
+            outputModalities: ["text"],
+            limits: CatalogLimits(context: 1_048_576, input: nil, output: 32_768),
+            cost: CatalogCost(
+                inputPerMillion: nil,
+                outputPerMillion: nil,
+                reasoningPerMillion: nil,
+                cacheReadPerMillion: nil,
+                cacheWritePerMillion: nil
+            ),
+            providerContract: CatalogModelProviderContract(
+                npm: "@ai-sdk/openai",
+                api: nil,
+                shape: "responses"
+            )
+        )
+        let catalogProvider = CatalogProvider(
+            id: "opencode-go",
+            name: "OpenCode Go",
+            npm: "@ai-sdk/openai-compatible",
+            api: "https://opencode.ai/zen/go/v1",
+            env: ["OPENCODE_API_KEY"],
+            models: [catalogModel]
+        )
+        try JSONEncoder().encode([catalogProvider]).write(to: cacheURL)
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "PiAgentGatewayTests.\(UUID().uuidString)"))
+        let catalog = ModelsDevCatalogRepository(defaults: defaults, cacheURL: cacheURL)
+        let pi = PiStreamSpy()
+        let gateway = ProviderGateway(
+            settingsRepository: SettingsRepository(dbQueue: database),
+            credentialStore: credentials,
+            modelsDevCatalogRepository: catalog,
+            piStream: pi.stream
+        )
+
+        _ = try await gateway.stream(
+            request: ProviderRequest(
+                model: "muse-spark-1.2-contributor",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")]
+            ),
+            providerID: "MODELS_DEV:OPENCODE-GO"
+        )
+
+        let configuration = try XCTUnwrap(pi.calls.first?.configuration)
+        XCTAssertEqual(configuration.provider, "opencode-go")
+        XCTAssertEqual(configuration.model, "muse-spark-1.2-contributor")
+        XCTAssertEqual(configuration.catalogContract?.shape, "responses")
+        XCTAssertEqual(configuration.catalogContract?.toolCall, true)
+    }
+
+    func testModelsDevOpenCodeGoMuseSparkPassesReasoningEffortAsThinkingLevel() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.saveSecret(
+            "test-opencode-go-key",
+            key: "models_dev_opencode-go_OPENCODE_API_KEY"
+        )
+        let cacheURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("models-dev-opencode-effort-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: cacheURL) }
+        let catalogModel = CatalogModel(
+            id: "muse-spark-1.2-contributor",
+            name: "Muse Spark 1.2 Contributor",
+            attachment: true,
+            reasoning: true,
+            reasoningOptions: [
+                CatalogReasoningOption(type: "effort", values: ["minimal", "low", "medium", "high", "xhigh"])
+            ],
+            toolCall: true,
+            structuredOutput: true,
+            temperature: true,
+            inputModalities: ["text", "image"],
+            outputModalities: ["text"],
+            limits: CatalogLimits(context: 1_048_576, input: nil, output: 32_768),
+            cost: CatalogCost(
+                inputPerMillion: nil,
+                outputPerMillion: nil,
+                reasoningPerMillion: nil,
+                cacheReadPerMillion: nil,
+                cacheWritePerMillion: nil
+            ),
+            providerContract: CatalogModelProviderContract(
+                npm: "@ai-sdk/openai",
+                api: nil,
+                shape: "responses"
+            )
+        )
+        let catalogProvider = CatalogProvider(
+            id: "opencode-go",
+            name: "OpenCode Go",
+            npm: "@ai-sdk/openai-compatible",
+            api: "https://opencode.ai/zen/go/v1",
+            env: ["OPENCODE_API_KEY"],
+            models: [catalogModel]
+        )
+        try JSONEncoder().encode([catalogProvider]).write(to: cacheURL)
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "PiAgentGatewayTests.\(UUID().uuidString)"))
+        let catalog = ModelsDevCatalogRepository(defaults: defaults, cacheURL: cacheURL)
+        let pi = PiStreamSpy()
+        let gateway = ProviderGateway(
+            settingsRepository: SettingsRepository(dbQueue: database),
+            credentialStore: credentials,
+            modelsDevCatalogRepository: catalog,
+            piStream: pi.stream
+        )
+
+        _ = try await gateway.stream(
+            request: ProviderRequest(
+                model: "muse-spark-1.2-contributor",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")],
+                thinking: ProviderThinkingConfig(
+                    enabled: nil,
+                    budget: nil,
+                    effort: "medium",
+                    includeThoughts: true,
+                    exclude: nil
+                )
+            ),
+            providerID: "MODELS_DEV:OPENCODE-GO"
+        )
+
+        let configuration = try XCTUnwrap(pi.calls.first?.configuration)
+        XCTAssertEqual(configuration.provider, "opencode-go")
+        XCTAssertEqual(configuration.model, "muse-spark-1.2-contributor")
+        XCTAssertEqual(configuration.thinkingLevel, "medium")
     }
 }

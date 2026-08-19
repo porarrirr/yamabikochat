@@ -213,8 +213,7 @@ final class FusionService {
 
         let skillContext: SkillRequestContext?
         if phase == .panel, let skillRepository {
-            let supportsTools = ProviderReference(persistedID: model.provider).isModelsDev
-                || LLMProvider(rawOrDefault: model.provider).supportsClientWebSearchTool
+            let supportsTools = resolvedSettings.metadata["supportsClientTools"] == "true"
             let application = try AgentSkillPromptComposer.apply(
                 repository: skillRepository,
                 to: messages,

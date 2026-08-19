@@ -104,8 +104,13 @@ class PiAgentRuntime private constructor(private val context: Context) {
                 try {
                     httpClient.newCall(healthRequest).execute().use { response ->
                         if (response.isSuccessful) {
-                            DiagnosticsLogger.log("Pi runtime health check succeeded attempt=$attempt port=$port")
-                            ready = true
+                            val health = response.body?.string()?.let { body ->
+                                runCatching { json.decodeFromString<PiHealthResponse>(body) }.getOrNull()
+                            }
+                            if (health?.ok == true && health.contractVersion == 2) {
+                                DiagnosticsLogger.log("Pi runtime health check succeeded attempt=$attempt port=$port contractVersion=2")
+                                ready = true
+                            }
                         }
                     }
                 } catch (_: Exception) {}
@@ -126,6 +131,34 @@ class PiAgentRuntime private constructor(private val context: Context) {
         }
     }
 
+    suspend fun resolveModels(configurations: List<PiAgentConfiguration>): List<PiModelResolution> =
+        withContext(Dispatchers.IO) {
+            val (endpoint, token) = startIfNeeded()
+            val envelope = PiModelResolutionEnvelope(configurations)
+            val request = Request.Builder()
+                .url("${endpoint}v1/models/resolve")
+                .header("Authorization", "Bearer $token")
+                .header("Content-Type", "application/json")
+                .post(json.encodeToString(envelope).toRequestBody("application/json".toMediaType()))
+                .build()
+            httpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) throw ProviderClientError.InvalidResponse
+                val value = json.decodeFromString<PiModelResolutionResponse>(response.body?.string().orEmpty())
+                if (value.contractVersion != 2) {
+                    throw ProviderClientError.ParseFailure("Pi runtime contract mismatch")
+                }
+                value.models.forEach { model ->
+                    DiagnosticsLogger.log(
+                        "Pi model contract resolved contractVersion=${value.contractVersion} " +
+                            "supported=${model.supported} provider=${model.provider ?: "unknown"} " +
+                            "model=${model.model ?: "unknown"} api=${model.api ?: "none"} " +
+                            "source=${model.source ?: "none"} reason=${model.reason ?: "none"}"
+                    )
+                }
+                value.models
+            }
+        }
+
     private fun extractBundledScript(): File {
         val runtimeDir = File(context.filesDir, "pi-runtime")
         if (!runtimeDir.exists()) runtimeDir.mkdirs()
@@ -145,11 +178,11 @@ class PiAgentRuntime private constructor(private val context: Context) {
         tools: LocalToolRegistry
     ): Flow<ProviderStreamEvent> = flow {
         DiagnosticsLogger.log(
-            "Pi runtime stream requested provider=${configuration.provider} model=${configuration.model} api=${configuration.api}"
+            "Pi runtime stream requested provider=${configuration.provider} model=${configuration.model} contractVersion=${configuration.contractVersion}"
         )
         val (endpoint, token) = startIfNeeded()
         val runId = UUID.randomUUID().toString()
-        val piRequest = makeRequest(request, supportsImages = configuration.supportsImages)
+        val piRequest = makeRequest(request)
         val envelope = PiRunEnvelope(runId = runId, request = piRequest, config = configuration)
         val bodyJson = json.encodeToString(envelope)
         val requestBody = bodyJson.toRequestBody("application/json".toMediaType())
@@ -398,15 +431,13 @@ class PiAgentRuntime private constructor(private val context: Context) {
         }
     }
 
-    private fun makeRequest(request: ProviderRequest, supportsImages: Boolean): PiRequest {
+    private fun makeRequest(request: ProviderRequest): PiRequest {
         return PiRequest(
             messages = request.messages.map { msg ->
                 PiMessage(
                     role = msg.role,
                     content = msg.content,
-                    attachments = if (supportsImages) {
-                        msg.attachments.mapNotNull { path -> loadImageAttachment(path) }
-                    } else emptyList(),
+                    attachments = msg.attachments.mapNotNull { path -> loadImageAttachment(path) },
                     reasoningContent = msg.reasoningContent,
                     toolCalls = msg.toolCalls,
                     toolCallId = msg.toolCallId,

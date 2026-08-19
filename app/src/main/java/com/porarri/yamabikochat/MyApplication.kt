@@ -10,6 +10,7 @@ import com.porarri.yamabikochat.data.files.FileProcessingRepository
 import com.porarri.yamabikochat.data.local.AppDatabase
 import com.porarri.yamabikochat.data.model.ModelRepository
 import com.porarri.yamabikochat.data.modelsdev.ModelsDevCatalogRepository
+import com.porarri.yamabikochat.data.modelsdev.ModelsDevReasoningPreference
 import com.porarri.yamabikochat.data.remote.LiteLlmPricingRepository
 import com.porarri.yamabikochat.data.remote.OpenRouterModelService
 import com.porarri.yamabikochat.data.remote.RetrofitClient
@@ -62,7 +63,14 @@ class MyApplication : Application() {
     private val requestSettingsResolver by lazy {
         ProviderRequestSettingsResolver(
             modelService = modelService,
-            skillRepository = agentSkillRepository
+            skillRepository = agentSkillRepository,
+            modelsDevCatalogRepository = modelsDevCatalogRepository,
+            modelsDevReasoningEffort = { providerId, modelId ->
+                securePreferences.getModelsDevField(
+                    providerId,
+                    ModelsDevReasoningPreference.fieldName(modelId)
+                )
+            }
         )
     }
 
