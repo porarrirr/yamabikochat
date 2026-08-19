@@ -182,9 +182,11 @@ class ProviderGateway(
                 val route = OpenCodeGoModelCatalog.modelFor(request.model)
                     ?: throw ProviderClientError.InvalidBaseURL("Unsupported OpenCode Go model: ${request.model}")
                 piProvider = "opencode-go"
-                api = if (route.endpointKind == com.porarri.yamabikochat.data.remote.OpenCodeGoEndpointKind.MESSAGES) {
-                    "anthropic-messages"
-                } else "openai-completions"
+                api = when (route.endpointKind) {
+                    com.porarri.yamabikochat.data.remote.OpenCodeGoEndpointKind.CHAT_COMPLETIONS -> "openai-completions"
+                    com.porarri.yamabikochat.data.remote.OpenCodeGoEndpointKind.RESPONSES -> "openai-responses"
+                    com.porarri.yamabikochat.data.remote.OpenCodeGoEndpointKind.MESSAGES -> "anthropic-messages"
+                }
                 baseURL = normalizedBaseURL(ProviderCatalog.defaultOpenCodeGoBaseUrl)
                 apiKey = credential(provider)
             }
@@ -316,9 +318,11 @@ class ProviderGateway(
     }
 
     private fun normalizedModel(model: String, provider: LLMProvider): String {
-        return if (provider == LLMProvider.CODEX_AUTH) {
-            model.replace("/openai/", "")
-        } else model
+        return when (provider) {
+            LLMProvider.CODEX_AUTH -> model.replace("/openai/", "")
+            LLMProvider.OPENCODE_GO -> OpenCodeGoModelCatalog.modelFor(model)?.id ?: model
+            else -> model
+        }
     }
 
     private fun thinkingLevel(

@@ -85,6 +85,10 @@ enum ProviderCatalog {
     }
 
     static func migrateLegacyModelID(_ model: String, for provider: String) -> String {
-        provider.uppercased() == "ZAI" ? ZAICodingPlanModelCatalog.migrateLegacyModel(model) : model
+        switch provider.uppercased() {
+        case "ZAI": ZAICodingPlanModelCatalog.migrateLegacyModel(model)
+        case "OPENCODE_GO": OpenCodeGoModelCatalog.normalizedModelID(model)
+        default: model
+        }
     }
 }

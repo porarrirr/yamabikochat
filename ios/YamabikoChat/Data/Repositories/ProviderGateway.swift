@@ -244,7 +244,14 @@ final class ProviderGateway {
                 throw ProviderClientError.invalidBaseURL("Unsupported OpenCode Go model: \(request.model)")
             }
             piProvider = "opencode-go"
-            api = route.endpointKind == .messages ? "anthropic-messages" : "openai-completions"
+            switch route.endpointKind {
+            case .chatCompletions:
+                api = "openai-completions"
+            case .responses:
+                api = "openai-responses"
+            case .messages:
+                api = "anthropic-messages"
+            }
             baseURL = normalizedBaseURL(AppConstants.defaultOpenCodeGoBaseURL.absoluteString)
             apiKey = try credential(.openCodeGo)
         case .codexAuth:
@@ -363,8 +370,14 @@ final class ProviderGateway {
     }
 
     private func normalizedModel(_ model: String, provider: LLMProvider) -> String {
-        guard provider == .codexAuth else { return model }
-        return model.replacingOccurrences(of: "/openai/", with: "")
+        switch provider {
+        case .codexAuth:
+            return model.replacingOccurrences(of: "/openai/", with: "")
+        case .openCodeGo:
+            return OpenCodeGoModelCatalog.model(for: model)?.id ?? model
+        default:
+            return model
+        }
     }
 
     private func thinkingLevel(

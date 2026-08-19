@@ -49,6 +49,11 @@ class ProviderCatalogTest {
         assertEquals("glm-5.1", ProviderCatalog.migrateLegacyModelId("OPENCODE_GO", "glm-5.1"))
         assertTrue(AlibabaCodingPlanModelCatalog.supportedModels.contains("qwen3.7-plus"))
         assertTrue(OpenCodeGoModelCatalog.modelFor("qwen3.8-max")?.endpointKind == OpenCodeGoEndpointKind.MESSAGES)
+        assertEquals(
+            "muse-spark-1.2-contributor",
+            OpenCodeGoModelCatalog.modelFor("muse-spark-1.2")?.id
+        )
+        assertTrue(OpenCodeGoModelCatalog.modelFor("muse-spark-1.2")?.endpointKind == OpenCodeGoEndpointKind.RESPONSES)
     }
 
     @Test

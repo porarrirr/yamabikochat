@@ -73,8 +73,11 @@ object ProviderCatalog {
     }
 
     fun migrateLegacyModelId(provider: String, model: String): String =
-        if (provider.equals(ZAI, ignoreCase = true)) ZaiCodingPlanModelCatalog.migrateLegacyModel(model)
-        else model
+        when {
+            provider.equals(ZAI, ignoreCase = true) -> ZaiCodingPlanModelCatalog.migrateLegacyModel(model)
+            provider.equals(OPENCODE_GO, ignoreCase = true) -> OpenCodeGoModelCatalog.normalizedModelId(model)
+            else -> model
+        }
 
     fun remapRemovedProvider(provider: String): String = when (provider.uppercase()) {
         "GEMINI_AUTH" -> GEMINI
@@ -85,6 +88,7 @@ object ProviderCatalog {
 
 enum class OpenCodeGoEndpointKind {
     CHAT_COMPLETIONS,
+    RESPONSES,
     MESSAGES
 }
 
@@ -170,9 +174,11 @@ object OpenCodeGoModelCatalog {
     const val defaultModel = "glm-5.1"
 
     val supportedModels = listOf(
+        OpenCodeGoModel("gpt-5.6-luna", "GPT-5.6 Luna", OpenCodeGoEndpointKind.RESPONSES),
+        OpenCodeGoModel("glm-5.3", "GLM-5.3", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("glm-5.2", "GLM-5.2", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("glm-5.1", "GLM-5.1", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
-        OpenCodeGoModel("grok-4.5", "Grok 4.5", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("grok-4.5", "Grok 4.5", OpenCodeGoEndpointKind.RESPONSES),
         OpenCodeGoModel("kimi-k3", "Kimi K3", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("kimi-k2.7-code", "Kimi K2.7 Code", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("kimi-k2.6", "Kimi K2.6", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
@@ -187,16 +193,18 @@ object OpenCodeGoModelCatalog {
         OpenCodeGoModel("qwen3.6-plus", "Qwen3.6 Plus", OpenCodeGoEndpointKind.MESSAGES),
         OpenCodeGoModel("minimax-m3", "MiniMax M3", OpenCodeGoEndpointKind.MESSAGES),
         OpenCodeGoModel("minimax-m2.7", "MiniMax M2.7", OpenCodeGoEndpointKind.MESSAGES),
-        OpenCodeGoModel("minimax-m2.5", "MiniMax M2.5", OpenCodeGoEndpointKind.MESSAGES)
+        OpenCodeGoModel("minimax-m2.5", "MiniMax M2.5", OpenCodeGoEndpointKind.MESSAGES),
+        OpenCodeGoModel("muse-spark-1.2-contributor", "Muse Spark 1.2 Contributor", OpenCodeGoEndpointKind.RESPONSES)
     )
 
     fun normalizedModelId(raw: String): String {
         val trimmed = raw.trim()
-        return if (trimmed.startsWith("opencode-go/", ignoreCase = true)) {
-            trimmed.drop("opencode-go/".length)
-        } else {
-            trimmed
+        if (trimmed.startsWith("opencode-go/", ignoreCase = true)) {
+            return normalizedModelId(trimmed.drop("opencode-go/".length))
         }
+        return if (trimmed.equals("muse-spark-1.2", ignoreCase = true)) {
+            "muse-spark-1.2-contributor"
+        } else trimmed
     }
 
     fun modelFor(raw: String): OpenCodeGoModel? {

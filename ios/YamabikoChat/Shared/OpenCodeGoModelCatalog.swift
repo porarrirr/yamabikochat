@@ -2,6 +2,7 @@ import Foundation
 
 enum OpenCodeGoEndpointKind: String, Sendable {
     case chatCompletions
+    case responses
     case messages
 }
 
@@ -16,9 +17,11 @@ enum OpenCodeGoModelCatalog {
     static let defaultModel = "glm-5.1"
 
     static let supportedModels: [OpenCodeGoModel] = [
+        OpenCodeGoModel(id: "gpt-5.6-luna", displayName: "GPT-5.6 Luna", endpointKind: .responses, description: "OpenCode Go Responses API model."),
+        OpenCodeGoModel(id: "glm-5.3", displayName: "GLM-5.3", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
         OpenCodeGoModel(id: "glm-5.2", displayName: "GLM-5.2", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
         OpenCodeGoModel(id: "glm-5.1", displayName: "GLM-5.1", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
-        OpenCodeGoModel(id: "grok-4.5", displayName: "Grok 4.5", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
+        OpenCodeGoModel(id: "grok-4.5", displayName: "Grok 4.5", endpointKind: .responses, description: "OpenCode Go Responses API model."),
         OpenCodeGoModel(id: "kimi-k3", displayName: "Kimi K3", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
         OpenCodeGoModel(id: "kimi-k2.7-code", displayName: "Kimi K2.7 Code", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
         OpenCodeGoModel(id: "kimi-k2.6", displayName: "Kimi K2.6", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
@@ -33,15 +36,17 @@ enum OpenCodeGoModelCatalog {
         OpenCodeGoModel(id: "qwen3.6-plus", displayName: "Qwen3.6 Plus", endpointKind: .messages, description: "OpenCode Go messages API model."),
         OpenCodeGoModel(id: "minimax-m3", displayName: "MiniMax M3", endpointKind: .messages, description: "OpenCode Go messages API model."),
         OpenCodeGoModel(id: "minimax-m2.7", displayName: "MiniMax M2.7", endpointKind: .messages, description: "OpenCode Go messages API model."),
-        OpenCodeGoModel(id: "minimax-m2.5", displayName: "MiniMax M2.5", endpointKind: .messages, description: "OpenCode Go messages API model.")
+        OpenCodeGoModel(id: "minimax-m2.5", displayName: "MiniMax M2.5", endpointKind: .messages, description: "OpenCode Go messages API model."),
+        OpenCodeGoModel(id: "muse-spark-1.2-contributor", displayName: "Muse Spark 1.2 Contributor", endpointKind: .responses, description: "OpenCode Go Responses API model.")
     ]
 
     static func normalizedModelID(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = trimmed.lowercased()
         if lower.hasPrefix("opencode-go/") {
-            return String(trimmed.dropFirst("opencode-go/".count))
+            return normalizedModelID(String(trimmed.dropFirst("opencode-go/".count)))
         }
+        if lower == "muse-spark-1.2" { return "muse-spark-1.2-contributor" }
         return trimmed
     }
 

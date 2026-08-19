@@ -207,4 +207,30 @@ final class PiAgentGatewayTests: XCTestCase {
         XCTAssertEqual(configuration.api, "openai-responses")
         XCTAssertEqual(configuration.provider, "xai-oauth")
     }
+
+    func testOpenCodeGoMuseSparkUsesResponsesAPI() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.setCredential("test-opencode-go-key", for: .openCodeGo)
+        let pi = PiStreamSpy()
+        let gateway = ProviderGateway(
+            settingsRepository: SettingsRepository(dbQueue: database),
+            credentialStore: credentials,
+            piStream: pi.stream
+        )
+
+        _ = try await gateway.stream(
+            request: ProviderRequest(
+                model: "muse-spark-1.2",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")]
+            ),
+            provider: .openCodeGo
+        )
+
+        let configuration = try XCTUnwrap(pi.calls.first?.configuration)
+        XCTAssertEqual(configuration.api, "openai-responses")
+        XCTAssertEqual(configuration.provider, "opencode-go")
+        XCTAssertEqual(configuration.model, "muse-spark-1.2-contributor")
+    }
 }

@@ -1973,6 +1973,7 @@ fun SettingsScreen(
                                     options = OpenCodeGoModelCatalog.supportedModels.map { option ->
                                         val endpoint = when (option.endpointKind) {
                                             OpenCodeGoEndpointKind.CHAT_COMPLETIONS -> "chat/completions"
+                                            OpenCodeGoEndpointKind.RESPONSES -> "responses"
                                             OpenCodeGoEndpointKind.MESSAGES -> "messages"
                                         }
                                         YamabikoOption(
@@ -1989,6 +1990,7 @@ fun SettingsScreen(
                             selectedModel?.let { selected ->
                                 val endpoint = when (selected.endpointKind) {
                                     OpenCodeGoEndpointKind.CHAT_COMPLETIONS -> "/chat/completions"
+                                    OpenCodeGoEndpointKind.RESPONSES -> "/responses"
                                     OpenCodeGoEndpointKind.MESSAGES -> "/messages"
                                 }
                                 Text(
