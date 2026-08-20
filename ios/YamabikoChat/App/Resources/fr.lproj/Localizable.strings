@@ -140,6 +140,7 @@
 "外観/診断" = "Apparence / Diagnostics";
 "危険なファイル形式は添付できません。" = "Les formats de fichiers dangereux ne peuvent pas être joints.";
 "共有" = "Partager";
+"チャットを書き出す" = "Exporter le chat";
 "強制更新" = "Forcer la mise à jour";
 "空欄は送信されません。JSONが不正な場合は無視されます。" = "Les champs vides ne sont pas envoyés. Le JSON invalide est ignoré.";
 "検索" = "Rechercher";

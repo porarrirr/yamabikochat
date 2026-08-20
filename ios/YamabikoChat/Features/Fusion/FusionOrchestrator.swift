@@ -220,7 +220,8 @@ struct FusionOrchestrator: Sendable {
                     inputTokens: usage?.inputTokens,
                     outputTokens: usage?.outputTokens,
                     cost: cost,
-                    error: nil
+                    error: nil,
+                    piExecutions: [response.piExecution].compactMap { $0 }
                 )
         }
 
@@ -247,7 +248,8 @@ struct FusionOrchestrator: Sendable {
                     inputTokens: repairUsage?.inputTokens,
                     outputTokens: repairUsage?.outputTokens,
                     cost: (cost ?? 0) + (repairCost ?? 0),
-                    error: nil
+                    error: nil,
+                    piExecutions: [response.piExecution, repairResponse.piExecution].compactMap { $0 }
                 )
         }
         throw ProviderClientError.parseFailure("Judge JSON parse failed")

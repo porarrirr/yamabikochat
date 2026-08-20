@@ -9,19 +9,22 @@ struct ChatMessageToolActivity: Codable, FetchableRecord, MutablePersistableReco
     var variantId: Int64?
     var stepsJSON: String
     var providerTranscriptJSON: String?
+    var piExecutionJSON: String?
 
     init(
         id: Int64? = nil,
         messageId: Int64? = nil,
         variantId: Int64? = nil,
         stepsJSON: String,
-        providerTranscriptJSON: String? = nil
+        providerTranscriptJSON: String? = nil,
+        piExecutionJSON: String? = nil
     ) {
         self.id = id
         self.messageId = messageId
         self.variantId = variantId
         self.stepsJSON = stepsJSON
         self.providerTranscriptJSON = providerTranscriptJSON
+        self.piExecutionJSON = piExecutionJSON
     }
 
     mutating func didInsert(_ inserted: InsertionSuccess) {
@@ -38,6 +41,21 @@ struct ChatMessageToolActivity: Codable, FetchableRecord, MutablePersistableReco
               let data = providerTranscriptJSON.data(using: .utf8)
         else { return nil }
         return try? JSONDecoder().decode([ProviderRequestMessage].self, from: data)
+    }
+
+    var piExecution: JSONValue? {
+        guard let piExecutionJSON,
+              let data = piExecutionJSON.data(using: .utf8)
+        else { return nil }
+        return try? JSONDecoder().decode(JSONValue.self, from: data)
+    }
+
+    var payload: ToolActivityPayload {
+        ToolActivityPayload(
+            steps: steps,
+            providerTranscript: providerTranscript ?? [],
+            piExecution: piExecution
+        )
     }
 }
 
@@ -84,19 +102,22 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
     var steps: [ToolActivityStep] = []
     var providerTranscript: [ProviderRequestMessage] = []
     var attachmentPaths: [String] = []
+    var piExecution: JSONValue? = nil
 
     init(
         steps: [ToolActivityStep] = [],
         providerTranscript: [ProviderRequestMessage] = [],
-        attachmentPaths: [String] = []
+        attachmentPaths: [String] = [],
+        piExecution: JSONValue? = nil
     ) {
         self.steps = steps
         self.providerTranscript = providerTranscript
         self.attachmentPaths = attachmentPaths
+        self.piExecution = piExecution
     }
 
     private enum CodingKeys: String, CodingKey {
-        case steps, providerTranscript, attachmentPaths
+        case steps, providerTranscript, attachmentPaths, piExecution
     }
 
     init(from decoder: Decoder) throws {
@@ -104,6 +125,11 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
         steps = try container.decodeIfPresent([ToolActivityStep].self, forKey: .steps) ?? []
         providerTranscript = try container.decodeIfPresent([ProviderRequestMessage].self, forKey: .providerTranscript) ?? []
         attachmentPaths = try container.decodeIfPresent([String].self, forKey: .attachmentPaths) ?? []
+        piExecution = try container.decodeIfPresent(JSONValue.self, forKey: .piExecution)
+    }
+
+    var hasPersistableContent: Bool {
+        !steps.isEmpty || !providerTranscript.isEmpty || piExecution != nil
     }
 
     mutating func apply(_ event: ToolActivityEvent) {

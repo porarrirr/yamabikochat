@@ -68,6 +68,7 @@ final class ProviderGateway {
             case let .textDelta(delta): text += delta
             case let .reasoningDelta(delta): reasoning += delta
             case let .toolActivity(activity): toolActivity.apply(activity)
+            case let .executionSnapshot(execution): toolActivity.piExecution = execution
             case let .completed(response): completed = response
             }
         }
@@ -76,7 +77,14 @@ final class ProviderGateway {
         }
         if response.text.isEmpty { response.text = text }
         if response.reasoningSummary == nil { response.reasoningSummary = reasoning.trimmedNonEmpty }
-        if !toolActivity.steps.isEmpty { response.toolActivity = toolActivity }
+        if toolActivity.hasPersistableContent {
+            var merged = response.toolActivity ?? ToolActivityPayload()
+            if !toolActivity.steps.isEmpty { merged.steps = toolActivity.steps }
+            if !toolActivity.providerTranscript.isEmpty { merged.providerTranscript = toolActivity.providerTranscript }
+            if !toolActivity.attachmentPaths.isEmpty { merged.attachmentPaths = toolActivity.attachmentPaths }
+            merged.piExecution = response.piExecution ?? toolActivity.piExecution
+            response.toolActivity = merged
+        }
         return response
     }
 

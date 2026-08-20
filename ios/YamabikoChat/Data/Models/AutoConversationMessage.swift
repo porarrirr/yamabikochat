@@ -19,6 +19,7 @@ struct AutoConversationMessage: Codable, FetchableRecord, MutablePersistableReco
         case turnNumber = "turnIndex"
         case timestamp = "createdAtMs"
         case isEndSignal
+        case piExecutionJSON
     }
 
     var id: Int64?
@@ -29,6 +30,7 @@ struct AutoConversationMessage: Codable, FetchableRecord, MutablePersistableReco
     var turnNumber: Int
     var timestamp: Int64
     var isEndSignal: Bool
+    var piExecutionJSON: String?
 
     var speakerModel: AutoConversationSpeakerModel {
         get { AutoConversationSpeakerModel(rawValue: speakerModelRaw.uppercased()) ?? .user }
@@ -43,7 +45,8 @@ struct AutoConversationMessage: Codable, FetchableRecord, MutablePersistableReco
         reasoning: String? = nil,
         turnNumber: Int,
         timestamp: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
-        isEndSignal: Bool = false
+        isEndSignal: Bool = false,
+        piExecutionJSON: String? = nil
     ) {
         self.id = id
         self.autoConversationId = autoConversationId
@@ -53,9 +56,17 @@ struct AutoConversationMessage: Codable, FetchableRecord, MutablePersistableReco
         self.turnNumber = turnNumber
         self.timestamp = timestamp
         self.isEndSignal = isEndSignal
+        self.piExecutionJSON = piExecutionJSON
     }
 
     mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
+    }
+
+    var piExecution: JSONValue? {
+        guard let piExecutionJSON,
+              let data = piExecutionJSON.data(using: .utf8)
+        else { return nil }
+        return try? JSONDecoder().decode(JSONValue.self, from: data)
     }
 }

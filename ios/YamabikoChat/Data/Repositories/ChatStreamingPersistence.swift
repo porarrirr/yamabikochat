@@ -149,7 +149,7 @@ enum ChatStreamSession {
             }
         } catch {
             toolActivity.failRunning(message: L10n.text("ツールの実行が中断されました"))
-            if !toolActivity.steps.isEmpty {
+            if toolActivity.hasPersistableContent {
                 try? target.persistToolActivity(toolActivity)
             }
             if fullText.isEmpty, reasoningText.isEmpty {
@@ -166,7 +166,7 @@ enum ChatStreamSession {
         }
 
         try coordinator.apply(text: fullText, thinking: reasoningText, force: true, persist: target.persist)
-        if !toolActivity.steps.isEmpty {
+        if toolActivity.hasPersistableContent {
             try target.persistToolActivity(toolActivity)
         }
         publishStreamingSnapshot(
@@ -183,7 +183,7 @@ enum ChatStreamSession {
             usage: finalUsage,
             usageSamples: finalUsageSamples,
             toolCalls: finalToolCalls,
-            toolActivity: toolActivity.steps.isEmpty ? nil : toolActivity
+            toolActivity: toolActivity.hasPersistableContent ? toolActivity : nil
         )
     }
 
@@ -236,10 +236,14 @@ enum ChatStreamSession {
                 isFinal: false,
                 onStreamingSnapshot: onStreamingSnapshot
             )
+        case let .executionSnapshot(execution):
+            toolActivity.piExecution = execution
+            try target.persistToolActivity(toolActivity)
         case let .completed(response):
             finalUsage = response.usage ?? finalUsage
             finalUsageSamples = response.usageSamples ?? finalUsageSamples
             finalToolCalls = response.toolCalls
+            toolActivity.piExecution = response.piExecution
             if fullText.isEmpty, !response.text.isEmpty {
                 fullText = response.text
             }

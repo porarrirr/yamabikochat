@@ -205,6 +205,15 @@ final class ChatViewModel: ObservableObject {
         inputText = text
     }
 
+    func exportConversation() async throws -> URL {
+        guard let repository else {
+            throw ProviderClientError.parseFailure(
+                L10n.text("チャット初期化中です。少し待ってから再試行してください。")
+            )
+        }
+        return try await repository.exportConversation(id: conversationID)
+    }
+
     @discardableResult
     func addAttachment(
         url: URL,

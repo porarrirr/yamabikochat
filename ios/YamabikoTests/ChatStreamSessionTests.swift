@@ -104,6 +104,46 @@ final class ChatStreamSessionTests: XCTestCase {
         }
     }
 
+    func testRunPersistsPiExecutionSnapshotBeforeStreamFailure() async throws {
+        let conversations = try makeConversations()
+        let conversationId = try conversations.createConversation(
+            title: "test",
+            model: "gpt-4o-mini",
+            provider: "OPENAI"
+        )
+        let messageId = try conversations.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "model", text: "", createdAtMs: 1)
+        )
+        let execution: JSONValue = .object([
+            "format": .string("yamabiko.pi-agent-execution"),
+            "failure": .object(["message": .string("provider failed")])
+        ])
+
+        struct TestStreamError: Error {}
+        let stream = AsyncThrowingStream<ProviderStreamEvent, Error> { continuation in
+            continuation.yield(.executionSnapshot(execution))
+            continuation.finish(throwing: TestStreamError())
+        }
+
+        do {
+            _ = try await ChatStreamSession.run(
+                stream: stream,
+                conversations: conversations,
+                kind: .message(messageId: messageId),
+                onStreamEvent: nil,
+                onStreamingSnapshot: nil
+            )
+            XCTFail("Expected stream error")
+        } catch is TestStreamError {
+            XCTAssertEqual(
+                try conversations.fetchFullMessage(id: messageId)?.toolActivity?.piExecution,
+                execution
+            )
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testRunPublishesAndPersistsToolActivity() async throws {
         let conversations = try makeConversations()
         let conversationId = try conversations.createConversation(title: "test", model: "gpt", provider: "OPENAI")
@@ -139,6 +179,43 @@ final class ChatStreamSessionTests: XCTestCase {
         XCTAssertEqual(persisted?.toolActivity?.steps.first?.status, .completed)
         let attachmentData = try XCTUnwrap(persisted?.displayAttachmentsJSON.data(using: .utf8))
         XCTAssertEqual(try JSONDecoder().decode([String].self, from: attachmentData), ["/tmp/generated.png"])
+    }
+
+    func testRunPersistsPiExecutionWithoutToolSteps() async throws {
+        let conversations = try makeConversations()
+        let conversationId = try conversations.createConversation(title: "test", model: "gpt", provider: "OPENAI")
+        let messageId = try conversations.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "model", text: "", createdAtMs: 1)
+        )
+        let execution: JSONValue = .object([
+            "format": .string("yamabiko.pi-agent-execution"),
+            "state": .object(["messages": .array([])])
+        ])
+        let stream = AsyncThrowingStream<ProviderStreamEvent, Error> { continuation in
+            continuation.yield(
+                .completed(
+                    ProviderResponse(
+                        text: "done",
+                        reasoningSummary: nil,
+                        raw: nil,
+                        usage: nil,
+                        piExecution: execution
+                    )
+                )
+            )
+            continuation.finish()
+        }
+
+        let result = try await ChatStreamSession.run(
+            stream: stream,
+            conversations: conversations,
+            kind: .message(messageId: messageId),
+            onStreamEvent: nil,
+            onStreamingSnapshot: nil
+        )
+
+        XCTAssertEqual(result.toolActivity?.piExecution, execution)
+        XCTAssertEqual(try conversations.fetchFullMessage(id: messageId)?.toolActivity?.piExecution, execution)
     }
 
     private func makeConversations() throws -> ConversationRepository {

@@ -129,6 +129,7 @@ struct PanelResult: Codable, Sendable, Equatable {
     var toolActivity: ToolActivityPayload? = nil
     var finishReason: String?
     var role: String?
+    var piExecution: JSONValue? = nil
 }
 
 struct JudgeContradiction: Codable, Sendable, Equatable {
@@ -178,6 +179,7 @@ struct JudgePhaseResult: Codable, Sendable, Equatable {
     var outputTokens: Int?
     var cost: Double?
     var error: String?
+    var piExecutions: [JSONValue] = []
 }
 
 struct SynthesisPhaseResult: Codable, Sendable, Equatable {
@@ -190,6 +192,7 @@ struct SynthesisPhaseResult: Codable, Sendable, Equatable {
     var outputTokens: Int?
     var cost: Double?
     var error: String?
+    var piExecution: JSONValue? = nil
 }
 
 struct FusionTrace: Codable, Sendable, Equatable {

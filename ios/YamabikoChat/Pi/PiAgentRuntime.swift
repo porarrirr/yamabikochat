@@ -101,6 +101,7 @@ private struct PiRuntimeEvent: Decodable {
     var name: String?
     var arguments: JSONValue?
     var response: ProviderResponse?
+    var execution: JSONValue?
     var url: String?
     var userCode: String?
     var verificationUri: String?
@@ -519,6 +520,11 @@ actor PiAgentRuntime {
                                 ]
                             )
                             continuation.yield(.completed(response))
+                        case "execution_snapshot":
+                            guard let execution = event.execution else {
+                                throw ProviderClientError.parseFailure("Pi emitted an invalid execution snapshot")
+                            }
+                            continuation.yield(.executionSnapshot(execution))
                         case "error":
                             let error = ProviderClientError.parseFailure(event.message ?? "Pi agent failed")
                             DiagnosticsLogger.log(

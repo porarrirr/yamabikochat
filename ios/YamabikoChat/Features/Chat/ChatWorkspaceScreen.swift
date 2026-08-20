@@ -9,6 +9,8 @@ struct ChatWorkspaceScreen: View {
     let conversationID: Int64
     @ObservedObject var viewModel: ChatViewModel
     var onSelectConversation: ((Int64) -> Void)?
+    @State private var exportedArchive: ConversationExportShareItem?
+    @State private var isExporting = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,6 +41,9 @@ struct ChatWorkspaceScreen: View {
         }
         .onChange(of: appState.shareImportDraft) { _, _ in
             applyShareImportDraftIfNeeded()
+        }
+        .sheet(item: $exportedArchive) { item in
+            ConversationExportShareSheet(items: [item.url])
         }
     }
 
@@ -211,6 +216,13 @@ struct ChatWorkspaceScreen: View {
                 .disabled(!viewModel.canRegenerateLastAssistant)
 
                 Button {
+                    exportConversation()
+                } label: {
+                    Label(L10n.text("チャットを書き出す"), systemImage: "square.and.arrow.up")
+                }
+                .disabled(isExporting)
+
+                Button {
                     viewModel.toggleDualMode()
                 } label: {
                     if viewModel.settings.isDualModeEnabled {
@@ -342,6 +354,26 @@ struct ChatWorkspaceScreen: View {
         }
     }
 
+    private func exportConversation() {
+        guard !isExporting else { return }
+        isExporting = true
+        Task { @MainActor in
+            defer { isExporting = false }
+            do {
+                let url = try await viewModel.exportConversation()
+                exportedArchive = ConversationExportShareItem(url: url)
+            } catch {
+                viewModel.errorMessage = error.localizedDescription
+                DiagnosticsLogger.log(
+                    "Conversation export failed",
+                    category: .chat,
+                    metadata: ["conversation": String(conversationID)],
+                    error: error
+                )
+            }
+        }
+    }
+
     private func openConversationHistory() {
         if horizontalSizeClass == .compact {
             appState.isConversationHistoryPresented = true
@@ -349,4 +381,19 @@ struct ChatWorkspaceScreen: View {
             appState.requestConversationSidebarReveal()
         }
     }
+}
+
+private struct ConversationExportShareItem: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct ConversationExportShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

@@ -802,6 +802,24 @@ enum AppDatabase {
             }
         }
 
+        migrator.registerMigration("v20_pi_execution_history") { db in
+            let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(chat_message_tool_activity)")
+            let columns = Set(rows.compactMap { ($0["name"] as String?)?.lowercased() })
+            if !columns.contains("piexecutionjson") {
+                try db.alter(table: "chat_message_tool_activity") { t in
+                    t.add(column: "piExecutionJSON", .text)
+                }
+            }
+
+            let autoRows = try Row.fetchAll(db, sql: "PRAGMA table_info(auto_conversation_messages)")
+            let autoColumns = Set(autoRows.compactMap { ($0["name"] as String?)?.lowercased() })
+            if !autoColumns.contains("piexecutionjson") {
+                try db.alter(table: "auto_conversation_messages") { t in
+                    t.add(column: "piExecutionJSON", .text)
+                }
+            }
+        }
+
         return migrator
     }
 
@@ -813,6 +831,7 @@ enum AppDatabase {
                 variantId INTEGER REFERENCES chat_message_variants(id) ON DELETE CASCADE,
                 stepsJSON TEXT NOT NULL DEFAULT '[]',
                 providerTranscriptJSON TEXT,
+                piExecutionJSON TEXT,
                 CHECK (
                     (messageId IS NOT NULL AND variantId IS NULL)
                     OR (messageId IS NULL AND variantId IS NOT NULL)

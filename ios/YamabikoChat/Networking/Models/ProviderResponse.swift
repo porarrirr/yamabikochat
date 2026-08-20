@@ -48,6 +48,9 @@ struct ProviderResponse: Codable, Sendable, Equatable {
     var usageSamples: [ProviderUsage]? = nil
     var toolCalls: [ToolCall] = []
     var toolActivity: ToolActivityPayload? = nil
+    /// Exact Pi Agent execution snapshot returned by the bundled runtime.
+    /// Authentication material is excluded by the runtime before serialization.
+    var piExecution: JSONValue? = nil
 }
 
 extension ProviderUsage {
@@ -76,6 +79,7 @@ enum ProviderStreamEvent: Sendable, Equatable {
     case textDelta(String)
     case reasoningDelta(String)
     case toolActivity(ToolActivityEvent)
+    case executionSnapshot(JSONValue)
     case completed(ProviderResponse)
 }
 
@@ -88,7 +92,7 @@ extension ProviderStreamEvent {
             return delta.trimmedNonEmpty != nil
         case let .completed(response):
             return response.text.trimmedNonEmpty != nil
-        case .reasoningDelta, .toolActivity:
+        case .reasoningDelta, .toolActivity, .executionSnapshot:
             return false
         }
     }

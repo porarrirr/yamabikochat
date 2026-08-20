@@ -648,11 +648,13 @@ final class ConversationRepository: @unchecked Sendable {
     ) throws {
         let stepsData = try JSONEncoder().encode(payload.steps)
         let transcriptData = try JSONEncoder().encode(payload.providerTranscript)
+        let piExecutionData = try payload.piExecution.map { try JSONEncoder().encode($0) }
         var activity = ChatMessageToolActivity(
             messageId: messageId,
             variantId: variantId,
             stepsJSON: String(decoding: stepsData, as: UTF8.self),
-            providerTranscriptJSON: String(decoding: transcriptData, as: UTF8.self)
+            providerTranscriptJSON: String(decoding: transcriptData, as: UTF8.self),
+            piExecutionJSON: piExecutionData.map { String(decoding: $0, as: UTF8.self) }
         )
         try dbQueue.write { db in
             if let messageId {
@@ -661,6 +663,138 @@ final class ConversationRepository: @unchecked Sendable {
                 try ChatMessageToolActivity.filter(Column("variantId") == variantId).deleteAll(db)
             }
             try activity.insert(db)
+        }
+    }
+
+    func fetchDebugExport(conversationId: Int64) throws -> ConversationDebugExport {
+        try dbQueue.read { db in
+            guard let conversation = try Conversation.fetchOne(db, key: conversationId) else {
+                throw ConversationExportError.conversationNotFound
+            }
+
+            let messages = try ChatMessage
+                .filter(Column("conversationId") == conversationId)
+                .order(Column("createdAtMs").asc, Column("id").asc)
+                .fetchAll(db)
+            let messageIDs = messages.compactMap(\.id)
+            let variants = messageIDs.isEmpty ? [] : try ChatMessageVariant
+                .filter(messageIDs.contains(Column("baseMessageId")))
+                .order(Column("baseMessageId").asc, Column("variantIndex").asc)
+                .fetchAll(db)
+            let variantsByMessage = Dictionary(grouping: variants, by: \.baseMessageId)
+            let variantIDs = variants.compactMap(\.id)
+
+            let thinkingRows = messageIDs.isEmpty ? [] : try ChatMessageThinking
+                .filter(messageIDs.contains(Column("messageId")))
+                .fetchAll(db)
+            let thinkingByMessage = Dictionary(uniqueKeysWithValues: thinkingRows.map { ($0.messageId, $0.thinkingStream) })
+
+            let activityRows: [ChatMessageToolActivity]
+            if messageIDs.isEmpty, variantIDs.isEmpty {
+                activityRows = []
+            } else if variantIDs.isEmpty {
+                activityRows = try ChatMessageToolActivity
+                    .filter(messageIDs.contains(Column("messageId")))
+                    .fetchAll(db)
+            } else if messageIDs.isEmpty {
+                activityRows = try ChatMessageToolActivity
+                    .filter(variantIDs.contains(Column("variantId")))
+                    .fetchAll(db)
+            } else {
+                activityRows = try ChatMessageToolActivity
+                    .filter(
+                        messageIDs.contains(Column("messageId"))
+                            || variantIDs.contains(Column("variantId"))
+                    )
+                    .fetchAll(db)
+            }
+            let activityByMessage = Dictionary(
+                uniqueKeysWithValues: activityRows.compactMap { row in row.messageId.map { ($0, row.payload) } }
+            )
+            let activityByVariant = Dictionary(
+                uniqueKeysWithValues: activityRows.compactMap { row in row.variantId.map { ($0, row.payload) } }
+            )
+
+            let messageExports = messages.map { message in
+                let messageVariants = (message.id.flatMap { variantsByMessage[$0] } ?? []).map { variant in
+                    ConversationVariantDebugExport(
+                        variant: variant,
+                        attachments: decodeArray(variant.attachmentsJSON),
+                        toolActivity: variant.id.flatMap { activityByVariant[$0] }
+                    )
+                }
+                return ConversationMessageDebugExport(
+                    message: message,
+                    thinkingStream: message.id.flatMap { thinkingByMessage[$0] },
+                    attachments: decodeArray(message.attachmentsJSON),
+                    toolActivity: message.id.flatMap { activityByMessage[$0] },
+                    variants: messageVariants
+                )
+            }
+
+            let dualRows = try DualChatMessage
+                .filter(Column("conversationId") == conversationId)
+                .order(Column("createdAtMs").asc, Column("id").asc)
+                .fetchAll(db)
+            let dualExports = dualRows.map {
+                DualMessageDebugExport(
+                    message: $0,
+                    attachments: $0.attachments,
+                    modelAToolActivity: $0.modelAToolActivity,
+                    modelBToolActivity: $0.modelBToolActivity
+                )
+            }
+
+            let autoRows = try AutoConversation
+                .filter(Column("boundChatConversationId") == conversationId)
+                .order(Column("createdAtMs").asc, Column("id").asc)
+                .fetchAll(db)
+            let autoIDs = autoRows.compactMap(\.id)
+            let autoMessages = autoIDs.isEmpty ? [] : try AutoConversationMessage
+                .filter(autoIDs.contains(Column("autoConversationId")))
+                .order(Column("autoConversationId").asc, Column("turnIndex").asc, Column("id").asc)
+                .fetchAll(db)
+            let autoMessagesByConversation = Dictionary(grouping: autoMessages, by: \.autoConversationId)
+            let autoExports = autoRows.map { autoConversation in
+                AutoConversationDebugExport(
+                    conversation: autoConversation,
+                    messages: (autoConversation.id.flatMap { autoMessagesByConversation[$0] } ?? []).map {
+                        AutoConversationMessageDebugExport(message: $0, piExecution: $0.piExecution)
+                    }
+                )
+            }
+
+            let fusionTraces = try FusionTraceRecord
+                .filter(Column("conversationId") == conversationId)
+                .order(Column("startedAtMs").asc)
+                .fetchAll(db)
+            let tokenUsage = try TokenUsageRecord
+                .filter(Column("conversationId") == conversationId)
+                .order(Column("timestamp").asc, Column("id").asc)
+                .fetchAll(db)
+            let metrics = try ConversationExecutionMetric
+                .filter(Column("conversationId") == conversationId)
+                .order(Column("startedAtMs").asc, Column("id").asc)
+                .fetchAll(db)
+
+            return ConversationDebugExport(
+                exportedAtMs: Int64(Date().timeIntervalSince1970 * 1_000),
+                application: ConversationDebugExport.ApplicationInfo(
+                    name: Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "YamabikoChat",
+                    version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
+                    build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
+                    platform: "iOS"
+                ),
+                securityNotice: "API keys, authorization values, credentials, access tokens, and abort signals are excluded. All conversation content and available Pi execution history are included.",
+                conversation: conversation,
+                messages: messageExports,
+                dualMessages: dualExports,
+                autoConversations: autoExports,
+                fusionTraces: fusionTraces,
+                tokenUsageRecords: tokenUsage,
+                executionMetrics: metrics,
+                files: []
+            )
         }
     }
 

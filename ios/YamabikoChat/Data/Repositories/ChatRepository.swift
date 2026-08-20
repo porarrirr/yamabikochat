@@ -115,6 +115,14 @@ final class ChatRepository {
         try conversations.fetchConversation(id: id)
     }
 
+    func exportConversation(id: Int64) async throws -> URL {
+        let conversations = conversations
+        return try await Task.detached(priority: .userInitiated) {
+            let snapshot = try conversations.fetchDebugExport(conversationId: id)
+            return try ConversationExportService.createArchive(snapshot: snapshot)
+        }.value
+    }
+
     func ensureInitialConversation() throws -> Int64 {
         if let existing = try conversations.fetchLatestEmptyConversation(title: "New Chat", projectId: nil), let id = existing.id {
             return id
@@ -732,7 +740,8 @@ final class ChatRepository {
                 usage: session.usage,
                 usageSamples: session.usageSamples,
                 toolCalls: session.toolCalls,
-                toolActivity: session.toolActivity
+                toolActivity: session.toolActivity,
+                piExecution: session.toolActivity?.piExecution
             )
             if persistResults {
                 try persistProviderResponse(response, kind: persistenceKind)
@@ -756,7 +765,9 @@ final class ChatRepository {
             text: response.text,
             thinking: response.reasoningSummary ?? ""
         )
-        if let activity = response.toolActivity, !activity.steps.isEmpty {
+        var activity = response.toolActivity ?? ToolActivityPayload()
+        activity.piExecution = response.piExecution ?? activity.piExecution
+        if activity.hasPersistableContent {
             try target.persistToolActivity(activity)
             try target.persistAttachments(activity.attachmentPaths)
         }
@@ -1111,7 +1122,8 @@ final class ChatRepository {
             inputTokens: synthUsage?.inputTokens,
             outputTokens: synthUsage?.outputTokens,
             cost: cost,
-            error: nil
+            error: nil,
+            piExecution: session.toolActivity?.piExecution
         )
 
         await recordTokenUsageIfAvailable(
@@ -1810,6 +1822,9 @@ final class ChatRepository {
                 text: responseText,
                 configuredEndSignal: autoConversation.endSignal
             )
+            let piExecutionJSON = try response.piExecution.map {
+                String(decoding: try JSONEncoder().encode($0), as: UTF8.self)
+            }
             _ = try conversations.insertAutoConversationMessage(
                 AutoConversationMessage(
                     autoConversationId: autoConversationId,
@@ -1817,7 +1832,8 @@ final class ChatRepository {
                     content: responseText,
                     reasoning: reasoning?.isEmpty == true ? nil : reasoning,
                     turnNumber: nextTurn,
-                    isEndSignal: hasEndSignal
+                    isEndSignal: hasEndSignal,
+                    piExecutionJSON: piExecutionJSON
                 )
             )
 
@@ -2151,17 +2167,26 @@ final class ChatRepository {
             let response = try await generateNonStreamingResponse(
                 request: request,
                 provider: provider,
-                onToolActivity: { event in
-                    activityState.apply(event)
-                    onToolActivity?(event)
+                onStreamEvent: { event in
+                    switch event {
+                    case let .toolActivity(toolEvent):
+                        activityState.apply(toolEvent)
+                        onToolActivity?(toolEvent)
+                    case let .executionSnapshot(execution):
+                        activityState.setExecution(execution)
+                    case .textDelta, .reasoningDelta, .completed:
+                        break
+                    }
                 }
             )
+            var activity = response.toolActivity ?? activityState.snapshot() ?? ToolActivityPayload()
+            activity.piExecution = response.piExecution ?? activity.piExecution
             return DualSideResult(
                 text: response.text,
                 reasoning: response.reasoningSummary,
                 usage: response.usage,
                 usageSamples: response.usageSamples,
-                toolActivity: response.toolActivity ?? activityState.snapshot(),
+                toolActivity: activity.hasPersistableContent ? activity : nil,
                 error: nil
             )
         } catch {
@@ -2180,15 +2205,12 @@ final class ChatRepository {
     private func generateNonStreamingResponse(
         request: ProviderRequest,
         provider: String,
-        onToolActivity: (@Sendable (ToolActivityEvent) -> Void)? = nil
+        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil
     ) async throws -> ProviderResponse {
         try await providers.generate(
             request: request,
             providerID: provider,
-            onStreamEvent: { event in
-                guard case let .toolActivity(activity) = event else { return }
-                onToolActivity?(activity)
-            }
+            onStreamEvent: onStreamEvent
         )
     }
 
@@ -2387,7 +2409,13 @@ private final class DualToolActivityState: @unchecked Sendable {
         lock.lock()
         let value = activity
         lock.unlock()
-        return value.steps.isEmpty ? nil : value
+        return value.hasPersistableContent ? value : nil
+    }
+
+    func setExecution(_ execution: JSONValue) {
+        lock.lock()
+        activity.piExecution = execution
+        lock.unlock()
     }
 
     func failRunning() -> ToolActivityPayload? {
@@ -2395,7 +2423,7 @@ private final class DualToolActivityState: @unchecked Sendable {
         activity.failRunning(message: L10n.text("ツールの実行が中断されました"))
         let value = activity
         lock.unlock()
-        return value.steps.isEmpty ? nil : value
+        return value.hasPersistableContent ? value : nil
     }
 }
 

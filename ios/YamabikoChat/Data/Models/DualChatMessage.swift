@@ -85,7 +85,7 @@ struct DualChatMessage: Codable, FetchableRecord, MutablePersistableRecord, Iden
     var modelBToolActivity: ToolActivityPayload? { Self.decodeToolActivity(modelBToolActivityJSON) }
 
     static func encodeToolActivity(_ payload: ToolActivityPayload?) -> String? {
-        guard let payload, !payload.steps.isEmpty, let data = try? JSONEncoder().encode(payload) else { return nil }
+        guard let payload, payload.hasPersistableContent, let data = try? JSONEncoder().encode(payload) else { return nil }
         return String(decoding: data, as: UTF8.self)
     }
 

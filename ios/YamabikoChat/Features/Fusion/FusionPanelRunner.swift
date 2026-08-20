@@ -81,7 +81,8 @@ enum FusionPanelRunner {
                 toolCalls: response.toolCalls.isEmpty ? nil : response.toolCalls,
                 toolActivity: response.toolActivity ?? activityState.snapshot(),
                 finishReason: nil,
-                role: panel.role
+                role: panel.role,
+                piExecution: response.piExecution
             )
         } catch {
             let latencyMs = Int64(Date().timeIntervalSince(started) * 1000)
@@ -102,7 +103,8 @@ enum FusionPanelRunner {
                 toolCalls: nil,
                 toolActivity: failedActivity,
                 finishReason: nil,
-                role: panel.role
+                role: panel.role,
+                piExecution: nil
             )
         }
     }
@@ -122,7 +124,7 @@ private final class FusionPanelActivityState: @unchecked Sendable {
         lock.lock()
         let value = activity
         lock.unlock()
-        return value.steps.isEmpty ? nil : value
+        return value.hasPersistableContent ? value : nil
     }
 
     func failRunning() -> ToolActivityPayload? {
@@ -130,7 +132,7 @@ private final class FusionPanelActivityState: @unchecked Sendable {
         activity.failRunning(message: L10n.text("ツールの実行が中断されました"))
         let value = activity
         lock.unlock()
-        return value.steps.isEmpty ? nil : value
+        return value.hasPersistableContent ? value : nil
     }
 }
 

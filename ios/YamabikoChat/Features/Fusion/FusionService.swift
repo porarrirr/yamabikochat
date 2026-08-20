@@ -87,7 +87,8 @@ final class FusionService {
             inputTokens: usage?.inputTokens,
             outputTokens: usage?.outputTokens,
             cost: cost,
-            error: nil
+            error: nil,
+            piExecution: response.piExecution
         )
         let trace = orchestrator.finalizeTrace(
             trace: outcome.trace,
@@ -303,8 +304,14 @@ final class FusionService {
                 request: currentRequest,
                 providerID: provider,
                 onStreamEvent: { event in
-                    guard case let .toolActivity(toolEvent) = event else { return }
-                    onToolActivity?(activityAccumulator.apply(toolEvent))
+                    switch event {
+                    case let .toolActivity(toolEvent):
+                        onToolActivity?(activityAccumulator.apply(toolEvent))
+                    case let .executionSnapshot(execution):
+                        onToolActivity?(activityAccumulator.setExecution(execution))
+                    case .textDelta, .reasoningDelta, .completed:
+                        break
+                    }
                 }
             )
 
@@ -375,6 +382,14 @@ private final class FusionToolActivityAccumulator: @unchecked Sendable {
     func apply(_ event: ToolActivityEvent) -> ToolActivityPayload {
         lock.lock()
         payload.apply(event)
+        let value = payload
+        lock.unlock()
+        return value
+    }
+
+    func setExecution(_ execution: JSONValue) -> ToolActivityPayload {
+        lock.lock()
+        payload.piExecution = execution
         let value = payload
         lock.unlock()
         return value

@@ -288733,7 +288733,23 @@ function timeoutMs(request) {
   const milliseconds = Number(request.timeoutInterval) * 1e3;
   return Number.isFinite(milliseconds) && milliseconds > 0 && milliseconds <= 2147483647 ? milliseconds : void 0;
 }
-function standardStreamFunction(request, config, report) {
+function exportableProviderPayload(value2) {
+  const seen = /* @__PURE__ */ new WeakSet();
+  return JSON.parse(JSON.stringify(value2, (key, nested) => {
+    const normalizedKey = key.toLowerCase();
+    if (["apikey", "api_key", "authorization", "accesstoken", "access_token", "credential"].includes(normalizedKey)) {
+      return "[REDACTED]";
+    }
+    if (normalizedKey === "abortsignal" || normalizedKey === "signal") return void 0;
+    if (typeof nested === "function") return void 0;
+    if (nested && typeof nested === "object") {
+      if (seen.has(nested)) return "[CIRCULAR]";
+      seen.add(nested);
+    }
+    return nested;
+  }));
+}
+function standardStreamFunction(request, config, report, captureProviderRequest) {
   return (model, context, options = {}) => runtimeModels.streamSimple(model, context, {
     ...options,
     apiKey: config.apiKey,
@@ -288747,6 +288763,7 @@ function standardStreamFunction(request, config, report) {
     sessionId: request.metadata?.promptCacheKey || request.metadata?.codexSessionId,
     onPayload: (payload) => {
       const mutated = mutatePayload(payload, request, config);
+      captureProviderRequest(exportableProviderPayload(mutated));
       report("provider_request", "Pi provider request payload prepared", {
         api: config.api,
         provider: config.provider,
@@ -288852,8 +288869,41 @@ function finalResponse(assistants, contextUsage) {
     toolCalls
   };
 }
+function piExecutionSnapshot({ agent, effectiveRequest, providerRequests, resolution, startedAtMs, failure = null }) {
+  return {
+    format: "yamabiko.pi-agent-execution",
+    version: 1,
+    runtimeContractVersion: RUNTIME_CONTRACT_VERSION,
+    startedAtMs,
+    completedAtMs: Date.now(),
+    resolution,
+    request: exportableProviderPayload(effectiveRequest),
+    state: exportableProviderPayload({
+      systemPrompt: agent.state.systemPrompt,
+      model: {
+        id: agent.state.model.id,
+        name: agent.state.model.name,
+        api: agent.state.model.api,
+        provider: agent.state.model.provider,
+        baseUrl: agent.state.model.baseUrl,
+        reasoning: agent.state.model.reasoning,
+        input: agent.state.model.input,
+        contextWindow: agent.state.model.contextWindow,
+        maxTokens: agent.state.model.maxTokens
+      },
+      thinkingLevel: agent.state.thinkingLevel,
+      messages: agent.state.messages,
+      streamingMessage: agent.state.streamingMessage,
+      errorMessage: agent.state.errorMessage
+    }),
+    providerRequests,
+    failure,
+    redactions: ["API keys, authorization values, credentials, access tokens, and abort signals"]
+  };
+}
 async function runAgent(envelope, res) {
   const { runId, request, config } = envelope;
+  const startedAtMs = Date.now();
   const { model, resolution } = resolveModel(config);
   const resolvedConfig = { ...config, api: model.api, provider: model.provider, model: model.id };
   const report = (stage, message, metadata) => diagnostic(res, runId, stage, message, metadata);
@@ -288872,6 +288922,7 @@ async function runAgent(envelope, res) {
     throw new Error(`Model does not support image input: ${model.provider}/${model.id}`);
   }
   const effectiveRequest = resolution.toolCall ? request : { ...request, tools: [] };
+  const providerRequests = [];
   const agent = new Agent({
     initialState: {
       systemPrompt: request.systemPrompt || "",
@@ -288880,7 +288931,13 @@ async function runAgent(envelope, res) {
       tools: makeTools(effectiveRequest, runId, res),
       messages: messagesFrom(effectiveRequest, model)
     },
-    streamFn: standardStreamFunction(effectiveRequest, resolvedConfig, report),
+    streamFn: standardStreamFunction(effectiveRequest, resolvedConfig, report, (payload) => {
+      providerRequests.push({
+        step: providerRequests.length + 1,
+        capturedAtMs: Date.now(),
+        payload
+      });
+    }),
     toolExecution: "sequential",
     maxRetryDelayMs: 6e4
   });
@@ -288925,9 +288982,30 @@ async function runAgent(envelope, res) {
     const contextWindow = model.contextWindow || null;
     const contextEstimate = contextWindow && last?.usage ? { tokens: last.usage.totalTokens, contextWindow } : null;
     const response = finalResponse(runAssistants, contextEstimate);
+    response.piExecution = piExecutionSnapshot({
+      agent,
+      effectiveRequest,
+      providerRequests,
+      resolution,
+      startedAtMs
+    });
     report("agent_complete", "Pi agent execution completed");
     send(res, { type: "completed", response });
   } catch (error) {
+    send(res, {
+      type: "execution_snapshot",
+      execution: piExecutionSnapshot({
+        agent,
+        effectiveRequest,
+        providerRequests,
+        resolution,
+        startedAtMs,
+        failure: {
+          name: error?.name || "Error",
+          message: error?.message || String(error)
+        }
+      })
+    });
     report("agent_error", "Pi agent execution failed", {
       errorName: error?.name || "Error",
       errorMessage: error?.message || String(error)
