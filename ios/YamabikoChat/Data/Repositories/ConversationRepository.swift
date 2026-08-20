@@ -93,6 +93,16 @@ final class ConversationRepository: @unchecked Sendable {
         }
     }
 
+    func conversationIDs(projectId: Int64) throws -> [Int64] {
+        try dbQueue.read { db in
+            try Int64.fetchAll(
+                db,
+                sql: "SELECT id FROM conversations WHERE projectId = ?",
+                arguments: [projectId]
+            )
+        }
+    }
+
     func deleteProject(id: Int64) throws {
         try dbQueue.write { db in
             let deleted = try ChatProject.deleteOne(db, key: id)

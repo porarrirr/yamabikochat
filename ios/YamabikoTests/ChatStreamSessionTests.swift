@@ -115,7 +115,8 @@ final class ChatStreamSessionTests: XCTestCase {
             callId: call.id,
             name: call.name,
             content: #"{"results":[]}"#,
-            sources: []
+            sources: [],
+            artifacts: [ToolArtifact(path: "/tmp/generated.png", name: "generated.png", mime: "image/png", size: 12)]
         )
         let snapshots = StreamingSnapshotCollector()
         let stream = AsyncThrowingStream<ProviderStreamEvent, Error> { continuation in
@@ -134,7 +135,10 @@ final class ChatStreamSessionTests: XCTestCase {
         )
 
         XCTAssertTrue(snapshots.values.contains { $0.toolActivity?.steps.first?.status == .running })
-        XCTAssertEqual(try conversations.fetchFullMessage(id: messageId)?.toolActivity?.steps.first?.status, .completed)
+        let persisted = try conversations.fetchFullMessage(id: messageId)
+        XCTAssertEqual(persisted?.toolActivity?.steps.first?.status, .completed)
+        let attachmentData = try XCTUnwrap(persisted?.displayAttachmentsJSON.data(using: .utf8))
+        XCTAssertEqual(try JSONDecoder().decode([String].self, from: attachmentData), ["/tmp/generated.png"])
     }
 
     private func makeConversations() throws -> ConversationRepository {

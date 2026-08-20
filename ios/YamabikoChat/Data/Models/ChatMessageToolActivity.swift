@@ -75,6 +75,28 @@ struct ToolActivityEvent: Sendable, Equatable {
 struct ToolActivityPayload: Codable, Sendable, Equatable {
     var steps: [ToolActivityStep] = []
     var providerTranscript: [ProviderRequestMessage] = []
+    var attachmentPaths: [String] = []
+
+    init(
+        steps: [ToolActivityStep] = [],
+        providerTranscript: [ProviderRequestMessage] = [],
+        attachmentPaths: [String] = []
+    ) {
+        self.steps = steps
+        self.providerTranscript = providerTranscript
+        self.attachmentPaths = attachmentPaths
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case steps, providerTranscript, attachmentPaths
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        steps = try container.decodeIfPresent([ToolActivityStep].self, forKey: .steps) ?? []
+        providerTranscript = try container.decodeIfPresent([ProviderRequestMessage].self, forKey: .providerTranscript) ?? []
+        attachmentPaths = try container.decodeIfPresent([String].self, forKey: .attachmentPaths) ?? []
+    }
 
     mutating func apply(_ event: ToolActivityEvent) {
         var step = Self.step(for: event)
@@ -88,6 +110,9 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
         steps.sort { $0.round < $1.round }
 
         guard event.phase == .finished, let result = event.result else { return }
+        for path in result.artifacts.map(\.path) where !attachmentPaths.contains(path) {
+            attachmentPaths.append(path)
+        }
         providerTranscript.removeAll { message in
             message.toolCallId == event.call.id || message.toolCalls?.contains(where: { $0.id == event.call.id }) == true
         }
@@ -119,14 +144,19 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
         let rawURL = arguments?["url"] as? String
         let host = rawURL.flatMap { URL(string: $0)?.host }
         let isSearch = event.call.name == WebSearchTool.name
-        let title = isSearch ? L10n.text("Webを検索") : L10n.text("ページを確認")
-        let detail = isSearch ? (query?.trimmedNonEmpty ?? L10n.text("検索語を確認中")) :
-            [host, goal?.trimmedNonEmpty].compactMap { $0 }.joined(separator: " — ").trimmedNonEmpty ?? L10n.text("ページを確認中")
+        let isPython = event.call.name == PythonExecuteTool.name
+        let code = (arguments?["code"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = isPython ? L10n.text("Pythonを実行") : (isSearch ? L10n.text("Webを検索") : L10n.text("ページを確認"))
+        let detail = isPython
+            ? (code?.trimmedNonEmpty ?? L10n.text("コードを確認中"))
+            : (isSearch ? (query?.trimmedNonEmpty ?? L10n.text("検索語を確認中")) :
+                [host, goal?.trimmedNonEmpty].compactMap { $0 }.joined(separator: " — ").trimmedNonEmpty ?? L10n.text("ページを確認中"))
         let result = event.result
         let resultObject = result.flatMap { jsonObject($0.content) }
         let resultCount = (resultObject?["results"] as? [Any])?.count
+        let nestedError = (resultObject?["error"] as? [String: Any])?["message"] as? String
         let error = result?.isError == true
-            ? ((resultObject?["error"] as? String)?.trimmedNonEmpty ?? L10n.text("ツールの実行に失敗しました"))
+            ? (nestedError?.trimmedNonEmpty ?? (resultObject?["error"] as? String)?.trimmedNonEmpty ?? L10n.text("ツールの実行に失敗しました"))
             : nil
         let sources = deduplicatedSources(result?.sources ?? [])
         return ToolActivityStep(

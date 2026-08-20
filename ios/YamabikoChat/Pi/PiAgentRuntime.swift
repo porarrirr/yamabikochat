@@ -469,9 +469,23 @@ actor PiAgentRuntime {
                                 throw ProviderClientError.parseFailure("Pi emitted an invalid tool request")
                             }
                             let arguments = Self.jsonString(event.arguments ?? .object([:]))
-                            let call = ToolCall(id: callID, name: name, argumentsJSON: arguments)
+                            var providerMetadata: [String: String]?
+                            if name == PythonExecuteTool.name {
+                                let attachmentPaths = request.messages.flatMap(\.attachments)
+                                let attachmentsData = try JSONEncoder().encode(attachmentPaths)
+                                providerMetadata = ["pythonAttachmentsJSON": String(decoding: attachmentsData, as: UTF8.self)]
+                                if let sessionID = request.metadata["pythonSessionId"]?.trimmedNonEmpty {
+                                    providerMetadata?["pythonSessionId"] = sessionID
+                                }
+                            }
+                            let call = ToolCall(
+                                id: callID,
+                                name: name,
+                                argumentsJSON: arguments,
+                                providerMetadata: providerMetadata
+                            )
                             let createdAtMs = event.timeMs ?? nowMs()
-                            let reportsActivity = name == WebSearchTool.name || name == FetchUrlTool.name
+                            let reportsActivity = name == WebSearchTool.name || name == FetchUrlTool.name || name == PythonExecuteTool.name
                             if reportsActivity {
                                 continuation.yield(.toolActivity(ToolActivityEvent(
                                     phase: .started,
@@ -622,7 +636,19 @@ actor PiAgentRuntime {
     }
 
     private static func makeRequest(_ request: ProviderRequest) throws -> PiRequest {
-        PiRequest(
+        let attachmentNames = Array(Set(request.messages.flatMap(\.attachments).map {
+            attachmentFileURL(from: $0).lastPathComponent
+        })).sorted()
+        var requestTools = request.tools
+        if !attachmentNames.isEmpty,
+           let index = requestTools.firstIndex(where: { $0.payload["name"] == PythonExecuteTool.name }) {
+            let existing = requestTools[index].payload["description"] ?? ""
+            requestTools[index].payload["description"] = existing
+                + " Files available in this chat workspace: "
+                + attachmentNames.joined(separator: ", ")
+                + "."
+        }
+        return PiRequest(
             messages: try request.messages.map { message in
                 PiMessage(
                     role: message.role,
@@ -636,7 +662,7 @@ actor PiAgentRuntime {
                 )
             },
             systemPrompt: request.systemPrompt,
-            tools: request.tools,
+            tools: requestTools,
             thinking: request.thinking,
             provider: request.provider,
             metadata: request.metadata,

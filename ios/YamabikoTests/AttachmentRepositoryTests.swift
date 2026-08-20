@@ -19,6 +19,19 @@ final class AttachmentRepositoryTests: XCTestCase {
         XCTAssertEqual(persistedText, text)
     }
 
+    func testPersistGeneratedFileSanitizesNameAndWritesBytes() throws {
+        let repository = AttachmentRepository()
+        let payload = Data("generated".utf8)
+        let persisted = try repository.persistGeneratedFile(
+            data: payload,
+            filename: "plot unsafe.png"
+        )
+        defer { try? FileManager.default.removeItem(at: persisted) }
+
+        XCTAssertEqual(try Data(contentsOf: persisted), payload)
+        XCTAssertTrue(persisted.lastPathComponent.hasSuffix("_plot_unsafe.png"))
+    }
+
     func testRejectsDangerousExtension() throws {
         let repo = AttachmentRepository()
         let dir = FileManager.default.temporaryDirectory

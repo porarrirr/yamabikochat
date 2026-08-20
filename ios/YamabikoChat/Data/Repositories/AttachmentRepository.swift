@@ -9,7 +9,7 @@ enum AttachmentValidationResult: Equatable {
     case unreadable
 }
 
-final class AttachmentRepository {
+final class AttachmentRepository: @unchecked Sendable {
     private let fileManager: FileManager
 
     init(fileManager: FileManager = .default) {

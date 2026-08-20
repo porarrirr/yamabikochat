@@ -60,6 +60,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var isStreamingEnabled: Bool
     var mathRenderingEnabled: Bool
     var clientWebSearchToolEnabled: Bool
+    var pythonToolEnabled: Bool
 
     var dynamicColorEnabled: Bool
     var themeColor: String
@@ -214,6 +215,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         isStreamingEnabled = true
         mathRenderingEnabled = true
         clientWebSearchToolEnabled = false
+        pythonToolEnabled = false
 
         dynamicColorEnabled = true
         themeColor = "BLUE_PURPLE"

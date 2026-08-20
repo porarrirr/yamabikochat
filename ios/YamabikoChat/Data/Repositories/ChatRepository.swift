@@ -193,15 +193,23 @@ final class ChatRepository {
 
     func deleteConversation(id: Int64) throws {
         try conversations.deleteConversation(id: id)
+        Task { await PythonWorker.shared.discard(sessionID: String(id)) }
     }
 
     func deleteConversations(ids: Set<Int64>) throws {
         try conversations.deleteConversations(ids: ids)
+        for id in ids {
+            Task { await PythonWorker.shared.discard(sessionID: String(id)) }
+        }
     }
 
     @discardableResult
     func deleteSecretConversationIfNeeded(id: Int64) throws -> Bool {
-        try conversations.deleteSecretConversationIfNeeded(id: id)
+        let deleted = try conversations.deleteSecretConversationIfNeeded(id: id)
+        if deleted {
+            Task { await PythonWorker.shared.discard(sessionID: String(id)) }
+        }
+        return deleted
     }
 
     func purgeSecretConversations() throws {
@@ -213,7 +221,11 @@ final class ChatRepository {
         case .projectOnly:
             try conversations.deleteProject(id: id)
         case .withConversations:
+            let conversationIDs = try conversations.conversationIDs(projectId: id)
             try conversations.deleteProjectWithConversations(id: id)
+            for conversationID in conversationIDs {
+                Task { await PythonWorker.shared.discard(sessionID: String(conversationID)) }
+            }
         }
     }
 
@@ -635,6 +647,7 @@ final class ChatRepository {
         }
         metadata["provider"] = conversation.apiProvider
         metadata["promptCacheKey"] = "conversation-\(conversationId)"
+        metadata["pythonSessionId"] = String(conversationId)
         metadata["supportsVision"] = await visionMetadataFlag(
             provider: conversation.apiProvider,
             model: conversation.model
@@ -745,6 +758,7 @@ final class ChatRepository {
         )
         if let activity = response.toolActivity, !activity.steps.isEmpty {
             try target.persistToolActivity(activity)
+            try target.persistAttachments(activity.attachmentPaths)
         }
     }
 
@@ -2072,6 +2086,9 @@ final class ChatRepository {
         metadata["provider"] = provider
         if let promptCacheKey = promptCacheKey?.trimmingCharacters(in: .whitespacesAndNewlines), !promptCacheKey.isEmpty {
             metadata["promptCacheKey"] = promptCacheKey
+            if promptCacheKey.hasPrefix("conversation-") {
+                metadata["pythonSessionId"] = String(promptCacheKey.dropFirst("conversation-".count))
+            }
         }
         metadata["supportsVision"] = await visionMetadataFlag(provider: provider, model: model)
         let baseMessages = messages ?? [ProviderRequestMessage(role: "user", content: text)]

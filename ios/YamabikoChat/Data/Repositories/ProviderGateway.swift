@@ -30,7 +30,7 @@ final class ProviderGateway {
         codexAuthRepository: CodexAuthRepository? = nil,
         superGrokAuthRepository: SuperGrokAuthRepository? = nil,
         modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
-        localTools: LocalToolRegistry = LocalToolRegistry(executors: [WebSearchTool(), FetchUrlTool()]),
+        localTools: LocalToolRegistry = LocalToolRegistry(executors: [WebSearchTool(), FetchUrlTool(), PythonExecuteTool()]),
         piStream: @escaping PiAgentStream = { request, configuration, tools in
             try await PiAgentRuntime.shared.stream(
                 request: request,

@@ -34,6 +34,11 @@ final class AppServices {
         settingsRepository = SettingsRepository(dbQueue: dbQueue)
         conversationRepository = ConversationRepository(dbQueue: dbQueue)
         attachmentRepository = AttachmentRepository()
+        do {
+            try PythonSessionStore.shared.purgeAll()
+        } catch {
+            DiagnosticsLogger.log("Python session cleanup failed", category: .app, error: error)
+        }
         skillRepository = AgentSkillRepository()
         openRouterModelService = OpenRouterModelService(credentialStore: credentialStore)
         Task { [openRouterModelService] in
@@ -43,11 +48,12 @@ final class AppServices {
         // appended by the resolver itself; the Pi runtime registry below includes
         // their executors so `activate_skill` / `read_skill_resource` calls can be
         // dispatched without sending duplicate tool definitions to providers.
+        let pythonTool = PythonExecuteTool(attachments: attachmentRepository)
         let clientWebTools = LocalToolRegistry(
-            executors: [WebSearchTool(), FetchUrlTool()]
+            executors: [WebSearchTool(), FetchUrlTool(), pythonTool]
         )
         let localTools = LocalToolRegistry(
-            executors: [WebSearchTool(), FetchUrlTool()] + AgentSkillTools.executors(repository: skillRepository)
+            executors: [WebSearchTool(), FetchUrlTool(), pythonTool] + AgentSkillTools.executors(repository: skillRepository)
         )
         modelsDevCatalogRepository = ModelsDevCatalogRepository()
         let modelsDevCredentials = credentialStore

@@ -45,6 +45,15 @@ enum ProviderRequestToolScope: Sendable, Equatable {
             return false
         }
     }
+
+    var allowsClientPython: Bool {
+        switch self {
+        case .all:
+            return true
+        case .providerOnly, .fusionPanel, .none:
+            return false
+        }
+    }
 }
 
 struct ProviderRequestResolvedSettings: Sendable, Equatable {
@@ -68,7 +77,7 @@ final class ProviderRequestSettingsResolver {
         skillRepository: AgentSkillRepository = AgentSkillRepository(),
         modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
         localToolRegistry: LocalToolRegistry = LocalToolRegistry(
-            executors: [WebSearchTool(), FetchUrlTool()]
+            executors: [WebSearchTool(), FetchUrlTool(), PythonExecuteTool()]
         ),
         modelsDevReasoningEffort: @escaping (String, String) -> String? = { _, _ in nil }
     ) {
@@ -192,7 +201,15 @@ final class ProviderRequestSettingsResolver {
         if toolScope.allowsClientWebSearch,
            settings.clientWebSearchToolEnabled,
            supportsClientWebSearch {
-            tools.append(contentsOf: localToolRegistry.definitions.map(\.providerTool))
+            tools.append(contentsOf: localToolRegistry.definitions
+                .filter { $0.name == WebSearchTool.name || $0.name == FetchUrlTool.name }
+                .map(\.providerTool))
+        }
+        if toolScope.allowsClientPython,
+           settings.pythonToolEnabled,
+           supportsClientWebSearch,
+           let definition = localToolRegistry.definitions.first(where: { $0.name == PythonExecuteTool.name }) {
+            tools.append(definition.providerTool)
         }
         if toolScope.allowsAgentSkills, supportsClientWebSearch {
             tools.append(contentsOf: AgentSkillTools.definitions(repository: skillRepository).map(\.providerTool))

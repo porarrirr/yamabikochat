@@ -27,7 +27,10 @@ targets:
       - path: YamabikoChat
         excludes:
           - Extensions
+          - Python/Resources
       - path: PiRuntime/bundle/main.js
+        buildPhase: resources
+      - path: YamabikoChat/Python/Resources/yamabiko_runtime.py
         buildPhase: resources
     resources:
       - path: YamabikoChat/App/Resources
@@ -41,6 +44,10 @@ targets:
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       SWIFT_OBJC_BRIDGING_HEADER: YamabikoChat/Pi/YamabikoChat-Bridging-Header.h
       ENABLE_BITCODE: NO
+      ENABLE_USER_SCRIPT_SANDBOXING: NO
+      CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER: NO
+      HEADER_SEARCH_PATHS:
+        - "$(BUILT_PRODUCTS_DIR)/Python.framework/Headers"
       EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
     dependencies:
       - package: GRDB
@@ -48,11 +55,17 @@ targets:
       - package: ZIPFoundation
       - framework: Vendor/NodeMobile.xcframework
         embed: true
+      - framework: Vendor/Python.xcframework
+        embed: true
       - target: YamabikoShareExtension
         embed: true
     preBuildScripts:
       - name: Copy legal notices
         script: scripts/copy-legal-notices.sh
+        basedOnDependencyAnalysis: false
+    postCompileScripts:
+      - name: Process Python libraries
+        script: scripts/process-python-libraries.sh
         basedOnDependencyAnalysis: false
     postBuildScripts:
       - name: Set build-time version

@@ -49,6 +49,10 @@ Pods/
 ios/Vendor/
 node_modules/
 
+# Python generated files
+__pycache__/
+*.py[cod]
+
 # IDE files
 .idea/
 .vscode/

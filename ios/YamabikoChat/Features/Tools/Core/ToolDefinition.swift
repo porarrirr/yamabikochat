@@ -76,20 +76,46 @@ struct ToolResult: Codable, Sendable, Equatable {
     var content: String
     var isError: Bool
     var sources: [ToolSource]
+    /// App-internal generated files. PiToolResultEnvelope deliberately omits
+    /// this field so binary paths never enter the model protocol.
+    var artifacts: [ToolArtifact]
 
     init(
         callId: String,
         name: String,
         content: String,
         isError: Bool = false,
-        sources: [ToolSource] = []
+        sources: [ToolSource] = [],
+        artifacts: [ToolArtifact] = []
     ) {
         self.callId = callId
         self.name = name
         self.content = content
         self.isError = isError
         self.sources = sources
+        self.artifacts = artifacts
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case callId, name, content, isError, sources, artifacts
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        callId = try container.decode(String.self, forKey: .callId)
+        name = try container.decode(String.self, forKey: .name)
+        content = try container.decode(String.self, forKey: .content)
+        isError = try container.decode(Bool.self, forKey: .isError)
+        sources = try container.decodeIfPresent([ToolSource].self, forKey: .sources) ?? []
+        artifacts = try container.decodeIfPresent([ToolArtifact].self, forKey: .artifacts) ?? []
+    }
+}
+
+struct ToolArtifact: Codable, Sendable, Equatable {
+    var path: String
+    var name: String
+    var mime: String
+    var size: Int64
 }
 
 extension Collection where Element == ProviderTool {

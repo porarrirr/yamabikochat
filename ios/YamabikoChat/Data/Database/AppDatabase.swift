@@ -122,6 +122,7 @@ enum AppDatabase {
                 t.column("isStreamingEnabled", .boolean).notNull().defaults(to: true)
                 t.column("mathRenderingEnabled", .boolean).notNull().defaults(to: true)
                 t.column("clientWebSearchToolEnabled", .boolean).notNull().defaults(to: false)
+                t.column("pythonToolEnabled", .boolean).notNull().defaults(to: false)
 
                 t.column("dynamicColorEnabled", .boolean).notNull().defaults(to: true)
                 t.column("themeColor", .text).notNull().defaults(to: "BLUE_PURPLE")
@@ -787,6 +788,16 @@ enum AppDatabase {
                 }
                 if !columns.contains("modelbtoolactivityjson") {
                     t.add(column: "modelBToolActivityJSON", .text)
+                }
+            }
+        }
+
+        migrator.registerMigration("v19_python_execute_tool") { db in
+            let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(settings)")
+            let columns = Set(rows.compactMap { ($0["name"] as String?)?.lowercased() })
+            if !columns.contains("pythontoolenabled") {
+                try db.alter(table: "settings") { t in
+                    t.add(column: "pythonToolEnabled", .boolean).notNull().defaults(to: false)
                 }
             }
         }

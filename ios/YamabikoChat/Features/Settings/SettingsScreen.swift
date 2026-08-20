@@ -226,6 +226,14 @@ struct SettingsScreen: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
+                Toggle(
+                    L10n.text("ローカルPython実行"),
+                    isOn: $viewModel.settings.pythonToolEnabled
+                )
+                Text(L10n.text("LLMが必要に応じて会話専用のPython 3.14環境でコードを実行します。ネットワーク、シェル、会話外のファイルにはアクセスできません。"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
                 if !LLMProvider(rawOrDefault: viewModel.settings.apiProvider).supportsClientWebSearchTool {
                     Text(L10n.text("現在のプロバイダーではこのツールは使用されません。"))
                         .font(.caption2)

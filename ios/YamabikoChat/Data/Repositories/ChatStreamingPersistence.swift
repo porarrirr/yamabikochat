@@ -94,6 +94,16 @@ struct ChatStreamSessionTarget {
             try conversations.saveToolActivity(messageId: nil, variantId: variantId, payload: payload)
         }
     }
+
+    func persistAttachments(_ paths: [String]) throws {
+        guard !paths.isEmpty else { return }
+        switch kind {
+        case let .message(messageId):
+            try conversations.appendAttachments(messageId: messageId, paths: paths)
+        case let .variant(variantId, _):
+            try conversations.appendAttachments(variantId: variantId, paths: paths)
+        }
+    }
 }
 
 struct ChatStreamSessionResult {
@@ -216,6 +226,9 @@ enum ChatStreamSession {
             )
         case let .toolActivity(event):
             toolActivity.apply(event)
+            if event.phase == .finished, let result = event.result {
+                try target.persistAttachments(result.artifacts.map(\.path))
+            }
             publishStreamingSnapshot(
                 targetId: target.snapshotMessageId,
                 coordinator: coordinator,

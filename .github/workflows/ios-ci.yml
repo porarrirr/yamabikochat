@@ -55,6 +55,7 @@ jobs:
           python3 scripts/check-opencode-go-contract.py
           git diff --exit-code -- ios/PiRuntime/bundle/main.js app/src/main/assets/pi-runtime/main.js
           (cd ios/PiRuntime && npm test)
+          python3 -m unittest ios/PythonTests/test_yamabiko_runtime.py
 
       - name: Build
         run: |

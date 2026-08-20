@@ -106,7 +106,7 @@ struct ToolActivityDisclosure: View {
             .padding(.top, 8)
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: isRunning ? "globe" : (hasFailure ? "exclamationmark.circle.fill" : "checkmark.circle.fill"))
+                Image(systemName: isRunning ? runningIcon : (hasFailure ? "exclamationmark.circle.fill" : "checkmark.circle.fill"))
                     .font(.caption)
                     .foregroundStyle(hasFailure && !isRunning ? Color.red : Color.secondary)
                 if isRunning {
@@ -117,7 +117,7 @@ struct ToolActivityDisclosure: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 } else {
-                    Text(L10n.format("Web検索・%dステップ", steps.count))
+                    Text(completedLabel)
                         .font(.caption)
                         .lineLimit(1)
                 }
@@ -125,12 +125,24 @@ struct ToolActivityDisclosure: View {
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
-        .accessibilityLabel(isRunning ? runningLabel : L10n.format("Web検索、%dステップ", steps.count))
+        .accessibilityLabel(isRunning ? runningLabel : completedLabel)
+    }
+
+    private var hasPython: Bool { steps.contains { $0.toolName == PythonExecuteTool.name } }
+
+    private var runningIcon: String {
+        currentStep?.toolName == PythonExecuteTool.name ? "chevron.left.forwardslash.chevron.right" : "globe"
+    }
+
+    private var completedLabel: String {
+        hasPython ? L10n.format("ツール実行・%dステップ", steps.count) : L10n.format("Web検索・%dステップ", steps.count)
     }
 
     private var runningLabel: String {
         guard let currentStep else { return L10n.text("検索中") }
-        let prefix = currentStep.toolName == FetchUrlTool.name ? L10n.text("確認中") : L10n.text("検索中")
+        let prefix = currentStep.toolName == PythonExecuteTool.name
+            ? L10n.text("Pythonを実行中")
+            : (currentStep.toolName == FetchUrlTool.name ? L10n.text("確認中") : L10n.text("検索中"))
         return "\(prefix)：\(currentStep.detail)"
     }
 

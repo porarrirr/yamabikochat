@@ -90,6 +90,37 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         XCTAssertFalse(resolved.tools.contains { $0.payload["name"] == FetchUrlTool.name })
     }
 
+    func testPythonToolIsAdvertisedIndependentlyForToolCallingModels() async throws {
+        let resolver = makeResolver()
+        var settings = AppSettings()
+        settings.clientWebSearchToolEnabled = false
+        settings.pythonToolEnabled = true
+
+        let resolved = try await resolver.resolve(
+            settings: settings,
+            provider: "GEMINI",
+            model: "gemini-2.5-flash"
+        )
+
+        XCTAssertTrue(resolved.tools.contains { $0.payload["name"] == PythonExecuteTool.name })
+        XCTAssertFalse(resolved.tools.containsWebSearchTool)
+    }
+
+    func testPythonToolIsOmittedFromFusionPanelScope() async throws {
+        let resolver = makeResolver()
+        var settings = AppSettings()
+        settings.pythonToolEnabled = true
+
+        let resolved = try await resolver.resolve(
+            settings: settings,
+            provider: "GEMINI",
+            model: "gemini-2.5-flash",
+            toolScope: .fusionPanel(allowWebSearch: true)
+        )
+
+        XCTAssertFalse(resolved.tools.contains { $0.payload["name"] == PythonExecuteTool.name })
+    }
+
     func testClientWebSearchToolsAreAvailableForEveryPiProvider() async throws {
         let resolver = makeResolver()
         var settings = AppSettings()
