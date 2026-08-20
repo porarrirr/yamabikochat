@@ -159,7 +159,6 @@ struct SvgPreviewWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let configuration = YamabikoWebKitSupport.makeConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
-        configuration.preferences.javaScriptEnabled = false
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isOpaque = false

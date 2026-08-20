@@ -131,7 +131,7 @@ enum DiagnosticsLogger {
         if manager.fileExists(atPath: url.path),
            let handle = try? FileHandle(forWritingTo: url) {
             defer { try? handle.close() }
-            try? handle.seekToEnd()
+            _ = try? handle.seekToEnd()
             if let data = text.data(using: .utf8) {
                 try? handle.write(contentsOf: data)
             }

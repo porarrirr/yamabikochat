@@ -2,11 +2,8 @@ import Foundation
 import WebKit
 
 enum YamabikoWebKitSupport {
-    static let sharedProcessPool = WKProcessPool()
-
     static func makeConfiguration(userContentController: WKUserContentController? = nil) -> WKWebViewConfiguration {
         let configuration = WKWebViewConfiguration()
-        configuration.processPool = sharedProcessPool
         if let userContentController {
             configuration.userContentController = userContentController
         }

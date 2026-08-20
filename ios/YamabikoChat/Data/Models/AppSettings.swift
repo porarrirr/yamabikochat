@@ -542,7 +542,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         autoProviderA = remapDualAutoProvider(autoProviderA)
         autoProviderB = remapDualAutoProvider(autoProviderB)
 
-        var models = providerModelMap()
+        let models = providerModelMap()
         var remappedModels: [String: String] = [:]
         let legacyRemovedKeys: Set<String> = ["GEMINI_AUTH", "QWEN_CODE"]
         for (key, value) in models {
@@ -558,7 +558,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             providerDefaultModelsJSON = json
         }
 
-        var visibility = showGlobalProviderPresetsInChatByProviderMap()
+        let visibility = showGlobalProviderPresetsInChatByProviderMap()
         var remappedVisibility: [String: Bool] = [:]
         for (key, value) in visibility {
             remappedVisibility[remap(key)] = value

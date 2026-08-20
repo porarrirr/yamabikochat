@@ -331,15 +331,14 @@ final class ChatViewModel: ObservableObject {
                         conversationId: conversationID,
                         text: text,
                         attachments: attachmentPaths,
-                        onFusionProgress: { [weak self] snapshot in
+                        onFusionProgress: { [self] snapshot in
                             Task { @MainActor in
-                                self?.fusionProgress = snapshot
+                                self.fusionProgress = snapshot
                             }
                         },
-                        onStreamEvent: { [weak self] event in
+                        onStreamEvent: { [self] event in
                             guard case let .reasoningDelta(delta) = event else { return }
                             Task { @MainActor in
-                                guard let self else { return }
                                 let reasoningStatus = delta.isEmpty ? nil : L10n.text("推論中...")
                                 self.fusionStreamingStatus = reasoningStatus
                                 if var progress = self.fusionProgress {
@@ -348,9 +347,9 @@ final class ChatViewModel: ObservableObject {
                                 }
                             }
                         },
-                        onStreamingSnapshot: { [weak self] snapshot in
+                        onStreamingSnapshot: { [self] snapshot in
                             Task { @MainActor in
-                                self?.handleStreamingSnapshot(snapshot)
+                                self.handleStreamingSnapshot(snapshot)
                             }
                         }
                     )
@@ -381,15 +380,15 @@ final class ChatViewModel: ObservableObject {
                         conversationId: conversationID,
                         text: text,
                         attachments: attachmentPaths,
-                        onStreamEvent: { [weak self] event in
+                        onStreamEvent: { [self] event in
                             guard case let .reasoningDelta(delta) = event else { return }
                             Task { @MainActor in
-                                self?.autoConversationStatus = delta.isEmpty ? self?.autoConversationStatus : L10n.text("推論中...")
+                                self.autoConversationStatus = delta.isEmpty ? self.autoConversationStatus : L10n.text("推論中...")
                             }
                         },
-                        onStreamingSnapshot: { [weak self] snapshot in
+                        onStreamingSnapshot: { [self] snapshot in
                             Task { @MainActor in
-                                self?.handleStreamingSnapshot(snapshot)
+                                self.handleStreamingSnapshot(snapshot)
                             }
                         }
                     )
@@ -486,15 +485,15 @@ final class ChatViewModel: ObservableObject {
             do {
                 _ = try await repository.regenerateLastAssistantVariant(
                     conversationId: conversationID,
-                    onStreamEvent: { [weak self] event in
+                    onStreamEvent: { [self] event in
                         guard case let .reasoningDelta(delta) = event else { return }
                         Task { @MainActor in
-                            self?.autoConversationStatus = delta.isEmpty ? self?.autoConversationStatus : L10n.text("推論中...")
+                            self.autoConversationStatus = delta.isEmpty ? self.autoConversationStatus : L10n.text("推論中...")
                         }
                     },
-                    onStreamingSnapshot: { [weak self] snapshot in
+                    onStreamingSnapshot: { [self] snapshot in
                         Task { @MainActor in
-                            self?.handleStreamingSnapshot(snapshot)
+                            self.handleStreamingSnapshot(snapshot)
                         }
                     }
                 )
@@ -1008,9 +1007,9 @@ final class ChatViewModel: ObservableObject {
             do {
                 try await repository.resumeAutoConversation(
                     autoConversationId: autoConversationId
-                ) { [weak self] turn, speaker, _ in
+                ) { [self] turn, speaker, _ in
                     Task { @MainActor in
-                        self?.autoConversationStatus = L10n.format("%dターン目: %@", turn, speaker)
+                        self.autoConversationStatus = L10n.format("%dターン目: %@", turn, speaker)
                     }
                 }
                 await MainActor.run {

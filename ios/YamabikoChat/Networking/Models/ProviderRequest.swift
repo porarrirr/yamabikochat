@@ -56,6 +56,17 @@ struct ProviderRequestMessage: Codable, Sendable, Equatable, Identifiable {
     var toolName: String?
     var toolResultIsError: Bool?
 
+    private enum CodingKeys: String, CodingKey {
+        case role
+        case content
+        case attachments
+        case reasoningContent
+        case toolCalls
+        case toolCallId
+        case toolName
+        case toolResultIsError
+    }
+
     init(
         role: String,
         content: String,

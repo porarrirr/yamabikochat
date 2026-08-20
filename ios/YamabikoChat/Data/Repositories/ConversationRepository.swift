@@ -2,7 +2,8 @@ import Foundation
 import Combine
 import GRDB
 
-final class ConversationRepository {
+// DatabaseQueue serializes database access and is safe to share across tasks.
+final class ConversationRepository: @unchecked Sendable {
     private let dbQueue: DatabaseQueue
 
     init(dbQueue: DatabaseQueue) {
@@ -522,7 +523,7 @@ final class ConversationRepository {
 
     func updateMessage(_ message: ChatMessage) throws {
         try dbQueue.write { db in
-            var mutable = message
+            let mutable = message
             try mutable.update(db)
         }
     }
@@ -733,7 +734,7 @@ final class ConversationRepository {
 
     func updateDualMessage(_ message: DualChatMessage) throws {
         try dbQueue.write { db in
-            var mutable = message
+            let mutable = message
             try mutable.update(db)
             try touchConversation(db: db, conversationId: mutable.conversationId)
         }
