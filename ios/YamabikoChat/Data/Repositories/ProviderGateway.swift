@@ -9,6 +9,12 @@ typealias PiAgentStream = @Sendable (
 /// The single LLM execution boundary. Every network-backed provider is normalized into a
 /// Pi model and executed by the bundled `pi-agent-core` runtime.
 final class ProviderGateway {
+    static let openRouterAttributionHeaders = [
+        "HTTP-Referer": "https://apps.apple.com/jp/app/yamabikochat-ai%E3%83%81%E3%83%A3%E3%83%83%E3%83%88/id6771687018",
+        "X-OpenRouter-Title": "YamabikoChat iOS",
+        "X-Title": "YamabikoChat iOS"
+    ]
+
     private let settingsRepository: SettingsRepository
     private let credentialStore: SecureCredentialStore
     private let piStream: PiAgentStream
@@ -191,10 +197,7 @@ final class ProviderGateway {
         case .openRouter:
             piProvider = "openrouter"
             apiKey = try credential(.openRouter)
-            headers = [
-                "HTTP-Referer": "https://apps.apple.com/jp/app/yamabikochat-ai%E3%83%81%E3%83%A3%E3%83%83%E3%83%88/id6771687018",
-                "X-Title": "YamabikoChat iOS"
-            ]
+            headers = Self.openRouterAttributionHeaders
         case .openAI:
             piProvider = "openai"
             apiKey = try credential(.openAI)

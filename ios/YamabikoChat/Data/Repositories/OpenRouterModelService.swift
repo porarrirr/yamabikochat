@@ -458,10 +458,12 @@ final class OpenRouterModelService {
         var headers: [String: String] = [
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "HTTP-Referer": "https://apps.apple.com/jp/app/yamabikochat-ai%E3%83%81%E3%83%A3%E3%83%83%E3%83%88/id6771687018",
-            "X-Title": "YamabikoChat iOS",
             "User-Agent": "YamabikoChat-iOS/1.0"
         ]
+        headers.merge(
+            ProviderGateway.openRouterAttributionHeaders,
+            uniquingKeysWith: { _, attributionValue in attributionValue }
+        )
 
         if let key = try credentialStore.credential(for: .openRouter), !key.isEmpty {
             headers["Authorization"] = "Bearer \(key)"

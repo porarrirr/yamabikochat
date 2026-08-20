@@ -126,6 +126,35 @@ final class PiAgentGatewayTests: XCTestCase {
         }
     }
 
+    func testOpenRouterPassesYamabikoAttributionHeadersToPi() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.setCredential("test-openrouter-key", for: .openRouter)
+        let pi = PiStreamSpy()
+        let gateway = ProviderGateway(
+            settingsRepository: SettingsRepository(dbQueue: database),
+            credentialStore: credentials,
+            piStream: pi.stream
+        )
+
+        _ = try await gateway.stream(
+            request: ProviderRequest(
+                model: "nvidia/nemotron-nano-9b-v2:free",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")]
+            ),
+            provider: .openRouter
+        )
+
+        let headers = try XCTUnwrap(pi.calls.first?.configuration.headers)
+        XCTAssertEqual(
+            headers["HTTP-Referer"],
+            "https://apps.apple.com/jp/app/yamabikochat-ai%E3%83%81%E3%83%A3%E3%83%83%E3%83%88/id6771687018"
+        )
+        XCTAssertEqual(headers["X-OpenRouter-Title"], "YamabikoChat iOS")
+        XCTAssertEqual(headers["X-Title"], "YamabikoChat iOS")
+    }
+
     func testGeminiThinkingLevelIsPassedThroughPiConfiguration() async throws {
         let database = try DatabaseQueue()
         try AppDatabase.migrator.migrate(database)
