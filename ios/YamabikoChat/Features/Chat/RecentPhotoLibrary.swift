@@ -21,6 +21,27 @@ struct RecentPhotoItem: Identifiable, Equatable {
     }
 }
 
+enum RecentPhotoThumbnailResultDecision: Equatable {
+    case waitForFinalImage
+    case returnImage
+    case returnNil
+
+    static func resolve(
+        isCancelled: Bool,
+        isDegraded: Bool,
+        hasImage: Bool,
+        hasError: Bool
+    ) -> Self {
+        if isCancelled || hasError {
+            return .returnNil
+        }
+        if isDegraded {
+            return .waitForFinalImage
+        }
+        return hasImage ? .returnImage : .returnNil
+    }
+}
+
 struct RecentPhotoSelection: Equatable {
     let limit: Int
     private(set) var orderedIDs: [String] = []
@@ -86,8 +107,8 @@ final class RecentPhotoThumbnailCache {
 
         return await withCheckedContinuation { continuation in
             let options = PHImageRequestOptions()
-            options.deliveryMode = .opportunistic
-            options.resizeMode = .fast
+            options.deliveryMode = .highQualityFormat
+            options.resizeMode = .exact
             options.isNetworkAccessAllowed = true
 
             var didResume = false
@@ -99,25 +120,27 @@ final class RecentPhotoThumbnailCache {
             ) { [weak self] image, info in
                 let isCancelled = (info?[PHImageCancelledKey] as? NSNumber)?.boolValue ?? false
                 let isDegraded = (info?[PHImageResultIsDegradedKey] as? NSNumber)?.boolValue ?? false
-                if isCancelled {
+                let hasError = info?[PHImageErrorKey] != nil
+                let decision = RecentPhotoThumbnailResultDecision.resolve(
+                    isCancelled: isCancelled,
+                    isDegraded: isDegraded,
+                    hasImage: image != nil,
+                    hasError: hasError
+                )
+
+                switch decision {
+                case .waitForFinalImage:
+                    return
+                case .returnImage:
+                    guard let image, !didResume else { return }
+                    didResume = true
+                    self?.cache.setObject(image, forKey: key)
+                    continuation.resume(returning: image)
+                case .returnNil:
                     if !didResume {
                         didResume = true
                         continuation.resume(returning: nil)
                     }
-                    return
-                }
-
-                if let image {
-                    if !isDegraded {
-                        self?.cache.setObject(image, forKey: key)
-                    }
-                    if !didResume {
-                        didResume = true
-                        continuation.resume(returning: image)
-                    }
-                } else if !didResume {
-                    didResume = true
-                    continuation.resume(returning: nil)
                 }
             }
         }

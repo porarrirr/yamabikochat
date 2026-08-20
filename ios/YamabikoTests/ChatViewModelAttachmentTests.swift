@@ -152,3 +152,48 @@ final class RecentPhotoSelectionTests: XCTestCase {
         XCTAssertEqual(selection.count, 0)
     }
 }
+
+final class RecentPhotoThumbnailTests: XCTestCase {
+    func testDegradedImageWaitsForFinalResult() {
+        let decision = RecentPhotoThumbnailResultDecision.resolve(
+            isCancelled: false,
+            isDegraded: true,
+            hasImage: true,
+            hasError: false
+        )
+
+        XCTAssertEqual(decision, .waitForFinalImage)
+    }
+
+    func testFinalImageIsAcceptedAndTerminalFailuresReturnNil() {
+        let finalImageDecision = RecentPhotoThumbnailResultDecision.resolve(
+            isCancelled: false,
+            isDegraded: false,
+            hasImage: true,
+            hasError: false
+        )
+        let missingImageDecision = RecentPhotoThumbnailResultDecision.resolve(
+            isCancelled: false,
+            isDegraded: false,
+            hasImage: false,
+            hasError: false
+        )
+        let errorDecision = RecentPhotoThumbnailResultDecision.resolve(
+            isCancelled: false,
+            isDegraded: false,
+            hasImage: true,
+            hasError: true
+        )
+        let cancelledDecision = RecentPhotoThumbnailResultDecision.resolve(
+            isCancelled: true,
+            isDegraded: false,
+            hasImage: true,
+            hasError: false
+        )
+
+        XCTAssertEqual(finalImageDecision, .returnImage)
+        XCTAssertEqual(missingImageDecision, .returnNil)
+        XCTAssertEqual(errorDecision, .returnNil)
+        XCTAssertEqual(cancelledDecision, .returnNil)
+    }
+}

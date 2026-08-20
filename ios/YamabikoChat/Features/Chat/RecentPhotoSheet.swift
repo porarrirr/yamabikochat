@@ -267,6 +267,17 @@ private struct RecentPhotoMasonryCell: View {
         return width / ratio
     }
 
+    private var thumbnailTargetSize: CGSize {
+        CGSize(
+            width: max(1, (width * displayScale).rounded(.up)),
+            height: max(1, (height * displayScale).rounded(.up))
+        )
+    }
+
+    private var thumbnailRequestID: String {
+        "\(item.id)_\(Int(thumbnailTargetSize.width))x\(Int(thumbnailTargetSize.height))"
+    }
+
     var body: some View {
         Button {
             onTap()
@@ -317,14 +328,14 @@ private struct RecentPhotoMasonryCell: View {
         }
         .buttonStyle(.plain)
         .disabled(isSelectionDisabled && selectionIndex == nil)
-        .task(id: item.id) {
-            if image == nil {
-                let targetSize = CGSize(width: width * displayScale, height: height * displayScale)
-                image = await RecentPhotoThumbnailCache.shared.thumbnail(
-                    for: item.asset,
-                    targetSize: targetSize
-                )
-            }
+        .task(id: thumbnailRequestID) {
+            image = nil
+            let loadedImage = await RecentPhotoThumbnailCache.shared.thumbnail(
+                for: item.asset,
+                targetSize: thumbnailTargetSize
+            )
+            guard !Task.isCancelled else { return }
+            image = loadedImage
         }
     }
 }
