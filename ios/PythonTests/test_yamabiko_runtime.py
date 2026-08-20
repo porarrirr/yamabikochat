@@ -58,6 +58,11 @@ class YamabikoRuntimeTests(unittest.TestCase):
         self.assertEqual(network["error"]["type"], "PermissionError")
         self.assertEqual(process["error"]["type"], "PermissionError")
 
+    def test_user_ctypes_dlopen_is_rejected(self):
+        result, _ = self.run_cell("ctypes", "import ctypes\nctypes.CDLL(None)")
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["error"]["type"], "PermissionError")
+
     def test_outputs_are_reported_as_artifacts(self):
         result, root = self.run_cell(
             "artifact",

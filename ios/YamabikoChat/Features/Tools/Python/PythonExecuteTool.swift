@@ -6,7 +6,7 @@ struct PythonExecuteTool: LocalToolExecutor {
     let definition = ToolDefinition(
         name: Self.name,
         description: """
-        Execute Python 3.14 locally in a stateful namespace scoped to this chat. numpy, pandas, matplotlib, and Pillow are available when their verified iOS wheels are bundled. Files created or updated in the workspace or ./outputs/ are automatically returned to the user as visible artifacts; open matplotlib figures are automatically saved as PNG. Network, subprocess, and shell access are disabled. Files attached to the chat are copied into the current workspace.
+        Execute Python 3.14 locally in a stateful namespace scoped to this chat. NumPy, Matplotlib, and Pillow are bundled for local data analysis and image generation. Files created or updated in the workspace or ./outputs/ are automatically returned to the user as visible artifacts; open Matplotlib figures are automatically saved as PNG. Network, subprocess, and shell access are disabled. Files attached to the chat are copied into the current workspace.
         """,
         parametersJSON: #"{"type":"object","properties":{"code":{"type":"string","description":"Python source code to execute"},"reset":{"type":"boolean","description":"Reset this chat's Python namespace and files before executing"}},"required":["code"],"additionalProperties":false}"#
     )

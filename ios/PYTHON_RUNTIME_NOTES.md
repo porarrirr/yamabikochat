@@ -12,6 +12,7 @@ native call does not return after interruption.
 
 Scientific binary wheels must be CPython 3.14 iOS wheels for every supported
 device/simulator slice. `bootstrap-python.sh` intentionally rejects missing or
-platform-substituted numpy, pandas, and matplotlib wheels. Every wheel must also
-have an audited SHA-256 entry in `python-wheels.sha256`; unpinned files are not
-bundled.
+platform-substituted NumPy, Matplotlib, Pillow, contourpy, and kiwisolver wheels.
+Downloaded wheels and sources are pinned by SHA-256. Locally cross-built wheels
+are accepted only when their generated checksum lock matches every expected iOS
+slice; unpinned files are not bundled.

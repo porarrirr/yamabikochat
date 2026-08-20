@@ -50,6 +50,26 @@ Release APKs exclude duplicate `META-INF/AL2.0` and `META-INF/LGPL2.1` files to 
 | Yams | 6.2.2 | MIT | https://github.com/jpsim/Yams |
 | ZIPFoundation | 0.9.20 | MIT | https://github.com/weichsel/ZIPFoundation |
 
+### Embedded Python runtime
+
+| Component | Version / pin | License | Source |
+| --- | --- | --- | --- |
+| CPython / Python-Apple-support | 3.14-b10 | PSF-2.0 and included third-party terms | https://github.com/beeware/Python-Apple-support |
+| NumPy | `ec6b2b2626d0fc2b1505f3ffd7905862ebe605f4` | BSD-3-Clause and included third-party terms | https://github.com/numpy/numpy |
+| Matplotlib | 3.11.1 | PSF-based Matplotlib license and included third-party terms | https://github.com/matplotlib/matplotlib |
+| Pillow | 12.3.0 | HPND and included third-party terms | https://github.com/python-pillow/Pillow |
+| contourpy | 1.3.3 | BSD-3-Clause | https://github.com/contourpy/contourpy |
+| kiwisolver | 1.5.0 | BSD-3-Clause | https://github.com/nucleic/kiwi |
+| cycler | 0.12.1 | BSD-3-Clause | https://github.com/matplotlib/cycler |
+| fonttools | 4.63.0 | MIT | https://github.com/fonttools/fonttools |
+| packaging | 26.3 | Apache-2.0 OR BSD-2-Clause | https://github.com/pypa/packaging |
+| pyparsing | 3.3.2 | MIT | https://github.com/pyparsing/pyparsing |
+| python-dateutil | 2.9.0.post0 | Apache-2.0 OR BSD-3-Clause | https://github.com/dateutil/dateutil |
+| six | 1.17.0 | MIT | https://github.com/benjaminp/six |
+
+The package-specific license and attribution files shipped by these wheels are
+retained in their bundled `.dist-info` metadata directories.
+
 ## Pi runtime npm packages
 
 The bundled `PiRuntime/bundle/main.js` is produced from the production dependencies in `ios/PiRuntime/package-lock.json`. Those packages are MIT, Apache-2.0, BSD-3-Clause, ISC, BlueOak-1.0.0, or 0BSD. See [third_party/npm-licenses.md](third_party/npm-licenses.md) for package names, versions, and SPDX identifiers.

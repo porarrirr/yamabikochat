@@ -14,6 +14,7 @@ import json
 import mimetypes
 import os
 from pathlib import Path
+import platform
 import random
 import sys
 import time
@@ -24,14 +25,16 @@ from typing import Any
 _MAX_STREAM_CHARS = 64 * 1024
 _TRUNCATION_MARKER = "\n...truncated...\n"
 _sessions: dict[str, dict[str, Any]] = {}
-_baseline_modules = frozenset(sys.modules)
 _active_workspace: Path | None = None
 _active_outputs: Path | None = None
 _active_read_roots: tuple[Path, ...] = ()
 
-# Initialize only the built-in MIME table before the audit policy is active;
-# desktop Python otherwise probes /etc/apache2/mime.types on first artifact.
+# Initialize trusted standard-library process state before the audit policy is
+# active. MIME setup otherwise probes host configuration files, while CPython's
+# iOS platform module loads the Apple Objective-C runtime to read device data.
 mimetypes.init(files=[])
+platform.system()
+_baseline_modules = frozenset(sys.modules)
 
 
 class _BoundedTextIO(io.TextIOBase):

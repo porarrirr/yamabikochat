@@ -2,6 +2,58 @@ import XCTest
 @testable import YamabikoChat
 
 final class PythonRuntimeTests: XCTestCase {
+    func testEmbeddedScientificPackagesRenderPNG() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("python-scientific-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = PythonSessionStore(rootOverride: root)
+        let worker = PythonWorker(
+            sessions: store,
+            timeoutSeconds: 60,
+            memoryLimitBytes: 4_000_000_000
+        )
+        let response = try await worker.execute(
+            sessionID: "scientific-integration",
+            code: #"""
+import numpy as np
+from PIL import Image
+import matplotlib
+import matplotlib.pyplot as plt
+
+values = np.array([1.0, 2.0, 3.0])
+Image.new("RGB", (4, 4), "red").save("pillow.png")
+plt.plot(values, values ** 2)
+plt.title("Embedded Python")
+plt.savefig("matplotlib.png")
+(float(np.sum(values)), matplotlib.get_backend())
+"""#,
+            reset: true,
+            attachmentPaths: []
+        )
+
+        XCTAssertEqual(response.status, "ok", response.error?.traceback ?? response.stderr)
+        XCTAssertNil(response.error)
+        XCTAssertTrue(response.resultRepr?.contains("6.0") == true)
+        XCTAssertTrue(response.resultRepr?.lowercased().contains("agg") == true)
+
+        let artifacts = Dictionary(uniqueKeysWithValues: response.artifacts.map { ($0.name, $0) })
+        let pillowArtifact = try XCTUnwrap(artifacts["pillow.png"])
+        let matplotlibArtifact = try XCTUnwrap(artifacts["matplotlib.png"])
+        XCTAssertGreaterThan(pillowArtifact.size, 0)
+        XCTAssertGreaterThan(matplotlibArtifact.size, 0)
+
+        let workspace = root
+            .appendingPathComponent("scientific-integration", isDirectory: true)
+            .appendingPathComponent("workspace", isDirectory: true)
+        for filename in ["pillow.png", "matplotlib.png"] {
+            let data = try Data(contentsOf: workspace.appendingPathComponent(filename))
+            XCTAssertEqual(Array(data.prefix(8)), [137, 80, 78, 71, 13, 10, 26, 10])
+        }
+
+        await worker.discard(sessionID: "scientific-integration")
+    }
+
     func testEmbeddedCPythonExecutesStatefulCells() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("python-runtime-\(UUID().uuidString)", isDirectory: true)

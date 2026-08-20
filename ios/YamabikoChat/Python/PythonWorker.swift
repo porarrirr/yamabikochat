@@ -91,6 +91,30 @@ private final class PythonExecutionGate: @unchecked Sendable {
     }
 }
 
+private final class PythonRuntimeBridgeStore: @unchecked Sendable {
+    static let shared = PythonRuntimeBridgeStore()
+
+    private let lock = NSLock()
+    private var bridge: PythonRuntimeBridge?
+
+    func resolve(
+        pythonHome: String,
+        harnessPath: String,
+        sitePackagesPath: String?
+    ) -> PythonRuntimeBridge {
+        lock.lock()
+        defer { lock.unlock() }
+        if let bridge { return bridge }
+        let runtime = PythonRuntimeBridge(
+            pythonHome: pythonHome,
+            harnessPath: harnessPath,
+            sitePackagesPath: sitePackagesPath
+        )
+        bridge = runtime
+        return runtime
+    }
+}
+
 actor PythonWorker {
     static let shared = PythonWorker()
 
@@ -176,7 +200,7 @@ actor PythonWorker {
             throw PythonToolError.runtimeResourcesMissing
         }
         let sitePackages = resourceRoot.appendingPathComponent("PythonSitePackages", isDirectory: true)
-        let runtime = PythonRuntimeBridge(
+        let runtime = PythonRuntimeBridgeStore.shared.resolve(
             pythonHome: pythonHome.path,
             harnessPath: harness.path,
             sitePackagesPath: FileManager.default.fileExists(atPath: sitePackages.path) ? sitePackages.path : nil

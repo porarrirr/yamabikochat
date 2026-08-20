@@ -40,6 +40,17 @@ jobs:
         with:
           node-version: 24
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Cache iOS Python wheels
+        uses: actions/cache@v4
+        with:
+          path: ios/Vendor/PythonWheelhouse
+          key: ios-python-wheels-${{ runner.os }}-${{ hashFiles('ios/python-scientific-sources.env', 'ios/python-wheels.sha256', 'ios/scripts/build-python-scientific-wheels.sh', 'ios/scripts/run-ios-cibuildwheel.py') }}
+
       - name: Install XcodeGen
         run: brew install xcodegen
 
