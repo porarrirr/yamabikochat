@@ -72,4 +72,54 @@ final class ProviderStreamEventTests: XCTestCase {
         payload.failRunning(message: "cancelled")
         XCTAssertEqual(payload.steps.last?.status, .failed)
     }
+
+    func testToolActivitySeparatesWebStepsAndCapturesPythonResultDetails() throws {
+        let search = ToolCall(
+            id: "search-1",
+            name: WebSearchTool.name,
+            argumentsJSON: #"{"query":"iOS Python"}"#
+        )
+        let python = ToolCall(
+            id: "python-1",
+            name: PythonExecuteTool.name,
+            argumentsJSON: #"{"code":"print('done')\n6 * 7"}"#
+        )
+        var payload = ToolActivityPayload()
+        payload.apply(ToolActivityEvent(phase: .started, call: search, result: nil, createdAtMs: 1))
+        payload.apply(ToolActivityEvent(
+            phase: .finished,
+            call: python,
+            result: ToolResult(
+                callId: python.id,
+                name: python.name,
+                content: #"{"status":"ok","stdout":"done\n","stderr":"","result_repr":"42","artifacts":[],"duration_ms":125,"error":null}"#,
+                artifacts: [ToolArtifact(path: "/tmp/chart.png", name: "chart.png", mime: "image/png", size: 12)]
+            ),
+            createdAtMs: 2
+        ))
+
+        XCTAssertEqual(payload.steps.filter(\.isWebActivity).map(\.id), [search.id])
+        let execution = try XCTUnwrap(payload.steps.first { !$0.isWebActivity })
+        XCTAssertEqual(execution.resultPreview, "42")
+        XCTAssertEqual(execution.outputPreview, "done")
+        XCTAssertEqual(execution.artifactNames, ["chart.png"])
+        XCTAssertEqual(execution.durationMs, 125)
+
+        let restored = try JSONDecoder().decode(
+            ToolActivityPayload.self,
+            from: JSONEncoder().encode(payload)
+        )
+        XCTAssertEqual(restored.steps, payload.steps)
+    }
+
+    func testLegacyToolActivityStepDecodesWithoutResultDetails() throws {
+        let json = #"{"id":"legacy","round":1,"toolName":"web_search","title":"Web","detail":"query","status":"completed","resultCount":1,"sources":[],"errorMessage":null,"createdAtMs":1}"#
+        let step = try JSONDecoder().decode(ToolActivityStep.self, from: Data(json.utf8))
+
+        XCTAssertTrue(step.isWebActivity)
+        XCTAssertNil(step.resultPreview)
+        XCTAssertNil(step.outputPreview)
+        XCTAssertNil(step.artifactNames)
+        XCTAssertNil(step.durationMs)
+    }
 }

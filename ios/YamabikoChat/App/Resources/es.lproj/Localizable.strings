@@ -419,6 +419,14 @@
 "LLMが必要に応じてWeb検索とページ取得を実行します。外部検索APIキーは不要です。" = "Permite que el LLM busque en la web y obtenga páginas cuando sea necesario. No requiere una clave de API de búsqueda externa.";
 "現在のプロバイダーではこのツールは使用されません。" = "Esta herramienta no se usa con el proveedor actual.";
 "Web検索" = "Búsqueda web";
+"ツール実行" = "Ejecución de herramientas";
+"完了" = "Completado";
+"失敗" = "Error";
+"コード" = "Código";
+"入力" = "Entrada";
+"結果" = "Resultado";
+"出力" = "Salida";
+"生成ファイル" = "Archivos generados";
 "Webを検索" = "Buscar en la web";
 "ページを取得" = "Obtener página";
 "出典" = "Fuentes";

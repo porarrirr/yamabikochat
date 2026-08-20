@@ -58,6 +58,14 @@ struct ToolActivityStep: Codable, Sendable, Equatable, Identifiable {
     var sources: [ToolSource]
     var errorMessage: String?
     var createdAtMs: Int64
+    var resultPreview: String? = nil
+    var outputPreview: String? = nil
+    var artifactNames: [String]? = nil
+    var durationMs: Int64? = nil
+
+    var isWebActivity: Bool {
+        toolName == WebSearchTool.name || toolName == FetchUrlTool.name
+    }
 }
 
 struct ToolActivityEvent: Sendable, Equatable {
@@ -144,13 +152,21 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
         let rawURL = arguments?["url"] as? String
         let host = rawURL.flatMap { URL(string: $0)?.host }
         let isSearch = event.call.name == WebSearchTool.name
+        let isFetch = event.call.name == FetchUrlTool.name
         let isPython = event.call.name == PythonExecuteTool.name
         let code = (arguments?["code"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = isPython ? L10n.text("Pythonを実行") : (isSearch ? L10n.text("Webを検索") : L10n.text("ページを確認"))
+        let title = isPython
+            ? L10n.text("Pythonを実行")
+            : (isSearch
+                ? L10n.text("Webを検索")
+                : (isFetch ? L10n.text("ページを確認") : displayName(event.call.name)))
         let detail = isPython
             ? (code?.trimmedNonEmpty ?? L10n.text("コードを確認中"))
-            : (isSearch ? (query?.trimmedNonEmpty ?? L10n.text("検索語を確認中")) :
-                [host, goal?.trimmedNonEmpty].compactMap { $0 }.joined(separator: " — ").trimmedNonEmpty ?? L10n.text("ページを確認中"))
+            : (isSearch
+                ? (query?.trimmedNonEmpty ?? L10n.text("検索語を確認中"))
+                : (isFetch
+                    ? [host, goal?.trimmedNonEmpty].compactMap { $0 }.joined(separator: " — ").trimmedNonEmpty ?? L10n.text("ページを確認中")
+                    : genericArgumentSummary(arguments, raw: event.call.argumentsJSON)))
         let result = event.result
         let resultObject = result.flatMap { jsonObject($0.content) }
         let resultCount = (resultObject?["results"] as? [Any])?.count
@@ -159,6 +175,12 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
             ? (nestedError?.trimmedNonEmpty ?? (resultObject?["error"] as? String)?.trimmedNonEmpty ?? L10n.text("ツールの実行に失敗しました"))
             : nil
         let sources = deduplicatedSources(result?.sources ?? [])
+        let stdout = (resultObject?["stdout"] as? String)?.trimmedNonEmpty
+        let stderr = (resultObject?["stderr"] as? String)?.trimmedNonEmpty
+        let outputPreview = [stdout, stderr].compactMap { $0 }.joined(separator: "\n").trimmedNonEmpty
+        let resultPreview = (resultObject?["result_repr"] as? String)?.trimmedNonEmpty
+        let artifactNames = result?.artifacts.map(\.name).filter { !$0.isEmpty }
+        let durationMs = (resultObject?["duration_ms"] as? NSNumber)?.int64Value
         return ToolActivityStep(
             id: event.call.id,
             round: 0,
@@ -169,8 +191,31 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
             resultCount: resultCount,
             sources: sources,
             errorMessage: error,
-            createdAtMs: event.createdAtMs
+            createdAtMs: event.createdAtMs,
+            resultPreview: resultPreview,
+            outputPreview: outputPreview,
+            artifactNames: artifactNames?.isEmpty == false ? artifactNames : nil,
+            durationMs: durationMs
         )
+    }
+
+    private static func displayName(_ name: String) -> String {
+        name.replacingOccurrences(of: "_", with: " ")
+    }
+
+    private static func genericArgumentSummary(_ object: [String: Any]?, raw: String) -> String {
+        guard let object else { return raw }
+        let values = object.keys.sorted().compactMap { key -> String? in
+            switch object[key] {
+            case let value as String:
+                return "\(key): \(value)"
+            case let value as NSNumber:
+                return "\(key): \(value)"
+            default:
+                return nil
+            }
+        }
+        return values.joined(separator: " · ").trimmedNonEmpty ?? raw
     }
 
     private static func jsonObject(_ value: String) -> [String: Any]? {
