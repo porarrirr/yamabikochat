@@ -29,6 +29,8 @@ class ModelsDevCatalogTest {
         assertEquals(true, providers.single().models.single().toolCall)
         assertEquals("@ai-sdk/openai", providers.single().models.single().providerContract?.npm)
         assertEquals("responses", providers.single().models.single().providerContract?.shape)
+        assertEquals("model", providers.single().models.single().providerContract?.provenance)
+        assertEquals(null, providers.single().models.single().providerContract?.api)
         assertEquals(listOf("low", "high"), providers.single().models.single().supportedReasoningEfforts)
     }
 
@@ -83,7 +85,7 @@ class ModelsDevCatalogTest {
         val FIXTURE = """
             {"providers":{
               "openrouter":{"name":"OpenRouter","npm":"@ai-sdk/openai-compatible","models":{"or":{"name":"OR","modalities":{"output":["text"]}}}},
-              "example":{"name":"Example","npm":"@ai-sdk/openai-compatible","env":["EXAMPLE_API_KEY"],"models":{
+              "example":{"name":"Example","npm":"@ai-sdk/openai-compatible","api":"https://provider.example/v1","env":["EXAMPLE_API_KEY"],"models":{
                 "chat":{"name":"Chat","tool_call":true,"reasoning":true,"reasoning_options":[{"type":"effort","values":["low","high"]}],"provider":{"npm":"@ai-sdk/openai","shape":"responses"},"modalities":{"input":["text"],"output":["text"]}},
                 "old":{"name":"Old","status":"deprecated","modalities":{"output":["text"]}},
                 "image":{"name":"Image","modalities":{"output":["image"]}}

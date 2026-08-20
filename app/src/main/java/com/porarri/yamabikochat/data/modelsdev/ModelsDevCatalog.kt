@@ -57,7 +57,8 @@ data class CatalogReasoningOption(
 data class CatalogModelProviderContract(
     val npm: String? = null,
     val api: String? = null,
-    val shape: String? = null
+    val shape: String? = null,
+    val provenance: String? = null
 )
 
 object ModelsDevReasoningPreference {

@@ -8,7 +8,10 @@ final class ModelsDevCatalogTests: XCTestCase {
         XCTAssertEqual(providers[0].models.map(\.id), ["chat"])
         XCTAssertEqual(providers[0].models[0].toolCall, true)
         XCTAssertEqual(providers[0].models[0].providerContract?.npm, "@ai-sdk/openai")
+        XCTAssertNil(providers[0].models[0].providerContract?.api)
         XCTAssertEqual(providers[0].models[0].providerContract?.shape, "responses")
+        XCTAssertEqual(providers[0].models[0].providerContract?.provenance, "model")
+        XCTAssertEqual(providers[0].api, "https://api.example.com/v1")
         XCTAssertEqual(providers[0].models[0].supportedReasoningEfforts, ["low", "high"])
     }
 
@@ -82,7 +85,7 @@ final class ModelsDevCatalogTests: XCTestCase {
     private static let fixture = #"""
     {"providers":{
       "openrouter":{"name":"OpenRouter","npm":"@ai-sdk/openai-compatible","models":{"or":{"name":"OR","modalities":{"output":["text"]}}}},
-      "example":{"name":"Example","npm":"@ai-sdk/openai-compatible","env":["EXAMPLE_API_KEY"],"models":{
+      "example":{"name":"Example","npm":"@ai-sdk/openai-compatible","api":"https://api.example.com/v1","env":["EXAMPLE_API_KEY"],"models":{
         "chat":{"name":"Chat","tool_call":true,"reasoning":true,"reasoning_options":[{"type":"effort","values":["low","high"]}],"provider":{"npm":"@ai-sdk/openai","shape":"responses"},"modalities":{"input":["text"],"output":["text"]}},
         "old":{"name":"Old","status":"deprecated","modalities":{"output":["text"]}},
         "image":{"name":"Image","modalities":{"output":["image"]}}

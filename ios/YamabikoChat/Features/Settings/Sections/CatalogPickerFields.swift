@@ -229,10 +229,11 @@ private struct CatalogModelListView: View {
                             : model.id,
                         apiKey: nil,
                         catalogContract: PiCatalogModelContract(
-                            npm: model.providerContract?.npm ?? provider.npm,
-                            api: model.providerContract?.api ?? provider.api,
+                            npm: model.providerContract?.npm,
+                            api: model.providerContract?.api,
                             shape: model.providerContract?.shape,
-                            toolCall: model.toolCall
+                            toolCall: model.toolCall,
+                            provenance: model.providerContract?.provenance
                         )
                     )
                 }
@@ -258,6 +259,9 @@ private struct CatalogModelListView: View {
         switch reason {
         case "pi_provider_missing": "Piにプロバイダー定義がありません"
         case "pi_model_missing": "Piにモデル定義がありません"
+        case "protocol_conflict": "models.devとPiのプロトコルが一致しません"
+        case "endpoint_conflict": "models.devとPiのエンドポイントが一致しません"
+        case "catalog_contract_ambiguous": "models.devのモデル実行契約を一意に特定できません"
         case "contract_conflict": "models.devとPiの実行契約が一致しません"
         case "runtime_contract_mismatch": "アプリとPi Runtimeの契約バージョンが一致しません"
         default: "実行契約を確認できません"

@@ -218,9 +218,6 @@ final class ProviderGateway {
                 )?.trimmedNonEmpty
             }
         case .openCodeGo:
-            guard OpenCodeGoModelCatalog.model(for: request.model) != nil else {
-                throw ProviderClientError.invalidBaseURL("Unsupported OpenCode Go model: \(request.model)")
-            }
             piProvider = "opencode-go"
             apiKey = try credential(.openCodeGo)
         case .codexAuth:
@@ -283,10 +280,11 @@ final class ProviderGateway {
             headers: [:],
             env: env,
             catalogContract: PiCatalogModelContract(
-                npm: model.providerContract?.npm ?? catalog.npm,
-                api: model.providerContract?.api ?? catalog.api,
+                npm: model.providerContract?.npm,
+                api: model.providerContract?.api,
                 shape: model.providerContract?.shape,
-                toolCall: model.toolCall
+                toolCall: model.toolCall,
+                provenance: model.providerContract?.provenance
             ),
             thinkingLevel: thinkingLevel(request.thinking),
         )
@@ -312,7 +310,7 @@ final class ProviderGateway {
         case .codexAuth:
             return model.replacingOccurrences(of: "/openai/", with: "")
         case .openCodeGo:
-            return OpenCodeGoModelCatalog.model(for: model)?.id ?? model
+            return OpenCodeGoModelCatalog.normalizedModelID(model)
         default:
             return model
         }

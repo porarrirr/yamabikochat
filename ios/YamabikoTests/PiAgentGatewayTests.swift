@@ -288,7 +288,8 @@ final class PiAgentGatewayTests: XCTestCase {
             providerContract: CatalogModelProviderContract(
                 npm: "@ai-sdk/openai",
                 api: nil,
-                shape: "responses"
+                shape: "responses",
+                provenance: "model"
             )
         )
         let catalogProvider = CatalogProvider(
@@ -321,8 +322,11 @@ final class PiAgentGatewayTests: XCTestCase {
         let configuration = try XCTUnwrap(pi.calls.first?.configuration)
         XCTAssertEqual(configuration.provider, "opencode-go")
         XCTAssertEqual(configuration.model, "muse-spark-1.2-contributor")
+        XCTAssertEqual(configuration.catalogContract?.npm, "@ai-sdk/openai")
+        XCTAssertNil(configuration.catalogContract?.api)
         XCTAssertEqual(configuration.catalogContract?.shape, "responses")
         XCTAssertEqual(configuration.catalogContract?.toolCall, true)
+        XCTAssertEqual(configuration.catalogContract?.provenance, "model")
     }
 
     func testModelsDevOpenCodeGoMuseSparkPassesReasoningEffortAsThinkingLevel() async throws {

@@ -156,7 +156,8 @@ final class ModelsDevCatalogRepository: @unchecked Sendable {
                         CatalogModelProviderContract(
                             npm: $0["npm"] as? String,
                             api: $0["api"] as? String,
-                            shape: $0["shape"] as? String
+                            shape: $0["shape"] as? String,
+                            provenance: "model"
                         )
                     }
                 )

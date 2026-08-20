@@ -162,7 +162,8 @@ class ModelsDevCatalogRepository(
                 CatalogModelProviderContract(
                     npm = it.string("npm"),
                     api = it.string("api"),
-                    shape = it.string("shape")
+                    shape = it.string("shape"),
+                    provenance = "model"
                 )
             }
         )

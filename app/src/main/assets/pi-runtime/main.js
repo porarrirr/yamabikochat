@@ -288169,35 +288169,72 @@ authModels.setProvider(openaiCodexProvider());
 var runtimeModels = builtinModels({ credentials: authCredentials });
 var activeAuthLogin = null;
 var VERIFIED_MODEL_SOURCES = /* @__PURE__ */ new Map();
+var VERIFIED_OPENCODE_GO_ROUTES = [
+  { id: "grok-4.5", api: "openai-responses" },
+  { id: "gpt-5.6-luna", api: "openai-responses" },
+  { id: "glm-5.3", api: "openai-completions" },
+  { id: "glm-5.2", api: "openai-completions" },
+  { id: "glm-5.1", api: "openai-completions" },
+  { id: "kimi-k3", api: "openai-completions" },
+  { id: "kimi-k2.7-code", api: "openai-completions" },
+  { id: "kimi-k2.6", api: "openai-completions" },
+  { id: "deepseek-v4-pro", api: "openai-completions" },
+  { id: "deepseek-v4-flash", api: "openai-completions" },
+  { id: "mimo-v2.5", api: "openai-completions" },
+  { id: "mimo-v2.5-pro", api: "openai-completions" },
+  { id: "minimax-m3", api: "anthropic-messages" },
+  { id: "minimax-m2.7", api: "anthropic-messages" },
+  { id: "minimax-m2.5", api: "anthropic-messages" },
+  { id: "muse-spark-1.2-contributor", api: "openai-responses" },
+  { id: "qwen3.8-max", api: "anthropic-messages" },
+  { id: "qwen3.7-max", api: "anthropic-messages" },
+  { id: "qwen3.7-plus", api: "anthropic-messages" },
+  { id: "qwen3.6-plus", api: "anthropic-messages" },
+  { id: "hy3", api: "openai-completions" }
+];
 function zeroCost() {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 }
 function installVerifiedOpenCodeGoContracts() {
   const provider = runtimeModels.getProvider("opencode-go");
   if (!provider) throw new Error("Pi does not provide the required opencode-go provider");
-  const overrides = [
-    {
+  const missingModels = /* @__PURE__ */ new Map([
+    ["minimax-m2.5", {
+      id: "minimax-m2.5",
+      name: "MiniMax-M2.5",
+      provider: "opencode-go",
+      reasoning: true,
+      input: ["text"],
+      cost: { input: 0.3, output: 1.2, cacheRead: 0.03, cacheWrite: 0 },
+      contextWindow: 204800,
+      maxTokens: 65536
+    }],
+    ["muse-spark-1.2-contributor", {
       id: "muse-spark-1.2-contributor",
       name: "Muse Spark 1.2 Contributor",
-      api: "openai-responses",
       provider: "opencode-go",
-      baseUrl: "https://opencode.ai/zen/go/v1",
       reasoning: true,
       input: ["text", "image"],
       cost: { input: 0.1, output: 0.2, cacheRead: 2e-3, cacheWrite: 0 },
       contextWindow: 1048576,
       maxTokens: 131072,
       thinkingLevelMap: { off: null, minimal: "minimal", low: "low", medium: "medium", high: "high", xhigh: "xhigh" }
-    }
-  ];
+    }]
+  ]);
   const originals = provider.getModels();
-  const merged = [...originals];
-  for (const model of overrides) {
-    const index5 = merged.findIndex((entry) => entry.id === model.id);
-    if (index5 >= 0) merged[index5] = model;
-    else merged.push(model);
+  const byId = new Map(originals.map((model) => [model.id, model]));
+  const merged = VERIFIED_OPENCODE_GO_ROUTES.map(({ id, api }) => {
+    const original = byId.get(id) || missingModels.get(id);
+    if (!original) throw new Error(`Pi is missing metadata for verified OpenCode Go model: ${id}`);
+    const model = {
+      ...original,
+      api,
+      provider: "opencode-go",
+      baseUrl: api === "anthropic-messages" ? "https://opencode.ai/zen/go" : "https://opencode.ai/zen/go/v1"
+    };
     VERIFIED_MODEL_SOURCES.set(`${model.provider}/${model.id}`, "verified_official_contract");
-  }
+    return model;
+  });
   runtimeModels.setProvider({ ...provider, getModels: () => merged });
 }
 function installSuperGrokProvider() {
@@ -288398,11 +288435,34 @@ function effectiveHeaders(config) {
 function expectedApiForShape(shape) {
   if (shape === "responses") return "openai-responses";
   if (shape === "completions") return "openai-completions";
+  if (shape === "messages") return "anthropic-messages";
+  return null;
+}
+function expectedApiForNpm(npm) {
+  if (npm === "@ai-sdk/openai") return "openai-responses";
+  if (npm === "@ai-sdk/openai-compatible") return "openai-completions";
+  if (npm === "@ai-sdk/anthropic") return "anthropic-messages";
   return null;
 }
 function normalizedURL(value2) {
   if (typeof value2 !== "string" || !value2.trim() || value2.includes("${")) return null;
   return value2.trim().replace(/\/+$/, "");
+}
+function endpointURL(baseUrl, api) {
+  const base = normalizedURL(baseUrl);
+  if (!base) return null;
+  if (api === "anthropic-messages") {
+    if (base.endsWith("/v1/messages")) return base;
+    if (base.endsWith("/v1")) return `${base}/messages`;
+    return `${base}/v1/messages`;
+  }
+  if (api === "openai-completions") {
+    return base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
+  }
+  if (api === "openai-responses") {
+    return base.endsWith("/responses") ? base : `${base}/responses`;
+  }
+  return null;
 }
 function resolutionFor(config) {
   if (config.contractVersion !== RUNTIME_CONTRACT_VERSION) {
@@ -288417,20 +288477,66 @@ function resolutionFor(config) {
     return { supported: false, reason: "pi_model_missing", provider: config.provider, model: config.model };
   }
   const contract = config.catalogContract;
-  const expectedApi = expectedApiForShape(contract?.shape);
-  const contractURL = normalizedURL(contract?.api);
-  const modelURL = normalizedURL(model.baseUrl);
-  if (expectedApi && expectedApi !== model.api || contractURL && modelURL && contractURL !== modelURL) {
+  const isModelContract = contract?.provenance === "model";
+  const shapeApi = expectedApiForShape(contract?.shape);
+  const npmApi = expectedApiForNpm(contract?.npm);
+  if (isModelContract && contract?.shape && !shapeApi) {
     return {
       supported: false,
-      reason: "contract_conflict",
+      reason: "catalog_contract_ambiguous",
       provider: model.provider,
       model: model.id,
       api: model.api,
-      contractApi: expectedApi,
-      contractURL,
-      modelURL
+      contractShape: contract.shape
     };
+  }
+  if (isModelContract && shapeApi && npmApi && shapeApi !== npmApi) {
+    return {
+      supported: false,
+      reason: "protocol_conflict",
+      provider: model.provider,
+      model: model.id,
+      api: model.api,
+      contractApi: shapeApi,
+      contractNpmApi: npmApi
+    };
+  }
+  const expectedApi = shapeApi || npmApi;
+  if (isModelContract && expectedApi && expectedApi !== model.api) {
+    return {
+      supported: false,
+      reason: "protocol_conflict",
+      provider: model.provider,
+      model: model.id,
+      api: model.api,
+      contractApi: expectedApi
+    };
+  }
+  if (isModelContract && contract?.api) {
+    if (!expectedApi) {
+      return {
+        supported: false,
+        reason: "catalog_contract_ambiguous",
+        provider: model.provider,
+        model: model.id,
+        api: model.api,
+        contractURL: normalizedURL(contract.api)
+      };
+    }
+    const contractEndpoint = endpointURL(contract.api, expectedApi);
+    const modelEndpoint = endpointURL(model.baseUrl, model.api);
+    if (contractEndpoint && modelEndpoint && contractEndpoint !== modelEndpoint) {
+      return {
+        supported: false,
+        reason: "endpoint_conflict",
+        provider: model.provider,
+        model: model.id,
+        api: model.api,
+        contractApi: expectedApi,
+        contractURL: contractEndpoint,
+        modelURL: modelEndpoint
+      };
+    }
   }
   return {
     supported: true,

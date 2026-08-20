@@ -5,6 +5,8 @@ on:
     paths:
       - "ios/**"
       - "app/src/main/java/com/porarri/yamabikochat/data/remote/ProviderCatalog.kt"
+      - "app/src/main/assets/pi-runtime/**"
+      - "scripts/bootstrap-pi-runtime-android.sh"
       - "scripts/check-opencode-go-contract.py"
       - ".github/workflows/ios-ci.yml"
   push:
@@ -12,6 +14,8 @@ on:
     paths:
       - "ios/**"
       - "app/src/main/java/com/porarri/yamabikochat/data/remote/ProviderCatalog.kt"
+      - "app/src/main/assets/pi-runtime/**"
+      - "scripts/bootstrap-pi-runtime-android.sh"
       - "scripts/check-opencode-go-contract.py"
       - ".github/workflows/ios-ci.yml"
   workflow_dispatch:
@@ -41,13 +45,16 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Verify OpenCode Go API contract
-        run: python3 scripts/check-opencode-go-contract.py
-
       - name: Generate Project
         run: |
           cd ios
           ./bootstrap.sh
+
+      - name: Verify OpenCode Go API contract and Pi bundle
+        run: |
+          python3 scripts/check-opencode-go-contract.py
+          git diff --exit-code -- ios/PiRuntime/bundle/main.js app/src/main/assets/pi-runtime/main.js
+          (cd ios/PiRuntime && npm test)
 
       - name: Build
         run: |

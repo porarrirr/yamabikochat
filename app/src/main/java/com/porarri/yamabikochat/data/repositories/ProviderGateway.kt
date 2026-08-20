@@ -158,9 +158,6 @@ class ProviderGateway(
                 }
             }
             LLMProvider.OPENCODE_GO -> {
-                if (OpenCodeGoModelCatalog.modelFor(request.model) == null) {
-                    throw ProviderClientError.InvalidBaseURL("Unsupported OpenCode Go model: ${request.model}")
-                }
                 piProvider = "opencode-go"
                 apiKey = credential(provider)
             }
@@ -224,9 +221,10 @@ class ProviderGateway(
             apiKey = null,
             env = env,
             catalogContract = PiCatalogModelContract(
-                npm = model.providerContract?.npm ?: catalog.npm,
-                api = model.providerContract?.api ?: catalog.api,
+                npm = model.providerContract?.npm,
+                api = model.providerContract?.api,
                 shape = model.providerContract?.shape,
+                provenance = model.providerContract?.provenance,
                 toolCall = model.toolCall
             ),
             thinkingLevel = thinkingLevel(request.thinking),
@@ -256,7 +254,7 @@ class ProviderGateway(
     private fun normalizedModel(model: String, provider: LLMProvider): String {
         return when (provider) {
             LLMProvider.CODEX_AUTH -> model.replace("/openai/", "")
-            LLMProvider.OPENCODE_GO -> OpenCodeGoModelCatalog.modelFor(model)?.id ?: model
+            LLMProvider.OPENCODE_GO -> OpenCodeGoModelCatalog.normalizedModelId(model)
             else -> model
         }
     }

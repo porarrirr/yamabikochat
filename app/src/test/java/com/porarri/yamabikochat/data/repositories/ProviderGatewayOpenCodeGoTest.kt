@@ -49,7 +49,8 @@ class ProviderGatewayOpenCodeGoTest {
                     limits = CatalogLimits(context = 1_048_576, output = 32_768),
                     providerContract = CatalogModelProviderContract(
                         npm = "@ai-sdk/openai",
-                        shape = "responses"
+                        shape = "responses",
+                        provenance = "model"
                     )
                 )
             )
@@ -79,7 +80,10 @@ class ProviderGatewayOpenCodeGoTest {
 
         assertEquals("opencode-go", captured?.provider)
         assertEquals("muse-spark-1.2-contributor", captured?.model)
+        assertEquals("@ai-sdk/openai", captured?.catalogContract?.npm)
+        assertEquals(null, captured?.catalogContract?.api)
         assertEquals("responses", captured?.catalogContract?.shape)
+        assertEquals("model", captured?.catalogContract?.provenance)
         assertEquals(true, captured?.catalogContract?.toolCall)
     }
 
@@ -102,7 +106,8 @@ class ProviderGatewayOpenCodeGoTest {
                     limits = CatalogLimits(context = 1_048_576, output = 32_768),
                     providerContract = CatalogModelProviderContract(
                         npm = "@ai-sdk/openai",
-                        shape = "responses"
+                        shape = "responses",
+                        provenance = "model"
                     )
                 )
             )

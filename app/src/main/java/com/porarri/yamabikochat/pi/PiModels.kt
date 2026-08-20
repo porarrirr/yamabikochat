@@ -31,6 +31,7 @@ data class PiCatalogModelContract(
     val npm: String? = null,
     val api: String? = null,
     val shape: String? = null,
+    val provenance: String? = null,
     val toolCall: Boolean? = null
 )
 

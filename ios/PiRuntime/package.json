@@ -4,8 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/main.js --bundle --platform=node --format=esm --target=node24 --banner:js=\"import{createRequire as __yamabikoCreateRequire}from'node:module';const require=__yamabikoCreateRequire(import.meta.url);\" --outfile=bundle/main.js",
+    "build": "esbuild src/main.js --bundle --platform=node --format=esm --target=node24 --banner:js=\"import{createRequire as __yamabikoCreateRequire}from'node:module';const require=__yamabikoCreateRequire(import.meta.url);\" --outfile=bundle/main.js && cp bundle/main.js ../../app/src/main/assets/pi-runtime/main.js",
     "check": "node --check src/main.js",
+    "check:contracts": "python3 ../../scripts/check-opencode-go-contract.py",
     "test": "node --test test/model-resolution.test.js"
   },
   "dependencies": {

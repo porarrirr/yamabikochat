@@ -40,7 +40,7 @@ async function resolveModels(baseURL, token, models) {
   return response.json();
 }
 
-test("strictly resolves Muse and rejects missing or conflicting contracts", async (context) => {
+test("resolves verified OpenCode Go routes and returns typed contract conflicts", async (context) => {
   const port = await availablePort();
   const token = "model-resolution-test-token";
   const process = spawn(
@@ -58,8 +58,10 @@ test("strictly resolves Muse and rejects missing or conflicting contracts", asyn
       provider: "opencode-go",
       model: "muse-spark-1.2-contributor",
       catalogContract: {
+        npm: "@ai-sdk/openai",
         api: "https://opencode.ai/zen/go/v1",
         shape: "responses",
+        provenance: "model",
         toolCall: false
       }
     },
@@ -69,8 +71,53 @@ test("strictly resolves Muse and rejects missing or conflicting contracts", asyn
       contractVersion: 2,
       provider: "opencode-go",
       model: "muse-spark-1.2-contributor",
-      catalogContract: { shape: "completions" }
+      catalogContract: { shape: "completions", provenance: "model" }
     },
+    {
+      contractVersion: 2,
+      provider: "opencode-go",
+      model: "qwen3.7-max",
+      catalogContract: { toolCall: true }
+    },
+    {
+      contractVersion: 2,
+      provider: "opencode-go",
+      model: "qwen3.7-plus",
+      catalogContract: {
+        npm: "@ai-sdk/anthropic",
+        api: "https://opencode.ai/zen/go/v1",
+        shape: "messages",
+        provenance: "model"
+      }
+    },
+    {
+      contractVersion: 2,
+      provider: "opencode-go",
+      model: "qwen3.8-max",
+      catalogContract: { shape: "completions", provenance: "model" }
+    },
+    {
+      contractVersion: 2,
+      provider: "opencode-go",
+      model: "qwen3.8-max",
+      catalogContract: {
+        npm: "@ai-sdk/anthropic",
+        api: "https://example.invalid/v1",
+        shape: "messages",
+        provenance: "model"
+      }
+    },
+    {
+      contractVersion: 2,
+      provider: "opencode-go",
+      model: "qwen3.8-max",
+      catalogContract: { shape: "unknown", provenance: "model" }
+    },
+    { contractVersion: 2, provider: "opencode-go", model: "minimax-m3" },
+    { contractVersion: 2, provider: "opencode-go", model: "minimax-m2.5" },
+    { contractVersion: 2, provider: "opencode-go", model: "glm-5.3" },
+    { contractVersion: 2, provider: "opencode-go", model: "qwen3.6-plus" },
+    { contractVersion: 2, provider: "opencode-go", model: "minimax-m2.7" },
     { contractVersion: 1, provider: "opencode-go", model: "muse-spark-1.2-contributor" }
   ]);
 
@@ -89,6 +136,19 @@ test("strictly resolves Muse and rejects missing or conflicting contracts", asyn
   });
   assert.equal(result.models[1].reason, "pi_provider_missing");
   assert.equal(result.models[2].reason, "pi_model_missing");
-  assert.equal(result.models[3].reason, "contract_conflict");
-  assert.equal(result.models[4].reason, "runtime_contract_mismatch");
+  assert.equal(result.models[3].reason, "protocol_conflict");
+  assert.equal(result.models[4].supported, true);
+  assert.equal(result.models[4].api, "anthropic-messages");
+  assert.equal(result.models[4].source, "verified_official_contract");
+  assert.equal(result.models[5].supported, true);
+  assert.equal(result.models[5].api, "anthropic-messages");
+  assert.equal(result.models[6].reason, "protocol_conflict");
+  assert.equal(result.models[7].reason, "endpoint_conflict");
+  assert.equal(result.models[8].reason, "catalog_contract_ambiguous");
+  assert.equal(result.models[9].api, "anthropic-messages");
+  assert.equal(result.models[10].api, "anthropic-messages");
+  assert.equal(result.models[11].api, "openai-completions");
+  assert.equal(result.models[12].api, "anthropic-messages");
+  assert.equal(result.models[13].api, "anthropic-messages");
+  assert.equal(result.models[14].reason, "runtime_contract_mismatch");
 });

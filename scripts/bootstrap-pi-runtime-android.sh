@@ -38,9 +38,7 @@ with zipfile.ZipFile(zip_path) as z:
 fi
 
 if [[ -d "$runtime_dir" ]]; then
-  if [[ ! -f "$runtime_dir/bundle/main.js" ]]; then
-    (cd "$runtime_dir" && npm ci && npm run build)
-  fi
+  (cd "$runtime_dir" && npm ci && npm run build)
   mkdir -p "$assets_dir"
   cp "$runtime_dir/bundle/main.js" "$assets_dir/main.js"
 fi

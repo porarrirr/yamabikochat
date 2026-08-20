@@ -93,6 +93,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 private fun modelsDevUnsupportedReason(reason: String?): String = when (reason) {
     "pi_provider_missing" -> "Piにプロバイダー定義がありません"
     "pi_model_missing" -> "Piにモデル定義がありません"
+    "protocol_conflict" -> "models.devとPiのプロトコルが一致しません"
+    "endpoint_conflict" -> "models.devとPiのエンドポイントが一致しません"
+    "catalog_contract_ambiguous" -> "models.devの実行契約を一意に決定できません"
     "contract_conflict" -> "models.devとPiの実行契約が一致しません"
     "runtime_contract_mismatch" -> "アプリとPi Runtimeの契約バージョンが一致しません"
     else -> "実行契約を確認できません"
@@ -2101,9 +2104,10 @@ fun SettingsScreen(
                                                 OpenCodeGoModelCatalog.normalizedModelId(option.id)
                                             } else option.id,
                                             catalogContract = PiCatalogModelContract(
-                                                npm = option.providerContract?.npm ?: providerValue.npm,
-                                                api = option.providerContract?.api ?: providerValue.api,
+                                                npm = option.providerContract?.npm,
+                                                api = option.providerContract?.api,
                                                 shape = option.providerContract?.shape,
+                                                provenance = option.providerContract?.provenance,
                                                 toolCall = option.toolCall
                                             )
                                         )

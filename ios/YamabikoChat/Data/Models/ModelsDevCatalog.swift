@@ -84,6 +84,7 @@ struct CatalogModelProviderContract: Codable, Equatable, Sendable {
     var npm: String?
     var api: String?
     var shape: String?
+    var provenance: String? = nil
 }
 
 struct CatalogModel: Codable, Identifiable, Equatable, Sendable {
