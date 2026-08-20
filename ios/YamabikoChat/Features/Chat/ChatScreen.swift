@@ -4,6 +4,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 import UIKit
 import ImageIO
+import QuickLook
 
 private enum ChatTimelineItem: Identifiable {
     case message(FullChatMessage)
@@ -868,18 +869,30 @@ private struct ChatAttachmentItem: Identifiable, Equatable {
         guard let url else { return false }
         return url.isImageAttachment
     }
+
+    var isSVG: Bool { url?.pathExtension.lowercased() == "svg" }
+    var isHTML: Bool { ["html", "htm"].contains(url?.pathExtension.lowercased() ?? "") }
 }
 
 private struct MessageAttachmentList: View {
     let attachments: [ChatAttachmentItem]
     let isOutgoing: Bool
+    @State private var previewURL: URL?
 
     private var imageAttachments: [ChatAttachmentItem] {
-        attachments.filter(\.isImage)
+        attachments.filter { $0.isImage && !$0.isSVG }
+    }
+
+    private var svgAttachments: [ChatAttachmentItem] {
+        attachments.filter(\.isSVG)
+    }
+
+    private var htmlAttachments: [ChatAttachmentItem] {
+        attachments.filter(\.isHTML)
     }
 
     private var fileAttachments: [ChatAttachmentItem] {
-        attachments.filter { !$0.isImage }
+        attachments.filter { !$0.isImage && !$0.isHTML && !$0.isSVG }
     }
 
     private var horizontalAlignment: HorizontalAlignment {
@@ -916,37 +929,214 @@ private struct MessageAttachmentList: View {
                 .frame(maxWidth: .infinity, alignment: frameAlignment)
             }
 
+            ForEach(svgAttachments) { attachment in
+                if let url = attachment.url {
+                    GeneratedSVGAttachmentCard(url: url, displayName: attachment.displayName)
+                }
+            }
+
+            ForEach(htmlAttachments) { attachment in
+                if let url = attachment.url {
+                    GeneratedHTMLAttachmentCard(url: url, displayName: attachment.displayName)
+                }
+            }
+
             ForEach(fileAttachments) { attachment in
-                Label(attachment.displayName, systemImage: "paperclip")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .frame(maxWidth: 260, alignment: frameAlignment)
+                if let url = attachment.url {
+                    Button {
+                        previewURL = url
+                    } label: {
+                        Label(attachment.displayName, systemImage: "doc")
+                            .font(.caption)
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(Color(uiColor: .secondarySystemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: 300, alignment: frameAlignment)
+                }
             }
         }
+        .quickLookPreview($previewURL)
     }
 }
 
 private struct AttachmentImageCard: View {
     let url: URL
     let displayName: String
+    @State private var previewURL: URL?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            AttachmentThumbnail(url: url, sideLength: 128)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.chatBubbleBorder.opacity(0.45), lineWidth: 1)
-                }
+        Button {
+            previewURL = url
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                AttachmentThumbnail(url: url, sideLength: 128)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.chatBubbleBorder.opacity(0.45), lineWidth: 1)
+                    }
 
-            Text(displayName)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .frame(width: 128, alignment: .leading)
+                Text(displayName)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(width: 128, alignment: .leading)
+            }
         }
+        .buttonStyle(.plain)
+        .quickLookPreview($previewURL)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(L10n.format("添付画像: %@", displayName))
+    }
+}
+
+private struct GeneratedSVGAttachmentCard: View {
+    let url: URL
+    let displayName: String
+
+    @State private var content: String?
+    @State private var loadFailed = false
+    @State private var renderError: String?
+    @State private var previewURL: URL?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            attachmentHeader(icon: "photo", title: displayName, url: url) {
+                previewURL = url
+            }
+            if let content {
+                SvgPreviewWebView(svgContent: content) { error in
+                    renderError = error
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 240)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color(uiColor: .separator).opacity(0.4), lineWidth: 1)
+                }
+                if let renderError {
+                    Text(renderError)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                }
+            } else if loadFailed {
+                Text(L10n.text("SVGを読み込めませんでした"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 80)
+            }
+        }
+        .generatedAttachmentCardStyle()
+        .task(id: url.path) {
+            content = Self.loadTextFile(url)
+            loadFailed = content == nil
+        }
+        .quickLookPreview($previewURL)
+    }
+
+    private static func loadTextFile(_ url: URL) -> String? {
+        guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              size <= AppConstants.maxAttachmentSizeBytes else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+}
+
+private struct GeneratedHTMLAttachmentCard: View {
+    let url: URL
+    let displayName: String
+
+    @State private var content: String?
+    @State private var loadFailed = false
+    @State private var pageTitle = ""
+    @State private var isBrowserPresented = false
+    @State private var previewURL: URL?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            attachmentHeader(icon: "globe", title: displayName, url: url) {
+                isBrowserPresented = content != nil
+                if content == nil { previewURL = url }
+            }
+            if let content {
+                HtmlPreviewWebView(html: content, pageTitle: $pageTitle)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 260)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color(uiColor: .separator).opacity(0.4), lineWidth: 1)
+                    }
+            } else if loadFailed {
+                Text(L10n.text("HTMLを読み込めませんでした"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 80)
+            }
+        }
+        .generatedAttachmentCardStyle()
+        .task(id: url.path) {
+            content = Self.loadTextFile(url)
+            loadFailed = content == nil
+        }
+        .sheet(isPresented: $isBrowserPresented) {
+            if let content {
+                HtmlPreviewBrowser(html: content, filename: displayName)
+            }
+        }
+        .quickLookPreview($previewURL)
+    }
+
+    private static func loadTextFile(_ url: URL) -> String? {
+        guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              size <= AppConstants.maxAttachmentSizeBytes else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+}
+
+private func attachmentHeader(
+    icon: String,
+    title: String,
+    url: URL,
+    onOpen: @escaping () -> Void
+) -> some View {
+    HStack(spacing: 8) {
+        Image(systemName: icon)
+            .foregroundStyle(.secondary)
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .lineLimit(1)
+        Spacer(minLength: 8)
+        ShareLink(item: url) {
+            Image(systemName: "square.and.arrow.up")
+                .font(.caption)
+        }
+        .buttonStyle(.plain)
+        Button(action: onOpen) {
+            Label(L10n.text("表示"), systemImage: "eye")
+                .font(.caption)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private extension View {
+    func generatedAttachmentCardStyle() -> some View {
+        padding(10)
+            .background(Color(uiColor: .secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color(uiColor: .separator).opacity(0.4), lineWidth: 1)
+            }
     }
 }
 

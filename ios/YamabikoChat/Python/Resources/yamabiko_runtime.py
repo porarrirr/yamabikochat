@@ -160,11 +160,18 @@ def _session_import(*args: Any, **kwargs: Any) -> Any:
     return imported
 
 
-def _snapshot_outputs(outputs: Path) -> dict[str, tuple[int, int]]:
+def _is_visible_generated_file(path: Path, root: Path) -> bool:
+    relative = path.relative_to(root)
+    return path.is_file() and not any(
+        part.startswith(".") or part == "__pycache__" for part in relative.parts
+    )
+
+
+def _snapshot_files(root: Path) -> dict[str, tuple[int, int]]:
     return {
-        str(path.relative_to(outputs)): (path.stat().st_mtime_ns, path.stat().st_size)
-        for path in outputs.rglob("*")
-        if path.is_file()
+        str(path.relative_to(root)): (path.stat().st_mtime_ns, path.stat().st_size)
+        for path in root.rglob("*")
+        if _is_visible_generated_file(path, root)
     }
 
 
@@ -193,17 +200,27 @@ def _patch_matplotlib_show() -> None:
     plt.show = save_instead_of_show
 
 
-def _artifacts(outputs: Path, before: dict[str, tuple[int, int]]) -> list[dict[str, Any]]:
+def _artifacts(
+    roots: tuple[tuple[str, Path], ...],
+    before: dict[str, dict[str, tuple[int, int]]],
+) -> list[dict[str, Any]]:
     values: list[dict[str, Any]] = []
-    for path in sorted(outputs.rglob("*")):
-        if not path.is_file():
-            continue
-        relpath = str(path.relative_to(outputs))
-        stat = path.stat()
-        if before.get(relpath) == (stat.st_mtime_ns, stat.st_size):
-            continue
-        mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        values.append({"name": path.name, "relpath": relpath, "mime": mime, "size": stat.st_size})
+    for root_name, root in roots:
+        for path in sorted(root.rglob("*")):
+            if not _is_visible_generated_file(path, root):
+                continue
+            relpath = str(path.relative_to(root))
+            stat = path.stat()
+            if before[root_name].get(relpath) == (stat.st_mtime_ns, stat.st_size):
+                continue
+            mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            values.append({
+                "name": path.name,
+                "root": root_name,
+                "relpath": relpath,
+                "mime": mime,
+                "size": stat.st_size,
+            })
     return values
 
 
@@ -230,6 +247,8 @@ def run_cell(session_id: str, code: str, options_json: str) -> str:
     error: dict[str, str] | None = None
     result_repr: str | None = None
     artifacts: list[dict[str, Any]] = []
+    artifact_roots: tuple[tuple[str, Path], ...] = ()
+    before: dict[str, dict[str, tuple[int, int]]] = {}
     try:
         options = json.loads(options_json)
         workspace = _resolved(options["workspace"])
@@ -245,11 +264,10 @@ def run_cell(session_id: str, code: str, options_json: str) -> str:
         os.environ["MPLBACKEND"] = "Agg"
         os.environ["MPLCONFIGDIR"] = str(workspace / ".matplotlib")
         os.chdir(workspace)
-        before = _snapshot_outputs(outputs)
+        artifact_roots = (("outputs", outputs), ("workspace", workspace))
+        before = {name: _snapshot_files(root) for name, root in artifact_roots}
         sys.stdout, sys.stderr = stdout, stderr
         result_repr = _execute(code, _namespace(session_id))
-        _save_open_figures(outputs)
-        artifacts = _artifacts(outputs, before)
     except BaseException as exc:  # The bridge must always receive a JSON envelope.
         error = {
             "type": type(exc).__name__,
@@ -258,6 +276,19 @@ def run_cell(session_id: str, code: str, options_json: str) -> str:
         }
     finally:
         sys.stdout, sys.stderr = previous_stdout, previous_stderr
+        if artifact_roots:
+            try:
+                _save_open_figures(outputs)
+                artifacts = _artifacts(artifact_roots, before)
+            except BaseException as artifact_error:
+                if error is None:
+                    error = {
+                        "type": type(artifact_error).__name__,
+                        "message": str(artifact_error),
+                        "traceback": "".join(traceback.format_exception(
+                            type(artifact_error), artifact_error, artifact_error.__traceback__
+                        )),
+                    }
         _active_workspace = None
         _active_outputs = None
         _active_read_roots = ()

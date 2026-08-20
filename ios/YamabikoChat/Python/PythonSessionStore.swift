@@ -70,10 +70,23 @@ final class PythonSessionStore: @unchecked Sendable {
     }
 
     func outputURL(sessionID: String, relativePath: String) throws -> URL {
+        try artifactURL(sessionID: sessionID, root: "outputs", relativePath: relativePath)
+    }
+
+    func artifactURL(sessionID: String, root: String, relativePath: String) throws -> URL {
         let paths = try paths(sessionID: sessionID)
-        let candidate = paths.outputs.appendingPathComponent(relativePath).standardizedFileURL
-        let outputRoot = paths.outputs.standardizedFileURL.path + "/"
-        guard candidate.path.hasPrefix(outputRoot) else {
+        let allowedRoot: URL
+        switch root {
+        case "outputs":
+            allowedRoot = paths.outputs
+        case "workspace":
+            allowedRoot = paths.workspace
+        default:
+            throw PythonToolError.invalidArtifactPath
+        }
+        let candidate = allowedRoot.appendingPathComponent(relativePath).standardizedFileURL
+        let normalizedRoot = allowedRoot.standardizedFileURL.path + "/"
+        guard candidate.path.hasPrefix(normalizedRoot) else {
             throw PythonToolError.invalidArtifactPath
         }
         return candidate

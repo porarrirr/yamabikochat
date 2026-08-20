@@ -36,7 +36,7 @@ struct HtmlPreviewBrowser: View {
     }
 }
 
-private struct HtmlPreviewWebView: UIViewRepresentable {
+struct HtmlPreviewWebView: UIViewRepresentable {
     let html: String
     @Binding var pageTitle: String
 

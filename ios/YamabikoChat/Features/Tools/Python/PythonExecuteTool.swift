@@ -6,7 +6,7 @@ struct PythonExecuteTool: LocalToolExecutor {
     let definition = ToolDefinition(
         name: Self.name,
         description: """
-        Execute Python 3.14 locally in a stateful namespace scoped to this chat. numpy, pandas, matplotlib, and Pillow are available when their verified iOS wheels are bundled. Save files under ./outputs/ to return them as artifacts; open matplotlib figures are automatically saved as PNG. Network, subprocess, and shell access are disabled. Files attached to the chat are copied into the current workspace.
+        Execute Python 3.14 locally in a stateful namespace scoped to this chat. numpy, pandas, matplotlib, and Pillow are available when their verified iOS wheels are bundled. Files created or updated in the workspace or ./outputs/ are automatically returned to the user as visible artifacts; open matplotlib figures are automatically saved as PNG. Network, subprocess, and shell access are disabled. Files attached to the chat are copied into the current workspace.
         """,
         parametersJSON: #"{"type":"object","properties":{"code":{"type":"string","description":"Python source code to execute"},"reset":{"type":"boolean","description":"Reset this chat's Python namespace and files before executing"}},"required":["code"],"additionalProperties":false}"#
     )
@@ -57,9 +57,17 @@ struct PythonExecuteTool: LocalToolExecutor {
         )
         var generated: [ToolArtifact] = []
         for artifact in response.artifacts {
-            let source = try sessions.outputURL(sessionID: sessionID, relativePath: artifact.relpath)
+            let source = try sessions.artifactURL(
+                sessionID: sessionID,
+                root: artifact.root ?? "outputs",
+                relativePath: artifact.relpath
+            )
             let data = try Data(contentsOf: source, options: .mappedIfSafe)
-            let persisted = try attachments.persistGeneratedFile(data: data, filename: artifact.name)
+            let persisted = try attachments.persistGeneratedFile(
+                data: data,
+                filename: artifact.name,
+                collection: "Chat \(sessionID)"
+            )
             generated.append(ToolArtifact(path: persisted.path, name: artifact.name, mime: artifact.mime, size: artifact.size))
         }
         let resultData = try JSONEncoder().encode(response)

@@ -20,16 +20,26 @@ final class AttachmentRepositoryTests: XCTestCase {
     }
 
     func testPersistGeneratedFileSanitizesNameAndWritesBytes() throws {
-        let repository = AttachmentRepository()
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("generated-files-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = AttachmentRepository(generatedFilesRootOverride: root)
         let payload = Data("generated".utf8)
         let persisted = try repository.persistGeneratedFile(
             data: payload,
-            filename: "plot unsafe.png"
+            filename: "plot:unsafe.png",
+            collection: "Chat 42"
         )
-        defer { try? FileManager.default.removeItem(at: persisted) }
+        let duplicate = try repository.persistGeneratedFile(
+            data: payload,
+            filename: "plot:unsafe.png",
+            collection: "Chat 42"
+        )
 
         XCTAssertEqual(try Data(contentsOf: persisted), payload)
-        XCTAssertTrue(persisted.lastPathComponent.hasSuffix("_plot_unsafe.png"))
+        XCTAssertEqual(persisted.lastPathComponent, "plot_unsafe.png")
+        XCTAssertEqual(persisted.deletingLastPathComponent().lastPathComponent, "Chat 42")
+        XCTAssertEqual(duplicate.lastPathComponent, "plot_unsafe (2).png")
     }
 
     func testRejectsDangerousExtension() throws {

@@ -48,14 +48,35 @@ final class PythonRuntimeTests: XCTestCase {
         XCTAssertEqual(timedOut.status, "error")
         XCTAssertEqual(timedOut.error?.type, "TimeoutError")
         XCTAssertEqual(afterInterrupt.resultRepr, "44")
+
+        let exportedRoot = root.appendingPathComponent("exported", isDirectory: true)
+        let tool = PythonExecuteTool(
+            worker: worker,
+            sessions: store,
+            attachments: AttachmentRepository(generatedFilesRootOverride: exportedRoot)
+        )
+        let artifactResult = try await tool.execute(call: ToolCall(
+            id: "artifact-call",
+            name: PythonExecuteTool.name,
+            argumentsJSON: #"{"code":"from pathlib import Path\nPath('weather.svg').write_text('<svg/>')"}"#,
+            providerMetadata: ["pythonSessionId": "integration"]
+        ))
+        let exportedArtifact = try XCTUnwrap(artifactResult.artifacts.first)
+        XCTAssertEqual(exportedArtifact.name, "weather.svg")
+        XCTAssertTrue(exportedArtifact.path.contains("Chat integration/weather.svg"))
+        XCTAssertEqual(
+            try String(contentsOfFile: exportedArtifact.path, encoding: .utf8),
+            "<svg/>"
+        )
         await worker.discard(sessionID: "integration")
     }
 
     func testResultEnvelopeDecodesArtifactsAndError() throws {
-        let json = #"{"status":"error","stdout":"out","stderr":"err","result_repr":null,"artifacts":[{"name":"plot.png","relpath":"plot.png","mime":"image/png","size":12}],"duration_ms":8,"error":{"type":"ValueError","message":"bad","traceback":"trace"}}"#
+        let json = #"{"status":"error","stdout":"out","stderr":"err","result_repr":null,"artifacts":[{"name":"plot.png","root":"workspace","relpath":"plot.png","mime":"image/png","size":12}],"duration_ms":8,"error":{"type":"ValueError","message":"bad","traceback":"trace"}}"#
         let response = try JSONDecoder().decode(PythonExecutionResponse.self, from: Data(json.utf8))
 
         XCTAssertEqual(response.status, "error")
+        XCTAssertEqual(response.artifacts.first?.root, "workspace")
         XCTAssertEqual(response.artifacts.first?.mime, "image/png")
         XCTAssertEqual(response.error?.type, "ValueError")
     }
@@ -72,6 +93,14 @@ final class PythonRuntimeTests: XCTestCase {
         let reset = try store.prepare(sessionID: "42", reset: true)
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: reset.outputs.path))
+
+        XCTAssertEqual(
+            try store.artifactURL(sessionID: "42", root: "workspace", relativePath: "state.txt"),
+            reset.workspace.appendingPathComponent("state.txt")
+        )
+        XCTAssertThrowsError(
+            try store.artifactURL(sessionID: "42", root: "workspace", relativePath: "../outputs/file.txt")
+        )
 
         try store.delete(sessionID: "42")
         XCTAssertFalse(FileManager.default.fileExists(atPath: reset.root.path))

@@ -2,6 +2,7 @@ import Foundation
 
 struct PythonArtifactDescriptor: Codable, Sendable, Equatable {
     var name: String
+    var root: String?
     var relpath: String
     var mime: String
     var size: Int64
@@ -43,7 +44,7 @@ enum PythonToolError: LocalizedError, Equatable {
         case .missingSession:
             return "python_execute requires a valid conversation session."
         case .invalidArtifactPath:
-            return "Python returned an artifact outside the session outputs directory."
+            return "Python returned an artifact outside the active session directory."
         case .invalidResponse:
             return "Embedded Python returned an invalid result envelope."
         case .poisoned:

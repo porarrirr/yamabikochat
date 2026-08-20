@@ -64,8 +64,19 @@ class YamabikoRuntimeTests(unittest.TestCase):
             "from pathlib import Path\nPath('../outputs/chart.txt').write_text('ok')",
         )
         self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["artifacts"][0]["root"], "outputs")
         self.assertEqual(result["artifacts"][0]["relpath"], "chart.txt")
         self.assertEqual((root / "outputs" / "chart.txt").read_text(), "ok")
+
+    def test_workspace_files_are_reported_without_model_path_compliance(self):
+        result, root = self.run_cell(
+            "workspace-artifact",
+            "from pathlib import Path\nPath('chart.svg').write_text('<svg/>')",
+        )
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["artifacts"][0]["root"], "workspace")
+        self.assertEqual(result["artifacts"][0]["relpath"], "chart.svg")
+        self.assertEqual((root / "workspace" / "chart.svg").read_text(), "<svg/>")
 
 
 if __name__ == "__main__":

@@ -11,9 +11,12 @@ enum AttachmentValidationResult: Equatable {
 
 final class AttachmentRepository: @unchecked Sendable {
     private let fileManager: FileManager
+    private let generatedFilesRootOverride: URL?
+    private let generatedFilesLock = NSLock()
 
-    init(fileManager: FileManager = .default) {
+    init(fileManager: FileManager = .default, generatedFilesRootOverride: URL? = nil) {
         self.fileManager = fileManager
+        self.generatedFilesRootOverride = generatedFilesRootOverride
     }
 
     func requiresVision(url: URL) -> Bool {
@@ -79,14 +82,56 @@ final class AttachmentRepository: @unchecked Sendable {
         return destination
     }
 
-    func persistGeneratedFile(data: Data, filename: String) throws -> URL {
-        let safeName = filename.replacingOccurrences(of: #"[^A-Za-z0-9._-]+"#, with: "_", options: .regularExpression)
-        let supportURL = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        let directory = supportURL.appendingPathComponent("YamabikoChat/Attachments", isDirectory: true)
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        let destination = directory.appendingPathComponent(UUID().uuidString + "_" + (safeName.isEmpty ? "generated-file" : safeName))
-        try data.write(to: destination, options: [.atomic])
-        return destination
+    func persistGeneratedFile(data: Data, filename: String, collection: String? = nil) throws -> URL {
+        try generatedFilesLock.withLock {
+            let safeName = safeGeneratedName(filename, fallback: "generated-file")
+            var directory = try generatedFilesRoot()
+            if let collection, !collection.isEmpty {
+                directory.appendPathComponent(
+                    safeGeneratedName(collection, fallback: "Chat"),
+                    isDirectory: true
+                )
+            }
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            let destination = uniqueDestination(directory: directory, filename: safeName)
+            try data.write(to: destination, options: [.atomic])
+            return destination
+        }
+    }
+
+    private func generatedFilesRoot() throws -> URL {
+        if let generatedFilesRootOverride { return generatedFilesRootOverride }
+        let documents = try fileManager.url(
+            for: .documentDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        return documents.appendingPathComponent("Generated Files", isDirectory: true)
+    }
+
+    private func safeGeneratedName(_ value: String, fallback: String) -> String {
+        let component = URL(fileURLWithPath: value).lastPathComponent
+            .replacingOccurrences(of: #"[\x00-\x1F/:]+"#, with: "_", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return component.isEmpty || component == "." ? fallback : component
+    }
+
+    private func uniqueDestination(directory: URL, filename: String) -> URL {
+        let initial = directory.appendingPathComponent(filename)
+        guard fileManager.fileExists(atPath: initial.path) else { return initial }
+        let source = URL(fileURLWithPath: filename)
+        let ext = source.pathExtension
+        let stem = source.deletingPathExtension().lastPathComponent
+        var index = 2
+        while true {
+            let candidateName = ext.isEmpty ? "\(stem) (\(index))" : "\(stem) (\(index)).\(ext)"
+            let candidate = directory.appendingPathComponent(candidateName)
+            if !fileManager.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+            index += 1
+        }
     }
 
     private func coordinateAndCopyToTemporary(url: URL) throws -> URL {
@@ -138,5 +183,13 @@ final class AttachmentRepository: @unchecked Sendable {
     private func isDangerous(url: URL) -> Bool {
         let blocked = ["exe", "bat", "cmd", "com", "sh", "js", "dll", "msi", "apk", "ipa"]
         return blocked.contains(url.pathExtension.lowercased())
+    }
+}
+
+private extension NSLock {
+    func withLock<T>(_ operation: () throws -> T) rethrows -> T {
+        lock()
+        defer { unlock() }
+        return try operation()
     }
 }
