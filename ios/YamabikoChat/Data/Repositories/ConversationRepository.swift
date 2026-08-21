@@ -777,6 +777,102 @@ final class ConversationRepository: @unchecked Sendable {
                 .order(Column("startedAtMs").asc, Column("id").asc)
                 .fetchAll(db)
 
+            func requiredExportId(_ id: Int64?, source: String) throws -> String {
+                guard let id else {
+                    throw ConversationExportError.invalidStoredRecord("\(source).id")
+                }
+                return String(id)
+            }
+
+            var piExecutions: [ConversationPiExecutionExport] = []
+            for message in messageExports {
+                if let execution = message.toolActivity?.piExecution {
+                    piExecutions.append(
+                        ConversationPiExecutionExport(
+                            source: "message",
+                            sourceId: try requiredExportId(message.message.id, source: "message"),
+                            execution: execution
+                        )
+                    )
+                }
+                for variant in message.variants {
+                    if let execution = variant.toolActivity?.piExecution {
+                        piExecutions.append(
+                            ConversationPiExecutionExport(
+                                source: "message-variant",
+                                sourceId: try requiredExportId(variant.variant.id, source: "message-variant"),
+                                execution: execution
+                            )
+                        )
+                    }
+                }
+            }
+            for dual in dualExports {
+                if let execution = dual.modelAToolActivity?.piExecution {
+                    piExecutions.append(
+                        ConversationPiExecutionExport(
+                            source: "dual-model-a",
+                            sourceId: try requiredExportId(dual.message.id, source: "dual-message"),
+                            execution: execution
+                        )
+                    )
+                }
+                if let execution = dual.modelBToolActivity?.piExecution {
+                    piExecutions.append(
+                        ConversationPiExecutionExport(
+                            source: "dual-model-b",
+                            sourceId: try requiredExportId(dual.message.id, source: "dual-message"),
+                            execution: execution
+                        )
+                    )
+                }
+            }
+            for auto in autoExports {
+                for message in auto.messages {
+                    if let execution = message.piExecution {
+                        piExecutions.append(
+                            ConversationPiExecutionExport(
+                                source: "auto-conversation",
+                                sourceId: try requiredExportId(message.message.id, source: "auto-conversation-message"),
+                                execution: execution
+                            )
+                        )
+                    }
+                }
+            }
+            for record in fusionTraces {
+                let trace = try record.fusionTrace()
+                for (index, panel) in trace.panelResults.enumerated() {
+                    if let execution = panel.piExecution {
+                        piExecutions.append(
+                            ConversationPiExecutionExport(
+                                source: "fusion-panel",
+                                sourceId: "\(record.id)-\(index)-\(panel.modelId)",
+                                execution: execution
+                            )
+                        )
+                    }
+                }
+                for (index, execution) in (trace.judgeResult?.piExecutions ?? []).enumerated() {
+                    piExecutions.append(
+                        ConversationPiExecutionExport(
+                            source: "fusion-judge",
+                            sourceId: "\(record.id)-\(index)",
+                            execution: execution
+                        )
+                    )
+                }
+                if let execution = trace.synthesisResult?.piExecution {
+                    piExecutions.append(
+                        ConversationPiExecutionExport(
+                            source: "fusion-synthesis",
+                            sourceId: record.id,
+                            execution: execution
+                        )
+                    )
+                }
+            }
+
             return ConversationDebugExport(
                 exportedAtMs: Int64(Date().timeIntervalSince1970 * 1_000),
                 application: ConversationDebugExport.ApplicationInfo(
@@ -793,6 +889,7 @@ final class ConversationRepository: @unchecked Sendable {
                 fusionTraces: fusionTraces,
                 tokenUsageRecords: tokenUsage,
                 executionMetrics: metrics,
+                piExecutions: piExecutions,
                 files: []
             )
         }

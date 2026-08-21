@@ -53,6 +53,18 @@ final class ConversationExportTests: XCTestCase {
             ]),
             "providerRequests": .array([
                 .object(["step": .number(1), "payload": .object(["model": .string("test-model")])])
+            ]),
+            "events": .array([
+                .object([
+                    "seq": .number(0),
+                    "time": .number(11),
+                    "event": .object(["type": .string("turn_start")])
+                ]),
+                .object([
+                    "seq": .number(1),
+                    "time": .number(19),
+                    "event": .object(["type": .string("turn_end")])
+                ])
             ])
         ])
         try repository.saveToolActivity(
@@ -118,6 +130,8 @@ final class ConversationExportTests: XCTestCase {
         let data = try Data(contentsOf: extractedURL.appendingPathComponent("conversation.json"))
         let decoded = try JSONDecoder().decode(ConversationDebugExport.self, from: data)
         XCTAssertEqual(decoded.messages[1].toolActivity?.piExecution, execution)
+        XCTAssertEqual(decoded.piExecutions.count, 1)
+        XCTAssertEqual(decoded.piExecutions.first?.source, "message")
         XCTAssertEqual(decoded.files.count, 2)
         XCTAssertTrue(decoded.files.allSatisfy { $0.status == .included })
         let attachmentRecord = try XCTUnwrap(
@@ -136,6 +150,55 @@ final class ConversationExportTests: XCTestCase {
             try String(contentsOf: extractedURL.appendingPathComponent(toolOutputArchivePath), encoding: .utf8),
             "<svg>chart</svg>"
         )
+        let manifestData = try Data(
+            contentsOf: extractedURL.appendingPathComponent("sessions/manifest.json")
+        )
+        let manifest = try JSONSerialization.jsonObject(with: manifestData) as? [[String: Any]]
+        XCTAssertEqual(manifest?.count, 1)
+        XCTAssertEqual(manifest?.first?["eventCount"] as? Int, 2)
+        let sessionPath = try XCTUnwrap(manifest?.first?["archivePath"] as? String)
+        let sessionLog = try String(
+            contentsOf: extractedURL.appendingPathComponent(sessionPath),
+            encoding: .utf8
+        )
+        XCTAssertEqual(sessionLog.split(separator: "\n").count, 3)
+        XCTAssertTrue(sessionLog.contains(#""format":"yamabiko.pi-agent-session""#))
+        XCTAssertTrue(sessionLog.contains(#""type":"turn_start""#))
+    }
+
+    func testExportFailsWhenAReferencedFileIsMissing() throws {
+        let dbQueue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(dbQueue)
+        let repository = ConversationRepository(dbQueue: dbQueue)
+        let conversationID = try repository.createConversation(
+            title: "Missing attachment",
+            model: "test-model",
+            provider: "TEST",
+            systemPrompt: ""
+        )
+        let missingPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .path
+        let attachmentsJSON = String(
+            decoding: try JSONEncoder().encode([missingPath]),
+            as: UTF8.self
+        )
+        _ = try repository.insertMessage(
+            ChatMessage(
+                conversationId: conversationID,
+                role: "user",
+                text: "question",
+                attachmentsJSON: attachmentsJSON
+            )
+        )
+
+        let snapshot = try repository.fetchDebugExport(conversationId: conversationID)
+        XCTAssertThrowsError(try ConversationExportService.createArchive(snapshot: snapshot)) { error in
+            guard case let ConversationExportError.referencedFileUnavailable(path) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(path, missingPath)
+        }
     }
 
     func testMigrationAddsPiExecutionColumns() throws {

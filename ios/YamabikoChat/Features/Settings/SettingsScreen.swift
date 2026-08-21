@@ -105,6 +105,7 @@ struct SettingsScreen: View {
                     modelsDevCatalogRepository: container.modelsDevCatalogRepository,
                     skillRepository: container.skillRepository
                 )
+                viewModel.prefetchLatestModelCatalogs()
             }
             .onDisappear {
                 viewModel.flushPendingSettingsSave()

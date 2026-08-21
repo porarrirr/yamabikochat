@@ -175,10 +175,16 @@ final class SettingsViewModel: ObservableObject {
         setupAutoSave()
 
         Task {
-            _ = await modelsDevCatalogRepository?.load(forceRefresh: false)
-            await refreshOpenRouterModels(force: false)
             await refreshCodexAuth(force: false)
             refreshDiagnosticsLog()
+        }
+    }
+
+    func prefetchLatestModelCatalogs() {
+        Task {
+            async let modelsDevRefresh: CatalogLoadState? = modelsDevCatalogRepository?.load(forceRefresh: true)
+            async let openRouterRefresh: Void = refreshOpenRouterModels(force: true)
+            _ = await (modelsDevRefresh, openRouterRefresh)
         }
     }
 

@@ -93,8 +93,12 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
 
     init {
         viewModelScope.launch { updateApiKeyStatus() }
-        viewModelScope.launch { repository.refreshModelsDevCatalog() }
         observeTokenUsageStats()
+    }
+
+    fun prefetchLatestModelCatalogs() {
+        viewModelScope.launch { repository.refreshModelsDevCatalog(forceRefresh = true) }
+        viewModelScope.launch { repository.getOpenRouterModels(forceRefresh = true) }
     }
 
     fun refreshModelsDevCatalog() {

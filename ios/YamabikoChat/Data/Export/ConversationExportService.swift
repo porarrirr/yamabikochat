@@ -32,6 +32,12 @@ struct AutoConversationMessageDebugExport: Codable, Equatable {
     var piExecution: JSONValue?
 }
 
+struct ConversationPiExecutionExport: Codable, Equatable {
+    var source: String
+    var sourceId: String
+    var execution: JSONValue
+}
+
 struct ConversationExportFileRecord: Codable, Equatable {
     enum Status: String, Codable {
         case included
@@ -55,7 +61,7 @@ struct ConversationDebugExport: Codable, Equatable {
     }
 
     var format: String = "yamabiko-chat-debug-export"
-    var schemaVersion: Int = 1
+    var schemaVersion: Int = 2
     var exportedAtMs: Int64
     var application: ApplicationInfo
     var securityNotice: String
@@ -66,6 +72,7 @@ struct ConversationDebugExport: Codable, Equatable {
     var fusionTraces: [FusionTraceRecord]
     var tokenUsageRecords: [TokenUsageRecord]
     var executionMetrics: [ConversationExecutionMetric]
+    var piExecutions: [ConversationPiExecutionExport]
     var files: [ConversationExportFileRecord]
 
     var referencedFilePaths: [String] {
@@ -93,6 +100,8 @@ struct ConversationDebugExport: Codable, Equatable {
 enum ConversationExportError: LocalizedError {
     case conversationNotFound
     case archiveCreationFailed
+    case referencedFileUnavailable(String)
+    case invalidStoredRecord(String)
 
     var errorDescription: String? {
         switch self {
@@ -100,6 +109,10 @@ enum ConversationExportError: LocalizedError {
             return L10n.text("チャットが見つかりません。")
         case .archiveCreationFailed:
             return L10n.text("チャットの書き出しファイルを作成できませんでした。")
+        case let .referencedFileUnavailable(path):
+            return L10n.format("参照ファイルを完全に書き出せませんでした: %@", path)
+        case let .invalidStoredRecord(record):
+            return L10n.format("書き出し対象の保存データが壊れています: %@", record)
         }
     }
 }
@@ -121,25 +134,31 @@ enum ConversationExportService {
         let filesURL = stagingURL.appendingPathComponent("files", isDirectory: true)
         try fileManager.createDirectory(at: filesURL, withIntermediateDirectories: true)
 
+        for trace in snapshot.fusionTraces {
+            _ = try trace.fusionTrace()
+        }
         var export = snapshot
-        export.files = includeFiles(snapshot.referencedFilePaths, at: filesURL, fileManager: fileManager)
+        export.files = try includeFiles(snapshot.referencedFilePaths, at: filesURL, fileManager: fileManager)
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         let exportData = try encoder.encode(export)
         try exportData.write(to: stagingURL.appendingPathComponent("conversation.json"), options: .atomic)
+        try writePiSessions(export.piExecutions, at: stagingURL, encoder: encoder, fileManager: fileManager)
 
         let readme = """
         YamabikoChat complete debug export
 
         conversation.json contains the stored conversation, every variant, thinking text,
         tool calls and results, token usage, execution timing, and Pi Agent execution snapshots.
-        Pi snapshots include Agent.state.messages and the provider request payload captured for
-        every LLM step. API keys, authorization values, credentials, access tokens, and abort
-        signals are deliberately excluded.
+        sessions/manifest.json indexes every Pi execution spawned by the conversation, including
+        dual, auto-conversation, and Fusion child executions. Each child directory contains the
+        complete execution snapshot and a session.jsonl with the runtime's ordered Agent event
+        stream. API keys, authorization values, credentials, access tokens, and abort signals are
+        deliberately excluded.
 
-        files/ contains readable chat attachments and generated artifacts. Missing or unreadable
-        files remain listed in conversation.json with an explicit status and error.
+        files/ contains every referenced chat attachment and generated artifact. Archive creation
+        fails if any referenced file cannot be read, so a successful export is never incomplete.
         """
         try Data(readme.utf8).write(to: stagingURL.appendingPathComponent("README.txt"), options: .atomic)
 
@@ -161,20 +180,15 @@ enum ConversationExportService {
         _ paths: [String],
         at filesURL: URL,
         fileManager: FileManager
-    ) -> [ConversationExportFileRecord] {
+    ) throws -> [ConversationExportFileRecord] {
         var seen = Set<String>()
         let uniquePaths = paths.filter { seen.insert($0).inserted }
+        var records: [ConversationExportFileRecord] = []
 
-        return uniquePaths.enumerated().map { offset, originalPath in
+        for (offset, originalPath) in uniquePaths.enumerated() {
             let sourceURL = PiAgentRuntime.attachmentFileURL(from: originalPath)
             guard fileManager.fileExists(atPath: sourceURL.path) else {
-                return ConversationExportFileRecord(
-                    originalPath: originalPath,
-                    archivePath: nil,
-                    status: .missing,
-                    size: nil,
-                    error: "File does not exist at export time"
-                )
+                throw ConversationExportError.referencedFileUnavailable(originalPath)
             }
 
             let archiveName = String(format: "%04d-%@", offset + 1, safeFilename(sourceURL.lastPathComponent))
@@ -182,13 +196,13 @@ enum ConversationExportService {
             do {
                 try fileManager.copyItem(at: sourceURL, to: destinationURL)
                 let size = try destinationURL.resourceValues(forKeys: [.fileSizeKey]).fileSize
-                return ConversationExportFileRecord(
+                records.append(ConversationExportFileRecord(
                     originalPath: originalPath,
                     archivePath: "files/\(archiveName)",
                     status: .included,
                     size: size.map(Int64.init),
                     error: nil
-                )
+                ))
             } catch {
                 DiagnosticsLogger.log(
                     "Conversation export could not include file",
@@ -197,15 +211,80 @@ enum ConversationExportService {
                     metadata: ["path": originalPath],
                     error: error
                 )
-                return ConversationExportFileRecord(
-                    originalPath: originalPath,
-                    archivePath: nil,
-                    status: .unreadable,
-                    size: nil,
-                    error: error.localizedDescription
-                )
+                throw ConversationExportError.referencedFileUnavailable(originalPath)
             }
         }
+        return records
+    }
+
+    private struct PiSessionManifestRecord: Codable {
+        var source: String
+        var sourceId: String
+        var archivePath: String
+        var eventCount: Int
+    }
+
+    private static func writePiSessions(
+        _ executions: [ConversationPiExecutionExport],
+        at stagingURL: URL,
+        encoder: JSONEncoder,
+        fileManager: FileManager
+    ) throws {
+        let sessionsURL = stagingURL.appendingPathComponent("sessions", isDirectory: true)
+        try fileManager.createDirectory(at: sessionsURL, withIntermediateDirectories: true)
+        var manifest: [PiSessionManifestRecord] = []
+
+        for (offset, record) in executions.enumerated() {
+            let directoryName = String(
+                format: "%04d-%@-%@",
+                offset + 1,
+                safeFilename(record.source),
+                safeFilename(record.sourceId)
+            )
+            let directoryURL = sessionsURL.appendingPathComponent(directoryName, isDirectory: true)
+            try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+            try encoder.encode(record.execution).write(
+                to: directoryURL.appendingPathComponent("execution.json"),
+                options: .atomic
+            )
+
+            let events = executionEvents(record.execution)
+            let lineEncoder = JSONEncoder()
+            lineEncoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+            var jsonl = Data()
+            let header = JSONValue.object([
+                "type": .string("session"),
+                "format": .string("yamabiko.pi-agent-session"),
+                "version": .number(2),
+                "source": .string(record.source),
+                "sourceId": .string(record.sourceId)
+            ])
+            for value in [header] + events {
+                jsonl.append(try lineEncoder.encode(value))
+                jsonl.append(0x0A)
+            }
+            try jsonl.write(to: directoryURL.appendingPathComponent("session.jsonl"), options: .atomic)
+            manifest.append(
+                PiSessionManifestRecord(
+                    source: record.source,
+                    sourceId: record.sourceId,
+                    archivePath: "sessions/\(directoryName)/session.jsonl",
+                    eventCount: events.count
+                )
+            )
+        }
+
+        try encoder.encode(manifest).write(
+            to: sessionsURL.appendingPathComponent("manifest.json"),
+            options: .atomic
+        )
+    }
+
+    private static func executionEvents(_ execution: JSONValue) -> [JSONValue] {
+        guard case let .object(root) = execution,
+              case let .array(events)? = root["events"]
+        else { return [] }
+        return events
     }
 
     private static func safeFilename(_ value: String) -> String {

@@ -741,6 +741,14 @@ function exportableProviderPayload(value) {
   }));
 }
 
+function exportableAgentEvent(event) {
+  const value = exportableProviderPayload(event);
+  if (event.type === "message_update") {
+    delete value.message;
+  }
+  return value;
+}
+
 function standardStreamFunction(request, config, report, captureProviderRequest) {
   return (model, context, options = {}) => runtimeModels.streamSimple(model, context, {
     ...options,
@@ -864,10 +872,10 @@ function finalResponse(assistants, contextUsage) {
   };
 }
 
-function piExecutionSnapshot({ agent, effectiveRequest, providerRequests, resolution, startedAtMs, failure = null }) {
+function piExecutionSnapshot({ agent, effectiveRequest, providerRequests, events, resolution, startedAtMs, failure = null }) {
   return {
     format: "yamabiko.pi-agent-execution",
-    version: 1,
+    version: 2,
     runtimeContractVersion: RUNTIME_CONTRACT_VERSION,
     startedAtMs,
     completedAtMs: Date.now(),
@@ -892,6 +900,7 @@ function piExecutionSnapshot({ agent, effectiveRequest, providerRequests, resolu
       errorMessage: agent.state.errorMessage
     }),
     providerRequests,
+    events,
     failure,
     redactions: ["API keys, authorization values, credentials, access tokens, and abort signals"]
   };
@@ -943,7 +952,13 @@ async function runAgent(envelope, res) {
   let step = 0;
   let activeStep = null;
   const runAssistants = [];
+  const events = [];
   agent.subscribe((event) => {
+    events.push({
+      seq: events.length,
+      time: Date.now(),
+      event: exportableAgentEvent(event)
+    });
     if (event.type === "turn_start") {
       activeStep = ++step;
       send(res, { type: "llm_start", stepId: activeStep, timeMs: Date.now() });
@@ -986,6 +1001,7 @@ async function runAgent(envelope, res) {
       agent,
       effectiveRequest,
       providerRequests,
+      events,
       resolution,
       startedAtMs
     });
@@ -998,6 +1014,7 @@ async function runAgent(envelope, res) {
         agent,
         effectiveRequest,
         providerRequests,
+        events,
         resolution,
         startedAtMs,
         failure: {

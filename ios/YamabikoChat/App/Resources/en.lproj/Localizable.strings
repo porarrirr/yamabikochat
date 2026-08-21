@@ -516,3 +516,5 @@
 "サーバーエラー" = "Server error";
 "しばらくしてから再試行してください。" = "Please try again in a moment.";
 "応答を取得できませんでした" = "Couldn't get a response";
+"参照ファイルを完全に書き出せませんでした: %@" = "A referenced file could not be exported completely: %@";
+"書き出し対象の保存データが壊れています: %@" = "Stored data required for export is corrupted: %@";

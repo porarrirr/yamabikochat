@@ -115,6 +115,16 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `prefetchLatestModelCatalogs force refreshes both catalogs`() = runTest {
+        viewModel.prefetchLatestModelCatalogs()
+
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { repository.refreshModelsDevCatalog(forceRefresh = true) }
+        coVerify(exactly = 1) { repository.getOpenRouterModels(forceRefresh = true) }
+    }
+
+    @Test
     fun `saveSettings persists OpenAI compatible key when requested`() = runTest {
         viewModel.saveSettings(
             SettingsUpdateRequest(

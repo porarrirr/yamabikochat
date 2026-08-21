@@ -157,6 +157,10 @@ fun SettingsScreen(
         uri?.let(viewModel::inspectAgentSkill)
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.prefetchLatestModelCatalogs()
+    }
+
     agentSkillPreview?.let { preview ->
         var trusted by remember(preview.contentHash) { mutableStateOf(false) }
         AlertDialog(

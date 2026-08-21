@@ -474,3 +474,5 @@
 "しばらくしてから再試行してください。" = "Veuillez réessayer dans un instant.";
 "応答を取得できませんでした" = "Impossible d’obtenir une réponse";
 "詳細" = "Détails";
+"参照ファイルを完全に書き出せませんでした: %@" = "Un fichier référencé n’a pas pu être exporté intégralement : %@";
+"書き出し対象の保存データが壊れています: %@" = "Les données enregistrées requises pour l’exportation sont endommagées : %@";
