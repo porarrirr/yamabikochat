@@ -28,13 +28,13 @@ _sessions: dict[str, dict[str, Any]] = {}
 _active_workspace: Path | None = None
 _active_outputs: Path | None = None
 _active_read_roots: tuple[Path, ...] = ()
+_FIGURE_SAVED_ATTRIBUTE = "__yamabiko_explicitly_saved__"
 
 # Initialize trusted standard-library process state before the audit policy is
 # active. MIME setup otherwise probes host configuration files, while CPython's
 # iOS platform module loads the Apple Objective-C runtime to read device data.
 mimetypes.init(files=[])
 platform.system()
-_baseline_modules = frozenset(sys.modules)
 
 
 class _BoundedTextIO(io.TextIOBase):
@@ -135,9 +135,9 @@ def _reset_global_state(session_id: str) -> None:
         pyplot.close("all")
     if matplotlib is not None:
         matplotlib.rcdefaults()
-    for name in tuple(sys.modules):
-        if name not in _baseline_modules and name != __name__:
-            sys.modules.pop(name, None)
+    # Extension modules are process-global and cannot be safely unloaded by
+    # deleting sys.modules entries. Session isolation comes from replacing the
+    # execution namespace; imported package code remains cached by CPython.
     random.seed()
 
 
@@ -183,16 +183,41 @@ def _save_open_figures(outputs: Path) -> None:
     if plt is None:
         return
     for number in plt.get_fignums():
+        figure = plt.figure(number)
+        if getattr(figure, _FIGURE_SAVED_ATTRIBUTE, False):
+            continue
         index = 1
         while (outputs / f"figure_{index}.png").exists():
             index += 1
-        plt.figure(number).savefig(outputs / f"figure_{index}.png", format="png", bbox_inches="tight")
+        figure.savefig(outputs / f"figure_{index}.png", format="png", bbox_inches="tight")
     plt.close("all")
+
+
+def _close_open_figures() -> None:
+    plt = sys.modules.get("matplotlib.pyplot")
+    if plt is not None:
+        plt.close("all")
 
 
 def _patch_matplotlib_show() -> None:
     plt = sys.modules.get("matplotlib.pyplot")
-    if plt is None or getattr(plt.show, "__yamabiko_show__", False):
+    if plt is None:
+        return
+
+    figure_module = sys.modules.get("matplotlib.figure")
+    figure_class = getattr(figure_module, "Figure", None)
+    if figure_class is not None and not getattr(figure_class.savefig, "__yamabiko_savefig__", False):
+        original_savefig = figure_class.savefig
+
+        def savefig_and_mark(figure: Any, *args: Any, **kwargs: Any) -> Any:
+            result = original_savefig(figure, *args, **kwargs)
+            setattr(figure, _FIGURE_SAVED_ATTRIBUTE, True)
+            return result
+
+        savefig_and_mark.__yamabiko_savefig__ = True
+        figure_class.savefig = savefig_and_mark
+
+    if getattr(plt.show, "__yamabiko_show__", False):
         return
 
     def save_instead_of_show(*_args: Any, **_kwargs: Any) -> None:
@@ -208,10 +233,15 @@ def _artifacts(
     before: dict[str, dict[str, tuple[int, int]]],
 ) -> list[dict[str, Any]]:
     values: list[dict[str, Any]] = []
+    seen_paths: set[Path] = set()
     for root_name, root in roots:
         for path in sorted(root.rglob("*")):
             if not _is_visible_generated_file(path, root):
                 continue
+            resolved_path = path.resolve(strict=False)
+            if resolved_path in seen_paths:
+                continue
+            seen_paths.add(resolved_path)
             relpath = str(path.relative_to(root))
             stat = path.stat()
             if before[root_name].get(relpath) == (stat.st_mtime_ns, stat.st_size):
@@ -281,7 +311,10 @@ def run_cell(session_id: str, code: str, options_json: str) -> str:
         sys.stdout, sys.stderr = previous_stdout, previous_stderr
         if artifact_roots:
             try:
-                _save_open_figures(outputs)
+                if error is None:
+                    _save_open_figures(outputs)
+                else:
+                    _close_open_figures()
                 artifacts = _artifacts(artifact_roots, before)
             except BaseException as artifact_error:
                 if error is None:

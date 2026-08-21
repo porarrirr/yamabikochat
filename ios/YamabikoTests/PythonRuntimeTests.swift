@@ -42,6 +42,7 @@ plt.savefig("matplotlib.png")
         let matplotlibArtifact = try XCTUnwrap(artifacts["matplotlib.png"])
         XCTAssertGreaterThan(pillowArtifact.size, 0)
         XCTAssertGreaterThan(matplotlibArtifact.size, 0)
+        XCTAssertNil(artifacts["figure_1.png"], "An explicitly saved figure must not be auto-saved a second time")
 
         let workspace = root
             .appendingPathComponent("scientific-integration", isDirectory: true)
@@ -130,7 +131,7 @@ plt.savefig("matplotlib.png")
         XCTAssertEqual(response.status, "error")
         XCTAssertEqual(response.artifacts.first?.root, "workspace")
         XCTAssertEqual(response.artifacts.first?.mime, "image/png")
-        XCTAssertEqual(response.error?.type, "ValueError")
+        XCTAssertEqual(response.error?.type, "ValueError", response.error?.traceback ?? response.stderr)
     }
 
     func testSessionStoreResetAndDeleteLifecycle() throws {
@@ -162,5 +163,69 @@ plt.savefig("matplotlib.png")
         let json = #"{"callId":"1","name":"web_search","content":"{}","isError":false,"sources":[]}"#
         let result = try JSONDecoder().decode(ToolResult.self, from: Data(json.utf8))
         XCTAssertEqual(result.artifacts, [])
+    }
+
+    func testOutputsDirectoryMatchesThePythonToolContract() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("python-outputs-contract-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = PythonSessionStore(rootOverride: root)
+        let worker = PythonWorker(sessions: store, timeoutSeconds: 10, memoryLimitBytes: 4_000_000_000)
+        let response = try await worker.execute(
+            sessionID: "outputs-contract",
+            code: #"""
+from pathlib import Path
+Path("outputs/report.txt").write_text("ready")
+"""#,
+            reset: true,
+            attachmentPaths: []
+        )
+
+        XCTAssertEqual(response.status, "ok", response.error?.traceback ?? response.stderr)
+        XCTAssertEqual(response.artifacts, [
+            PythonArtifactDescriptor(
+                name: "report.txt",
+                root: "outputs",
+                relpath: "report.txt",
+                mime: "text/plain",
+                size: 5
+            )
+        ])
+        XCTAssertEqual(
+            try String(contentsOf: store.outputURL(sessionID: "outputs-contract", relativePath: "report.txt")),
+            "ready"
+        )
+        await worker.discard(sessionID: "outputs-contract")
+    }
+
+    func testFailedCellDoesNotAutoSaveOpenMatplotlibFigure() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("python-failed-figure-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = PythonSessionStore(rootOverride: root)
+        let worker = PythonWorker(sessions: store, timeoutSeconds: 60, memoryLimitBytes: 4_000_000_000)
+
+        let warmup = try await worker.execute(
+            sessionID: "figure-warmup",
+            code: "import matplotlib.pyplot as plt\nplt.close('all')",
+            reset: true,
+            attachmentPaths: []
+        )
+        XCTAssertEqual(warmup.status, "ok", warmup.error?.traceback ?? warmup.stderr)
+        await worker.discard(sessionID: "figure-warmup")
+
+        let response = try await worker.execute(
+            sessionID: "failed-figure",
+            code: "import matplotlib.pyplot as plt\nplt.plot([1, 2])\nraise ValueError('stop')",
+            reset: true,
+            attachmentPaths: []
+        )
+
+        XCTAssertEqual(response.status, "error")
+        XCTAssertEqual(response.error?.type, "ValueError")
+        XCTAssertTrue(response.artifacts.isEmpty)
+        await worker.discard(sessionID: "failed-figure")
     }
 }

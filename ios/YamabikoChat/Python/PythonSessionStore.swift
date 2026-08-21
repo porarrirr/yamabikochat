@@ -100,10 +100,11 @@ final class PythonSessionStore: @unchecked Sendable {
         )
         guard !safeID.isEmpty else { throw PythonToolError.missingSession }
         let root = try sessionsRoot().appendingPathComponent(safeID, isDirectory: true)
+        let workspace = root.appendingPathComponent("workspace", isDirectory: true)
         return PythonSessionPaths(
             root: root,
-            workspace: root.appendingPathComponent("workspace", isDirectory: true),
-            outputs: root.appendingPathComponent("outputs", isDirectory: true)
+            workspace: workspace,
+            outputs: workspace.appendingPathComponent("outputs", isDirectory: true)
         )
     }
 

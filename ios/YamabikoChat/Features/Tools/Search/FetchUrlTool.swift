@@ -1,5 +1,16 @@
 import Foundation
 
+private enum FetchUrlToolError: LocalizedError {
+    case httpStatus(Int, host: String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .httpStatus(status, host):
+            return "fetch_url received HTTP \(status) from \(host)"
+        }
+    }
+}
+
 struct FetchUrlTool: LocalToolExecutor {
     static let name = "fetch_url"
     static let maxCharacters = 8_000
@@ -56,7 +67,10 @@ struct FetchUrlTool: LocalToolExecutor {
             try WebToolURLPolicy.validatePublicHTTPURL(finalURL)
         }
         guard (200 ... 299).contains(response.statusCode) else {
-            throw ProviderClientError.httpStatus(response.statusCode, String(data: data, encoding: .utf8) ?? "")
+            throw FetchUrlToolError.httpStatus(
+                response.statusCode,
+                host: url.host ?? "the requested host"
+            )
         }
         guard data.count <= Self.maxResponseBytes else {
             throw ProviderClientError.parseFailure("Fetched page exceeds the 2 MB response limit")

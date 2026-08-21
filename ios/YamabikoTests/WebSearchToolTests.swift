@@ -18,9 +18,11 @@ private actor RecordingWebToolHTTPClient: WebToolHTTPClient {
 
 private actor FailingWebToolHTTPClient: WebToolHTTPClient {
     let statusCode: Int
+    let body: String
 
-    init(statusCode: Int = 500) {
+    init(statusCode: Int = 500, body: String = "server error") {
         self.statusCode = statusCode
+        self.body = body
     }
 
     func get(url: URL, timeout: TimeInterval) async throws -> (Data, HTTPURLResponse) {
@@ -30,7 +32,7 @@ private actor FailingWebToolHTTPClient: WebToolHTTPClient {
             httpVersion: nil,
             headerFields: ["Content-Type": "text/plain"]
         )!
-        return (Data("server error".utf8), response)
+        return (Data(body.utf8), response)
     }
 }
 
@@ -398,5 +400,28 @@ final class WebSearchToolTests: XCTestCase {
 
         let requestedURLs = await httpClient.requestedURLs
         XCTAssertTrue(requestedURLs.isEmpty)
+    }
+
+    func testFetchURLHTTPErrorDoesNotExposeResponseBodyToAgentContext() async throws {
+        let secretMarker = "BODY-MUST-NOT-ENTER-TOOL-RESULT"
+        let registry = LocalToolRegistry(executors: [
+            FetchUrlTool(httpClient: FailingWebToolHTTPClient(
+                statusCode: 404,
+                body: String(repeating: secretMarker, count: 1_000)
+            ))
+        ])
+
+        let result = await registry.execute(call: ToolCall(
+            id: "call-404",
+            name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/missing","goal":"read the page"}"#,
+            providerMetadata: nil
+        ))
+
+        XCTAssertTrue(result.isError)
+        XCTAssertTrue(result.content.contains("HTTP 404"))
+        XCTAssertTrue(result.content.contains("example.com"))
+        XCTAssertFalse(result.content.contains(secretMarker))
+        XCTAssertLessThan(result.content.count, 300)
     }
 }
