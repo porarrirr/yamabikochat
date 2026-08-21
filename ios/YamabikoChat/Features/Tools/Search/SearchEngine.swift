@@ -45,7 +45,10 @@ struct URLSessionWebToolHTTPClient: WebToolHTTPClient {
             "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
             forHTTPHeaderField: "User-Agent"
         )
-        request.setValue("text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1", forHTTPHeaderField: "Accept")
+        request.setValue(
+            "text/html,application/xhtml+xml,application/json,application/*+json,text/plain;q=0.9,*/*;q=0.1",
+            forHTTPHeaderField: "Accept"
+        )
         let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw ProviderClientError.invalidResponse

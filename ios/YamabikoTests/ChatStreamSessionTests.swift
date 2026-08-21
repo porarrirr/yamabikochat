@@ -33,6 +33,83 @@ final class ChatStreamSessionTests: XCTestCase {
         XCTAssertEqual(messages.last?.text, "Hello")
     }
 
+    func testRunReplacesIntermediateToolTurnTextWithFinalAnswer() async throws {
+        let conversations = try makeConversations()
+        let conversationId = try conversations.createConversation(
+            title: "test",
+            model: "deepseek-v4-flash",
+            provider: "MODELS_DEV:OPENCODE-GO"
+        )
+        let messageId = try conversations.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "model", text: "", createdAtMs: 1)
+        )
+        let snapshots = StreamingSnapshotCollector()
+        let stream = AsyncThrowingStream<ProviderStreamEvent, Error> { continuation in
+            continuation.yield(.answerStart)
+            continuation.yield(.reasoningDelta("search reasoning"))
+            continuation.yield(.textDelta("検索結果が見つかりました。詳細を確認します。"))
+            continuation.yield(.answerStart)
+            continuation.yield(.textDelta("最終回答"))
+            continuation.yield(.completed(ProviderResponse(
+                text: "最終回答",
+                reasoningSummary: "search reasoning",
+                raw: nil,
+                usage: nil
+            )))
+            continuation.finish()
+        }
+
+        let session = try await ChatStreamSession.run(
+            stream: stream,
+            conversations: conversations,
+            kind: .message(messageId: messageId),
+            onStreamEvent: nil,
+            onStreamingSnapshot: { snapshots.append($0) }
+        )
+
+        XCTAssertEqual(session.text, "最終回答")
+        XCTAssertEqual(session.reasoningText, "search reasoning")
+        XCTAssertTrue(snapshots.values.contains { $0.text.contains("検索結果が見つかりました") })
+        XCTAssertEqual(snapshots.values.last?.text, "最終回答")
+        let messages = try conversations.fetchMessages(conversationId: conversationId)
+        XCTAssertEqual(messages.last?.text, "最終回答")
+        XCTAssertEqual(try conversations.fetchFullMessage(id: messageId)?.thinkingStream, "search reasoning")
+    }
+
+    func testRunTreatsCompletedTextAsAuthoritativeWithoutTurnBoundary() async throws {
+        let conversations = try makeConversations()
+        let conversationId = try conversations.createConversation(
+            title: "test",
+            model: "deepseek-v4-flash",
+            provider: "MODELS_DEV:OPENCODE-GO"
+        )
+        let messageId = try conversations.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "model", text: "", createdAtMs: 1)
+        )
+        let stream = AsyncThrowingStream<ProviderStreamEvent, Error> { continuation in
+            continuation.yield(.textDelta("途中経過"))
+            continuation.yield(.textDelta("最終回答"))
+            continuation.yield(.completed(ProviderResponse(
+                text: "最終回答",
+                reasoningSummary: nil,
+                raw: nil,
+                usage: nil
+            )))
+            continuation.finish()
+        }
+
+        let session = try await ChatStreamSession.run(
+            stream: stream,
+            conversations: conversations,
+            kind: .message(messageId: messageId),
+            onStreamEvent: nil,
+            onStreamingSnapshot: nil
+        )
+
+        XCTAssertEqual(session.text, "最終回答")
+        XCTAssertEqual(try conversations.fetchMessages(conversationId: conversationId).last?.text, "最終回答")
+    }
+
     func testRunWritesErrorPlaceholderWhenStreamFailsBeforeContent() async throws {
         let conversations = try makeConversations()
         let conversationId = try conversations.createConversation(

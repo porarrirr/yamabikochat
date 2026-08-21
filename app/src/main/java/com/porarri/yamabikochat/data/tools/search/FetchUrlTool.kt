@@ -6,6 +6,8 @@ import com.porarri.yamabikochat.data.model.ToolResult
 import com.porarri.yamabikochat.data.model.ToolSource
 import com.porarri.yamabikochat.data.tools.LocalToolExecutor
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import org.json.JSONObject
 import java.net.URL
 import java.nio.charset.StandardCharsets
@@ -53,9 +55,11 @@ class FetchUrlTool(
         }
 
         val contentType = response.contentType?.lowercase().orEmpty()
+        val isJson = isJSONDocument(contentType, url.path)
         if (contentType.isNotEmpty() &&
             !contentType.contains("text/") &&
-            !contentType.contains("application/xhtml+xml")
+            !contentType.contains("application/xhtml+xml") &&
+            !isJson
         ) {
             throw WebToolException.ParseFailure("Unsupported fetched content type: $contentType")
         }
@@ -63,11 +67,14 @@ class FetchUrlTool(
         val rawText = decodeBody(response.body)
             ?: throw WebToolException.ParseFailure("Fetched page encoding is unsupported")
 
-        val extracted = if (contentType.contains("text/plain")) {
-            rawText.take(MAX_CHARACTERS)
-        } else {
-            HTMLTextExtractor.extract(from = rawText, maxCharacters = MAX_CHARACTERS)
+        val readableText = when {
+            isJson -> {
+                readableJSON(rawText)
+            }
+            contentType.contains("text/plain") -> rawText
+            else -> HTMLTextExtractor.extract(from = rawText, maxCharacters = Int.MAX_VALUE)
         }
+        val extracted = readableText.take(MAX_CHARACTERS)
         if (extracted.isEmpty()) {
             throw WebToolException.ParseFailure("Fetched page did not contain readable text")
         }
@@ -76,7 +83,7 @@ class FetchUrlTool(
         val content = JSONObject()
             .put("content", extracted)
             .put("title", title)
-            .put("truncated", rawText.length > MAX_CHARACTERS)
+            .put("truncated", readableText.length > MAX_CHARACTERS)
             .put("url", url.toString())
             .toString()
 
@@ -96,6 +103,22 @@ class FetchUrlTool(
         const val MAX_CHARACTERS = 8_000
         const val MAX_RESPONSE_BYTES = 2 * 1024 * 1024
         const val REQUEST_TIMEOUT_SECONDS = 15L
+        private val jsonFormatter = Json { prettyPrint = true }
+
+        internal fun isJSONContentType(contentType: String): Boolean {
+            val mediaType = contentType.lowercase().substringBefore(';').trim()
+            return mediaType == "application/json" || mediaType.endsWith("+json")
+        }
+
+        internal fun isJSONDocument(contentType: String, path: String): Boolean {
+            return isJSONContentType(contentType) || path.endsWith(".json", ignoreCase = true)
+        }
+
+        internal fun readableJSON(rawText: String): String {
+            val value = runCatching { jsonFormatter.parseToJsonElement(rawText) }
+                .getOrElse { throw WebToolException.ParseFailure("Fetched JSON is invalid") }
+            return jsonFormatter.encodeToString(JsonElement.serializer(), value)
+        }
 
         private fun extractTitle(html: String): String? {
             val match = Regex("""(?is)<title\b[^>]*>(.*?)</title>""").find(html) ?: return null

@@ -59,7 +59,10 @@ class OkHttpWebToolHTTPClient(
                 .url(url)
                 .get()
                 .header("User-Agent", USER_AGENT)
-                .header("Accept", "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1")
+                .header(
+                    "Accept",
+                    "text/html,application/xhtml+xml,application/json,application/*+json,text/plain;q=0.9,*/*;q=0.1"
+                )
                 .build()
 
             val call = client.newCall(request)

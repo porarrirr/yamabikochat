@@ -76,21 +76,40 @@ struct FetchUrlTool: LocalToolExecutor {
             throw ProviderClientError.parseFailure("Fetched page exceeds the 2 MB response limit")
         }
         let contentType = response.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
+        let mediaType = contentType
+            .split(separator: ";", maxSplits: 1)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let isJSON = mediaType == "application/json" ||
+            mediaType.hasSuffix("+json") ||
+            url.pathExtension.caseInsensitiveCompare("json") == .orderedSame
         guard contentType.isEmpty ||
             contentType.contains("text/") ||
-            contentType.contains("application/xhtml+xml")
+            contentType.contains("application/xhtml+xml") ||
+            isJSON
         else {
             throw ProviderClientError.parseFailure("Unsupported fetched content type: \(contentType)")
         }
-        guard let rawText = String(data: data, encoding: .utf8) ??
-            String(data: data, encoding: .isoLatin1)
-        else {
-            throw ProviderClientError.parseFailure("Fetched page encoding is unsupported")
+        let rawText: String
+        let paragraphs: [PageParagraph]
+        if isJSON {
+            do {
+                paragraphs = try PageParagraphExtractor.extractJSON(data)
+            } catch {
+                throw ProviderClientError.parseFailure("Fetched JSON is invalid")
+            }
+            rawText = ""
+        } else {
+            guard let decoded = String(data: data, encoding: .utf8) ??
+                String(data: data, encoding: .isoLatin1)
+            else {
+                throw ProviderClientError.parseFailure("Fetched page encoding is unsupported")
+            }
+            rawText = decoded
+            paragraphs = contentType.contains("text/plain")
+                ? PageParagraphExtractor.extractPlainText(rawText)
+                : PageParagraphExtractor.extractHTML(rawText)
         }
-
-        let paragraphs = contentType.contains("text/plain")
-            ? PageParagraphExtractor.extractPlainText(rawText)
-            : PageParagraphExtractor.extractHTML(rawText)
         guard !paragraphs.isEmpty else {
             throw ProviderClientError.parseFailure("Fetched page did not contain readable text")
         }
@@ -100,7 +119,7 @@ struct FetchUrlTool: LocalToolExecutor {
             maxCharacters: Self.maxCharacters
         )
 
-        let title = Self.extractTitle(from: rawText) ?? url.host ?? url.absoluteString
+        let title = (isJSON ? nil : Self.extractTitle(from: rawText)) ?? url.host ?? url.absoluteString
         let object: [String: Any] = [
             "url": url.absoluteString,
             "title": title,

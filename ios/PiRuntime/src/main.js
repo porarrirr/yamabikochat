@@ -961,6 +961,7 @@ async function runAgent(envelope, res) {
     });
     if (event.type === "turn_start") {
       activeStep = ++step;
+      send(res, { type: "answer_start", stepId: activeStep, timeMs: Date.now() });
       send(res, { type: "llm_start", stepId: activeStep, timeMs: Date.now() });
     } else if (event.type === "message_update") {
       const update = event.assistantMessageEvent;

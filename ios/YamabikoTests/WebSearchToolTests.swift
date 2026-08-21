@@ -154,6 +154,17 @@ final class WebSearchToolTests: XCTestCase {
         XCTAssertEqual(paragraphs.map(\.index), [0, 1])
     }
 
+    func testJSONExtractorPreservesPathsAndScalarValues() throws {
+        let data = Data(#"{"city":"東京","forecast":{"high":33,"rain":true},"alerts":[]}"#.utf8)
+
+        let paragraphs = try PageParagraphExtractor.extractJSON(data)
+
+        XCTAssertEqual(
+            paragraphs.map(\.text),
+            ["$.alerts: []", "$.city: \"東京\"", "$.forecast.high: 33", "$.forecast.rain: true"]
+        )
+    }
+
     func testRelevantPageReaderSelectsLateHitWithContextInOriginalOrder() {
         let paragraphs = [
             PageParagraph(index: 0, heading: "Intro", text: "Unrelated introduction."),
@@ -354,6 +365,95 @@ final class WebSearchToolTests: XCTestCase {
         XCTAssertEqual(object["selected_paragraph_count"] as? Int, 3)
         XCTAssertEqual(object["truncated"] as? Bool, false)
         XCTAssertTrue((object["content"] as? String)?.contains("Context before") == true)
+    }
+
+    func testFetchURLReadsApplicationJSONAndSelectsRelevantArrayEntry() async throws {
+        let tool = FetchUrlTool(
+            httpClient: StaticWebToolHTTPClient(
+                body: #"{"cities":[{"name":"東京","temperature":33},{"name":"大阪","temperature":36}]}"#,
+                contentType: "application/json; charset=utf-8"
+            )
+        )
+        let result = try await tool.execute(
+            call: ToolCall(
+                id: "call-json",
+                name: FetchUrlTool.name,
+                argumentsJSON: #"{"url":"https://example.com/weather.json","goal":"大阪 temperature"}"#,
+                providerMetadata: nil
+            )
+        )
+        let data = try XCTUnwrap(result.content.data(using: .utf8))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let content = try XCTUnwrap(object["content"] as? String)
+
+        XCTAssertEqual(object["selection_status"] as? String, "selected")
+        XCTAssertTrue(content.contains("$.cities[1].name: \"大阪\""))
+        XCTAssertTrue(content.contains("$.cities[1].temperature: 36"))
+    }
+
+    func testFetchURLReadsStructuredSyntaxSuffixJSON() async throws {
+        let tool = FetchUrlTool(
+            httpClient: StaticWebToolHTTPClient(
+                body: #"{"title":"Release notes","version":"2.0"}"#,
+                contentType: "application/problem+json"
+            )
+        )
+        let result = try await tool.execute(
+            call: ToolCall(
+                id: "call-suffix-json",
+                name: FetchUrlTool.name,
+                argumentsJSON: #"{"url":"https://example.com/release.json","goal":"version"}"#,
+                providerMetadata: nil
+            )
+        )
+
+        XCTAssertFalse(result.isError)
+        XCTAssertTrue(result.content.contains("$.version"))
+        XCTAssertTrue(result.content.contains("2.0"))
+    }
+
+    func testFetchURLReadsJSONFileWithGenericContentType() async throws {
+        let tool = FetchUrlTool(
+            httpClient: StaticWebToolHTTPClient(
+                body: #"{"status":"ok"}"#,
+                contentType: "application/octet-stream"
+            )
+        )
+        let result = try await tool.execute(
+            call: ToolCall(
+                id: "call-json-file",
+                name: FetchUrlTool.name,
+                argumentsJSON: #"{"url":"https://example.com/status.json","goal":"status"}"#,
+                providerMetadata: nil
+            )
+        )
+
+        XCTAssertFalse(result.isError)
+        XCTAssertTrue(result.content.contains("$.status"))
+        XCTAssertTrue(result.content.contains("ok"))
+    }
+
+    func testFetchURLRejectsMalformedJSONWithoutHTMLFallback() async throws {
+        let tool = FetchUrlTool(
+            httpClient: StaticWebToolHTTPClient(
+                body: #"{"weather":"sunny""#,
+                contentType: "application/json"
+            )
+        )
+
+        do {
+            _ = try await tool.execute(
+                call: ToolCall(
+                    id: "call-invalid-json",
+                    name: FetchUrlTool.name,
+                    argumentsJSON: #"{"url":"https://example.com/weather.json","goal":"weather"}"#,
+                    providerMetadata: nil
+                )
+            )
+            XCTFail("Expected malformed JSON to be rejected")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("Fetched JSON is invalid"))
+        }
     }
 
     func testWebSearchFailureWritesDiagnosticsLog() async throws {

@@ -62,13 +62,12 @@ final class ProviderGateway {
     ) async throws -> ProviderResponse {
         let stream = try await stream(request: request, providerID: providerID)
         var completed: ProviderResponse?
-        var text = ""
         var reasoning = ""
         var toolActivity = ToolActivityPayload()
         for try await event in stream {
             onStreamEvent?(event)
             switch event {
-            case let .textDelta(delta): text += delta
+            case .answerStart, .textDelta: break
             case let .reasoningDelta(delta): reasoning += delta
             case let .toolActivity(activity): toolActivity.apply(activity)
             case let .executionSnapshot(execution): toolActivity.piExecution = execution
@@ -78,7 +77,6 @@ final class ProviderGateway {
         guard var response = completed else {
             throw ProviderClientError.parseFailure("Pi agent stream ended without completion")
         }
-        if response.text.isEmpty { response.text = text }
         if response.reasoningSummary == nil { response.reasoningSummary = reasoning.trimmedNonEmpty }
         if toolActivity.hasPersistableContent {
             var merged = response.toolActivity ?? ToolActivityPayload()

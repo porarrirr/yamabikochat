@@ -76,6 +76,9 @@ extension ProviderUsage {
 }
 
 enum ProviderStreamEvent: Sendable, Equatable {
+    /// A new Pi assistant turn is starting. Text emitted by an earlier turn may
+    /// have accompanied a tool call and must not be carried into the final answer.
+    case answerStart
     case textDelta(String)
     case reasoningDelta(String)
     case toolActivity(ToolActivityEvent)
@@ -88,6 +91,8 @@ extension ProviderStreamEvent {
     /// Used by `ProviderGateway` for non-streaming retry; reasoning-only streams still retry.
     var includesNonEmptyAnswerText: Bool {
         switch self {
+        case .answerStart:
+            return false
         case let .textDelta(delta):
             return delta.trimmedNonEmpty != nil
         case let .completed(response):

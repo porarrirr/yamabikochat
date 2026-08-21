@@ -19,6 +19,15 @@ struct RelevantPageSelection: Sendable, Equatable {
 }
 
 enum PageParagraphExtractor {
+    static func extractJSON(_ data: Data) throws -> [PageParagraph] {
+        let root = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        var texts: [String] = []
+        appendJSONLeaves(root, path: "$", to: &texts)
+        return texts.enumerated().map { offset, text in
+            PageParagraph(index: offset, heading: nil, text: text)
+        }
+    }
+
     static func extractHTML(_ html: String) -> [PageParagraph] {
         let visibleHTML = replacingMatches(
             in: html,
@@ -75,6 +84,48 @@ enum PageParagraphExtractor {
         return paragraphTexts.enumerated().map { offset, text in
             PageParagraph(index: offset, heading: nil, text: text)
         }
+    }
+
+    private static func appendJSONLeaves(_ value: Any, path: String, to texts: inout [String]) {
+        switch value {
+        case let object as [String: Any]:
+            if object.isEmpty {
+                texts.append("\(path): {}")
+                return
+            }
+            for key in object.keys.sorted() {
+                guard let nested = object[key] else { continue }
+                appendJSONLeaves(nested, path: path + jsonPathComponent(key), to: &texts)
+            }
+        case let array as [Any]:
+            if array.isEmpty {
+                texts.append("\(path): []")
+                return
+            }
+            for (index, nested) in array.enumerated() {
+                appendJSONLeaves(nested, path: "\(path)[\(index)]", to: &texts)
+            }
+        default:
+            texts.append("\(path): \(jsonScalar(value))")
+        }
+    }
+
+    private static func jsonPathComponent(_ key: String) -> String {
+        if key.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil {
+            return ".\(key)"
+        }
+        let encoded = (try? JSONSerialization.data(withJSONObject: key, options: [.fragmentsAllowed]))
+            .map { String(decoding: $0, as: UTF8.self) } ?? "\"\(key)\""
+        return "[\(encoded)]"
+    }
+
+    private static func jsonScalar(_ value: Any) -> String {
+        guard !(value is NSNull),
+              let data = try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])
+        else {
+            return "null"
+        }
+        return String(decoding: data, as: UTF8.self)
     }
 
     private static func normalizedText(_ htmlFragment: String) -> String {

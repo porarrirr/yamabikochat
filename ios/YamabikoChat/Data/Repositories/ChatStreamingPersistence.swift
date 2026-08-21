@@ -202,6 +202,17 @@ enum ChatStreamSession {
     ) throws {
         onStreamEvent?(event)
         switch event {
+        case .answerStart:
+            fullText = ""
+            try publishBufferedState(
+                target: target,
+                coordinator: &coordinator,
+                fullText: fullText,
+                reasoningText: reasoningText,
+                toolActivity: toolActivity,
+                force: true,
+                onStreamingSnapshot: onStreamingSnapshot
+            )
         case let .textDelta(delta):
             fullText += delta
             try publishBufferedState(
@@ -244,9 +255,10 @@ enum ChatStreamSession {
             finalUsageSamples = response.usageSamples ?? finalUsageSamples
             finalToolCalls = response.toolCalls
             toolActivity.piExecution = response.piExecution
-            if fullText.isEmpty, !response.text.isEmpty {
-                fullText = response.text
-            }
+            // Pi's completed response is built from the last assistant message.
+            // Earlier assistant turns can contain user-facing progress text before
+            // tool calls, so completion authoritatively replaces the live buffer.
+            fullText = response.text
             if let reasoning = response.reasoningSummary, !reasoning.isEmpty {
                 reasoningText = reasoning
             }

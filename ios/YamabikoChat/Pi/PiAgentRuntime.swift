@@ -441,6 +441,8 @@ actor PiAgentRuntime {
                         case "reasoning_delta":
                             if event.delta?.trimmedNonEmpty != nil { metrics.observeToken(at: event.timeMs ?? nowMs()) }
                             continuation.yield(.reasoningDelta(event.delta ?? ""))
+                        case "answer_start":
+                            continuation.yield(.answerStart)
                         case "llm_start":
                             guard let id = event.stepId else {
                                 throw ProviderClientError.parseFailure("Pi emitted an invalid LLM start event")

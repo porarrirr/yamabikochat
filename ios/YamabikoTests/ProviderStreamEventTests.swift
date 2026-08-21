@@ -6,6 +6,10 @@ final class ProviderStreamEventTests: XCTestCase {
         XCTAssertFalse(ProviderStreamEvent.textDelta("   \n").includesNonEmptyAnswerText)
     }
 
+    func testAnswerStartDoesNotCountAsAnswerText() {
+        XCTAssertFalse(ProviderStreamEvent.answerStart.includesNonEmptyAnswerText)
+    }
+
     func testIncludesNonEmptyAnswerTextAcceptsNonEmptyTextDelta() {
         XCTAssertTrue(ProviderStreamEvent.textDelta("hello").includesNonEmptyAnswerText)
     }
