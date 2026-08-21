@@ -96,6 +96,7 @@ private fun modelsDevUnsupportedReason(reason: String?): String = when (reason) 
     "protocol_conflict" -> "models.devとPiのプロトコルが一致しません"
     "endpoint_conflict" -> "models.devとPiのエンドポイントが一致しません"
     "catalog_contract_ambiguous" -> "models.devの実行契約を一意に決定できません"
+    "catalog_contract_incomplete" -> "公式カタログのモデル実行契約が不完全です"
     "contract_conflict" -> "models.devとPiの実行契約が一致しません"
     "runtime_contract_mismatch" -> "アプリとPi Runtimeの契約バージョンが一致しません"
     else -> "実行契約を確認できません"
@@ -2108,7 +2109,12 @@ fun SettingsScreen(
                                                 api = option.providerContract?.api,
                                                 shape = option.providerContract?.shape,
                                                 provenance = option.providerContract?.provenance,
-                                                toolCall = option.toolCall
+                                                toolCall = option.toolCall,
+                                                name = option.name,
+                                                reasoning = option.reasoning,
+                                                input = option.inputModalities,
+                                                contextWindow = option.limits.context,
+                                                maxTokens = option.limits.output
                                             )
                                         )
                                     }

@@ -8,7 +8,7 @@ final class ModelsDevCatalogTests: XCTestCase {
         XCTAssertEqual(providers[0].models.map(\.id), ["chat"])
         XCTAssertEqual(providers[0].models[0].toolCall, true)
         XCTAssertEqual(providers[0].models[0].providerContract?.npm, "@ai-sdk/openai")
-        XCTAssertNil(providers[0].models[0].providerContract?.api)
+        XCTAssertEqual(providers[0].models[0].providerContract?.api, "https://api.example.com/v1")
         XCTAssertEqual(providers[0].models[0].providerContract?.shape, "responses")
         XCTAssertEqual(providers[0].models[0].providerContract?.provenance, "model")
         XCTAssertEqual(providers[0].api, "https://api.example.com/v1")

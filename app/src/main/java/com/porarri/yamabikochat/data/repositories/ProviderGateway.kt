@@ -14,6 +14,7 @@ import com.porarri.yamabikochat.data.modelsdev.ModelsDevCatalogRepository
 import com.porarri.yamabikochat.data.modelsdev.ModelsDevReasoningPreference
 import com.porarri.yamabikochat.data.modelsdev.ProviderReference
 import com.porarri.yamabikochat.data.remote.OpenCodeGoModelCatalog
+import com.porarri.yamabikochat.data.remote.OpenRouterModelService
 import com.porarri.yamabikochat.data.tools.LocalToolRegistry
 import com.porarri.yamabikochat.data.tools.search.FetchUrlTool
 import com.porarri.yamabikochat.data.tools.search.WebSearchTool
@@ -23,6 +24,7 @@ import com.porarri.yamabikochat.pi.PiCatalogModelContract
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import com.porarri.yamabikochat.utils.SecurePreferencesManager
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import java.util.UUID
 
 typealias PiAgentStreamFn = (
@@ -37,6 +39,7 @@ class ProviderGateway(
     private val codexAuthRepository: CodexAuthRepository? = null,
     private val superGrokAuthRepository: SuperGrokAuthRepository? = null,
     private val modelsDevCatalogRepository: ModelsDevCatalogRepository? = null,
+    private val openRouterModelService: OpenRouterModelService? = null,
     private val localTools: LocalToolRegistry = LocalToolRegistry(listOf(WebSearchTool(), FetchUrlTool())),
     private val piStream: PiAgentStreamFn? = null,
     private val piRuntime: PiAgentRuntime? = null
@@ -99,7 +102,13 @@ class ProviderGateway(
             runtime.stream(req, cfg, tools)
         }
 
-        return streamExecutor(request, piConfiguration, localTools)
+        return streamExecutor(request, piConfiguration, localTools).catch { error ->
+            DiagnosticsLogger.log(
+                "Pi agent stream failed requestId=$requestId provider=$normalizedProvider model=${request.model}",
+                error
+            )
+            throw error
+        }
     }
 
     private suspend fun configuration(
@@ -182,11 +191,28 @@ class ProviderGateway(
             }
         }
 
+        val openRouterModel = if (provider == LLMProvider.OPENROUTER) {
+            openRouterModelService?.getAvailableModels()?.firstOrNull { it.id == request.model }
+        } else null
+        val catalogContract = openRouterModel?.let { model ->
+            PiCatalogModelContract(
+                npm = "@openrouter/ai-sdk-provider",
+                api = "https://openrouter.ai/api/v1",
+                provenance = "official_provider_catalog",
+                toolCall = model.supportsTools,
+                name = model.name,
+                reasoning = model.supportsReasoning,
+                input = model.inputModalities,
+                contextWindow = model.contextLength.toLong(),
+                maxTokens = model.maxCompletionTokens?.toLong()
+            )
+        }
         return PiAgentConfiguration(
             provider = piProvider,
             model = normalizedModel(request.model, provider),
             apiKey = apiKey,
             headers = headers,
+            catalogContract = catalogContract,
             thinkingLevel = thinkingLevel(
                 request.thinking,
                 geminiLevel = if (provider == LLMProvider.GEMINI) request.metadata["geminiThinkingLevel"] else null
@@ -225,7 +251,12 @@ class ProviderGateway(
                 api = model.providerContract?.api,
                 shape = model.providerContract?.shape,
                 provenance = model.providerContract?.provenance,
-                toolCall = model.toolCall
+                toolCall = model.toolCall,
+                name = model.name,
+                reasoning = model.reasoning,
+                input = model.inputModalities,
+                contextWindow = model.limits.context,
+                maxTokens = model.limits.output
             ),
             thinkingLevel = thinkingLevel(request.thinking),
         )

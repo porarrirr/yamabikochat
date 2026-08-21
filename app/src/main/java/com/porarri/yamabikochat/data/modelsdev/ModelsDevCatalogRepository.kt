@@ -112,22 +112,23 @@ class ModelsDevCatalogRepository(
     private fun parseProvider(id: String, value: JsonObject): CatalogProvider? {
         val name = value.string("name") ?: return null
         val npm = value.string("npm") ?: return null
+        val api = value.string("api")
         val models = value["models"]?.jsonObject?.entries.orEmpty().mapNotNull { (modelId, modelValue) ->
-            parseModel(modelId, modelValue.jsonObject)
+            parseModel(modelId, modelValue.jsonObject, npm, api)
         }.sortedBy { it.name.lowercase() }
         if (models.isEmpty()) return null
         return CatalogProvider(
             id = id.lowercase(),
             name = name,
             npm = npm,
-            api = value.string("api"),
+            api = api,
             env = value.stringList("env"),
             documentationUrl = value.string("doc"),
             models = models
         )
     }
 
-    private fun parseModel(id: String, value: JsonObject): CatalogModel? {
+    private fun parseModel(id: String, value: JsonObject, providerNpm: String, providerApi: String?): CatalogModel? {
         if (value.string("status")?.lowercase() == "deprecated") return null
         val outputs = value["modalities"]?.jsonObject?.stringList("output").orEmpty()
         if (outputs.none { it.equals("text", ignoreCase = true) }) return null
@@ -158,14 +159,12 @@ class ModelsDevCatalogRepository(
                 cost?.double("input"), cost?.double("output"), cost?.double("reasoning"),
                 cost?.double("cache_read"), cost?.double("cache_write")
             ),
-            providerContract = modelProvider?.let {
-                CatalogModelProviderContract(
-                    npm = it.string("npm"),
-                    api = it.string("api"),
-                    shape = it.string("shape"),
-                    provenance = "model"
-                )
-            }
+            providerContract = CatalogModelProviderContract(
+                npm = modelProvider?.string("npm") ?: providerNpm,
+                api = modelProvider?.string("api") ?: providerApi,
+                shape = modelProvider?.string("shape"),
+                provenance = if (modelProvider == null) "provider" else "model"
+            )
         )
     }
 

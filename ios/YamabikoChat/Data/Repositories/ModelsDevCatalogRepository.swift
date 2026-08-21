@@ -152,14 +152,12 @@ final class ModelsDevCatalogRepository: @unchecked Sendable {
                         reasoningPerMillion: decimal(cost?["reasoning"]), cacheReadPerMillion: decimal(cost?["cache_read"]),
                         cacheWritePerMillion: decimal(cost?["cache_write"])
                     ),
-                    providerContract: modelProvider.map {
-                        CatalogModelProviderContract(
-                            npm: $0["npm"] as? String,
-                            api: $0["api"] as? String,
-                            shape: $0["shape"] as? String,
-                            provenance: "model"
-                        )
-                    }
+                    providerContract: CatalogModelProviderContract(
+                        npm: modelProvider?["npm"] as? String ?? npm,
+                        api: modelProvider?["api"] as? String ?? value["api"] as? String,
+                        shape: modelProvider?["shape"] as? String,
+                        provenance: modelProvider == nil ? "provider" : "model"
+                    )
                 )
             }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             guard !models.isEmpty else { return nil }

@@ -49,7 +49,8 @@ data class OpenRouterModel(
     val architecture: ModelArchitecture? = null,
     @SerialName("top_provider") val topProvider: ModelProvider? = null,
     val created: Long? = null,
-    val reasoning: OpenRouterReasoningCapabilities? = null
+    val reasoning: OpenRouterReasoningCapabilities? = null,
+    @SerialName("supported_parameters") val supportedParameters: List<String>? = null
 )
 
 @Serializable
@@ -66,7 +67,9 @@ data class ModelPricing(
 data class ModelArchitecture(
     val modality: String? = null,
     val tokenizer: String? = null,
-    @SerialName("instruct_type") val instructType: String? = null
+    @SerialName("instruct_type") val instructType: String? = null,
+    @SerialName("input_modalities") val inputModalities: List<String>? = null,
+    @SerialName("output_modalities") val outputModalities: List<String>? = null
 )
 
 @Serializable
@@ -91,7 +94,12 @@ data class SimpleModel(
     val isFree: Boolean = false,
     val availableProviders: List<String> = emptyList(),
     val availableQuantizations: List<String> = emptyList(),
-    val reasoning: OpenRouterReasoningCapabilities? = null
+    val reasoning: OpenRouterReasoningCapabilities? = null,
+    val inputModalities: List<String> = emptyList(),
+    val outputModalities: List<String> = emptyList(),
+    val maxCompletionTokens: Int? = null,
+    val supportsTools: Boolean = false,
+    val supportsReasoning: Boolean = false
 ) {
     // 後方互換性のため、旧プロパティを維持（単位: USD/1 token）
     val promptPrice: Double
@@ -136,7 +144,14 @@ data class SimpleModel(
                 isFree = promptPricePerToken == 0.0 && completionPricePerToken == 0.0,
                 availableProviders = model.topProvider?.availableProviders ?: emptyList(),
                 availableQuantizations = model.topProvider?.availableQuantizations ?: emptyList(),
-                reasoning = model.reasoning
+                reasoning = model.reasoning,
+                inputModalities = model.architecture?.inputModalities.orEmpty(),
+                outputModalities = model.architecture?.outputModalities.orEmpty(),
+                maxCompletionTokens = model.topProvider?.maxCompletionTokens,
+                supportsTools = model.supportedParameters?.contains("tools") == true,
+                supportsReasoning = model.reasoning != null || model.supportedParameters.orEmpty().any {
+                    it in setOf("include_reasoning", "reasoning", "reasoning_effort")
+                }
             )
         }
     }

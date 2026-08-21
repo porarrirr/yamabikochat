@@ -118,7 +118,82 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
     { contractVersion: 2, provider: "opencode-go", model: "glm-5.3" },
     { contractVersion: 2, provider: "opencode-go", model: "qwen3.6-plus" },
     { contractVersion: 2, provider: "opencode-go", model: "minimax-m2.7" },
-    { contractVersion: 1, provider: "opencode-go", model: "muse-spark-1.2-contributor" }
+    { contractVersion: 1, provider: "opencode-go", model: "muse-spark-1.2-contributor" },
+    {
+      contractVersion: 2,
+      provider: "opencode",
+      model: "nemotron-3.5-lightning-free",
+      catalogContract: {
+        npm: "@ai-sdk/openai-compatible",
+        api: "https://opencode.ai/zen/v1",
+        provenance: "provider",
+        name: "Nemotron 3.5 Lightning Free",
+        reasoning: true,
+        input: ["text"],
+        contextWindow: 262144,
+        maxTokens: 262144,
+        toolCall: true
+      }
+    },
+    {
+      contractVersion: 2,
+      provider: "opencode",
+      model: "muse-spark-1.2-contributor-free",
+      catalogContract: {
+        npm: "@ai-sdk/openai",
+        api: "https://opencode.ai/zen/v1",
+        provenance: "model",
+        name: "Muse Spark 1.2 Free",
+        reasoning: true,
+        input: ["text", "image", "video", "pdf", "audio"],
+        contextWindow: 1048576,
+        maxTokens: 131072,
+        toolCall: true
+      }
+    },
+    {
+      contractVersion: 2,
+      provider: "openrouter",
+      model: "stealth/ox-alpha",
+      catalogContract: {
+        npm: "@openrouter/ai-sdk-provider",
+        api: "https://openrouter.ai/api/v1",
+        provenance: "official_provider_catalog",
+        name: "Ox Alpha",
+        reasoning: true,
+        input: ["text", "image", "video"],
+        contextWindow: 1048576,
+        maxTokens: 131072,
+        toolCall: true
+      }
+    },
+    {
+      contractVersion: 2,
+      provider: "opencode",
+      model: "incomplete-new-model",
+      catalogContract: {
+        npm: "@ai-sdk/openai-compatible",
+        api: "https://opencode.ai/zen/v1",
+        provenance: "provider"
+      }
+    },
+    {
+      contractVersion: 2,
+      provider: "opencode",
+      model: "conflicting-new-model",
+      catalogContract: {
+        npm: "@ai-sdk/openai-compatible",
+        api: "https://opencode.ai/zen/v1",
+        shape: "responses",
+        provenance: "model",
+        name: "Conflicting New Model",
+        reasoning: false,
+        input: ["text"],
+        contextWindow: 100000,
+        maxTokens: 10000
+      }
+    },
+    { contractVersion: 2, provider: "opencode", model: "conflicting-new-model" }
   ]);
 
   assert.equal(result.contractVersion, 2);
@@ -151,4 +226,25 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
   assert.equal(result.models[12].api, "anthropic-messages");
   assert.equal(result.models[13].api, "anthropic-messages");
   assert.equal(result.models[14].reason, "runtime_contract_mismatch");
+  assert.deepEqual(result.models[15], {
+    supported: true,
+    provider: "opencode",
+    model: "nemotron-3.5-lightning-free",
+    api: "openai-completions",
+    source: "pi_builtin",
+    reasoning: true,
+    input: ["text"],
+    contextWindow: 262144,
+    maxTokens: 262144,
+    toolCall: true
+  });
+  assert.equal(result.models[16].supported, true);
+  assert.equal(result.models[16].api, "openai-responses");
+  assert.equal(result.models[16].source, "model");
+  assert.equal(result.models[17].supported, true);
+  assert.equal(result.models[17].api, "openai-completions");
+  assert.equal(result.models[17].source, "official_provider_catalog");
+  assert.equal(result.models[18].reason, "catalog_contract_incomplete");
+  assert.equal(result.models[19].reason, "protocol_conflict");
+  assert.equal(result.models[20].reason, "pi_model_missing");
 });

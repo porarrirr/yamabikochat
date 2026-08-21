@@ -18,6 +18,17 @@ private final class PiGatewayCredentialStore: SecureCredentialStore {
     }
 }
 
+private struct PiGatewayHTTPClient: HTTPClientProtocol {
+    let data: Data
+
+    func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
+        (
+            data,
+            HTTPURLResponse(url: request.url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        )
+    }
+}
+
 final class PiAgentGatewayTests: XCTestCase {
     func testAttachmentFileURLResolvesFilesystemPath() {
         let path = "/tmp/Yamabiko Chat/photo.png"
@@ -37,6 +48,49 @@ final class PiAgentGatewayTests: XCTestCase {
 
     func testBundledPiRuntimeStarts() async throws {
         try await PiAgentRuntime.shared.verifyReady()
+    }
+
+    func testBundledPiRuntimeResolvesCurrentOpenCodeAndOpenRouterModels() async throws {
+        let resolutions = try await PiAgentRuntime.shared.resolveModels([
+            PiAgentConfiguration(
+                provider: "opencode",
+                model: "nemotron-3.5-lightning-free"
+            ),
+            PiAgentConfiguration(
+                provider: "opencode",
+                model: "muse-spark-1.2-contributor-free",
+                catalogContract: PiCatalogModelContract(
+                    npm: "@ai-sdk/openai",
+                    api: "https://opencode.ai/zen/v1",
+                    toolCall: true,
+                    provenance: "model",
+                    name: "Muse Spark 1.2 Free",
+                    reasoning: true,
+                    input: ["text", "image", "video", "pdf", "audio"],
+                    contextWindow: 1_048_576,
+                    maxTokens: 131_072
+                )
+            ),
+            PiAgentConfiguration(
+                provider: "openrouter",
+                model: "stealth/ox-alpha",
+                catalogContract: PiCatalogModelContract(
+                    npm: "@openrouter/ai-sdk-provider",
+                    api: "https://openrouter.ai/api/v1",
+                    toolCall: true,
+                    provenance: "official_provider_catalog",
+                    name: "Ox Alpha",
+                    reasoning: true,
+                    input: ["text", "image", "video"],
+                    contextWindow: 1_048_576,
+                    maxTokens: 131_072
+                )
+            )
+        ])
+
+        XCTAssertEqual(resolutions.map(\.supported), [true, true, true])
+        XCTAssertEqual(resolutions.map(\.api), ["openai-completions", "openai-responses", "openai-completions"])
+        XCTAssertEqual(resolutions.map(\.source), ["pi_builtin", "model", "official_provider_catalog"])
     }
 
     func testBundledPiResolvesFreshCodexCredential() async throws {
@@ -153,6 +207,83 @@ final class PiAgentGatewayTests: XCTestCase {
         )
         XCTAssertEqual(headers["X-OpenRouter-Title"], "YamabikoChat iOS")
         XCTAssertEqual(headers["X-Title"], "YamabikoChat iOS")
+    }
+
+    func testOpenRouterPassesOfficialDynamicModelContractToPi() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.setCredential("test-openrouter-key", for: .openRouter)
+        let payload = #"""
+        {"data":[{
+          "id":"stealth/ox-alpha",
+          "name":"Ox Alpha",
+          "context_length":1048576,
+          "architecture":{"input_modalities":["text","image","video"],"output_modalities":["text"]},
+          "pricing":{"prompt":"0","completion":"0"},
+          "top_provider":{"max_completion_tokens":131072},
+          "supported_parameters":["reasoning","tools"],
+          "reasoning":{"mandatory":true}
+        }]}
+        """#.data(using: .utf8)!
+        let modelService = OpenRouterModelService(
+            credentialStore: credentials,
+            httpClient: PiGatewayHTTPClient(data: payload)
+        )
+        let pi = PiStreamSpy()
+        let gateway = ProviderGateway(
+            settingsRepository: SettingsRepository(dbQueue: database),
+            credentialStore: credentials,
+            openRouterModelService: modelService,
+            piStream: pi.stream
+        )
+
+        _ = try await gateway.stream(
+            request: ProviderRequest(
+                model: "stealth/ox-alpha",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")]
+            ),
+            provider: .openRouter
+        )
+
+        let contract = try XCTUnwrap(pi.calls.first?.configuration.catalogContract)
+        XCTAssertEqual(contract.npm, "@openrouter/ai-sdk-provider")
+        XCTAssertEqual(contract.provenance, "official_provider_catalog")
+        XCTAssertEqual(contract.name, "Ox Alpha")
+        XCTAssertEqual(contract.input, ["text", "image", "video"])
+        XCTAssertEqual(contract.contextWindow, 1_048_576)
+        XCTAssertEqual(contract.maxTokens, 131_072)
+        XCTAssertEqual(contract.toolCall, true)
+    }
+
+    func testAsynchronousPiStreamFailureIsWrittenToDiagnostics() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.setCredential("test-openai-key", for: .openAI)
+        let marker = "async-pi-failure-\(UUID().uuidString)"
+        let gateway = ProviderGateway(
+            settingsRepository: SettingsRepository(dbQueue: database),
+            credentialStore: credentials,
+            piStream: { _, _, _ in
+                AsyncThrowingStream { continuation in
+                    continuation.finish(throwing: ProviderClientError.parseFailure(marker))
+                }
+            }
+        )
+
+        do {
+            _ = try await gateway.generate(
+                request: ProviderRequest(
+                    model: "gpt-4.1-mini",
+                    messages: [ProviderRequestMessage(role: "user", content: "hello")]
+                ),
+                provider: .openAI
+            )
+            XCTFail("Expected asynchronous Pi failure")
+        } catch {
+            XCTAssertTrue(DiagnosticsLogger.read().contains(marker))
+        }
     }
 
     func testGeminiThinkingLevelIsPassedThroughPiConfiguration() async throws {

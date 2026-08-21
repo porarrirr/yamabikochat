@@ -30,7 +30,7 @@ class ModelsDevCatalogTest {
         assertEquals("@ai-sdk/openai", providers.single().models.single().providerContract?.npm)
         assertEquals("responses", providers.single().models.single().providerContract?.shape)
         assertEquals("model", providers.single().models.single().providerContract?.provenance)
-        assertEquals(null, providers.single().models.single().providerContract?.api)
+        assertEquals("https://provider.example/v1", providers.single().models.single().providerContract?.api)
         assertEquals(listOf("low", "high"), providers.single().models.single().supportedReasoningEfforts)
     }
 

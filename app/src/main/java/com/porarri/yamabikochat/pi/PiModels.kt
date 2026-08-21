@@ -32,7 +32,12 @@ data class PiCatalogModelContract(
     val api: String? = null,
     val shape: String? = null,
     val provenance: String? = null,
-    val toolCall: Boolean? = null
+    val toolCall: Boolean? = null,
+    val name: String? = null,
+    val reasoning: Boolean? = null,
+    val input: List<String>? = null,
+    val contextWindow: Long? = null,
+    val maxTokens: Long? = null
 )
 
 @Serializable

@@ -76,6 +76,7 @@ final class AppServices {
             codexAuthRepository: codexAuthRepository,
             superGrokAuthRepository: superGrokAuthRepository,
             modelsDevCatalogRepository: modelsDevCatalogRepository,
+            openRouterModelService: openRouterModelService,
             localTools: localTools
         )
         fusionTraceStore = FusionTraceStore(dbQueue: dbQueue)

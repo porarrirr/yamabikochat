@@ -56,6 +56,7 @@ class MyApplication : Application() {
             codexAuthRepository = codexAuthRepository,
             superGrokAuthRepository = superGrokAuthRepository,
             modelsDevCatalogRepository = modelsDevCatalogRepository,
+            openRouterModelService = modelService,
             piRuntime = piRuntime
         )
     }

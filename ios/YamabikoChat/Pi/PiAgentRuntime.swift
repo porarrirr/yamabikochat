@@ -22,6 +22,11 @@ struct PiCatalogModelContract: Codable, Sendable {
     var shape: String?
     var toolCall: Bool?
     var provenance: String? = nil
+    var name: String? = nil
+    var reasoning: Bool? = nil
+    var input: [String]? = nil
+    var contextWindow: Int? = nil
+    var maxTokens: Int? = nil
 }
 
 struct PiModelResolution: Codable, Equatable, Sendable {

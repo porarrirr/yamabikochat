@@ -22,6 +22,7 @@ final class ProviderGateway {
     private let codexAuthRepository: CodexAuthRepository?
     private let superGrokAuthRepository: SuperGrokAuthRepository?
     private let modelsDevCatalogRepository: ModelsDevCatalogRepository?
+    private let openRouterModelService: OpenRouterModelService?
     private let appleIntelligence = AppleIntelligenceProviderClient()
 
     init(
@@ -30,6 +31,7 @@ final class ProviderGateway {
         codexAuthRepository: CodexAuthRepository? = nil,
         superGrokAuthRepository: SuperGrokAuthRepository? = nil,
         modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
+        openRouterModelService: OpenRouterModelService? = nil,
         localTools: LocalToolRegistry = LocalToolRegistry(executors: [WebSearchTool(), FetchUrlTool(), PythonExecuteTool()]),
         piStream: @escaping PiAgentStream = { request, configuration, tools in
             try await PiAgentRuntime.shared.stream(
@@ -44,6 +46,7 @@ final class ProviderGateway {
         self.codexAuthRepository = codexAuthRepository
         self.superGrokAuthRepository = superGrokAuthRepository
         self.modelsDevCatalogRepository = modelsDevCatalogRepository
+        self.openRouterModelService = openRouterModelService
         self.localTools = localTools
         self.piStream = piStream
     }
@@ -168,7 +171,12 @@ final class ProviderGateway {
                 requestID: requestID,
                 metadata: ["provider": normalizedProvider, "model": request.model]
             )
-            return stream
+            return monitoredStream(
+                stream,
+                requestID: requestID,
+                provider: normalizedProvider,
+                model: request.model
+            )
         } catch {
             DiagnosticsLogger.log(
                 "Pi agent stream creation failed",
@@ -178,6 +186,36 @@ final class ProviderGateway {
                 error: error
             )
             throw error
+        }
+    }
+
+    private func monitoredStream(
+        _ stream: AsyncThrowingStream<ProviderStreamEvent, Error>,
+        requestID: String,
+        provider: String,
+        model: String
+    ) -> AsyncThrowingStream<ProviderStreamEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    for try await event in stream {
+                        continuation.yield(event)
+                    }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: CancellationError())
+                } catch {
+                    DiagnosticsLogger.log(
+                        "Pi agent stream failed",
+                        category: .network,
+                        requestID: requestID,
+                        metadata: ["provider": provider, "model": model],
+                        error: error
+                    )
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 
@@ -251,11 +289,35 @@ final class ProviderGateway {
             preconditionFailure("Apple Intelligence is handled before Pi configuration")
         }
 
+        let catalogContract: PiCatalogModelContract?
+        let openRouterModels: [SimpleModel]
+        if provider == .openRouter, let openRouterModelService {
+            openRouterModels = await openRouterModelService.getAvailableModels()
+        } else {
+            openRouterModels = []
+        }
+        if let model = openRouterModels.first(where: { $0.id == request.model }) {
+            catalogContract = PiCatalogModelContract(
+                npm: "@openrouter/ai-sdk-provider",
+                api: "https://openrouter.ai/api/v1",
+                shape: nil,
+                toolCall: model.supportsTools,
+                provenance: "official_provider_catalog",
+                name: model.name,
+                reasoning: model.supportsReasoning,
+                input: model.inputModalities,
+                contextWindow: model.contextLength,
+                maxTokens: model.maxCompletionTokens
+            )
+        } else {
+            catalogContract = nil
+        }
         return PiAgentConfiguration(
             provider: piProvider,
             model: normalizedModel(request.model, provider: provider),
             apiKey: apiKey,
             headers: headers,
+            catalogContract: catalogContract,
             thinkingLevel: thinkingLevel(
                 request.thinking,
                 geminiLevel: provider == .gemini ? request.metadata["geminiThinkingLevel"] : nil
@@ -295,7 +357,12 @@ final class ProviderGateway {
                 api: model.providerContract?.api,
                 shape: model.providerContract?.shape,
                 toolCall: model.toolCall,
-                provenance: model.providerContract?.provenance
+                provenance: model.providerContract?.provenance,
+                name: model.name,
+                reasoning: model.reasoning,
+                input: model.inputModalities,
+                contextWindow: model.limits.context,
+                maxTokens: model.limits.output
             ),
             thinkingLevel: thinkingLevel(request.thinking),
         )

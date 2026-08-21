@@ -288169,6 +288169,8 @@ authModels.setProvider(openaiCodexProvider());
 var runtimeModels = builtinModels({ credentials: authCredentials });
 var activeAuthLogin = null;
 var VERIFIED_MODEL_SOURCES = /* @__PURE__ */ new Map();
+var DYNAMIC_CONTRACT_MODELS = /* @__PURE__ */ new Map();
+var DYNAMIC_PROVIDER_BASES = /* @__PURE__ */ new Map();
 var VERIFIED_OPENCODE_GO_ROUTES = [
   { id: "grok-4.5", api: "openai-responses" },
   { id: "gpt-5.6-luna", api: "openai-responses" },
@@ -288441,7 +288443,9 @@ function expectedApiForShape(shape) {
 function expectedApiForNpm(npm) {
   if (npm === "@ai-sdk/openai") return "openai-responses";
   if (npm === "@ai-sdk/openai-compatible") return "openai-completions";
+  if (npm === "@openrouter/ai-sdk-provider") return "openai-completions";
   if (npm === "@ai-sdk/anthropic") return "anthropic-messages";
+  if (npm === "@ai-sdk/google") return "google-generative-ai";
   return null;
 }
 function normalizedURL(value2) {
@@ -288464,6 +288468,61 @@ function endpointURL(baseUrl, api) {
   }
   return null;
 }
+function trustedCatalogContract(contract) {
+  return ["model", "provider", "official_provider_catalog"].includes(contract?.provenance);
+}
+function installCatalogModel(config, provider, expectedApi) {
+  const contract = config.catalogContract;
+  if (!trustedCatalogContract(contract)) return null;
+  const contractURL = normalizedURL(contract.api);
+  const name = typeof contract.name === "string" ? contract.name.trim() : "";
+  const input = Array.isArray(contract.input) ? contract.input.filter((value2) => typeof value2 === "string" && value2.trim()).map((value2) => value2.trim()) : [];
+  const contextWindow = Number(contract.contextWindow);
+  const maxTokens = Number(contract.maxTokens);
+  if (!expectedApi || !contractURL || !name || !input.includes("text") || !Number.isInteger(contextWindow) || contextWindow <= 0 || !Number.isInteger(maxTokens) || maxTokens <= 0 || typeof contract.reasoning !== "boolean") {
+    return null;
+  }
+  const reference = provider.getModels().find((model2) => model2.api === expectedApi);
+  if (!reference) return null;
+  const contractEndpoint = endpointURL(contractURL, expectedApi) || contractURL;
+  const referenceEndpoint = endpointURL(reference.baseUrl, expectedApi) || normalizedURL(reference.baseUrl);
+  if (!referenceEndpoint || contractEndpoint !== referenceEndpoint) return null;
+  const model = {
+    id: config.model,
+    name,
+    api: expectedApi,
+    provider: config.provider,
+    baseUrl: contractURL,
+    reasoning: contract.reasoning,
+    input,
+    cost: zeroCost(),
+    contextWindow,
+    maxTokens
+  };
+  let dynamic = DYNAMIC_CONTRACT_MODELS.get(config.provider);
+  if (!dynamic) {
+    dynamic = /* @__PURE__ */ new Map();
+    DYNAMIC_CONTRACT_MODELS.set(config.provider, dynamic);
+  }
+  dynamic.set(model.id, model);
+  let baseProvider = DYNAMIC_PROVIDER_BASES.get(config.provider);
+  if (!baseProvider) {
+    baseProvider = provider;
+    DYNAMIC_PROVIDER_BASES.set(config.provider, baseProvider);
+  }
+  runtimeModels.setProvider({
+    ...baseProvider,
+    getModels: () => {
+      const dynamicModels = DYNAMIC_CONTRACT_MODELS.get(config.provider) || /* @__PURE__ */ new Map();
+      return [
+        ...baseProvider.getModels().filter((entry) => !dynamicModels.has(entry.id)),
+        ...dynamicModels.values()
+      ];
+    }
+  });
+  VERIFIED_MODEL_SOURCES.set(`${model.provider}/${model.id}`, contract.provenance);
+  return model;
+}
 function resolutionFor(config) {
   if (config.contractVersion !== RUNTIME_CONTRACT_VERSION) {
     throw new Error(`Pi runtime contract mismatch: expected ${RUNTIME_CONTRACT_VERSION}, received ${config.contractVersion ?? "missing"}`);
@@ -288472,37 +288531,66 @@ function resolutionFor(config) {
   if (!provider) {
     return { supported: false, reason: "pi_provider_missing", provider: config.provider, model: config.model };
   }
-  const model = runtimeModels.getModel(config.provider, config.model);
-  if (!model) {
-    return { supported: false, reason: "pi_model_missing", provider: config.provider, model: config.model };
-  }
   const contract = config.catalogContract;
-  const isModelContract = contract?.provenance === "model";
+  const isAuthoritativeContract = trustedCatalogContract(contract);
   const shapeApi = expectedApiForShape(contract?.shape);
   const npmApi = expectedApiForNpm(contract?.npm);
-  if (isModelContract && contract?.shape && !shapeApi) {
+  const expectedApi = shapeApi || npmApi;
+  if (isAuthoritativeContract && contract?.shape && !shapeApi) {
     return {
       supported: false,
       reason: "catalog_contract_ambiguous",
-      provider: model.provider,
-      model: model.id,
-      api: model.api,
+      provider: config.provider,
+      model: config.model,
       contractShape: contract.shape
     };
   }
-  if (isModelContract && shapeApi && npmApi && shapeApi !== npmApi) {
+  if (isAuthoritativeContract && shapeApi && npmApi && shapeApi !== npmApi) {
     return {
       supported: false,
       reason: "protocol_conflict",
-      provider: model.provider,
-      model: model.id,
-      api: model.api,
+      provider: config.provider,
+      model: config.model,
       contractApi: shapeApi,
       contractNpmApi: npmApi
     };
   }
-  const expectedApi = shapeApi || npmApi;
-  if (isModelContract && expectedApi && expectedApi !== model.api) {
+  if (isAuthoritativeContract && !expectedApi) {
+    return {
+      supported: false,
+      reason: "catalog_contract_ambiguous",
+      provider: config.provider,
+      model: config.model,
+      contractNpm: contract?.npm
+    };
+  }
+  let model = runtimeModels.getModel(config.provider, config.model);
+  if (!model) {
+    const contractEndpoint = endpointURL(contract?.api, expectedApi) || normalizedURL(contract?.api);
+    const reference = provider.getModels().find((entry) => entry.api === expectedApi);
+    const referenceEndpoint = endpointURL(reference?.baseUrl, expectedApi) || normalizedURL(reference?.baseUrl);
+    if (contractEndpoint && referenceEndpoint && contractEndpoint !== referenceEndpoint) {
+      return {
+        supported: false,
+        reason: "endpoint_conflict",
+        provider: config.provider,
+        model: config.model,
+        contractApi: expectedApi,
+        contractURL: contractEndpoint,
+        modelURL: referenceEndpoint
+      };
+    }
+    model = installCatalogModel(config, provider, expectedApi);
+    if (!model) {
+      return {
+        supported: false,
+        reason: isAuthoritativeContract ? "catalog_contract_incomplete" : "pi_model_missing",
+        provider: config.provider,
+        model: config.model
+      };
+    }
+  }
+  if (isAuthoritativeContract && expectedApi && expectedApi !== model.api) {
     return {
       supported: false,
       reason: "protocol_conflict",
@@ -288512,7 +288600,7 @@ function resolutionFor(config) {
       contractApi: expectedApi
     };
   }
-  if (isModelContract && contract?.api) {
+  if (isAuthoritativeContract && contract?.api) {
     if (!expectedApi) {
       return {
         supported: false,

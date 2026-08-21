@@ -520,6 +520,11 @@ final class OpenRouterModelService {
         let availableQuantizations = parseStringArray(topProvider?["available_quantizations"])
         let contextLength = parseInt(object["context_length"]) ?? 0
         let reasoning = parseReasoningCapabilities(object["reasoning"])
+        let architecture = object["architecture"] as? [String: Any]
+        let inputModalities = parseStringArray(architecture?["input_modalities"])
+        let outputModalities = parseStringArray(architecture?["output_modalities"])
+        let supportedParameters = parseStringArray(object["supported_parameters"])
+        let maxCompletionTokens = parseInt(topProvider?["max_completion_tokens"])
 
         return SimpleModel(
             id: id,
@@ -532,7 +537,14 @@ final class OpenRouterModelService {
             isFree: promptPerToken == 0 && completionPerToken == 0,
             availableProviders: availableProviders,
             availableQuantizations: availableQuantizations,
-            reasoning: reasoning
+            reasoning: reasoning,
+            inputModalities: inputModalities,
+            outputModalities: outputModalities,
+            maxCompletionTokens: maxCompletionTokens,
+            supportsTools: supportedParameters.contains("tools"),
+            supportsReasoning: reasoning != nil || supportedParameters.contains {
+                ["include_reasoning", "reasoning", "reasoning_effort"].contains($0)
+            }
         )
     }
 

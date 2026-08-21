@@ -86,10 +86,22 @@ struct OpenRouterModel: Codable, Sendable {
     struct TopProvider: Codable, Sendable {
         var availableProviders: [String]?
         var availableQuantizations: [String]?
+        var maxCompletionTokens: Int?
 
         enum CodingKeys: String, CodingKey {
             case availableProviders = "available_providers"
             case availableQuantizations = "available_quantizations"
+            case maxCompletionTokens = "max_completion_tokens"
+        }
+    }
+
+    struct Architecture: Codable, Sendable {
+        var inputModalities: [String]?
+        var outputModalities: [String]?
+
+        enum CodingKeys: String, CodingKey {
+            case inputModalities = "input_modalities"
+            case outputModalities = "output_modalities"
         }
     }
 
@@ -100,6 +112,8 @@ struct OpenRouterModel: Codable, Sendable {
     var contextLength: Int?
     var topProvider: TopProvider?
     var reasoning: OpenRouterReasoningCapabilities? = nil
+    var architecture: Architecture? = nil
+    var supportedParameters: [String]? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -109,6 +123,8 @@ struct OpenRouterModel: Codable, Sendable {
         case contextLength = "context_length"
         case topProvider = "top_provider"
         case reasoning
+        case architecture
+        case supportedParameters = "supported_parameters"
     }
 }
 
@@ -128,6 +144,11 @@ struct SimpleModel: Codable, Sendable, Equatable, Identifiable {
     var availableProviders: [String]
     var availableQuantizations: [String]
     var reasoning: OpenRouterReasoningCapabilities? = nil
+    var inputModalities: [String] = []
+    var outputModalities: [String] = []
+    var maxCompletionTokens: Int? = nil
+    var supportsTools: Bool = false
+    var supportsReasoning: Bool = false
 
     static func fromOpenRouterModel(_ model: OpenRouterModel) -> SimpleModel {
         func parse(_ values: String?...) -> Double {
@@ -148,7 +169,14 @@ struct SimpleModel: Codable, Sendable, Equatable, Identifiable {
             isFree: promptPerToken == 0 && completionPerToken == 0,
             availableProviders: model.topProvider?.availableProviders ?? [],
             availableQuantizations: model.topProvider?.availableQuantizations ?? [],
-            reasoning: model.reasoning
+            reasoning: model.reasoning,
+            inputModalities: model.architecture?.inputModalities ?? [],
+            outputModalities: model.architecture?.outputModalities ?? [],
+            maxCompletionTokens: model.topProvider?.maxCompletionTokens,
+            supportsTools: model.supportedParameters?.contains("tools") == true,
+            supportsReasoning: model.reasoning != nil || (model.supportedParameters ?? []).contains {
+                ["include_reasoning", "reasoning", "reasoning_effort"].contains($0)
+            }
         )
     }
 }

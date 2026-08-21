@@ -233,7 +233,12 @@ private struct CatalogModelListView: View {
                             api: model.providerContract?.api,
                             shape: model.providerContract?.shape,
                             toolCall: model.toolCall,
-                            provenance: model.providerContract?.provenance
+                            provenance: model.providerContract?.provenance,
+                            name: model.name,
+                            reasoning: model.reasoning,
+                            input: model.inputModalities,
+                            contextWindow: model.limits.context,
+                            maxTokens: model.limits.output
                         )
                     )
                 }
@@ -262,6 +267,7 @@ private struct CatalogModelListView: View {
         case "protocol_conflict": "models.devとPiのプロトコルが一致しません"
         case "endpoint_conflict": "models.devとPiのエンドポイントが一致しません"
         case "catalog_contract_ambiguous": "models.devのモデル実行契約を一意に特定できません"
+        case "catalog_contract_incomplete": "公式カタログのモデル実行契約が不完全です"
         case "contract_conflict": "models.devとPiの実行契約が一致しません"
         case "runtime_contract_mismatch": "アプリとPi Runtimeの契約バージョンが一致しません"
         default: "実行契約を確認できません"
