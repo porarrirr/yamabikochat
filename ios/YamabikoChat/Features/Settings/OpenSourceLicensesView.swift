@@ -19,6 +19,7 @@ private enum LegalDocument: String, CaseIterable, Identifiable {
     case thirdPartyNotices
     case npmLicenses
     case nodeLicense
+    case notoFontLicenses
 
     var id: String { rawValue }
 
@@ -32,6 +33,8 @@ private enum LegalDocument: String, CaseIterable, Identifiable {
             return L10n.text("Pi runtime npm ライセンス")
         case .nodeLicense:
             return L10n.text("Node.js / NodeMobile ライセンス")
+        case .notoFontLicenses:
+            return L10n.text("Noto 多言語フォント ライセンス")
         }
     }
 
@@ -45,6 +48,8 @@ private enum LegalDocument: String, CaseIterable, Identifiable {
             return "npm-licenses"
         case .nodeLicense:
             return "NODEJS_LICENSE"
+        case .notoFontLicenses:
+            return "NOTO_FONTS_LICENSES"
         }
     }
 
@@ -52,7 +57,7 @@ private enum LegalDocument: String, CaseIterable, Identifiable {
         switch self {
         case .thirdPartyNotices, .npmLicenses:
             return "md"
-        case .projectLicense, .nodeLicense:
+        case .projectLicense, .nodeLicense, .notoFontLicenses:
             return "txt"
         }
     }

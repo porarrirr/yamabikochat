@@ -66,9 +66,14 @@ Release APKs exclude duplicate `META-INF/AL2.0` and `META-INF/LGPL2.1` files to 
 | pyparsing | 3.3.2 | MIT | https://github.com/pyparsing/pyparsing |
 | python-dateutil | 2.9.0.post0 | Apache-2.0 OR BSD-3-Clause | https://github.com/dateutil/dateutil |
 | six | 1.17.0 | MIT | https://github.com/benjaminp/six |
+| Noto multilingual fonts | `google/fonts@ec626514f79f831f1ab848a82114a0ce7e2d6372` | OFL-1.1 | https://github.com/google/fonts/tree/ec626514f79f831f1ab848a82114a0ce7e2d6372/ofl |
 
 The package-specific license and attribution files shipped by these wheels are
 retained in their bundled `.dist-info` metadata directories.
+
+The Noto font license and copyright notices are bundled in
+`legal/NOTO_FONTS_LICENSES.txt` and exposed from the in-app open-source
+licenses screen.
 
 ## Pi runtime npm packages
 

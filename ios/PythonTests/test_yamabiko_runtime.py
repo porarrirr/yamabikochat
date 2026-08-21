@@ -13,7 +13,7 @@ class YamabikoRuntimeTests(unittest.TestCase):
         root = Path(tempfile.mkdtemp(prefix="yamabiko-python-test-"))
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
         workspace = root / "workspace"
-        outputs = root / "outputs"
+        outputs = workspace / "outputs"
         options = json.dumps({
             "workspace": str(workspace),
             "outputs": str(outputs),
@@ -66,12 +66,12 @@ class YamabikoRuntimeTests(unittest.TestCase):
     def test_outputs_are_reported_as_artifacts(self):
         result, root = self.run_cell(
             "artifact",
-            "from pathlib import Path\nPath('../outputs/chart.txt').write_text('ok')",
+            "from pathlib import Path\nPath('outputs/chart.txt').write_text('ok')",
         )
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["artifacts"][0]["root"], "outputs")
         self.assertEqual(result["artifacts"][0]["relpath"], "chart.txt")
-        self.assertEqual((root / "outputs" / "chart.txt").read_text(), "ok")
+        self.assertEqual((root / "workspace" / "outputs" / "chart.txt").read_text(), "ok")
 
     def test_workspace_files_are_reported_without_model_path_compliance(self):
         result, root = self.run_cell(

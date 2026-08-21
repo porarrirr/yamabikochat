@@ -159,8 +159,28 @@ def _namespace(session_id: str) -> dict[str, Any]:
 
 def _session_import(*args: Any, **kwargs: Any) -> Any:
     imported = builtins.__import__(*args, **kwargs)
+    _configure_matplotlib_fonts()
     _patch_matplotlib_show()
     return imported
+
+
+def _configure_matplotlib_fonts() -> None:
+    matplotlib = sys.modules.get("matplotlib")
+    if matplotlib is None:
+        return
+    # A family list is passed directly so Matplotlib builds an FT2Font fallback
+    # chain and selects a font per glyph. Putting the same list under
+    # `font.sans-serif` makes Matplotlib select only its first available family.
+    matplotlib.rcParams["font.family"] = [
+        "Noto Sans JP",
+        "Noto Sans SC",
+        "Noto Sans Devanagari",
+        "Noto Sans Arabic",
+        "Noto Nastaliq Urdu",
+        "Noto Sans Bengali",
+        "DejaVu Sans",
+    ]
+    matplotlib.rcParams["axes.unicode_minus"] = False
 
 
 def _is_visible_generated_file(path: Path, root: Path) -> bool:

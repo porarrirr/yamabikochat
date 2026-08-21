@@ -16,3 +16,9 @@ platform-substituted NumPy, Matplotlib, Pillow, contourpy, and kiwisolver wheels
 Downloaded wheels and sources are pinned by SHA-256. Locally cross-built wheels
 are accepted only when their generated checksum lock matches every expected iOS
 slice; unpinned files are not bundled.
+
+Matplotlib also bundles pinned OFL-licensed Noto Regular fonts for Japanese,
+Simplified Chinese, Devanagari, Arabic, Urdu Nastaliq, Bengali, Latin, and
+Cyrillic. The build verifies `Python/Resources/Fonts/SHA256SUMS` before copying
+the fonts into Matplotlib's own font directory. The runtime configures the font
+families as a direct fallback chain so mixed-script labels resolve per glyph.

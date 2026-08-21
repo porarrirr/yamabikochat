@@ -20,13 +20,25 @@ import numpy as np
 from PIL import Image
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib import font_manager
+import warnings
 
 values = np.array([1.0, 2.0, 3.0])
 Image.new("RGB", (4, 4), "red").save("pillow.png")
 plt.plot(values, values ** 2)
-plt.title("Embedded Python")
+required_fonts = {
+    "Noto Sans JP", "Noto Sans SC", "Noto Sans Devanagari",
+    "Noto Sans Arabic", "Noto Nastaliq Urdu", "Noto Sans Bengali",
+}
+available_fonts = {font.name for font in font_manager.fontManager.ttflist}
+assert required_fonts <= available_fonts, required_fonts - available_fonts
+warnings.filterwarnings("error", message=r"Glyph .* missing from font")
+plt.title("東京・大阪・名古屋の今日の気温")
+plt.xlabel("तापमान / درجة الحرارة / তাপমাত্রা")
+plt.figtext(0.02, 0.02, "北京、上海、广州今日气温", fontfamily="Noto Sans SC")
+plt.figtext(0.98, 0.02, "لاہور، کراچی کا درجہ حرارت", ha="right", fontfamily="Noto Nastaliq Urdu")
 plt.savefig("matplotlib.png")
-(float(np.sum(values)), matplotlib.get_backend())
+(float(np.sum(values)), matplotlib.get_backend(), sorted(required_fonts))
 """#,
             reset: true,
             attachmentPaths: []
@@ -36,6 +48,7 @@ plt.savefig("matplotlib.png")
         XCTAssertNil(response.error)
         XCTAssertTrue(response.resultRepr?.contains("6.0") == true)
         XCTAssertTrue(response.resultRepr?.lowercased().contains("agg") == true)
+        XCTAssertTrue(response.resultRepr?.contains("Noto Sans JP") == true)
 
         let artifacts = Dictionary(uniqueKeysWithValues: response.artifacts.map { ($0.name, $0) })
         let pillowArtifact = try XCTUnwrap(artifacts["pillow.png"])

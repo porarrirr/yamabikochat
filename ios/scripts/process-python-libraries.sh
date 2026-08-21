@@ -16,6 +16,15 @@ package_destination="$CODESIGNING_FOLDER_PATH/PythonSitePackages"
 mkdir -p "$package_destination"
 rsync -au --delete "$PROJECT_DIR/Vendor/PythonSitePackages/$python_packages_slice/" "$package_destination/"
 
+font_source="$PROJECT_DIR/YamabikoChat/Python/Resources/Fonts"
+font_destination="$package_destination/matplotlib/mpl-data/fonts/ttf"
+(
+  cd "$font_source"
+  shasum -a 256 -c SHA256SUMS
+)
+mkdir -p "$font_destination"
+cp "$font_source"/*.ttf "$font_destination/"
+
 # CPython's official packaging utility also signs dylib frameworks for
 # CODE_SIGNING_ALLOWED=NO simulator/CI builds. An explicit ad-hoc identity keeps
 # that required packaging step deterministic instead of relying on unset Xcode
