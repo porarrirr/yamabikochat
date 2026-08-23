@@ -92,6 +92,10 @@ class DualChatResponder(
                 try {
                     repository.streamProviderRequest(requestA, providerA).collect { event ->
                         when (event) {
+                            ProviderStreamEvent.AnswerStart -> {
+                                textA.set("")
+                                emitPartial(false)
+                            }
                             is ProviderStreamEvent.TextDelta -> {
                                 textA.set(textA.get() + event.delta)
                                 emitPartial(false)
@@ -107,6 +111,9 @@ class DualChatResponder(
                             is ProviderStreamEvent.Completed -> {
                                 if (event.response.text.isNotBlank()) textA.set(event.response.text)
                                 event.response.reasoningSummary?.let { thinkingA.set(it) }
+                                event.response.providerTranscript?.let { transcript ->
+                                    toolActivityA.set(toolActivityA.get().copy(providerTranscript = transcript))
+                                }
                                 event.response.usage?.let {
                                     repository.recordTokenUsage(providerA, modelA, it, conversationId, "dual_stream")
                                 }
@@ -125,6 +132,10 @@ class DualChatResponder(
                 try {
                     repository.streamProviderRequest(requestB, providerB).collect { event ->
                         when (event) {
+                            ProviderStreamEvent.AnswerStart -> {
+                                textB.set("")
+                                emitPartial(false)
+                            }
                             is ProviderStreamEvent.TextDelta -> {
                                 textB.set(textB.get() + event.delta)
                                 emitPartial(false)
@@ -140,6 +151,9 @@ class DualChatResponder(
                             is ProviderStreamEvent.Completed -> {
                                 if (event.response.text.isNotBlank()) textB.set(event.response.text)
                                 event.response.reasoningSummary?.let { thinkingB.set(it) }
+                                event.response.providerTranscript?.let { transcript ->
+                                    toolActivityB.set(toolActivityB.get().copy(providerTranscript = transcript))
+                                }
                                 event.response.usage?.let {
                                     repository.recordTokenUsage(providerB, modelB, it, conversationId, "dual_stream")
                                 }

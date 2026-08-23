@@ -117,6 +117,7 @@ final class ConversationExportTests: XCTestCase {
         XCTAssertEqual(snapshot.messages.count, 2)
         XCTAssertEqual(snapshot.messages[1].thinkingStream, "reasoning")
         XCTAssertEqual(snapshot.messages[1].toolActivity?.providerTranscript.count, 2)
+        XCTAssertEqual(snapshot.messages[1].toolActivity?.attachmentPaths, [toolOutputURL.path])
         XCTAssertEqual(snapshot.messages[1].toolActivity?.piExecution, execution)
         XCTAssertEqual(snapshot.tokenUsageRecords.first?.totalTokens, 14)
         XCTAssertEqual(snapshot.executionMetrics.first?.turnId, "turn-1")
@@ -201,7 +202,7 @@ final class ConversationExportTests: XCTestCase {
         }
     }
 
-    func testMigrationAddsPiExecutionColumns() throws {
+    func testMigrationAddsPiExecutionAndToolAttachmentColumns() throws {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)
 
@@ -215,6 +216,7 @@ final class ConversationExportTests: XCTestCase {
                 sql: "SELECT name FROM pragma_table_info('auto_conversation_messages')"
             )
             XCTAssertTrue(toolColumns.contains("piExecutionJSON"))
+            XCTAssertTrue(toolColumns.contains("attachmentPathsJSON"))
             XCTAssertTrue(autoColumns.contains("piExecutionJSON"))
         }
     }

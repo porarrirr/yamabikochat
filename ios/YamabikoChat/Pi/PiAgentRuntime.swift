@@ -410,6 +410,7 @@ actor PiAgentRuntime {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 var metrics = PiConversationMetricsCollector(context: metricsContext)
+                var toolTasks: [Task<Void, Error>] = []
 
                 func nowMs() -> Int64 {
                     Int64(Date().timeIntervalSince1970 * 1_000)
@@ -502,17 +503,32 @@ actor PiAgentRuntime {
                                     createdAtMs: createdAtMs
                                 )))
                             }
-                            let result = await tools.execute(call: call)
-                            if reportsActivity {
-                                continuation.yield(.toolActivity(ToolActivityEvent(
-                                    phase: .finished,
-                                    call: call,
-                                    result: result,
-                                    createdAtMs: createdAtMs
-                                )))
-                            }
-                            try await Self.submitToolResult(result, requestID: requestID, endpoint: endpoint, token: token)
+                            toolTasks.append(Task {
+                                do {
+                                    let result = await tools.execute(call: call)
+                                    if reportsActivity {
+                                        continuation.yield(.toolActivity(ToolActivityEvent(
+                                            phase: .finished,
+                                            call: call,
+                                            result: result,
+                                            createdAtMs: createdAtMs
+                                        )))
+                                    }
+                                    try await Self.submitToolResult(
+                                        result,
+                                        requestID: requestID,
+                                        endpoint: endpoint,
+                                        token: token
+                                    )
+                                } catch {
+                                    await Self.abort(runID: runID, endpoint: endpoint, token: token)
+                                    throw error
+                                }
+                            })
                         case "completed":
+                            for toolTask in toolTasks {
+                                try await toolTask.value
+                            }
                             guard let response = event.response else {
                                 throw ProviderClientError.parseFailure("Pi completed without a response")
                             }
@@ -553,6 +569,7 @@ actor PiAgentRuntime {
                     metrics.closeInterruptedLLMSteps(at: nowMs())
                     continuation.finish()
                 } catch is CancellationError {
+                    toolTasks.forEach { $0.cancel() }
                     metrics.closeInterruptedLLMSteps(at: nowMs())
                     DiagnosticsLogger.log(
                         "Pi runtime request cancelled",
@@ -564,6 +581,7 @@ actor PiAgentRuntime {
                     await Self.abort(runID: runID, endpoint: endpoint, token: token)
                     continuation.finish(throwing: CancellationError())
                 } catch {
+                    toolTasks.forEach { $0.cancel() }
                     metrics.closeInterruptedLLMSteps(at: nowMs())
                     DiagnosticsLogger.log(
                         "Pi runtime bridge failed",

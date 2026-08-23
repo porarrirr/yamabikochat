@@ -367,6 +367,58 @@ final class WebSearchToolTests: XCTestCase {
         XCTAssertTrue((object["content"] as? String)?.contains("Context before") == true)
     }
 
+    func testFetchURLRejectsUnrenderedDynamicPageAsSelectedEvidence() async throws {
+        let tool = FetchUrlTool(
+            httpClient: StaticWebToolHTTPClient(
+                body: """
+                <title>東京の天気</title>
+                <h2>東京都の各地の天気</h2>
+                <p>ライブ放送中 {{ content.title }}</p>
+                <p>8月22日の各地の気温変化と服装情報</p>
+                """
+            )
+        )
+        let result = try await tool.execute(
+            call: ToolCall(
+                id: "call-dynamic",
+                name: FetchUrlTool.name,
+                argumentsJSON: #"{"url":"https://example.com/tokyo","goal":"東京 今日の天気 最高 最低気温"}"#,
+                providerMetadata: nil
+            )
+        )
+        let data = try XCTUnwrap(result.content.data(using: .utf8))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        XCTAssertEqual(object["selection_status"] as? String, "dynamic_content_unavailable")
+        XCTAssertEqual(object["selected_paragraph_count"] as? Int, 0)
+        XCTAssertEqual(object["content"] as? String, "")
+    }
+
+    func testFetchURLDoesNotSelectPassagesMissingMostGoalTerms() async throws {
+        let tool = FetchUrlTool(
+            httpClient: StaticWebToolHTTPClient(
+                body: """
+                <title>東京のお知らせ</title>
+                <h2>東京都の各地の天気</h2>
+                <p>明日は全国的に気温が変化します。</p>
+                """
+            )
+        )
+        let result = try await tool.execute(
+            call: ToolCall(
+                id: "call-incomplete",
+                name: FetchUrlTool.name,
+                argumentsJSON: #"{"url":"https://example.com/tokyo","goal":"東京 今日の天気 最高 最低気温"}"#,
+                providerMetadata: nil
+            )
+        )
+        let data = try XCTUnwrap(result.content.data(using: .utf8))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        XCTAssertEqual(object["selection_status"] as? String, "partial_match")
+        XCTAssertFalse((object["content"] as? String)?.isEmpty ?? true)
+    }
+
     func testFetchURLReadsApplicationJSONAndSelectsRelevantArrayEntry() async throws {
         let tool = FetchUrlTool(
             httpClient: StaticWebToolHTTPClient(

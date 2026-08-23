@@ -820,6 +820,16 @@ enum AppDatabase {
             }
         }
 
+        migrator.registerMigration("v21_tool_attachment_paths") { db in
+            let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(chat_message_tool_activity)")
+            let columns = Set(rows.compactMap { ($0["name"] as String?)?.lowercased() })
+            if !columns.contains("attachmentpathsjson") {
+                try db.alter(table: "chat_message_tool_activity") { t in
+                    t.add(column: "attachmentPathsJSON", .text)
+                }
+            }
+        }
+
         return migrator
     }
 
@@ -831,6 +841,7 @@ enum AppDatabase {
                 variantId INTEGER REFERENCES chat_message_variants(id) ON DELETE CASCADE,
                 stepsJSON TEXT NOT NULL DEFAULT '[]',
                 providerTranscriptJSON TEXT,
+                attachmentPathsJSON TEXT,
                 piExecutionJSON TEXT,
                 CHECK (
                     (messageId IS NOT NULL AND variantId IS NULL)

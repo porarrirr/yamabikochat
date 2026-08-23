@@ -2,6 +2,15 @@ import XCTest
 @testable import YamabikoChat
 
 final class ProviderStreamEventTests: XCTestCase {
+    func testProviderResponseDecodesGroupedPiTranscript() throws {
+        let json = #"{"text":"done","toolCalls":[],"providerTranscript":[{"role":"assistant","content":"","attachments":[],"toolCalls":[{"id":"one","name":"web_search","argumentsJSON":"{\"query\":\"Tokyo\"}","providerMetadata":null},{"id":"two","name":"web_search","argumentsJSON":"{\"query\":\"Osaka\"}","providerMetadata":null}]},{"role":"tool","content":"{}","attachments":[],"toolCallId":"one","toolName":"web_search","toolResultIsError":false}]}"#
+
+        let response = try JSONDecoder().decode(ProviderResponse.self, from: Data(json.utf8))
+
+        XCTAssertEqual(response.providerTranscript?.map(\.role), ["assistant", "tool"])
+        XCTAssertEqual(response.providerTranscript?.first?.toolCalls?.map(\.id), ["one", "two"])
+    }
+
     func testIncludesNonEmptyAnswerTextIgnoresWhitespaceTextDelta() {
         XCTAssertFalse(ProviderStreamEvent.textDelta("   \n").includesNonEmptyAnswerText)
     }

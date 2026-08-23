@@ -474,11 +474,8 @@ final class OpenRouterRoutingTests: XCTestCase {
         let viewModel = SettingsViewModel()
         viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
 
-        for _ in 0 ..< 100 where viewModel.openRouterModels.count < 2 {
-            try? await Task.sleep(nanoseconds: 10_000_000)
-        }
+        await viewModel.refreshOpenRouterModels(force: true)
         XCTAssertEqual(viewModel.openRouterModels.count, 2)
-        try? await Task.sleep(nanoseconds: 50_000_000)
 
         viewModel.settings.apiProvider = "OPENROUTER"
         viewModel.settings.defaultModel = "example/old"

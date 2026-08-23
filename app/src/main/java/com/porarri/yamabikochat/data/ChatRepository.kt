@@ -648,6 +648,7 @@ class ChatRepository(
 
             providerGateway.stream(judgeOutcome.synthesisRequest, judgeOutcome.synthesizerProvider).collect { event ->
                 when (event) {
+                    ProviderStreamEvent.AnswerStart -> textAcc = ""
                     is ProviderStreamEvent.TextDelta -> textAcc += event.delta
                     is ProviderStreamEvent.Completed -> {
                         if (event.response.text.isNotBlank()) textAcc = event.response.text

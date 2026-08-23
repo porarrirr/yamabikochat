@@ -20,7 +20,7 @@ struct FetchUrlTool: LocalToolExecutor {
     let definition = ToolDefinition(
         name: name,
         description: """
-        Read an HTTP or HTTPS page for a specific goal and return the most relevant passages with nearby context, up to 8000 characters. Use it only after evaluating web_search snippets. Prefer primary or authoritative pages. Do not claim support for information absent from the returned content.
+        Read an HTTP or HTTPS page for a specific goal and return the most relevant passages with nearby context, up to 8000 characters. Use it only after evaluating web_search snippets. Prefer primary or authoritative pages. Treat only selection_status=selected as sufficient evidence; partial_match, no_relevant_passages, and dynamic_content_unavailable require another source or a narrower goal. Do not claim support for information absent from the returned content.
         """,
         parametersJSON: """
         {

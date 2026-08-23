@@ -35,6 +35,8 @@ enum OpenCodeGoModelCatalog {
         OpenCodeGoModel(id: "kimi-k2.6", displayName: "Kimi K2.6", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
         OpenCodeGoModel(id: "deepseek-v4-pro", displayName: "DeepSeek V4 Pro", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
         OpenCodeGoModel(id: "deepseek-v4-flash", displayName: "DeepSeek V4 Flash", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
+        OpenCodeGoModel(id: "deepseek-v4-flash-vision-exp", displayName: "DeepSeek V4 Flash Vision Exp", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
+        OpenCodeGoModel(id: "ox-alpha-free", displayName: "Ox Alpha Free", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
         OpenCodeGoModel(id: "mimo-v2.5-pro", displayName: "MiMo-V2.5-Pro", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
         OpenCodeGoModel(id: "mimo-v2.5", displayName: "MiMo-V2.5", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),
         OpenCodeGoModel(id: "hy3", displayName: "HY 3", endpointKind: .chatCompletions, description: "OpenCode Go chat/completions model."),

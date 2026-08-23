@@ -49,10 +49,11 @@ final class ChatStreamSessionTests: XCTestCase {
             continuation.yield(.reasoningDelta("search reasoning"))
             continuation.yield(.textDelta("検索結果が見つかりました。詳細を確認します。"))
             continuation.yield(.answerStart)
+            continuation.yield(.reasoningDelta("\nfinal reasoning"))
             continuation.yield(.textDelta("最終回答"))
             continuation.yield(.completed(ProviderResponse(
                 text: "最終回答",
-                reasoningSummary: "search reasoning",
+                reasoningSummary: "search reasoning\nfinal reasoning",
                 raw: nil,
                 usage: nil
             )))
@@ -68,12 +69,93 @@ final class ChatStreamSessionTests: XCTestCase {
         )
 
         XCTAssertEqual(session.text, "最終回答")
-        XCTAssertEqual(session.reasoningText, "search reasoning")
+        XCTAssertEqual(session.reasoningText, "search reasoning\nfinal reasoning")
         XCTAssertTrue(snapshots.values.contains { $0.text.contains("検索結果が見つかりました") })
         XCTAssertEqual(snapshots.values.last?.text, "最終回答")
         let messages = try conversations.fetchMessages(conversationId: conversationId)
         XCTAssertEqual(messages.last?.text, "最終回答")
-        XCTAssertEqual(try conversations.fetchFullMessage(id: messageId)?.thinkingStream, "search reasoning")
+        XCTAssertEqual(
+            try conversations.fetchFullMessage(id: messageId)?.thinkingStream,
+            "search reasoning\nfinal reasoning"
+        )
+    }
+
+    func testRunPersistsExactGroupedPiToolTranscriptFromCompletion() async throws {
+        let conversations = try makeConversations()
+        let conversationId = try conversations.createConversation(
+            title: "test",
+            model: "deepseek-v4-flash",
+            provider: "MODELS_DEV:OPENCODE-GO"
+        )
+        let messageId = try conversations.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "model", text: "", createdAtMs: 1)
+        )
+        let first = ToolCall(id: "search-1", name: WebSearchTool.name, argumentsJSON: #"{"query":"東京"}"#)
+        let second = ToolCall(id: "search-2", name: WebSearchTool.name, argumentsJSON: #"{"query":"大阪"}"#)
+        let firstResult = ToolResult(callId: first.id, name: first.name, content: #"{"results":[]}"#)
+        let secondResult = ToolResult(callId: second.id, name: second.name, content: #"{"results":[]}"#)
+        let exactTranscript = [
+            ProviderRequestMessage(role: "assistant", content: "", toolCalls: [first, second]),
+            ProviderRequestMessage(
+                role: "tool",
+                content: firstResult.content,
+                toolCallId: first.id,
+                toolName: first.name,
+                toolResultIsError: false
+            ),
+            ProviderRequestMessage(
+                role: "tool",
+                content: secondResult.content,
+                toolCallId: second.id,
+                toolName: second.name,
+                toolResultIsError: false
+            )
+        ]
+        let stream = AsyncThrowingStream<ProviderStreamEvent, Error> { continuation in
+            for call in [first, second] {
+                continuation.yield(.toolActivity(ToolActivityEvent(
+                    phase: .started,
+                    call: call,
+                    result: nil,
+                    createdAtMs: 1
+                )))
+            }
+            continuation.yield(.toolActivity(ToolActivityEvent(
+                phase: .finished,
+                call: first,
+                result: firstResult,
+                createdAtMs: 2
+            )))
+            continuation.yield(.toolActivity(ToolActivityEvent(
+                phase: .finished,
+                call: second,
+                result: secondResult,
+                createdAtMs: 2
+            )))
+            continuation.yield(.completed(ProviderResponse(
+                text: "done",
+                reasoningSummary: nil,
+                raw: nil,
+                usage: nil,
+                providerTranscript: exactTranscript
+            )))
+            continuation.finish()
+        }
+
+        let session = try await ChatStreamSession.run(
+            stream: stream,
+            conversations: conversations,
+            kind: .message(messageId: messageId),
+            onStreamEvent: nil,
+            onStreamingSnapshot: nil
+        )
+
+        XCTAssertEqual(session.toolActivity?.providerTranscript, exactTranscript)
+        let history = try conversations.fetchProviderHistory(conversationId: conversationId)
+        XCTAssertEqual(history.last?.toolTranscript.map(\.role), ["assistant", "tool", "tool"])
+        XCTAssertEqual(history.last?.toolTranscript.first?.toolCalls?.map(\.id), [first.id, second.id])
+        XCTAssertEqual(history.last?.providerMessages.map(\.role), ["assistant", "tool", "tool", "assistant"])
+        XCTAssertEqual(history.last?.providerMessages.first?.toolCalls?.count, 2)
     }
 
     func testRunTreatsCompletedTextAsAuthoritativeWithoutTurnBoundary() async throws {
@@ -191,8 +273,24 @@ final class ChatStreamSessionTests: XCTestCase {
         let messageId = try conversations.insertMessage(
             ChatMessage(conversationId: conversationId, role: "model", text: "", createdAtMs: 1)
         )
+        let call = ToolCall(id: "search-1", name: WebSearchTool.name, argumentsJSON: #"{"query":"Tokyo"}"#)
+        let transcript = [
+            ProviderRequestMessage(role: "assistant", content: "", toolCalls: [call]),
+            ProviderRequestMessage(
+                role: "tool",
+                content: #"{"results":[]}"#,
+                toolCallId: call.id,
+                toolName: call.name,
+                toolResultIsError: false
+            )
+        ]
+        let transcriptValue = try JSONDecoder().decode(
+            JSONValue.self,
+            from: JSONEncoder().encode(transcript)
+        )
         let execution: JSONValue = .object([
             "format": .string("yamabiko.pi-agent-execution"),
+            "providerTranscript": transcriptValue,
             "failure": .object(["message": .string("provider failed")])
         ])
 
@@ -215,6 +313,10 @@ final class ChatStreamSessionTests: XCTestCase {
             XCTAssertEqual(
                 try conversations.fetchFullMessage(id: messageId)?.toolActivity?.piExecution,
                 execution
+            )
+            XCTAssertEqual(
+                try conversations.fetchProviderHistory(conversationId: conversationId).last?.toolTranscript.map(\.role),
+                ["assistant", "tool"]
             )
         } catch {
             XCTFail("Unexpected error: \(error)")

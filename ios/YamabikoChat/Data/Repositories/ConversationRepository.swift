@@ -648,12 +648,14 @@ final class ConversationRepository: @unchecked Sendable {
     ) throws {
         let stepsData = try JSONEncoder().encode(payload.steps)
         let transcriptData = try JSONEncoder().encode(payload.providerTranscript)
+        let attachmentPathsData = try JSONEncoder().encode(payload.attachmentPaths)
         let piExecutionData = try payload.piExecution.map { try JSONEncoder().encode($0) }
         var activity = ChatMessageToolActivity(
             messageId: messageId,
             variantId: variantId,
             stepsJSON: String(decoding: stepsData, as: UTF8.self),
             providerTranscriptJSON: String(decoding: transcriptData, as: UTF8.self),
+            attachmentPathsJSON: String(decoding: attachmentPathsData, as: UTF8.self),
             piExecutionJSON: piExecutionData.map { String(decoding: $0, as: UTF8.self) }
         )
         try dbQueue.write { db in

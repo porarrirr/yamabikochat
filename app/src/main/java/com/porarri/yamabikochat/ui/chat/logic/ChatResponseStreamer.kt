@@ -116,6 +116,9 @@ class ChatResponseStreamer(
             try {
                 repository.streamProviderRequest(request, provider).collect { event ->
                     when (event) {
+                        ProviderStreamEvent.AnswerStart -> {
+                            textAccumulator = ""
+                        }
                         is ProviderStreamEvent.TextDelta -> {
                             textAccumulator += event.delta
                         }
@@ -134,6 +137,9 @@ class ChatResponseStreamer(
                         }
                         is ProviderStreamEvent.Completed -> {
                             val response = event.response
+                            response.providerTranscript?.let {
+                                toolPayload = toolPayload.copy(providerTranscript = it)
+                            }
                             if (response.text.isNotBlank()) textAccumulator = response.text
                             val thinkingSummary = response.reasoningSummary ?: thinkingAccumulator.takeIf { it.isNotBlank() }
 
@@ -203,13 +209,13 @@ class ChatResponseStreamer(
                     }
                 }
                 toolPayload = toolPayload.failRunning("ツールの実行が中断されました")
-                if (toolPayload.steps.isNotEmpty()) {
+                if (toolPayload.steps.isNotEmpty() || toolPayload.providerTranscript.isNotEmpty()) {
                     activeVariant?.id?.let { repository.saveToolActivityForVariant(it, toolPayload) }
                         ?: repository.saveToolActivity(messageId, toolPayload)
                 }
                 updateFullMessageState(errText, emptyList(), null, thinkingAccumulator, toolPayload)
             }
-            if (toolPayload.steps.isNotEmpty()) {
+            if (toolPayload.steps.isNotEmpty() || toolPayload.providerTranscript.isNotEmpty()) {
                 activeVariant?.id?.let { repository.saveToolActivityForVariant(it, toolPayload) }
                     ?: repository.saveToolActivity(messageId, toolPayload)
             }
@@ -220,11 +226,13 @@ class ChatResponseStreamer(
         messageId: Long?,
         variantId: Long?,
         payload: ToolActivityPayload
-    ): ChatMessageToolActivity? = payload.steps.takeIf { it.isNotEmpty() }?.let {
+    ): ChatMessageToolActivity? = payload.takeIf {
+        it.steps.isNotEmpty() || it.providerTranscript.isNotEmpty()
+    }?.let {
         ChatMessageToolActivity(
             messageId = messageId,
             variantId = variantId,
-            stepsJSON = ToolActivityStep.encodeSteps(it),
+            stepsJSON = ToolActivityStep.encodeSteps(it.steps),
             providerTranscriptJSON = ChatMessageToolActivity.encodeProviderTranscript(payload.providerTranscript)
         )
     }

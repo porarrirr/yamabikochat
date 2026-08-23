@@ -9,6 +9,7 @@ struct ChatMessageToolActivity: Codable, FetchableRecord, MutablePersistableReco
     var variantId: Int64?
     var stepsJSON: String
     var providerTranscriptJSON: String?
+    var attachmentPathsJSON: String?
     var piExecutionJSON: String?
 
     init(
@@ -17,6 +18,7 @@ struct ChatMessageToolActivity: Codable, FetchableRecord, MutablePersistableReco
         variantId: Int64? = nil,
         stepsJSON: String,
         providerTranscriptJSON: String? = nil,
+        attachmentPathsJSON: String? = nil,
         piExecutionJSON: String? = nil
     ) {
         self.id = id
@@ -24,6 +26,7 @@ struct ChatMessageToolActivity: Codable, FetchableRecord, MutablePersistableReco
         self.variantId = variantId
         self.stepsJSON = stepsJSON
         self.providerTranscriptJSON = providerTranscriptJSON
+        self.attachmentPathsJSON = attachmentPathsJSON
         self.piExecutionJSON = piExecutionJSON
     }
 
@@ -50,10 +53,18 @@ struct ChatMessageToolActivity: Codable, FetchableRecord, MutablePersistableReco
         return try? JSONDecoder().decode(JSONValue.self, from: data)
     }
 
+    var attachmentPaths: [String] {
+        guard let attachmentPathsJSON,
+              let data = attachmentPathsJSON.data(using: .utf8)
+        else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+    }
+
     var payload: ToolActivityPayload {
         ToolActivityPayload(
             steps: steps,
             providerTranscript: providerTranscript ?? [],
+            attachmentPaths: attachmentPaths,
             piExecution: piExecution
         )
     }
@@ -129,7 +140,7 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
     }
 
     var hasPersistableContent: Bool {
-        !steps.isEmpty || !providerTranscript.isEmpty || piExecution != nil
+        !steps.isEmpty || !providerTranscript.isEmpty || !attachmentPaths.isEmpty || piExecution != nil
     }
 
     mutating func apply(_ event: ToolActivityEvent) {

@@ -17,8 +17,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -176,7 +178,7 @@ class PiAgentRuntime private constructor(private val context: Context) {
         request: ProviderRequest,
         configuration: PiAgentConfiguration,
         tools: LocalToolRegistry
-    ): Flow<ProviderStreamEvent> = flow {
+    ): Flow<ProviderStreamEvent> = channelFlow {
         DiagnosticsLogger.log(
             "Pi runtime stream requested provider=${configuration.provider} model=${configuration.model} contractVersion=${configuration.contractVersion}"
         )
@@ -209,6 +211,7 @@ class PiAgentRuntime private constructor(private val context: Context) {
             val source = response.body?.byteStream() ?: throw ProviderClientError.InvalidResponse
             val reader = BufferedReader(InputStreamReader(source, Charsets.UTF_8))
 
+            val toolJobs = mutableListOf<kotlinx.coroutines.Job>()
             var line: String?
             while (reader.readLine().also { line = it } != null) {
                 val currentLine = line?.trim().orEmpty()
@@ -229,10 +232,13 @@ class PiAgentRuntime private constructor(private val context: Context) {
                         )
                     }
                     "text_delta" -> {
-                        emit(ProviderStreamEvent.TextDelta(event.delta.orEmpty()))
+                        send(ProviderStreamEvent.TextDelta(event.delta.orEmpty()))
                     }
                     "reasoning_delta" -> {
-                        emit(ProviderStreamEvent.ReasoningDelta(event.delta.orEmpty()))
+                        send(ProviderStreamEvent.ReasoningDelta(event.delta.orEmpty()))
+                    }
+                    "answer_start" -> {
+                        send(ProviderStreamEvent.AnswerStart)
                     }
                     "tool_request" -> {
                         val reqId = event.requestId
@@ -244,31 +250,40 @@ class PiAgentRuntime private constructor(private val context: Context) {
                             val createdAtMs = event.timeMs ?: System.currentTimeMillis()
                             val reportsActivity = toolName == "web_search" || toolName == "fetch_url"
                             if (reportsActivity) {
-                                emit(ProviderStreamEvent.ToolActivity(ToolActivityEvent(
+                                send(ProviderStreamEvent.ToolActivity(ToolActivityEvent(
                                     phase = ToolActivityEvent.Phase.started,
                                     call = toolCall,
                                     createdAtMs = createdAtMs
                                 )))
                             }
-                            val toolResult = tools.execute(toolCall)
-                            if (reportsActivity) {
-                                emit(ProviderStreamEvent.ToolActivity(ToolActivityEvent(
-                                    phase = ToolActivityEvent.Phase.finished,
-                                    call = toolCall,
-                                    result = toolResult,
-                                    createdAtMs = createdAtMs
-                                )))
+                            toolJobs += launch {
+                                try {
+                                    val toolResult = tools.execute(toolCall)
+                                    if (reportsActivity) {
+                                        send(ProviderStreamEvent.ToolActivity(ToolActivityEvent(
+                                            phase = ToolActivityEvent.Phase.finished,
+                                            call = toolCall,
+                                            result = toolResult,
+                                            createdAtMs = createdAtMs
+                                        )))
+                                    }
+                                    submitToolResult(toolResult, reqId, endpoint, token)
+                                } catch (error: Exception) {
+                                    abortRun(runId, endpoint, token)
+                                    call.cancel()
+                                    throw error
+                                }
                             }
-                            submitToolResult(toolResult, reqId, endpoint, token)
                         }
                     }
                     "completed" -> {
+                        toolJobs.joinAll()
                         val completedResponse = event.response
                             ?: throw ProviderClientError.ParseFailure("Pi completed without a response")
                         DiagnosticsLogger.log(
                             "Pi runtime request completed runId=$runId provider=${configuration.provider} model=${configuration.model}"
                         )
-                        emit(ProviderStreamEvent.Completed(completedResponse))
+                        send(ProviderStreamEvent.Completed(completedResponse))
                     }
                     "error" -> {
                         val error = ProviderClientError.ParseFailure(event.message ?: "Pi agent failed")
@@ -307,8 +322,10 @@ class PiAgentRuntime private constructor(private val context: Context) {
             .post(bodyJson.toRequestBody("application/json".toMediaType()))
             .build()
 
-        runCatching {
-            httpClient.newCall(request).execute().close()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw ProviderClientError.InvalidResponse
+            }
         }
     }
 

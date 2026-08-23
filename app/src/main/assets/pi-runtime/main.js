@@ -288182,6 +288182,8 @@ var VERIFIED_OPENCODE_GO_ROUTES = [
   { id: "kimi-k2.6", api: "openai-completions" },
   { id: "deepseek-v4-pro", api: "openai-completions" },
   { id: "deepseek-v4-flash", api: "openai-completions" },
+  { id: "deepseek-v4-flash-vision-exp", api: "openai-completions" },
+  { id: "ox-alpha-free", api: "openai-completions" },
   { id: "mimo-v2.5", api: "openai-completions" },
   { id: "mimo-v2.5-pro", api: "openai-completions" },
   { id: "minimax-m3", api: "anthropic-messages" },
@@ -288201,6 +288203,28 @@ function installVerifiedOpenCodeGoContracts() {
   const provider = runtimeModels.getProvider("opencode-go");
   if (!provider) throw new Error("Pi does not provide the required opencode-go provider");
   const missingModels = /* @__PURE__ */ new Map([
+    ["deepseek-v4-flash-vision-exp", {
+      id: "deepseek-v4-flash-vision-exp",
+      name: "DeepSeek V4 Flash Vision Exp",
+      provider: "opencode-go",
+      reasoning: true,
+      input: ["text", "image"],
+      cost: { input: 0.22, output: 0.66, cacheRead: 7e-3, cacheWrite: 0 },
+      contextWindow: 1e6,
+      maxTokens: 384e3,
+      thinkingLevelMap: { minimal: null, low: "low", medium: null, high: "high", max: "max" }
+    }],
+    ["ox-alpha-free", {
+      id: "ox-alpha-free",
+      name: "Ox Alpha Free (Unlimited)",
+      provider: "opencode-go",
+      reasoning: true,
+      input: ["text", "image", "video"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 1e6,
+      maxTokens: 131072,
+      thinkingLevelMap: { low: "low", high: "high", max: "max" }
+    }],
     ["minimax-m2.5", {
       id: "minimax-m2.5",
       name: "MiniMax-M2.5",
@@ -288891,6 +288915,7 @@ function makeTools(request, runId, res) {
       label: tool.payload?.name,
       description: tool.payload?.description || "",
       parameters: typebox_exports.Unsafe(schema),
+      executionMode: tool.payload?.name === "python_execute" ? "sequential" : "parallel",
       execute: async (toolCallId, params, signal) => {
         const requestId = crypto.randomUUID();
         send(res, { type: "tool_request", runId, requestId, toolCallId, name: tool.payload?.name, arguments: params });
@@ -288916,7 +288941,34 @@ function makeTools(request, runId, res) {
     };
   });
 }
-function finalResponse(assistants, contextUsage) {
+function replayableProviderTranscript(messages) {
+  return messages.flatMap((message) => {
+    if (message.role === "assistant") {
+      const toolCalls = (message.content || []).filter((part) => part.type === "toolCall").map((part) => ({
+        id: part.id,
+        name: part.name,
+        argumentsJSON: JSON.stringify(part.arguments || {}),
+        providerMetadata: null
+      }));
+      if (!toolCalls.length) return [];
+      const content = (message.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
+      return [{ role: "assistant", content, attachments: [], toolCalls }];
+    }
+    if (message.role === "toolResult") {
+      const content = (message.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
+      return [{
+        role: "tool",
+        content,
+        attachments: [],
+        toolCallId: message.toolCallId,
+        toolName: message.toolName,
+        toolResultIsError: Boolean(message.isError)
+      }];
+    }
+    return [];
+  });
+}
+function finalResponse(assistants, contextUsage, generatedMessages = []) {
   const last = assistants.at(-1);
   if (!last) throw new Error("Pi provider returned no assistant message");
   if (last.stopReason === "error" || last.errorMessage) {
@@ -288924,7 +288976,7 @@ function finalResponse(assistants, contextUsage) {
     throw new Error(`Pi provider failed: ${detail}`);
   }
   const text = (last?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
-  const reasoning = (last?.content || []).filter((part) => part.type === "thinking").map((part) => part.thinking).join("");
+  const reasoning = assistants.flatMap((message) => (message.content || []).filter((part) => part.type === "thinking").map((part) => part.thinking)).join("");
   const totals = assistants.reduce((sum, message) => {
     sum.inputTokens += message.usage?.input || 0;
     sum.outputTokens += message.usage?.output || 0;
@@ -288961,10 +289013,12 @@ function finalResponse(assistants, contextUsage) {
     reasoningSummary: reasoning || null,
     usage: aggregateUsage,
     usageSamples,
-    toolCalls
+    toolCalls,
+    providerTranscript: replayableProviderTranscript(generatedMessages)
   };
 }
 function piExecutionSnapshot({ agent, effectiveRequest, providerRequests, events, resolution, startedAtMs, failure = null }) {
+  const generatedMessages = agent.state.messages.slice((effectiveRequest.messages || []).length);
   return {
     format: "yamabiko.pi-agent-execution",
     version: 2,
@@ -288972,6 +289026,7 @@ function piExecutionSnapshot({ agent, effectiveRequest, providerRequests, events
     startedAtMs,
     completedAtMs: Date.now(),
     resolution,
+    providerTranscript: replayableProviderTranscript(generatedMessages),
     request: exportableProviderPayload(effectiveRequest),
     state: exportableProviderPayload({
       systemPrompt: agent.state.systemPrompt,
@@ -289034,9 +289089,10 @@ async function runAgent(envelope, res) {
         payload
       });
     }),
-    toolExecution: "sequential",
+    toolExecution: "parallel",
     maxRetryDelayMs: 6e4
   });
+  const initialMessageCount = agent.state.messages.length;
   runs.set(runId, agent);
   let step = 0;
   let activeStep = null;
@@ -289084,7 +289140,8 @@ async function runAgent(envelope, res) {
     });
     const contextWindow = model.contextWindow || null;
     const contextEstimate = contextWindow && last?.usage ? { tokens: last.usage.totalTokens, contextWindow } : null;
-    const response = finalResponse(runAssistants, contextEstimate);
+    const generatedMessages = agent.state.messages.slice(initialMessageCount);
+    const response = finalResponse(runAssistants, contextEstimate, generatedMessages);
     response.piExecution = piExecutionSnapshot({
       agent,
       effectiveRequest,

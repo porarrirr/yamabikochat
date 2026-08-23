@@ -9,7 +9,9 @@ struct PageParagraph: Sendable, Equatable {
 struct RelevantPageSelection: Sendable, Equatable {
     enum Status: String, Sendable {
         case selected
+        case partialMatch = "partial_match"
         case noRelevantPassages = "no_relevant_passages"
+        case dynamicContentUnavailable = "dynamic_content_unavailable"
     }
 
     let content: String
@@ -153,6 +155,7 @@ enum RelevantPageReader {
     static let defaultSeedLimit = 8
     static let defaultContextRadius = 1
     static let minimumSimilarity = 0.12
+    static let minimumGoalTermCoverage = 0.8
 
     static func select(
         paragraphs: [PageParagraph],
@@ -163,6 +166,15 @@ enum RelevantPageReader {
     ) -> RelevantPageSelection {
         guard maxCharacters > 0, !paragraphs.isEmpty else {
             return noRelevantSelection
+        }
+
+        if paragraphs.contains(where: { containsUnresolvedTemplate($0.text) }) {
+            return RelevantPageSelection(
+                content: "",
+                status: .dynamicContentUnavailable,
+                selectedParagraphCount: 0,
+                truncated: false
+            )
         }
 
         let normalizedGoal = normalizeForComparison(goal)
@@ -220,6 +232,20 @@ enum RelevantPageReader {
         if content.count > maxCharacters {
             content = String(content.prefix(maxCharacters))
             truncated = true
+        }
+
+        if !importantTerms.isEmpty {
+            let normalizedContent = normalizeForComparison(content)
+            let matchedCount = importantTerms.filter { normalizedContent.contains($0) }.count
+            let coverage = Double(matchedCount) / Double(importantTerms.count)
+            if coverage < minimumGoalTermCoverage {
+                return RelevantPageSelection(
+                    content: content,
+                    status: .partialMatch,
+                    selectedParagraphCount: indices.count,
+                    truncated: truncated
+                )
+            }
         }
 
         return RelevantPageSelection(
@@ -316,6 +342,13 @@ enum RelevantPageReader {
         }
         let intersection = left.intersection(right).count
         return (2 * Double(intersection)) / Double(left.count + right.count)
+    }
+
+    private static func containsUnresolvedTemplate(_ value: String) -> Bool {
+        value.range(
+            of: #"\{\{[^{}]+\}\}|\{%[^%]+%\}|<%[^%]+%>"#,
+            options: .regularExpression
+        ) != nil
     }
 
     private static func bigrams(_ value: String) -> Set<String> {

@@ -62,6 +62,7 @@ class ProviderGateway(
         streamFlow.collect { event ->
             onStreamEvent?.invoke(event)
             when (event) {
+                ProviderStreamEvent.AnswerStart -> text = ""
                 is ProviderStreamEvent.TextDelta -> text += event.delta
                 is ProviderStreamEvent.ReasoningDelta -> reasoning += event.delta
                 is ProviderStreamEvent.ToolActivity -> toolActivity = toolActivity.applying(event.event)
@@ -74,7 +75,12 @@ class ProviderGateway(
         if (response.reasoningSummary == null && reasoning.trim().isNotEmpty()) {
             response.reasoningSummary = reasoning.trim()
         }
-        if (toolActivity.steps.isNotEmpty()) response.toolActivity = toolActivity
+        response.providerTranscript?.let {
+            toolActivity = toolActivity.copy(providerTranscript = it)
+        }
+        if (toolActivity.steps.isNotEmpty() || toolActivity.providerTranscript.isNotEmpty()) {
+            response.toolActivity = toolActivity
+        }
         return response
     }
 

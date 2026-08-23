@@ -184,6 +184,8 @@ object OpenCodeGoModelCatalog {
         OpenCodeGoModel("kimi-k2.6", "Kimi K2.6", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("deepseek-v4-pro", "DeepSeek V4 Pro", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("deepseek-v4-flash", "DeepSeek V4 Flash", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("deepseek-v4-flash-vision-exp", "DeepSeek V4 Flash Vision Exp", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("ox-alpha-free", "Ox Alpha Free", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("mimo-v2.5-pro", "MiMo-V2.5-Pro", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("mimo-v2.5", "MiMo-V2.5", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("hy3", "HY 3", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),

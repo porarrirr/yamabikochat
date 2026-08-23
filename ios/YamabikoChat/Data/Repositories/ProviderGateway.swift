@@ -78,6 +78,9 @@ final class ProviderGateway {
             throw ProviderClientError.parseFailure("Pi agent stream ended without completion")
         }
         if response.reasoningSummary == nil { response.reasoningSummary = reasoning.trimmedNonEmpty }
+        if let providerTranscript = response.providerTranscript {
+            toolActivity.providerTranscript = providerTranscript
+        }
         if toolActivity.hasPersistableContent {
             var merged = response.toolActivity ?? ToolActivityPayload()
             if !toolActivity.steps.isEmpty { merged.steps = toolActivity.steps }

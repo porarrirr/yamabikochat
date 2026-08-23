@@ -65,10 +65,12 @@ data class ProviderResponse(
     var usage: ProviderUsage? = null,
     var usageSamples: List<ProviderUsage>? = null,
     var toolCalls: List<ToolCall> = emptyList(),
+    var providerTranscript: List<ProviderRequestMessage>? = null,
     var toolActivity: ToolActivityPayload? = null
 )
 
 sealed interface ProviderStreamEvent {
+    data object AnswerStart : ProviderStreamEvent
     data class TextDelta(val delta: String) : ProviderStreamEvent
     data class ReasoningDelta(val delta: String) : ProviderStreamEvent
     data class ToolActivity(val event: ToolActivityEvent) : ProviderStreamEvent
@@ -78,7 +80,7 @@ sealed interface ProviderStreamEvent {
         get() = when (this) {
             is TextDelta -> delta.trim().isNotEmpty()
             is Completed -> response.text.trim().isNotEmpty()
-            is ReasoningDelta, is ToolActivity -> false
+            AnswerStart, is ReasoningDelta, is ToolActivity -> false
         }
 }
 

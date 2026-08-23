@@ -47,6 +47,8 @@ struct ProviderResponse: Codable, Sendable, Equatable {
     var usage: ProviderUsage?
     var usageSamples: [ProviderUsage]? = nil
     var toolCalls: [ToolCall] = []
+    /// Exact replayable assistant/tool messages emitted by Pi during this run.
+    var providerTranscript: [ProviderRequestMessage]? = nil
     var toolActivity: ToolActivityPayload? = nil
     /// Exact Pi Agent execution snapshot returned by the bundled runtime.
     /// Authentication material is excluded by the runtime before serialization.

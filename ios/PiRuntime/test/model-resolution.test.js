@@ -118,6 +118,8 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
     { contractVersion: 2, provider: "opencode-go", model: "glm-5.3" },
     { contractVersion: 2, provider: "opencode-go", model: "qwen3.6-plus" },
     { contractVersion: 2, provider: "opencode-go", model: "minimax-m2.7" },
+    { contractVersion: 2, provider: "opencode-go", model: "deepseek-v4-flash-vision-exp" },
+    { contractVersion: 2, provider: "opencode-go", model: "ox-alpha-free" },
     { contractVersion: 1, provider: "opencode-go", model: "muse-spark-1.2-contributor" },
     {
       contractVersion: 2,
@@ -225,8 +227,14 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
   assert.equal(result.models[11].api, "openai-completions");
   assert.equal(result.models[12].api, "anthropic-messages");
   assert.equal(result.models[13].api, "anthropic-messages");
-  assert.equal(result.models[14].reason, "runtime_contract_mismatch");
-  assert.deepEqual(result.models[15], {
+  assert.equal(result.models[14].api, "openai-completions");
+  assert.deepEqual(result.models[14].input, ["text", "image"]);
+  assert.equal(result.models[14].maxTokens, 384000);
+  assert.equal(result.models[15].api, "openai-completions");
+  assert.deepEqual(result.models[15].input, ["text", "image", "video"]);
+  assert.equal(result.models[15].maxTokens, 131072);
+  assert.equal(result.models[16].reason, "runtime_contract_mismatch");
+  assert.deepEqual(result.models[17], {
     supported: true,
     provider: "opencode",
     model: "nemotron-3.5-lightning-free",
@@ -238,13 +246,13 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
     maxTokens: 262144,
     toolCall: true
   });
-  assert.equal(result.models[16].supported, true);
-  assert.equal(result.models[16].api, "openai-responses");
-  assert.equal(result.models[16].source, "model");
-  assert.equal(result.models[17].supported, true);
-  assert.equal(result.models[17].api, "openai-completions");
-  assert.equal(result.models[17].source, "official_provider_catalog");
-  assert.equal(result.models[18].reason, "catalog_contract_incomplete");
-  assert.equal(result.models[19].reason, "protocol_conflict");
-  assert.equal(result.models[20].reason, "pi_model_missing");
+  assert.equal(result.models[18].supported, true);
+  assert.equal(result.models[18].api, "openai-responses");
+  assert.equal(result.models[18].source, "model");
+  assert.equal(result.models[19].supported, true);
+  assert.equal(result.models[19].api, "openai-completions");
+  assert.equal(result.models[19].source, "official_provider_catalog");
+  assert.equal(result.models[20].reason, "catalog_contract_incomplete");
+  assert.equal(result.models[21].reason, "protocol_conflict");
+  assert.equal(result.models[22].reason, "pi_model_missing");
 });

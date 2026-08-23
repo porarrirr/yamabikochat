@@ -249,12 +249,18 @@ enum ChatStreamSession {
             )
         case let .executionSnapshot(execution):
             toolActivity.piExecution = execution
+            if let providerTranscript = providerTranscript(from: execution) {
+                toolActivity.providerTranscript = providerTranscript
+            }
             try target.persistToolActivity(toolActivity)
         case let .completed(response):
             finalUsage = response.usage ?? finalUsage
             finalUsageSamples = response.usageSamples ?? finalUsageSamples
             finalToolCalls = response.toolCalls
             toolActivity.piExecution = response.piExecution
+            if let providerTranscript = response.providerTranscript {
+                toolActivity.providerTranscript = providerTranscript
+            }
             // Pi's completed response is built from the last assistant message.
             // Earlier assistant turns can contain user-facing progress text before
             // tool calls, so completion authoritatively replaces the live buffer.
@@ -272,6 +278,17 @@ enum ChatStreamSession {
                 onStreamingSnapshot: onStreamingSnapshot
             )
         }
+    }
+
+    private static func providerTranscript(from execution: JSONValue) -> [ProviderRequestMessage]? {
+        guard case let .object(object) = execution,
+              let value = object["providerTranscript"],
+              case .array = value,
+              let data = try? JSONEncoder().encode(value)
+        else {
+            return nil
+        }
+        return try? JSONDecoder().decode([ProviderRequestMessage].self, from: data)
     }
 
     private static func publishBufferedState(
