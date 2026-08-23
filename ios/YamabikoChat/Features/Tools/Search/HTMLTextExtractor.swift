@@ -2,8 +2,13 @@ import Foundation
 
 enum HTMLTextExtractor {
     static func extract(from html: String, maxCharacters: Int = 8_000) -> String {
-        let withoutInvisible = replacingMatches(
+        let withoutContainers = replacingMatches(
             in: html,
+            pattern: #"(?is)<(nav|header|footer|aside|form|dialog)\b[^>]*>.*?</\1\s*>"#,
+            with: " "
+        )
+        let withoutInvisible = replacingMatches(
+            in: withoutContainers,
             pattern: #"(?is)<(script|style|noscript|svg|template)\b[^>]*>.*?</\1\s*>"#,
             with: " "
         )

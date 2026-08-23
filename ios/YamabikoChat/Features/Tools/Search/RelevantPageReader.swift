@@ -31,8 +31,9 @@ enum PageParagraphExtractor {
     }
 
     static func extractHTML(_ html: String) -> [PageParagraph] {
+        let withoutNonContentContainers = removeNonContentContainers(from: html)
         let visibleHTML = replacingMatches(
-            in: html,
+            in: withoutNonContentContainers,
             pattern: #"(?is)<(script|style|noscript|svg|template)\b[^>]*>.*?</\1\s*>"#,
             with: " "
         )
@@ -148,6 +149,21 @@ enum PageParagraphExtractor {
             range: NSRange(input.startIndex..., in: input),
             withTemplate: replacement
         )
+    }
+
+    private static func removeNonContentContainers(from html: String) -> String {
+        var result = replacingMatches(
+            in: html,
+            pattern: #"(?is)<(nav|header|footer|aside|form|dialog)\b[^>]*>.*?</\1\s*>"#,
+            with: " "
+        )
+        let explicitNonContentAttribute = #"(?:role\s*=\s*[\"'](?:navigation|banner|contentinfo|complementary|dialog|advertisement)[\"']|(?:class|id)\s*=\s*[\"'][^\"']*(?:advertisement|ad-container|ad-wrapper|cookie-banner|cookie-consent|newsletter|navbar|navigation|sidebar|site-footer|site-header)[^\"']*[\"'])"#
+        result = replacingMatches(
+            in: result,
+            pattern: #"(?is)<(div|section)\b[^>]*\#(explicitNonContentAttribute)[^>]*>.*?</\1\s*>"#,
+            with: " "
+        )
+        return result
     }
 }
 

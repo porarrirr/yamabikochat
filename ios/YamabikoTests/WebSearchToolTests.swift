@@ -1,4 +1,5 @@
 import XCTest
+import WebKit
 @testable import YamabikoChat
 
 private actor RecordingWebToolHTTPClient: WebToolHTTPClient {
@@ -52,6 +53,50 @@ private actor StaticWebToolHTTPClient: WebToolHTTPClient {
             httpVersion: nil,
             headerFields: ["Content-Type": contentType]
         )!
+        return (Data(body.utf8), response)
+    }
+}
+
+@MainActor
+private final class RecordingRenderedPageLoader: RenderedPageContentLoading, @unchecked Sendable {
+    var result: Result<RenderedPageLoadResult, Error>
+    private(set) var callCount = 0
+    private(set) var activeCount = 0
+    private(set) var maximumActiveCount = 0
+    var delay: Duration?
+
+    init(
+        result: Result<RenderedPageLoadResult, Error> = .success(.accessRestricted(reason: "test_restricted")),
+        delay: Duration? = nil
+    ) {
+        self.result = result
+        self.delay = delay
+    }
+
+    func load(url: URL, timeout: TimeInterval) async throws -> RenderedPageLoadResult {
+        callCount += 1
+        activeCount += 1
+        maximumActiveCount = max(maximumActiveCount, activeCount)
+        defer { activeCount -= 1 }
+        if let delay {
+            try await Task.sleep(for: delay)
+        }
+        return try result.get()
+    }
+}
+
+private actor URLRoutingWebToolHTTPClient: WebToolHTTPClient {
+    func get(url: URL, timeout: TimeInterval) async throws -> (Data, HTTPURLResponse) {
+        let fails = url.path.contains("fail")
+        let response = HTTPURLResponse(
+            url: url,
+            statusCode: fails ? 500 : 200,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "text/html"]
+        )!
+        let body = fails
+            ? "server error"
+            : "<title>Guide</title><main><p>Odette recommended party details.</p></main>"
         return (Data(body.utf8), response)
     }
 }
@@ -124,6 +169,21 @@ final class WebSearchToolTests: XCTestCase {
         )
 
         XCTAssertEqual(text.count, 8_000)
+    }
+
+    func testParagraphExtractorRemovesNavigationAdvertisingAndFooterContainers() {
+        let html = """
+        <header><p>Site title</p></header>
+        <nav><li>Menu item</li></nav>
+        <div class="advertisement"><p>Buy this product</p></div>
+        <main><h1>Article</h1><p>Important article body.</p></main>
+        <footer><p>Copyright notice</p></footer>
+        """
+
+        let paragraphs = PageParagraphExtractor.extractHTML(html)
+
+        XCTAssertEqual(paragraphs.map(\.text), ["Important article body."])
+        XCTAssertEqual(paragraphs.first?.heading, "Article")
     }
 
     func testParagraphExtractorPreservesHeadingAndDocumentOrder() {
@@ -338,6 +398,7 @@ final class WebSearchToolTests: XCTestCase {
     }
 
     func testFetchURLReturnsGoalAwareSelectionMetadata() async throws {
+        let renderedLoader = await RecordingRenderedPageLoader()
         let tool = FetchUrlTool(
             httpClient: StaticWebToolHTTPClient(
                 body: """
@@ -347,7 +408,8 @@ final class WebSearchToolTests: XCTestCase {
                 <p>Odette and Sandrone are the recommended party.</p>
                 <p>Context after.</p>
                 """
-            )
+            ),
+            renderedPageLoader: renderedLoader
         )
         let result = try await tool.execute(
             call: ToolCall(
@@ -365,9 +427,15 @@ final class WebSearchToolTests: XCTestCase {
         XCTAssertEqual(object["selected_paragraph_count"] as? Int, 3)
         XCTAssertEqual(object["truncated"] as? Bool, false)
         XCTAssertTrue((object["content"] as? String)?.contains("Context before") == true)
+        XCTAssertEqual(object["fetch_method"] as? String, "url_session")
+        XCTAssertEqual(object["render_attempted"] as? Bool, false)
+        XCTAssertEqual(object["render_outcome"] as? String, "not_attempted")
+        let renderCallCount = await renderedLoader.callCount
+        XCTAssertEqual(renderCallCount, 0)
     }
 
     func testFetchURLRejectsUnrenderedDynamicPageAsSelectedEvidence() async throws {
+        let renderedLoader = await RecordingRenderedPageLoader()
         let tool = FetchUrlTool(
             httpClient: StaticWebToolHTTPClient(
                 body: """
@@ -376,7 +444,8 @@ final class WebSearchToolTests: XCTestCase {
                 <p>ライブ放送中 {{ content.title }}</p>
                 <p>8月22日の各地の気温変化と服装情報</p>
                 """
-            )
+            ),
+            renderedPageLoader: renderedLoader
         )
         let result = try await tool.execute(
             call: ToolCall(
@@ -392,9 +461,12 @@ final class WebSearchToolTests: XCTestCase {
         XCTAssertEqual(object["selection_status"] as? String, "dynamic_content_unavailable")
         XCTAssertEqual(object["selected_paragraph_count"] as? Int, 0)
         XCTAssertEqual(object["content"] as? String, "")
+        XCTAssertEqual(object["render_attempted"] as? Bool, true)
+        XCTAssertEqual(object["render_outcome"] as? String, "access_restricted")
     }
 
     func testFetchURLDoesNotSelectPassagesMissingMostGoalTerms() async throws {
+        let renderedLoader = await RecordingRenderedPageLoader()
         let tool = FetchUrlTool(
             httpClient: StaticWebToolHTTPClient(
                 body: """
@@ -402,7 +474,8 @@ final class WebSearchToolTests: XCTestCase {
                 <h2>東京都の各地の天気</h2>
                 <p>明日は全国的に気温が変化します。</p>
                 """
-            )
+            ),
+            renderedPageLoader: renderedLoader
         )
         let result = try await tool.execute(
             call: ToolCall(
@@ -417,6 +490,169 @@ final class WebSearchToolTests: XCTestCase {
 
         XCTAssertEqual(object["selection_status"] as? String, "partial_match")
         XCTAssertFalse((object["content"] as? String)?.isEmpty ?? true)
+    }
+
+    func testFetchURLUsesRenderedDOMWhenStaticHTMLIsDynamicShell() async throws {
+        let renderedLoader = await RecordingRenderedPageLoader(result: .success(.loaded(
+            RenderedPageContent(
+                title: "Rendered Party Guide",
+                finalURL: URL(string: "https://example.com/dynamic")!,
+                paragraphs: [
+                    PageParagraph(index: 0, heading: "Recommended Party", text: "Odette and Sandrone are the recommended party."),
+                    PageParagraph(index: 1, heading: "Recommended Party", text: "Escoffier completes the party composition.")
+                ]
+            )
+        )))
+        let tool = FetchUrlTool(
+            httpClient: StaticWebToolHTTPClient(body: "<title>Loading</title><div id=app>{{ content }}</div>"),
+            renderedPageLoader: renderedLoader
+        )
+
+        let result = try await tool.execute(call: ToolCall(
+            id: "call-rendered",
+            name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/dynamic","goal":"Odette Sandrone Escoffier recommended party"}"#,
+            providerMetadata: nil
+        ))
+        let data = try XCTUnwrap(result.content.data(using: .utf8))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        XCTAssertEqual(object["selection_status"] as? String, "selected")
+        XCTAssertEqual(object["fetch_method"] as? String, "webkit")
+        XCTAssertEqual(object["render_outcome"] as? String, "selected")
+        XCTAssertEqual(object["title"] as? String, "Rendered Party Guide")
+        XCTAssertTrue((object["content"] as? String)?.contains("Escoffier") == true)
+    }
+
+    @MainActor
+    func testRenderedDOMJavaScriptReadsDelayedContentAndRemovesPageChrome() async throws {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.loadHTMLString(
+            """
+            <html><head><title>Dynamic Article</title></head><body>
+              <header><p>Site heading</p></header>
+              <nav><li>Menu link</li></nav>
+              <main><h1>Recommended Party</h1><p id="content">Loading</p></main>
+              <div class="advertisement"><p>Advertisement text</p></div>
+              <footer><p>Copyright footer</p></footer>
+              <script>
+                setTimeout(() => {
+                  document.getElementById('content').textContent = 'Odette and Sandrone are the recommended party.';
+                }, 100);
+              </script>
+            </body></html>
+            """,
+            baseURL: URL(string: "https://example.com/article")
+        )
+        var dynamicContentLoaded = false
+        for _ in 0 ..< 30 {
+            if let text = try? await webView.evaluateJavaScript("document.body?.innerText || ''") as? String,
+               text.contains("Odette and Sandrone") {
+                dynamicContentLoaded = true
+                break
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertTrue(dynamicContentLoaded)
+
+        let value = try await webView.evaluateJavaScript(
+            WKRenderedPageContentLoader.extractionJavaScriptForTesting
+        )
+        let json = try XCTUnwrap(value as? String)
+        let data = try XCTUnwrap(json.data(using: .utf8))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let paragraphs = try XCTUnwrap(object["paragraphs"] as? [[String: Any]])
+        let combined = paragraphs.compactMap { $0["text"] as? String }.joined(separator: "\n")
+
+        XCTAssertEqual(object["title"] as? String, "Dynamic Article")
+        XCTAssertTrue(combined.contains("Odette and Sandrone"))
+        XCTAssertFalse(combined.contains("Menu link"))
+        XCTAssertFalse(combined.contains("Advertisement text"))
+        XCTAssertFalse(combined.contains("Copyright footer"))
+    }
+
+    func testFetchURLReportsRenderedTimeoutWithoutDiscardingStaticPartialContent() async throws {
+        let renderedLoader = await RecordingRenderedPageLoader(result: .failure(RenderedPageLoaderError.timedOut))
+        let tool = FetchUrlTool(
+            httpClient: StaticWebToolHTTPClient(body: "<p>Odette party overview.</p>"),
+            renderedPageLoader: renderedLoader
+        )
+
+        let result = try await tool.execute(call: ToolCall(
+            id: "call-timeout",
+            name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/slow","goal":"Odette Sandrone party"}"#,
+            providerMetadata: nil
+        ))
+        let data = try XCTUnwrap(result.content.data(using: .utf8))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        XCTAssertEqual(object["fetch_method"] as? String, "url_session")
+        XCTAssertEqual(object["render_attempted"] as? Bool, true)
+        XCTAssertEqual(object["render_outcome"] as? String, "timed_out")
+        XCTAssertEqual(object["selection_status"] as? String, "partial_match")
+        XCTAssertTrue((object["content"] as? String)?.contains("Odette") == true)
+    }
+
+    func testWebKitFallbackIsSerializedAcrossMultiplePages() async throws {
+        let renderedLoader = await RecordingRenderedPageLoader(
+            result: .success(.loaded(RenderedPageContent(
+                title: "Rendered",
+                finalURL: URL(string: "https://example.com/page")!,
+                paragraphs: [PageParagraph(index: 0, heading: nil, text: "Odette recommended party")]
+            ))),
+            delay: .milliseconds(100)
+        )
+        let limiter = WebFetchConcurrencyLimiter(httpLimit: 3, webKitLimit: 1)
+        let tool = FetchUrlTool(
+            httpClient: StaticWebToolHTTPClient(body: "<div id=app></div>"),
+            renderedPageLoader: renderedLoader,
+            concurrencyLimiter: limiter
+        )
+
+        async let first = tool.execute(call: ToolCall(
+            id: "page-1",
+            name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/one","goal":"Odette party"}"#,
+            providerMetadata: nil
+        ))
+        async let second = tool.execute(call: ToolCall(
+            id: "page-2",
+            name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/two","goal":"Odette party"}"#,
+            providerMetadata: nil
+        ))
+        _ = try await (first, second)
+
+        let maximumActiveCount = await renderedLoader.maximumActiveCount
+        XCTAssertEqual(maximumActiveCount, 1)
+    }
+
+    func testMultipleFetchesContinueWhenOnePageFails() async throws {
+        let registry = LocalToolRegistry(executors: [
+            FetchUrlTool(httpClient: URLRoutingWebToolHTTPClient())
+        ])
+
+        async let failed = registry.execute(call: ToolCall(
+            id: "failed-page",
+            name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/fail","goal":"Odette recommended party"}"#,
+            providerMetadata: nil
+        ))
+        async let succeeded = registry.execute(call: ToolCall(
+            id: "successful-page",
+            name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/success","goal":"Odette recommended party"}"#,
+            providerMetadata: nil
+        ))
+        let results = await (failed, succeeded)
+
+        XCTAssertTrue(results.0.isError)
+        XCTAssertFalse(results.1.isError)
+        XCTAssertTrue(results.1.content.contains("Odette recommended party details"))
     }
 
     func testFetchURLReadsApplicationJSONAndSelectsRelevantArrayEntry() async throws {

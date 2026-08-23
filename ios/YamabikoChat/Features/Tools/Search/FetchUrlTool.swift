@@ -16,11 +16,12 @@ struct FetchUrlTool: LocalToolExecutor {
     static let maxCharacters = 8_000
     static let maxResponseBytes = 2 * 1024 * 1024
     static let requestTimeout: TimeInterval = 15
+    static let renderTimeout: TimeInterval = 15
 
     let definition = ToolDefinition(
         name: name,
         description: """
-        Read an HTTP or HTTPS page for a specific goal and return the most relevant passages with nearby context, up to 8000 characters. Use it only after evaluating web_search snippets. Prefer primary or authoritative pages. Treat only selection_status=selected as sufficient evidence; partial_match, no_relevant_passages, and dynamic_content_unavailable require another source or a narrower goal. Do not claim support for information absent from the returned content.
+        Read an HTTP or HTTPS page for a specific goal and return the most relevant passages with nearby context, up to 8000 characters. Dynamic HTML may be rendered privately when the lightweight fetch is insufficient. Use it only after evaluating web_search snippets. Prefer primary or authoritative pages. Treat only selection_status=selected as sufficient evidence; partial_match, no_relevant_passages, dynamic_content_unavailable, and render_outcome values access_restricted, timed_out, or failed require another source or a narrower goal. Do not claim support for information absent from the returned content.
         """,
         parametersJSON: """
         {
@@ -42,9 +43,17 @@ struct FetchUrlTool: LocalToolExecutor {
     )
 
     private let httpClient: any WebToolHTTPClient
+    private let renderedPageLoader: any RenderedPageContentLoading
+    private let concurrencyLimiter: any WebFetchConcurrencyLimiting
 
-    init(httpClient: any WebToolHTTPClient = URLSessionWebToolHTTPClient()) {
+    init(
+        httpClient: any WebToolHTTPClient = URLSessionWebToolHTTPClient(),
+        renderedPageLoader: any RenderedPageContentLoading = WKRenderedPageContentLoader.shared,
+        concurrencyLimiter: any WebFetchConcurrencyLimiting = WebFetchConcurrencyLimiter.shared
+    ) {
         self.httpClient = httpClient
+        self.renderedPageLoader = renderedPageLoader
+        self.concurrencyLimiter = concurrencyLimiter
     }
 
     func execute(call: ToolCall) async throws -> ToolResult {
@@ -62,7 +71,8 @@ struct FetchUrlTool: LocalToolExecutor {
         }
         try WebToolURLPolicy.validatePublicHTTPURL(url)
 
-        let (data, response) = try await httpClient.get(url: url, timeout: Self.requestTimeout)
+        let startedAt = Date()
+        let (data, response) = try await limitedHTTPGet(url: url)
         if let finalURL = response.url {
             try WebToolURLPolicy.validatePublicHTTPURL(finalURL)
         }
@@ -110,16 +120,66 @@ struct FetchUrlTool: LocalToolExecutor {
                 ? PageParagraphExtractor.extractPlainText(rawText)
                 : PageParagraphExtractor.extractHTML(rawText)
         }
-        guard !paragraphs.isEmpty else {
-            throw ProviderClientError.parseFailure("Fetched page did not contain readable text")
-        }
-        let selection = RelevantPageReader.select(
+        var selection = RelevantPageReader.select(
             paragraphs: paragraphs,
             goal: goal,
             maxCharacters: Self.maxCharacters
         )
+        var title = (isJSON ? nil : Self.extractTitle(from: rawText)) ?? url.host ?? url.absoluteString
+        var fetchMethod = FetchMethod.urlSession
+        var renderAttempted = false
+        var renderOutcome = RenderOutcome.notAttempted
 
-        let title = (isJSON ? nil : Self.extractTitle(from: rawText)) ?? url.host ?? url.absoluteString
+        if !isJSON,
+           !contentType.contains("text/plain"),
+           selection.status != .selected {
+            renderAttempted = true
+            do {
+                let renderedResult = try await limitedRenderedLoad(url: url)
+                switch renderedResult {
+                case let .accessRestricted(reason):
+                    renderOutcome = .accessRestricted
+                    DiagnosticsLogger.log(
+                        "Rendered page access restricted",
+                        level: .warning,
+                        category: .network,
+                        metadata: [
+                            "url": url.absoluteString,
+                            "reason": reason
+                        ]
+                    )
+                case let .loaded(rendered):
+                    let renderedSelection = RelevantPageReader.select(
+                        paragraphs: rendered.paragraphs,
+                        goal: goal,
+                        maxCharacters: Self.maxCharacters
+                    )
+                    renderOutcome = RenderOutcome(selectionStatus: renderedSelection.status)
+                    if Self.shouldPrefer(
+                        renderedSelection,
+                        renderedParagraphCount: rendered.paragraphs.count,
+                        over: selection,
+                        staticParagraphCount: paragraphs.count
+                    ) {
+                        selection = renderedSelection
+                        title = rendered.title ?? title
+                        fetchMethod = .webKit
+                    }
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                renderOutcome = error as? RenderedPageLoaderError == .timedOut ? .timedOut : .failed
+                DiagnosticsLogger.log(
+                    "Rendered page fetch failed",
+                    level: .warning,
+                    category: .network,
+                    metadata: ["url": url.absoluteString],
+                    error: error
+                )
+            }
+        }
+
         let object: [String: Any] = [
             "url": url.absoluteString,
             "title": title,
@@ -127,7 +187,10 @@ struct FetchUrlTool: LocalToolExecutor {
             "content": selection.content,
             "selection_status": selection.status.rawValue,
             "selected_paragraph_count": selection.selectedParagraphCount,
-            "truncated": selection.truncated
+            "truncated": selection.truncated,
+            "fetch_method": fetchMethod.rawValue,
+            "render_attempted": renderAttempted,
+            "render_outcome": renderOutcome.rawValue
         ]
         let outputData = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         DiagnosticsLogger.log(
@@ -137,7 +200,11 @@ struct FetchUrlTool: LocalToolExecutor {
                 "url": url.absoluteString,
                 "character_count": String(selection.content.count),
                 "selection_status": selection.status.rawValue,
-                "selected_paragraph_count": String(selection.selectedParagraphCount)
+                "selected_paragraph_count": String(selection.selectedParagraphCount),
+                "fetch_method": fetchMethod.rawValue,
+                "render_attempted": String(renderAttempted),
+                "render_outcome": renderOutcome.rawValue,
+                "duration_ms": String(Int(Date().timeIntervalSince(startedAt) * 1_000))
             ]
         )
         return ToolResult(
@@ -156,5 +223,89 @@ struct FetchUrlTool: LocalToolExecutor {
             return nil
         }
         return HTMLTextExtractor.extract(from: String(html[range]), maxCharacters: 300).trimmedNonEmpty
+    }
+
+    private func limitedHTTPGet(url: URL) async throws -> (Data, HTTPURLResponse) {
+        try await concurrencyLimiter.acquire(.http)
+        do {
+            let result = try await httpClient.get(url: url, timeout: Self.requestTimeout)
+            await concurrencyLimiter.release(.http)
+            return result
+        } catch {
+            await concurrencyLimiter.release(.http)
+            throw error
+        }
+    }
+
+    private func limitedRenderedLoad(url: URL) async throws -> RenderedPageLoadResult {
+        try await concurrencyLimiter.acquire(.webKit)
+        do {
+            let result = try await renderedPageLoader.load(url: url, timeout: Self.renderTimeout)
+            await concurrencyLimiter.release(.webKit)
+            return result
+        } catch {
+            await concurrencyLimiter.release(.webKit)
+            throw error
+        }
+    }
+
+    private static func shouldPrefer(
+        _ rendered: RelevantPageSelection,
+        renderedParagraphCount: Int,
+        over staticSelection: RelevantPageSelection,
+        staticParagraphCount: Int
+    ) -> Bool {
+        let renderedRank = selectionRank(rendered.status)
+        let staticRank = selectionRank(staticSelection.status)
+        if renderedRank != staticRank {
+            return renderedRank > staticRank
+        }
+        guard !rendered.content.isEmpty else { return false }
+        if rendered.selectedParagraphCount != staticSelection.selectedParagraphCount {
+            return rendered.selectedParagraphCount > staticSelection.selectedParagraphCount
+        }
+        return renderedParagraphCount > staticParagraphCount
+    }
+
+    private static func selectionRank(_ status: RelevantPageSelection.Status) -> Int {
+        switch status {
+        case .selected:
+            3
+        case .partialMatch:
+            2
+        case .noRelevantPassages:
+            1
+        case .dynamicContentUnavailable:
+            0
+        }
+    }
+
+    private enum FetchMethod: String {
+        case urlSession = "url_session"
+        case webKit = "webkit"
+    }
+
+    private enum RenderOutcome: String {
+        case notAttempted = "not_attempted"
+        case selected
+        case partialMatch = "partial_match"
+        case noRelevantPassages = "no_relevant_passages"
+        case dynamicContentUnavailable = "dynamic_content_unavailable"
+        case accessRestricted = "access_restricted"
+        case timedOut = "timed_out"
+        case failed
+
+        init(selectionStatus: RelevantPageSelection.Status) {
+            switch selectionStatus {
+            case .selected:
+                self = .selected
+            case .partialMatch:
+                self = .partialMatch
+            case .noRelevantPassages:
+                self = .noRelevantPassages
+            case .dynamicContentUnavailable:
+                self = .dynamicContentUnavailable
+            }
+        }
     }
 }
