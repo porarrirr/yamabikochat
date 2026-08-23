@@ -122,7 +122,7 @@ final class ConversationExportTests: XCTestCase {
         XCTAssertEqual(snapshot.tokenUsageRecords.first?.totalTokens, 14)
         XCTAssertEqual(snapshot.executionMetrics.first?.turnId, "turn-1")
 
-        let archiveURL = try ConversationExportService.createArchive(snapshot: snapshot)
+        let archiveURL = try ConversationExportService.createArchive(snapshot: snapshot, mode: .fullDiagnostics)
         defer { try? FileManager.default.removeItem(at: archiveURL) }
         XCTAssertEqual(archiveURL.pathExtension, "zip")
 
@@ -130,9 +130,8 @@ final class ConversationExportTests: XCTestCase {
         try FileManager.default.unzipItem(at: archiveURL, to: extractedURL)
         let data = try Data(contentsOf: extractedURL.appendingPathComponent("conversation.json"))
         let decoded = try JSONDecoder().decode(ConversationDebugExport.self, from: data)
-        XCTAssertEqual(decoded.messages[1].toolActivity?.piExecution, execution)
-        XCTAssertEqual(decoded.piExecutions.count, 1)
-        XCTAssertEqual(decoded.piExecutions.first?.source, "message")
+        XCTAssertNil(decoded.messages[1].toolActivity?.piExecution)
+        XCTAssertTrue(decoded.piExecutions.isEmpty)
         XCTAssertEqual(decoded.files.count, 2)
         XCTAssertTrue(decoded.files.allSatisfy { $0.status == .included })
         let attachmentRecord = try XCTUnwrap(
@@ -158,13 +157,26 @@ final class ConversationExportTests: XCTestCase {
         XCTAssertEqual(manifest?.count, 1)
         XCTAssertEqual(manifest?.first?["eventCount"] as? Int, 2)
         let sessionPath = try XCTUnwrap(manifest?.first?["archivePath"] as? String)
-        let sessionLog = try String(
-            contentsOf: extractedURL.appendingPathComponent(sessionPath),
-            encoding: .utf8
-        )
-        XCTAssertEqual(sessionLog.split(separator: "\n").count, 3)
-        XCTAssertTrue(sessionLog.contains(#""format":"yamabiko.pi-agent-session""#))
-        XCTAssertTrue(sessionLog.contains(#""type":"turn_start""#))
+        XCTAssertTrue(sessionPath.hasSuffix("execution.json"))
+        let sessionData = try Data(contentsOf: extractedURL.appendingPathComponent(sessionPath))
+        XCTAssertEqual(try JSONDecoder().decode(JSONValue.self, from: sessionData), execution)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: extractedURL.appendingPathComponent(sessionPath).deletingLastPathComponent()
+                .appendingPathComponent("session.jsonl").path
+        ))
+
+        let standardArchiveURL = try ConversationExportService.createArchive(snapshot: snapshot, mode: .standard)
+        defer { try? FileManager.default.removeItem(at: standardArchiveURL) }
+        let standardExtractedURL = sourceDirectory.appendingPathComponent("standard-extracted", isDirectory: true)
+        try FileManager.default.unzipItem(at: standardArchiveURL, to: standardExtractedURL)
+        let standardData = try Data(contentsOf: standardExtractedURL.appendingPathComponent("conversation.json"))
+        let standard = try JSONDecoder().decode(ConversationDebugExport.self, from: standardData)
+        XCTAssertEqual(standard.format, "yamabiko-chat-export")
+        XCTAssertNil(standard.messages[1].thinkingStream)
+        XCTAssertNil(standard.messages[1].toolActivity)
+        XCTAssertTrue(standard.tokenUsageRecords.isEmpty)
+        XCTAssertTrue(standard.executionMetrics.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: standardExtractedURL.appendingPathComponent("sessions").path))
     }
 
     func testExportFailsWhenAReferencedFileIsMissing() throws {

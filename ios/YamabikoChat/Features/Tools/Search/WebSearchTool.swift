@@ -76,6 +76,7 @@ struct WebSearchTool: LocalToolExecutor {
                 callId: call.id,
                 name: call.name,
                 content: content,
+                status: results.isEmpty ? .insufficient : .complete,
                 sources: sources
             )
         } catch is CancellationError {

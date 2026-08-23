@@ -655,10 +655,11 @@ final class WebSearchToolTests: XCTestCase {
         XCTAssertTrue(results.1.content.contains("Odette recommended party details"))
     }
 
-    func testFetchURLReadsApplicationJSONAndSelectsRelevantArrayEntry() async throws {
+    func testFetchURLReturnsSmallApplicationJSONWithoutPassageExtraction() async throws {
+        let rawJSON = #"{"cities":[{"name":"東京","temperature":33},{"name":"大阪","temperature":36}]}"#
         let tool = FetchUrlTool(
             httpClient: StaticWebToolHTTPClient(
-                body: #"{"cities":[{"name":"東京","temperature":33},{"name":"大阪","temperature":36}]}"#,
+                body: rawJSON,
                 contentType: "application/json; charset=utf-8"
             )
         )
@@ -670,13 +671,11 @@ final class WebSearchToolTests: XCTestCase {
                 providerMetadata: nil
             )
         )
-        let data = try XCTUnwrap(result.content.data(using: .utf8))
-        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let content = try XCTUnwrap(object["content"] as? String)
-
-        XCTAssertEqual(object["selection_status"] as? String, "selected")
-        XCTAssertTrue(content.contains("$.cities[1].name: \"大阪\""))
-        XCTAssertTrue(content.contains("$.cities[1].temperature: 36"))
+        XCTAssertEqual(result.content, rawJSON)
+        XCTAssertEqual(result.status, .complete)
+        XCTAssertEqual(result.provenance?.contentType, "application/json; charset=utf-8")
+        XCTAssertEqual(result.provenance?.url, "https://example.com/weather.json")
+        XCTAssertGreaterThan(result.provenance?.fetchedAtMs ?? 0, 0)
     }
 
     func testFetchURLReadsStructuredSyntaxSuffixJSON() async throws {
@@ -696,8 +695,25 @@ final class WebSearchToolTests: XCTestCase {
         )
 
         XCTAssertFalse(result.isError)
-        XCTAssertTrue(result.content.contains("$.version"))
-        XCTAssertTrue(result.content.contains("2.0"))
+        XCTAssertEqual(result.content, #"{"title":"Release notes","version":"2.0"}"#)
+    }
+
+    func testFetchURLMarksLargeJSONInsufficientWithoutPassageExtraction() async throws {
+        let rawJSON = #"{"payload":"\#(String(repeating: "x", count: FetchUrlTool.maxCharacters))"}"#
+        let tool = FetchUrlTool(
+            httpClient: StaticWebToolHTTPClient(body: rawJSON, contentType: "application/json")
+        )
+        let result = try await tool.execute(call: ToolCall(
+            id: "call-large-json",
+            name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/large.json","goal":"payload"}"#,
+            providerMetadata: nil
+        ))
+
+        XCTAssertEqual(result.status, .insufficient)
+        XCTAssertFalse(result.isError)
+        XCTAssertFalse(result.content.contains("$.payload"))
+        XCTAssertTrue(result.content.contains("direct-return limit"))
     }
 
     func testFetchURLReadsJSONFileWithGenericContentType() async throws {
@@ -717,8 +733,7 @@ final class WebSearchToolTests: XCTestCase {
         )
 
         XCTAssertFalse(result.isError)
-        XCTAssertTrue(result.content.contains("$.status"))
-        XCTAssertTrue(result.content.contains("ok"))
+        XCTAssertEqual(result.content, #"{"status":"ok"}"#)
     }
 
     func testFetchURLRejectsMalformedJSONWithoutHTMLFallback() async throws {

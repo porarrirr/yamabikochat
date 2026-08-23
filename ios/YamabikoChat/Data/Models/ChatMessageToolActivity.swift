@@ -155,8 +155,17 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
         steps.sort { $0.round < $1.round }
 
         guard event.phase == .finished, let result = event.result else { return }
-        for path in result.artifacts.map(\.path) where !attachmentPaths.contains(path) {
-            attachmentPaths.append(path)
+        for artifact in result.artifacts {
+            // Python's persisted path gains a numeric suffix when the same logical
+            // output is generated again. Keep only the path and activity badge for
+            // the newest version of that named artifact.
+            attachmentPaths.removeAll { Self.isPersistedVersion($0, of: artifact.name) }
+            for index in steps.indices where steps[index].id != event.call.id {
+                guard var names = steps[index].artifactNames else { continue }
+                names.removeAll { $0 == artifact.name }
+                steps[index].artifactNames = names.isEmpty ? nil : names
+            }
+            attachmentPaths.append(artifact.path)
         }
         providerTranscript.removeAll { message in
             message.toolCallId == event.call.id || message.toolCalls?.contains(where: { $0.id == event.call.id }) == true
@@ -263,5 +272,19 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
     private static func deduplicatedSources(_ sources: [ToolSource]) -> [ToolSource] {
         var seen: Set<String> = []
         return sources.filter { seen.insert($0.url).inserted }
+    }
+
+    private static func isPersistedVersion(_ path: String, of artifactName: String) -> Bool {
+        let candidate = URL(fileURLWithPath: path).lastPathComponent
+        let artifactURL = URL(fileURLWithPath: artifactName)
+        let candidateURL = URL(fileURLWithPath: candidate)
+        guard candidateURL.pathExtension == artifactURL.pathExtension else { return false }
+        let expectedStem = artifactURL.deletingPathExtension().lastPathComponent
+        let candidateStem = candidateURL.deletingPathExtension().lastPathComponent
+        return candidateStem == expectedStem
+            || candidateStem.range(
+                of: #"^\#(NSRegularExpression.escapedPattern(for: expectedStem)) \([0-9]+\)$"#,
+                options: .regularExpression
+            ) != nil
     }
 }

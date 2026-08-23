@@ -125,6 +125,38 @@ final class ProviderStreamEventTests: XCTestCase {
         XCTAssertEqual(restored.steps, payload.steps)
     }
 
+    func testToolActivityReplacesAnOlderVersionOfTheSameArtifact() {
+        let first = ToolCall(id: "python-1", name: PythonExecuteTool.name, argumentsJSON: #"{"code":"plot()"}"#)
+        let second = ToolCall(id: "python-2", name: PythonExecuteTool.name, argumentsJSON: #"{"code":"plot_again()"}"#)
+        var payload = ToolActivityPayload()
+        payload.apply(ToolActivityEvent(
+            phase: .finished,
+            call: first,
+            result: ToolResult(
+                callId: first.id,
+                name: first.name,
+                content: #"{"status":"ok"}"#,
+                artifacts: [ToolArtifact(path: "/tmp/plot.png", name: "plot.png", mime: "image/png", size: 10)]
+            ),
+            createdAtMs: 1
+        ))
+        payload.apply(ToolActivityEvent(
+            phase: .finished,
+            call: second,
+            result: ToolResult(
+                callId: second.id,
+                name: second.name,
+                content: #"{"status":"ok"}"#,
+                artifacts: [ToolArtifact(path: "/tmp/plot (2).png", name: "plot.png", mime: "image/png", size: 12)]
+            ),
+            createdAtMs: 2
+        ))
+
+        XCTAssertEqual(payload.attachmentPaths, ["/tmp/plot (2).png"])
+        XCTAssertNil(payload.steps.first?.artifactNames)
+        XCTAssertEqual(payload.steps.last?.artifactNames, ["plot.png"])
+    }
+
     func testLegacyToolActivityStepDecodesWithoutResultDetails() throws {
         let json = #"{"id":"legacy","round":1,"toolName":"web_search","title":"Web","detail":"query","status":"completed","resultCount":1,"sources":[],"errorMessage":null,"createdAtMs":1}"#
         let step = try JSONDecoder().decode(ToolActivityStep.self, from: Data(json.utf8))

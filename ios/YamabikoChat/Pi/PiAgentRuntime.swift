@@ -58,7 +58,7 @@ private struct PiHealthResponse: Decodable {
     var contractVersion: Int
 }
 
-private struct PiAttachment: Codable, Sendable {
+struct PiAttachment: Codable, Sendable {
     var data: String
     var mimeType: String
 }
@@ -225,11 +225,14 @@ private struct PiOAuthResolveRequest: Encodable {
     var force: Bool
 }
 
-private struct PiToolResultEnvelope: Encodable {
+struct PiToolResultEnvelope: Encodable {
     var requestId: String
     var content: String
     var isError: Bool
+    var status: ToolResultStatus
+    var provenance: ToolResultProvenance?
     var sources: [ToolSource]
+    var images: [PiAttachment]
 }
 
 actor PiAgentRuntime {
@@ -729,12 +732,7 @@ actor PiAgentRuntime {
         endpoint: URL,
         token: String
     ) async throws {
-        let envelope = PiToolResultEnvelope(
-            requestId: requestID,
-            content: result.content,
-            isError: result.isError,
-            sources: result.sources
-        )
+        let envelope = try toolResultEnvelope(result, requestID: requestID)
         var request = URLRequest(url: endpoint.appendingPathComponent("v1/tool-result"))
         request.httpMethod = "POST"
         request.httpBody = try JSONEncoder().encode(envelope)
@@ -743,6 +741,30 @@ actor PiAgentRuntime {
         let (_, response) = try await URLSession.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
             throw ProviderClientError.invalidResponse
+        }
+    }
+
+    static func toolResultEnvelope(_ result: ToolResult, requestID: String) throws -> PiToolResultEnvelope {
+        PiToolResultEnvelope(
+            requestId: requestID,
+            content: result.content,
+            isError: result.isError,
+            status: result.status,
+            provenance: result.provenance,
+            sources: result.sources,
+            images: try toolResultImages(from: result.artifacts)
+        )
+    }
+
+    private static func toolResultImages(from artifacts: [ToolArtifact]) throws -> [PiAttachment] {
+        try artifacts.compactMap { artifact in
+            guard artifact.mime.lowercased().hasPrefix("image/") else { return nil }
+            guard artifact.size <= Int64(AppConstants.maxAttachmentSizeBytes) else {
+                throw ProviderClientError.parseFailure("Generated image exceeds the 10 MB limit")
+            }
+            let url = attachmentFileURL(from: artifact.path)
+            let data = try Data(contentsOf: url, options: .mappedIfSafe)
+            return PiAttachment(data: data.base64EncodedString(), mimeType: artifact.mime)
         }
     }
 

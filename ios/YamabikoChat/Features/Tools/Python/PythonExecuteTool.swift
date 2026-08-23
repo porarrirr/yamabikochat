@@ -75,7 +75,7 @@ struct PythonExecuteTool: LocalToolExecutor {
             callId: call.id,
             name: call.name,
             content: String(decoding: resultData, as: UTF8.self),
-            isError: response.status != "ok",
+            status: response.status == "ok" ? .complete : .failure,
             artifacts: generated
         )
     }

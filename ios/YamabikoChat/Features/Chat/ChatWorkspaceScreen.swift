@@ -216,9 +216,16 @@ struct ChatWorkspaceScreen: View {
                 .disabled(!viewModel.canRegenerateLastAssistant)
 
                 Button {
-                    exportConversation()
+                    exportConversation(mode: .standard)
                 } label: {
                     Label(L10n.text("チャットを書き出す"), systemImage: "square.and.arrow.up")
+                }
+                .disabled(isExporting)
+
+                Button {
+                    exportConversation(mode: .fullDiagnostics)
+                } label: {
+                    Label(L10n.text("完全診断を書き出す"), systemImage: "stethoscope")
                 }
                 .disabled(isExporting)
 
@@ -354,13 +361,13 @@ struct ChatWorkspaceScreen: View {
         }
     }
 
-    private func exportConversation() {
+    private func exportConversation(mode: ConversationExportMode) {
         guard !isExporting else { return }
         isExporting = true
         Task { @MainActor in
             defer { isExporting = false }
             do {
-                let url = try await viewModel.exportConversation()
+                let url = try await viewModel.exportConversation(mode: mode)
                 exportedArchive = ConversationExportShareItem(url: url)
             } catch {
                 viewModel.errorMessage = error.localizedDescription

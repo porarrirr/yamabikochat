@@ -288932,8 +288932,19 @@ function makeTools(request, runId, res) {
               return;
             }
             resolve4({
-              content: [{ type: "text", text: result.content || "" }],
-              details: { sources: result.sources || [] }
+              content: [
+                { type: "text", text: result.content || "" },
+                ...(result.images || []).map((image) => ({
+                  type: "image",
+                  data: image.data,
+                  mimeType: image.mimeType
+                }))
+              ],
+              details: {
+                status: result.status || (result.isError ? "failure" : "complete"),
+                provenance: result.provenance || null,
+                sources: result.sources || []
+              }
             });
           });
         });

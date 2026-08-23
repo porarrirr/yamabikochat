@@ -100,26 +100,34 @@ struct FetchUrlTool: LocalToolExecutor {
         else {
             throw ProviderClientError.parseFailure("Unsupported fetched content type: \(contentType)")
         }
+        let fetchedAtMs = Int64(Date().timeIntervalSince1970 * 1_000)
+        let finalURL = response.url ?? url
+        let provenance = ToolResultProvenance(
+            url: finalURL.absoluteString,
+            fetchedAtMs: fetchedAtMs,
+            contentType: contentType
+        )
+        if isJSON {
+            return try Self.jsonResult(
+                call: call,
+                data: data,
+                url: finalURL,
+                provenance: provenance,
+                startedAt: startedAt
+            )
+        }
+
         let rawText: String
         let paragraphs: [PageParagraph]
-        if isJSON {
-            do {
-                paragraphs = try PageParagraphExtractor.extractJSON(data)
-            } catch {
-                throw ProviderClientError.parseFailure("Fetched JSON is invalid")
-            }
-            rawText = ""
-        } else {
-            guard let decoded = String(data: data, encoding: .utf8) ??
-                String(data: data, encoding: .isoLatin1)
-            else {
-                throw ProviderClientError.parseFailure("Fetched page encoding is unsupported")
-            }
-            rawText = decoded
-            paragraphs = contentType.contains("text/plain")
-                ? PageParagraphExtractor.extractPlainText(rawText)
-                : PageParagraphExtractor.extractHTML(rawText)
+        guard let decoded = String(data: data, encoding: .utf8) ??
+            String(data: data, encoding: .isoLatin1)
+        else {
+            throw ProviderClientError.parseFailure("Fetched page encoding is unsupported")
         }
+        rawText = decoded
+        paragraphs = contentType.contains("text/plain")
+            ? PageParagraphExtractor.extractPlainText(rawText)
+            : PageParagraphExtractor.extractHTML(rawText)
         var selection = RelevantPageReader.select(
             paragraphs: paragraphs,
             goal: goal,
@@ -211,8 +219,66 @@ struct FetchUrlTool: LocalToolExecutor {
             callId: call.id,
             name: call.name,
             content: String(decoding: outputData, as: UTF8.self),
-            sources: [ToolSource(title: title, url: url.absoluteString)]
+            status: Self.toolResultStatus(for: selection.status),
+            provenance: provenance,
+            sources: [ToolSource(title: title, url: finalURL.absoluteString)]
         )
+    }
+
+    private static func jsonResult(
+        call: ToolCall,
+        data: Data,
+        url: URL,
+        provenance: ToolResultProvenance,
+        startedAt: Date
+    ) throws -> ToolResult {
+        guard (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) != nil,
+              let rawJSON = String(data: data, encoding: .utf8)
+        else {
+            throw ProviderClientError.parseFailure("Fetched JSON is invalid")
+        }
+        let isSmall = rawJSON.count <= maxCharacters
+        let content: String
+        if isSmall {
+            content = rawJSON
+        } else {
+            let object: [String: Any] = [
+                "url": url.absoluteString,
+                "content_type": provenance.contentType,
+                "byte_count": data.count,
+                "message": "Fetched JSON exceeds the 8000 character direct-return limit."
+            ]
+            content = String(decoding: try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]), as: UTF8.self)
+        }
+        DiagnosticsLogger.log(
+            "Client JSON fetch completed",
+            category: .network,
+            metadata: [
+                "url": url.absoluteString,
+                "character_count": String(rawJSON.count),
+                "tool_result_status": isSmall ? ToolResultStatus.complete.rawValue : ToolResultStatus.insufficient.rawValue,
+                "duration_ms": String(Int(Date().timeIntervalSince(startedAt) * 1_000))
+            ]
+        )
+        return ToolResult(
+            callId: call.id,
+            name: call.name,
+            content: content,
+            status: isSmall ? .complete : .insufficient,
+            provenance: provenance,
+            sources: [ToolSource(title: url.host ?? url.absoluteString, url: url.absoluteString)]
+        )
+    }
+
+    private static func toolResultStatus(for selectionStatus: RelevantPageSelection.Status) -> ToolResultStatus {
+        switch selectionStatus {
+        case .selected:
+            return .complete
+        case .partialMatch:
+            return .partial
+        case .noRelevantPassages, .dynamicContentUnavailable:
+            return .insufficient
+        }
     }
 
     private static func extractTitle(from html: String) -> String? {

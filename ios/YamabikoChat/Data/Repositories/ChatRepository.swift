@@ -115,11 +115,11 @@ final class ChatRepository {
         try conversations.fetchConversation(id: id)
     }
 
-    func exportConversation(id: Int64) async throws -> URL {
+    func exportConversation(id: Int64, mode: ConversationExportMode = .standard) async throws -> URL {
         let conversations = conversations
         return try await Task.detached(priority: .userInitiated) {
             let snapshot = try conversations.fetchDebugExport(conversationId: id)
-            return try ConversationExportService.createArchive(snapshot: snapshot)
+            return try ConversationExportService.createArchive(snapshot: snapshot, mode: mode)
         }.value
     }
 

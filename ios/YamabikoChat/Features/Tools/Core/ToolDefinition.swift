@@ -70,14 +70,29 @@ struct ToolCall: Codable, Sendable, Equatable, Identifiable {
     var providerMetadata: [String: String]?
 }
 
+enum ToolResultStatus: String, Codable, Sendable {
+    case complete
+    case partial
+    case insufficient
+    case failure
+}
+
+struct ToolResultProvenance: Codable, Sendable, Equatable {
+    var url: String
+    var fetchedAtMs: Int64
+    var contentType: String
+}
+
 struct ToolResult: Codable, Sendable, Equatable {
     var callId: String
     var name: String
     var content: String
     var isError: Bool
+    var status: ToolResultStatus
+    var provenance: ToolResultProvenance?
     var sources: [ToolSource]
-    /// App-internal generated files. PiToolResultEnvelope deliberately omits
-    /// this field so binary paths never enter the model protocol.
+    /// App-internal generated files. The Pi bridge reads image bytes from these
+    /// paths but never exposes filesystem paths to the model protocol.
     var artifacts: [ToolArtifact]
 
     init(
@@ -85,19 +100,24 @@ struct ToolResult: Codable, Sendable, Equatable {
         name: String,
         content: String,
         isError: Bool = false,
+        status: ToolResultStatus? = nil,
+        provenance: ToolResultProvenance? = nil,
         sources: [ToolSource] = [],
         artifacts: [ToolArtifact] = []
     ) {
         self.callId = callId
         self.name = name
         self.content = content
-        self.isError = isError
+        let resolvedStatus = status ?? (isError ? .failure : .complete)
+        self.isError = resolvedStatus == .failure
+        self.status = resolvedStatus
+        self.provenance = provenance
         self.sources = sources
         self.artifacts = artifacts
     }
 
     private enum CodingKeys: String, CodingKey {
-        case callId, name, content, isError, sources, artifacts
+        case callId, name, content, isError, status, provenance, sources, artifacts
     }
 
     init(from decoder: Decoder) throws {
@@ -105,7 +125,11 @@ struct ToolResult: Codable, Sendable, Equatable {
         callId = try container.decode(String.self, forKey: .callId)
         name = try container.decode(String.self, forKey: .name)
         content = try container.decode(String.self, forKey: .content)
-        isError = try container.decode(Bool.self, forKey: .isError)
+        let legacyIsError = try container.decodeIfPresent(Bool.self, forKey: .isError) ?? false
+        status = try container.decodeIfPresent(ToolResultStatus.self, forKey: .status)
+            ?? (legacyIsError ? .failure : .complete)
+        isError = status == .failure
+        provenance = try container.decodeIfPresent(ToolResultProvenance.self, forKey: .provenance)
         sources = try container.decodeIfPresent([ToolSource].self, forKey: .sources) ?? []
         artifacts = try container.decodeIfPresent([ToolArtifact].self, forKey: .artifacts) ?? []
     }

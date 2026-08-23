@@ -176,6 +176,43 @@ plt.savefig("matplotlib.png")
         let json = #"{"callId":"1","name":"web_search","content":"{}","isError":false,"sources":[]}"#
         let result = try JSONDecoder().decode(ToolResult.self, from: Data(json.utf8))
         XCTAssertEqual(result.artifacts, [])
+        XCTAssertEqual(result.status, .complete)
+        XCTAssertNil(result.provenance)
+    }
+
+    func testLegacyErrorToolResultDerivesFailureStatus() throws {
+        let json = #"{"callId":"1","name":"web_search","content":"{}","isError":true,"sources":[]}"#
+        let result = try JSONDecoder().decode(ToolResult.self, from: Data(json.utf8))
+        XCTAssertEqual(result.status, .failure)
+        XCTAssertTrue(result.isError)
+    }
+
+    func testGeneratedImageIsEncodedForTheNextPiModelInput() throws {
+        let imageURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("tool-result-\(UUID().uuidString).png")
+        let imageData = Data([0x89, 0x50, 0x4E, 0x47])
+        try imageData.write(to: imageURL)
+        defer { try? FileManager.default.removeItem(at: imageURL) }
+        let result = ToolResult(
+            callId: "python-image",
+            name: PythonExecuteTool.name,
+            content: #"{"status":"ok"}"#,
+            artifacts: [
+                ToolArtifact(
+                    path: imageURL.path,
+                    name: "plot.png",
+                    mime: "image/png",
+                    size: Int64(imageData.count)
+                )
+            ]
+        )
+
+        let envelope = try PiAgentRuntime.toolResultEnvelope(result, requestID: "request-1")
+        let data = try JSONEncoder().encode(envelope)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let images = try XCTUnwrap(object["images"] as? [[String: Any]])
+        XCTAssertEqual(images.first?["mimeType"] as? String, "image/png")
+        XCTAssertEqual(images.first?["data"] as? String, imageData.base64EncodedString())
     }
 
     func testOutputsDirectoryMatchesThePythonToolContract() async throws {

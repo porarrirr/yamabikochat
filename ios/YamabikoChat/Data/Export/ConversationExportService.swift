@@ -117,9 +117,15 @@ enum ConversationExportError: LocalizedError {
     }
 }
 
+enum ConversationExportMode: Sendable, Equatable {
+    case standard
+    case fullDiagnostics
+}
+
 enum ConversationExportService {
     static func createArchive(
         snapshot: ConversationDebugExport,
+        mode: ConversationExportMode = .standard,
         fileManager: FileManager = .default
     ) throws -> URL {
         let exportRoot = fileManager.temporaryDirectory
@@ -137,33 +143,40 @@ enum ConversationExportService {
         for trace in snapshot.fusionTraces {
             _ = try trace.fusionTrace()
         }
-        var export = snapshot
+        let piExecutions = snapshot.piExecutions
+        var export = preparedExport(snapshot, mode: mode)
         export.files = try includeFiles(snapshot.referencedFilePaths, at: filesURL, fileManager: fileManager)
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         let exportData = try encoder.encode(export)
         try exportData.write(to: stagingURL.appendingPathComponent("conversation.json"), options: .atomic)
-        try writePiSessions(export.piExecutions, at: stagingURL, encoder: encoder, fileManager: fileManager)
+        if mode == .fullDiagnostics {
+            try writePiSessions(piExecutions, at: stagingURL, encoder: encoder, fileManager: fileManager)
+        }
 
-        let readme = """
-        YamabikoChat complete debug export
+        let readme = mode == .fullDiagnostics ? """
+        YamabikoChat complete diagnostic export
 
-        conversation.json contains the stored conversation, every variant, thinking text,
-        tool calls and results, token usage, execution timing, and Pi Agent execution snapshots.
-        sessions/manifest.json indexes every Pi execution spawned by the conversation, including
-        dual, auto-conversation, and Fusion child executions. Each child directory contains the
-        complete execution snapshot and a session.jsonl with the runtime's ordered Agent event
-        stream. API keys, authorization values, credentials, access tokens, and abort signals are
-        deliberately excluded.
+        conversation.json contains the stored conversation, variants, thinking text, tool activity,
+        token usage, and execution timing. sessions/manifest.json indexes every Pi execution, and
+        each execution is stored once in its session directory as execution.json. API keys,
+        authorization values, credentials, access tokens, and abort signals are excluded.
 
         files/ contains every referenced chat attachment and generated artifact. Archive creation
         fails if any referenced file cannot be read, so a successful export is never incomplete.
+        """ : """
+        YamabikoChat conversation export
+
+        conversation.json contains the conversation and its variants. Runtime transcripts,
+        reasoning, token metrics, and complete Pi diagnostics are excluded. files/ contains every
+        referenced chat attachment and generated artifact.
         """
         try Data(readme.utf8).write(to: stagingURL.appendingPathComponent("README.txt"), options: .atomic)
 
         let filename = safeFilename(snapshot.conversation.title)
-        let archiveURL = exportRoot.appendingPathComponent("\(filename)-\(identifier.prefix(8)).zip")
+        let suffix = mode == .fullDiagnostics ? "-diagnostics" : ""
+        let archiveURL = exportRoot.appendingPathComponent("\(filename)\(suffix)-\(identifier.prefix(8)).zip")
         try fileManager.zipItem(
             at: stagingURL,
             to: archiveURL,
@@ -174,6 +187,55 @@ enum ConversationExportService {
             throw ConversationExportError.archiveCreationFailed
         }
         return archiveURL
+    }
+
+    private static func preparedExport(
+        _ snapshot: ConversationDebugExport,
+        mode: ConversationExportMode
+    ) -> ConversationDebugExport {
+        var export = snapshot
+        export.schemaVersion = 3
+        export.piExecutions = []
+
+        for messageIndex in export.messages.indices {
+            export.messages[messageIndex].toolActivity?.piExecution = nil
+            for variantIndex in export.messages[messageIndex].variants.indices {
+                export.messages[messageIndex].variants[variantIndex].toolActivity?.piExecution = nil
+            }
+        }
+        for dualIndex in export.dualMessages.indices {
+            export.dualMessages[dualIndex].modelAToolActivity?.piExecution = nil
+            export.dualMessages[dualIndex].modelBToolActivity?.piExecution = nil
+        }
+        for conversationIndex in export.autoConversations.indices {
+            for messageIndex in export.autoConversations[conversationIndex].messages.indices {
+                export.autoConversations[conversationIndex].messages[messageIndex].piExecution = nil
+            }
+        }
+
+        guard mode == .standard else { return export }
+        export.format = "yamabiko-chat-export"
+        export.messages = export.messages.map { message in
+            var value = message
+            value.thinkingStream = nil
+            value.toolActivity = nil
+            value.variants = value.variants.map { variant in
+                var variantValue = variant
+                variantValue.toolActivity = nil
+                return variantValue
+            }
+            return value
+        }
+        export.dualMessages = export.dualMessages.map { message in
+            var value = message
+            value.modelAToolActivity = nil
+            value.modelBToolActivity = nil
+            return value
+        }
+        export.fusionTraces = []
+        export.tokenUsageRecords = []
+        export.executionMetrics = []
+        return export
     }
 
     private static func includeFiles(
@@ -249,26 +311,11 @@ enum ConversationExportService {
             )
 
             let events = executionEvents(record.execution)
-            let lineEncoder = JSONEncoder()
-            lineEncoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-            var jsonl = Data()
-            let header = JSONValue.object([
-                "type": .string("session"),
-                "format": .string("yamabiko.pi-agent-session"),
-                "version": .number(2),
-                "source": .string(record.source),
-                "sourceId": .string(record.sourceId)
-            ])
-            for value in [header] + events {
-                jsonl.append(try lineEncoder.encode(value))
-                jsonl.append(0x0A)
-            }
-            try jsonl.write(to: directoryURL.appendingPathComponent("session.jsonl"), options: .atomic)
             manifest.append(
                 PiSessionManifestRecord(
                     source: record.source,
                     sourceId: record.sourceId,
-                    archivePath: "sessions/\(directoryName)/session.jsonl",
+                    archivePath: "sessions/\(directoryName)/execution.json",
                     eventCount: events.count
                 )
             )
