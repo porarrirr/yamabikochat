@@ -126,7 +126,7 @@ actor PythonWorker {
 
     init(
         sessions: PythonSessionStore = .shared,
-        timeoutSeconds: TimeInterval = 30,
+        timeoutSeconds: TimeInterval = 120,
         memoryLimitBytes: UInt64 = 1_200_000_000
     ) {
         self.sessions = sessions
@@ -245,7 +245,7 @@ actor PythonWorker {
                             gate: gate,
                             exceptionName: "TimeoutError",
                             errorType: "TimeoutError",
-                            message: "Python execution exceeded the 30 second limit."
+                            message: "Python execution exceeded the 120 second limit."
                         )
                         return
                     }

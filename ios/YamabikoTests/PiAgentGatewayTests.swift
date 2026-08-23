@@ -50,6 +50,12 @@ final class PiAgentGatewayTests: XCTestCase {
         try await PiAgentRuntime.shared.verifyReady()
     }
 
+    func testBundledPiRuntimeRemainsReachableThroughForegroundSynchronization() async throws {
+        try await PiAgentRuntime.shared.verifyReady()
+        try await PiAgentRuntime.shared.prepareForForeground()
+        try await PiAgentRuntime.shared.verifyReady()
+    }
+
     func testBundledPiRuntimeResolvesCurrentOpenCodeAndOpenRouterModels() async throws {
         let resolutions = try await PiAgentRuntime.shared.resolveModels([
             PiAgentConfiguration(

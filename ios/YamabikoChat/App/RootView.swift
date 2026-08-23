@@ -95,6 +95,17 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 importSharePayloadIfNeeded()
+                Task {
+                    do {
+                        try await PiAgentRuntime.shared.prepareForForeground()
+                    } catch {
+                        DiagnosticsLogger.log(
+                            "Pi runtime foreground synchronization failed",
+                            category: .network,
+                            error: error
+                        )
+                    }
+                }
             } else {
                 discardSelectedSecretConversationIfNeeded()
             }

@@ -40,10 +40,21 @@ class ProviderGateway(
     private val superGrokAuthRepository: SuperGrokAuthRepository? = null,
     private val modelsDevCatalogRepository: ModelsDevCatalogRepository? = null,
     private val openRouterModelService: OpenRouterModelService? = null,
+    /**
+     * Snapshot fallback for tests / legacy callers.
+     * Production passes [localToolFactory] which is preferred via [resolveLocalTools].
+     */
     private val localTools: LocalToolRegistry = LocalToolRegistry(listOf(WebSearchTool(), FetchUrlTool())),
+    /**
+     * Factory evaluated per request so Skill install/enable/disable is reflected without
+     * restarting the gateway. Null in tests where a fixed snapshot is injected via [localTools].
+     */
+    private val localToolFactory: (() -> LocalToolRegistry)? = null,
     private val piStream: PiAgentStreamFn? = null,
     private val piRuntime: PiAgentRuntime? = null
 ) {
+    // Factory has priority; fallback to snapshot for backwards compatibility / tests.
+    private fun resolveLocalTools(): LocalToolRegistry = localToolFactory?.invoke() ?: localTools
     suspend fun generate(request: ProviderRequest, provider: LLMProvider): ProviderResponse {
         return generate(request, provider.rawValue)
     }
@@ -108,7 +119,7 @@ class ProviderGateway(
             runtime.stream(req, cfg, tools)
         }
 
-        return streamExecutor(request, piConfiguration, localTools).catch { error ->
+        return streamExecutor(request, piConfiguration, resolveLocalTools()).catch { error ->
             DiagnosticsLogger.log(
                 "Pi agent stream failed requestId=$requestId provider=$normalizedProvider model=${request.model}",
                 error

@@ -18,7 +18,10 @@ final class ProviderGateway {
     private let settingsRepository: SettingsRepository
     private let credentialStore: SecureCredentialStore
     private let piStream: PiAgentStream
+    /// Snapshot fallback for tests / legacy callers.
     private let localTools: LocalToolRegistry
+    /// Factory evaluated per request so Skill states are reflected without recreating the gateway.
+    private let localToolFactory: (@Sendable () -> LocalToolRegistry)?
     private let codexAuthRepository: CodexAuthRepository?
     private let superGrokAuthRepository: SuperGrokAuthRepository?
     private let modelsDevCatalogRepository: ModelsDevCatalogRepository?
@@ -33,6 +36,7 @@ final class ProviderGateway {
         modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
         openRouterModelService: OpenRouterModelService? = nil,
         localTools: LocalToolRegistry = LocalToolRegistry(executors: [WebSearchTool(), FetchUrlTool(), PythonExecuteTool()]),
+        localToolFactory: (@Sendable () -> LocalToolRegistry)? = nil,
         piStream: @escaping PiAgentStream = { request, configuration, tools in
             try await PiAgentRuntime.shared.stream(
                 request: request,
@@ -48,7 +52,13 @@ final class ProviderGateway {
         self.modelsDevCatalogRepository = modelsDevCatalogRepository
         self.openRouterModelService = openRouterModelService
         self.localTools = localTools
+        self.localToolFactory = localToolFactory
         self.piStream = piStream
+    }
+
+    // Factory has priority; fallback to snapshot for backwards compatibility / tests.
+    private func resolveLocalTools() -> LocalToolRegistry {
+        localToolFactory?() ?? localTools
     }
 
     func generate(request: ProviderRequest, provider: LLMProvider) async throws -> ProviderResponse {
@@ -165,7 +175,7 @@ final class ProviderGateway {
             ]
         )
         do {
-            let stream = try await piStream(request, piConfiguration, localTools)
+            let stream = try await piStream(request, piConfiguration, resolveLocalTools())
             DiagnosticsLogger.log(
                 "Pi agent stream created",
                 category: .network,

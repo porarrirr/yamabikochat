@@ -238,12 +238,32 @@ struct PiToolResultEnvelope: Encodable {
 actor PiAgentRuntime {
     static let shared = PiAgentRuntime()
 
+    private enum Readiness {
+        static let startupAttempts = 100
+        static let resumeAttempts = 10
+        static let retryDelay = Duration.milliseconds(100)
+        static let requestTimeout: TimeInterval = 0.5
+    }
+
     private var endpoint: URL?
     private var token: String?
     private var startupTask: Task<(URL, String), Error>?
 
     func verifyReady() async throws {
         _ = try await startIfNeeded()
+    }
+
+    /// Synchronizes the native client with an already-started Node runtime after iOS resumes it.
+    /// Node Mobile is a process singleton and cannot safely be started a second time, so a cached
+    /// endpoint must be proven live instead of being replaced with another embedded runtime.
+    func prepareForForeground() async throws {
+        guard let endpoint, let token else { return }
+        _ = try await waitUntilHealthy(
+            endpoint: endpoint,
+            token: token,
+            attempts: Readiness.resumeAttempts,
+            context: "foreground"
+        )
     }
 
     func resolveModels(_ configurations: [PiAgentConfiguration]) async throws -> [PiModelResolution] {
@@ -604,7 +624,12 @@ actor PiAgentRuntime {
 
     private func startIfNeeded() async throws -> (URL, String) {
         if let endpoint, let token {
-            DiagnosticsLogger.log("Pi runtime already ready", category: .network)
+            _ = try await waitUntilHealthy(
+                endpoint: endpoint,
+                token: token,
+                attempts: Readiness.resumeAttempts,
+                context: "request"
+            )
             return (endpoint, token)
         }
         if let startupTask {
@@ -629,31 +654,13 @@ actor PiAgentRuntime {
             )
             PiNodeRunner.startEngine(withArguments: ["node", script.path, String(port), token])
 
-            var health = URLRequest(url: endpoint.appendingPathComponent("health"))
-            health.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            for attempt in 0 ..< 100 {
-                try Task.checkCancellation()
-                if let (data, response) = try? await URLSession.shared.data(for: health),
-                   (response as? HTTPURLResponse)?.statusCode == 200,
-                   let status = try? JSONDecoder().decode(PiHealthResponse.self, from: data),
-                   status.ok, status.contractVersion == 2 {
-                    DiagnosticsLogger.log(
-                        "Pi runtime health check succeeded",
-                        category: .network,
-                        metadata: ["attempt": String(attempt + 1), "port": String(port)]
-                    )
-                    return (endpoint, token)
-                }
-                try await Task.sleep(for: .milliseconds(100))
-            }
-            let error = ProviderClientError.parseFailure("Pi agent runtime did not start")
-            DiagnosticsLogger.log(
-                "Pi runtime health check timed out",
-                category: .network,
-                metadata: ["attempts": "100", "port": String(port)],
-                error: error
+            _ = try await self.waitUntilHealthy(
+                endpoint: endpoint,
+                token: token,
+                attempts: Readiness.startupAttempts,
+                context: "startup"
             )
-            throw error
+            return (endpoint, token)
         }
         startupTask = task
         do {
@@ -667,6 +674,59 @@ actor PiAgentRuntime {
             DiagnosticsLogger.log("Pi runtime startup failed", category: .network, error: error)
             throw error
         }
+    }
+
+    @discardableResult
+    private func waitUntilHealthy(
+        endpoint: URL,
+        token: String,
+        attempts: Int,
+        context: String
+    ) async throws -> PiHealthResponse {
+        var health = URLRequest(
+            url: endpoint.appendingPathComponent("health"),
+            timeoutInterval: Readiness.requestTimeout
+        )
+        health.cachePolicy = .reloadIgnoringLocalCacheData
+        health.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        for attempt in 0 ..< attempts {
+            try Task.checkCancellation()
+            if let (data, response) = try? await URLSession(configuration: .ephemeral).data(for: health),
+               (response as? HTTPURLResponse)?.statusCode == 200,
+               let status = try? JSONDecoder().decode(PiHealthResponse.self, from: data),
+               status.ok, status.contractVersion == 2 {
+                DiagnosticsLogger.log(
+                    "Pi runtime health check succeeded",
+                    category: .network,
+                    metadata: [
+                        "attempt": String(attempt + 1),
+                        "context": context,
+                        "port": endpoint.port.map(String.init) ?? "unknown"
+                    ]
+                )
+                return status
+            }
+            if attempt + 1 < attempts {
+                try await Task.sleep(for: Readiness.retryDelay)
+            }
+        }
+
+        let message = context == "startup"
+            ? "Pi agent runtime did not start"
+            : "Pi agent runtime did not resume"
+        let error = ProviderClientError.parseFailure(message)
+        DiagnosticsLogger.log(
+            "Pi runtime health check timed out",
+            category: .network,
+            metadata: [
+                "attempts": String(attempts),
+                "context": context,
+                "port": endpoint.port.map(String.init) ?? "unknown"
+            ],
+            error: error
+        )
+        throw error
     }
 
     private static func makeRequest(_ request: ProviderRequest) throws -> PiRequest {

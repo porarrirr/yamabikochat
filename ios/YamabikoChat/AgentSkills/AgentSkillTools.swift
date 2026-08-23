@@ -5,7 +5,8 @@ enum AgentSkillTools {
     static let readResourceName = "read_skill_resource"
 
     static func executors(repository: AgentSkillRepository) -> [any LocalToolExecutor] {
-        [ActivateAgentSkillTool(repository: repository), ReadAgentSkillResourceTool(repository: repository)]
+        guard !repository.enabledSkills.isEmpty else { return [] }
+        return [ActivateAgentSkillTool(repository: repository), ReadAgentSkillResourceTool(repository: repository)]
     }
 
     static func definitions(repository: AgentSkillRepository) -> [ToolDefinition] {

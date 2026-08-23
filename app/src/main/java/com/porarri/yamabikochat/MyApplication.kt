@@ -17,6 +17,10 @@ import com.porarri.yamabikochat.data.remote.RetrofitClient
 import com.porarri.yamabikochat.data.repositories.ProviderGateway
 import com.porarri.yamabikochat.data.repositories.ProviderRequestSettingsResolver
 import com.porarri.yamabikochat.data.skills.AgentSkillRepository
+import com.porarri.yamabikochat.data.skills.AgentSkillTools
+import com.porarri.yamabikochat.data.tools.LocalToolRegistry
+import com.porarri.yamabikochat.data.tools.search.FetchUrlTool
+import com.porarri.yamabikochat.data.tools.search.WebSearchTool
 import com.porarri.yamabikochat.pi.PiAgentRuntime
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import com.porarri.yamabikochat.utils.SecurePreferencesManager
@@ -50,6 +54,13 @@ class MyApplication : Application() {
     private val superGrokAuthRepository by lazy { SuperGrokAuthRepository(applicationContext, securePreferences, piRuntime) }
 
     private val providerGateway by lazy {
+        // Recreate registry per request so AgentSkill enable/disable is reflected immediately.
+        // WebSearch/FetchUrl are stateless; reuse of AgentSkill executors captures latest enabledSkills.
+        val makeLocalTools = {
+            LocalToolRegistry(
+                listOf(WebSearchTool(), FetchUrlTool()) + AgentSkillTools.executors(agentSkillRepository)
+            )
+        }
         ProviderGateway(
             settingsProvider = { databaseRepository.getLatestSettings() },
             securePreferences = securePreferences,
@@ -57,6 +68,8 @@ class MyApplication : Application() {
             superGrokAuthRepository = superGrokAuthRepository,
             modelsDevCatalogRepository = modelsDevCatalogRepository,
             openRouterModelService = modelService,
+            localTools = makeLocalTools(),
+            localToolFactory = makeLocalTools,
             piRuntime = piRuntime
         )
     }

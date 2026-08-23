@@ -146,6 +146,10 @@ final class AgentSkillRepository: @unchecked Sendable {
         let enabled = enabledSkills
         guard !enabled.isEmpty else { return nil }
         let names = Self.explicitSkillNames(in: text, allowed: Set(enabled.map { $0.manifest.name }))
+        let catalog: [AgentSkillCatalogEntry] = providerSupportsTools
+            ? enabled.map { AgentSkillCatalogEntry(name: $0.manifest.name, description: $0.manifest.description) }
+            : []
+        if catalog.isEmpty, names.isEmpty { return nil }
         var instructions: [String] = []
         var resources: [String] = []
         for name in names {
@@ -153,7 +157,7 @@ final class AgentSkillRepository: @unchecked Sendable {
             resources.append(resourcePaths(name: name).joined(separator: "\n"))
         }
         return SkillRequestContext(
-            catalog: enabled.map { AgentSkillCatalogEntry(name: $0.manifest.name, description: $0.manifest.description) },
+            catalog: catalog,
             explicitlyRequestedNames: names,
             explicitInstructions: instructions,
             resourceLists: resources,

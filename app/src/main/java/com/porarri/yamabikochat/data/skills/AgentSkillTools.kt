@@ -37,7 +37,10 @@ object AgentSkillTools {
         )
     }
 
-    fun executors(repository: AgentSkillRepository): List<LocalToolExecutor> = listOf(Activate(repository), ReadResource(repository))
+    fun executors(repository: AgentSkillRepository): List<LocalToolExecutor> {
+        if (repository.enabledSkills.isEmpty()) return emptyList()
+        return listOf(Activate(repository), ReadResource(repository))
+    }
 
     private class Activate(private val repository: AgentSkillRepository) : LocalToolExecutor {
         override val definition: ToolDefinition get() = definitions(repository).firstOrNull() ?: ToolDefinition(ACTIVATE, "Activate skill", "{\"type\":\"object\"}")

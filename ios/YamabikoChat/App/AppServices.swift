@@ -39,7 +39,8 @@ final class AppServices {
         } catch {
             DiagnosticsLogger.log("Python session cleanup failed", category: .app, error: error)
         }
-        skillRepository = AgentSkillRepository()
+        let repository = AgentSkillRepository()
+        skillRepository = repository
         openRouterModelService = OpenRouterModelService(credentialStore: credentialStore)
         Task { [openRouterModelService] in
             _ = await openRouterModelService.getAvailableModels()
@@ -52,9 +53,14 @@ final class AppServices {
         let clientWebTools = LocalToolRegistry(
             executors: [WebSearchTool(), FetchUrlTool(), pythonTool]
         )
-        let localTools = LocalToolRegistry(
-            executors: [WebSearchTool(), FetchUrlTool(), pythonTool] + AgentSkillTools.executors(repository: skillRepository)
-        )
+        // Recreate per request: WebSearch/FetchUrl are stateless, pythonTool is reused
+        // (tied to attachmentRepository), and AgentSkill executors snapshot latest enabledSkills.
+        let makeLocalTools: @Sendable () -> LocalToolRegistry = { [repository, pythonTool] in
+            LocalToolRegistry(
+                executors: [WebSearchTool(), FetchUrlTool(), pythonTool] + AgentSkillTools.executors(repository: repository)
+            )
+        }
+        let localTools = makeLocalTools()
         modelsDevCatalogRepository = ModelsDevCatalogRepository()
         let modelsDevCredentials = credentialStore
         requestSettingsResolver = ProviderRequestSettingsResolver(
@@ -77,7 +83,8 @@ final class AppServices {
             superGrokAuthRepository: superGrokAuthRepository,
             modelsDevCatalogRepository: modelsDevCatalogRepository,
             openRouterModelService: openRouterModelService,
-            localTools: localTools
+            localTools: localTools,
+            localToolFactory: makeLocalTools
         )
         fusionTraceStore = FusionTraceStore(dbQueue: dbQueue)
         fusionService = FusionService(
