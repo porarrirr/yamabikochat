@@ -121,6 +121,17 @@ final class ConversationListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.selectedProjectId, projectId)
     }
 
+    func testCreateProjectDoesNotActivateProjectFilter() throws {
+        let repository = try makeFixture()
+        let viewModel = ConversationListViewModel()
+        viewModel.bind(repository: repository)
+
+        let projectId = viewModel.createProject(title: "Project A", instructions: nil)
+
+        XCTAssertNotNil(projectId)
+        XCTAssertNil(viewModel.selectedProjectId)
+    }
+
     private func makeFixture() throws -> ChatRepository {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)

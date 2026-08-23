@@ -103,6 +103,43 @@ final class ConversationRepository: @unchecked Sendable {
         }
     }
 
+    func updateProject(
+        id: Int64,
+        title: String,
+        instructions: String?,
+        iconName: String? = nil,
+        colorHex: String? = nil,
+        updateConversationsPrompt: Bool = false,
+        conversationsSystemPrompt: String? = nil
+    ) throws {
+        try dbQueue.write { db in
+            guard var project = try ChatProject.fetchOne(db, key: id) else {
+                throw ProviderClientError.parseFailure("Project not found")
+            }
+
+            let previousInstructions = project.instructions?.trimmedNonEmpty
+            let nextInstructions = instructions?.trimmedNonEmpty
+
+            project.title = title
+            project.instructions = nextInstructions
+            if let iconName {
+                project.iconName = iconName
+            }
+            if let colorHex {
+                project.colorHex = colorHex
+            }
+            project.updatedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
+            try project.update(db)
+
+            if updateConversationsPrompt, previousInstructions != nextInstructions {
+                try db.execute(
+                    sql: "UPDATE conversations SET systemPrompt = ? WHERE projectId = ?",
+                    arguments: [conversationsSystemPrompt, id]
+                )
+            }
+        }
+    }
+
     func deleteProject(id: Int64) throws {
         try dbQueue.write { db in
             let deleted = try ChatProject.deleteOne(db, key: id)

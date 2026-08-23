@@ -176,6 +176,56 @@ final class ChatRepository {
         return try conversations.createProject(title: normalizedTitle, instructions: instructions)
     }
 
+    func fetchProject(id: Int64) throws -> ChatProject? {
+        try conversations.fetchProject(id: id)
+    }
+
+    func updateProject(
+        id: Int64,
+        title: String,
+        instructions: String?,
+        iconName: String? = nil,
+        colorHex: String? = nil,
+        updateConversationsPrompt: Bool = true
+    ) throws {
+        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedTitle.isEmpty else {
+            throw ProviderClientError.parseFailure(L10n.text("プロジェクト名を入力してください。"))
+        }
+        let normalizedInstructions = instructions?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalInstructions = (normalizedInstructions?.isEmpty == false) ? normalizedInstructions : nil
+
+        var conversationsSystemPrompt: String?
+        if updateConversationsPrompt {
+            let defaultPrompt = try loadSettings().systemPrompt
+            conversationsSystemPrompt = finalInstructions ?? defaultPrompt
+        }
+
+        try conversations.updateProject(
+            id: id,
+            title: normalizedTitle,
+            instructions: finalInstructions,
+            iconName: iconName,
+            colorHex: colorHex,
+            updateConversationsPrompt: updateConversationsPrompt,
+            conversationsSystemPrompt: conversationsSystemPrompt
+        )
+    }
+
+    func updateProjectInstructions(id: Int64, instructions: String?) throws {
+        guard let project = try conversations.fetchProject(id: id) else {
+            throw ProviderClientError.parseFailure("Project not found")
+        }
+        try updateProject(
+            id: id,
+            title: project.title,
+            instructions: instructions,
+            iconName: project.iconName,
+            colorHex: project.colorHex,
+            updateConversationsPrompt: true
+        )
+    }
+
     func projectConversationCount(projectId: Int64) throws -> Int {
         try conversations.countConversations(projectId: projectId)
     }

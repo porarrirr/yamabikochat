@@ -2,10 +2,10 @@ import Foundation
 import SwiftUI
 
 struct ConversationListScreen: View {
-    private struct PendingProjectDeletion {
-        let id: Int64
-        let title: String
-        let conversationCount: Int
+    enum NavigationState: Equatable {
+        case conversations
+        case projectList
+        case projectDetail(Int64)
     }
 
     @ObservedObject var viewModel: ConversationListViewModel
@@ -15,12 +15,72 @@ struct ConversationListScreen: View {
     var onOpenSettings: () -> Void
     var onClose: (() -> Void)? = nil
 
-    @State private var isCreateProjectPresented = false
-    @State private var pendingProjectDeletion: PendingProjectDeletion?
-    @State private var isProjectDeleteOptionsPresented = false
+    @State private var navigationState: NavigationState = .conversations
     @State private var isDeleteConfirmationPresented = false
 
     var body: some View {
+        Group {
+            switch navigationState {
+            case .conversations:
+                conversationsMainView
+            case .projectList:
+                ProjectListScreen(
+                    viewModel: viewModel,
+                    onBack: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            navigationState = .conversations
+                        }
+                    },
+                    onSelectProject: { projectId in
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            navigationState = .projectDetail(projectId)
+                        }
+                    }
+                )
+            case .projectDetail(let projectId):
+                ProjectDetailScreen(
+                    viewModel: viewModel,
+                    projectId: projectId,
+                    onBack: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            navigationState = .projectList
+                        }
+                    },
+                    onSelectConversation: { conversationId in
+                        openConversation(id: conversationId)
+                    }
+                )
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .background(Color(uiColor: .systemBackground))
+        .overlay(alignment: .bottom) {
+            if let error = viewModel.errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(8)
+            }
+        }
+        .alert(
+            L10n.format("%d 件の会話を削除しますか？", viewModel.selectedConversationIds.count),
+            isPresented: $isDeleteConfirmationPresented
+        ) {
+            Button(L10n.text("削除"), role: .destructive) {
+                if let current = selection, viewModel.selectedConversationIds.contains(current) {
+                    selection = nil
+                }
+                viewModel.deleteSelectedConversations()
+            }
+            Button(L10n.text("キャンセル"), role: .cancel) {}
+        } message: {
+            Text(L10n.format("選択した %d 件の会話を完全に削除します。この操作は取り消せません。", viewModel.selectedConversationIds.count))
+        }
+    }
+
+    // MARK: - Conversations Main View
+
+    private var conversationsMainView: some View {
         VStack(spacing: 0) {
             topHeader
 
@@ -28,10 +88,13 @@ struct ConversationListScreen: View {
                 if !viewModel.isSelectionMode {
                     Section {
                         drawerActionRow(
-                            title: L10n.text("新しいプロジェクト"),
-                            systemImage: "plus.square.on.square"
+                            title: L10n.text("プロジェクト"),
+                            systemImage: "folder.fill",
+                            badgeCount: viewModel.projects.count
                         ) {
-                            isCreateProjectPresented = true
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                navigationState = .projectList
+                            }
                         }
 
                         drawerActionRow(
@@ -43,15 +106,9 @@ struct ConversationListScreen: View {
                     }
                 }
 
-                if !viewModel.projects.isEmpty {
-                    Section {
-                        projectFilterRow
-                    }
-                }
-
                 Section {
                     if viewModel.filteredConversations.isEmpty {
-                        Text("会話がありません")
+                        Text(L10n.text("会話がありません"))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .padding(.vertical, 6)
@@ -70,6 +127,14 @@ struct ConversationListScreen: View {
                                 .listRowSeparator(.hidden)
                         }
                     }
+                } header: {
+                    if !viewModel.filteredConversations.isEmpty && !viewModel.isSelectionMode {
+                        Text(L10n.text("最近"))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(nil)
+                            .padding(.leading, -4)
+                    }
                 }
             }
             .listStyle(.plain)
@@ -84,70 +149,9 @@ struct ConversationListScreen: View {
                 settingsFooter
             }
         }
-        .toolbar(.hidden, for: .navigationBar)
-        .background(Color(uiColor: .systemBackground))
-        .sheet(isPresented: $isCreateProjectPresented) {
-            CreateProjectSheet { title, instructions in
-                guard let projectId = viewModel.createProject(title: title, instructions: instructions) else { return }
-                guard let conversationId = viewModel.createConversation(secret: false, projectId: projectId) else { return }
-                openConversation(id: conversationId)
-            }
-        }
-        .confirmationDialog(
-            "プロジェクトを削除",
-            isPresented: $isProjectDeleteOptionsPresented,
-            titleVisibility: .visible
-        ) {
-            Button("プロジェクトのみ削除", role: .destructive) {
-                guard let pending = pendingProjectDeletion else { return }
-                viewModel.deleteProject(id: pending.id, mode: .projectOnly)
-                clearPendingProjectDeletion()
-            }
-
-            Button("会話も削除", role: .destructive) {
-                guard let pending = pendingProjectDeletion else { return }
-                viewModel.deleteProject(id: pending.id, mode: .withConversations)
-                clearPendingProjectDeletion()
-            }
-
-            Button("キャンセル", role: .cancel) {
-                clearPendingProjectDeletion()
-            }
-        } message: {
-            if let pending = pendingProjectDeletion {
-                Text(L10n.format("「%@」には %d 件の会話があります。削除方法を選択してください。", pending.title, pending.conversationCount))
-            } else {
-                Text("削除方法を選択してください。")
-            }
-        }
-        .overlay(alignment: .bottom) {
-            if let error = viewModel.errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .padding(8)
-            }
-        }
-        .onChange(of: isProjectDeleteOptionsPresented) { _, isPresented in
-            if !isPresented {
-                clearPendingProjectDeletion()
-            }
-        }
-        .alert(
-            L10n.format("%d 件の会話を削除しますか？", viewModel.selectedConversationIds.count),
-            isPresented: $isDeleteConfirmationPresented
-        ) {
-            Button("削除", role: .destructive) {
-                if let current = selection, viewModel.selectedConversationIds.contains(current) {
-                    selection = nil
-                }
-                viewModel.deleteSelectedConversations()
-            }
-            Button("キャンセル", role: .cancel) {}
-        } message: {
-            Text(L10n.format("選択した %d 件の会話を完全に削除します。この操作は取り消せません。", viewModel.selectedConversationIds.count))
-        }
     }
+
+    // MARK: - Top Header
 
     private var topHeader: some View {
         HStack(spacing: 8) {
@@ -222,6 +226,8 @@ struct ConversationListScreen: View {
         .padding(.bottom, 6)
     }
 
+    // MARK: - Settings Footer
+
     private var settingsFooter: some View {
         Button {
             onOpenSettings()
@@ -241,6 +247,8 @@ struct ConversationListScreen: View {
         .accessibilityIdentifier("open-settings")
         .background(Color(uiColor: .systemBackground))
     }
+
+    // MARK: - Selection Action Bar
 
     private var selectionActionBar: some View {
         HStack {
@@ -279,90 +287,44 @@ struct ConversationListScreen: View {
         .background(Color(uiColor: .systemBackground))
     }
 
-    private var projectFilterRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                projectChip(
-                    title: L10n.text("すべて"),
-                    iconName: "tray.full",
-                    colorHex: "#8B8B8B",
-                    selected: viewModel.selectedProjectId == nil
-                ) {
-                    viewModel.selectProject(nil)
-                }
-
-                ForEach(viewModel.projects) { project in
-                    projectChip(
-                        title: project.title,
-                        iconName: project.iconName,
-                        colorHex: project.colorHex,
-                        selected: viewModel.selectedProjectId == project.id
-                    ) {
-                        viewModel.selectProject(project.id)
-                    }
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            beginProjectDeletion(project)
-                        } label: {
-                            Label("プロジェクトを削除", systemImage: "trash")
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 4)
-        }
-        .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
-        .listRowSeparator(.hidden)
-    }
-
-    @ViewBuilder
-    private func projectChip(
-        title: String,
-        iconName: String,
-        colorHex: String,
-        selected: Bool,
-        onTap: @escaping () -> Void
-    ) -> some View {
-        Button(action: onTap) {
-            HStack(spacing: 6) {
-                Image(systemName: iconName)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(selected ? .white : Color(hex: colorHex))
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                    .foregroundStyle(selected ? .white : .primary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(
-                Capsule()
-                    .fill(selected ? Color(hex: colorHex) : Color(uiColor: .secondarySystemBackground))
-            )
-        }
-        .buttonStyle(.plain)
-    }
+    // MARK: - Drawer Action Row
 
     @ViewBuilder
     private func drawerActionRow(
         title: String,
         systemImage: String,
+        badgeCount: Int? = nil,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(.primary)
-                    .frame(width: 20)
+                    .frame(width: 24)
 
                 Text(title)
-                    .font(.body)
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Spacer()
+
+                if let badgeCount, badgeCount > 0 {
+                    Text("\(badgeCount)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(Color(uiColor: .secondarySystemFill))
+                        )
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 10)
@@ -371,6 +333,8 @@ struct ConversationListScreen: View {
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
     }
+
+    // MARK: - Conversation Row
 
     @ViewBuilder
     private func conversationRow(_ entry: ConversationListEntry) -> some View {
@@ -487,80 +451,57 @@ struct ConversationListScreen: View {
         selection = id
         onSelect(id)
     }
-
-    private func beginProjectDeletion(_ project: ProjectListEntry) {
-        pendingProjectDeletion = PendingProjectDeletion(
-            id: project.id,
-            title: project.title,
-            conversationCount: viewModel.projectConversationCount(projectId: project.id)
-        )
-        isProjectDeleteOptionsPresented = true
-    }
-
-    private func clearPendingProjectDeletion() {
-        pendingProjectDeletion = nil
-    }
 }
 
-private struct CreateProjectSheet: View {
+struct CreateProjectSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject var viewModel: ConversationListViewModel
 
     @State private var title = ""
     @State private var instructions = ""
 
-    var onCreate: (String, String?) -> Void
+    var onCreate: (String, String?) -> Bool
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("プロジェクト名") {
-                    TextField("例: iOS移植", text: $title)
+                Section(L10n.text("プロジェクト名")) {
+                    TextField(L10n.text("例: iOS移植"), text: $title)
                 }
-                Section("プロジェクト指示（任意）") {
+                Section(L10n.text("プロジェクト指示（任意）")) {
                     TextEditor(text: $instructions)
                         .frame(minHeight: 120)
                 }
+
+                if let error = viewModel.errorMessage {
+                    Section {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
             }
-            .navigationTitle("新しいプロジェクト")
+            .navigationTitle(L10n.text("新しいプロジェクト"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") {
+                    Button(L10n.text("キャンセル")) {
                         dismiss()
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("作成") {
+                    Button(L10n.text("作成")) {
                         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
                         let trimmedInstructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
-                        onCreate(trimmedTitle, trimmedInstructions.isEmpty ? nil : trimmedInstructions)
-                        dismiss()
+                        if onCreate(trimmedTitle, trimmedInstructions.isEmpty ? nil : trimmedInstructions) {
+                            dismiss()
+                        }
                     }
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
-    }
-}
-
-private extension Color {
-    init(hex: String) {
-        let cleaned = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int = UInt64(0)
-        Scanner(string: cleaned).scanHexInt64(&int)
-
-        let r, g, b: UInt64
-        switch cleaned.count {
-        case 6:
-            (r, g, b) = (int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        default:
-            (r, g, b) = (58, 122, 254)
+        .onAppear {
+            viewModel.errorMessage = nil
         }
-        self.init(
-            .sRGB,
-            red: Double(r) / 255,
-            green: Double(g) / 255,
-            blue: Double(b) / 255,
-            opacity: 1
-        )
     }
 }

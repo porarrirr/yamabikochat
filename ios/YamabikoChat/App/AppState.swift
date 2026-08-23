@@ -6,12 +6,28 @@ struct ShareImportDraft: Equatable {
     let text: String
 }
 
+struct PendingInitialMessage: Equatable {
+    let conversationID: Int64
+    let text: String
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var selectedConversationID: Int64?
     @Published private(set) var shareImportDraft: ShareImportDraft?
+    @Published private(set) var pendingInitialMessage: PendingInitialMessage?
     @Published var isConversationHistoryPresented = false
     @Published private(set) var conversationSidebarRevealGeneration = 0
+
+    func setPendingInitialMessage(conversationID: Int64, text: String) {
+        pendingInitialMessage = PendingInitialMessage(conversationID: conversationID, text: text)
+    }
+
+    func consumePendingInitialMessage(for conversationID: Int64) -> String? {
+        guard let pending = pendingInitialMessage, pending.conversationID == conversationID else { return nil }
+        pendingInitialMessage = nil
+        return pending.text
+    }
 
     func requestConversationSidebarReveal() {
         conversationSidebarRevealGeneration += 1

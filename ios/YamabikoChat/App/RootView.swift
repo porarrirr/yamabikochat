@@ -165,6 +165,7 @@ struct RootView: View {
                 }
             )
             .environmentObject(container)
+            .environmentObject(appState)
         }
         .preferredColorScheme(resolvedColorScheme)
         .tint(resolvedTintColor)

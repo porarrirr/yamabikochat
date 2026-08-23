@@ -38,9 +38,13 @@ struct ChatWorkspaceScreen: View {
                 skillRepository: container.skillRepository
             )
             applyShareImportDraftIfNeeded()
+            applyPendingInitialMessageIfNeeded()
         }
         .onChange(of: appState.shareImportDraft) { _, _ in
             applyShareImportDraftIfNeeded()
+        }
+        .onChange(of: appState.pendingInitialMessage) { _, _ in
+            applyPendingInitialMessageIfNeeded()
         }
         .sheet(item: $exportedArchive) { item in
             ConversationExportShareSheet(items: [item.url])
@@ -51,6 +55,14 @@ struct ChatWorkspaceScreen: View {
         guard let text = appState.shareImportText(for: conversationID) else { return }
         viewModel.applySharedText(text)
         appState.clearShareImportDraft(for: conversationID)
+    }
+
+    private func applyPendingInitialMessageIfNeeded() {
+        guard let text = appState.consumePendingInitialMessage(for: conversationID) else { return }
+        viewModel.inputText = text
+        Task { @MainActor in
+            viewModel.sendMessage()
+        }
     }
 
     private var workspaceBackground: Color {

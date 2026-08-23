@@ -135,6 +135,99 @@ final class ProjectFeatureTests: XCTestCase {
         XCTAssertNotNil(try fixture.repository.conversation(id: regularConversationId))
     }
 
+    func testUpdateProjectInstructionsUpdatesProjectAndConversations() throws {
+        let fixture = try makeFixture()
+        let projectId = try fixture.repository.createProject(title: "テストプロジェクト", instructions: "初期の指示")
+        let conversationId = try fixture.repository.createConversation(projectId: projectId)
+
+        let initialConv = try fixture.repository.conversation(id: conversationId)
+        XCTAssertEqual(initialConv?.systemPrompt, "初期の指示")
+
+        try fixture.repository.updateProjectInstructions(id: projectId, instructions: "更新後の指示")
+
+        let project = try fixture.repository.fetchProject(id: projectId)
+        XCTAssertEqual(project?.instructions, "更新後の指示")
+
+        let updatedConv = try fixture.repository.conversation(id: conversationId)
+        XCTAssertEqual(updatedConv?.systemPrompt, "更新後の指示")
+    }
+
+    func testUpdateProjectTitleAndProperties() throws {
+        let fixture = try makeFixture()
+        let projectId = try fixture.repository.createProject(title: "旧タイトル", instructions: "指示")
+
+        try fixture.repository.updateProject(
+            id: projectId,
+            title: "新タイトル",
+            instructions: "新しい指示",
+            iconName: "folder.fill",
+            colorHex: "#FF3B30"
+        )
+
+        let project = try fixture.repository.fetchProject(id: projectId)
+        XCTAssertEqual(project?.title, "新タイトル")
+        XCTAssertEqual(project?.instructions, "新しい指示")
+        XCTAssertEqual(project?.iconName, "folder.fill")
+        XCTAssertEqual(project?.colorHex, "#FF3B30")
+    }
+
+    func testUpdateProjectTitleDoesNotResetCustomConversationPrompt() throws {
+        let fixture = try makeFixture()
+        let projectId = try fixture.repository.createProject(title: "旧タイトル", instructions: "プロジェクト指示")
+        let conversationId = try fixture.repository.createConversation(projectId: projectId)
+
+        try fixture.repository.updateConversationSystemPrompt(
+            conversationId: conversationId,
+            systemPrompt: "会話固有の指示"
+        )
+
+        try fixture.repository.updateProject(
+            id: projectId,
+            title: "新タイトル",
+            instructions: "プロジェクト指示",
+            iconName: "folder.fill",
+            colorHex: "#FF3B30"
+        )
+
+        let project = try fixture.repository.fetchProject(id: projectId)
+        let conversation = try fixture.repository.conversation(id: conversationId)
+        XCTAssertEqual(project?.title, "新タイトル")
+        XCTAssertEqual(project?.colorHex, "#FF3B30")
+        XCTAssertEqual(conversation?.systemPrompt, "会話固有の指示")
+    }
+
+    func testClearingProjectInstructionsFallsBackToDefaultPrompt() throws {
+        let fixture = try makeFixture()
+        let projectId = try fixture.repository.createProject(title: "テスト", instructions: "プロジェクト指示")
+        let conversationId = try fixture.repository.createConversation(projectId: projectId)
+
+        try fixture.repository.updateProjectInstructions(id: projectId, instructions: nil)
+
+        let project = try fixture.repository.fetchProject(id: projectId)
+        let conversation = try fixture.repository.conversation(id: conversationId)
+        XCTAssertNil(project?.instructions)
+        XCTAssertNil(conversation?.systemPrompt)
+    }
+
+    @MainActor
+    func testPendingInitialMessageLifecycle() {
+        let appState = AppState()
+        XCTAssertNil(appState.pendingInitialMessage)
+
+        appState.setPendingInitialMessage(conversationID: 42, text: "こんにちは")
+        XCTAssertEqual(appState.pendingInitialMessage?.conversationID, 42)
+        XCTAssertEqual(appState.pendingInitialMessage?.text, "こんにちは")
+
+        // Wrong conversation ID returns nil and does not consume
+        XCTAssertNil(appState.consumePendingInitialMessage(for: 99))
+        XCTAssertNotNil(appState.pendingInitialMessage)
+
+        // Matching conversation ID consumes the message
+        let consumed = appState.consumePendingInitialMessage(for: 42)
+        XCTAssertEqual(consumed, "こんにちは")
+        XCTAssertNil(appState.pendingInitialMessage)
+    }
+
     private func makeFixture() throws -> (
         repository: ChatRepository,
         conversations: ConversationRepository,

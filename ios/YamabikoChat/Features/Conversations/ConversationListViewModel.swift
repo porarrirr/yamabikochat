@@ -47,10 +47,14 @@ final class ConversationListViewModel: ObservableObject {
         guard let repository else { return nil }
         do {
             let targetProjectId = projectId ?? selectedProjectId
+            let conversationID: Int64
             if secret {
-                return try repository.createSecretConversation(projectId: targetProjectId)
+                conversationID = try repository.createSecretConversation(projectId: targetProjectId)
+            } else {
+                conversationID = try repository.createConversation(projectId: targetProjectId)
             }
-            return try repository.createConversation(projectId: targetProjectId)
+            errorMessage = nil
+            return conversationID
         } catch {
             errorMessage = error.localizedDescription
             return nil
@@ -61,11 +65,49 @@ final class ConversationListViewModel: ObservableObject {
         guard let repository else { return nil }
         do {
             let id = try repository.createProject(title: title, instructions: instructions)
-            selectedProjectId = id
+            errorMessage = nil
             return id
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    @discardableResult
+    func updateProject(
+        id: Int64,
+        title: String,
+        instructions: String?,
+        iconName: String? = nil,
+        colorHex: String? = nil
+    ) -> Bool {
+        guard let repository else { return false }
+        do {
+            try repository.updateProject(
+                id: id,
+                title: title,
+                instructions: instructions,
+                iconName: iconName,
+                colorHex: colorHex
+            )
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
+    func updateProjectInstructions(id: Int64, instructions: String?) -> Bool {
+        guard let repository else { return false }
+        do {
+            try repository.updateProjectInstructions(id: id, instructions: instructions)
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
         }
     }
 
@@ -120,15 +162,19 @@ final class ConversationListViewModel: ObservableObject {
         }
     }
 
-    func deleteProject(id: Int64, mode: ProjectDeletionMode) {
-        guard let repository else { return }
+    @discardableResult
+    func deleteProject(id: Int64, mode: ProjectDeletionMode) -> Bool {
+        guard let repository else { return false }
         do {
             try repository.deleteProject(id: id, mode: mode)
             if selectedProjectId == id {
                 selectedProjectId = nil
             }
+            errorMessage = nil
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 
