@@ -9,6 +9,37 @@ final class ChatPerformancePolicyTests: XCTestCase {
         XCTAssertFalse(ChatScrollPolicy.shouldFollowContentGrowth(isNearBottom: true, isUserInteracting: true))
     }
 
+    func testStreamingScrollFollowsMeasuredLayoutGrowth() {
+        XCTAssertTrue(ChatScrollPolicy.shouldFollowStreamingLayoutGrowth(
+            wasNearBottom: true,
+            isUserInteracting: false,
+            isStreaming: true,
+            previousBottomMaxY: 700,
+            currentBottomMaxY: 730
+        ))
+        XCTAssertFalse(ChatScrollPolicy.shouldFollowStreamingLayoutGrowth(
+            wasNearBottom: true,
+            isUserInteracting: false,
+            isStreaming: true,
+            previousBottomMaxY: 730,
+            currentBottomMaxY: 700
+        ))
+        XCTAssertFalse(ChatScrollPolicy.shouldFollowStreamingLayoutGrowth(
+            wasNearBottom: true,
+            isUserInteracting: true,
+            isStreaming: true,
+            previousBottomMaxY: 700,
+            currentBottomMaxY: 730
+        ))
+        XCTAssertFalse(ChatScrollPolicy.shouldFollowStreamingLayoutGrowth(
+            wasNearBottom: true,
+            isUserInteracting: false,
+            isStreaming: false,
+            previousBottomMaxY: 700,
+            currentBottomMaxY: 730
+        ))
+    }
+
     func testMarkdownInputSignatureDistinguishesFinalStreamingTransition() {
         let streaming = MathMarkdownInputSignature(
             markdownText: "same",

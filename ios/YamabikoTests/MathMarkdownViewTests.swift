@@ -181,11 +181,12 @@ final class MathMarkdownViewTests: XCTestCase {
             mathJaxScriptTag: "<script src=\"tex-svg.js\"></script>"
         )
 
-        XCTAssertTrue(html.contains("window.__yamabikoRenderSource = function(nextSource)"))
-        XCTAssertTrue(html.contains("window.__yamabikoRenderSource(source);"))
+        XCTAssertTrue(html.contains("window.__yamabikoRenderSource = function(nextSource, shouldTypeset)"))
+        XCTAssertTrue(html.contains("window.__yamabikoRenderSource(source, true);"))
         XCTAssertTrue(html.contains("root.innerHTML = window.yamabikoRenderMarkdown(source);"))
-        XCTAssertTrue(html.contains("typesetRenderedContent(root, function()"))
-        XCTAssertTrue(html.contains("window.MathJax.typesetClear([root])"))
+        XCTAssertTrue(html.contains("typesetRenderedContent(root, finishRender)"))
+        XCTAssertTrue(html.contains("if (shouldTypeset && window.MathJax && window.MathJax.typesetClear)"))
+        XCTAssertTrue(html.contains("if (shouldTypeset)"))
         XCTAssertTrue(html.contains("if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();"))
     }
 
@@ -203,7 +204,7 @@ final class MathMarkdownViewTests: XCTestCase {
 
         XCTAssertTrue(html.contains("var source = \"**hello**\";"))
         XCTAssertTrue(html.contains("source = String(nextSource || '');"))
-        XCTAssertTrue(html.contains("window.__yamabikoRenderSource(source);"))
+        XCTAssertTrue(html.contains("window.__yamabikoRenderSource(source, true);"))
         XCTAssertEqual(html.components(separatedBy: "window.yamabikoRenderMarkdown(source)").count - 1, 1)
     }
 

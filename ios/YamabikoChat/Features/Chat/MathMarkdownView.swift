@@ -513,11 +513,11 @@ enum MathMarkdownHTMLBuilder {
                 var finish = completion;
         \(mathTypesetScript)
               }
-              window.__yamabikoRenderSource = function(nextSource) {
+              window.__yamabikoRenderSource = function(nextSource, shouldTypeset) {
                 renderGeneration += 1;
                 var generation = renderGeneration;
                 source = String(nextSource || '');
-                if (window.MathJax && window.MathJax.typesetClear) {
+                if (shouldTypeset && window.MathJax && window.MathJax.typesetClear) {
                   try {
                     window.MathJax.typesetClear([root]);
                   } catch (_) {}
@@ -527,13 +527,18 @@ enum MathMarkdownHTMLBuilder {
                 } else {
                   root.textContent = source || '';
                 }
-                typesetRenderedContent(root, function() {
+                function finishRender() {
                   if (generation !== renderGeneration) return;
                   enableHorizontalScrollContainers();
                   if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();
-                });
+                }
+                if (shouldTypeset) {
+                  typesetRenderedContent(root, finishRender);
+                } else {
+                  finishRender();
+                }
               };
-              window.__yamabikoRenderSource(source);
+              window.__yamabikoRenderSource(source, true);
             })();
           </script>
         </body>
@@ -1548,7 +1553,8 @@ private struct MathMarkdownWebView: UIViewRepresentable {
                     return
                 }
 
-                let script = "window.__yamabikoRenderSource && window.__yamabikoRenderSource(\(markdownPayload));"
+                let shouldTypeset = isStreaming ? "false" : "true"
+                let script = "window.__yamabikoRenderSource && window.__yamabikoRenderSource(\(markdownPayload), \(shouldTypeset));"
                 webView.evaluateJavaScript(script) { [weak self, weak webView] _, _ in
                     guard let self, token == self.pendingRenderToken else { return }
                     self.lastRenderedMarkdownPayload = markdownPayload

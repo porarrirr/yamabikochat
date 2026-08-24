@@ -90,55 +90,59 @@ struct ChatScreen: View {
                         let timelineMinHeight = max(scrollGeometry.size.height - chatTimelineVerticalPadding * 2, 0)
 
                         ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 24) {
-                                if timeline.isEmpty {
-                                    ContentUnavailableView(
-                                        emptyStateTitle,
-                                        systemImage: emptyStateSystemImage,
-                                        description: Text(emptyStateDescription)
-                                    )
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.top, 56)
-                                } else {
-                                    ForEach(timeline) { item in
-                                        switch item {
-                                        case let .message(message):
-                                            MessageBubble(
-                                                message: message,
-                                                rowWidth: timelineWidth,
-                                                mathRenderingEnabled: viewModel.settings.mathRenderingEnabled,
-                                                streamingSnapshot: viewModel.streamingSnapshot(for: message.id),
-                                                isActivelyStreaming: viewModel.isMessageStreaming(message.id),
-                                                canRegenerate: viewModel.canRegenerateLastAssistant && message.id == viewModel.fullMessages.last?.id,
-                                                fusionDebugModeEnabled: viewModel.settings.fusionDebugModeEnabled,
-                                                fusionTrace: viewModel.fusionTrace(for: message.message),
-                                                onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
-                                                onNextVariant: { viewModel.showNextVariant(messageId: message.id) },
-                                                onCopy: {
-                                                    UIPasteboard.general.string = message.displayText
-                                                },
-                                                onBranch: {
-                                                    guard let newConversationId = viewModel.branchConversation(from: message.id) else { return }
-                                                    onNavigateToConversation?(newConversationId)
-                                                },
-                                                onRegenerate: {
-                                                    viewModel.regenerateLastAssistantVariant()
-                                                }
-                                            )
-                                            .equatable()
-                                            .id(item.id)
-                                        case let .dual(message):
-                                            DualMessageCard(
-                                                message: message,
-                                                rowWidth: timelineWidth,
-                                                settings: viewModel.settings,
-                                                mathRenderingEnabled: viewModel.settings.mathRenderingEnabled
-                                            )
-                                            .equatable()
-                                            .id(item.id)
+                            VStack(alignment: .leading, spacing: 0) {
+                                LazyVStack(alignment: .leading, spacing: 24) {
+                                    if timeline.isEmpty {
+                                        ContentUnavailableView(
+                                            emptyStateTitle,
+                                            systemImage: emptyStateSystemImage,
+                                            description: Text(emptyStateDescription)
+                                        )
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.top, 56)
+                                    } else {
+                                        ForEach(timeline) { item in
+                                            switch item {
+                                            case let .message(message):
+                                                MessageBubble(
+                                                    message: message,
+                                                    rowWidth: timelineWidth,
+                                                    mathRenderingEnabled: viewModel.settings.mathRenderingEnabled,
+                                                    streamingSnapshot: viewModel.streamingSnapshot(for: message.id),
+                                                    isActivelyStreaming: viewModel.isMessageStreaming(message.id),
+                                                    canRegenerate: viewModel.canRegenerateLastAssistant && message.id == viewModel.fullMessages.last?.id,
+                                                    fusionDebugModeEnabled: viewModel.settings.fusionDebugModeEnabled,
+                                                    fusionTrace: viewModel.fusionTrace(for: message.message),
+                                                    onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
+                                                    onNextVariant: { viewModel.showNextVariant(messageId: message.id) },
+                                                    onCopy: {
+                                                        UIPasteboard.general.string = message.displayText
+                                                    },
+                                                    onBranch: {
+                                                        guard let newConversationId = viewModel.branchConversation(from: message.id) else { return }
+                                                        onNavigateToConversation?(newConversationId)
+                                                    },
+                                                    onRegenerate: {
+                                                        viewModel.regenerateLastAssistantVariant()
+                                                    }
+                                                )
+                                                .equatable()
+                                                .id(item.id)
+                                            case let .dual(message):
+                                                DualMessageCard(
+                                                    message: message,
+                                                    rowWidth: timelineWidth,
+                                                    settings: viewModel.settings,
+                                                    mathRenderingEnabled: viewModel.settings.mathRenderingEnabled
+                                                )
+                                                .equatable()
+                                                .id(item.id)
+                                            }
                                         }
                                     }
                                 }
+
+                                Spacer(minLength: 0)
 
                                 Color.clear
                                     .frame(height: 1)
@@ -209,9 +213,6 @@ struct ChatScreen: View {
                         }
                         .onChange(of: timeline.count) { _, _ in
                             scrollToBottomIfNeeded(proxy: proxy)
-                        }
-                        .onChange(of: viewModel.streamingSnapshots) { _, _ in
-                            scrollToBottomIfNeeded(proxy: proxy, animated: false)
                         }
                         .onChange(of: isComposerFocused) { _, focused in
                             guard !focused else { return }
@@ -799,9 +800,23 @@ struct ChatScreen: View {
         }
     }
 
-    private func handleBottomAnchorChange(maxY: CGFloat, viewportHeight: CGFloat, proxy _: ScrollViewProxy) {
+    private func handleBottomAnchorChange(maxY: CGFloat, viewportHeight: CGFloat, proxy: ScrollViewProxy) {
+        let previousMaxY = bottomAnchorMaxY
+        let wasNearBottom = isUserNearBottom
         bottomAnchorMaxY = maxY
         updateIsUserNearBottom(bottomAnchorMaxY: maxY, viewportHeight: viewportHeight)
+
+        guard ChatScrollPolicy.shouldFollowStreamingLayoutGrowth(
+            wasNearBottom: wasNearBottom,
+            isUserInteracting: isUserDraggingScroll,
+            isStreaming: viewModel.isSending,
+            previousBottomMaxY: previousMaxY,
+            currentBottomMaxY: maxY
+        ) else { return }
+
+        DispatchQueue.main.async {
+            scrollToBottom(proxy: proxy, animated: false)
+        }
     }
 
     private func updateIsUserNearBottom(bottomAnchorMaxY: CGFloat, viewportHeight: CGFloat) {
