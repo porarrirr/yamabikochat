@@ -9,6 +9,7 @@ struct FusionMessageSummary: View {
             let steps = trace.panelResults.compactMap(\.toolActivity).flatMap(\.steps)
             if !steps.isEmpty {
                 ToolActivityDisclosure(steps: steps)
+                    .equatable()
             }
             Button(action: onShowDetails) {
             HStack(spacing: 8) {

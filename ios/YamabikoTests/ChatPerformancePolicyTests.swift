@@ -42,6 +42,18 @@ final class ChatPerformancePolicyTests: XCTestCase {
         ))
     }
 
+    func testToolActivityPreviewClipsBeforeSwiftUITextLayout() {
+        let oversized = String(repeating: "あ", count: ToolActivityPreviewPolicy.maximumDisplayedCharacters + 50)
+        let clipped = ToolActivityPreviewPolicy.displayText(oversized)
+
+        XCTAssertEqual(
+            clipped.dropLast(2).count,
+            ToolActivityPreviewPolicy.maximumDisplayedCharacters
+        )
+        XCTAssertTrue(clipped.hasSuffix("\n…"))
+        XCTAssertEqual(ToolActivityPreviewPolicy.displayText("short"), "short")
+    }
+
     func testMarkdownInputSignatureDistinguishesFinalStreamingTransition() {
         let streaming = MathMarkdownInputSignature(
             markdownText: "same",

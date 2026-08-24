@@ -104,6 +104,7 @@ struct FusionDetailSheet: View {
                 DisclosureGroup {
                     if let steps = panel.toolActivity?.steps, !steps.isEmpty {
                         ToolActivityDisclosure(steps: steps)
+                            .equatable()
                     }
                     if let error = panel.error {
                         Text(error)

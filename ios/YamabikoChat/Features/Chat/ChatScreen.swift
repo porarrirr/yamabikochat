@@ -179,6 +179,9 @@ struct ChatScreen: View {
                             .padding(.vertical, chatTimelineVerticalPadding)
                         }
                         .coordinateSpace(name: scrollCoordinateSpace)
+                        .environment(\.toolActivityWillToggle) {
+                            isAutoFollowingTimeline = false
+                        }
                         .background(Color.chatScreenBackground)
                         .overlay(alignment: .bottomTrailing) {
                             if !isUserNearBottom {
@@ -1411,16 +1414,10 @@ private struct MessageBubble: View, Equatable {
         return message.displayToolActivity?.steps ?? []
     }
 
-    private var toolSources: [ToolSource] {
-        var seen: Set<String> = []
-        return toolActivitySteps
-            .flatMap(\.sources)
-            .filter { seen.insert($0.url).inserted }
-    }
-
     var body: some View {
         let userContentWidth = min(300, rowWidth)
         let userLeadingWidth = max(rowWidth - userContentWidth, 0)
+        let activitySteps = toolActivitySteps
 
         HStack(alignment: .top, spacing: 0) {
             if isUser {
@@ -1448,8 +1445,9 @@ private struct MessageBubble: View, Equatable {
                             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     }
                 } else {
-                    if !toolActivitySteps.isEmpty {
-                        ToolActivityDisclosure(steps: toolActivitySteps)
+                    if !activitySteps.isEmpty {
+                        ToolActivityDisclosure(steps: activitySteps)
+                            .equatable()
                     }
 
                     if thinkingText != nil {
@@ -1863,6 +1861,7 @@ private struct DualResponsePane: View {
 
             if !toolSteps.isEmpty {
                 ToolActivityDisclosure(steps: toolSteps)
+                    .equatable()
             }
 
             if !attachments.isEmpty {

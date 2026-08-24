@@ -1,6 +1,17 @@
 import SwiftUI
 import UIKit
 
+private struct ToolActivityWillToggleKey: EnvironmentKey {
+    static let defaultValue: () -> Void = {}
+}
+
+extension EnvironmentValues {
+    var toolActivityWillToggle: () -> Void {
+        get { self[ToolActivityWillToggleKey.self] }
+        set { self[ToolActivityWillToggleKey.self] = newValue }
+    }
+}
+
 /// TextKit-backed thinking panel. Updating a long `Text` causes SwiftUI to
 /// reshape the complete string for every stream delta; UITextView can update
 /// in place and preserves the reader's scroll position.
@@ -85,7 +96,7 @@ struct ThinkingSheet: View {
     }
 }
 
-struct ToolActivityDisclosure: View {
+struct ToolActivityDisclosure: View, Equatable {
     let steps: [ToolActivityStep]
 
     var body: some View {
@@ -94,9 +105,11 @@ struct ToolActivityDisclosure: View {
             let executionSteps = steps.filter { !$0.isWebActivity }
             if !webSteps.isEmpty {
                 ToolActivitySectionDisclosure(kind: .web, steps: webSteps)
+                    .equatable()
             }
             if !executionSteps.isEmpty {
                 ToolActivitySectionDisclosure(kind: .execution, steps: executionSteps)
+                    .equatable()
             }
         }
     }
@@ -128,10 +141,15 @@ private enum ToolActivitySectionKind: Equatable {
     }
 }
 
-private struct ToolActivitySectionDisclosure: View {
+private struct ToolActivitySectionDisclosure: View, Equatable {
     let kind: ToolActivitySectionKind
     let steps: [ToolActivityStep]
     @State private var isExpanded = false
+    @Environment(\.toolActivityWillToggle) private var toolActivityWillToggle
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.kind == rhs.kind && lhs.steps == rhs.steps
+    }
 
     private var isRunning: Bool { steps.contains { $0.status == .running } }
     private var hasFailure: Bool { steps.contains { $0.status == .failed } }
@@ -140,9 +158,8 @@ private struct ToolActivitySectionDisclosure: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    isExpanded.toggle()
-                }
+                toolActivityWillToggle()
+                isExpanded.toggle()
             } label: {
             HStack(spacing: 10) {
                 ZStack {
@@ -181,17 +198,18 @@ private struct ToolActivitySectionDisclosure: View {
             .contentShape(Rectangle())
 
             if isExpanded {
-                LazyVStack(alignment: .leading, spacing: 8) {
+                let sources = kind == .web ? deduplicatedSources : []
+                VStack(alignment: .leading, spacing: 8) {
                     ForEach(steps) { step in
                         ToolActivityStepCard(kind: kind, step: step)
+                            .equatable()
                     }
-                    if kind == .web, !deduplicatedSources.isEmpty {
-                        ToolSourcesView(sources: deduplicatedSources)
+                    if !sources.isEmpty {
+                        ToolSourcesView(sources: sources)
                             .padding(.horizontal, 4)
                     }
                 }
                 .padding(.top, 8)
-                .transition(.opacity)
             }
         }
         .padding(.vertical, 3)
@@ -201,7 +219,7 @@ private struct ToolActivitySectionDisclosure: View {
 
     private var summary: String {
         if let currentStep {
-            return "\(L10n.text("実行中"))：\(currentStep.title)"
+            return "\(L10n.text("実行中"))：\(ToolActivityPreviewPolicy.displayText(currentStep.title))"
         }
         return L10n.format("%dステップ", steps.count)
     }
@@ -212,7 +230,7 @@ private struct ToolActivitySectionDisclosure: View {
     }
 }
 
-private struct ToolActivityStepCard: View {
+private struct ToolActivityStepCard: View, Equatable {
     let kind: ToolActivitySectionKind
     let step: ToolActivityStep
 
@@ -221,7 +239,7 @@ private struct ToolActivityStepCard: View {
             HStack(alignment: .center, spacing: 7) {
                 statusIcon
                     .frame(width: 17, height: 17)
-                Text(step.title)
+                Text(ToolActivityPreviewPolicy.displayText(step.title))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
                 Spacer(minLength: 4)
@@ -236,14 +254,14 @@ private struct ToolActivityStepCard: View {
             if kind == .execution {
                 ToolActivityValueBlock(
                     title: step.toolName == PythonExecuteTool.name ? L10n.text("コード") : L10n.text("入力"),
-                    value: step.detail,
+                    value: ToolActivityPreviewPolicy.displayText(step.detail),
                     icon: step.toolName == PythonExecuteTool.name ? "chevron.left.forwardslash.chevron.right" : "slider.horizontal.3",
                     monospaced: true
                 )
                 if let result = step.resultPreview?.trimmedNonEmpty {
                     ToolActivityValueBlock(
                         title: L10n.text("結果"),
-                        value: result,
+                        value: ToolActivityPreviewPolicy.displayText(result),
                         icon: "return",
                         monospaced: true
                     )
@@ -251,26 +269,32 @@ private struct ToolActivityStepCard: View {
                 if let output = step.outputPreview?.trimmedNonEmpty {
                     ToolActivityValueBlock(
                         title: L10n.text("出力"),
-                        value: output,
+                        value: ToolActivityPreviewPolicy.displayText(output),
                         icon: "text.alignleft",
                         monospaced: true
                     )
                 }
                 if let names = step.artifactNames, !names.isEmpty {
+                    let displayedNames = names.prefix(ToolActivityPreviewPolicy.maximumDisplayedArtifacts)
                     VStack(alignment: .leading, spacing: 5) {
                         Label(L10n.text("生成ファイル"), systemImage: "doc.badge.plus")
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(.secondary)
-                        ForEach(Array(names.enumerated()), id: \.offset) { _, name in
-                            Label(name, systemImage: "doc")
+                        ForEach(Array(displayedNames.enumerated()), id: \.offset) { _, name in
+                            Label(ToolActivityPreviewPolicy.displayText(name), systemImage: "doc")
                                 .font(.caption2)
                                 .lineLimit(1)
                                 .foregroundStyle(.primary)
                         }
+                        if names.count > displayedNames.count {
+                            Text(L10n.format("ほか%d件", names.count - displayedNames.count))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             } else {
-                Text(step.detail)
+                Text(ToolActivityPreviewPolicy.displayText(step.detail))
                     .font(.caption)
                     .foregroundStyle(.primary)
                     .lineLimit(4)
@@ -284,7 +308,7 @@ private struct ToolActivityStepCard: View {
 
             if let error = step.errorMessage?.trimmedNonEmpty {
                 Label {
-                    Text(error)
+                    Text(ToolActivityPreviewPolicy.displayText(error))
                         .textSelection(.enabled)
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -341,6 +365,21 @@ private struct ToolActivityStepCard: View {
     }
 }
 
+enum ToolActivityPreviewPolicy {
+    static let maximumDisplayedCharacters = 2_000
+    static let maximumDisplayedSources = 40
+    static let maximumDisplayedArtifacts = 20
+
+    static func displayText(_ value: String) -> String {
+        guard let end = value.index(
+            value.startIndex,
+            offsetBy: maximumDisplayedCharacters,
+            limitedBy: value.endIndex
+        ), end != value.endIndex else { return value }
+        return String(value[..<end]) + "\n…"
+    }
+}
+
 private struct ToolActivityValueBlock: View {
     let title: String
     let value: String
@@ -367,19 +406,23 @@ private struct ToolActivityValueBlock: View {
 struct ToolSourcesView: View {
     let sources: [ToolSource]
 
+    private var displayedSources: ArraySlice<ToolSource> {
+        sources.prefix(ToolActivityPreviewPolicy.maximumDisplayedSources)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             Text(L10n.text("出典"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
+            ForEach(Array(displayedSources.enumerated()), id: \.element.id) { index, source in
                 if let url = URL(string: source.url) {
                     Link(destination: url) {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text("[\(index + 1)]")
                                 .monospacedDigit()
-                            Text(source.title.trimmedNonEmpty ?? source.url)
+                            Text(ToolActivityPreviewPolicy.displayText(source.title.trimmedNonEmpty ?? source.url))
                                 .lineLimit(2)
                             Image(systemName: "arrow.up.right.square")
                                 .font(.caption2)
@@ -387,6 +430,13 @@ struct ToolSourcesView: View {
                         .font(.caption)
                     }
                 }
+            }
+
+            let hiddenSourceCount = sources.count - displayedSources.count
+            if hiddenSourceCount > 0 {
+                Text(L10n.format("ほか%d件", hiddenSourceCount))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.top, 4)

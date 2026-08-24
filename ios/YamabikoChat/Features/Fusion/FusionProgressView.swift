@@ -33,6 +33,7 @@ struct FusionProgressView: View {
                 .compactMap(\.toolActivity)
                 .last(where: { !$0.steps.isEmpty }) {
                 ToolActivityDisclosure(steps: activity.steps)
+                    .equatable()
             }
         }
         .padding(.horizontal, 10)
