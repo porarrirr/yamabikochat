@@ -93,7 +93,8 @@ final class ProviderRequestSettingsResolver {
         provider: String,
         model: String,
         context: AppSettings.ReasoningContext = .default,
-        toolScope: ProviderRequestToolScope = .all
+        toolScope: ProviderRequestToolScope = .all,
+        enablesUserQuestions: Bool = false
     ) async throws -> ProviderRequestResolvedSettings {
         var metadata = metadataForProvider(
             settings: settings,
@@ -112,7 +113,8 @@ final class ProviderRequestSettingsResolver {
                 provider: provider,
                 model: model,
                 context: context,
-                toolScope: toolScope
+                toolScope: toolScope,
+                enablesUserQuestions: enablesUserQuestions
             ),
             thinking: try thinkingConfigForProvider(
                 settings: settings,
@@ -134,7 +136,8 @@ final class ProviderRequestSettingsResolver {
         provider: String,
         model: String,
         context: AppSettings.ReasoningContext,
-        toolScope: ProviderRequestToolScope
+        toolScope: ProviderRequestToolScope,
+        enablesUserQuestions: Bool
     ) -> [ProviderTool] {
         guard toolScope.allowsProviderTools else { return [] }
 
@@ -215,6 +218,12 @@ final class ProviderRequestSettingsResolver {
            context == .default || context == .dualA || context == .dualB,
            supportsClientWebSearch,
            let definition = localToolRegistry.definitions.first(where: { $0.name == StrReplaceEditorTool.name }) {
+            tools.append(definition.providerTool)
+        }
+        if toolScope == .all,
+           enablesUserQuestions,
+           supportsClientWebSearch,
+           let definition = localToolRegistry.definitions.first(where: { $0.name == AskUserQuestionTool.name }) {
             tools.append(definition.providerTool)
         }
         if toolScope.allowsAgentSkills, supportsClientWebSearch {

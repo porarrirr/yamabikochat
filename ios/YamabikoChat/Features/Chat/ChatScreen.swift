@@ -52,6 +52,7 @@ private let maximumPhotoSelectionCount = 10
 
 struct ChatScreen: View {
     @ObservedObject var viewModel: ChatViewModel
+    @ObservedObject var questionCoordinator: UserQuestionCoordinator
     var onNavigateToConversation: ((Int64) -> Void)? = nil
 
     @Environment(\.scenePhase) private var scenePhase
@@ -249,11 +250,19 @@ struct ChatScreen: View {
                     .padding(.top, 8)
                 }
 
-                composerBar
-                    .padding(.horizontal, 14)
-                    .padding(.top, 4)
-                    .padding(.bottom, 8)
-                    .background(Color.chatScreenBackground)
+                if questionCoordinator.pending != nil {
+                    AskUserQuestionCard(coordinator: questionCoordinator)
+                        .padding(.horizontal, 10)
+                        .padding(.top, 5)
+                        .padding(.bottom, 8)
+                        .background(Color.chatScreenBackground)
+                } else {
+                    composerBar
+                        .padding(.horizontal, 14)
+                        .padding(.top, 4)
+                        .padding(.bottom, 8)
+                        .background(Color.chatScreenBackground)
+                }
             }
             .frame(width: rootGeometry.size.width, height: rootGeometry.size.height)
             .background(Color.chatScreenBackground)

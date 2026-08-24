@@ -771,7 +771,8 @@ final class ChatRepository {
         let resolvedSettings = try await requestSettingsResolver.resolve(
             settings: settings,
             provider: conversation.apiProvider,
-            model: conversation.model
+            model: conversation.model,
+            enablesUserQuestions: true
         )
         var metadata = resolvedSettings.metadata
         if conversation.apiProvider.uppercased() == "CODEX_AUTH" {
@@ -798,7 +799,8 @@ final class ChatRepository {
             systemPrompt: SystemPromptComposer.composeForAPI(
                 conversation.systemPrompt,
                 enablesAgenticWebSearch: resolvedSettings.tools.containsWebSearchTool,
-                enablesEditorInstructions: resolvedSettings.tools.containsEditorTool
+                enablesEditorInstructions: resolvedSettings.tools.containsEditorTool,
+                enablesUserQuestionInstructions: resolvedSettings.tools.containsAskUserQuestionTool
             ),
             stream: settings.isStreamingEnabled,
             tools: resolvedSettings.tools,

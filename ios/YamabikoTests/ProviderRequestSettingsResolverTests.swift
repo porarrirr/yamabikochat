@@ -383,6 +383,40 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         XCTAssertEqual(functionNames.filter { $0 == AgentSkillTools.readResourceName }.count, 1)
     }
 
+    func testAskUserQuestionIsExposedOnlyForInteractiveConversationRequests() async throws {
+        let coordinator = UserQuestionCoordinator()
+        let resolver = ProviderRequestSettingsResolver(
+            modelService: OpenRouterModelService(credentialStore: ResolverCredentialStore()),
+            localToolRegistry: LocalToolRegistry(
+                executors: [AskUserQuestionTool(coordinator: coordinator)]
+            )
+        )
+        let settings = AppSettings()
+
+        let interactive = try await resolver.resolve(
+            settings: settings,
+            provider: "OPENAI",
+            model: "gpt-5.6",
+            enablesUserQuestions: true
+        )
+        let nonInteractive = try await resolver.resolve(
+            settings: settings,
+            provider: "OPENAI",
+            model: "gpt-5.6"
+        )
+        let providerOnly = try await resolver.resolve(
+            settings: settings,
+            provider: "OPENAI",
+            model: "gpt-5.6",
+            toolScope: .providerOnly,
+            enablesUserQuestions: true
+        )
+
+        XCTAssertTrue(interactive.tools.containsAskUserQuestionTool)
+        XCTAssertFalse(nonInteractive.tools.containsAskUserQuestionTool)
+        XCTAssertFalse(providerOnly.tools.containsAskUserQuestionTool)
+    }
+
     private func makeResolver() -> ProviderRequestSettingsResolver {
         ProviderRequestSettingsResolver(
             modelService: OpenRouterModelService(credentialStore: ResolverCredentialStore())

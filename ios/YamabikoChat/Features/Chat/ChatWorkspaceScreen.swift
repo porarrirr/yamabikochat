@@ -18,6 +18,7 @@ struct ChatWorkspaceScreen: View {
 
             ChatScreen(
                 viewModel: viewModel,
+                questionCoordinator: container.userQuestionCoordinator,
                 onNavigateToConversation: { newConversationId in
                     if let onSelectConversation {
                         onSelectConversation(newConversationId)

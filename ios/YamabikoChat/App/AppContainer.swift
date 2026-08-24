@@ -18,6 +18,7 @@ final class AppContainer: ObservableObject {
     let fusionService: FusionService
     let chatRepository: ChatRepository
     let sharePayloadStore: SharePayloadStore
+    let userQuestionCoordinator: UserQuestionCoordinator
 
     init(services: AppServices) {
         dbQueue = services.dbQueue
@@ -33,6 +34,7 @@ final class AppContainer: ObservableObject {
         fusionService = services.fusionService
         chatRepository = services.chatRepository
         sharePayloadStore = services.sharePayloadStore
+        userQuestionCoordinator = services.userQuestionCoordinator
 
         AppStoreScreenshotDemoSeeder.seedIfNeeded(
             chatRepository: chatRepository,

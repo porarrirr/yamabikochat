@@ -35,10 +35,15 @@ enum SystemPromptComposer {
     - Preserve unrelated content.
     """
 
+    static let userQuestionToolInstructions = """
+    Use ask_user_question only when you need the user's confirmation, a user-owned choice, or information that cannot be discovered from the available context or tools. Keep each question concise and give it a stable id. You may ask multiple questions in one call. Put a recommended option first and append "(Recommended)" to its label. Set multi_select to true only when more than one option may be selected. If the user cancels, do not invent an answer or claim that the question was answered.
+    """
+
     static func composeForAPI(
         _ systemPrompt: String?,
         enablesAgenticWebSearch: Bool = false,
         enablesEditorInstructions: Bool = false,
+        enablesUserQuestionInstructions: Bool = false,
         now: Date = Date()
     ) -> String? {
         let dateSuffix = dateLabel + formattedDate(now)
@@ -46,6 +51,7 @@ enum SystemPromptComposer {
             systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
             enablesAgenticWebSearch ? agenticWebSearchInstructions : nil,
             enablesEditorInstructions ? editorToolInstructions : nil,
+            enablesUserQuestionInstructions ? userQuestionToolInstructions : nil,
             dateSuffix
         ]
         .compactMap { $0 }

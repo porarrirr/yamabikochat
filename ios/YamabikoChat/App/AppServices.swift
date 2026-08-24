@@ -31,6 +31,7 @@ final class AppServices {
     let fusionService: FusionService
     let chatRepository: ChatRepository
     let sharePayloadStore: SharePayloadStore
+    let userQuestionCoordinator: UserQuestionCoordinator
 
     private init() throws {
         DiagnosticsLogger.initialize()
@@ -53,6 +54,8 @@ final class AppServices {
         Task { [openRouterModelService] in
             _ = await openRouterModelService.getAvailableModels()
         }
+        userQuestionCoordinator = UserQuestionCoordinator()
+        let askUserQuestionTool = AskUserQuestionTool(coordinator: userQuestionCoordinator)
         // The resolver receives only the client web tools. Agent Skill tools are
         // appended by the resolver itself; the Pi runtime registry below includes
         // their executors so `activate_skill` / `read_skill_resource` calls can be
@@ -60,13 +63,13 @@ final class AppServices {
         let pythonTool = PythonExecuteTool(attachments: attachmentRepository)
         let editorTool = StrReplaceEditorTool(attachments: attachmentRepository)
         let clientWebTools = LocalToolRegistry(
-            executors: [WebSearchTool(), FetchUrlTool(), pythonTool, editorTool]
+            executors: [WebSearchTool(), FetchUrlTool(), pythonTool, editorTool, askUserQuestionTool]
         )
         // Recreate per request: WebSearch/FetchUrl are stateless, pythonTool is reused
         // (tied to attachmentRepository), and AgentSkill executors snapshot latest enabledSkills.
-        let makeLocalTools: @Sendable () -> LocalToolRegistry = { [repository, pythonTool, editorTool] in
+        let makeLocalTools: @Sendable () -> LocalToolRegistry = { [repository, pythonTool, editorTool, askUserQuestionTool] in
             LocalToolRegistry(
-                executors: [WebSearchTool(), FetchUrlTool(), pythonTool, editorTool] + AgentSkillTools.executors(repository: repository)
+                executors: [WebSearchTool(), FetchUrlTool(), pythonTool, editorTool, askUserQuestionTool] + AgentSkillTools.executors(repository: repository)
             )
         }
         let localTools = makeLocalTools()

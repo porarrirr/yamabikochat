@@ -154,6 +154,12 @@ extension Collection where Element == ProviderTool {
             $0.type == "function" && $0.payload["name"] == StrReplaceEditorTool.name
         }
     }
+
+    var containsAskUserQuestionTool: Bool {
+        contains {
+            $0.type == "function" && $0.payload["name"] == AskUserQuestionTool.name
+        }
+    }
 }
 
 struct ToolSource: Codable, Sendable, Equatable, Identifiable {

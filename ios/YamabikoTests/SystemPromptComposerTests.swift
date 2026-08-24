@@ -113,4 +113,18 @@ final class SystemPromptComposerTests: XCTestCase {
         XCTAssertFalse(composed?.contains("str_replace_editor") == true)
         XCTAssertEqual(composed, "Be helpful.\n\nToday's date: 2026/06/27")
     }
+
+    func testComposeForAPI_appendsUserQuestionInstructionsWhenEnabled() {
+        let composed = SystemPromptComposer.composeForAPI(
+            "Be helpful.",
+            enablesUserQuestionInstructions: true,
+            now: makeDate(year: 2026, month: 6, day: 27)
+        )
+
+        XCTAssertTrue(composed?.contains("Use ask_user_question only when") == true)
+        XCTAssertTrue(composed?.contains("stable id") == true)
+        XCTAssertTrue(composed?.contains("(Recommended)") == true)
+        XCTAssertTrue(composed?.contains("If the user cancels") == true)
+        XCTAssertTrue(composed?.hasSuffix("Today's date: 2026/06/27") == true)
+    }
 }
