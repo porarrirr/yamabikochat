@@ -46,6 +46,14 @@ private struct ChatBottomAnchorMaxYPreferenceKey: PreferenceKey {
     }
 }
 
+private struct ChatTimelineHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 private let chatTimelineHorizontalPadding: CGFloat = 20
 private let chatTimelineVerticalPadding: CGFloat = 24
 private let maximumPhotoSelectionCount = 10
@@ -62,9 +70,9 @@ struct ChatScreen: View {
     @State private var showCameraPicker = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var isUserNearBottom = true
-    @State private var bottomAnchorMaxY: CGFloat = .infinity
     @State private var isUserDraggingScroll = false
-    @State private var isFinalizingStreamLayout = false
+    @State private var isAutoFollowingTimeline = true
+    @State private var timelineLayoutHeight: CGFloat = 0
     @State private var scrollInteractionToken = 0
     @State private var addingRecentPhotoIDs: Set<String> = []
     @State private var recentPhotoSelection = RecentPhotoSelection(limit: maximumPhotoSelectionCount)
@@ -91,59 +99,55 @@ struct ChatScreen: View {
                         let timelineMinHeight = max(scrollGeometry.size.height - chatTimelineVerticalPadding * 2, 0)
 
                         ScrollView {
-                            VStack(alignment: .leading, spacing: 0) {
-                                LazyVStack(alignment: .leading, spacing: 24) {
-                                    if timeline.isEmpty {
-                                        ContentUnavailableView(
-                                            emptyStateTitle,
-                                            systemImage: emptyStateSystemImage,
-                                            description: Text(emptyStateDescription)
-                                        )
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.top, 56)
-                                    } else {
-                                        ForEach(timeline) { item in
-                                            switch item {
-                                            case let .message(message):
-                                                MessageBubble(
-                                                    message: message,
-                                                    rowWidth: timelineWidth,
-                                                    mathRenderingEnabled: viewModel.settings.mathRenderingEnabled,
-                                                    streamingSnapshot: viewModel.streamingSnapshot(for: message.id),
-                                                    isActivelyStreaming: viewModel.isMessageStreaming(message.id),
-                                                    canRegenerate: viewModel.canRegenerateLastAssistant && message.id == viewModel.fullMessages.last?.id,
-                                                    fusionDebugModeEnabled: viewModel.settings.fusionDebugModeEnabled,
-                                                    fusionTrace: viewModel.fusionTrace(for: message.message),
-                                                    onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
-                                                    onNextVariant: { viewModel.showNextVariant(messageId: message.id) },
-                                                    onCopy: {
-                                                        UIPasteboard.general.string = message.displayText
-                                                    },
-                                                    onBranch: {
-                                                        guard let newConversationId = viewModel.branchConversation(from: message.id) else { return }
-                                                        onNavigateToConversation?(newConversationId)
-                                                    },
-                                                    onRegenerate: {
-                                                        viewModel.regenerateLastAssistantVariant()
-                                                    }
-                                                )
-                                                .equatable()
-                                                .id(item.id)
-                                            case let .dual(message):
-                                                DualMessageCard(
-                                                    message: message,
-                                                    rowWidth: timelineWidth,
-                                                    settings: viewModel.settings,
-                                                    mathRenderingEnabled: viewModel.settings.mathRenderingEnabled
-                                                )
-                                                .equatable()
-                                                .id(item.id)
-                                            }
+                            LazyVStack(alignment: .leading, spacing: 24) {
+                                if timeline.isEmpty {
+                                    ContentUnavailableView(
+                                        emptyStateTitle,
+                                        systemImage: emptyStateSystemImage,
+                                        description: Text(emptyStateDescription)
+                                    )
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.top, 56)
+                                } else {
+                                    ForEach(timeline) { item in
+                                        switch item {
+                                        case let .message(message):
+                                            MessageBubble(
+                                                message: message,
+                                                rowWidth: timelineWidth,
+                                                mathRenderingEnabled: viewModel.settings.mathRenderingEnabled,
+                                                streamingSnapshot: viewModel.streamingSnapshot(for: message.id),
+                                                isActivelyStreaming: viewModel.isMessageStreaming(message.id),
+                                                canRegenerate: viewModel.canRegenerateLastAssistant && message.id == viewModel.fullMessages.last?.id,
+                                                fusionDebugModeEnabled: viewModel.settings.fusionDebugModeEnabled,
+                                                fusionTrace: viewModel.fusionTrace(for: message.message),
+                                                onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
+                                                onNextVariant: { viewModel.showNextVariant(messageId: message.id) },
+                                                onCopy: {
+                                                    UIPasteboard.general.string = message.displayText
+                                                },
+                                                onBranch: {
+                                                    guard let newConversationId = viewModel.branchConversation(from: message.id) else { return }
+                                                    onNavigateToConversation?(newConversationId)
+                                                },
+                                                onRegenerate: {
+                                                    viewModel.regenerateLastAssistantVariant()
+                                                }
+                                            )
+                                            .equatable()
+                                            .id(item.id)
+                                        case let .dual(message):
+                                            DualMessageCard(
+                                                message: message,
+                                                rowWidth: timelineWidth,
+                                                settings: viewModel.settings,
+                                                mathRenderingEnabled: viewModel.settings.mathRenderingEnabled
+                                            )
+                                            .equatable()
+                                            .id(item.id)
                                         }
                                     }
                                 }
-
-                                Spacer(minLength: 0)
 
                                 Color.clear
                                     .frame(height: 1)
@@ -162,6 +166,14 @@ struct ChatScreen: View {
                                 minHeight: timeline.isEmpty ? nil : timelineMinHeight,
                                 alignment: .topLeading
                             )
+                            .background {
+                                GeometryReader { timelineGeometry in
+                                    Color.clear.preference(
+                                        key: ChatTimelineHeightPreferenceKey.self,
+                                        value: timelineGeometry.size.height
+                                    )
+                                }
+                            }
                             .scrollTargetLayout()
                             .padding(.horizontal, chatTimelineHorizontalPadding)
                             .padding(.vertical, chatTimelineVerticalPadding)
@@ -171,7 +183,7 @@ struct ChatScreen: View {
                         .overlay(alignment: .bottomTrailing) {
                             if !isUserNearBottom {
                                 Button {
-                                    scrollToBottom(proxy: proxy, animated: true)
+                                    resumeAutoFollowing(proxy: proxy, animated: true)
                                 } label: {
                                     Image(systemName: "arrow.down")
                                         .font(.system(size: 15, weight: .semibold))
@@ -202,30 +214,31 @@ struct ChatScreen: View {
                                 }
                         )
                         .onPreferenceChange(ChatBottomAnchorMaxYPreferenceKey.self) { maxY in
-                            handleBottomAnchorChange(
-                                maxY: maxY,
-                                viewportHeight: scrollGeometry.size.height,
-                                proxy: proxy
-                            )
+                            updateIsUserNearBottom(bottomAnchorMaxY: maxY, viewportHeight: scrollGeometry.size.height)
+                        }
+                        .onPreferenceChange(ChatTimelineHeightPreferenceKey.self) { height in
+                            handleTimelineLayoutHeightChange(height, proxy: proxy)
                         }
                         .onAppear {
                             isUserNearBottom = true
+                            isAutoFollowingTimeline = true
                             scrollToBottom(proxy: proxy, animated: false)
                         }
                         .onChange(of: timeline.count) { _, _ in
-                            scrollToBottomIfNeeded(proxy: proxy)
+                            scrollToBottomIfFollowing(proxy: proxy)
                         }
                         .onChange(of: isComposerFocused) { _, focused in
-                            guard !focused else { return }
-                            scrollToBottomIfNeeded(proxy: proxy)
+                            if focused {
+                                resumeAutoFollowing(proxy: proxy, animated: false)
+                            } else {
+                                scrollToBottomIfFollowing(proxy: proxy)
+                            }
                         }
                         .onChange(of: viewModel.isSending) { oldValue, newValue in
                             if !oldValue, newValue {
-                                isFinalizingStreamLayout = false
-                                scrollToBottom(proxy: proxy, animated: true)
+                                resumeAutoFollowing(proxy: proxy, animated: false)
                             } else if oldValue, !newValue {
-                                isFinalizingStreamLayout = isUserNearBottom && !isUserDraggingScroll
-                                scrollToBottomIfNeeded(proxy: proxy, animated: false)
+                                scrollToBottomIfFollowing(proxy: proxy)
                             }
                         }
                     }
@@ -790,12 +803,12 @@ struct ChatScreen: View {
 
     private func dismissComposerChrome() {
         isComposerFocused = false
-        isFinalizingStreamLayout = false
+        isAutoFollowingTimeline = false
     }
 
     private func beginScrollInteraction() {
         isUserDraggingScroll = true
-        isFinalizingStreamLayout = false
+        isAutoFollowingTimeline = false
         scrollInteractionToken += 1
     }
 
@@ -805,28 +818,23 @@ struct ChatScreen: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             guard scrollInteractionToken == token else { return }
             isUserDraggingScroll = false
+            if isUserNearBottom {
+                isAutoFollowingTimeline = true
+            }
         }
     }
 
-    private func handleBottomAnchorChange(maxY: CGFloat, viewportHeight: CGFloat, proxy: ScrollViewProxy) {
-        let previousMaxY = bottomAnchorMaxY
-        let wasNearBottom = isUserNearBottom
-        bottomAnchorMaxY = maxY
-        updateIsUserNearBottom(bottomAnchorMaxY: maxY, viewportHeight: viewportHeight)
-
-        guard ChatScrollPolicy.shouldFollowStreamingLayoutChange(
-            wasNearBottom: wasNearBottom,
+    private func handleTimelineLayoutHeightChange(_ height: CGFloat, proxy: ScrollViewProxy) {
+        let previousHeight = timelineLayoutHeight
+        timelineLayoutHeight = height
+        guard ChatScrollPolicy.shouldFollowTimelineLayoutChange(
+            isAutoFollowing: isAutoFollowingTimeline,
             isUserInteracting: isUserDraggingScroll,
-            isStreaming: viewModel.isSending,
-            isFinalizingStreamLayout: isFinalizingStreamLayout,
-            previousBottomMaxY: previousMaxY,
-            currentBottomMaxY: maxY
+            previousHeight: previousHeight,
+            currentHeight: height
         ) else { return }
-
-        if !viewModel.isSending {
-            isFinalizingStreamLayout = false
-        }
         DispatchQueue.main.async {
+            guard isAutoFollowingTimeline, !isUserDraggingScroll else { return }
             scrollToBottom(proxy: proxy, animated: false)
         }
     }
@@ -835,12 +843,20 @@ struct ChatScreen: View {
         isUserNearBottom = timeline.isEmpty || bottomAnchorMaxY <= viewportHeight + bottomProximityThreshold
     }
 
-    private func scrollToBottomIfNeeded(proxy: ScrollViewProxy, animated: Bool = true) {
-        guard ChatScrollPolicy.shouldFollowContentGrowth(
-            isNearBottom: isUserNearBottom,
-            isUserInteracting: isUserDraggingScroll
-        ) else { return }
+    private func scrollToBottomIfFollowing(proxy: ScrollViewProxy) {
+        guard isAutoFollowingTimeline, !isUserDraggingScroll else { return }
         DispatchQueue.main.async {
+            guard isAutoFollowingTimeline, !isUserDraggingScroll else { return }
+            scrollToBottom(proxy: proxy, animated: false)
+        }
+    }
+
+    private func resumeAutoFollowing(proxy: ScrollViewProxy, animated: Bool) {
+        // Run after the current gesture finishes. The bottom button lives
+        // inside the scroll view's simultaneous tap gesture, which otherwise
+        // could cancel the follow state again in the same event cycle.
+        DispatchQueue.main.async {
+            isAutoFollowingTimeline = true
             scrollToBottom(proxy: proxy, animated: animated)
         }
     }
@@ -855,7 +871,12 @@ struct ChatScreen: View {
                 scrollAction()
             }
         } else {
-            scrollAction()
+            var transaction = Transaction()
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                scrollAction()
+            }
         }
     }
 }

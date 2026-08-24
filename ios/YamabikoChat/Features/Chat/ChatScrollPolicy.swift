@@ -4,37 +4,22 @@ import Foundation
 /// the user's scroll position. Content producers explicitly ask this policy
 /// whether the timeline should remain pinned to the bottom.
 enum ChatScrollPolicy {
-    static func shouldFollowContentGrowth(
-        isNearBottom: Bool,
-        isUserInteracting: Bool
-    ) -> Bool {
-        isNearBottom && !isUserInteracting
-    }
-
-    /// Streaming text changes its rendered height asynchronously. Follow the
-    /// measured layout change instead of the earlier token notification so the
-    /// scroll target always reflects the web view's current size.
-    static func shouldFollowStreamingLayoutChange(
-        wasNearBottom: Bool,
+    /// Timeline height is independent of the current scroll offset. This must
+    /// not use the bottom anchor's viewport coordinate: scrolling changes that
+    /// coordinate and would feed the resulting preference update back into
+    /// another programmatic scroll.
+    static func shouldFollowTimelineLayoutChange(
+        isAutoFollowing: Bool,
         isUserInteracting: Bool,
-        isStreaming: Bool,
-        isFinalizingStreamLayout: Bool,
-        previousBottomMaxY: CGFloat,
-        currentBottomMaxY: CGFloat
+        previousHeight: CGFloat,
+        currentHeight: CGFloat
     ) -> Bool {
-        guard wasNearBottom,
+        guard isAutoFollowing,
               !isUserInteracting,
-              previousBottomMaxY.isFinite
+              previousHeight > 0,
+              previousHeight.isFinite,
+              currentHeight.isFinite
         else { return false }
-
-        let delta = currentBottomMaxY - previousBottomMaxY
-        if isStreaming {
-            return delta > 1
-        }
-
-        // Final Markdown typesetting and the stats row are committed after
-        // `isSending` becomes false. Their height can grow or shrink, so keep
-        // the formerly pinned viewport attached through that final change.
-        return isFinalizingStreamLayout && abs(delta) > 1
+        return abs(currentHeight - previousHeight) > 1
     }
 }
