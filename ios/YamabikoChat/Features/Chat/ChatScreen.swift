@@ -1416,7 +1416,11 @@ private struct MessageBubble: View, Equatable {
 
                     let isChatError = UserFacingErrorFormatter.looksLikeChatError(responseText)
                     let svgBlocks = isChatError ? [] : SvgCodeExtractor.extract(from: responseText)
-                    let htmlBlocks = isChatError ? [] : HtmlCodeExtractor.extract(from: responseText)
+                    let htmlBlocks = HtmlPreviewPolicy.blocks(
+                        from: responseText,
+                        isChatError: isChatError,
+                        isActivelyStreaming: isActivelyStreaming
+                    )
                     let mediaBlocks = (
                         svgBlocks.map(ExtractedMediaBlock.svg) +
                         htmlBlocks.map(ExtractedMediaBlock.html)

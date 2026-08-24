@@ -2,6 +2,30 @@ import XCTest
 @testable import YamabikoChat
 
 final class HtmlCodeExtractorTests: XCTestCase {
+    func testPreviewPolicyDoesNotExtractHtmlWhileStreaming() {
+        let text = """
+        ```html
+        <!doctype html><html><body>preview</body></html>
+        ```
+        """
+
+        XCTAssertTrue(
+            HtmlPreviewPolicy.blocks(
+                from: text,
+                isChatError: false,
+                isActivelyStreaming: true
+            ).isEmpty
+        )
+        XCTAssertEqual(
+            HtmlPreviewPolicy.blocks(
+                from: text,
+                isChatError: false,
+                isActivelyStreaming: false
+            ).count,
+            1
+        )
+    }
+
     func testExtractsFencedHtmlBlock() {
         let text = """
         Before

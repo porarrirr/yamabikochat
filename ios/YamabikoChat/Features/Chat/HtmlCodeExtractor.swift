@@ -234,3 +234,14 @@ enum HtmlCodeExtractor {
         return regex.stringByReplacingMatches(in: text, range: range, withTemplate: template)
     }
 }
+
+enum HtmlPreviewPolicy {
+    static func blocks(
+        from text: String,
+        isChatError: Bool,
+        isActivelyStreaming: Bool
+    ) -> [ExtractedHtmlBlock] {
+        guard !isChatError, !isActivelyStreaming else { return [] }
+        return HtmlCodeExtractor.extract(from: text)
+    }
+}
