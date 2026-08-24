@@ -54,15 +54,26 @@ private struct AskUserQuestionFlow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            headerControls
+            questionPanel
 
             if rendersEditableField {
-                ScrollView {
-                    questionContent
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        answerContent
+                    }
+                    .frame(minHeight: 96, maxHeight: 310)
+                    .scrollDismissesKeyboard(.interactively)
+                    .id(question.id)
+                    .onChange(of: customFieldFocused) { _, focused in
+                        guard focused else { return }
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo(Self.customAnswerID, anchor: .bottom)
+                        }
+                    }
                 }
-                .frame(maxHeight: 310)
             } else {
-                questionContent
+                answerContent
             }
 
             footer
@@ -77,33 +88,30 @@ private struct AskUserQuestionFlow: View {
         .accessibilityElement(children: .contain)
     }
 
-    private var questionContent: some View {
+    private var answerContent: some View {
         VStack(spacing: 4) {
             ForEach(Array(question.options.enumerated()), id: \.offset) { optionIndex, option in
                 optionRow(option, optionIndex: optionIndex)
             }
             customAnswerRow
+                .id(Self.customAnswerID)
         }
         .padding(.horizontal, 10)
         .padding(.top, 12)
         .padding(.bottom, 6)
     }
 
-    private var header: some View {
-        HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                if let header = question.header?.trimmingCharacters(in: .whitespacesAndNewlines), !header.isEmpty {
-                    Text(header)
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-                Text(question.question)
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
+    private var headerControls: some View {
+        HStack(spacing: 10) {
+            if let header = question.header?.trimmingCharacters(in: .whitespacesAndNewlines), !header.isEmpty {
+                Text(header)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 2) {
                 pagerButton("chevron.left", label: L10n.text("前の質問"), disabled: index == 0) {
@@ -130,7 +138,26 @@ private struct AskUserQuestionFlow: View {
         }
         .padding(.leading, 18)
         .padding(.trailing, 8)
-        .padding(.top, 16)
+        .padding(.top, 10)
+    }
+
+    private var questionPanel: some View {
+        ScrollView {
+            Text(question.question)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 8)
+        }
+        .frame(maxHeight: 108)
+        .scrollBounceBehavior(.basedOnSize)
+        .id(question.id)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
     }
 
     private func optionRow(_ option: AskUserQuestionOption, optionIndex: Int) -> some View {
@@ -230,6 +257,8 @@ private struct AskUserQuestionFlow: View {
         .background(!draft.custom.isEmpty || customFieldFocused ? Color(uiColor: .tertiarySystemFill) : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
+
+    private static let customAnswerID = "ask-user-question-custom-answer"
 
     private var footer: some View {
         VStack(spacing: 6) {
