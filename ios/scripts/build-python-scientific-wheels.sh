@@ -8,6 +8,8 @@ wheelhouse="$vendor_dir/PythonWheelhouse"
 build_environment="$vendor_dir/PythonWheelBuild"
 source_lock="$ios_dir/python-scientific-sources.env"
 generated_lock="$wheelhouse/source-built.sha256"
+generated_sdk_lock="$wheelhouse/source-built.sdk"
+active_sdk_version="$(xcrun --sdk iphoneos --show-sdk-version)"
 
 if [[ ! -d "$framework" ]]; then
   echo "Missing $framework; run ios/scripts/bootstrap-python.sh --runtime-only first." >&2
@@ -51,6 +53,8 @@ done
 
 generated_wheels_are_valid() {
   [[ -f "$generated_lock" ]] || return 1
+  [[ -f "$generated_sdk_lock" ]] || return 1
+  [[ "$(<"$generated_sdk_lock")" == "$active_sdk_version" ]] || return 1
   for filename in "${expected_wheels[@]}"; do
     local wheel="$wheelhouse/$filename"
     local expected_sha256
@@ -62,9 +66,17 @@ generated_wheels_are_valid() {
 }
 
 if generated_wheels_are_valid; then
-  echo "Verified cached CPython 3.14 iOS scientific wheels"
+  echo "Verified cached CPython 3.14 iOS scientific wheels built with SDK $active_sdk_version"
   exit 0
 fi
+
+# Generated native wheels are toolchain artifacts. Rebuild the exact expected
+# set whenever the active iOS SDK changes instead of mixing cached Mach-O files
+# from a different Xcode installation into the app bundle.
+for filename in "${expected_wheels[@]}"; do
+  rm -f "$wheelhouse/$filename"
+done
+rm -f "$generated_lock" "$generated_sdk_lock"
 
 if [[ ! -x "$build_environment/bin/python" ]]; then
   "$host_python" -m venv "$build_environment"
@@ -191,4 +203,6 @@ for filename in "${expected_wheels[@]}"; do
   printf '%s %s\n' "$(shasum -a 256 "$wheel" | awk '{print $1}')" "$filename" >> "$generated_lock"
 done
 
-echo "Built and locked CPython 3.14 iOS NumPy and Matplotlib wheel set"
+printf '%s\n' "$active_sdk_version" > "$generated_sdk_lock"
+
+echo "Built and locked CPython 3.14 iOS NumPy and Matplotlib wheel set with SDK $active_sdk_version"

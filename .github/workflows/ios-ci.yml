@@ -25,8 +25,11 @@ permissions:
 
 jobs:
   build_test:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
+    env:
+      XCODE_VERSION: "26.5"
+      APP_STORE_MAX_SDK_VERSION: "26.5"
 
     steps:
       - name: Checkout
@@ -35,7 +38,7 @@ jobs:
       - name: Set up Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: ${{ env.XCODE_VERSION }}
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -51,7 +54,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ios/Vendor/PythonWheelhouse
-          key: ios-python-wheels-${{ runner.os }}-${{ hashFiles('ios/python-scientific-sources.env', 'ios/python-wheels.sha256', 'ios/scripts/build-python-scientific-wheels.sh', 'ios/scripts/run-ios-cibuildwheel.py') }}
+          key: ios-python-wheels-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('ios/python-scientific-sources.env', 'ios/python-wheels.sha256', 'ios/scripts/build-python-scientific-wheels.sh', 'ios/scripts/run-ios-cibuildwheel.py') }}
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -68,6 +71,7 @@ jobs:
           (cd ios/PiRuntime && npm test)
           python3 -m unittest ios/PythonTests/test_yamabiko_runtime.py
           ios/scripts/test-align-python-framework-minimum-os.sh
+          ios/scripts/test-validate-app-sdk-versions.sh
 
       - name: Build
         run: |
@@ -113,6 +117,7 @@ jobs:
           IPA_PATH="$RUNNER_TEMP/YamabikoChat-unsigned.ipa"
 
           test -d "$APP_PATH"
+          scripts/validate-app-sdk-versions.sh "$APP_PATH" "$APP_STORE_MAX_SDK_VERSION"
           mkdir -p "$IPA_DIR/Payload"
           cp -R "$APP_PATH" "$IPA_DIR/Payload/"
           cd "$IPA_DIR"
