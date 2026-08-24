@@ -172,6 +172,118 @@ plt.savefig("matplotlib.png")
         XCTAssertFalse(FileManager.default.fileExists(atPath: reset.root.path))
     }
 
+    func testAttachmentStagingUsesContentIdentityForDuplicateBasenames() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("python-attachment-identity-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let firstDirectory = root.appendingPathComponent("first", isDirectory: true)
+        let secondDirectory = root.appendingPathComponent("second", isDirectory: true)
+        try FileManager.default.createDirectory(at: firstDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: secondDirectory, withIntermediateDirectories: true)
+        let first = firstDirectory.appendingPathComponent("data.csv")
+        let second = secondDirectory.appendingPathComponent("data.csv")
+        try Data("first".utf8).write(to: first)
+        try Data("second".utf8).write(to: second)
+
+        let store = PythonSessionStore(rootOverride: root.appendingPathComponent("sessions"))
+        let paths = try store.prepare(sessionID: "identity", reset: true)
+        let staged = try store.stageAttachments([first.path, second.path], in: paths)
+
+        XCTAssertEqual(staged.count, 2)
+        XCTAssertNotEqual(staged[0], staged[1])
+        XCTAssertTrue(staged.allSatisfy { $0.hasPrefix("attachments/") && $0.hasSuffix("/data.csv") })
+        XCTAssertEqual(try String(contentsOf: paths.workspace.appendingPathComponent(staged[0])), "first")
+        XCTAssertEqual(try String(contentsOf: paths.workspace.appendingPathComponent(staged[1])), "second")
+        let manifestData = try Data(contentsOf: paths.workspace.appendingPathComponent("attachments/manifest.json"))
+        let manifest = try XCTUnwrap(JSONSerialization.jsonObject(with: manifestData) as? [[String: String]])
+        XCTAssertEqual(Set(manifest.compactMap { $0["path"] }), Set(staged))
+    }
+
+    func testAttachmentStagingRejectsMissingSource() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("python-missing-attachment-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PythonSessionStore(rootOverride: root)
+        let paths = try store.prepare(sessionID: "missing", reset: true)
+
+        XCTAssertThrowsError(try store.stageAttachments([root.appendingPathComponent("gone.csv").path], in: paths))
+    }
+
+    func testWorkspaceUsageCountsFilesBytesAndDepth() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("python-workspace-usage-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PythonSessionStore(rootOverride: root)
+        let paths = try store.prepare(sessionID: "usage", reset: true)
+        let nested = paths.workspace.appendingPathComponent("a/b", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 7).write(to: paths.workspace.appendingPathComponent("one.bin"))
+        try Data(repeating: 2, count: 11).write(to: nested.appendingPathComponent("two.bin"))
+
+        let usage = try store.workspaceUsage(in: paths)
+        XCTAssertEqual(usage.fileCount, 2)
+        XCTAssertEqual(usage.totalBytes, 18)
+        XCTAssertEqual(usage.largestFileBytes, 11)
+        XCTAssertEqual(usage.maximumDepth, 3)
+    }
+
+    func testWorkerRejectsAndCleansUpOversizedGeneratedFile() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("python-file-quota-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PythonSessionStore(rootOverride: root)
+        let worker = PythonWorker(
+            sessions: store,
+            timeoutSeconds: 10,
+            memoryLimitBytes: 4_000_000_000,
+            maximumWorkspaceFiles: 10,
+            maximumWorkspaceBytes: 100,
+            maximumFileBytes: 4,
+            maximumPathDepth: 4
+        )
+
+        let response = try await worker.execute(
+            sessionID: "quota",
+            code: "from pathlib import Path\nPath('large.bin').write_bytes(b'12345')",
+            reset: true,
+            attachmentPaths: []
+        )
+
+        XCTAssertEqual(response.status, "error")
+        XCTAssertEqual(response.error?.type, "ResourceLimitExceeded")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("quota").path))
+    }
+
+    func testWorkerCancellationInterruptsExecutionAndCleansSession() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("python-cancellation-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PythonSessionStore(rootOverride: root)
+        let worker = PythonWorker(
+            sessions: store,
+            timeoutSeconds: 10,
+            memoryLimitBytes: 4_000_000_000
+        )
+        let task = Task {
+            try await worker.execute(
+                sessionID: "cancelled",
+                code: "while True:\n    pass",
+                reset: true,
+                attachmentPaths: []
+            )
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            XCTFail("Expected Python execution cancellation")
+        } catch is CancellationError {
+            // Expected.
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("cancelled").path))
+    }
+
     func testLegacyToolResultDecodesWithoutArtifacts() throws {
         let json = #"{"callId":"1","name":"web_search","content":"{}","isError":false,"sources":[]}"#
         let result = try JSONDecoder().decode(ToolResult.self, from: Data(json.utf8))

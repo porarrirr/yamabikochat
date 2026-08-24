@@ -37,4 +37,15 @@ final class SharePayloadStorageTests: XCTestCase {
         XCTAssertEqual(payload?.text, "shared text")
         XCTAssertEqual(payload?.sourceApp, "Safari")
     }
+
+    func testMatchingRemovalDoesNotDeleteNewerPayload() throws {
+        let oldData = Data("old".utf8)
+        let newData = Data("new".utf8)
+        XCTAssertTrue(AppGroupShareStorage.writePayloadData(oldData))
+        XCTAssertEqual(AppGroupShareStorage.readPayloadData(), oldData)
+
+        XCTAssertTrue(AppGroupShareStorage.writePayloadData(newData))
+        XCTAssertFalse(AppGroupShareStorage.removePayloadData(matching: oldData))
+        XCTAssertEqual(AppGroupShareStorage.readPayloadData(), newData)
+    }
 }

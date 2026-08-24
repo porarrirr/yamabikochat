@@ -225,7 +225,10 @@
     });
 
     output = output.replace(/@@YBMATH(\d+)@@/g, function(_, index) {
-      return mathProtected.tokens[Number(index)] || "";
+      // MathJax reads TeX from text nodes. Returning the raw token here would
+      // re-enter the HTML parser when the caller assigns this string to
+      // innerHTML, allowing markup hidden inside math delimiters to execute.
+      return escapeHtml(mathProtected.tokens[Number(index)] || "");
     });
 
     return output;

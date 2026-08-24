@@ -14,7 +14,12 @@ fi
 
 package_destination="$CODESIGNING_FOLDER_PATH/PythonSitePackages"
 mkdir -p "$package_destination"
-rsync -au --delete "$PROJECT_DIR/Vendor/PythonSitePackages/$python_packages_slice/" "$package_destination/"
+# Wheel archives can contain static libraries intended only for compiling
+# downstream extension modules. They are not runtime resources and App Store
+# bundles reject standalone archives outside a framework.
+rsync -au --delete --exclude '*.a' \
+  "$PROJECT_DIR/Vendor/PythonSitePackages/$python_packages_slice/" \
+  "$package_destination/"
 
 font_source="$PROJECT_DIR/YamabikoChat/Python/Resources/Fonts"
 font_destination="$package_destination/matplotlib/mpl-data/fonts/ttf"
@@ -34,3 +39,64 @@ export EXPANDED_CODE_SIGN_IDENTITY_NAME="${EXPANDED_CODE_SIGN_IDENTITY_NAME:-Ad 
 
 source "$PROJECT_DIR/Vendor/Python.xcframework/build/utils.sh"
 install_python Vendor/Python.xcframework PythonSitePackages
+
+for forbidden_pattern in '*.a' '*.so' '*.dylib'; do
+  forbidden_binary="$(find "$package_destination" -type f -name "$forbidden_pattern" -print -quit)"
+  if [[ -n "$forbidden_binary" ]]; then
+    echo "Forbidden standalone Python binary remains in app bundle: $forbidden_binary" >&2
+    exit 1
+  fi
+done
+
+generate_framework_dsym() {
+  local framework="$1"
+  local framework_name
+  local executable_name
+  local binary
+  local dsym_path
+  local dsym_binary
+  local binary_uuid
+  local dsym_uuid
+
+  framework_name="$(basename "$framework")"
+  executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$framework/Info.plist")"
+  binary="$framework/$executable_name"
+  dsym_path="$DWARF_DSYM_FOLDER_PATH/$framework_name.dSYM"
+  dsym_binary="$dsym_path/Contents/Resources/DWARF/$executable_name"
+
+  if [[ ! -f "$binary" ]]; then
+    echo "Framework executable is missing: $binary" >&2
+    exit 1
+  fi
+
+  rm -rf "$dsym_path"
+  echo "Generating symbols for $framework_name"
+  xcrun dsymutil "$binary" -o "$dsym_path" >/dev/null 2>&1
+  if [[ ! -f "$dsym_binary" ]]; then
+    echo "dSYM generation did not produce a DWARF binary for $framework_name" >&2
+    exit 1
+  fi
+
+  binary_uuid="$(dwarfdump --uuid "$binary" | awk '{print $2}' | sort | tr '\n' ' ')"
+  dsym_uuid="$(dwarfdump --uuid "$dsym_path" | awk '{print $2}' | sort | tr '\n' ' ')"
+  if [[ -z "$binary_uuid" || "$binary_uuid" != "$dsym_uuid" ]]; then
+    echo "dSYM UUID mismatch for $framework_name: binary=[$binary_uuid] dsym=[$dsym_uuid]" >&2
+    exit 1
+  fi
+}
+
+if [[ "$EFFECTIVE_PLATFORM_NAME" == "-iphoneos" && "${DEBUG_INFORMATION_FORMAT:-}" == *dwarf-with-dsym* ]]; then
+  if [[ -z "${DWARF_DSYM_FOLDER_PATH:-}" ]]; then
+    echo "DWARF_DSYM_FOLDER_PATH is required for an archive build" >&2
+    exit 1
+  fi
+  mkdir -p "$DWARF_DSYM_FOLDER_PATH"
+
+  python_framework="$PROJECT_DIR/Vendor/Python.xcframework/ios-arm64/Python.framework"
+  generate_framework_dsym "$python_framework"
+
+  for framework in "$CODESIGNING_FOLDER_PATH"/Frameworks/*.framework; do
+    [[ -d "$framework" ]] || continue
+    generate_framework_dsym "$framework"
+  done
+fi

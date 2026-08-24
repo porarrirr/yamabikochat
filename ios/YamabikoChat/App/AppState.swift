@@ -35,11 +35,19 @@ final class AppState: ObservableObject {
 
     @discardableResult
     func importSharePayload(from store: SharePayloadStore, repository: ChatRepository) -> Bool {
-        guard let payload = store.consumeLatest() else { return false }
+        guard let pending = store.loadLatest() else { return false }
         do {
             let conversationID = try repository.createConversation(projectId: nil)
-            shareImportDraft = ShareImportDraft(conversationID: conversationID, text: payload.text)
+            shareImportDraft = ShareImportDraft(conversationID: conversationID, text: pending.payload.text)
             selectedConversationID = conversationID
+            if !store.discard(pending) {
+                DiagnosticsLogger.log(
+                    "Committed share import but could not remove the matching pending payload",
+                    level: .warning,
+                    category: .app,
+                    metadata: ["conversationId": "\(conversationID)"]
+                )
+            }
             DiagnosticsLogger.log(
                 "Imported share into new conversation",
                 category: .app,

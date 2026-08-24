@@ -73,7 +73,7 @@ private final class RecordingRenderedPageLoader: RenderedPageContentLoading, @un
         self.delay = delay
     }
 
-    func load(url: URL, timeout: TimeInterval) async throws -> RenderedPageLoadResult {
+    func load(html: String, sourceURL: URL, timeout: TimeInterval) async throws -> RenderedPageLoadResult {
         callCount += 1
         activeCount += 1
         maximumActiveCount = max(maximumActiveCount, activeCount)
@@ -572,6 +572,33 @@ final class WebSearchToolTests: XCTestCase {
         XCTAssertFalse(combined.contains("Menu link"))
         XCTAssertFalse(combined.contains("Advertisement text"))
         XCTAssertFalse(combined.contains("Copyright footer"))
+    }
+
+    @MainActor
+    func testRenderedPageLoaderDoesNotExecuteUntrustedPageJavaScript() async throws {
+        let result = try await WKRenderedPageContentLoader.shared.load(
+            html: """
+            <html><head><title>Static Article</title></head><body>
+              <main><p id="content">Safe static text</p></main>
+              <script>
+                document.getElementById('content').textContent = 'EXECUTED UNTRUSTED SCRIPT';
+              </script>
+              <img src="http://127.0.0.1/private" onerror="document.title='EXECUTED HANDLER'">
+            </body></html>
+            """,
+            sourceURL: URL(string: "https://example.com/article")!,
+            timeout: 5
+        )
+
+        guard case let .loaded(content) = result else {
+            return XCTFail("Expected isolated static HTML extraction")
+        }
+        let combined = content.paragraphs.map(\.text).joined(separator: "\n")
+        XCTAssertEqual(content.finalURL, URL(string: "https://example.com/article"))
+        XCTAssertEqual(content.title, "Static Article")
+        XCTAssertTrue(combined.contains("Safe static text"))
+        XCTAssertFalse(combined.contains("EXECUTED UNTRUSTED SCRIPT"))
+        XCTAssertNotEqual(content.title, "EXECUTED HANDLER")
     }
 
     func testFetchURLReportsRenderedTimeoutWithoutDiscardingStaticPartialContent() async throws {

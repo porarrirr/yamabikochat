@@ -52,6 +52,22 @@ enum AppGroupShareStorage {
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
         fileManager: FileManager = .default
     ) -> Data? {
+        guard let data = readPayloadData(
+            appGroupIdentifier: appGroupIdentifier,
+            fileManager: fileManager
+        ) else { return nil }
+        guard removePayloadData(
+            matching: data,
+            appGroupIdentifier: appGroupIdentifier,
+            fileManager: fileManager
+        ) else { return nil }
+        return data
+    }
+
+    static func readPayloadData(
+        appGroupIdentifier: String = AppConstants.appGroupIdentifier,
+        fileManager: FileManager = .default
+    ) -> Data? {
         guard
             let fileURL = payloadFileURL(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager),
             fileManager.fileExists(atPath: fileURL.path)
@@ -59,9 +75,25 @@ enum AppGroupShareStorage {
             return nil
         }
 
-        guard let data = try? Data(contentsOf: fileURL) else { return nil }
-        try? fileManager.removeItem(at: fileURL)
-        return data
+        return try? Data(contentsOf: fileURL)
+    }
+
+    @discardableResult
+    static func removePayloadData(
+        matching expectedData: Data,
+        appGroupIdentifier: String = AppConstants.appGroupIdentifier,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        guard let fileURL = payloadFileURL(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager),
+              let currentData = try? Data(contentsOf: fileURL),
+              currentData == expectedData
+        else { return false }
+        do {
+            try fileManager.removeItem(at: fileURL)
+            return true
+        } catch {
+            return false
+        }
     }
 }
 

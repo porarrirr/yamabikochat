@@ -14,7 +14,7 @@ enum RenderedPageLoadResult: Sendable, Equatable {
 
 protocol RenderedPageContentLoading: Sendable {
     @MainActor
-    func load(url: URL, timeout: TimeInterval) async throws -> RenderedPageLoadResult
+    func load(html: String, sourceURL: URL, timeout: TimeInterval) async throws -> RenderedPageLoadResult
 }
 
 enum WebFetchPermitKind: Sendable {
@@ -91,13 +91,14 @@ enum RenderedPageLoaderError: LocalizedError, Equatable {
 
 final class WKRenderedPageContentLoader: RenderedPageContentLoading, @unchecked Sendable {
     static let shared = WKRenderedPageContentLoader()
+    @MainActor
     static var extractionJavaScriptForTesting: String {
         WKRenderedPageSession.extractionJavaScript
     }
 
     @MainActor
-    func load(url: URL, timeout: TimeInterval) async throws -> RenderedPageLoadResult {
-        let session = WKRenderedPageSession(url: url, timeout: timeout)
+    func load(html: String, sourceURL: URL, timeout: TimeInterval) async throws -> RenderedPageLoadResult {
+        let session = WKRenderedPageSession(html: html, sourceURL: sourceURL, timeout: timeout)
         return try await withTaskCancellationHandler {
             try await session.start()
         } onCancel: {
@@ -110,7 +111,8 @@ final class WKRenderedPageContentLoader: RenderedPageContentLoading, @unchecked 
 
 @MainActor
 private final class WKRenderedPageSession: NSObject, WKNavigationDelegate {
-    private let url: URL
+    private let html: String
+    private let sourceURL: URL
     private let timeout: TimeInterval
     private var webView: WKWebView?
     private var continuation: CheckedContinuation<RenderedPageLoadResult, Error>?
@@ -118,8 +120,9 @@ private final class WKRenderedPageSession: NSObject, WKNavigationDelegate {
     private var extractionTask: Task<Void, Never>?
     private var completed = false
 
-    init(url: URL, timeout: TimeInterval) {
-        self.url = url
+    init(html: String, sourceURL: URL, timeout: TimeInterval) {
+        self.html = html
+        self.sourceURL = sourceURL
         self.timeout = timeout
     }
 
@@ -129,7 +132,7 @@ private final class WKRenderedPageSession: NSObject, WKNavigationDelegate {
 
             let configuration = YamabikoWebKitSupport.makeConfiguration()
             configuration.websiteDataStore = .nonPersistent()
-            configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+            configuration.defaultWebpagePreferences.allowsContentJavaScript = false
             configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
             configuration.mediaTypesRequiringUserActionForPlayback = .all
 
@@ -137,12 +140,9 @@ private final class WKRenderedPageSession: NSObject, WKNavigationDelegate {
             webView.navigationDelegate = self
             self.webView = webView
 
-            var request = URLRequest(url: url, timeoutInterval: timeout)
-            request.setValue(
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
-                forHTTPHeaderField: "User-Agent"
-            )
-            webView.load(request)
+            let policy = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+            let isolatedHTML = "<meta http-equiv=\"Content-Security-Policy\" content=\"\(policy)\">" + html
+            webView.loadHTMLString(isolatedHTML, baseURL: nil)
 
             timeoutTask = Task { [weak self] in
                 guard let self else { return }
@@ -163,20 +163,13 @@ private final class WKRenderedPageSession: NSObject, WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
-        guard navigationAction.targetFrame?.isMainFrame != false,
-              let targetURL = navigationAction.request.url
-        else {
+        if navigationAction.navigationType == .other,
+           navigationAction.targetFrame?.isMainFrame != false,
+           navigationAction.request.url?.scheme == "about" {
             decisionHandler(.allow)
             return
         }
-
-        do {
-            try WebToolURLPolicy.validatePublicHTTPURL(targetURL)
-            decisionHandler(.allow)
-        } catch {
-            decisionHandler(.cancel)
-            finish(.failure(error))
-        }
+        decisionHandler(.cancel)
     }
 
     func webView(
@@ -273,10 +266,7 @@ private final class WKRenderedPageSession: NSObject, WKNavigationDelegate {
     }
 
     private func makeLoadedResult(_ payload: DOMExtractionPayload) throws -> RenderedPageLoadResult {
-        guard let finalURL = URL(string: payload.url) else {
-            throw RenderedPageLoaderError.invalidExtraction
-        }
-        try WebToolURLPolicy.validatePublicHTTPURL(finalURL)
+        let finalURL = sourceURL
         let paragraphs = payload.paragraphs.enumerated().compactMap { offset, item -> PageParagraph? in
             guard let text = item.text.trimmedNonEmpty else { return nil }
             return PageParagraph(

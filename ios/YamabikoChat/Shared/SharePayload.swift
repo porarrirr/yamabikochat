@@ -13,6 +13,11 @@ struct SharePayload: Codable, Equatable {
 }
 
 final class SharePayloadStore {
+    struct PendingPayload: Equatable {
+        let payload: SharePayload
+        fileprivate let encodedData: Data
+    }
+
     init() {
         SharePayloadDarwinNotifier.startObserving {
             NotificationCenter.default.post(name: AppConstants.sharePayloadDidChangeNotification, object: nil)
@@ -28,6 +33,18 @@ final class SharePayloadStore {
     func consumeLatest() -> SharePayload? {
         guard let data = AppGroupShareStorage.consumePayloadData() else { return nil }
         return try? JSONDecoder().decode(SharePayload.self, from: data)
+    }
+
+    func loadLatest() -> PendingPayload? {
+        guard let data = AppGroupShareStorage.readPayloadData(),
+              let payload = try? JSONDecoder().decode(SharePayload.self, from: data)
+        else { return nil }
+        return PendingPayload(payload: payload, encodedData: data)
+    }
+
+    @discardableResult
+    func discard(_ pending: PendingPayload) -> Bool {
+        AppGroupShareStorage.removePayloadData(matching: pending.encodedData)
     }
 }
 

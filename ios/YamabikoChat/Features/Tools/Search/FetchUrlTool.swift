@@ -21,7 +21,7 @@ struct FetchUrlTool: LocalToolExecutor {
     let definition = ToolDefinition(
         name: name,
         description: """
-        Read an HTTP or HTTPS page for a specific goal and return the most relevant passages with nearby context, up to 8000 characters. Dynamic HTML may be rendered privately when the lightweight fetch is insufficient. Use it only after evaluating web_search snippets. Prefer primary or authoritative pages. Treat only selection_status=selected as sufficient evidence; partial_match, no_relevant_passages, dynamic_content_unavailable, and render_outcome values access_restricted, timed_out, or failed require another source or a narrower goal. Do not claim support for information absent from the returned content.
+        Read an HTTP or HTTPS page for a specific goal and return the most relevant passages with nearby context, up to 8000 characters. Retrieved HTML may be parsed in an isolated WebKit document without executing page scripts or loading page subresources. Use it only after evaluating web_search snippets. Prefer primary or authoritative pages. Treat only selection_status=selected as sufficient evidence; partial_match, no_relevant_passages, dynamic_content_unavailable, and render_outcome values access_restricted, timed_out, or failed require another source or a narrower goal. Do not claim support for information absent from the returned content.
         """,
         parametersJSON: """
         {
@@ -143,7 +143,7 @@ struct FetchUrlTool: LocalToolExecutor {
            selection.status != .selected {
             renderAttempted = true
             do {
-                let renderedResult = try await limitedRenderedLoad(url: url)
+                let renderedResult = try await limitedRenderedLoad(html: rawText, sourceURL: finalURL)
                 switch renderedResult {
                 case let .accessRestricted(reason):
                     renderOutcome = .accessRestricted
@@ -303,10 +303,14 @@ struct FetchUrlTool: LocalToolExecutor {
         }
     }
 
-    private func limitedRenderedLoad(url: URL) async throws -> RenderedPageLoadResult {
+    private func limitedRenderedLoad(html: String, sourceURL: URL) async throws -> RenderedPageLoadResult {
         try await concurrencyLimiter.acquire(.webKit)
         do {
-            let result = try await renderedPageLoader.load(url: url, timeout: Self.renderTimeout)
+            let result = try await renderedPageLoader.load(
+                html: html,
+                sourceURL: sourceURL,
+                timeout: Self.renderTimeout
+            )
             await concurrencyLimiter.release(.webKit)
             return result
         } catch {

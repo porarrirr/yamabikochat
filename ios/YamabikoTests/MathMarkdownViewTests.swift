@@ -18,6 +18,10 @@ final class MathMarkdownViewTests: XCTestCase {
         XCTAssertTrue(html.contains("window.MathJax ="))
         XCTAssertTrue(html.contains("tex-svg.js"))
         XCTAssertTrue(html.contains("typesetPromise([root])"))
+        XCTAssertTrue(html.contains("packages: {'[-]': ['require']}"))
+        XCTAssertTrue(html.contains("options: { enableMenu: false }"))
+        XCTAssertTrue(html.contains("Content-Security-Policy"))
+        XCTAssertTrue(html.contains("connect-src 'none'"))
     }
 
     func testBuildHTMLOmitsMathJaxWhenDisabled() {
@@ -627,10 +631,27 @@ line1\\nline2
     func testMarkdownRendererPreservesMathWithSpecialCharacters() throws {
         let result = try renderMarkdownWithJavaScript("本文 $a < b$ と $c & d$")
 
-        XCTAssertTrue(result.contains("$a < b$"))
-        XCTAssertTrue(result.contains("$c & d$"))
-        XCTAssertFalse(result.contains("&lt;"))
-        XCTAssertFalse(result.contains("&amp;"))
+        XCTAssertTrue(result.contains("$a &lt; b$"))
+        XCTAssertTrue(result.contains("$c &amp; d$"))
+        XCTAssertFalse(result.contains("$a < b$"))
+    }
+
+    func testMarkdownRendererEscapesExecutableMarkupInsideMath() throws {
+        let payloads = [
+            #"$<img src=x onerror=alert(1)>$"#,
+            #"$$<svg onload=alert(1)></svg>$$"#,
+            #"\(<math href=\"javascript:alert(1)\">x</math>\)"#,
+            #"\[<a href=\"data:text/html,boom\">x</a>\]"#
+        ]
+
+        for payload in payloads {
+            let result = try renderMarkdownWithJavaScript(payload)
+            XCTAssertFalse(result.contains("<img"), payload)
+            XCTAssertFalse(result.contains("<svg"), payload)
+            XCTAssertFalse(result.contains("<math"), payload)
+            XCTAssertFalse(result.contains("<a "), payload)
+            XCTAssertTrue(result.contains("&lt;"), payload)
+        }
     }
 
     func testMarkdownRendererDoesNotParseInvalidTableDelimiter() throws {

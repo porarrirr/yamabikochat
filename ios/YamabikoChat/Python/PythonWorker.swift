@@ -36,6 +36,9 @@ enum PythonToolError: LocalizedError, Equatable {
     case invalidArtifactPath
     case invalidResponse
     case poisoned
+    case attachmentMissing(String)
+    case attachmentIdentityCollision(String)
+    case resourceLimitExceeded(String)
 
     var errorDescription: String? {
         switch self {
@@ -49,6 +52,12 @@ enum PythonToolError: LocalizedError, Equatable {
             return "Embedded Python returned an invalid result envelope."
         case .poisoned:
             return "Embedded Python did not stop inside a native extension. Restart YamabikoChat before using python_execute again."
+        case let .attachmentMissing(path):
+            return "A Python attachment no longer exists: \(path)"
+        case let .attachmentIdentityCollision(identifier):
+            return "Python attachment identity invariant failed for \(identifier)."
+        case let .resourceLimitExceeded(reason):
+            return "Python workspace resource limit exceeded: \(reason)"
         }
     }
 }
@@ -91,6 +100,23 @@ private final class PythonExecutionGate: @unchecked Sendable {
     }
 }
 
+private final class PythonCancellationFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
+    }
+}
+
 private final class PythonRuntimeBridgeStore: @unchecked Sendable {
     static let shared = PythonRuntimeBridgeStore()
 
@@ -121,17 +147,29 @@ actor PythonWorker {
     private let sessions: PythonSessionStore
     private let timeoutSeconds: TimeInterval
     private let memoryLimitBytes: UInt64
+    private let maximumWorkspaceFiles: Int
+    private let maximumWorkspaceBytes: Int64
+    private let maximumFileBytes: Int64
+    private let maximumPathDepth: Int
     private var bridge: PythonRuntimeBridge?
     private var poisoned = false
 
     init(
         sessions: PythonSessionStore = .shared,
         timeoutSeconds: TimeInterval = 120,
-        memoryLimitBytes: UInt64 = 1_200_000_000
+        memoryLimitBytes: UInt64 = 1_200_000_000,
+        maximumWorkspaceFiles: Int = 1_024,
+        maximumWorkspaceBytes: Int64 = 100 * 1_024 * 1_024,
+        maximumFileBytes: Int64 = 25 * 1_024 * 1_024,
+        maximumPathDepth: Int = 16
     ) {
         self.sessions = sessions
         self.timeoutSeconds = timeoutSeconds
         self.memoryLimitBytes = memoryLimitBytes
+        self.maximumWorkspaceFiles = maximumWorkspaceFiles
+        self.maximumWorkspaceBytes = maximumWorkspaceBytes
+        self.maximumFileBytes = maximumFileBytes
+        self.maximumPathDepth = maximumPathDepth
     }
 
     func execute(
@@ -144,6 +182,9 @@ actor PythonWorker {
         let bridge = try runtimeBridge()
         let paths = try sessions.prepare(sessionID: sessionID, reset: reset)
         _ = try sessions.stageAttachments(attachmentPaths, in: paths)
+        if let violation = workspaceLimitViolation(in: paths) {
+            throw PythonToolError.resourceLimitExceeded(violation)
+        }
         let readRoots = [
             Bundle.main.resourceURL?.appendingPathComponent("python").path,
             Bundle.main.resourceURL?.path,
@@ -160,8 +201,20 @@ actor PythonWorker {
             bridge: bridge,
             sessionID: sessionID,
             code: code,
-            optionsJSON: optionsJSON
+            optionsJSON: optionsJSON,
+            paths: paths
         )
+        do {
+            try Task.checkCancellation()
+        } catch {
+            await discard(sessionID: sessionID)
+            throw error
+        }
+        if let violation = workspaceLimitViolation(in: paths) {
+            let response = Self.resourceLimitResponse(violation)
+            await discard(sessionID: sessionID)
+            return response
+        }
         guard let resultData = resultJSON.data(using: .utf8),
               let result = try? JSONDecoder().decode(PythonExecutionResponse.self, from: resultData)
         else {
@@ -213,45 +266,106 @@ actor PythonWorker {
         bridge: PythonRuntimeBridge,
         sessionID: String,
         code: String,
-        optionsJSON: String
+        optionsJSON: String,
+        paths: PythonSessionPaths
     ) async -> String {
         let configuredMemoryLimit = memoryLimitBytes
         let configuredTimeout = timeoutSeconds
-        return await withCheckedContinuation { continuation in
-            let gate = PythonExecutionGate(continuation: continuation)
-            bridge.executeSession(sessionID, code: code, optionsJSON: optionsJSON) { result in
-                gate.finish(result)
-            }
-            Task { [weak self] in
-                guard let self else { return }
-                let started = ContinuousClock.now
-                while !gate.isFinished {
-                    try? await Task.sleep(for: .milliseconds(250))
-                    guard !gate.isFinished else { return }
-                    let footprint = bridge.physicalFootprintBytes()
-                    if footprint > configuredMemoryLimit {
-                        await self.interrupt(
-                            bridge: bridge,
-                            gate: gate,
-                            exceptionName: "MemoryError",
-                            errorType: "MemoryLimitExceeded",
-                            message: "Python exceeded the 1.2 GB process memory soft limit."
-                        )
-                        return
-                    }
-                    if started.duration(to: .now) >= .seconds(configuredTimeout) {
-                        await self.interrupt(
-                            bridge: bridge,
-                            gate: gate,
-                            exceptionName: "TimeoutError",
-                            errorType: "TimeoutError",
-                            message: "Python execution exceeded the 120 second limit."
-                        )
-                        return
+        let cancellation = PythonCancellationFlag()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                let gate = PythonExecutionGate(continuation: continuation)
+                bridge.executeSession(sessionID, code: code, optionsJSON: optionsJSON) { result in
+                    gate.finish(result)
+                }
+                Task { [weak self] in
+                    guard let self else { return }
+                    let started = ContinuousClock.now
+                    while !gate.isFinished {
+                        try? await Task.sleep(for: .milliseconds(250))
+                        guard !gate.isFinished else { return }
+                        if cancellation.isCancelled {
+                            await self.interrupt(
+                                bridge: bridge,
+                                gate: gate,
+                                exceptionName: "KeyboardInterrupt",
+                                errorType: "CancellationError",
+                                message: "Python execution was cancelled."
+                            )
+                            return
+                        }
+                        let footprint = bridge.physicalFootprintBytes()
+                        if footprint > configuredMemoryLimit {
+                            await self.interrupt(
+                                bridge: bridge,
+                                gate: gate,
+                                exceptionName: "MemoryError",
+                                errorType: "MemoryLimitExceeded",
+                                message: "Python exceeded the 1.2 GB process memory soft limit."
+                            )
+                            return
+                        }
+                        if let violation = await self.workspaceLimitViolation(in: paths) {
+                            await self.interrupt(
+                                bridge: bridge,
+                                gate: gate,
+                                exceptionName: "OSError",
+                                errorType: "ResourceLimitExceeded",
+                                message: violation
+                            )
+                            return
+                        }
+                        if started.duration(to: .now) >= .seconds(configuredTimeout) {
+                            await self.interrupt(
+                                bridge: bridge,
+                                gate: gate,
+                                exceptionName: "TimeoutError",
+                                errorType: "TimeoutError",
+                                message: "Python execution exceeded the 120 second limit."
+                            )
+                            return
+                        }
                     }
                 }
             }
+        } onCancel: {
+            cancellation.cancel()
         }
+    }
+
+    private func workspaceLimitViolation(in paths: PythonSessionPaths) -> String? {
+        guard let usage = try? sessions.workspaceUsage(in: paths) else {
+            return "The Python workspace could not be inspected safely."
+        }
+        if usage.fileCount > maximumWorkspaceFiles {
+            return "Workspace file count exceeded \(maximumWorkspaceFiles)."
+        }
+        if usage.totalBytes > maximumWorkspaceBytes {
+            return "Workspace bytes exceeded \(maximumWorkspaceBytes)."
+        }
+        if usage.largestFileBytes > maximumFileBytes {
+            return "A file exceeded \(maximumFileBytes) bytes."
+        }
+        if usage.maximumDepth > maximumPathDepth {
+            return "Workspace path depth exceeded \(maximumPathDepth)."
+        }
+        return nil
+    }
+
+    private static func resourceLimitResponse(_ message: String) -> PythonExecutionResponse {
+        PythonExecutionResponse(
+            status: "error",
+            stdout: "",
+            stderr: "",
+            resultRepr: nil,
+            artifacts: [],
+            durationMs: 0,
+            error: PythonExecutionFailure(
+                type: "ResourceLimitExceeded",
+                message: message,
+                traceback: ""
+            )
+        )
     }
 
     private func interrupt(

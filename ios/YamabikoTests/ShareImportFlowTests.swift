@@ -50,8 +50,22 @@ final class ShareImportFlowTests: XCTestCase {
         XCTAssertNil(appState.shareImportDraft)
     }
 
-    private func makeRepository() throws -> ChatRepository {
+    func testFailedConversationCreationKeepsPendingSharePayload() throws {
         let dbQueue = try DatabaseQueue()
+        let repository = try makeRepository(dbQueue: dbQueue)
+        try dbQueue.write { db in
+            try db.execute(sql: "DROP TABLE conversations")
+        }
+        let store = SharePayloadStore()
+        SharePayloadPersister.save(text: "must survive", sourceApp: "Safari")
+
+        let appState = AppState()
+        XCTAssertFalse(appState.importSharePayload(from: store, repository: repository))
+        XCTAssertEqual(store.loadLatest()?.payload.text, "must survive")
+    }
+
+    private func makeRepository(dbQueue: DatabaseQueue? = nil) throws -> ChatRepository {
+        let dbQueue = try dbQueue ?? DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)
 
         let settings = SettingsRepository(dbQueue: dbQueue)

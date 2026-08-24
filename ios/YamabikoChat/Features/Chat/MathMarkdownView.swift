@@ -170,9 +170,11 @@ enum MathMarkdownHTMLBuilder {
                     inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
                     displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
                     processEscapes: true,
-                    processEnvironments: true
+                    processEnvironments: true,
+                    packages: {'[-]': ['require']}
                   },
-                  svg: { fontCache: 'global' }
+                  svg: { fontCache: 'global' },
+                  options: { enableMenu: false }
                 };
                 window.__yamabikoMathJaxOnError = function() {
                   if (window.console && window.console.warn) {
@@ -201,6 +203,7 @@ enum MathMarkdownHTMLBuilder {
           <meta charset=\"utf-8\" />
           <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
           <meta name=\"color-scheme\" content=\"light dark\" />
+          <meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'self' 'unsafe-inline' file:; style-src 'unsafe-inline'; img-src data:; font-src 'self' file: data:; connect-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'\" />
           \(copyLabelSetupScript)
           \(mathSetupScript)
           <script>\(markdownRendererScript)</script>
@@ -956,7 +959,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         });
     
         output = output.replace(/@@YBMATH(\d+)@@/g, function(_, index) {
-          return mathProtected.tokens[Number(index)] || "";
+          return escapeHtml(mathProtected.tokens[Number(index)] || "");
         });
     
         return output;
