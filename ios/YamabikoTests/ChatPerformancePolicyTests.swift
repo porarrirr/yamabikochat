@@ -10,33 +10,72 @@ final class ChatPerformancePolicyTests: XCTestCase {
     }
 
     func testStreamingScrollFollowsMeasuredLayoutGrowth() {
-        XCTAssertTrue(ChatScrollPolicy.shouldFollowStreamingLayoutGrowth(
+        XCTAssertTrue(ChatScrollPolicy.shouldFollowStreamingLayoutChange(
             wasNearBottom: true,
             isUserInteracting: false,
             isStreaming: true,
+            isFinalizingStreamLayout: false,
             previousBottomMaxY: 700,
             currentBottomMaxY: 730
         ))
-        XCTAssertFalse(ChatScrollPolicy.shouldFollowStreamingLayoutGrowth(
+        XCTAssertFalse(ChatScrollPolicy.shouldFollowStreamingLayoutChange(
             wasNearBottom: true,
             isUserInteracting: false,
             isStreaming: true,
+            isFinalizingStreamLayout: false,
             previousBottomMaxY: 730,
             currentBottomMaxY: 700
         ))
-        XCTAssertFalse(ChatScrollPolicy.shouldFollowStreamingLayoutGrowth(
+        XCTAssertFalse(ChatScrollPolicy.shouldFollowStreamingLayoutChange(
             wasNearBottom: true,
             isUserInteracting: true,
             isStreaming: true,
+            isFinalizingStreamLayout: false,
             previousBottomMaxY: 700,
             currentBottomMaxY: 730
         ))
-        XCTAssertFalse(ChatScrollPolicy.shouldFollowStreamingLayoutGrowth(
+        XCTAssertFalse(ChatScrollPolicy.shouldFollowStreamingLayoutChange(
             wasNearBottom: true,
             isUserInteracting: false,
             isStreaming: false,
+            isFinalizingStreamLayout: false,
             previousBottomMaxY: 700,
             currentBottomMaxY: 730
+        ))
+    }
+
+    func testCompletedStreamFollowsFinalLayoutGrowthAndShrink() {
+        XCTAssertTrue(ChatScrollPolicy.shouldFollowStreamingLayoutChange(
+            wasNearBottom: true,
+            isUserInteracting: false,
+            isStreaming: false,
+            isFinalizingStreamLayout: true,
+            previousBottomMaxY: 730,
+            currentBottomMaxY: 700
+        ))
+        XCTAssertTrue(ChatScrollPolicy.shouldFollowStreamingLayoutChange(
+            wasNearBottom: true,
+            isUserInteracting: false,
+            isStreaming: false,
+            isFinalizingStreamLayout: true,
+            previousBottomMaxY: 700,
+            currentBottomMaxY: 730
+        ))
+        XCTAssertFalse(ChatScrollPolicy.shouldFollowStreamingLayoutChange(
+            wasNearBottom: false,
+            isUserInteracting: false,
+            isStreaming: false,
+            isFinalizingStreamLayout: true,
+            previousBottomMaxY: 730,
+            currentBottomMaxY: 700
+        ))
+        XCTAssertFalse(ChatScrollPolicy.shouldFollowStreamingLayoutChange(
+            wasNearBottom: true,
+            isUserInteracting: true,
+            isStreaming: false,
+            isFinalizingStreamLayout: true,
+            previousBottomMaxY: 730,
+            currentBottomMaxY: 700
         ))
     }
 

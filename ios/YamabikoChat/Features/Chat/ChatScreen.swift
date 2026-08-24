@@ -64,6 +64,7 @@ struct ChatScreen: View {
     @State private var isUserNearBottom = true
     @State private var bottomAnchorMaxY: CGFloat = .infinity
     @State private var isUserDraggingScroll = false
+    @State private var isFinalizingStreamLayout = false
     @State private var scrollInteractionToken = 0
     @State private var addingRecentPhotoIDs: Set<String> = []
     @State private var recentPhotoSelection = RecentPhotoSelection(limit: maximumPhotoSelectionCount)
@@ -219,8 +220,13 @@ struct ChatScreen: View {
                             scrollToBottomIfNeeded(proxy: proxy)
                         }
                         .onChange(of: viewModel.isSending) { oldValue, newValue in
-                            guard !oldValue, newValue else { return }
-                            scrollToBottom(proxy: proxy, animated: true)
+                            if !oldValue, newValue {
+                                isFinalizingStreamLayout = false
+                                scrollToBottom(proxy: proxy, animated: true)
+                            } else if oldValue, !newValue {
+                                isFinalizingStreamLayout = isUserNearBottom && !isUserDraggingScroll
+                                scrollToBottomIfNeeded(proxy: proxy, animated: false)
+                            }
                         }
                     }
                 }
@@ -784,10 +790,12 @@ struct ChatScreen: View {
 
     private func dismissComposerChrome() {
         isComposerFocused = false
+        isFinalizingStreamLayout = false
     }
 
     private func beginScrollInteraction() {
         isUserDraggingScroll = true
+        isFinalizingStreamLayout = false
         scrollInteractionToken += 1
     }
 
@@ -806,14 +814,18 @@ struct ChatScreen: View {
         bottomAnchorMaxY = maxY
         updateIsUserNearBottom(bottomAnchorMaxY: maxY, viewportHeight: viewportHeight)
 
-        guard ChatScrollPolicy.shouldFollowStreamingLayoutGrowth(
+        guard ChatScrollPolicy.shouldFollowStreamingLayoutChange(
             wasNearBottom: wasNearBottom,
             isUserInteracting: isUserDraggingScroll,
             isStreaming: viewModel.isSending,
+            isFinalizingStreamLayout: isFinalizingStreamLayout,
             previousBottomMaxY: previousMaxY,
             currentBottomMaxY: maxY
         ) else { return }
 
+        if !viewModel.isSending {
+            isFinalizingStreamLayout = false
+        }
         DispatchQueue.main.async {
             scrollToBottom(proxy: proxy, animated: false)
         }
