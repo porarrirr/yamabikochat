@@ -116,6 +116,18 @@ final class SpeechRecognitionService: ObservableObject {
         recognitionTask?.cancel()
         recognitionTask = nil
         isRecording = false
+        do {
+            try AVAudioSession.sharedInstance().setActive(
+                false,
+                options: .notifyOthersOnDeactivation
+            )
+        } catch {
+            DiagnosticsLogger.log(
+                "Audio session deactivation failed",
+                category: .app,
+                error: error
+            )
+        }
     }
 
     private func beginRecognition(speechRecognizer: SFSpeechRecognizer) {

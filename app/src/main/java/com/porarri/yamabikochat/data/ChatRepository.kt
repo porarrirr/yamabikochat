@@ -57,6 +57,7 @@ import com.porarri.yamabikochat.data.repositories.ProviderGateway
 import com.porarri.yamabikochat.data.repositories.ProviderRequestSettingsResolver
 import com.porarri.yamabikochat.data.skills.AgentSkillPromptComposer
 import com.porarri.yamabikochat.data.skills.AgentSkillRepository
+import com.porarri.yamabikochat.data.tools.editor.EditorWorkspaceStore
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import com.porarri.yamabikochat.utils.FileValidationUtils
 import com.porarri.yamabikochat.utils.SecurePreferencesManager
@@ -77,7 +78,8 @@ class ChatRepository(
     private val pricingRepository: LiteLlmPricingRepository,
     private val modelsDevCatalogRepository: ModelsDevCatalogRepository,
     val agentSkillRepository: AgentSkillRepository,
-    private val securePreferences: SecurePreferencesManager
+    private val securePreferences: SecurePreferencesManager,
+    private val editorWorkspaceStore: EditorWorkspaceStore
 ) {
     private val fusionTraceStore = FusionTraceStore(
         saveRecord = { databaseRepository.saveFusionTrace(it) },
@@ -119,8 +121,11 @@ class ChatRepository(
     suspend fun assignConversationToProject(conversationId: Long, projectId: Long?) =
         databaseRepository.assignConversationToProject(conversationId, projectId)
 
-    suspend fun deleteProject(id: Long, deleteConversations: Boolean = false) =
+    suspend fun deleteProject(id: Long, deleteConversations: Boolean = false) {
+        val ids = if (deleteConversations) databaseRepository.getConversationIdsForProject(id) else emptyList()
         databaseRepository.deleteProject(id, deleteConversations)
+        ids.forEach { editorWorkspaceStore.delete(it.toString()) }
+    }
 
     suspend fun countConversationsInProject(projectId: Long): Int =
         databaseRepository.countConversationsInProject(projectId)
@@ -207,7 +212,10 @@ class ChatRepository(
         modelsDevCatalogRepository.load(forceRefresh)
     }
 
-    suspend fun deleteConversationById(id: Long) = databaseRepository.deleteConversationById(id)
+    suspend fun deleteConversationById(id: Long) {
+        databaseRepository.deleteConversationById(id)
+        editorWorkspaceStore.delete(id.toString())
+    }
 
     suspend fun clearHistory(conversationId: Long) =
         databaseRepository.deleteMessagesForConversation(conversationId)
@@ -379,6 +387,7 @@ class ChatRepository(
         val metadata = resolved.metadata.toMutableMap()
         metadata["provider"] = provider
         metadata["promptCacheKey"] = cacheKey
+        metadata["editorSessionId"] = conversation.id.toString()
         metadata["supportsVision"] = visionMetadataFlag(provider, model)
         if (provider.equals("CODEX_AUTH", ignoreCase = true)) {
             metadata["codexSessionId"] = databaseRepository.getOrCreateCodexSessionId(conversation.id)
@@ -412,7 +421,8 @@ class ChatRepository(
         databaseRepository.saveToolActivities(
             messageId,
             ToolActivityStep.encodeSteps(payload.steps),
-            ChatMessageToolActivity.encodeProviderTranscript(payload.providerTranscript)
+            ChatMessageToolActivity.encodeProviderTranscript(payload.providerTranscript),
+            ChatMessageToolActivity.encodeAttachmentPaths(payload.attachmentPaths)
         )
     }
 
@@ -420,7 +430,8 @@ class ChatRepository(
         databaseRepository.saveToolActivitiesForVariant(
             variantId,
             ToolActivityStep.encodeSteps(payload.steps),
-            ChatMessageToolActivity.encodeProviderTranscript(payload.providerTranscript)
+            ChatMessageToolActivity.encodeProviderTranscript(payload.providerTranscript),
+            ChatMessageToolActivity.encodeAttachmentPaths(payload.attachmentPaths)
         )
     }
 

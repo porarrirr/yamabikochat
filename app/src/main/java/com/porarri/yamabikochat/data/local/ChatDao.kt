@@ -195,6 +195,9 @@ interface ChatDao {
     @Query("SELECT id FROM conversations WHERE projectId = :projectId")
     suspend fun getConversationIdsForProject(projectId: Long): List<Long>
 
+    @Query("SELECT id FROM conversations WHERE isSecret = 1")
+    suspend fun getSecretConversationIds(): List<Long>
+
     // ChatMessage queries
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: ChatMessage): Long

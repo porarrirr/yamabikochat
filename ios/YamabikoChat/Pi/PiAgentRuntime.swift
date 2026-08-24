@@ -502,12 +502,19 @@ actor PiAgentRuntime {
                             }
                             let arguments = Self.jsonString(event.arguments ?? .object([:]))
                             var providerMetadata: [String: String]?
-                            if name == PythonExecuteTool.name {
+                            if name == PythonExecuteTool.name || name == StrReplaceEditorTool.name {
                                 let attachmentPaths = request.messages.flatMap(\.attachments)
                                 let attachmentsData = try JSONEncoder().encode(attachmentPaths)
-                                providerMetadata = ["pythonAttachmentsJSON": String(decoding: attachmentsData, as: UTF8.self)]
-                                if let sessionID = request.metadata["pythonSessionId"]?.trimmedNonEmpty {
-                                    providerMetadata?["pythonSessionId"] = sessionID
+                                if name == PythonExecuteTool.name {
+                                    providerMetadata = ["pythonAttachmentsJSON": String(decoding: attachmentsData, as: UTF8.self)]
+                                    if let sessionID = request.metadata["pythonSessionId"]?.trimmedNonEmpty {
+                                        providerMetadata?["pythonSessionId"] = sessionID
+                                    }
+                                } else {
+                                    providerMetadata = ["editorAttachmentsJSON": String(decoding: attachmentsData, as: UTF8.self)]
+                                    if let sessionID = request.metadata["editorSessionId"]?.trimmedNonEmpty {
+                                        providerMetadata?["editorSessionId"] = sessionID
+                                    }
                                 }
                             }
                             let call = ToolCall(
@@ -517,7 +524,7 @@ actor PiAgentRuntime {
                                 providerMetadata: providerMetadata
                             )
                             let createdAtMs = event.timeMs ?? nowMs()
-                            let reportsActivity = name == WebSearchTool.name || name == FetchUrlTool.name || name == PythonExecuteTool.name
+                            let reportsActivity = name == WebSearchTool.name || name == FetchUrlTool.name || name == PythonExecuteTool.name || name == StrReplaceEditorTool.name
                             if reportsActivity {
                                 continuation.yield(.toolActivity(ToolActivityEvent(
                                     phase: .started,

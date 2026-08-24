@@ -50,6 +50,8 @@ final class ChatRepositoryDualTests: XCTestCase {
         XCTAssertEqual(rows[1].parsedRole, .dualModel)
         XCTAssertEqual(rows[1].modelAText, "response-model-a")
         XCTAssertEqual(rows[1].modelBText, "response-model-b")
+        XCTAssertEqual(rows[1].parsedModelAStatus, .completed)
+        XCTAssertEqual(rows[1].parsedModelBStatus, .completed)
         XCTAssertEqual(result.parsedRole, .dualModel)
     }
 
@@ -73,6 +75,8 @@ final class ChatRepositoryDualTests: XCTestCase {
         let modelBRequests = runtime.calls.map(\.request).filter { $0.model == "model-b" }
         XCTAssertGreaterThanOrEqual(modelARequests.count, 2)
         XCTAssertGreaterThanOrEqual(modelBRequests.count, 2)
+        XCTAssertEqual(modelARequests.last?.metadata["editorSessionId"], String(conversationID))
+        XCTAssertEqual(modelBRequests.last?.metadata["editorSessionId"], String(conversationID))
 
         let modelAJoined = modelARequests.last?.messages.map(\.content).joined(separator: "\n") ?? ""
         XCTAssertTrue(modelAJoined.contains("response-model-a"))
@@ -99,10 +103,10 @@ final class ChatRepositoryDualTests: XCTestCase {
         let result = try await fixture.repository.sendDualMessage(conversationId: conversationID, text: "hello")
 
         XCTAssertEqual(result.modelAText, "response-model-a")
-        XCTAssertEqual(
-            result.modelBText,
-            UserFacingErrorFormatter.placeholder(for: ProviderClientError.parseFailure("forced failure"))
-        )
+        XCTAssertEqual(result.modelBText, "")
+        XCTAssertEqual(result.parsedModelAStatus, .completed)
+        XCTAssertEqual(result.parsedModelBStatus, .failed)
+        XCTAssertEqual(result.modelBError, "Response parse failed: forced failure")
         let rows = try fixture.conversations.fetchDualMessages(conversationId: conversationID)
         XCTAssertEqual(rows.count, 2)
         XCTAssertEqual(rows.last?.parsedRole, .dualModel)

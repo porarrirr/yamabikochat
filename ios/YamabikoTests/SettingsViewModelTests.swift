@@ -71,6 +71,22 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testSetProviderPreservesUnsavedDraftPerProvider() throws {
+        let fixture = try makeFixture()
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+
+        viewModel.apiKeyDraft = "gemini-unsaved"
+        viewModel.setProvider("OPENAI")
+        viewModel.apiKeyDraft = "openai-unsaved"
+        viewModel.setProvider("GEMINI")
+
+        XCTAssertEqual(viewModel.apiKeyDraft, "gemini-unsaved")
+        viewModel.setProvider("OPENAI")
+        XCTAssertEqual(viewModel.apiKeyDraft, "openai-unsaved")
+    }
+
+    @MainActor
     func testBindLoadsAlibabaApiKeyFromCredentialStore() throws {
         let fixture = try makeFixture()
         var settings = try fixture.repository.loadSettings()
@@ -179,7 +195,7 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testSetAlibabaMCPServerURLClearsAuthorizationTokenWhenServerChanges() throws {
+    func testSetAlibabaMCPServerURLPreservesAuthorizationTokenDraftWhileEditing() throws {
         let fixture = try makeFixture()
         try fixture.credentials.saveSecret("mcp-token", key: AppConstants.alibabaMCPAuthorizationTokenKey)
 
@@ -189,7 +205,7 @@ final class SettingsViewModelTests: XCTestCase {
 
         viewModel.setAlibabaMCPServerURL("https://mcp.firecrawl.dev/example/v2/mcp")
 
-        XCTAssertEqual(viewModel.alibabaMCPAuthorizationTokenInput, "")
+        XCTAssertEqual(viewModel.alibabaMCPAuthorizationTokenInput, "mcp-token")
     }
 
     @MainActor
@@ -241,12 +257,14 @@ final class SettingsViewModelTests: XCTestCase {
         let viewModel = SettingsViewModel()
         viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
         viewModel.settings.alibabaMCPEnabled = true
+        viewModel.settings.themeMode = "DARK"
         viewModel.setAlibabaMCPServerURL("http://example.com/mcp")
 
         viewModel.saveSettings()
 
         XCTAssertEqual(viewModel.errorMessage, L10n.text("Remote MCP URL に有効な https:// URL を入力してください。"))
         XCTAssertFalse(try fixture.repository.loadSettings().alibabaMCPEnabled)
+        XCTAssertEqual(try fixture.repository.loadSettings().themeMode, "DARK")
     }
 
     private func makeFixture() throws -> (repository: ChatRepository, credentials: SettingsViewModelCredentialStore) {

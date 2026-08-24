@@ -21,12 +21,7 @@ final class AgentSkillRepository: @unchecked Sendable {
         if let rootURL {
             self.rootURL = rootURL
         } else {
-            let support = try! fileManager.url(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask,
-                appropriateFor: nil,
-                create: true
-            )
+            let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             self.rootURL = support.appendingPathComponent("YamabikoChat/AgentSkills", isDirectory: true)
         }
         try? fileManager.createDirectory(at: self.rootURL, withIntermediateDirectories: true)

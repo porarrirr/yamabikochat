@@ -33,6 +33,8 @@ class DatabaseRepository(private val chatDao: ChatDao) {
 
     fun getAllConversations(): Flow<List<Conversation>> = chatDao.getAllConversations()
 
+    suspend fun getAllConversationIds(): List<Long> = chatDao.getAllConversations().first().map { it.id }
+
     fun getConversationListEntries(): Flow<List<ConversationListEntry>> =
         chatDao.getConversationListEntries()
 
@@ -59,6 +61,10 @@ class DatabaseRepository(private val chatDao: ChatDao) {
         chatDao.getProjectById(id) ?: throw IllegalArgumentException("Project not found: $id")
         chatDao.deleteProject(id, deleteConversations)
     }
+
+    suspend fun getConversationIdsForProject(projectId: Long): List<Long> = chatDao.getConversationIdsForProject(projectId)
+
+    suspend fun getSecretConversationIds(): List<Long> = chatDao.getSecretConversationIds()
 
     suspend fun countConversationsInProject(projectId: Long): Int =
         chatDao.countConversationsInProject(projectId)
@@ -222,15 +228,17 @@ class DatabaseRepository(private val chatDao: ChatDao) {
     suspend fun saveToolActivities(
         messageId: Long,
         stepsJSON: String,
-        providerTranscriptJSON: String? = null
+        providerTranscriptJSON: String? = null,
+        attachmentPathsJSON: String? = null
     ) {
-        val existingTranscript = chatDao.getToolActivityForMessage(messageId)?.providerTranscriptJSON
+        val existing = chatDao.getToolActivityForMessage(messageId)
         chatDao.deleteToolActivityForMessage(messageId)
         chatDao.insertToolActivity(
             ChatMessageToolActivity(
                 messageId = messageId,
                 stepsJSON = stepsJSON,
-                providerTranscriptJSON = providerTranscriptJSON ?: existingTranscript
+                providerTranscriptJSON = providerTranscriptJSON ?: existing?.providerTranscriptJSON,
+                attachmentPathsJSON = attachmentPathsJSON ?: existing?.attachmentPathsJSON
             )
         )
     }
@@ -238,15 +246,17 @@ class DatabaseRepository(private val chatDao: ChatDao) {
     suspend fun saveToolActivitiesForVariant(
         variantId: Long,
         stepsJSON: String,
-        providerTranscriptJSON: String? = null
+        providerTranscriptJSON: String? = null,
+        attachmentPathsJSON: String? = null
     ) {
-        val existingTranscript = chatDao.getToolActivityForVariant(variantId)?.providerTranscriptJSON
+        val existing = chatDao.getToolActivityForVariant(variantId)
         chatDao.deleteToolActivityForVariant(variantId)
         chatDao.insertToolActivity(
             ChatMessageToolActivity(
                 variantId = variantId,
                 stepsJSON = stepsJSON,
-                providerTranscriptJSON = providerTranscriptJSON ?: existingTranscript
+                providerTranscriptJSON = providerTranscriptJSON ?: existing?.providerTranscriptJSON,
+                attachmentPathsJSON = attachmentPathsJSON ?: existing?.attachmentPathsJSON
             )
         )
     }

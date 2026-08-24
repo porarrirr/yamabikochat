@@ -16,7 +16,8 @@ final class ConversationRepository: @unchecked Sendable {
         provider: String,
         systemPrompt: String? = nil,
         isSecret: Bool = false,
-        projectId: Int64? = nil
+        projectId: Int64? = nil,
+        pendingInitialMessage: String? = nil
     ) throws -> Int64 {
         try dbQueue.write { db in
             var conversation = Conversation(
@@ -25,7 +26,8 @@ final class ConversationRepository: @unchecked Sendable {
                 model: model,
                 apiProvider: provider,
                 isSecret: isSecret,
-                projectId: projectId
+                projectId: projectId,
+                pendingInitialMessage: pendingInitialMessage
             )
             try conversation.insert(db)
             return conversation.id ?? 0
@@ -100,6 +102,18 @@ final class ConversationRepository: @unchecked Sendable {
                 sql: "SELECT id FROM conversations WHERE projectId = ?",
                 arguments: [projectId]
             )
+        }
+    }
+
+    func secretConversationIDs() throws -> [Int64] {
+        try dbQueue.read { db in
+            try Int64.fetchAll(db, sql: "SELECT id FROM conversations WHERE isSecret = 1")
+        }
+    }
+
+    func allConversationIDs() throws -> [Int64] {
+        try dbQueue.read { db in
+            try Int64.fetchAll(db, sql: "SELECT id FROM conversations")
         }
     }
 
@@ -263,6 +277,16 @@ final class ConversationRepository: @unchecked Sendable {
     func fetchConversation(id: Int64) throws -> Conversation? {
         try dbQueue.read { db in
             try Conversation.fetchOne(db, key: id)
+        }
+    }
+
+    func pendingInitialMessage(conversationId: Int64) throws -> String? {
+        try dbQueue.read { db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT pendingInitialMessage FROM conversations WHERE id = ?",
+                arguments: [conversationId]
+            )
         }
     }
 
@@ -560,8 +584,13 @@ final class ConversationRepository: @unchecked Sendable {
 
             let now = Int64(Date().timeIntervalSince1970 * 1000)
             try db.execute(
-                sql: "UPDATE conversations SET updatedAtMs = ? WHERE id = ?",
-                arguments: [now, mutable.conversationId]
+                sql: """
+                    UPDATE conversations
+                    SET updatedAtMs = ?,
+                        pendingInitialMessage = CASE WHEN ? = 'user' THEN NULL ELSE pendingInitialMessage END
+                    WHERE id = ?
+                    """,
+                arguments: [now, mutable.role, mutable.conversationId]
             )
 
             return mutable.id ?? 0
@@ -1005,8 +1034,13 @@ final class ConversationRepository: @unchecked Sendable {
             try mutable.insert(db)
             let now = Int64(Date().timeIntervalSince1970 * 1000)
             try db.execute(
-                sql: "UPDATE conversations SET updatedAtMs = ? WHERE id = ?",
-                arguments: [now, mutable.conversationId]
+                sql: """
+                    UPDATE conversations
+                    SET updatedAtMs = ?,
+                        pendingInitialMessage = CASE WHEN ? = 'user' THEN NULL ELSE pendingInitialMessage END
+                    WHERE id = ?
+                    """,
+                arguments: [now, mutable.role, mutable.conversationId]
             )
             return mutable.id ?? 0
         }

@@ -34,10 +34,19 @@ data class ToolSource(
 )
 
 @Serializable
+data class ToolArtifact(
+    val path: String,
+    val name: String,
+    val mime: String,
+    val size: Long
+)
+
+@Serializable
 data class ToolResult(
     val callId: String,
     val name: String,
     val content: String,
     val isError: Boolean = false,
-    val sources: List<ToolSource> = emptyList()
+    val sources: List<ToolSource> = emptyList(),
+    val artifacts: List<ToolArtifact> = emptyList()
 )

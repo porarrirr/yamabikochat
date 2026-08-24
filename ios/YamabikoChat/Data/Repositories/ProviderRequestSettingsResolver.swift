@@ -77,7 +77,7 @@ final class ProviderRequestSettingsResolver {
         skillRepository: AgentSkillRepository = AgentSkillRepository(),
         modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
         localToolRegistry: LocalToolRegistry = LocalToolRegistry(
-            executors: [WebSearchTool(), FetchUrlTool(), PythonExecuteTool()]
+            executors: [WebSearchTool(), FetchUrlTool(), PythonExecuteTool(), StrReplaceEditorTool()]
         ),
         modelsDevReasoningEffort: @escaping (String, String) -> String? = { _, _ in nil }
     ) {
@@ -209,6 +209,12 @@ final class ProviderRequestSettingsResolver {
            settings.pythonToolEnabled,
            supportsClientWebSearch,
            let definition = localToolRegistry.definitions.first(where: { $0.name == PythonExecuteTool.name }) {
+            tools.append(definition.providerTool)
+        }
+        if toolScope == .all,
+           context == .default || context == .dualA || context == .dualB,
+           supportsClientWebSearch,
+           let definition = localToolRegistry.definitions.first(where: { $0.name == StrReplaceEditorTool.name }) {
             tools.append(definition.providerTool)
         }
         if toolScope.allowsAgentSkills, supportsClientWebSearch {

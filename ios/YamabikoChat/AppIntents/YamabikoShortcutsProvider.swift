@@ -26,10 +26,9 @@ struct YamabikoShortcutsProvider: AppShortcutsProvider {
             intent: RunFusionIntent(),
             phrases: [
                 "Shortcuts: \(.applicationName) で Fusion に聞く",
-                "\(.applicationName) Fusion に聞く",
-                "\(.applicationName) fusion test"
+                "\(.applicationName) Fusion に聞く"
             ],
-            shortTitle: "Fusion に聞く",
+            shortTitle: LocalizedStringResource("Fusion に聞く"),
             systemImageName: "arrow.triangle.merge"
         )
     }

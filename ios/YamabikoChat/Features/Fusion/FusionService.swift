@@ -239,9 +239,7 @@ final class FusionService {
             thinking: resolvedSettings.thinking,
             provider: resolvedSettings.routing,
             metadata: metadata,
-            // URLRequest defaults to a 60-second idle timeout. Fusion requests
-            // must remain active until completion or explicit user cancellation.
-            timeoutInterval: .greatestFiniteMagnitude,
+            timeoutInterval: TimeInterval(max(model.timeoutMs ?? 120_000, 1_000)) / 1_000,
             skillContext: skillContext
         )
     }

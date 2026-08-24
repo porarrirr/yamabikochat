@@ -538,3 +538,6 @@
 "メッセージを送信する" = "Send a message";
 "カラー" = "Color";
 "戻る" = "Back";
+"別の会話を開くと破棄 · %@" = "Discarded when another chat opens · %@";
+"このチャットは別の会話を開くと破棄されます。" = "This chat is discarded when you open another chat.";
+"無制限（安全上限: 100ターン・30分）" = "Unlimited (safety limit: 100 turns or 30 min)";

@@ -12,4 +12,6 @@ enum ShareExtensionStrings {
     static var cancelButton: String { text("share.cancel_button") }
     static var loading: String { text("share.loading") }
     static var emptyPreview: String { text("share.empty_preview") }
+    static var importFailed: String { text("share.import_failed") }
+    static var openFailed: String { text("share.open_failed") }
 }

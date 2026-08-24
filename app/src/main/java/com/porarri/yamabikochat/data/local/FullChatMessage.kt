@@ -20,7 +20,7 @@ data class FullChatMessage(
         get() = selectedVariant?.text ?: chatMessage.text
 
     val displayAttachments: List<String>
-        get() = selectedVariant?.attachments ?: chatMessage.attachments
+        get() = ((selectedVariant?.attachments ?: chatMessage.attachments) + displayToolActivity?.attachmentPaths.orEmpty()).distinct()
 
     val displayThinkingStream: String?
         get() = if (normalizedSelectedVariantIndex == 0) thinkingStream else selectedVariant?.thinkingStream

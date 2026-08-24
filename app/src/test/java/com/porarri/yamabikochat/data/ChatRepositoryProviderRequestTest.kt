@@ -58,7 +58,8 @@ class ChatRepositoryProviderRequestTest {
             pricingRepository = pricingRepository,
             modelsDevCatalogRepository = mockk(relaxed = true),
             agentSkillRepository = agentSkillRepository,
-            securePreferences = mockk(relaxed = true)
+            securePreferences = mockk(relaxed = true),
+            editorWorkspaceStore = mockk(relaxed = true)
         )
     }
 
@@ -84,6 +85,7 @@ class ChatRepositoryProviderRequestTest {
         assertEquals("true", request.metadata["supportsVision"])
         assertEquals("CODEX_AUTH", request.metadata["provider"])
         assertEquals("conversation-42", request.metadata["promptCacheKey"])
+        assertEquals("42", request.metadata["editorSessionId"])
         assertEquals("session-uuid", request.metadata["codexSessionId"])
     }
 
@@ -104,6 +106,7 @@ class ChatRepositoryProviderRequestTest {
         assertEquals("false", request.metadata["supportsVision"])
         assertEquals("GEMINI", request.metadata["provider"])
         assertEquals("conversation-7-dual-a", request.metadata["promptCacheKey"])
+        assertEquals("7", request.metadata["editorSessionId"])
         assertNull(request.metadata["codexSessionId"])
     }
 

@@ -1361,16 +1361,18 @@ private struct MathMarkdownWebView: UIViewRepresentable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
-            guard navigationAction.navigationType == .linkActivated,
-                  let url = navigationAction.request.url,
-                  let scheme = url.scheme?.lowercased(),
-                  scheme == "http" || scheme == "https"
-            else {
+            if navigationAction.navigationType == .other,
+               navigationAction.targetFrame?.isMainFrame == true,
+               navigationAction.request.url?.scheme == "file" {
                 decisionHandler(.allow)
                 return
             }
-
-            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            if navigationAction.navigationType == .linkActivated,
+               let url = navigationAction.request.url,
+               let scheme = url.scheme?.lowercased(),
+               scheme == "http" || scheme == "https" {
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            }
             decisionHandler(.cancel)
         }
 

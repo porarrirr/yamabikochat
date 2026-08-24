@@ -19,6 +19,8 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.UUID
@@ -37,6 +39,63 @@ import java.io.IOException
  * in-memory cache, eliminates repeated Base64 conversions when the same attachment is reused.
  */
 class AttachmentStorage(private val context: Context) {
+
+    suspend fun persistGeneratedFile(data: ByteArray, filename: String, collection: String): File =
+        persistGeneratedFile(data, filename, collection, MAX_FILE_SIZE)
+
+    suspend fun persistGeneratedFile(data: ByteArray, filename: String, collection: String, maximumBytes: Int): File =
+        withContext(Dispatchers.IO) {
+            require(data.size <= maximumBytes) { "Generated file exceeds the attachment size limit." }
+            val collectionDirectory = File(context.filesDir, "GeneratedFiles/${FileValidationUtils.sanitizeFileName(collection)}")
+            if (!collectionDirectory.exists() && !collectionDirectory.mkdirs()) {
+                throw IOException("Could not create generated-file collection.")
+            }
+            val rawName = FileValidationUtils.sanitizeFileName(filename).ifBlank { "file" }
+            val extension = rawName.substringAfterLast('.', "").takeIf { it.isNotEmpty() }
+            val stem = if (extension == null) rawName else rawName.dropLast(extension.length + 1)
+            var destination = File(collectionDirectory, rawName)
+            var suffix = 2
+            while (destination.exists()) {
+                val next = "$stem ($suffix)" + (extension?.let { ".$it" } ?: "")
+                destination = File(collectionDirectory, next)
+                suffix += 1
+            }
+            FileOutputStream(destination).use { it.write(data) }
+            destination
+        }
+
+    suspend fun persistGeneratedFileReplacingExisting(
+        data: ByteArray,
+        filename: String,
+        collection: String,
+        maximumBytes: Int,
+    ): File = withContext(Dispatchers.IO) {
+        require(data.size <= maximumBytes) { "Generated file exceeds the attachment size limit." }
+        val collectionDirectory = File(context.filesDir, "GeneratedFiles/${FileValidationUtils.sanitizeFileName(collection)}")
+        if (!collectionDirectory.exists() && !collectionDirectory.mkdirs()) {
+            throw IOException("Could not create generated-file collection.")
+        }
+        val safeName = FileValidationUtils.sanitizeFileName(filename).ifBlank { "file" }
+        val destination = File(collectionDirectory, safeName)
+        val temporary = File(collectionDirectory, ".yamabiko-generated-${UUID.randomUUID()}")
+        try {
+            FileOutputStream(temporary).use { it.write(data) }
+            Files.move(
+                temporary.toPath(),
+                destination.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        } catch (error: Exception) {
+            temporary.delete()
+            throw error
+        }
+        destination
+    }
+
+    suspend fun deleteGeneratedFile(file: File) = withContext(Dispatchers.IO) {
+        if (file.exists() && !file.delete()) throw IOException("Could not remove generated file.")
+    }
 
     private class StringBuilderOutputStream : OutputStream() {
         private val builder = StringBuilder()

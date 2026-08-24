@@ -14,6 +14,7 @@ struct Conversation: Codable, FetchableRecord, MutablePersistableRecord, Identif
     var codexSessionId: String?
     var isSecret: Bool
     var projectId: Int64?
+    var pendingInitialMessage: String?
 
     init(
         id: Int64? = nil,
@@ -25,7 +26,8 @@ struct Conversation: Codable, FetchableRecord, MutablePersistableRecord, Identif
         updatedAtMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
         codexSessionId: String? = nil,
         isSecret: Bool = false,
-        projectId: Int64? = nil
+        projectId: Int64? = nil,
+        pendingInitialMessage: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -37,6 +39,7 @@ struct Conversation: Codable, FetchableRecord, MutablePersistableRecord, Identif
         self.codexSessionId = codexSessionId
         self.isSecret = isSecret
         self.projectId = projectId
+        self.pendingInitialMessage = pendingInitialMessage
     }
 
     mutating func didInsert(_ inserted: InsertionSuccess) {

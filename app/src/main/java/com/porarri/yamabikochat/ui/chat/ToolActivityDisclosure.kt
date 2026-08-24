@@ -54,11 +54,14 @@ fun ToolActivityDisclosure(
     val isRunning = steps.any { it.status == ToolActivityStep.Status.running }
     val hasFailure = steps.any { it.status == ToolActivityStep.Status.failed }
     val currentStep = steps.lastOrNull { it.status == ToolActivityStep.Status.running }
+    val hasNonWebTool = steps.any { it.toolName != "web_search" && it.toolName != "fetch_url" }
     val statusLabel = if (isRunning) {
+        if (currentStep?.toolName == "str_replace_editor") "ファイル操作中：${currentStep.detail}"
+        else
         if (currentStep?.toolName == "fetch_url") "確認中：${currentStep.detail}"
         else "検索中：${currentStep?.detail.orEmpty()}"
     } else {
-        "Web検索・${steps.size}ステップ"
+        if (hasNonWebTool) "ツール・${steps.size}ステップ" else "Web検索・${steps.size}ステップ"
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -192,6 +195,13 @@ private fun ToolActivityStepRow(step: ToolActivityStep) {
                     text = error,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error
+                )
+            }
+            step.artifactNames?.takeIf { it.isNotEmpty() }?.let { names ->
+                Text(
+                    text = "生成ファイル: ${names.joinToString(", ")}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }

@@ -5,7 +5,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 object AppDatabaseMigrations {
     private const val LEGACY_TARGET_VERSION = 27
-    private const val LATEST_VERSION = 56
+    private const val LATEST_VERSION = 57
 
     private val legacyRebuildMigrations: List<Migration> = (1 until LEGACY_TARGET_VERSION).map { startVersion ->
         object : Migration(startVersion, LEGACY_TARGET_VERSION) {
@@ -414,6 +414,12 @@ object AppDatabaseMigrations {
         }
     }
 
+    private val migration56To57 = object : Migration(56, 57) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            ensureColumn(db, "chat_message_tool_activity", Column("attachmentPathsJSON", "TEXT"))
+        }
+    }
+
     val ALL_MIGRATIONS: Array<Migration> =
         (legacyRebuildMigrations + listOf(
             migration27To28,
@@ -444,7 +450,8 @@ object AppDatabaseMigrations {
             migration52To53,
             migration53To54,
             migration54To55,
-            migration55To56
+            migration55To56,
+            migration56To57
         )).toTypedArray()
 
     private fun rebuildSchema(db: SupportSQLiteDatabase) {
@@ -872,6 +879,7 @@ object AppDatabaseMigrations {
                 `variantId` INTEGER,
                 `stepsJSON` TEXT NOT NULL,
                 `providerTranscriptJSON` TEXT,
+                `attachmentPathsJSON` TEXT,
                 FOREIGN KEY(`messageId`) REFERENCES `chat_messages`(`id`) ON DELETE CASCADE,
                 FOREIGN KEY(`variantId`) REFERENCES `chat_message_variants`(`id`) ON DELETE CASCADE
             )

@@ -25,6 +25,7 @@ final class ChatViewModel: ObservableObject {
     @Published var isAutoConversationRunning: Bool = false
     @Published var isAutoConversationPaused: Bool = false
     @Published var autoConversationStatus: String?
+    @Published private(set) var generationStatus: String?
     @Published var fusionStreamingStatus: String?
     @Published var fusionProgress: FusionProgressSnapshot?
     @Published var errorMessage: String?
@@ -47,6 +48,8 @@ final class ChatViewModel: ObservableObject {
     private var attachmentRepository: AttachmentRepository?
     private var cancellables: Set<AnyCancellable> = []
     private var autoConversationTask: Task<Void, Never>?
+    private var activeSendTask: Task<Void, Never>?
+    private var activeSendID: UUID?
     private var activeAutoConversationID: Int64?
     private var conversationSystemPrompt: String?
     private var lastSettingsSnapshot: AppSettings?
@@ -92,6 +95,7 @@ final class ChatViewModel: ObservableObject {
 
     deinit {
         autoConversationTask?.cancel()
+        activeSendTask?.cancel()
     }
 
     func bind(repository: ChatRepository, attachmentRepository: AttachmentRepository, skillRepository: AgentSkillRepository? = nil) {
@@ -300,6 +304,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     func sendMessage() {
+        guard !isSending else { return }
         // Stop immediately to prevent late-start recording after send.
         speechService.stopRecording()
         let trimmedText = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -317,19 +322,33 @@ final class ChatViewModel: ObservableObject {
 
         let attachmentDrafts = attachments
         attachments = []
-
-        let isAutoConversationEnabled = settings.isAutoConversationEnabled
+        let runSettings = settings
+        let runStartedAtMs = Int64(Date().timeIntervalSince1970 * 1_000)
+        let isAutoConversationEnabled = runSettings.isAutoConversationEnabled
         let shouldStartAutoConversation = isAutoConversationEnabled && AutoConversationTrigger.matches(text)
+        let runID = UUID()
+        activeSendID = runID
 
-        Task {
-            defer { isSending = false }
+        activeSendTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if self.activeSendID == runID {
+                    self.clearStreamingState()
+                    self.generationStatus = nil
+                    self.fusionStreamingStatus = nil
+                    self.fusionProgress = nil
+                    self.isSending = false
+                    self.activeSendID = nil
+                    self.activeSendTask = nil
+                }
+            }
             do {
                 // Provider requests use filesystem paths. Serializing these URLs with
                 // absoluteString would produce `file:///...`, which is not a path and
                 // causes the Pi runtime to look for a non-existent file.
                 let attachmentPaths = attachmentDrafts.map { $0.url.path }
 
-                if settings.isFusionModeEnabled {
+                if runSettings.isFusionModeEnabled {
                     guard !text.isEmpty || !attachmentPaths.isEmpty else {
                         errorMessage = L10n.text("Fusion モードでは本文または添付を入力してください。")
                         attachments = attachmentDrafts
@@ -340,14 +359,17 @@ final class ChatViewModel: ObservableObject {
                         conversationId: conversationID,
                         text: text,
                         attachments: attachmentPaths,
+                        settingsOverride: runSettings,
                         onFusionProgress: { [self] snapshot in
                             Task { @MainActor in
+                                guard self.activeSendID == runID else { return }
                                 self.fusionProgress = snapshot
                             }
                         },
                         onStreamEvent: { [self] event in
                             guard case let .reasoningDelta(delta) = event else { return }
                             Task { @MainActor in
+                                guard self.activeSendID == runID else { return }
                                 let reasoningStatus = delta.isEmpty ? nil : L10n.text("推論中...")
                                 self.fusionStreamingStatus = reasoningStatus
                                 if var progress = self.fusionProgress {
@@ -358,13 +380,14 @@ final class ChatViewModel: ObservableObject {
                         },
                         onStreamingSnapshot: { [self] snapshot in
                             Task { @MainActor in
+                                guard self.activeSendID == runID else { return }
                                 self.handleStreamingSnapshot(snapshot)
                             }
                         }
                     )
                     fusionStreamingStatus = nil
                     fusionProgress = nil
-                } else if settings.isDualModeEnabled {
+                } else if runSettings.isDualModeEnabled {
                     guard !text.isEmpty || !attachmentPaths.isEmpty else {
                         errorMessage = L10n.text("デュアルモードでは本文または添付を入力してください。")
                         attachments = attachmentDrafts
@@ -373,7 +396,8 @@ final class ChatViewModel: ObservableObject {
                     _ = try await repository.sendDualMessage(
                         conversationId: conversationID,
                         text: text,
-                        attachments: attachmentPaths
+                        attachments: attachmentPaths,
+                        settingsOverride: runSettings
                     )
                 } else if shouldStartAutoConversation,
                           !isAutoConversationRunning,
@@ -389,23 +413,40 @@ final class ChatViewModel: ObservableObject {
                         conversationId: conversationID,
                         text: text,
                         attachments: attachmentPaths,
+                        settingsOverride: runSettings,
                         onStreamEvent: { [self] event in
                             guard case let .reasoningDelta(delta) = event else { return }
                             Task { @MainActor in
-                                self.autoConversationStatus = delta.isEmpty ? self.autoConversationStatus : L10n.text("推論中...")
+                                guard self.activeSendID == runID else { return }
+                                self.generationStatus = delta.isEmpty ? self.generationStatus : L10n.text("推論中...")
                             }
                         },
                         onStreamingSnapshot: { [self] snapshot in
                             Task { @MainActor in
+                                guard self.activeSendID == runID else { return }
                                 self.handleStreamingSnapshot(snapshot)
                             }
                         }
                     )
                 }
                 refreshConversationTitle()
+            } catch is CancellationError {
+                restoreDraftIfUncommitted(
+                    repository: repository,
+                    text: text,
+                    attachmentDrafts: attachmentDrafts,
+                    settings: runSettings,
+                    startedAtMs: runStartedAtMs
+                )
             } catch {
                 errorMessage = error.localizedDescription
-                attachments = attachmentDrafts
+                restoreDraftIfUncommitted(
+                    repository: repository,
+                    text: text,
+                    attachmentDrafts: attachmentDrafts,
+                    settings: runSettings,
+                    startedAtMs: runStartedAtMs
+                )
                 DiagnosticsLogger.log(
                     "Send message failed conversation=\(conversationID)",
                     category: .chat,
@@ -413,6 +454,49 @@ final class ChatViewModel: ObservableObject {
                 )
             }
         }
+    }
+
+    func cancelActiveRun() {
+        activeSendTask?.cancel()
+    }
+
+    private func restoreDraft(text: String, attachmentDrafts: [AttachmentDraft]) {
+        let current = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if current.isEmpty {
+            inputText = text
+        } else if current != text, !text.isEmpty {
+            inputText = text + "\n" + inputText
+        }
+        let existingIDs = Set(attachments.map(\.id))
+        attachments = attachmentDrafts.filter { !existingIDs.contains($0.id) } + attachments
+    }
+
+    private func restoreDraftIfUncommitted(
+        repository: ChatRepository,
+        text: String,
+        attachmentDrafts: [AttachmentDraft],
+        settings: AppSettings,
+        startedAtMs: Int64
+    ) {
+        let paths = attachmentDrafts.map { $0.url.path }
+        let committed = (try? repository.isUserTurnCommitted(
+            conversationId: conversationID,
+            text: text,
+            attachments: paths,
+            dualMode: settings.isDualModeEnabled,
+            startedAtMs: startedAtMs
+        )) ?? false
+        if !committed {
+            restoreDraft(text: text, attachmentDrafts: attachmentDrafts)
+        }
+    }
+
+    private func clearStreamingState() {
+        streamingFlushTasks.values.forEach { $0.cancel() }
+        streamingFlushTasks.removeAll()
+        pendingStreamingSnapshots.removeAll()
+        lastStreamingPublishAt.removeAll()
+        streamingSnapshots.removeAll()
     }
 
     func streamingSnapshot(for messageId: Int64) -> ChatStreamingSnapshot? {
@@ -468,6 +552,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     func regenerateLastAssistantVariant() {
+        guard !isSending else { return }
         guard let repository else {
             errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             return
@@ -489,23 +574,40 @@ final class ChatViewModel: ObservableObject {
 
         isSending = true
         errorMessage = nil
-        Task {
-            defer { isSending = false }
+        let runSettings = settings
+        let runID = UUID()
+        activeSendID = runID
+        activeSendTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if self.activeSendID == runID {
+                    self.clearStreamingState()
+                    self.generationStatus = nil
+                    self.isSending = false
+                    self.activeSendID = nil
+                    self.activeSendTask = nil
+                }
+            }
             do {
                 _ = try await repository.regenerateLastAssistantVariant(
                     conversationId: conversationID,
+                    settingsOverride: runSettings,
                     onStreamEvent: { [self] event in
                         guard case let .reasoningDelta(delta) = event else { return }
                         Task { @MainActor in
-                            self.autoConversationStatus = delta.isEmpty ? self.autoConversationStatus : L10n.text("推論中...")
+                            guard self.activeSendID == runID else { return }
+                            self.generationStatus = delta.isEmpty ? self.generationStatus : L10n.text("推論中...")
                         }
                     },
                     onStreamingSnapshot: { [self] snapshot in
                         Task { @MainActor in
+                            guard self.activeSendID == runID else { return }
                             self.handleStreamingSnapshot(snapshot)
                         }
                     }
                 )
+            } catch is CancellationError {
+                return
             } catch {
                 errorMessage = error.localizedDescription
                 DiagnosticsLogger.log(
@@ -568,6 +670,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     func toggleDualMode() {
+        guard !isSending else { return }
         guard let repository else {
             errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             return
@@ -591,6 +694,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     func toggleFusionMode() {
+        guard !isSending else { return }
         guard let repository else {
             errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             return
@@ -676,6 +780,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     func toggleAutoConversation() {
+        guard !isSending else { return }
         guard let repository else {
             errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             return
@@ -743,7 +848,7 @@ final class ChatViewModel: ObservableObject {
                 ? settings.currentModel().trimmingCharacters(in: .whitespacesAndNewlines)
                 : activeConversationModel
             let base = model.isEmpty ? provider : "\(provider) · \(Self.shortModelLabel(model))"
-            return L10n.format("閉じると破棄 · %@", base)
+            return L10n.format("別の会話を開くと破棄 · %@", base)
         }
         if settings.isFusionModeEnabled {
             var parts = [fusionStatusLabel]
@@ -881,6 +986,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     func applyChatPreset(_ preset: ModelPreset) {
+        guard !isSending else { return }
         guard let repository else {
             errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             return
@@ -924,6 +1030,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     func applySystemPromptPreset(name: String?) {
+        guard !isSending else { return }
         guard let repository else { return }
 
         let selectedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1137,8 +1244,10 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func updateActiveChatPresetName() {
-        let currentProvider = settings.apiProvider.uppercased()
-        let currentModel = settings.currentModel().trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentProvider = (activeConversationProvider.isEmpty ? settings.apiProvider : activeConversationProvider)
+            .uppercased()
+        let currentModel = (activeConversationModel.isEmpty ? settings.currentModel() : activeConversationModel)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !currentModel.isEmpty else {
             activeChatPresetName = nil
             return
@@ -1163,9 +1272,22 @@ final class ChatViewModel: ObservableObject {
             conversationModel: activeConversationModel
         )
         canAttachImages = supportsVision
-        if !supportsVision, !attachments.isEmpty {
-            attachments = []
+        if !supportsVision {
+            let unsupportedImages = attachments.filter { attachmentRepository?.requiresVision(url: $0.url) == true }
+            if !unsupportedImages.isEmpty {
+                let unsupportedIDs = Set(unsupportedImages.map(\.id))
+                attachments.removeAll { unsupportedIDs.contains($0.id) }
+                errorMessage = L10n.text("画像入力に対応していないモデルのため、画像添付を外しました。")
+            }
         }
+    }
+
+    var conversationProvider: String {
+        activeConversationProvider.isEmpty ? settings.apiProvider : activeConversationProvider
+    }
+
+    var conversationModel: String {
+        activeConversationModel.isEmpty ? settings.currentModel() : activeConversationModel
     }
 
     private func rebuildContextUsage() {

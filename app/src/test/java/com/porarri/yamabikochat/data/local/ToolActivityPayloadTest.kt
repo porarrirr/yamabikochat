@@ -5,6 +5,7 @@ import com.porarri.yamabikochat.data.model.ToolActivityEvent
 import com.porarri.yamabikochat.data.model.ToolCall
 import com.porarri.yamabikochat.data.model.ToolResult
 import com.porarri.yamabikochat.data.model.ToolSource
+import com.porarri.yamabikochat.data.model.ToolArtifact
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -73,5 +74,20 @@ class ToolActivityPayloadTest {
         assertEquals(ToolActivityStep.Status.failed, payload.steps.first().status)
         payload = payload.failRunning("cancelled")
         assertEquals(ToolActivityStep.Status.failed, payload.steps.last().status)
+    }
+
+    @Test
+    fun `new editor artifact replaces prior persisted version by logical name`() {
+        val call = ToolCall("edit-1", "str_replace_editor", """{"command":"create","path":"/workspace/report.txt"}""")
+        val first = ToolResult(call.id, call.name, "ok", artifacts = listOf(ToolArtifact("/generated/report.txt", "report.txt", "text/plain", 1)))
+        val second = ToolResult(call.id, call.name, "ok", artifacts = listOf(ToolArtifact("/generated/report (2).txt", "report.txt", "text/plain", 2)))
+        var payload = ToolActivityPayload().applying(ToolActivityEvent(ToolActivityEvent.Phase.finished, call, first))
+        payload = payload.applying(ToolActivityEvent(ToolActivityEvent.Phase.finished, call.copy(id = "edit-2"), second))
+
+        assertEquals(listOf("/generated/report (2).txt"), payload.attachmentPaths)
+        assertEquals(null, payload.steps.first().artifactNames)
+        assertEquals(listOf("report.txt"), payload.steps.last().artifactNames)
+        assertEquals("ファイルを編集", payload.steps.last().title)
+        assertEquals("create — /workspace/report.txt", payload.steps.last().detail)
     }
 }

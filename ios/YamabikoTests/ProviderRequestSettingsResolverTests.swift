@@ -2,6 +2,39 @@ import XCTest
 @testable import YamabikoChat
 
 final class ProviderRequestSettingsResolverTests: XCTestCase {
+    func testEditorIsPublishedOnlyForNormalAndDualPiToolContexts() async throws {
+        let resolver = makeResolver()
+        func containsEditor(
+            context: AppSettings.ReasoningContext,
+            scope: ProviderRequestToolScope = .all,
+            provider: String = "GEMINI"
+        ) async throws -> Bool {
+            let resolved = try await resolver.resolve(
+                settings: AppSettings(),
+                provider: provider,
+                model: "gemini-2.5-flash",
+                context: context,
+                toolScope: scope
+            )
+            return resolved.tools.contains { $0.payload["name"] == StrReplaceEditorTool.name }
+        }
+
+        let normal = try await containsEditor(context: .default)
+        let dualA = try await containsEditor(context: .dualA)
+        let dualB = try await containsEditor(context: .dualB)
+        let autoA = try await containsEditor(context: .autoA)
+        let autoB = try await containsEditor(context: .autoB)
+        let fusion = try await containsEditor(context: .default, scope: .fusionPanel(allowWebSearch: true))
+        let nonPi = try await containsEditor(context: .default, provider: LLMProvider.appleIntelligence.rawValue)
+        XCTAssertTrue(normal)
+        XCTAssertTrue(dualA)
+        XCTAssertTrue(dualB)
+        XCTAssertFalse(autoA)
+        XCTAssertFalse(autoB)
+        XCTAssertFalse(fusion)
+        XCTAssertFalse(nonPi)
+    }
+
     func testDualContextInheritsProviderGlobalsIncludingClientWebSearch() async throws {
         let resolver = makeResolver()
         var settings = AppSettings()

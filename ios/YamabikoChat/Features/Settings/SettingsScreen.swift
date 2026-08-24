@@ -29,7 +29,7 @@ struct SettingsScreen: View {
             case .systemPrompt, .dual, .auto:
                 return .conversation
             case .appearance:
-                return .management
+                return .display
             }
         }
     }
@@ -83,7 +83,7 @@ struct SettingsScreen: View {
                     }
                 }
             }
-            .overlay(alignment: .bottom) {
+            .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 4) {
                     if let status = viewModel.statusMessage {
                         Text(status)
@@ -91,12 +91,24 @@ struct SettingsScreen: View {
                             .foregroundStyle(.green)
                     }
                     if let error = viewModel.errorMessage {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
+                        HStack(alignment: .top) {
+                            Text(error)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                            Spacer()
+                            Button {
+                                viewModel.errorMessage = nil
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .frame(width: 44, height: 44)
+                            }
+                            .accessibilityLabel(Text(L10n.text("エラーを閉じる")))
+                        }
+                        .padding(.horizontal, 12)
+                        .background(.regularMaterial)
+                        .accessibilityElement(children: .combine)
                     }
                 }
-                .padding(.bottom, 8)
             }
             .task {
                 viewModel.bind(

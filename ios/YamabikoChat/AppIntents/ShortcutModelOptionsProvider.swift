@@ -2,9 +2,10 @@ import AppIntents
 import Foundation
 
 private enum ShortcutModelOptionsSupport {
-    static func modelOptions(for providerID: String) -> [String] {
-        let settings = (try? AppServices.shared.settingsRepository.load()) ?? AppSettings()
-        let openRouterModels = AppServices.shared.openRouterModelService.currentModels()
+    static func modelOptions(for providerID: String) throws -> [String] {
+        let services = try AppServices.resolve()
+        let settings = try services.settingsRepository.load()
+        let openRouterModels = services.openRouterModelService.currentModels()
         return ShortcutModelOptionsBuilder.modelOptions(
             provider: providerID,
             settings: settings,
@@ -12,27 +13,43 @@ private enum ShortcutModelOptionsSupport {
         )
     }
 
-    static func defaultProviderID() -> String {
-        (try? AppServices.shared.settingsRepository.load().apiProvider) ?? "GEMINI"
+    static func defaultProviderID() throws -> String {
+        try AppServices.resolve().settingsRepository.load().apiProvider
     }
 }
 
 struct AskShortcutModelOptionsProvider: DynamicOptionsProvider {
+    @IntentParameterDependency<RunYamabikoModelIntent>(\.$provider)
+    private var intent
+
     func results() async throws -> [String] {
-        ShortcutModelOptionsSupport.modelOptions(for: ShortcutModelOptionsSupport.defaultProviderID())
+        try ShortcutModelOptionsSupport.modelOptions(
+            for: try intent?.provider.providerKey ?? ShortcutModelOptionsSupport.defaultProviderID()
+        )
     }
 
     func defaultResult() async -> String? {
-        ShortcutModelOptionsSupport.modelOptions(for: ShortcutModelOptionsSupport.defaultProviderID()).first
+        guard let provider = intent?.provider.providerKey ?? (try? ShortcutModelOptionsSupport.defaultProviderID()) else {
+            return nil
+        }
+        return try? ShortcutModelOptionsSupport.modelOptions(for: provider).first
     }
 }
 
 struct SaveShortcutModelOptionsProvider: DynamicOptionsProvider {
+    @IntentParameterDependency<RunAndSaveYamabikoModelIntent>(\.$provider)
+    private var intent
+
     func results() async throws -> [String] {
-        ShortcutModelOptionsSupport.modelOptions(for: ShortcutModelOptionsSupport.defaultProviderID())
+        try ShortcutModelOptionsSupport.modelOptions(
+            for: try intent?.provider.providerKey ?? ShortcutModelOptionsSupport.defaultProviderID()
+        )
     }
 
     func defaultResult() async -> String? {
-        ShortcutModelOptionsSupport.modelOptions(for: ShortcutModelOptionsSupport.defaultProviderID()).first
+        guard let provider = intent?.provider.providerKey ?? (try? ShortcutModelOptionsSupport.defaultProviderID()) else {
+            return nil
+        }
+        return try? ShortcutModelOptionsSupport.modelOptions(for: provider).first
     }
 }

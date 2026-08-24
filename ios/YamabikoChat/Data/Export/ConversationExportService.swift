@@ -131,6 +131,7 @@ enum ConversationExportService {
         let exportRoot = fileManager.temporaryDirectory
             .appendingPathComponent("YamabikoChatExports", isDirectory: true)
         try fileManager.createDirectory(at: exportRoot, withIntermediateDirectories: true)
+        purgeExpiredArchives(in: exportRoot, fileManager: fileManager)
 
         let identifier = UUID().uuidString
         let stagingURL = exportRoot.appendingPathComponent(identifier, isDirectory: true)
@@ -187,6 +188,21 @@ enum ConversationExportService {
             throw ConversationExportError.archiveCreationFailed
         }
         return archiveURL
+    }
+
+    private static func purgeExpiredArchives(in directory: URL, fileManager: FileManager) {
+        guard let files = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
+        for file in files where file.pathExtension.lowercased() == "zip" {
+            guard let values = try? file.resourceValues(forKeys: [.contentModificationDateKey]),
+                  let modified = values.contentModificationDate,
+                  modified < cutoff else { continue }
+            try? fileManager.removeItem(at: file)
+        }
     }
 
     private static func preparedExport(

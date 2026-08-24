@@ -22,6 +22,7 @@ final class ConversationListViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
                 self?.conversations = $0
+                self?.pruneSelectionToVisibleConversations()
             }
             .store(in: &cancellables)
 
@@ -41,6 +42,12 @@ final class ConversationListViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+
+        Publishers.CombineLatest($searchQuery.removeDuplicates(), $selectedProjectId.removeDuplicates())
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _, _ in self?.pruneSelectionToVisibleConversations() }
+            .store(in: &cancellables)
     }
 
     func createConversation(secret: Bool = false, projectId: Int64? = nil) -> Int64? {
@@ -53,6 +60,21 @@ final class ConversationListViewModel: ObservableObject {
             } else {
                 conversationID = try repository.createConversation(projectId: targetProjectId)
             }
+            errorMessage = nil
+            return conversationID
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func createConversation(initialMessage: String, projectId: Int64) -> Int64? {
+        guard let repository else { return nil }
+        do {
+            let conversationID = try repository.createConversationWithPendingInitialMessage(
+                initialMessage,
+                projectId: projectId
+            )
             errorMessage = nil
             return conversationID
         } catch {
@@ -234,9 +256,14 @@ final class ConversationListViewModel: ObservableObject {
         guard let repository, !selectedConversationIds.isEmpty else { return }
         do {
             try repository.deleteConversations(ids: selectedConversationIds)
+            exitSelectionMode()
         } catch {
             errorMessage = error.localizedDescription
         }
-        exitSelectionMode()
+    }
+
+    private func pruneSelectionToVisibleConversations() {
+        guard isSelectionMode else { return }
+        selectedConversationIds.formIntersection(filteredConversations.map(\.id))
     }
 }

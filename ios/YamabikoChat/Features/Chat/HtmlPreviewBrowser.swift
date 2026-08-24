@@ -47,29 +47,50 @@ struct HtmlPreviewWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let configuration = YamabikoWebKitSupport.makeConfiguration()
         configuration.websiteDataStore = WKWebsiteDataStore.nonPersistent()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
-        webView.allowsBackForwardNavigationGestures = true
-        webView.loadHTMLString(html, baseURL: nil)
+        webView.uiDelegate = context.coordinator
+        context.coordinator.load(html: html, in: webView)
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.pageTitle = $pageTitle
+        context.coordinator.load(html: html, in: webView)
     }
 
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
         webView.navigationDelegate = nil
+        webView.uiDelegate = nil
         webView.stopLoading()
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         var pageTitle: Binding<String>
+        private var loadedHTML: String?
 
         init(pageTitle: Binding<String>) {
             self.pageTitle = pageTitle
+        }
+
+        func load(html: String, in webView: WKWebView) {
+            guard loadedHTML != html else { return }
+            loadedHTML = html
+            pageTitle.wrappedValue = ""
+            webView.loadHTMLString(Self.sandbox(html), baseURL: nil)
+        }
+
+        static func sandbox(_ html: String) -> String {
+            let policy = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'\">"
+            if let head = html.range(of: "<head", options: [.caseInsensitive])?.lowerBound,
+               let end = html[head...].firstIndex(of: ">") {
+                var result = html
+                result.insert(contentsOf: policy, at: result.index(after: end))
+                return result
+            }
+            return policy + html
         }
 
         func webView(
@@ -77,18 +98,33 @@ struct HtmlPreviewWebView: UIViewRepresentable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
-            guard let url = navigationAction.request.url else {
+            if navigationAction.navigationType == .other,
+               let scheme = navigationAction.request.url?.scheme?.lowercased(),
+               scheme == "about" || scheme == "data" {
                 decisionHandler(.allow)
                 return
             }
-
-            let scheme = url.scheme?.lowercased() ?? ""
-            switch scheme {
-            case "about", "data", "http", "https":
-                decisionHandler(.allow)
-            default:
-                decisionHandler(.cancel)
+            if navigationAction.navigationType == .linkActivated,
+               let url = navigationAction.request.url,
+               let scheme = url.scheme?.lowercased(),
+               scheme == "http" || scheme == "https" {
+                UIApplication.shared.open(url)
             }
+            decisionHandler(.cancel)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            if let url = navigationAction.request.url,
+               let scheme = url.scheme?.lowercased(),
+               scheme == "http" || scheme == "https" {
+                UIApplication.shared.open(url)
+            }
+            return nil
         }
 
         func webView(_ webView: WKWebView, didFinish _: WKNavigation!) {

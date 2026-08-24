@@ -24,15 +24,27 @@ enum SystemPromptComposer {
     For simple lookups, one search or one source may be sufficient. Match the depth of the search to the complexity and risk of the question.
     """
 
+    static let editorToolInstructions = """
+    Use only the tools that are actually provided. Follow each tool's parameter schema exactly, and do not invent tool names or parameters. If a tool returns an error, do not claim that the operation succeeded.
+
+    When using str_replace_editor:
+    - Inspect the relevant file before modifying it.
+    - Use create only for a path that does not already exist.
+    - Use str_replace only when old_str uniquely identifies the intended text.
+    - Preserve unrelated content.
+    """
+
     static func composeForAPI(
         _ systemPrompt: String?,
         enablesAgenticWebSearch: Bool = false,
+        enablesEditorInstructions: Bool = false,
         now: Date = Date()
     ) -> String? {
         let dateSuffix = dateLabel + formattedDate(now)
         let components = [
             systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
             enablesAgenticWebSearch ? agenticWebSearchInstructions : nil,
+            enablesEditorInstructions ? editorToolInstructions : nil,
             dateSuffix
         ]
         .compactMap { $0 }

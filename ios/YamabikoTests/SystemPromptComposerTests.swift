@@ -86,4 +86,30 @@ final class SystemPromptComposerTests: XCTestCase {
         XCTAssertFalse(composed?.contains("web_search") == true)
         XCTAssertEqual(composed, "Be helpful.\n\nToday's date: 2026/06/27")
     }
+
+    func testComposeForAPI_appendsEditorInstructionsWhenEnabled() {
+        let composed = SystemPromptComposer.composeForAPI(
+            "Be helpful.",
+            enablesEditorInstructions: true,
+            now: makeDate(year: 2026, month: 6, day: 27)
+        )
+
+        XCTAssertTrue(composed?.contains("Use only the tools that are actually provided.") == true)
+        XCTAssertTrue(composed?.contains("do not invent tool names or parameters") == true)
+        XCTAssertTrue(composed?.contains("When using str_replace_editor:") == true)
+        XCTAssertTrue(composed?.contains("Inspect the relevant file before modifying it.") == true)
+        XCTAssertTrue(composed?.contains("Preserve unrelated content.") == true)
+        XCTAssertTrue(composed?.hasSuffix("Today's date: 2026/06/27") == true)
+    }
+
+    func testComposeForAPI_omitsEditorInstructionsWhenDisabled() {
+        let composed = SystemPromptComposer.composeForAPI(
+            "Be helpful.",
+            enablesEditorInstructions: false,
+            now: makeDate(year: 2026, month: 6, day: 27)
+        )
+
+        XCTAssertFalse(composed?.contains("str_replace_editor") == true)
+        XCTAssertEqual(composed, "Be helpful.\n\nToday's date: 2026/06/27")
+    }
 }

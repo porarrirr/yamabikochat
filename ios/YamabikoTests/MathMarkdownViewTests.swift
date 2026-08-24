@@ -471,6 +471,13 @@ line1\\nline2
         XCTAssertTrue(result.contains("<em>強調</em>"))
     }
 
+    func testMarkdownRendererEscapesHTMLInsideMathDelimiters() throws {
+        let result = try renderMarkdownWithJavaScript("$<img src=x onerror=alert(1)>$")
+
+        XCTAssertFalse(result.contains("<img"))
+        XCTAssertTrue(result.contains("&lt;img"))
+    }
+
     func testMarkdownRendererWrapsCodeBlockWithCopyButton() throws {
         let result = try renderMarkdownWithJavaScript(
             """

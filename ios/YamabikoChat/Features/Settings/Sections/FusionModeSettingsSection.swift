@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FusionModeSettingsSection: View {
     @ObservedObject var viewModel: SettingsViewModel
+    @State private var panelPendingDeletion: PanelModelConfig?
 
     private var chatVisibleProviderPresets: [ModelPreset] {
         viewModel.settings.chatVisibleGlobalProviderPresets()
@@ -14,21 +15,11 @@ struct FusionModeSettingsSection: View {
                     get: { viewModel.settings.isFusionModeEnabled },
                     set: { viewModel.setFusionModeEnabled($0) }
                 ))
-                .disabled(
-                    (viewModel.settings.isDualModeEnabled || viewModel.settings.isAutoConversationEnabled)
-                        && !viewModel.settings.isFusionModeEnabled
-                )
 
                 Text(L10n.text("Fusion は複数モデルを並列実行し、ジャッジと合成で最終回答を生成します。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if (viewModel.settings.isDualModeEnabled || viewModel.settings.isAutoConversationEnabled)
-                    && !viewModel.settings.isFusionModeEnabled {
-                    Text(L10n.text("デュアルモードまたは自動会話が有効な間は Fusion を ON にできません。"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
             } header: {
                 Text(L10n.text("Fusion モード"))
             } footer: {
@@ -54,7 +45,7 @@ struct FusionModeSettingsSection: View {
 
     @ViewBuilder
     private var modelSections: some View {
-        ForEach(Array(viewModel.fusionCustomPreset.panelModels.enumerated()), id: \.offset) { index, panel in
+        ForEach(Array(viewModel.fusionCustomPreset.panelModels.enumerated()), id: \.element.id) { index, panel in
             Section {
                 FusionModelSlotForm(
                     providerTitleKey: "Provider",
@@ -82,7 +73,7 @@ struct FusionModeSettingsSection: View {
                     Spacer()
                     if viewModel.fusionCustomPreset.panelModels.count > 1 {
                         Button(role: .destructive) {
-                            viewModel.removeFusionPanel(at: index)
+                            panelPendingDeletion = panel
                         } label: {
                             Image(systemName: "trash")
                         }
@@ -137,6 +128,23 @@ struct FusionModeSettingsSection: View {
                 onProviderChanged: handleProviderChanged
             )
         }
+        .alert(
+            L10n.text("このパネルを削除しますか？"),
+            isPresented: Binding(
+                get: { panelPendingDeletion != nil },
+                set: { if !$0 { panelPendingDeletion = nil } }
+            ),
+            presenting: panelPendingDeletion
+        ) { panel in
+            Button(L10n.text("削除"), role: .destructive) {
+                guard let index = viewModel.fusionCustomPreset.panelModels.firstIndex(where: { $0.id == panel.id }) else { return }
+                viewModel.removeFusionPanel(at: index)
+                panelPendingDeletion = nil
+            }
+            Button(L10n.text("キャンセル"), role: .cancel) {
+                panelPendingDeletion = nil
+            }
+        }
 
     }
 
@@ -145,7 +153,8 @@ struct FusionModeSettingsSection: View {
     }
 
     private func handleProviderChanged(_ provider: String) {
-        guard provider == "OPENROUTER", viewModel.openRouterModels.isEmpty else { return }
+        guard provider.caseInsensitiveCompare("OPENROUTER") == .orderedSame,
+              viewModel.openRouterModels.isEmpty else { return }
         refreshOpenRouterModels()
     }
 

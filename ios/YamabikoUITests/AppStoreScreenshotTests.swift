@@ -31,19 +31,23 @@ final class AppStoreScreenshotTests: XCTestCase {
         sleep(4)
         capture("02-chat-markdown", app: app)
 
-        openSettings(app: app)
+        XCTAssertTrue(openSettings(app: app))
+        XCTAssertTrue(openSettingsCategory(app: app, subtitle: "API・モデル", title: "接続"))
         capture("03-settings-api", app: app)
 
-        if tapSegmentedTab(app: app, title: "外観/診断") {
-            sleep(1)
-            capture("04-settings-appearance", app: app)
-        }
+        XCTAssertTrue(returnToSettingsIndex(app: app))
+        XCTAssertTrue(openSettingsCategory(app: app, subtitle: "テーマ・数式", title: "表示"))
+        capture("04-settings-appearance", app: app)
 
-        if tapSegmentedTab(app: app, title: "デュアル") {
-            sleep(1)
-            capture("05-settings-dual", app: app)
-        }
+        XCTAssertTrue(returnToSettingsIndex(app: app))
+        XCTAssertTrue(openSettingsCategory(app: app, subtitle: "プロンプト・モード", title: "会話"))
+        XCTAssertTrue(scrollToText(app: app, text: "デュアルモード"))
+        capture("05-settings-dual", app: app)
 
+        XCTAssertTrue(scrollToText(app: app, text: "自動会話"))
+        capture("08-settings-auto", app: app)
+
+        XCTAssertTrue(returnToSettingsIndex(app: app))
         closeSettings(app: app)
 
         if UIDevice.current.userInterfaceIdiom == .pad {
@@ -55,17 +59,13 @@ final class AppStoreScreenshotTests: XCTestCase {
             sleep(1)
         } else {
             navigateToConversationList(app: app)
-            if app.staticTexts["仕事用"].firstMatch.waitForExistence(timeout: 3) {
-                app.staticTexts["仕事用"].firstMatch.tap()
+            if app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "仕事用")).firstMatch.waitForExistence(timeout: 3) {
+                app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "仕事用")).firstMatch.tap()
                 sleep(1)
                 capture("06-project-conversations", app: app)
             }
         }
 
-        if openSettings(app: app), tapSegmentedTab(app: app, title: "自動会話") {
-            sleep(1)
-            capture("08-settings-auto", app: app)
-        }
     }
 
     func testProviderSelectionChangesProvider() throws {
@@ -129,9 +129,9 @@ final class AppStoreScreenshotTests: XCTestCase {
     }
 
     private func listIsVisible(app: XCUIApplication) -> Bool {
-        app.staticTexts["旅行プラン"].exists
-            || app.staticTexts["Markdown 数式"].exists
-            || app.staticTexts["API 設計レビュー"].exists
+        ["旅行プラン", "Markdown 数式", "API 設計レビュー"].contains { title in
+            app.buttons.matching(NSPredicate(format: "label CONTAINS %@", title)).firstMatch.exists
+        }
     }
 
     private func revealSidebarWithEdgeSwipe(app: XCUIApplication) {
@@ -145,12 +145,14 @@ final class AppStoreScreenshotTests: XCTestCase {
 
     private func openConversation(app: XCUIApplication, title: String, fallbackTitle: String) {
         navigateToConversationList(app: app)
-        let primary = app.staticTexts[title].firstMatch
+        let primary = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", title)).firstMatch
         if primary.waitForExistence(timeout: 5) {
             primary.tap()
             return
         }
-        app.staticTexts[fallbackTitle].firstMatch.tap()
+        let fallback = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", fallbackTitle)).firstMatch
+        XCTAssertTrue(fallback.waitForExistence(timeout: 5), "Conversation row was not found")
+        fallback.tap()
     }
 
     @discardableResult
@@ -174,18 +176,33 @@ final class AppStoreScreenshotTests: XCTestCase {
 
     private func closeSettings(app: XCUIApplication) {
         let close = app.navigationBars.buttons["閉じる"].firstMatch
-        if close.waitForExistence(timeout: 3), close.isHittable {
-            close.tap()
-            sleep(1)
-        }
+        XCTAssertTrue(close.waitForExistence(timeout: 3), "Settings close button was not found")
+        XCTAssertTrue(close.isHittable)
+        close.tap()
+        sleep(1)
     }
 
-    @discardableResult
-    private func tapSegmentedTab(app: XCUIApplication, title: String) -> Bool {
-        let tab = app.segmentedControls.buttons[title].firstMatch
-        guard tab.waitForExistence(timeout: 3), tab.isHittable else { return false }
-        tab.tap()
-        return true
+    private func openSettingsCategory(app: XCUIApplication, subtitle: String, title: String) -> Bool {
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", subtitle)).firstMatch
+        guard row.waitForExistence(timeout: 5), row.isHittable else { return false }
+        row.tap()
+        return app.navigationBars[title].waitForExistence(timeout: 5)
+    }
+
+    private func returnToSettingsIndex(app: XCUIApplication) -> Bool {
+        let back = app.navigationBars.buttons["設定"].firstMatch
+        guard back.waitForExistence(timeout: 3), back.isHittable else { return false }
+        back.tap()
+        return app.navigationBars["設定"].waitForExistence(timeout: 5)
+    }
+
+    private func scrollToText(app: XCUIApplication, text: String) -> Bool {
+        let target = app.staticTexts[text].firstMatch
+        for _ in 0..<8 {
+            if target.exists, target.isHittable { return true }
+            app.swipeUp()
+        }
+        return target.exists
     }
 
     private func capture(_ name: String, app: XCUIApplication) {
@@ -197,7 +214,10 @@ final class AppStoreScreenshotTests: XCTestCase {
 
         let url = outputDirectory.appendingPathComponent("\(name).png")
         let image = screenshot.image
-        guard let data = image.pngData() else { return }
-        try? data.write(to: url, options: .atomic)
+        guard let data = image.pngData() else {
+            XCTFail("Could not encode screenshot \(name)")
+            return
+        }
+        XCTAssertNoThrow(try data.write(to: url, options: .atomic))
     }
 }

@@ -10,6 +10,13 @@ struct DualChatMessage: Codable, FetchableRecord, MutablePersistableRecord, Iden
         case legacy
     }
 
+    enum SideStatus: String, Codable {
+        case pending
+        case completed
+        case failed
+        case canceled
+    }
+
     var id: Int64?
     var conversationId: Int64
     var role: String
@@ -25,6 +32,10 @@ struct DualChatMessage: Codable, FetchableRecord, MutablePersistableRecord, Iden
     var attachmentsJSON: String
     var modelAToolActivityJSON: String?
     var modelBToolActivityJSON: String?
+    var modelAStatus: String
+    var modelBStatus: String
+    var modelAError: String?
+    var modelBError: String?
     var createdAtMs: Int64
 
     init(
@@ -43,6 +54,10 @@ struct DualChatMessage: Codable, FetchableRecord, MutablePersistableRecord, Iden
         attachmentsJSON: String = "[]",
         modelAToolActivityJSON: String? = nil,
         modelBToolActivityJSON: String? = nil,
+        modelAStatus: String = SideStatus.completed.rawValue,
+        modelBStatus: String = SideStatus.completed.rawValue,
+        modelAError: String? = nil,
+        modelBError: String? = nil,
         createdAtMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
     ) {
         self.id = id
@@ -60,6 +75,10 @@ struct DualChatMessage: Codable, FetchableRecord, MutablePersistableRecord, Iden
         self.attachmentsJSON = attachmentsJSON
         self.modelAToolActivityJSON = modelAToolActivityJSON
         self.modelBToolActivityJSON = modelBToolActivityJSON
+        self.modelAStatus = modelAStatus
+        self.modelBStatus = modelBStatus
+        self.modelAError = modelAError
+        self.modelBError = modelBError
         self.createdAtMs = createdAtMs
     }
 
@@ -83,6 +102,8 @@ struct DualChatMessage: Codable, FetchableRecord, MutablePersistableRecord, Iden
 
     var modelAToolActivity: ToolActivityPayload? { Self.decodeToolActivity(modelAToolActivityJSON) }
     var modelBToolActivity: ToolActivityPayload? { Self.decodeToolActivity(modelBToolActivityJSON) }
+    var parsedModelAStatus: SideStatus { SideStatus(rawValue: modelAStatus) ?? .completed }
+    var parsedModelBStatus: SideStatus { SideStatus(rawValue: modelBStatus) ?? .completed }
 
     static func encodeToolActivity(_ payload: ToolActivityPayload?) -> String? {
         guard let payload, payload.hasPersistableContent, let data = try? JSONEncoder().encode(payload) else { return nil }

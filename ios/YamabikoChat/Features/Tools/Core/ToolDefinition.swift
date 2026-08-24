@@ -148,6 +148,12 @@ extension Collection where Element == ProviderTool {
             $0.type == "function" && $0.payload["name"] == WebSearchTool.name
         }
     }
+
+    var containsEditorTool: Bool {
+        contains {
+            $0.type == "function" && $0.payload["name"] == StrReplaceEditorTool.name
+        }
+    }
 }
 
 struct ToolSource: Codable, Sendable, Equatable, Identifiable {

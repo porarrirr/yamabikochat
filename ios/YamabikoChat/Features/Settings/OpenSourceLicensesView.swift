@@ -77,16 +77,24 @@ private struct LegalDocumentView: View {
                     .foregroundStyle(.secondary)
                     .padding()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            } else if document.isMarkdown {
-                LegalMarkdownDocumentView(blocks: LegalMarkdownParser.parse(documentText))
-            } else {
-                ScrollView {
-                    Text(documentText)
-                        .font(.body)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
+            } else if let documentText {
+                if document.isMarkdown {
+                    LegalMarkdownDocumentView(blocks: LegalMarkdownParser.parse(documentText))
+                } else {
+                    ScrollView {
+                        Text(documentText)
+                            .font(.body)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                    }
                 }
+            } else {
+                ContentUnavailableView(
+                    L10n.text("ライセンスを読み込めません"),
+                    systemImage: "doc.badge.ellipsis",
+                    description: Text(L10n.text("ライセンスファイルは存在しますが、内容の読み込みに失敗しました。"))
+                )
             }
         }
         .navigationTitle(document.title)
@@ -105,9 +113,9 @@ private struct LegalDocumentView: View {
         )
     }
 
-    private var documentText: String {
-        guard let url = documentURL else { return "" }
-        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+    private var documentText: String? {
+        guard let url = documentURL else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
     }
 }
 

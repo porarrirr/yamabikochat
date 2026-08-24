@@ -14,7 +14,7 @@ enum ConversationListSelectionResolver {
         keepSidebarAfterSecretDiscard: Bool
     ) -> ConversationListSelectionResolution {
         if let selectedConversationID,
-           ids.contains(selectedConversationID) || selectedConversationExists {
+           ids.contains(selectedConversationID) {
             return .keepCurrentSelection
         }
 
@@ -67,9 +67,6 @@ struct RootView: View {
                     conversationID: conversationID,
                     onSelectConversation: { id in
                         selectConversation(id: id)
-                    },
-                    onDiscardSecretConversation: { id in
-                        discardSecretConversationIfNeeded(id: id, keepSidebar: true)
                     }
                 )
                 .id(conversationID)
@@ -106,8 +103,6 @@ struct RootView: View {
                         )
                     }
                 }
-            } else {
-                discardSelectedSecretConversationIfNeeded()
             }
         }
         .onReceive(container.chatRepository.settingsPublisher()) { settings in
@@ -117,7 +112,7 @@ struct RootView: View {
             columnVisibility = .all
             preferredCompactColumn = .sidebar
         }
-        .onChange(of: listViewModel.conversations.map(\.id)) { _, ids in
+        .onChange(of: listViewModel.filteredConversations.map(\.id)) { _, ids in
             guard !AppStoreScreenshotRouting.isEnabled else { return }
             if let draft = appState.shareImportDraft, ids.contains(draft.conversationID) {
                 appState.selectedConversationID = draft.conversationID
@@ -272,13 +267,16 @@ struct RootView: View {
     }
 
     private func importSharePayloadIfNeeded() {
-        guard appState.importSharePayload(
+        var importedAny = false
+        while appState.importSharePayload(
             from: container.sharePayloadStore,
             repository: container.chatRepository
-        ) else {
-            return
+        ) {
+            importedAny = true
         }
-        preferredCompactColumn = .detail
+        if importedAny {
+            preferredCompactColumn = .detail
+        }
     }
 
     private func discardSelectedSecretConversationIfNeeded(keepSidebar: Bool = true) {
@@ -310,17 +308,14 @@ private struct ConversationDetailHost: View {
 
     let conversationID: Int64
     let onSelectConversation: (Int64) -> Void
-    let onDiscardSecretConversation: (Int64) -> Void
     @StateObject private var viewModel: ChatViewModel
 
     init(
         conversationID: Int64,
-        onSelectConversation: @escaping (Int64) -> Void,
-        onDiscardSecretConversation: @escaping (Int64) -> Void
+        onSelectConversation: @escaping (Int64) -> Void
     ) {
         self.conversationID = conversationID
         self.onSelectConversation = onSelectConversation
-        self.onDiscardSecretConversation = onDiscardSecretConversation
         _viewModel = StateObject(wrappedValue: ChatViewModel(conversationID: conversationID))
     }
 
@@ -329,12 +324,9 @@ private struct ConversationDetailHost: View {
             conversationID: conversationID,
             viewModel: viewModel,
             onSelectConversation: onSelectConversation
-        )
+            )
             .environmentObject(container)
             .environmentObject(appState)
-            .onDisappear {
-                onDiscardSecretConversation(conversationID)
-            }
     }
 }
 

@@ -19,6 +19,8 @@ import com.porarri.yamabikochat.data.repositories.ProviderRequestSettingsResolve
 import com.porarri.yamabikochat.data.skills.AgentSkillRepository
 import com.porarri.yamabikochat.data.skills.AgentSkillTools
 import com.porarri.yamabikochat.data.tools.LocalToolRegistry
+import com.porarri.yamabikochat.data.tools.editor.EditorWorkspaceStore
+import com.porarri.yamabikochat.data.tools.editor.StrReplaceEditorTool
 import com.porarri.yamabikochat.data.tools.search.FetchUrlTool
 import com.porarri.yamabikochat.data.tools.search.WebSearchTool
 import com.porarri.yamabikochat.pi.PiAgentRuntime
@@ -34,13 +36,18 @@ class MyApplication : Application() {
         super.onCreate()
         DiagnosticsLogger.initialize(this)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            val secretIds = databaseRepository.getSecretConversationIds()
             databaseRepository.purgeSecretConversations()
+            secretIds.forEach { editorWorkspaceStore.delete(it.toString()) }
+            editorWorkspaceStore.deleteOrphans(databaseRepository.getAllConversationIds().map(Long::toString))
         }
     }
 
     private val database by lazy { AppDatabase.getDatabase(this) }
     private val openRouterApiService by lazy { RetrofitClient.openRouterInstance }
     private val attachmentStorage by lazy { AttachmentStorage(applicationContext) }
+    private val editorWorkspaceStore by lazy { EditorWorkspaceStore.forContext(applicationContext) }
+    private val editorTool by lazy { StrReplaceEditorTool(editorWorkspaceStore, attachmentStorage) }
     val agentSkillRepository by lazy { AgentSkillRepository(applicationContext) }
     private val chatDao by lazy { database.chatDao() }
     private val databaseRepository by lazy { DatabaseRepository(chatDao) }
@@ -58,7 +65,7 @@ class MyApplication : Application() {
         // WebSearch/FetchUrl are stateless; reuse of AgentSkill executors captures latest enabledSkills.
         val makeLocalTools = {
             LocalToolRegistry(
-                listOf(WebSearchTool(), FetchUrlTool()) + AgentSkillTools.executors(agentSkillRepository)
+                listOf(WebSearchTool(), FetchUrlTool(), editorTool) + AgentSkillTools.executors(agentSkillRepository)
             )
         }
         ProviderGateway(
@@ -79,6 +86,7 @@ class MyApplication : Application() {
             modelService = modelService,
             skillRepository = agentSkillRepository,
             modelsDevCatalogRepository = modelsDevCatalogRepository,
+            localToolRegistry = LocalToolRegistry(listOf(WebSearchTool(), FetchUrlTool(), editorTool)),
             modelsDevReasoningEffort = { providerId, modelId ->
                 securePreferences.getModelsDevField(
                     providerId,
@@ -104,7 +112,8 @@ class MyApplication : Application() {
             pricingRepository = pricingRepository,
             modelsDevCatalogRepository = modelsDevCatalogRepository,
             agentSkillRepository = agentSkillRepository,
-            securePreferences = securePreferences
+            securePreferences = securePreferences,
+            editorWorkspaceStore = editorWorkspaceStore
         )
     }
 

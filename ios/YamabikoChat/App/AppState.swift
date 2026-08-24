@@ -6,27 +6,17 @@ struct ShareImportDraft: Equatable {
     let text: String
 }
 
-struct PendingInitialMessage: Equatable {
-    let conversationID: Int64
-    let text: String
-}
-
 @MainActor
 final class AppState: ObservableObject {
     @Published var selectedConversationID: Int64?
-    @Published private(set) var shareImportDraft: ShareImportDraft?
-    @Published private(set) var pendingInitialMessage: PendingInitialMessage?
+    @Published private var shareImportDrafts: [Int64: String] = [:]
     @Published var isConversationHistoryPresented = false
     @Published private(set) var conversationSidebarRevealGeneration = 0
 
-    func setPendingInitialMessage(conversationID: Int64, text: String) {
-        pendingInitialMessage = PendingInitialMessage(conversationID: conversationID, text: text)
-    }
-
-    func consumePendingInitialMessage(for conversationID: Int64) -> String? {
-        guard let pending = pendingInitialMessage, pending.conversationID == conversationID else { return nil }
-        pendingInitialMessage = nil
-        return pending.text
+    var shareImportDraft: ShareImportDraft? {
+        guard let conversationID = selectedConversationID,
+              let text = shareImportDrafts[conversationID] else { return nil }
+        return ShareImportDraft(conversationID: conversationID, text: text)
     }
 
     func requestConversationSidebarReveal() {
@@ -38,7 +28,7 @@ final class AppState: ObservableObject {
         guard let pending = store.loadLatest() else { return false }
         do {
             let conversationID = try repository.createConversation(projectId: nil)
-            shareImportDraft = ShareImportDraft(conversationID: conversationID, text: pending.payload.text)
+            shareImportDrafts[conversationID] = pending.payload.text
             selectedConversationID = conversationID
             if !store.discard(pending) {
                 DiagnosticsLogger.log(
@@ -65,12 +55,10 @@ final class AppState: ObservableObject {
     }
 
     func shareImportText(for conversationID: Int64) -> String? {
-        guard let draft = shareImportDraft, draft.conversationID == conversationID else { return nil }
-        return draft.text
+        shareImportDrafts[conversationID]
     }
 
     func clearShareImportDraft(for conversationID: Int64) {
-        guard shareImportDraft?.conversationID == conversationID else { return }
-        shareImportDraft = nil
+        shareImportDrafts.removeValue(forKey: conversationID)
     }
 }

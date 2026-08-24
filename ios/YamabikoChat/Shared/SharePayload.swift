@@ -15,7 +15,7 @@ struct SharePayload: Codable, Equatable {
 final class SharePayloadStore {
     struct PendingPayload: Equatable {
         let payload: SharePayload
-        fileprivate let encodedData: Data
+        fileprivate let queued: AppGroupShareStorage.QueuedPayload
     }
 
     init() {
@@ -24,9 +24,11 @@ final class SharePayloadStore {
         }
     }
 
-    func save(_ payload: SharePayload) {
-        guard let data = try? JSONEncoder().encode(payload) else { return }
-        guard AppGroupShareStorage.writePayloadData(data) else { return }
+    func save(_ payload: SharePayload) throws {
+        let data = try JSONEncoder().encode(payload)
+        guard AppGroupShareStorage.writePayloadData(data) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
         NotificationCenter.default.post(name: AppConstants.sharePayloadDidChangeNotification, object: nil)
     }
 
@@ -36,26 +38,35 @@ final class SharePayloadStore {
     }
 
     func loadLatest() -> PendingPayload? {
-        guard let data = AppGroupShareStorage.readPayloadData(),
-              let payload = try? JSONDecoder().decode(SharePayload.self, from: data)
-        else { return nil }
-        return PendingPayload(payload: payload, encodedData: data)
+        while let queued = AppGroupShareStorage.peekPayload() {
+            if let payload = try? JSONDecoder().decode(SharePayload.self, from: queued.data) {
+                return PendingPayload(payload: payload, queued: queued)
+            }
+            guard AppGroupShareStorage.quarantine(queued) else {
+                NSLog("Invalid share payload could not be quarantined: %@", queued.id.uuidString)
+                return nil
+            }
+            NSLog("Invalid share payload moved to failed queue: %@", queued.id.uuidString)
+        }
+        return nil
     }
 
     @discardableResult
     func discard(_ pending: PendingPayload) -> Bool {
-        AppGroupShareStorage.removePayloadData(matching: pending.encodedData)
+        AppGroupShareStorage.acknowledge(pending.queued)
     }
 }
 
 enum SharePayloadPersister {
-    static func save(text: String, sourceApp: String?) {
+    static func save(text: String, sourceApp: String?) throws {
         let payload = SharePayload(
             text: text,
             sourceApp: sourceApp,
             createdAtMs: Int64(Date().timeIntervalSince1970 * 1000)
         )
-        guard let data = try? JSONEncoder().encode(payload) else { return }
-        AppGroupShareStorage.writePayloadData(data)
+        let data = try JSONEncoder().encode(payload)
+        guard AppGroupShareStorage.writePayloadData(data) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
     }
 }

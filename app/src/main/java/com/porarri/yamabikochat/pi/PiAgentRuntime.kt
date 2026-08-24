@@ -10,6 +10,7 @@ import com.porarri.yamabikochat.data.model.ProviderResponse
 import com.porarri.yamabikochat.data.model.ProviderStreamEvent
 import com.porarri.yamabikochat.data.model.ToolActivityEvent
 import com.porarri.yamabikochat.data.model.ToolCall
+import com.porarri.yamabikochat.data.tools.editor.StrReplaceEditorTool
 import com.porarri.yamabikochat.data.model.ToolResult
 import com.porarri.yamabikochat.data.tools.LocalToolRegistry
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
@@ -246,9 +247,15 @@ class PiAgentRuntime private constructor(private val context: Context) {
                         val toolName = event.name
                         if (reqId != null && callId != null && toolName != null) {
                             val argumentsString = event.arguments?.let { json.encodeToString(it) } ?: "{}"
-                            val toolCall = ToolCall(id = callId, name = toolName, argumentsJSON = argumentsString)
+                            val providerMetadata = if (toolName == StrReplaceEditorTool.NAME) {
+                                mapOf(
+                                    "editorSessionId" to request.metadata["editorSessionId"].orEmpty(),
+                                    "editorAttachmentsJSON" to json.encodeToString(request.messages.flatMap { it.attachments })
+                                )
+                            } else null
+                            val toolCall = ToolCall(id = callId, name = toolName, argumentsJSON = argumentsString, providerMetadata = providerMetadata)
                             val createdAtMs = event.timeMs ?: System.currentTimeMillis()
-                            val reportsActivity = toolName == "web_search" || toolName == "fetch_url"
+                            val reportsActivity = toolName == "web_search" || toolName == "fetch_url" || toolName == StrReplaceEditorTool.NAME
                             if (reportsActivity) {
                                 send(ProviderStreamEvent.ToolActivity(ToolActivityEvent(
                                     phase = ToolActivityEvent.Phase.started,

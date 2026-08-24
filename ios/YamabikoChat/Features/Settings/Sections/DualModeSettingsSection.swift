@@ -30,21 +30,11 @@ struct DualModeSettingsSection: View {
                     get: { viewModel.settings.isDualModeEnabled },
                     set: { viewModel.setDualModeEnabled($0) }
                 ))
-                .disabled(
-                    (viewModel.settings.isAutoConversationEnabled || viewModel.settings.isFusionModeEnabled)
-                        && !viewModel.settings.isDualModeEnabled
-                )
 
                 Text(L10n.text("デュアルモードで2つのモデル応答を同時比較します。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if (viewModel.settings.isAutoConversationEnabled || viewModel.settings.isFusionModeEnabled)
-                    && !viewModel.settings.isDualModeEnabled {
-                    Text(L10n.text("Fusion または自動会話が有効な間はデュアルモードをONにできません。"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
             } header: {
                 Text(L10n.text("デュアルモード"))
             } footer: {
@@ -62,6 +52,10 @@ struct DualModeSettingsSection: View {
                         systemPrompt: dualSystemPromptABinding,
                         providerPresets: providerPresetOptions,
                         catalogProviders: viewModel.modelsDevCatalogState.providers,
+                        openRouterModels: viewModel.openRouterModels,
+                        openRouterModelsLoading: viewModel.openRouterModelsLoading,
+                        openRouterModelsError: viewModel.openRouterModelsError,
+                        onRefreshOpenRouterModels: { Task { await viewModel.refreshOpenRouterModels(force: false) } },
                         onProviderPresetSelected: applyProviderPresetToDualA
                     )
                 }
@@ -76,6 +70,10 @@ struct DualModeSettingsSection: View {
                         systemPrompt: dualSystemPromptBBinding,
                         providerPresets: providerPresetOptions,
                         catalogProviders: viewModel.modelsDevCatalogState.providers,
+                        openRouterModels: viewModel.openRouterModels,
+                        openRouterModelsLoading: viewModel.openRouterModelsLoading,
+                        openRouterModelsError: viewModel.openRouterModelsError,
+                        onRefreshOpenRouterModels: { Task { await viewModel.refreshOpenRouterModels(force: false) } },
                         onProviderPresetSelected: applyProviderPresetToDualB
                     )
                 }

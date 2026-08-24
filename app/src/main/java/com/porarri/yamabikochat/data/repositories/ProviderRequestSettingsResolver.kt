@@ -17,6 +17,7 @@ import com.porarri.yamabikochat.data.skills.AgentSkillTools
 import com.porarri.yamabikochat.data.tools.LocalToolRegistry
 import com.porarri.yamabikochat.data.tools.search.FetchUrlTool
 import com.porarri.yamabikochat.data.tools.search.WebSearchTool
+import com.porarri.yamabikochat.data.tools.editor.StrReplaceEditorTool
 import com.porarri.yamabikochat.utils.CodexModelPresets
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import com.porarri.yamabikochat.utils.ModelUtils
@@ -169,7 +170,15 @@ class ProviderRequestSettingsResolver(
 
         val supportsClientWebSearch = supportsClientTools(provider, model)
         if (toolScope.allowsClientWebSearch && settings.clientWebSearchToolEnabled && supportsClientWebSearch) {
-            tools.addAll(localToolRegistry.definitions.map { it.providerTool })
+            tools.addAll(localToolRegistry.definitions
+                .filter { it.name == WebSearchTool.NAME || it.name == FetchUrlTool.NAME }
+                .map { it.providerTool })
+        }
+        if (toolScope is ProviderRequestToolScope.All &&
+            context in setOf(Settings.ReasoningContext.DEFAULT, Settings.ReasoningContext.DUAL_A, Settings.ReasoningContext.DUAL_B) &&
+            supportsClientWebSearch) {
+            localToolRegistry.definitions.firstOrNull { it.name == StrReplaceEditorTool.NAME }
+                ?.let { tools.add(it.providerTool) }
         }
         if (toolScope.allowsAgentSkills && supportsClientWebSearch) {
             tools.addAll(AgentSkillTools.definitions(skillRepository).map { it.providerTool })

@@ -101,7 +101,7 @@ struct ProjectDetailScreen: View {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                     .background(
                         Circle()
                             .fill(Color(uiColor: .secondarySystemFill))
@@ -147,7 +147,7 @@ struct ProjectDetailScreen: View {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                     .background(
                         Circle()
                             .fill(Color(uiColor: .secondarySystemFill))
@@ -266,7 +266,7 @@ struct ProjectDetailScreen: View {
                     Image(systemName: "plus")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(L10n.text("新規チャット")))
@@ -310,11 +310,10 @@ struct ProjectDetailScreen: View {
     private func submitMessage() {
         let text = draftMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        guard let conversationId = viewModel.createConversation(secret: false, projectId: projectId) else {
+        guard let conversationId = viewModel.createConversation(initialMessage: text, projectId: projectId) else {
             return
         }
         draftMessage = ""
-        appState.setPendingInitialMessage(conversationID: conversationId, text: text)
         onSelectConversation(conversationId)
     }
 }

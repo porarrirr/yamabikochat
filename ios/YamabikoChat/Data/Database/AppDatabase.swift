@@ -830,6 +830,33 @@ enum AppDatabase {
             }
         }
 
+        migrator.registerMigration("v22_dual_side_status") { db in
+            let columns = Set(try db.columns(in: "dual_chat_messages").map(\.name))
+            try db.alter(table: "dual_chat_messages") { table in
+                if !columns.contains("modelAStatus") {
+                    table.add(column: "modelAStatus", .text).notNull().defaults(to: "completed")
+                }
+                if !columns.contains("modelBStatus") {
+                    table.add(column: "modelBStatus", .text).notNull().defaults(to: "completed")
+                }
+                if !columns.contains("modelAError") {
+                    table.add(column: "modelAError", .text)
+                }
+                if !columns.contains("modelBError") {
+                    table.add(column: "modelBError", .text)
+                }
+            }
+        }
+
+        migrator.registerMigration("v23_pending_initial_message") { db in
+            let columns = Set(try db.columns(in: "conversations").map(\.name))
+            if !columns.contains("pendingInitialMessage") {
+                try db.alter(table: "conversations") { table in
+                    table.add(column: "pendingInitialMessage", .text)
+                }
+            }
+        }
+
         return migrator
     }
 

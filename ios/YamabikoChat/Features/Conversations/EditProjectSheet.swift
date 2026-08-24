@@ -46,17 +46,22 @@ struct EditProjectSheet: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
                             ForEach(availableColors, id: \.self) { colorHex in
-                                Circle()
-                                    .fill(Color(hex: colorHex))
-                                    .frame(width: 32, height: 32)
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.primary, lineWidth: selectedColorHex == colorHex ? 2.5 : 0)
-                                            .padding(-3)
-                                    )
-                                    .onTapGesture {
-                                        selectedColorHex = colorHex
-                                    }
+                                Button {
+                                    selectedColorHex = colorHex
+                                } label: {
+                                    Circle()
+                                        .fill(Color(hex: colorHex))
+                                        .frame(width: 32, height: 32)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.primary, lineWidth: selectedColorHex == colorHex ? 2.5 : 0)
+                                                .padding(-3)
+                                        )
+                                        .frame(width: 44, height: 44)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(colorName(for: colorHex))
+                                .accessibilityAddTraits(selectedColorHex == colorHex ? .isSelected : [])
                             }
                         }
                         .padding(.vertical, 4)
@@ -104,5 +109,13 @@ struct EditProjectSheet: View {
         .onAppear {
             viewModel.errorMessage = nil
         }
+    }
+
+    private func colorName(for hex: String) -> Text {
+        let names = [
+            "#3A7AFE": "青", "#34C759": "緑", "#FF9500": "オレンジ", "#FF2D55": "ピンク",
+            "#AF52DE": "紫", "#FF3B30": "赤", "#5856D6": "インディゴ", "#8E8E93": "グレー"
+        ]
+        return Text(L10n.text(names[hex] ?? hex))
     }
 }

@@ -107,9 +107,9 @@ final class RecentPhotoThumbnailCache {
 
         return await withCheckedContinuation { continuation in
             let options = PHImageRequestOptions()
-            options.deliveryMode = .highQualityFormat
-            options.resizeMode = .exact
-            options.isNetworkAccessAllowed = true
+            options.deliveryMode = .opportunistic
+            options.resizeMode = .fast
+            options.isNetworkAccessAllowed = false
 
             var didResume = false
             imageManager.requestImage(

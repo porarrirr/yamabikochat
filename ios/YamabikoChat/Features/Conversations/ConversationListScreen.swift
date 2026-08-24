@@ -17,6 +17,7 @@ struct ConversationListScreen: View {
 
     @State private var navigationState: NavigationState = .conversations
     @State private var isDeleteConfirmationPresented = false
+    @State private var conversationPendingDeletion: Int64?
 
     var body: some View {
         Group {
@@ -54,12 +55,24 @@ struct ConversationListScreen: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .background(Color(uiColor: .systemBackground))
-        .overlay(alignment: .bottom) {
+        .safeAreaInset(edge: .bottom) {
             if let error = viewModel.errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .padding(8)
+                HStack(alignment: .top) {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                    Spacer()
+                    Button {
+                        viewModel.errorMessage = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel(Text(L10n.text("エラーを閉じる")))
+                }
+                .padding(.horizontal, 12)
+                .background(.regularMaterial)
+                .accessibilityElement(children: .combine)
             }
         }
         .alert(
@@ -75,6 +88,25 @@ struct ConversationListScreen: View {
             Button(L10n.text("キャンセル"), role: .cancel) {}
         } message: {
             Text(L10n.format("選択した %d 件の会話を完全に削除します。この操作は取り消せません。", viewModel.selectedConversationIds.count))
+        }
+        .confirmationDialog(
+            L10n.text("この会話を削除しますか？"),
+            isPresented: Binding(
+                get: { conversationPendingDeletion != nil },
+                set: { if !$0 { conversationPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(L10n.text("削除"), role: .destructive) {
+                if let id = conversationPendingDeletion {
+                    if selection == id { selection = nil }
+                    viewModel.deleteConversation(id: id)
+                }
+                conversationPendingDeletion = nil
+            }
+            Button(L10n.text("キャンセル"), role: .cancel) {
+                conversationPendingDeletion = nil
+            }
         }
     }
 
@@ -194,7 +226,7 @@ struct ConversationListScreen: View {
                     Image(systemName: "checkmark.circle")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(.primary)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
 
@@ -204,7 +236,7 @@ struct ConversationListScreen: View {
                     Image(systemName: "square.and.pencil")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(.primary)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
             }
@@ -216,7 +248,7 @@ struct ConversationListScreen: View {
                     Image(systemName: "line.3.horizontal")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(.primary)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
             }
@@ -338,7 +370,14 @@ struct ConversationListScreen: View {
 
     @ViewBuilder
     private func conversationRow(_ entry: ConversationListEntry) -> some View {
-        HStack(spacing: 8) {
+        Button {
+            if viewModel.isSelectionMode {
+                viewModel.toggleSelection(id: entry.id)
+            } else {
+                openConversation(id: entry.id)
+            }
+        } label: {
+          HStack(spacing: 8) {
             if viewModel.isSelectionMode {
                 Image(systemName: viewModel.selectedConversationIds.contains(entry.id) ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 22))
@@ -375,7 +414,9 @@ struct ConversationListScreen: View {
                         .foregroundStyle(.secondary)
                 }
             }
+          }
         }
+        .buttonStyle(.plain)
         .padding(.horizontal, 10)
         .padding(.vertical, 10)
         .contentShape(Rectangle())
@@ -383,13 +424,7 @@ struct ConversationListScreen: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(rowBackgroundColor(for: entry.id))
         )
-        .onTapGesture {
-            if viewModel.isSelectionMode {
-                viewModel.toggleSelection(id: entry.id)
-            } else {
-                openConversation(id: entry.id)
-            }
-        }
+        .accessibilityValue(viewModel.selectedConversationIds.contains(entry.id) ? Text(L10n.text("選択済み")) : Text(""))
         .contextMenu(viewModel.isSelectionMode ? nil : ContextMenu {
             Button {
                 viewModel.isSelectionMode = true
@@ -418,7 +453,7 @@ struct ConversationListScreen: View {
                 }
             }
         })
-        .swipeActions(edge: .trailing, allowsFullSwipe: !viewModel.isSelectionMode) {
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if !viewModel.isSelectionMode {
                 Button {
                     openConversation(id: entry.id)
@@ -428,7 +463,7 @@ struct ConversationListScreen: View {
                 .tint(.blue)
 
                 Button(role: .destructive) {
-                    viewModel.deleteConversation(id: entry.id)
+                    conversationPendingDeletion = entry.id
                 } label: {
                     Label("削除", systemImage: "trash")
                 }

@@ -43,11 +43,11 @@ struct ChatWorkspaceScreen: View {
         .onChange(of: appState.shareImportDraft) { _, _ in
             applyShareImportDraftIfNeeded()
         }
-        .onChange(of: appState.pendingInitialMessage) { _, _ in
-            applyPendingInitialMessageIfNeeded()
+        .onDisappear {
+            viewModel.cancelActiveRun()
         }
         .sheet(item: $exportedArchive) { item in
-            ConversationExportShareSheet(items: [item.url])
+            ConversationExportShareSheet(url: item.url)
         }
     }
 
@@ -58,10 +58,20 @@ struct ChatWorkspaceScreen: View {
     }
 
     private func applyPendingInitialMessageIfNeeded() {
-        guard let text = appState.consumePendingInitialMessage(for: conversationID) else { return }
-        viewModel.inputText = text
-        Task { @MainActor in
+        do {
+            guard let text = try container.chatRepository.pendingInitialMessage(conversationId: conversationID) else {
+                return
+            }
+            viewModel.inputText = text
             viewModel.sendMessage()
+        } catch {
+            viewModel.errorMessage = error.localizedDescription
+            DiagnosticsLogger.log(
+                "Could not load pending initial message",
+                category: .chat,
+                metadata: ["conversationId": String(conversationID)],
+                error: error
+            )
         }
     }
 
@@ -70,11 +80,11 @@ struct ChatWorkspaceScreen: View {
     }
 
     private var currentProvider: String {
-        viewModel.settings.apiProvider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        viewModel.conversationProvider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
     }
 
     private var currentModel: String {
-        viewModel.settings.currentModel().trimmingCharacters(in: .whitespacesAndNewlines)
+        viewModel.conversationModel.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var canSwitchChatModel: Bool {
@@ -146,7 +156,7 @@ struct ChatWorkspaceScreen: View {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(Color(uiColor: .label))
-                    .frame(width: 40, height: 40)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("チャット履歴"))
@@ -163,7 +173,7 @@ struct ChatWorkspaceScreen: View {
                     Image(systemName: "plus")
                         .font(.system(size: 19, weight: .semibold))
                         .foregroundStyle(.primary)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                         .overlay {
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
                                 .stroke(Color(uiColor: .label), lineWidth: 1.7)
@@ -214,6 +224,7 @@ struct ChatWorkspaceScreen: View {
                 modelTitleLabel(showsChevron: true)
             }
             .buttonStyle(.plain)
+            .disabled(viewModel.isSending)
             .accessibilityLabel(Text("モデルを切り替え"))
         } else {
             modelTitleLabel(showsChevron: false)
@@ -250,10 +261,7 @@ struct ChatWorkspaceScreen: View {
                         Text(L10n.text("デュアルモード"))
                     }
                 }
-                .disabled(
-                    (viewModel.settings.isAutoConversationEnabled || viewModel.settings.isFusionModeEnabled)
-                        && !viewModel.settings.isDualModeEnabled
-                )
+                .disabled(viewModel.isSending)
 
                 Button {
                     viewModel.toggleFusionMode()
@@ -264,10 +272,7 @@ struct ChatWorkspaceScreen: View {
                         Text(L10n.text("Fusion モード"))
                     }
                 }
-                .disabled(
-                    (viewModel.settings.isDualModeEnabled || viewModel.settings.isAutoConversationEnabled)
-                        && !viewModel.settings.isFusionModeEnabled
-                )
+                .disabled(viewModel.isSending)
 
                 Button {
                     viewModel.toggleAutoConversation()
@@ -278,10 +283,7 @@ struct ChatWorkspaceScreen: View {
                         Text(L10n.text("自動会話"))
                     }
                 }
-                .disabled(
-                    (viewModel.settings.isDualModeEnabled || viewModel.settings.isFusionModeEnabled)
-                        && !viewModel.settings.isAutoConversationEnabled
-                )
+                .disabled(viewModel.isSending)
 
                 if viewModel.isAutoConversationRunning {
                     Button("自動会話を一時停止") {
@@ -324,7 +326,7 @@ struct ChatWorkspaceScreen: View {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(.primary)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("その他"))
@@ -408,11 +410,44 @@ private struct ConversationExportShareItem: Identifiable {
 }
 
 private struct ConversationExportShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
+    let url: URL
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(url: url)
+    }
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
+        let controller = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        controller.completionWithItemsHandler = { [weak coordinator = context.coordinator] _, _, _, _ in
+            coordinator?.removeExport()
+        }
+        return controller
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+
+    static func dismantleUIViewController(_ uiViewController: UIActivityViewController, coordinator: Coordinator) {
+        coordinator.removeExport()
+    }
+
+    final class Coordinator {
+        private let url: URL
+        private var removed = false
+
+        init(url: URL) {
+            self.url = url
+        }
+
+        func removeExport() {
+            guard !removed else { return }
+            removed = true
+            do {
+                try FileManager.default.removeItem(at: url)
+            } catch {
+                if (error as NSError).code != NSFileNoSuchFileError {
+                    DiagnosticsLogger.log("Temporary export cleanup failed", category: .app, error: error)
+                }
+            }
+        }
+    }
 }

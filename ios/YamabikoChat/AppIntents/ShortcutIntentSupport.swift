@@ -14,7 +14,7 @@ enum ShortcutIntentSupport {
         let resolvedSystemPrompt = trimmedSystemPrompt?.isEmpty == false ? trimmedSystemPrompt : nil
 
         do {
-            let result = try await AppServices.shared.chatRepository.runShortcut(
+            let result = try await AppServices.resolve().chatRepository.runShortcut(
                 prompt: prompt,
                 provider: provider.providerKey,
                 model: model,

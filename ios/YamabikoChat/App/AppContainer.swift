@@ -19,7 +19,7 @@ final class AppContainer: ObservableObject {
     let chatRepository: ChatRepository
     let sharePayloadStore: SharePayloadStore
 
-    init(services: AppServices = .shared) {
+    init(services: AppServices) {
         dbQueue = services.dbQueue
         credentialStore = services.credentialStore
         settingsRepository = services.settingsRepository

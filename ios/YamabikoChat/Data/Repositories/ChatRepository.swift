@@ -37,6 +37,7 @@ final class ChatRepository {
     private let fusionService: FusionService
     private let fusionTraceStore: FusionTraceStore
     private let fusionOrchestrator: FusionOrchestrator
+    private let editorWorkspaces: EditorWorkspaceStore
 
     init(
         conversations: ConversationRepository,
@@ -51,7 +52,8 @@ final class ChatRepository {
         pricingRepository: any LiteLlmPricingEstimating = LiteLlmPricingRepository(),
         fusionService: FusionService,
         fusionTraceStore: FusionTraceStore,
-        fusionOrchestrator: FusionOrchestrator = FusionOrchestrator()
+        fusionOrchestrator: FusionOrchestrator = FusionOrchestrator(),
+        editorWorkspaces: EditorWorkspaceStore = .shared
     ) {
         self.conversations = conversations
         self.settings = settings
@@ -66,6 +68,7 @@ final class ChatRepository {
         self.fusionService = fusionService
         self.fusionTraceStore = fusionTraceStore
         self.fusionOrchestrator = fusionOrchestrator
+        self.editorWorkspaces = editorWorkspaces
     }
 
     // MARK: - Conversations
@@ -153,6 +156,33 @@ final class ChatRepository {
             systemPrompt: resolvedPrompt,
             projectId: projectId
         )
+    }
+
+    func createConversationWithPendingInitialMessage(
+        _ message: String,
+        projectId: Int64
+    ) throws -> Int64 {
+        let normalizedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedMessage.isEmpty else {
+            throw ProviderClientError.parseFailure(L10n.text("開始メッセージを入力してください。"))
+        }
+        let currentSettings = try settingsForNewConversation()
+        let resolvedPrompt = try resolveSystemPromptForProject(
+            projectId: projectId,
+            fallbackPrompt: currentSettings.systemPrompt
+        )
+        return try conversations.createConversation(
+            title: "New Chat",
+            model: currentSettings.currentModel(),
+            provider: currentSettings.apiProvider,
+            systemPrompt: resolvedPrompt,
+            projectId: projectId,
+            pendingInitialMessage: normalizedMessage
+        )
+    }
+
+    func pendingInitialMessage(conversationId: Int64) throws -> String? {
+        try conversations.pendingInitialMessage(conversationId: conversationId)
     }
 
     func createSecretConversation(projectId: Int64? = nil) throws -> Int64 {
@@ -251,12 +281,14 @@ final class ChatRepository {
 
     func deleteConversation(id: Int64) throws {
         try conversations.deleteConversation(id: id)
+        try editorWorkspaces.delete(sessionID: String(id))
         Task { await PythonWorker.shared.discard(sessionID: String(id)) }
     }
 
     func deleteConversations(ids: Set<Int64>) throws {
         try conversations.deleteConversations(ids: ids)
         for id in ids {
+            try editorWorkspaces.delete(sessionID: String(id))
             Task { await PythonWorker.shared.discard(sessionID: String(id)) }
         }
     }
@@ -265,13 +297,16 @@ final class ChatRepository {
     func deleteSecretConversationIfNeeded(id: Int64) throws -> Bool {
         let deleted = try conversations.deleteSecretConversationIfNeeded(id: id)
         if deleted {
+            try editorWorkspaces.delete(sessionID: String(id))
             Task { await PythonWorker.shared.discard(sessionID: String(id)) }
         }
         return deleted
     }
 
     func purgeSecretConversations() throws {
+        let ids = try conversations.secretConversationIDs()
         try conversations.purgeSecretConversations()
+        for id in ids { try editorWorkspaces.delete(sessionID: String(id)) }
     }
 
     func deleteProject(id: Int64, mode: ProjectDeletionMode) throws {
@@ -282,6 +317,7 @@ final class ChatRepository {
             let conversationIDs = try conversations.conversationIDs(projectId: id)
             try conversations.deleteProjectWithConversations(id: id)
             for conversationID in conversationIDs {
+                try editorWorkspaces.delete(sessionID: String(conversationID))
                 Task { await PythonWorker.shared.discard(sessionID: String(conversationID)) }
             }
         }
@@ -414,10 +450,35 @@ final class ChatRepository {
 
     // MARK: - Message Send
 
+    func isUserTurnCommitted(
+        conversationId: Int64,
+        text: String,
+        attachments: [String],
+        dualMode: Bool,
+        startedAtMs: Int64
+    ) throws -> Bool {
+        if dualMode {
+            return try conversations.fetchDualMessages(conversationId: conversationId).contains { message in
+                message.parsedRole == .user &&
+                    message.createdAtMs >= startedAtMs &&
+                    message.userText == text &&
+                    message.attachments == attachments
+            }
+        }
+        let expectedAttachments = encodeArray(attachments)
+        return try conversations.fetchMessages(conversationId: conversationId).contains { message in
+            message.role == "user" &&
+                message.createdAtMs >= startedAtMs &&
+                message.text == text &&
+                message.attachmentsJSON == expectedAttachments
+        }
+    }
+
     func sendMessage(
         conversationId: Int64,
         text: String,
         attachments: [String],
+        settingsOverride: AppSettings? = nil,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
     ) async throws -> SendMessageResult {
@@ -426,6 +487,7 @@ final class ChatRepository {
                 conversationId: conversationId,
                 text: text,
                 attachments: attachments,
+                settingsOverride: settingsOverride,
                 onStreamEvent: onStreamEvent,
                 onStreamingSnapshot: onStreamingSnapshot
             )
@@ -436,14 +498,28 @@ final class ChatRepository {
         conversationId: Int64,
         text: String,
         attachments: [String],
+        settingsOverride: AppSettings? = nil,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
     ) async throws -> SendMessageResult {
-        let settings = try self.settings.load()
+        let settings = try settingsOverride ?? self.settings.load()
         guard var conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
         }
         let isFirstMessage = try conversations.isConversationEmpty(conversationId: conversationId)
+
+        var requestMessages = try conversations.fetchProviderHistory(conversationId: conversationId)
+            .flatMap(\.providerMessages)
+        requestMessages.append(
+            ProviderRequestMessage(role: "user", content: text, attachments: attachments)
+        )
+        let request = try await buildProviderRequest(
+            conversation: conversation,
+            settings: settings,
+            conversationId: conversationId,
+            providerMessages: requestMessages
+        )
+        let provider = conversation.apiProvider
 
         let userMessageId = try conversations.insertMessage(
             ChatMessage(
@@ -458,13 +534,6 @@ final class ChatRepository {
             firstPrompt: text,
             isFirstMessage: isFirstMessage
         )
-
-        let request = try await buildProviderRequest(
-            conversation: conversation,
-            settings: settings,
-            conversationId: conversationId
-        )
-        let provider = conversation.apiProvider
 
         if settings.isStreamingEnabled {
             return try await streamMessage(
@@ -511,12 +580,14 @@ final class ChatRepository {
 
     func regenerateLastAssistantVariant(
         conversationId: Int64,
+        settingsOverride: AppSettings? = nil,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
     ) async throws -> Int64 {
         try await withConversationMetrics(conversationId: conversationId) {
             try await self.regenerateLastAssistantVariantMeasured(
                 conversationId: conversationId,
+                settingsOverride: settingsOverride,
                 onStreamEvent: onStreamEvent,
                 onStreamingSnapshot: onStreamingSnapshot
             )
@@ -525,10 +596,11 @@ final class ChatRepository {
 
     private func regenerateLastAssistantVariantMeasured(
         conversationId: Int64,
+        settingsOverride: AppSettings? = nil,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
     ) async throws -> Int64 {
-        let settings = try self.settings.load()
+        let settings = try settingsOverride ?? self.settings.load()
         guard let conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
         }
@@ -706,6 +778,7 @@ final class ChatRepository {
         metadata["provider"] = conversation.apiProvider
         metadata["promptCacheKey"] = "conversation-\(conversationId)"
         metadata["pythonSessionId"] = String(conversationId)
+        metadata["editorSessionId"] = String(conversationId)
         metadata["supportsVision"] = await visionMetadataFlag(
             provider: conversation.apiProvider,
             model: conversation.model
@@ -721,7 +794,8 @@ final class ChatRepository {
             messages: skillApplication.messages,
             systemPrompt: SystemPromptComposer.composeForAPI(
                 conversation.systemPrompt,
-                enablesAgenticWebSearch: resolvedSettings.tools.containsWebSearchTool
+                enablesAgenticWebSearch: resolvedSettings.tools.containsWebSearchTool,
+                enablesEditorInstructions: resolvedSettings.tools.containsEditorTool
             ),
             stream: settings.isStreamingEnabled,
             tools: resolvedSettings.tools,
@@ -823,22 +897,33 @@ final class ChatRepository {
         }
     }
 
-    func sendDualMessage(conversationId: Int64, text: String, attachments: [String] = []) async throws -> DualChatMessage {
+    func sendDualMessage(
+        conversationId: Int64,
+        text: String,
+        attachments: [String] = [],
+        settingsOverride: AppSettings? = nil
+    ) async throws -> DualChatMessage {
         try await withConversationMetrics(conversationId: conversationId) {
             try await self.sendDualMessageMeasured(
                 conversationId: conversationId,
                 text: text,
-                attachments: attachments
+                attachments: attachments,
+                settingsOverride: settingsOverride
             )
         }
     }
 
-    private func sendDualMessageMeasured(conversationId: Int64, text: String, attachments: [String]) async throws -> DualChatMessage {
+    private func sendDualMessageMeasured(
+        conversationId: Int64,
+        text: String,
+        attachments: [String],
+        settingsOverride: AppSettings?
+    ) async throws -> DualChatMessage {
         let bgGuard = BackgroundTaskGuard()
         bgGuard.begin(name: "YamabikoChatDualStreaming")
         defer { bgGuard.end() }
 
-        let settings = try self.settings.load()
+        let settings = try settingsOverride ?? self.settings.load()
         guard var conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
         }
@@ -857,19 +942,24 @@ final class ChatRepository {
             providerB: settings.dualProviderB,
             attachmentsJSON: encodeArray(normalizedAttachments)
         )
-        _ = try conversations.insertDualMessage(userMessage)
-
         let previousDualMessages = try conversations.fetchDualMessages(conversationId: conversationId)
-        let historyA = try buildDualHistory(
+        var historyA = try buildDualHistory(
             conversationId: conversationId,
             dualMessages: previousDualMessages,
             modelSide: .a
         )
-        let historyB = try buildDualHistory(
+        var historyB = try buildDualHistory(
             conversationId: conversationId,
             dualMessages: previousDualMessages,
             modelSide: .b
         )
+        let currentUserMessage = ProviderRequestMessage(
+            role: "user",
+            content: text,
+            attachments: normalizedAttachments
+        )
+        historyA.append(currentUserMessage)
+        historyB.append(currentUserMessage)
 
         let requestA = try await buildSingleTurnRequest(
             model: settings.dualModelA,
@@ -895,6 +985,8 @@ final class ChatRepository {
             promptCacheKey: "conversation-\(conversationId)-dual-b"
         )
 
+        _ = try conversations.insertDualMessage(userMessage)
+
         let modelCreatedAt = max(
             Int64(Date().timeIntervalSince1970 * 1000),
             userMessage.createdAtMs + 1
@@ -909,45 +1001,84 @@ final class ChatRepository {
             modelBName: settings.dualModelB,
             providerA: settings.dualProviderA,
             providerB: settings.dualProviderB,
+            modelAStatus: DualChatMessage.SideStatus.pending.rawValue,
+            modelBStatus: DualChatMessage.SideStatus.pending.rawValue,
             createdAtMs: modelCreatedAt
         )
         let modelRowId = try conversations.insertDualMessage(modelRow)
         modelRow.id = modelRowId
         let dualActivityQueue = DispatchQueue(label: "com.porarri.yamabikochat.dual-tool-activity.\(modelRowId)")
 
-        async let outcomeA = generateDualSideResponse(
-            request: requestA,
-            provider: settings.dualProviderA,
-            model: settings.dualModelA,
-            onToolActivity: { [conversations] event in
-                dualActivityQueue.sync {
-                    try? Self.persistDualToolEvent(
-                        event,
-                        side: .a,
-                        rowId: modelRowId,
-                        conversationId: conversationId,
-                        conversations: conversations
-                    )
-                }
+        var resultA: DualSideResult?
+        var resultB: DualSideResult?
+        try await withThrowingTaskGroup(of: (DualHistorySide, DualSideResult).self) { group in
+            group.addTask { [self, conversations] in
+                let result = await generateDualSideResponse(
+                    request: requestA,
+                    provider: settings.dualProviderA,
+                    model: settings.dualModelA,
+                    onToolActivity: { event in
+                        dualActivityQueue.sync {
+                            try? Self.persistDualToolEvent(
+                                event,
+                                side: .a,
+                                rowId: modelRowId,
+                                conversationId: conversationId,
+                                conversations: conversations
+                            )
+                        }
+                    }
+                )
+                return (.a, result)
             }
-        )
-        async let outcomeB = generateDualSideResponse(
-            request: requestB,
-            provider: settings.dualProviderB,
-            model: settings.dualModelB,
-            onToolActivity: { [conversations] event in
-                dualActivityQueue.sync {
-                    try? Self.persistDualToolEvent(
-                        event,
-                        side: .b,
-                        rowId: modelRowId,
-                        conversationId: conversationId,
-                        conversations: conversations
-                    )
-                }
+            group.addTask { [self, conversations] in
+                let result = await generateDualSideResponse(
+                    request: requestB,
+                    provider: settings.dualProviderB,
+                    model: settings.dualModelB,
+                    onToolActivity: { event in
+                        dualActivityQueue.sync {
+                            try? Self.persistDualToolEvent(
+                                event,
+                                side: .b,
+                                rowId: modelRowId,
+                                conversationId: conversationId,
+                                conversations: conversations
+                            )
+                        }
+                    }
+                )
+                return (.b, result)
             }
-        )
-        let (resultA, resultB) = await (outcomeA, outcomeB)
+
+            for try await (side, result) in group {
+                switch side {
+                case .a:
+                    resultA = result
+                    modelRow.modelAText = result.text
+                    modelRow.modelAThinking = result.reasoning
+                    modelRow.modelAToolActivityJSON = DualChatMessage.encodeToolActivity(result.toolActivity)
+                    modelRow.modelAStatus = result.error == nil
+                        ? DualChatMessage.SideStatus.completed.rawValue
+                        : DualChatMessage.SideStatus.failed.rawValue
+                    modelRow.modelAError = result.error?.localizedDescription
+                case .b:
+                    resultB = result
+                    modelRow.modelBText = result.text
+                    modelRow.modelBThinking = result.reasoning
+                    modelRow.modelBToolActivityJSON = DualChatMessage.encodeToolActivity(result.toolActivity)
+                    modelRow.modelBStatus = result.error == nil
+                        ? DualChatMessage.SideStatus.completed.rawValue
+                        : DualChatMessage.SideStatus.failed.rawValue
+                    modelRow.modelBError = result.error?.localizedDescription
+                }
+                try conversations.updateDualMessage(modelRow)
+            }
+        }
+
+        guard let resultA, let resultB else {
+            throw ProviderClientError.parseFailure(L10n.text("Dual response did not complete."))
+        }
 
         await recordTokenUsageIfAvailable(
             provider: settings.dualProviderA,
@@ -965,14 +1096,6 @@ final class ChatRepository {
             conversationId: conversationId,
             requestType: "dual_b"
         )
-
-        modelRow.modelAText = resultA.text
-        modelRow.modelBText = resultB.text
-        modelRow.modelAThinking = resultA.reasoning
-        modelRow.modelBThinking = resultB.reasoning
-        modelRow.modelAToolActivityJSON = DualChatMessage.encodeToolActivity(resultA.toolActivity)
-        modelRow.modelBToolActivityJSON = DualChatMessage.encodeToolActivity(resultB.toolActivity)
-        try conversations.updateDualMessage(modelRow)
 
         if let errA = resultA.error {
             DiagnosticsLogger.log(
@@ -1010,6 +1133,7 @@ final class ChatRepository {
         conversationId: Int64,
         text: String,
         attachments: [String] = [],
+        settingsOverride: AppSettings? = nil,
         onFusionProgress: (@Sendable (FusionProgressSnapshot) -> Void)? = nil,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
@@ -1019,6 +1143,7 @@ final class ChatRepository {
                 conversationId: conversationId,
                 text: text,
                 attachments: attachments,
+                settingsOverride: settingsOverride,
                 onFusionProgress: onFusionProgress,
                 onStreamEvent: onStreamEvent,
                 onStreamingSnapshot: onStreamingSnapshot
@@ -1030,6 +1155,7 @@ final class ChatRepository {
         conversationId: Int64,
         text: String,
         attachments: [String] = [],
+        settingsOverride: AppSettings?,
         onFusionProgress: (@Sendable (FusionProgressSnapshot) -> Void)? = nil,
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
@@ -1038,7 +1164,7 @@ final class ChatRepository {
         bgGuard.begin(name: "YamabikoChatFusion")
         defer { bgGuard.end() }
 
-        let settings = try self.settings.load()
+        let settings = try settingsOverride ?? self.settings.load()
         guard settings.isFusionModeEnabled else {
             throw ProviderClientError.parseFailure(L10n.text("Fusion モードが有効ではありません。"))
         }
@@ -1047,20 +1173,6 @@ final class ChatRepository {
         }
         let isFirstMessage = try conversations.isConversationEmpty(conversationId: conversationId)
         let normalizedAttachments = attachments.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-
-        let userMessageId = try conversations.insertMessage(
-            ChatMessage(
-                conversationId: conversationId,
-                role: "user",
-                text: text,
-                attachmentsJSON: encodeArray(normalizedAttachments)
-            )
-        )
-        try updateConversationTitleIfNeeded(
-            conversation: &conversation,
-            firstPrompt: text,
-            isFirstMessage: isFirstMessage
-        )
 
         let taskType = FusionTaskType(rawValue: settings.fusionTaskType.lowercased()) ?? .auto
         let allowWebSearchOverride: Bool? = settings.clientWebSearchToolEnabled ? nil : false
@@ -1078,8 +1190,25 @@ final class ChatRepository {
             throw error
         }
 
-        let history = try conversations.fetchProviderHistory(conversationId: conversationId)
+        var history = try conversations.fetchProviderHistory(conversationId: conversationId)
             .flatMap(\.providerMessages)
+        history.append(
+            ProviderRequestMessage(role: "user", content: text, attachments: normalizedAttachments)
+        )
+
+        let userMessageId = try conversations.insertMessage(
+            ChatMessage(
+                conversationId: conversationId,
+                role: "user",
+                text: text,
+                attachmentsJSON: encodeArray(normalizedAttachments)
+            )
+        )
+        try updateConversationTitleIfNeeded(
+            conversation: &conversation,
+            firstPrompt: text,
+            isFirstMessage: isFirstMessage
+        )
 
         let context = FusionContext(
             fusionDepth: 0,
@@ -1754,6 +1883,8 @@ final class ChatRepository {
     }
 
     private static let autoConversationTurnDelayNs: UInt64 = 2_000_000_000
+    private static let autoConversationUnlimitedTurnSafetyLimit = 100
+    private static let autoConversationSessionDurationLimitMs: Int64 = 30 * 60 * 1_000
     private static let autoConversationEndRegexes: [NSRegularExpression] = [
         try! NSRegularExpression(pattern: "(?:会話|議論|討論|対話)(?:を)?(?:(?:ここ|これ|以上)で)?終(?:了|わ)り(?:に)?(?:いたします|ます|ましょう|とします)", options: [.caseInsensitive]),
         try! NSRegularExpression(pattern: "これ(?:にて|で)(?:終(?:了|わ)り|終了)とさせていただきます", options: [.caseInsensitive]),
@@ -1780,6 +1911,21 @@ final class ChatRepository {
 
             let messages = try conversations.fetchAutoConversationMessages(autoConversationId: autoConversationId)
             let (nextTurn, speaker) = determineAutoConversationNextStep(messages: messages)
+
+            let nowMs = Int64(Date().timeIntervalSince1970 * 1_000)
+            if autoConversation.maxTurns == 0,
+               nextTurn > Self.autoConversationUnlimitedTurnSafetyLimit ||
+                nowMs - autoConversation.createdAtMs >= Self.autoConversationSessionDurationLimitMs {
+                try appendAutoConversationSystemMessage(
+                    autoConversation: autoConversation,
+                    text: L10n.text("**[SYSTEM]**\n\n安全上限（100ターンまたは30分）に達したため、自動会話を停止しました。")
+                )
+                try markAutoConversationEnded(
+                    autoConversationId: autoConversationId,
+                    reason: AutoConversationEndReason.safetyLimit
+                )
+                return
+            }
 
             if autoConversation.maxTurns > 0, nextTurn > autoConversation.maxTurns {
                 try appendAutoConversationSystemMessage(
@@ -1850,6 +1996,8 @@ final class ChatRepository {
                     conversationId: autoConversation.boundChatConversationId,
                     requestType: "auto_turn"
                 )
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 try markAutoConversationEnded(
                     autoConversationId: autoConversationId,
@@ -1867,6 +2015,12 @@ final class ChatRepository {
                 )
                 throw ProviderClientError.parseFailure(L10n.text("自動会話で空の応答を受信しました。"))
             }
+
+            guard let latestConversation = try conversations.fetchAutoConversation(id: autoConversationId),
+                  latestConversation.status == .active else {
+                return
+            }
+            autoConversation = latestConversation
 
             let hasEndSignal = containsAutoConversationEndSignal(
                 text: responseText,
@@ -2154,6 +2308,8 @@ final class ChatRepository {
             metadata["promptCacheKey"] = promptCacheKey
             if promptCacheKey.hasPrefix("conversation-") {
                 metadata["pythonSessionId"] = String(promptCacheKey.dropFirst("conversation-".count))
+                let suffix = promptCacheKey.dropFirst("conversation-".count)
+                metadata["editorSessionId"] = String(suffix.split(separator: "-").first ?? suffix[...])
             }
         }
         metadata["supportsVision"] = await visionMetadataFlag(provider: provider, model: model)
@@ -2168,7 +2324,8 @@ final class ChatRepository {
             messages: skillApplication.messages,
             systemPrompt: SystemPromptComposer.composeForAPI(
                 systemPrompt,
-                enablesAgenticWebSearch: resolvedSettings.tools.containsWebSearchTool
+                enablesAgenticWebSearch: resolvedSettings.tools.containsWebSearchTool,
+                enablesEditorInstructions: resolvedSettings.tools.containsEditorTool
             ),
             stream: stream ?? settings.isStreamingEnabled,
             tools: resolvedSettings.tools,
@@ -2192,7 +2349,7 @@ final class ChatRepository {
         )
     }
 
-    private enum DualHistorySide {
+    private enum DualHistorySide: Sendable {
         case a
         case b
     }
@@ -2242,7 +2399,7 @@ final class ChatRepository {
         } catch {
             let failedActivity = activityState.failRunning()
             return DualSideResult(
-                text: UserFacingErrorFormatter.placeholder(for: error),
+                text: "",
                 reasoning: nil,
                 usage: nil,
                 usageSamples: nil,

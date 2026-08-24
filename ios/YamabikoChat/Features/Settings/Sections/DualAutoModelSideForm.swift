@@ -9,6 +9,10 @@ struct DualAutoModelSideForm: View {
     @Binding var systemPrompt: String
     var providerPresets: [ModelPreset] = []
     var catalogProviders: [CatalogProvider] = []
+    var openRouterModels: [SimpleModel] = []
+    var openRouterModelsLoading = false
+    var openRouterModelsError: String?
+    var onRefreshOpenRouterModels: () -> Void = {}
     var onProviderPresetSelected: (ModelPreset) -> Void = { _ in }
     var systemPromptLineLimit: ClosedRange<Int> = 2 ... 8
 
@@ -62,7 +66,16 @@ struct DualAutoModelSideForm: View {
             catalogProviders: catalogProviders,
             title: providerTitleKey
         )
-        if let modelIDs = ProviderCatalog.constrainedModelIDs(for: provider) {
+        if provider.caseInsensitiveCompare("OPENROUTER") == .orderedSame {
+            OpenRouterModelPickerField(
+                titleKey: modelTitleKey,
+                model: $model,
+                models: openRouterModels,
+                isLoading: openRouterModelsLoading,
+                error: openRouterModelsError,
+                onRefresh: onRefreshOpenRouterModels
+            )
+        } else if let modelIDs = ProviderCatalog.constrainedModelIDs(for: provider) {
             Picker(L10n.text(modelTitleKey), selection: $model) {
                 ForEach(modelIDs, id: \.self) { modelID in
                     Text(modelID).tag(modelID)

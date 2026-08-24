@@ -57,6 +57,7 @@ final class SettingsViewModel: ObservableObject {
     private var isPersistingSettings = false
     private var activeOpenRouterModelsFetchID = UUID()
     private var activeOpenRouterEndpointsFetchID = UUID()
+    private var apiKeyDraftsByProvider: [String: String] = [:]
 
     private static let autoSaveDebounceInterval: TimeInterval = 0.5
 
@@ -90,6 +91,15 @@ final class SettingsViewModel: ObservableObject {
             .sink { [weak self] newSettings in
                 guard let self else { return }
                 guard !self.isPersistingSettings else { return }
+                guard self.autoSaveWorkItem == nil else {
+                    self.statusMessage = L10n.text("外部の設定変更があります。編集中の内容を保存してから再読み込みしてください。")
+                    DiagnosticsLogger.log(
+                        "Deferred external settings update while local edits are pending",
+                        level: .warning,
+                        category: .settings
+                    )
+                    return
+                }
                 self.isHydratingFromPersistence = true
                 self.settings = newSettings
                 self.syncSystemPromptPresetName()
@@ -314,8 +324,10 @@ final class SettingsViewModel: ObservableObject {
 
         $apiKeyDraft
             .dropFirst()
-            .sink { [weak self] _ in
-                self?.scheduleAutoSave()
+            .sink { [weak self] value in
+                guard let self else { return }
+                self.apiKeyDraftsByProvider[self.settings.apiProvider.uppercased()] = value
+                self.scheduleAutoSave()
             }
             .store(in: &cancellables)
 
@@ -369,8 +381,12 @@ final class SettingsViewModel: ObservableObject {
             let previousMCPToken = try credentialStore.flatMap {
                 try $0.readSecret(key: AppConstants.alibabaMCPAuthorizationTokenKey)
             }
-            var normalized = settings.normalizedForPersistence()
-            if normalized.alibabaMCPEnabled && normalized.resolvedAlibabaMCPServerURL() == nil {
+            let normalized = settings.normalizedForPersistence()
+            let hasInvalidMCP = normalized.alibabaMCPEnabled && normalized.resolvedAlibabaMCPServerURL() == nil
+            var persisted = normalized
+            if hasInvalidMCP {
+                persisted.alibabaMCPEnabled = previousPersistedSettings.alibabaMCPEnabled
+                persisted.alibabaMCPServerURL = previousPersistedSettings.alibabaMCPServerURL
                 errorMessage = L10n.text("Remote MCP URL に有効な https:// URL を入力してください。")
                 if showSuccessMessage {
                     statusMessage = nil
@@ -380,15 +396,14 @@ final class SettingsViewModel: ObservableObject {
                     level: .warning,
                     category: .settings
                 )
-                return
             }
-            if let selected = normalized.selectedSystemPromptPreset,
-               !normalized.systemPromptPresets().contains(where: { $0.name.caseInsensitiveCompare(selected) == .orderedSame }) {
-                normalized.selectedSystemPromptPreset = nil
+            if let selected = persisted.selectedSystemPromptPreset,
+               !persisted.systemPromptPresets().contains(where: { $0.name.caseInsensitiveCompare(selected) == .orderedSame }) {
+                persisted.selectedSystemPromptPreset = nil
             }
-            try repository.saveSettings(normalized)
+            try repository.saveSettings(persisted)
             do {
-                try persistCredentialDrafts()
+                try persistCredentialDrafts(includeMCP: !hasInvalidMCP)
             } catch {
                 try? repository.saveSettings(previousPersistedSettings)
                 try? credentialStore?.saveSecret(
@@ -397,11 +412,15 @@ final class SettingsViewModel: ObservableObject {
                 )
                 throw error
             }
-            settings = normalized
+            if !hasInvalidMCP {
+                settings = persisted
+            }
             if showSuccessMessage {
                 statusMessage = L10n.text("保存しました")
             }
-            errorMessage = nil
+            if !hasInvalidMCP {
+                errorMessage = nil
+            }
         } catch {
             errorMessage = error.localizedDescription
             if showSuccessMessage {
@@ -411,11 +430,13 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
-    private func persistCredentialDrafts() throws {
-        try credentialStore?.saveSecret(
-            alibabaMCPAuthorizationTokenInput.nilIfBlank,
-            key: AppConstants.alibabaMCPAuthorizationTokenKey
-        )
+    private func persistCredentialDrafts(includeMCP: Bool = true) throws {
+        if includeMCP {
+            try credentialStore?.saveSecret(
+                alibabaMCPAuthorizationTokenInput.nilIfBlank,
+                key: AppConstants.alibabaMCPAuthorizationTokenKey
+            )
+        }
 
         let providerKey = settings.apiProvider.uppercased()
         if providerKey != "CODEX_AUTH", providerKey != "SUPERGROK", providerKey != "APPLE_INTELLIGENCE",
@@ -441,11 +462,7 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func setAlibabaMCPServerURL(_ value: String) {
-        let previousIdentity = normalizedAlibabaMCPServerURLIdentity(settings.alibabaMCPServerURL)
         settings.alibabaMCPServerURL = value
-        let nextIdentity = normalizedAlibabaMCPServerURLIdentity(value)
-        guard previousIdentity != nextIdentity else { return }
-        alibabaMCPAuthorizationTokenInput = ""
         statusMessage = nil
     }
 
@@ -468,6 +485,7 @@ final class SettingsViewModel: ObservableObject {
     func setProvider(_ provider: String) {
         let nextProvider = provider.uppercased()
         let currentProvider = settings.apiProvider.uppercased()
+        apiKeyDraftsByProvider[currentProvider] = apiKeyDraft
         let currentModel = settings.defaultModel.trimmingCharacters(in: .whitespacesAndNewlines)
 
         var providerMap = settings.providerModelMap()
@@ -494,7 +512,13 @@ final class SettingsViewModel: ObservableObject {
         } else {
             resetOpenRouterEndpointState(forModelId: nil)
         }
-        scheduleAPIKeyLoad(for: nextProvider)
+        if let draft = apiKeyDraftsByProvider[nextProvider] {
+            isHydratingFromPersistence = true
+            apiKeyDraft = draft
+            isHydratingFromPersistence = false
+        } else {
+            loadCurrentProviderAPIKey()
+        }
     }
 
     private func scheduleAPIKeyLoad(for provider: String) {
@@ -832,7 +856,9 @@ final class SettingsViewModel: ObservableObject {
             timeoutMs: nil,
             role: "panel"
         )
-        preset.panelModels.append(template)
+        var newPanel = template
+        newPanel.id = UUID()
+        preset.panelModels.append(newPanel)
         saveFusionCustomPreset(preset)
     }
 
@@ -1196,7 +1222,11 @@ final class SettingsViewModel: ObservableObject {
         }
         do {
             isHydratingFromPersistence = true
-            apiKeyDraft = try credentialStore.credential(for: provider) ?? ""
+            let providerKey = settings.apiProvider.uppercased()
+            let storedValue = try credentialStore.credential(for: provider) ?? ""
+            let value = apiKeyDraftsByProvider[providerKey] ?? storedValue
+            apiKeyDraft = value
+            apiKeyDraftsByProvider[providerKey] = value
             isHydratingFromPersistence = false
         } catch {
             isHydratingFromPersistence = false

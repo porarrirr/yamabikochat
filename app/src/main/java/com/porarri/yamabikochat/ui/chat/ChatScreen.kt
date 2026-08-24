@@ -930,7 +930,9 @@ fun DualChatMessageItem(
                 thinkingA = dualMessage.modelAThinking,
                 thinkingB = dualMessage.modelBThinking,
                 toolStepsA = dualMessage.modelAToolActivity?.steps.orEmpty(),
-                toolStepsB = dualMessage.modelBToolActivity?.steps.orEmpty()
+                toolStepsB = dualMessage.modelBToolActivity?.steps.orEmpty(),
+                attachmentsA = dualMessage.modelAToolActivity?.attachmentPaths.orEmpty(),
+                attachmentsB = dualMessage.modelBToolActivity?.attachmentPaths.orEmpty()
             )
         }
     }

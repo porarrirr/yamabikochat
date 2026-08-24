@@ -16,6 +16,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.porarri.yamabikochat.data.local.SplitLayoutType
 import com.porarri.yamabikochat.data.local.ToolActivityStep
 import com.porarri.yamabikochat.ui.chat.MarkdownText
+import com.porarri.yamabikochat.ui.chat.MessageAttachmentList
 import com.porarri.yamabikochat.ui.chat.ToolActivityDisclosure
 import com.porarri.yamabikochat.ui.chat.components.ChatErrorCard
 import com.porarri.yamabikochat.utils.UserFacingErrorFormatter
@@ -178,7 +179,9 @@ fun DualResponseDisplay(
     thinkingA: String? = null,
     thinkingB: String? = null,
     toolStepsA: List<ToolActivityStep> = emptyList(),
-    toolStepsB: List<ToolActivityStep> = emptyList()
+    toolStepsB: List<ToolActivityStep> = emptyList(),
+    attachmentsA: List<String> = emptyList(),
+    attachmentsB: List<String> = emptyList()
 ) {
     DualSplitLayout(
         modifier = modifier,
@@ -192,6 +195,7 @@ fun DualResponseDisplay(
                 content = modelAContent,
                 thinking = thinkingA,
                 toolSteps = toolStepsA,
+                attachments = attachmentsA,
                 isLeft = true
             )
         },
@@ -202,6 +206,7 @@ fun DualResponseDisplay(
                 content = modelBContent,
                 thinking = thinkingB,
                 toolSteps = toolStepsB,
+                attachments = attachmentsB,
                 isLeft = false
             )
         }
@@ -215,6 +220,7 @@ private fun ResponsePanel(
     content: String,
     thinking: String?,
     toolSteps: List<ToolActivityStep>,
+    attachments: List<String>,
     isLeft: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -267,6 +273,11 @@ private fun ResponsePanel(
 
             if (toolSteps.isNotEmpty()) {
                 ToolActivityDisclosure(steps = toolSteps)
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+
+            if (attachments.isNotEmpty()) {
+                MessageAttachmentList(attachments = attachments)
                 Spacer(modifier = Modifier.height(6.dp))
             }
             

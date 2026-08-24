@@ -99,6 +99,23 @@ final class AttachmentRepository: @unchecked Sendable {
         }
     }
 
+    func persistGeneratedFileReplacingExisting(data: Data, filename: String, collection: String? = nil) throws -> URL {
+        try generatedFilesLock.withLock {
+            let safeName = safeGeneratedName(filename, fallback: "generated-file")
+            var directory = try generatedFilesRoot()
+            if let collection, !collection.isEmpty {
+                directory.appendPathComponent(
+                    safeGeneratedName(collection, fallback: "Chat"),
+                    isDirectory: true
+                )
+            }
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            let destination = directory.appendingPathComponent(safeName)
+            try data.write(to: destination, options: [.atomic])
+            return destination
+        }
+    }
+
     private func generatedFilesRoot() throws -> URL {
         if let generatedFilesRootOverride { return generatedFilesRootOverride }
         let documents = try fileManager.url(

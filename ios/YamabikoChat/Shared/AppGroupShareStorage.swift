@@ -1,7 +1,14 @@
 import Foundation
 
 enum AppGroupShareStorage {
-    static let payloadFileName = "share_payload.json"
+    static let payloadQueueDirectoryName = "share_payloads"
+    static let failedPayloadDirectoryName = "share_payloads_failed"
+
+    struct QueuedPayload: Equatable {
+        let id: UUID
+        let data: Data
+        fileprivate let fileURL: URL
+    }
 
     #if DEBUG
     /// Overrides the app group container URL in unit tests.
@@ -20,12 +27,12 @@ enum AppGroupShareStorage {
         return fileManager.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)
     }
 
-    static func payloadFileURL(
+    static func payloadQueueURL(
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
         fileManager: FileManager = .default
     ) -> URL? {
         containerURL(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager)?
-            .appendingPathComponent(payloadFileName, isDirectory: false)
+            .appendingPathComponent(payloadQueueDirectoryName, isDirectory: true)
     }
 
     @discardableResult
@@ -34,12 +41,19 @@ enum AppGroupShareStorage {
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
         fileManager: FileManager = .default
     ) -> Bool {
-        guard let fileURL = payloadFileURL(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager) else {
+        guard let queueURL = payloadQueueURL(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager) else {
             return false
         }
         do {
-            let directory = fileURL.deletingLastPathComponent()
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: queueURL, withIntermediateDirectories: true)
+            let fileURL = queueURL.appendingPathComponent(
+                String(
+                    format: "%020llu-%@.json",
+                    UInt64(Date().timeIntervalSince1970 * 1_000_000_000),
+                    UUID().uuidString
+                ),
+                isDirectory: false
+            )
             try data.write(to: fileURL, options: .atomic)
             SharePayloadDarwinNotifier.postChange()
             return true
@@ -52,30 +66,87 @@ enum AppGroupShareStorage {
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
         fileManager: FileManager = .default
     ) -> Data? {
-        guard let data = readPayloadData(
+        guard let queued = peekPayload(
             appGroupIdentifier: appGroupIdentifier,
             fileManager: fileManager
         ) else { return nil }
-        guard removePayloadData(
-            matching: data,
+        guard acknowledge(
+            queued,
             appGroupIdentifier: appGroupIdentifier,
             fileManager: fileManager
         ) else { return nil }
-        return data
+        return queued.data
     }
 
     static func readPayloadData(
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
         fileManager: FileManager = .default
     ) -> Data? {
-        guard
-            let fileURL = payloadFileURL(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager),
-            fileManager.fileExists(atPath: fileURL.path)
-        else {
-            return nil
-        }
+        peekPayload(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager)?.data
+    }
 
-        return try? Data(contentsOf: fileURL)
+    static func peekPayload(
+        appGroupIdentifier: String = AppConstants.appGroupIdentifier,
+        fileManager: FileManager = .default
+    ) -> QueuedPayload? {
+        guard let queueURL = payloadQueueURL(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager),
+              let urls = try? fileManager.contentsOfDirectory(
+                at: queueURL,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+              )
+        else { return nil }
+        for fileURL in urls.filter({ $0.pathExtension == "json" }).sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            let stem = fileURL.deletingPathExtension().lastPathComponent
+            guard let data = try? Data(contentsOf: fileURL),
+                  let separator = stem.firstIndex(of: "-"),
+                  let id = UUID(uuidString: String(stem[stem.index(after: separator)...]))
+            else { continue }
+            return QueuedPayload(id: id, data: data, fileURL: fileURL)
+        }
+        return nil
+    }
+
+    @discardableResult
+    static func acknowledge(
+        _ queued: QueuedPayload,
+        appGroupIdentifier: String = AppConstants.appGroupIdentifier,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        guard let queueURL = payloadQueueURL(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager),
+              queued.fileURL.deletingLastPathComponent().standardizedFileURL == queueURL.standardizedFileURL,
+              let currentData = try? Data(contentsOf: queued.fileURL),
+              currentData == queued.data
+        else { return false }
+        do {
+            try fileManager.removeItem(at: queued.fileURL)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    @discardableResult
+    static func quarantine(
+        _ queued: QueuedPayload,
+        appGroupIdentifier: String = AppConstants.appGroupIdentifier,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        guard let containerURL = containerURL(
+            appGroupIdentifier: appGroupIdentifier,
+            fileManager: fileManager
+        ) else { return false }
+        let failedURL = containerURL.appendingPathComponent(failedPayloadDirectoryName, isDirectory: true)
+        do {
+            try fileManager.createDirectory(at: failedURL, withIntermediateDirectories: true)
+            try fileManager.moveItem(
+                at: queued.fileURL,
+                to: failedURL.appendingPathComponent(queued.fileURL.lastPathComponent)
+            )
+            return true
+        } catch {
+            return false
+        }
     }
 
     @discardableResult
@@ -84,16 +155,9 @@ enum AppGroupShareStorage {
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
         fileManager: FileManager = .default
     ) -> Bool {
-        guard let fileURL = payloadFileURL(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager),
-              let currentData = try? Data(contentsOf: fileURL),
-              currentData == expectedData
-        else { return false }
-        do {
-            try fileManager.removeItem(at: fileURL)
-            return true
-        } catch {
-            return false
-        }
+        guard let queued = peekPayload(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager),
+              queued.data == expectedData else { return false }
+        return acknowledge(queued, appGroupIdentifier: appGroupIdentifier, fileManager: fileManager)
     }
 }
 

@@ -110,7 +110,7 @@ final class FusionServiceTests: XCTestCase {
             conversationHistory: []
         )
 
-        XCTAssertEqual(request.timeoutInterval, .greatestFiniteMagnitude)
+        XCTAssertEqual(request.timeoutInterval, 120)
     }
 
     func testPanelRequestIncludesGeminiGlobalReasoningAndTools() async throws {

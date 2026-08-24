@@ -6,6 +6,7 @@ final class ShareImportModel: ObservableObject {
     @Published var importedText = ""
     @Published var noteText = ""
     @Published var isLoading = true
+    @Published var importError: String?
 
     var mergedText: String {
         [importedText, noteText]
@@ -75,10 +76,22 @@ final class ShareImportViewController: UIViewController {
         let merged = model.mergedText
         guard !merged.isEmpty else { return }
 
-        SharePayloadPersister.save(text: merged, sourceApp: nil)
+        do {
+            try SharePayloadPersister.save(text: merged, sourceApp: nil)
+        } catch {
+            model.importError = error.localizedDescription
+            return
+        }
 
-        extensionContext?.open(AppConstants.importShareURL) { [weak self] _ in
-            self?.extensionContext?.completeRequest(returningItems: nil)
+        extensionContext?.open(AppConstants.importShareURL) { [weak self] opened in
+            guard let self else { return }
+            if opened {
+                self.extensionContext?.completeRequest(returningItems: nil)
+            } else {
+                Task { @MainActor in
+                    self.model.importError = ShareExtensionStrings.openFailed
+                }
+            }
         }
     }
 }
@@ -101,6 +114,13 @@ private struct ShareImportRootView: View {
                 Section {
                     TextField(ShareExtensionStrings.notePlaceholder, text: $model.noteText, axis: .vertical)
                         .lineLimit(3...8)
+                }
+                if let importError = model.importError {
+                    Section {
+                        Text(importError)
+                            .foregroundStyle(.red)
+                            .accessibilityLabel(ShareExtensionStrings.importFailed)
+                    }
                 }
             }
             .navigationTitle(ShareExtensionStrings.screenTitle)

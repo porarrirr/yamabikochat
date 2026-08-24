@@ -75,10 +75,7 @@ struct ChatScreen: View {
                 ScrollViewReader { proxy in
                     GeometryReader { scrollGeometry in
                         let measuredWidth = rootGeometry.size.width
-                        let viewportWidth = measuredWidth < 300
-                            ? UIScreen.main.bounds.width
-                            : measuredWidth
-                        let timelineWidth = max(viewportWidth - chatTimelineHorizontalPadding * 2, 0)
+                        let timelineWidth = max(measuredWidth - chatTimelineHorizontalPadding * 2, 0)
                         let timelineMinHeight = max(scrollGeometry.size.height - chatTimelineVerticalPadding * 2, 0)
 
                         ScrollView {
@@ -263,7 +260,9 @@ struct ChatScreen: View {
                 await importSelectedPhotos(items)
             }
         }
-        .sheet(isPresented: $showRecentPhotoSheet) {
+        .sheet(isPresented: $showRecentPhotoSheet, onDismiss: {
+            recentPhotoSelection.removeAll()
+        }) {
             RecentPhotoSheet(
                 library: recentPhotoLibrary,
                 selection: $recentPhotoSelection,
@@ -295,7 +294,7 @@ struct ChatScreen: View {
     }
 
     private var isPreparingPhotoAttachments: Bool {
-        !recentPhotoSelection.isEmpty || !addingRecentPhotoIDs.isEmpty || !photoItems.isEmpty
+        !addingRecentPhotoIDs.isEmpty || !photoItems.isEmpty
     }
 
     private var emptyStateTitle: String {
@@ -308,7 +307,7 @@ struct ChatScreen: View {
 
     private var emptyStateDescription: String {
         viewModel.isSecretConversation
-            ? L10n.text("このチャットは閉じると破棄されます。")
+            ? L10n.text("このチャットは別の会話を開くと破棄されます。")
             : L10n.text("メッセージを入力して会話を開始してください。")
     }
 
@@ -394,6 +393,7 @@ struct ChatScreen: View {
                     .padding(.bottom, isComposerExpanded ? 6 : 9)
                     .foregroundStyle(Color.chatComposerText)
                     .tint(Color.chatOrange)
+                    .disabled(viewModel.isSpeechRecording || viewModel.isSending)
 
                 if !isComposerExpanded {
                     if let contextUsage = viewModel.visibleContextUsage {
@@ -436,8 +436,8 @@ struct ChatScreen: View {
 
     @ViewBuilder
     private var composerPlusMenuButton: some View {
-        if viewModel.canAttachImages {
-            Menu {
+        Menu {
+            if viewModel.canAttachImages {
                 if UIImagePickerController.isSourceTypeAvailable(.camera) {
                     Button {
                         openCamera()
@@ -451,22 +451,22 @@ struct ChatScreen: View {
                 } label: {
                     Label(L10n.text("写真"), systemImage: "photo")
                 }
-
-                Button {
-                    openFileImporter()
-                } label: {
-                    Label(L10n.text("ファイル"), systemImage: "paperclip")
-                }
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 20, weight: .regular))
-                    .foregroundStyle(Color.chatComposerIcon)
-                    .frame(width: 36, height: 36)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text("添付を追加"))
+            Button {
+                openFileImporter()
+            } label: {
+                Label(L10n.text("ファイル"), systemImage: "paperclip")
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 20, weight: .regular))
+                .foregroundStyle(Color.chatComposerIcon)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isSending)
+        .accessibilityLabel(Text("添付を追加"))
     }
 
     private var composerMicButton: some View {
@@ -477,7 +477,7 @@ struct ChatScreen: View {
                 .font(.system(size: 20, weight: .regular))
                 .foregroundStyle(viewModel.isSpeechRecording ? Color.red : Color.chatComposerIcon)
                 .symbolEffect(.pulse, isActive: viewModel.isSpeechRecording)
-                .frame(width: 36, height: 36)
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -492,7 +492,7 @@ struct ChatScreen: View {
             ZStack {
                 Circle()
                     .fill(viewModel.isSpeechRecording ? Color.red : Color.chatOrange)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
 
                 if viewModel.isSending {
                     ProgressView()
@@ -513,19 +513,21 @@ struct ChatScreen: View {
 
     private var composerExpandedSendButton: some View {
         Button {
-            if canSend {
+            if viewModel.isSending {
+                viewModel.cancelActiveRun()
+            } else if canSend {
                 viewModel.sendMessage()
             }
         } label: {
             ZStack {
                 Circle()
-                    .fill(canSend ? Color.chatOrange : Color.chatSendDisabled)
-                    .frame(width: 36, height: 36)
+                    .fill((canSend || viewModel.isSending) ? Color.chatOrange : Color.chatSendDisabled)
+                    .frame(width: 44, height: 44)
 
                 if viewModel.isSending {
-                    ProgressView()
-                        .tint(.white)
-                        .controlSize(.small)
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
                 } else {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 17, weight: .bold))
@@ -534,8 +536,8 @@ struct ChatScreen: View {
             }
         }
         .buttonStyle(.plain)
-        .disabled(viewModel.isSending || !canSend)
-        .accessibilityLabel(Text("送信"))
+        .disabled(!viewModel.isSending && !canSend)
+        .accessibilityLabel(viewModel.isSending ? Text("生成を停止") : Text("送信"))
     }
 
     private struct ContextUsageMeter: View {
@@ -725,6 +727,7 @@ struct ChatScreen: View {
     }
 
     private func openPhotoPicker() {
+        recentPhotoSelection.removeAll()
         showRecentPhotoSheet = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             showPhotoPicker = true
@@ -1231,7 +1234,7 @@ private struct ChatStatsLine: View {
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.horizontal, 10)
         }
-        .frame(height: 18)
+        .frame(minHeight: 18)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(groups.joined(separator: ", ")))
     }
@@ -1560,18 +1563,24 @@ private struct DualMessageCard: View {
                     ) {
                         DualResponsePane(
                             title: "A · \(ProviderCatalog.displayName(for: message.providerA)) · \(message.modelAName)",
-                            content: modelAText.isEmpty ? L10n.text("（応答待ち）") : modelAText,
+                            content: modelAText,
+                            status: message.parsedModelAStatus,
+                            error: message.modelAError,
                             thinking: message.modelAThinking,
                             toolSteps: message.modelAToolActivity?.steps ?? [],
+                            attachments: message.modelAToolActivity?.attachmentPaths.map { ChatAttachmentItem(rawValue: $0) } ?? [],
                             showThinking: $showThinkingA,
                             mathRenderingEnabled: mathRenderingEnabled
                         )
                     } second: {
                         DualResponsePane(
                             title: "B · \(ProviderCatalog.displayName(for: message.providerB)) · \(message.modelBName)",
-                            content: modelBText.isEmpty ? L10n.text("（応答待ち）") : modelBText,
+                            content: modelBText,
+                            status: message.parsedModelBStatus,
+                            error: message.modelBError,
                             thinking: message.modelBThinking,
                             toolSteps: message.modelBToolActivity?.steps ?? [],
+                            attachments: message.modelBToolActivity?.attachmentPaths.map { ChatAttachmentItem(rawValue: $0) } ?? [],
                             showThinking: $showThinkingB,
                             mathRenderingEnabled: mathRenderingEnabled
                         )
@@ -1645,23 +1654,77 @@ private struct DualSplitContainer<First: View, Second: View>: View {
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         } else {
-            HStack(alignment: .top, spacing: 8) {
-                first()
-                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
-                    .layoutPriority(splitRatio)
-                second()
-                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
-                    .layoutPriority(1 - splitRatio)
+            ViewThatFits(in: .horizontal) {
+                DualRatioLayout(ratio: splitRatio, spacing: 8) {
+                    first()
+                    second()
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    first()
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    second()
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
             }
         }
+    }
+}
+
+private struct DualRatioLayout: Layout {
+    let ratio: Double
+    let spacing: CGFloat
+    private let minimumPaneWidth: CGFloat = 220
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        guard subviews.count == 2 else { return .zero }
+        let minimumWidth = minimumPaneWidth * 2 + spacing
+        let width = max(proposal.width ?? minimumWidth, minimumWidth)
+        let paneWidths = resolvedPaneWidths(totalWidth: width)
+        let firstSize = subviews[0].sizeThatFits(.init(width: paneWidths.0, height: proposal.height))
+        let secondSize = subviews[1].sizeThatFits(.init(width: paneWidths.1, height: proposal.height))
+        return CGSize(width: width, height: max(firstSize.height, secondSize.height))
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        guard subviews.count == 2 else { return }
+        let paneWidths = resolvedPaneWidths(totalWidth: bounds.width)
+        subviews[0].place(
+            at: bounds.origin,
+            anchor: .topLeading,
+            proposal: .init(width: paneWidths.0, height: proposal.height)
+        )
+        subviews[1].place(
+            at: CGPoint(x: bounds.minX + paneWidths.0 + spacing, y: bounds.minY),
+            anchor: .topLeading,
+            proposal: .init(width: paneWidths.1, height: proposal.height)
+        )
+    }
+
+    private func resolvedPaneWidths(totalWidth: CGFloat) -> (CGFloat, CGFloat) {
+        let available = max(0, totalWidth - spacing)
+        let minimumRatio = available > 0 ? min(0.5, minimumPaneWidth / available) : 0.5
+        let clampedRatio = min(max(CGFloat(ratio), minimumRatio), 1 - minimumRatio)
+        return (available * clampedRatio, available * (1 - clampedRatio))
     }
 }
 
 private struct DualResponsePane: View {
     let title: String
     let content: String
+    let status: DualChatMessage.SideStatus
+    let error: String?
     let thinking: String?
     let toolSteps: [ToolActivityStep]
+    let attachments: [ChatAttachmentItem]
     @Binding var showThinking: Bool
     let mathRenderingEnabled: Bool
 
@@ -1676,6 +1739,10 @@ private struct DualResponsePane: View {
 
             if !toolSteps.isEmpty {
                 ToolActivityDisclosure(steps: toolSteps)
+            }
+
+            if !attachments.isEmpty {
+                MessageAttachmentList(attachments: attachments, isOutgoing: false)
             }
 
             if let thinking = thinking?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1702,11 +1769,21 @@ private struct DualResponsePane: View {
                 }
             }
 
-            if UserFacingErrorFormatter.looksLikeChatError(content) {
-                ChatErrorCard(text: content)
-            } else {
+            switch status {
+            case .pending:
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text(L10n.text("応答待ち"))
+                        .foregroundStyle(.secondary)
+                }
+            case .failed:
+                ChatErrorCard(text: error ?? L10n.text("応答の生成に失敗しました。"))
+            case .canceled:
+                Text(L10n.text("キャンセルしました"))
+                    .foregroundStyle(.secondary)
+            case .completed:
                 MathMarkdownView(
-                    markdownText: content,
+                    markdownText: content.isEmpty ? L10n.text("応答がありません") : content,
                     mathRenderingEnabled: mathRenderingEnabled,
                     isStreaming: false
                 )

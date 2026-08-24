@@ -3,17 +3,20 @@ import Foundation
 
 struct RunFusionIntent: AppIntent {
     static var title: LocalizedStringResource = "Fusion に聞く"
-    static var description = IntentDescription("Run Fusion multi-model orchestration")
+    static var description = IntentDescription(LocalizedStringResource("Shortcuts: Fusion に聞く説明"))
     static var openAppWhenRun: Bool = false
 
-    @Parameter(title: "Prompt")
+    @Parameter(title: LocalizedStringResource("Shortcuts: プロンプト"))
     var prompt: String
 
-    @Parameter(title: "Debug", default: false)
+    @Parameter(title: LocalizedStringResource("Shortcuts: デバッグ"), default: false)
     var debug: Bool
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Fusion: \(\.$prompt)")
+        Summary("Shortcuts: Fusion に聞く要約") {
+            \.$prompt
+            \.$debug
+        }
     }
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
@@ -22,7 +25,7 @@ struct RunFusionIntent: AppIntent {
             throw FusionError.invalidPreset(L10n.text("プロンプトが空です。"))
         }
 
-        let result = try await AppServices.shared.fusionService.runFusion(
+        let result = try await AppServices.resolve().fusionService.runFusion(
             userPrompt: trimmedPrompt,
             options: FusionRunOptions(
                 debugMode: debug,

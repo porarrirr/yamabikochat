@@ -92,13 +92,44 @@ enum FusionConfidence: String, Codable, Sendable {
     case high
 }
 
-struct PanelModelConfig: Codable, Sendable, Equatable {
+struct PanelModelConfig: Codable, Sendable, Equatable, Identifiable {
+    var id: UUID
     var modelId: String
     var provider: String
     var temperature: Double?
     /// Legacy preset field retained for decoding only; Fusion does not enforce it.
     var timeoutMs: Int?
     var role: String?
+
+    init(
+        id: UUID = UUID(),
+        modelId: String,
+        provider: String,
+        temperature: Double? = nil,
+        timeoutMs: Int? = nil,
+        role: String? = nil
+    ) {
+        self.id = id
+        self.modelId = modelId
+        self.provider = provider
+        self.temperature = temperature
+        self.timeoutMs = timeoutMs
+        self.role = role
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, modelId, provider, temperature, timeoutMs, role
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        modelId = try container.decode(String.self, forKey: .modelId)
+        provider = try container.decode(String.self, forKey: .provider)
+        temperature = try container.decodeIfPresent(Double.self, forKey: .temperature)
+        timeoutMs = try container.decodeIfPresent(Int.self, forKey: .timeoutMs)
+        role = try container.decodeIfPresent(String.self, forKey: .role)
+    }
 }
 
 struct FusionRequest: Codable, Sendable, Equatable {

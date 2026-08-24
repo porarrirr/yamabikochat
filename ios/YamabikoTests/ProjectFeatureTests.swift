@@ -209,23 +209,31 @@ final class ProjectFeatureTests: XCTestCase {
         XCTAssertNil(conversation?.systemPrompt)
     }
 
-    @MainActor
-    func testPendingInitialMessageLifecycle() {
-        let appState = AppState()
-        XCTAssertNil(appState.pendingInitialMessage)
+    func testPendingInitialMessagePersistsUntilUserTurnIsCommitted() throws {
+        let fixture = try makeFixture()
+        let projectId = try fixture.repository.createProject(title: "テスト", instructions: nil)
+        let conversationId = try fixture.repository.createConversationWithPendingInitialMessage(
+            "  こんにちは  ",
+            projectId: projectId
+        )
 
-        appState.setPendingInitialMessage(conversationID: 42, text: "こんにちは")
-        XCTAssertEqual(appState.pendingInitialMessage?.conversationID, 42)
-        XCTAssertEqual(appState.pendingInitialMessage?.text, "こんにちは")
+        XCTAssertEqual(
+            try fixture.repository.pendingInitialMessage(conversationId: conversationId),
+            "こんにちは"
+        )
 
-        // Wrong conversation ID returns nil and does not consume
-        XCTAssertNil(appState.consumePendingInitialMessage(for: 99))
-        XCTAssertNotNil(appState.pendingInitialMessage)
+        _ = try fixture.conversations.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "model", text: "準備中")
+        )
+        XCTAssertEqual(
+            try fixture.repository.pendingInitialMessage(conversationId: conversationId),
+            "こんにちは"
+        )
 
-        // Matching conversation ID consumes the message
-        let consumed = appState.consumePendingInitialMessage(for: 42)
-        XCTAssertEqual(consumed, "こんにちは")
-        XCTAssertNil(appState.pendingInitialMessage)
+        _ = try fixture.conversations.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "user", text: "こんにちは")
+        )
+        XCTAssertNil(try fixture.repository.pendingInitialMessage(conversationId: conversationId))
     }
 
     private func makeFixture() throws -> (

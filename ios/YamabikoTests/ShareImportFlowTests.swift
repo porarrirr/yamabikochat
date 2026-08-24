@@ -23,7 +23,7 @@ final class ShareImportFlowTests: XCTestCase {
     func testImportSharePayloadCreatesNewConversationAndDraft() throws {
         let repository = try makeRepository()
         let store = SharePayloadStore()
-        SharePayloadPersister.save(text: "shared from Safari", sourceApp: "Safari")
+        try SharePayloadPersister.save(text: "shared from Safari", sourceApp: "Safari")
 
         let appState = AppState()
         XCTAssertTrue(appState.importSharePayload(from: store, repository: repository))
@@ -57,7 +57,7 @@ final class ShareImportFlowTests: XCTestCase {
             try db.execute(sql: "DROP TABLE conversations")
         }
         let store = SharePayloadStore()
-        SharePayloadPersister.save(text: "must survive", sourceApp: "Safari")
+        try SharePayloadPersister.save(text: "must survive", sourceApp: "Safari")
 
         let appState = AppState()
         XCTAssertFalse(appState.importSharePayload(from: store, repository: repository))

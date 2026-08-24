@@ -32,21 +32,11 @@ struct AutoConversationSettingsSection: View {
                     get: { viewModel.settings.isAutoConversationEnabled },
                     set: { viewModel.setAutoConversationEnabled($0) }
                 ))
-                .disabled(
-                    (viewModel.settings.isDualModeEnabled || viewModel.settings.isFusionModeEnabled)
-                        && !viewModel.settings.isAutoConversationEnabled
-                )
 
                 Text(L10n.text("自動会話はモデルA/Bの応答を交互に実行します。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if (viewModel.settings.isDualModeEnabled || viewModel.settings.isFusionModeEnabled)
-                    && !viewModel.settings.isAutoConversationEnabled {
-                    Text(L10n.text("Fusion またはデュアルモードが有効な間は自動会話をONにできません。"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
             } header: {
                 Text(L10n.text("自動会話"))
             } footer: {
@@ -64,6 +54,10 @@ struct AutoConversationSettingsSection: View {
                         systemPrompt: $viewModel.settings.autoSystemPromptA,
                         providerPresets: providerPresetOptions,
                         catalogProviders: viewModel.modelsDevCatalogState.providers,
+                        openRouterModels: viewModel.openRouterModels,
+                        openRouterModelsLoading: viewModel.openRouterModelsLoading,
+                        openRouterModelsError: viewModel.openRouterModelsError,
+                        onRefreshOpenRouterModels: { Task { await viewModel.refreshOpenRouterModels(force: false) } },
                         onProviderPresetSelected: applyProviderPresetToAutoA,
                         systemPromptLineLimit: 2 ... 6
                     )
@@ -79,6 +73,10 @@ struct AutoConversationSettingsSection: View {
                         systemPrompt: $viewModel.settings.autoSystemPromptB,
                         providerPresets: providerPresetOptions,
                         catalogProviders: viewModel.modelsDevCatalogState.providers,
+                        openRouterModels: viewModel.openRouterModels,
+                        openRouterModelsLoading: viewModel.openRouterModelsLoading,
+                        openRouterModelsError: viewModel.openRouterModelsError,
+                        onRefreshOpenRouterModels: { Task { await viewModel.refreshOpenRouterModels(force: false) } },
                         onProviderPresetSelected: applyProviderPresetToAutoB,
                         systemPromptLineLimit: 2 ... 6
                     )
@@ -88,7 +86,7 @@ struct AutoConversationSettingsSection: View {
                     Text(maxTurnsLabel)
                         .font(.subheadline)
 
-                    Toggle(L10n.text("無制限"), isOn: Binding(
+                    Toggle(L10n.text("無制限（安全上限: 100ターン・30分）"), isOn: Binding(
                         get: { isUnlimitedTurns },
                         set: { unlimited in
                             if unlimited {

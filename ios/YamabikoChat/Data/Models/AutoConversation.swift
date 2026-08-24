@@ -13,6 +13,7 @@ enum AutoConversationEndReason {
     static let endSignal = "END_SIGNAL"
     static let error = "ERROR"
     static let apiError = "API_ERROR"
+    static let safetyLimit = "SAFETY_LIMIT"
 }
 
 struct AutoConversationConfig {

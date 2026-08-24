@@ -5,3 +5,5 @@
 "share.cancel_button" = "Annuler";
 "share.loading" = "Chargement…";
 "share.empty_preview" = "Aucun contenu à importer";
+"share.import_failed" = "Impossible d’enregistrer le contenu partagé.";
+"share.open_failed" = "Impossible d’ouvrir YamabikoChat. Réessayez.";

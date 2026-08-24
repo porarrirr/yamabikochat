@@ -2,7 +2,17 @@ import Foundation
 import GRDB
 
 final class AppServices {
-    static let shared = AppServices()
+    private static let resolutionLock = NSLock()
+    private static var resolvedInstance: AppServices?
+
+    static func resolve() throws -> AppServices {
+        resolutionLock.lock()
+        defer { resolutionLock.unlock() }
+        if let resolvedInstance { return resolvedInstance }
+        let instance = try AppServices()
+        resolvedInstance = instance
+        return instance
+    }
 
     let dbQueue: DatabaseQueue
     let credentialStore: SecureCredentialStore
@@ -22,18 +32,21 @@ final class AppServices {
     let chatRepository: ChatRepository
     let sharePayloadStore: SharePayloadStore
 
-    private init() {
+    private init() throws {
         DiagnosticsLogger.initialize()
-        do {
-            dbQueue = try AppDatabase.makeDatabaseQueue()
-        } catch {
-            fatalError("Database initialization failed: \(error)")
-        }
+        dbQueue = try AppDatabase.makeDatabaseQueue()
 
         credentialStore = KeychainStore()
         settingsRepository = SettingsRepository(dbQueue: dbQueue)
         conversationRepository = ConversationRepository(dbQueue: dbQueue)
         attachmentRepository = AttachmentRepository()
+        do {
+            try EditorWorkspaceStore.shared.deleteOrphans(
+                validSessionIDs: try conversationRepository.allConversationIDs().map(String.init)
+            )
+        } catch {
+            DiagnosticsLogger.log("Editor workspace orphan cleanup failed", category: .app, error: error)
+        }
         do {
             try PythonSessionStore.shared.purgeAll()
         } catch {
@@ -50,14 +63,15 @@ final class AppServices {
         // their executors so `activate_skill` / `read_skill_resource` calls can be
         // dispatched without sending duplicate tool definitions to providers.
         let pythonTool = PythonExecuteTool(attachments: attachmentRepository)
+        let editorTool = StrReplaceEditorTool(attachments: attachmentRepository)
         let clientWebTools = LocalToolRegistry(
-            executors: [WebSearchTool(), FetchUrlTool(), pythonTool]
+            executors: [WebSearchTool(), FetchUrlTool(), pythonTool, editorTool]
         )
         // Recreate per request: WebSearch/FetchUrl are stateless, pythonTool is reused
         // (tied to attachmentRepository), and AgentSkill executors snapshot latest enabledSkills.
-        let makeLocalTools: @Sendable () -> LocalToolRegistry = { [repository, pythonTool] in
+        let makeLocalTools: @Sendable () -> LocalToolRegistry = { [repository, pythonTool, editorTool] in
             LocalToolRegistry(
-                executors: [WebSearchTool(), FetchUrlTool(), pythonTool] + AgentSkillTools.executors(repository: repository)
+                executors: [WebSearchTool(), FetchUrlTool(), pythonTool, editorTool] + AgentSkillTools.executors(repository: repository)
             )
         }
         let localTools = makeLocalTools()
@@ -110,10 +124,5 @@ final class AppServices {
         )
         sharePayloadStore = SharePayloadStore()
 
-        do {
-            try chatRepository.purgeSecretConversations()
-        } catch {
-            DiagnosticsLogger.log("Purge secret conversations failed", category: .app, error: error)
-        }
     }
 }

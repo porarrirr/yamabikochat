@@ -5,3 +5,5 @@
 "share.cancel_button" = "取消";
 "share.loading" = "正在加载…";
 "share.empty_preview" = "没有可导入的内容";
+"share.import_failed" = "无法保存共享内容。";
+"share.open_failed" = "无法打开 YamabikoChat，请重试。";
