@@ -653,6 +653,8 @@ enum MathMarkdownHeightScript {
     static func source(messageName: String) -> String {
         """
         (function() {
+          var heightFrame = 0;
+          var lastPostedHeight = -1;
           function sendHeight() {
             if (window.__yamabikoEnableHorizontalScroll) {
               window.__yamabikoEnableHorizontalScroll();
@@ -671,25 +673,35 @@ enum MathMarkdownHeightScript {
             if (!isFinite(height) || height <= 0) {
               height = Math.max(body.scrollHeight || 0, body.offsetHeight || 0);
             }
-            window.webkit.messageHandlers.\(messageName).postMessage(Math.ceil(height));
+            var roundedHeight = Math.ceil(height);
+            if (roundedHeight === lastPostedHeight) return;
+            lastPostedHeight = roundedHeight;
+            window.webkit.messageHandlers.\(messageName).postMessage(roundedHeight);
           }
-          window.__yamabikoSendHeight = sendHeight;
+          function scheduleHeight() {
+            if (heightFrame) return;
+            heightFrame = requestAnimationFrame(function() {
+              heightFrame = 0;
+              sendHeight();
+            });
+          }
+          window.__yamabikoSendHeight = scheduleHeight;
           window.addEventListener('load', function() {
-            sendHeight();
-            setTimeout(sendHeight, 80);
-            setTimeout(sendHeight, 220);
-            setTimeout(sendHeight, 420);
+            scheduleHeight();
+            setTimeout(scheduleHeight, 80);
+            setTimeout(scheduleHeight, 220);
+            setTimeout(scheduleHeight, 420);
           });
-          window.addEventListener('resize', sendHeight);
+          window.addEventListener('resize', scheduleHeight);
           if (window.ResizeObserver) {
-            var observer = new ResizeObserver(function() { sendHeight(); });
+            var observer = new ResizeObserver(function() { scheduleHeight(); });
             var observedRoot = document.getElementById('yamabiko-markdown');
             if (observedRoot) observer.observe(observedRoot);
           }
           if (window.MutationObserver) {
             var mutationRoot = document.getElementById('yamabiko-markdown');
             if (mutationRoot) {
-              var mutationObserver = new MutationObserver(function() { sendHeight(); });
+              var mutationObserver = new MutationObserver(function() { scheduleHeight(); });
               mutationObserver.observe(mutationRoot, { childList: true, subtree: true, characterData: true });
             }
           }
@@ -722,6 +734,51 @@ struct MathMarkdownView: View {
         .onChange(of: colorScheme) { _, _ in
             contentHeight = Self.minimumHeight
         }
+    }
+}
+
+struct MathMarkdownInputSignature: Equatable {
+    let markdownText: String
+    let mathRenderingEnabled: Bool
+    let isStreaming: Bool
+    let colorScheme: ColorScheme
+}
+
+struct MathMarkdownDocumentSignature: Equatable {
+    let mathRenderingEnabled: Bool
+    let colorScheme: ColorScheme
+    let mathJaxScriptTag: String
+    let copyButtonLabel: String
+    let copiedButtonLabel: String
+
+    fileprivate var cacheKey: NSString {
+        [
+            mathRenderingEnabled ? "math" : "plain",
+            colorScheme == .dark ? "dark" : "light",
+            mathJaxScriptTag,
+            copyButtonLabel,
+            copiedButtonLabel
+        ].joined(separator: "\u{1F}") as NSString
+    }
+}
+
+enum MathMarkdownDocumentCache {
+    private static let storage: NSCache<NSString, NSString> = {
+        let cache = NSCache<NSString, NSString>()
+        cache.countLimit = 8
+        return cache
+    }()
+
+    static func document(
+        for signature: MathMarkdownDocumentSignature,
+        build: () -> String
+    ) -> String {
+        if let cached = storage.object(forKey: signature.cacheKey) {
+            return cached as String
+        }
+        let value = build()
+        storage.setObject(value as NSString, forKey: signature.cacheKey)
+        return value
     }
 }
 
@@ -1268,6 +1325,14 @@ private struct MathMarkdownWebView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.parent = self
 
+        let inputSignature = MathMarkdownInputSignature(
+            markdownText: markdownText,
+            mathRenderingEnabled: mathRenderingEnabled,
+            isStreaming: isStreaming,
+            colorScheme: colorScheme
+        )
+        guard context.coordinator.beginUpdate(inputSignature) else { return }
+
         let normalizedMarkdown = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
             markdownText,
             mathRenderingEnabled: mathRenderingEnabled
@@ -1285,18 +1350,27 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         let borderColor = colorScheme == .dark ? "#38383A" : "#E5E5EA"
         let linkColor = colorScheme == .dark ? "#70A7FF" : "#1F64E0"
 
-        let html = MathMarkdownHTMLBuilder.buildHTML(
-            markdownPayload: "\"\"",
-            markdownRendererScript: Self.markdownRendererScript,
-            bodyTextColor: bodyTextColor,
-            codeBackgroundColor: codeBackgroundColor,
-            borderColor: borderColor,
-            linkColor: linkColor,
+        let documentSignature = MathMarkdownDocumentSignature(
             mathRenderingEnabled: mathRenderingEnabled,
+            colorScheme: colorScheme,
             mathJaxScriptTag: mathJaxLoadPlan.scriptTag,
             copyButtonLabel: L10n.text("コピー"),
             copiedButtonLabel: L10n.text("コピー済み")
         )
+        let html = MathMarkdownDocumentCache.document(for: documentSignature) {
+            MathMarkdownHTMLBuilder.buildHTML(
+                markdownPayload: "\"\"",
+                markdownRendererScript: Self.markdownRendererScript,
+                bodyTextColor: bodyTextColor,
+                codeBackgroundColor: codeBackgroundColor,
+                borderColor: borderColor,
+                linkColor: linkColor,
+                mathRenderingEnabled: mathRenderingEnabled,
+                mathJaxScriptTag: mathJaxLoadPlan.scriptTag,
+                copyButtonLabel: documentSignature.copyButtonLabel,
+                copiedButtonLabel: documentSignature.copiedButtonLabel
+            )
+        }
 
         let resourceDirectory = mathJaxLoadPlan.baseURL == nil
             ? nil
@@ -1322,6 +1396,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
 
         var parent: MathMarkdownWebView
         var lastHTML: String?
+        private var lastInputSignature: MathMarkdownInputSignature?
         private var pendingLoadToken = 0
         private var pendingRenderToken = 0
         private var didFinishInitialLoad = false
@@ -1332,6 +1407,12 @@ private struct MathMarkdownWebView: UIViewRepresentable {
 
         init(parent: MathMarkdownWebView) {
             self.parent = parent
+        }
+
+        func beginUpdate(_ signature: MathMarkdownInputSignature) -> Bool {
+            guard lastInputSignature != signature else { return false }
+            lastInputSignature = signature
+            return true
         }
 
         func webView(_ webView: WKWebView, didFinish _: WKNavigation!) {
@@ -1453,10 +1534,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
             pendingIsStreaming = isStreaming
 
             guard didFinishInitialLoad else { return }
-            guard force || lastRenderedMarkdownPayload != markdownPayload else {
-                scheduleHeightMeasurement(for: webView)
-                return
-            }
+            guard force || lastRenderedMarkdownPayload != markdownPayload else { return }
 
             pendingRenderToken += 1
             let token = pendingRenderToken
@@ -1479,13 +1557,6 @@ private struct MathMarkdownWebView: UIViewRepresentable {
                         self.requestHeightMeasurement(for: webView)
                     }
                 }
-            }
-        }
-
-        func scheduleHeightMeasurement(for webView: WKWebView) {
-            DispatchQueue.main.async { [weak self, weak webView] in
-                guard let self, let webView else { return }
-                self.requestHeightMeasurement(for: webView)
             }
         }
 

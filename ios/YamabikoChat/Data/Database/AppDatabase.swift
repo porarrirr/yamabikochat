@@ -19,6 +19,7 @@ enum AppDatabase {
 
         let queue = try DatabaseQueue(path: dbURL.path, configuration: configuration)
         try migrator.migrate(queue)
+        try recoverStreamCheckpoints(in: queue)
         return queue
     }
 
@@ -857,7 +858,61 @@ enum AppDatabase {
             }
         }
 
+        migrator.registerMigration("v24_stream_checkpoints") { db in
+            try db.create(table: "chat_stream_checkpoints", ifNotExists: true) { table in
+                table.autoIncrementedPrimaryKey("id")
+                table.column("messageId", .integer).references("chat_messages", onDelete: .cascade)
+                table.column("variantId", .integer).references("chat_message_variants", onDelete: .cascade)
+                table.column("text", .text).notNull().defaults(to: "")
+                table.column("thinking", .text).notNull().defaults(to: "")
+                table.column("updatedAtMs", .integer).notNull()
+                table.check(sql: "(messageId IS NOT NULL AND variantId IS NULL) OR (messageId IS NULL AND variantId IS NOT NULL)")
+            }
+            try db.create(
+                index: "idx_stream_checkpoint_message",
+                on: "chat_stream_checkpoints",
+                columns: ["messageId"],
+                unique: true,
+                ifNotExists: true
+            )
+            try db.create(
+                index: "idx_stream_checkpoint_variant",
+                on: "chat_stream_checkpoints",
+                columns: ["variantId"],
+                unique: true,
+                ifNotExists: true
+            )
+        }
+
         return migrator
+    }
+
+    /// A checkpoint is written to a table that is intentionally outside all
+    /// conversation UI observations. On a cold launch, fold any interrupted
+    /// stream into its canonical row before observers are installed.
+    static func recoverStreamCheckpoints(in queue: DatabaseQueue) throws {
+        try queue.write { db in
+            let rows = try Row.fetchAll(db, sql: "SELECT messageId, variantId, text, thinking FROM chat_stream_checkpoints")
+            for row in rows {
+                let text: String = row["text"] ?? ""
+                let thinking: String = row["thinking"] ?? ""
+                if let messageId: Int64 = row["messageId"] {
+                    try db.execute(sql: "UPDATE chat_messages SET text = ? WHERE id = ?", arguments: [text, messageId])
+                    if !thinking.isEmpty {
+                        try db.execute(
+                            sql: "INSERT INTO chat_message_thinking (messageId, thinkingStream) VALUES (?, ?) ON CONFLICT(messageId) DO UPDATE SET thinkingStream = excluded.thinkingStream",
+                            arguments: [messageId, thinking]
+                        )
+                    }
+                } else if let variantId: Int64 = row["variantId"] {
+                    try db.execute(
+                        sql: "UPDATE chat_message_variants SET text = ?, thinkingStream = CASE WHEN ? = '' THEN thinkingStream ELSE ? END WHERE id = ?",
+                        arguments: [text, thinking, thinking, variantId]
+                    )
+                }
+            }
+            try db.execute(sql: "DELETE FROM chat_stream_checkpoints")
+        }
     }
 
     private static func createToolActivityTable(_ db: Database) throws {

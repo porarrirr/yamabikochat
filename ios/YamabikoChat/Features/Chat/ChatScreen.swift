@@ -6,7 +6,7 @@ import UIKit
 import ImageIO
 import QuickLook
 
-private enum ChatTimelineItem: Identifiable {
+enum ChatTimelineItem: Identifiable, Equatable {
     case message(FullChatMessage)
     case dual(DualChatMessage)
 
@@ -26,6 +26,15 @@ private enum ChatTimelineItem: Identifiable {
         case let .dual(item):
             return item.createdAtMs
         }
+    }
+}
+
+struct ChatTimelineSnapshot: Equatable {
+    let items: [ChatTimelineItem]
+
+    init(messages: [FullChatMessage], dualMessages: [DualChatMessage]) {
+        items = (messages.map(ChatTimelineItem.message) + dualMessages.map(ChatTimelineItem.dual))
+            .sorted { $0.createdAtMs < $1.createdAtMs }
     }
 }
 
@@ -64,9 +73,10 @@ struct ChatScreen: View {
     private let bottomProximityThreshold: CGFloat = 96
 
     private var timeline: [ChatTimelineItem] {
-        (viewModel.fullMessages.map { ChatTimelineItem.message($0) } +
-            viewModel.dualMessages.map { ChatTimelineItem.dual($0) })
-            .sorted(by: { $0.createdAtMs < $1.createdAtMs })
+        ChatTimelineSnapshot(
+            messages: viewModel.fullMessages,
+            dualMessages: viewModel.dualMessages
+        ).items
     }
 
     var body: some View {
@@ -79,7 +89,7 @@ struct ChatScreen: View {
                         let timelineMinHeight = max(scrollGeometry.size.height - chatTimelineVerticalPadding * 2, 0)
 
                         ScrollView {
-                            VStack(alignment: .leading, spacing: 24) {
+                            LazyVStack(alignment: .leading, spacing: 24) {
                                 if timeline.isEmpty {
                                     ContentUnavailableView(
                                         emptyStateTitle,
@@ -114,6 +124,7 @@ struct ChatScreen: View {
                                                     viewModel.regenerateLastAssistantVariant()
                                                 }
                                             )
+                                            .equatable()
                                             .id(item.id)
                                         case let .dual(message):
                                             DualMessageCard(
@@ -122,6 +133,7 @@ struct ChatScreen: View {
                                                 settings: viewModel.settings,
                                                 mathRenderingEnabled: viewModel.settings.mathRenderingEnabled
                                             )
+                                            .equatable()
                                             .id(item.id)
                                         }
                                     }
@@ -150,6 +162,24 @@ struct ChatScreen: View {
                         }
                         .coordinateSpace(name: scrollCoordinateSpace)
                         .background(Color.chatScreenBackground)
+                        .overlay(alignment: .bottomTrailing) {
+                            if !isUserNearBottom {
+                                Button {
+                                    scrollToBottom(proxy: proxy, animated: true)
+                                } label: {
+                                    Image(systemName: "arrow.down")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(.primary)
+                                        .frame(width: 42, height: 42)
+                                        .background(.regularMaterial, in: Circle())
+                                        .shadow(color: .black.opacity(0.14), radius: 5, y: 2)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.trailing, 14)
+                                .padding(.bottom, 12)
+                                .accessibilityLabel(Text(L10n.text("最新メッセージへ移動")))
+                            }
+                        }
                         .scrollDismissesKeyboard(.interactively)
                         .simultaneousGesture(
                             TapGesture().onEnded {
@@ -178,6 +208,9 @@ struct ChatScreen: View {
                         }
                         .onChange(of: timeline.count) { _, _ in
                             scrollToBottomIfNeeded(proxy: proxy)
+                        }
+                        .onChange(of: viewModel.streamingSnapshots) { _, _ in
+                            scrollToBottomIfNeeded(proxy: proxy, animated: false)
                         }
                         .onChange(of: isComposerFocused) { _, focused in
                             guard !focused else { return }
@@ -757,18 +790,9 @@ struct ChatScreen: View {
         }
     }
 
-    private func handleBottomAnchorChange(maxY: CGFloat, viewportHeight: CGFloat, proxy: ScrollViewProxy) {
-        let wasNearBottom = isUserNearBottom
+    private func handleBottomAnchorChange(maxY: CGFloat, viewportHeight: CGFloat, proxy _: ScrollViewProxy) {
         bottomAnchorMaxY = maxY
         updateIsUserNearBottom(bottomAnchorMaxY: maxY, viewportHeight: viewportHeight)
-
-        if wasNearBottom,
-           !isUserDraggingScroll,
-           maxY > viewportHeight + bottomProximityThreshold {
-            DispatchQueue.main.async {
-                scrollToBottom(proxy: proxy, animated: false)
-            }
-        }
     }
 
     private func updateIsUserNearBottom(bottomAnchorMaxY: CGFloat, viewportHeight: CGFloat) {
@@ -776,7 +800,10 @@ struct ChatScreen: View {
     }
 
     private func scrollToBottomIfNeeded(proxy: ScrollViewProxy, animated: Bool = true) {
-        guard isUserNearBottom else { return }
+        guard ChatScrollPolicy.shouldFollowContentGrowth(
+            isNearBottom: isUserNearBottom,
+            isUserInteracting: isUserDraggingScroll
+        ) else { return }
         DispatchQueue.main.async {
             scrollToBottom(proxy: proxy, animated: animated)
         }
@@ -1177,7 +1204,7 @@ private struct AttachmentThumbnail: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .task(id: url.absoluteString) {
             guard image == nil else { return }
-            image = ImageThumbnailGenerator.thumbnail(
+            image = await ImageThumbnailGenerator.thumbnail(
                 for: url,
                 maxPixelSize: Int(sideLength * displayScale * 1.6)
             )
@@ -1187,7 +1214,25 @@ private struct AttachmentThumbnail: View {
 }
 
 private enum ImageThumbnailGenerator {
-    static func thumbnail(for url: URL, maxPixelSize: Int) -> UIImage? {
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 160
+        return cache
+    }()
+
+    static func thumbnail(for url: URL, maxPixelSize: Int) async -> UIImage? {
+        let key = "\(url.path)_\(maxPixelSize)"
+        if let cached = cache.object(forKey: key as NSString) { return cached }
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let result = generateThumbnail(for: url, maxPixelSize: maxPixelSize)
+                if let result { cache.setObject(result, forKey: key as NSString) }
+                continuation.resume(returning: result)
+            }
+        }
+    }
+
+    private static func generateThumbnail(for url: URL, maxPixelSize: Int) -> UIImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -1240,7 +1285,7 @@ private struct ChatStatsLine: View {
     }
 }
 
-private struct MessageBubble: View {
+private struct MessageBubble: View, Equatable {
     let message: FullChatMessage
     let rowWidth: CGFloat
     let mathRenderingEnabled: Bool
@@ -1256,6 +1301,17 @@ private struct MessageBubble: View {
     let onRegenerate: () -> Void
     @State private var isThinkingSheetPresented = false
     @State private var isFusionDetailPresented = false
+
+    static func == (lhs: MessageBubble, rhs: MessageBubble) -> Bool {
+        lhs.message == rhs.message &&
+            lhs.rowWidth == rhs.rowWidth &&
+            lhs.mathRenderingEnabled == rhs.mathRenderingEnabled &&
+            lhs.streamingSnapshot == rhs.streamingSnapshot &&
+            lhs.isActivelyStreaming == rhs.isActivelyStreaming &&
+            lhs.canRegenerate == rhs.canRegenerate &&
+            lhs.fusionDebugModeEnabled == rhs.fusionDebugModeEnabled &&
+            lhs.fusionTrace == rhs.fusionTrace
+    }
 
     private var isUser: Bool {
         message.message.role == "user"
@@ -1490,13 +1546,20 @@ private struct MessageBubble: View {
     }
 }
 
-private struct DualMessageCard: View {
+private struct DualMessageCard: View, Equatable {
     let message: DualChatMessage
     let rowWidth: CGFloat
     let settings: AppSettings
     let mathRenderingEnabled: Bool
     @State private var showThinkingA = false
     @State private var showThinkingB = false
+
+    static func == (lhs: DualMessageCard, rhs: DualMessageCard) -> Bool {
+        lhs.message == rhs.message &&
+            lhs.rowWidth == rhs.rowWidth &&
+            lhs.settings == rhs.settings &&
+            lhs.mathRenderingEnabled == rhs.mathRenderingEnabled
+    }
 
     private var resolvedLayout: String {
         let normalized = settings.dualSplitLayout.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()

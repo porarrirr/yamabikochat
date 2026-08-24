@@ -4,6 +4,7 @@ import Combine
 @MainActor
 final class ConversationListViewModel: ObservableObject {
     @Published private(set) var conversations: [ConversationListEntry] = []
+    @Published private(set) var filteredConversations: [ConversationListEntry] = []
     @Published private(set) var projects: [ProjectListEntry] = []
     @Published var searchQuery: String = ""
     @Published var selectedProjectId: Int64?
@@ -22,6 +23,7 @@ final class ConversationListViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
                 self?.conversations = $0
+                self?.rebuildFilteredConversations()
                 self?.pruneSelectionToVisibleConversations()
             }
             .store(in: &cancellables)
@@ -46,7 +48,10 @@ final class ConversationListViewModel: ObservableObject {
         Publishers.CombineLatest($searchQuery.removeDuplicates(), $selectedProjectId.removeDuplicates())
             .dropFirst()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _, _ in self?.pruneSelectionToVisibleConversations() }
+            .sink { [weak self] _, _ in
+                self?.rebuildFilteredConversations()
+                self?.pruneSelectionToVisibleConversations()
+            }
             .store(in: &cancellables)
     }
 
@@ -200,7 +205,7 @@ final class ConversationListViewModel: ObservableObject {
         }
     }
 
-    var filteredConversations: [ConversationListEntry] {
+    private func rebuildFilteredConversations() {
         let base: [ConversationListEntry]
         if let selectedProjectId {
             base = conversations.filter { $0.projectId == selectedProjectId }
@@ -209,12 +214,18 @@ final class ConversationListViewModel: ObservableObject {
         }
 
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return base }
-        return base.filter { entry in
+        let filtered: [ConversationListEntry]
+        if query.isEmpty {
+            filtered = base
+        } else {
+            filtered = base.filter { entry in
             entry.title.localizedCaseInsensitiveContains(query) ||
                 (entry.lastMessagePreview?.localizedCaseInsensitiveContains(query) ?? false) ||
                 (entry.projectTitle?.localizedCaseInsensitiveContains(query) ?? false)
+            }
         }
+        guard filteredConversations != filtered else { return }
+        filteredConversations = filtered
     }
 
     // MARK: - Selection Mode

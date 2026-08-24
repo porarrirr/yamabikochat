@@ -172,6 +172,7 @@ struct SvgPreviewWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.onError = onError
+        guard context.coordinator.shouldRender(svgContent: svgContent, maxHeight: maxHeight) else { return }
         let sanitized = SvgPreviewSanitizer.sanitize(svgContent)
         let html = SvgPreviewHTMLBuilder.buildHTML(svgContent: sanitized, maxHeight: maxHeight)
         guard context.coordinator.lastHTML != html else { return }
@@ -187,9 +188,18 @@ struct SvgPreviewWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate {
         var onError: ((String) -> Void)?
         var lastHTML: String?
+        private var lastSVGContent: String?
+        private var lastMaxHeight: CGFloat?
 
         init(onError: ((String) -> Void)?) {
             self.onError = onError
+        }
+
+        func shouldRender(svgContent: String, maxHeight: CGFloat) -> Bool {
+            guard lastSVGContent != svgContent || lastMaxHeight != maxHeight else { return false }
+            lastSVGContent = svgContent
+            lastMaxHeight = maxHeight
+            return true
         }
 
         func webView(

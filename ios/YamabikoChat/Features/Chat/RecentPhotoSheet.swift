@@ -9,6 +9,7 @@ struct RecentPhotoSheet: View {
     let isAdding: Bool
     let onAddSelected: () -> Void
     let onOpenFullLibrary: () -> Void
+    @StateObject private var masonryLayoutCache = RecentPhotoMasonryLayoutCache()
 
     private let columnSpacing: CGFloat = 4
     private let horizontalPadding: CGFloat = 12
@@ -41,18 +42,11 @@ struct RecentPhotoSheet: View {
         let totalPadding = horizontalPadding * 2
         let colWidth = max(40, (availableWidth - totalPadding - totalSpacing) / 3)
 
-        let columns: [[RecentPhotoItem]] = {
-            var cols: [[RecentPhotoItem]] = [[], [], []]
-            var heights: [CGFloat] = [0, 0, 0]
-            for item in library.items {
-                let ratio = min(max(item.aspectRatio, 0.55), 1.85)
-                let itemHeight = colWidth / ratio
-                let minCol = heights.indices.min(by: { heights[$0] < heights[$1] }) ?? 0
-                cols[minCol].append(item)
-                heights[minCol] += itemHeight + columnSpacing
-            }
-            return cols
-        }()
+        let columns = masonryLayoutCache.columns(
+            for: library.items,
+            columnWidth: colWidth,
+            spacing: columnSpacing
+        )
 
         return ScrollView(.vertical, showsIndicators: false) {
             HStack(alignment: .top, spacing: columnSpacing) {
@@ -249,6 +243,40 @@ struct RecentPhotoSheet: View {
     private func triggerSelectionHaptic() {
         let generator = UIImpactFeedbackGenerator(style: .light)
         generator.impactOccurred()
+    }
+}
+
+/// Selection changes redraw the sheet frequently. Column distribution depends
+/// only on assets and width, so keep that O(n) work out of selection updates.
+private final class RecentPhotoMasonryLayoutCache: ObservableObject {
+    private var items: [RecentPhotoItem] = []
+    private var columnWidth: CGFloat = -1
+    private var spacing: CGFloat = -1
+    private var cachedColumns: [[RecentPhotoItem]] = [[], [], []]
+
+    func columns(
+        for items: [RecentPhotoItem],
+        columnWidth: CGFloat,
+        spacing: CGFloat
+    ) -> [[RecentPhotoItem]] {
+        guard self.items != items || self.columnWidth != columnWidth || self.spacing != spacing else {
+            return cachedColumns
+        }
+        self.items = items
+        self.columnWidth = columnWidth
+        self.spacing = spacing
+
+        var columns: [[RecentPhotoItem]] = [[], [], []]
+        var heights: [CGFloat] = [0, 0, 0]
+        for item in items {
+            let ratio = min(max(item.aspectRatio, 0.55), 1.85)
+            let itemHeight = columnWidth / ratio
+            let target = heights.indices.min(by: { heights[$0] < heights[$1] }) ?? 0
+            columns[target].append(item)
+            heights[target] += itemHeight + spacing
+        }
+        cachedColumns = columns
+        return columns
     }
 }
 

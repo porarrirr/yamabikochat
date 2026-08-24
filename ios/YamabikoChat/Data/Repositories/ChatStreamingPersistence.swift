@@ -9,7 +9,9 @@ struct ChatStreamingSnapshot: Sendable, Equatable {
     var isFinal: Bool
 }
 
-/// Throttles GRDB writes during streaming while keeping in-memory state immediate.
+/// Throttles durable checkpoint writes during streaming while keeping in-memory
+/// state immediate. Checkpoints live outside observed message tables, so a token
+/// delta does not invalidate the full timeline and conversation list.
 struct ChatStreamingPersistenceCoordinator {
     private let flushIntervalNs: UInt64 = 100_000_000
     private var lastFlushNs: UInt64 = 0
@@ -73,6 +75,41 @@ struct ChatStreamSessionTarget {
             if !thinking.isEmpty {
                 try conversations.saveMessageVariantThinking(variantId: variantId, stream: thinking)
             }
+        }
+    }
+
+    func persistCheckpoint(text: String, thinking: String) throws {
+        let ids = checkpointIDs
+        guard (ids.messageId ?? ids.variantId ?? -1) >= 0 else { return }
+        try conversations.saveStreamCheckpoint(
+            messageId: ids.messageId,
+            variantId: ids.variantId,
+            text: text,
+            thinking: thinking
+        )
+    }
+
+    func commitCheckpoint(text: String, thinking: String) throws {
+        let ids = checkpointIDs
+        guard (ids.messageId ?? ids.variantId ?? -1) >= 0 else { return }
+        try conversations.commitStreamCheckpoint(
+            messageId: ids.messageId,
+            variantId: ids.variantId,
+            text: text,
+            thinking: thinking
+        )
+    }
+
+    func discardCheckpoint() throws {
+        let ids = checkpointIDs
+        guard (ids.messageId ?? ids.variantId ?? -1) >= 0 else { return }
+        try conversations.deleteStreamCheckpoint(messageId: ids.messageId, variantId: ids.variantId)
+    }
+
+    private var checkpointIDs: (messageId: Int64?, variantId: Int64?) {
+        switch kind {
+        case let .message(messageId): (messageId, nil)
+        case let .variant(variantId, _): (nil, variantId)
         }
     }
 
@@ -154,6 +191,9 @@ enum ChatStreamSession {
             }
             if fullText.isEmpty, reasoningText.isEmpty {
                 try? target.writeErrorPlaceholder(error)
+                try? target.discardCheckpoint()
+            } else {
+                try? target.commitCheckpoint(text: fullText, thinking: reasoningText)
             }
             publishStreamingSnapshot(
                 targetId: target.snapshotMessageId,
@@ -165,7 +205,7 @@ enum ChatStreamSession {
             throw error
         }
 
-        try coordinator.apply(text: fullText, thinking: reasoningText, force: true, persist: target.persist)
+        try target.commitCheckpoint(text: fullText, thinking: reasoningText)
         if toolActivity.hasPersistableContent {
             try target.persistToolActivity(toolActivity)
         }
@@ -300,7 +340,7 @@ enum ChatStreamSession {
         force: Bool,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
     ) throws {
-        try coordinator.apply(text: fullText, thinking: reasoningText, force: force, persist: target.persist)
+        try coordinator.apply(text: fullText, thinking: reasoningText, force: force, persist: target.persistCheckpoint)
         publishStreamingSnapshot(
             targetId: target.snapshotMessageId,
             coordinator: coordinator,

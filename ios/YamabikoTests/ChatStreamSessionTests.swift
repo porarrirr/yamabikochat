@@ -397,6 +397,56 @@ final class ChatStreamSessionTests: XCTestCase {
         XCTAssertEqual(try conversations.fetchFullMessage(id: messageId)?.toolActivity?.piExecution, execution)
     }
 
+    func testStreamCheckpointDoesNotMutateObservedMessageUntilCommit() throws {
+        let conversations = try makeConversations()
+        let conversationId = try conversations.createConversation(
+            title: "checkpoint",
+            model: "model",
+            provider: "OPENAI"
+        )
+        let messageId = try conversations.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "model", text: "", createdAtMs: 1)
+        )
+        let target = ChatStreamSessionTarget(conversations: conversations, kind: .message(messageId: messageId))
+
+        try target.persistCheckpoint(text: "partial", thinking: "reasoning")
+
+        XCTAssertEqual(try conversations.fetchMessages(conversationId: conversationId).last?.text, "")
+        XCTAssertEqual(try conversations.streamCheckpoint(messageId: messageId, variantId: nil)?.text, "partial")
+
+        try target.commitCheckpoint(text: "complete", thinking: "reasoning")
+
+        XCTAssertEqual(try conversations.fetchMessages(conversationId: conversationId).last?.text, "complete")
+        XCTAssertEqual(try conversations.fetchFullMessage(id: messageId)?.thinkingStream, "reasoning")
+        XCTAssertNil(try conversations.streamCheckpoint(messageId: messageId, variantId: nil))
+    }
+
+    func testInterruptedStreamCheckpointRecoversOnColdLaunch() throws {
+        let dbQueue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(dbQueue)
+        let conversations = ConversationRepository(dbQueue: dbQueue)
+        let conversationId = try conversations.createConversation(
+            title: "recovery",
+            model: "model",
+            provider: "OPENAI"
+        )
+        let messageId = try conversations.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "model", text: "", createdAtMs: 1)
+        )
+        try conversations.saveStreamCheckpoint(
+            messageId: messageId,
+            variantId: nil,
+            text: "recovered",
+            thinking: "saved reasoning"
+        )
+
+        try AppDatabase.recoverStreamCheckpoints(in: dbQueue)
+
+        XCTAssertEqual(try conversations.fetchMessages(conversationId: conversationId).last?.text, "recovered")
+        XCTAssertEqual(try conversations.fetchFullMessage(id: messageId)?.thinkingStream, "saved reasoning")
+        XCTAssertNil(try conversations.streamCheckpoint(messageId: messageId, variantId: nil))
+    }
+
     private func makeConversations() throws -> ConversationRepository {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)

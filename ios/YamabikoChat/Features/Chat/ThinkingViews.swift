@@ -1,27 +1,60 @@
 import SwiftUI
+import UIKit
 
-/// Plain-text thinking panel for streaming updates (avoids WebView reload flicker).
+/// TextKit-backed thinking panel. Updating a long `Text` causes SwiftUI to
+/// reshape the complete string for every stream delta; UITextView can update
+/// in place and preserves the reader's scroll position.
 struct ThinkingStreamTextView: View {
     let text: String
-    private let bottomAnchorID = "thinking-stream-bottom"
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                Text(text)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .id(bottomAnchorID)
-            }
-            .onChange(of: text) { oldValue, newValue in
-                guard newValue.count >= oldValue.count else { return }
-                proxy.scrollTo(bottomAnchorID, anchor: .bottom)
-            }
-            .onAppear {
-                proxy.scrollTo(bottomAnchorID, anchor: .bottom)
-            }
+        ThinkingTextViewRepresentable(text: text)
+    }
+}
+
+private struct ThinkingTextViewRepresentable: UIViewRepresentable {
+    let text: String
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> UITextView {
+        let view = UITextView()
+        view.delegate = context.coordinator
+        view.isEditable = false
+        view.isSelectable = true
+        view.alwaysBounceVertical = true
+        view.backgroundColor = .clear
+        view.font = .preferredFont(forTextStyle: .body)
+        view.adjustsFontForContentSizeCategory = true
+        view.textContainerInset = .zero
+        view.textContainer.lineFragmentPadding = 0
+        view.text = text
+        context.coordinator.lastText = text
+        DispatchQueue.main.async { scrollToEnd(view) }
+        return view
+    }
+
+    func updateUIView(_ view: UITextView, context: Context) {
+        guard context.coordinator.lastText != text else { return }
+        let wasFollowing = context.coordinator.isNearBottom(view)
+        let isAppend = text.hasPrefix(context.coordinator.lastText)
+        context.coordinator.lastText = text
+        view.text = text
+        guard isAppend && wasFollowing else { return }
+        DispatchQueue.main.async { scrollToEnd(view) }
+    }
+
+    private func scrollToEnd(_ view: UITextView) {
+        guard !view.text.isEmpty else { return }
+        view.scrollRangeToVisible(NSRange(location: view.text.utf16.count, length: 0))
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var lastText = ""
+
+        func isNearBottom(_ view: UITextView) -> Bool {
+            let visibleBottom = view.contentOffset.y + view.bounds.height - view.adjustedContentInset.bottom
+            return view.contentSize.height - visibleBottom <= 44
         }
     }
 }
@@ -105,18 +138,12 @@ private struct ToolActivitySectionDisclosure: View {
     private var currentStep: ToolActivityStep? { steps.last { $0.status == .running } }
 
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(steps) { step in
-                    ToolActivityStepCard(kind: kind, step: step)
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isExpanded.toggle()
                 }
-                if kind == .web, !deduplicatedSources.isEmpty {
-                    ToolSourcesView(sources: deduplicatedSources)
-                        .padding(.horizontal, 4)
-                }
-            }
-            .padding(.top, 8)
-        } label: {
+            } label: {
             HStack(spacing: 10) {
                 ZStack {
                     Circle()
@@ -142,10 +169,34 @@ private struct ToolActivitySectionDisclosure: View {
                         .foregroundStyle(hasFailure && !isRunning ? Color.red : Color.secondary)
                         .lineLimit(1)
                 }
+
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+            }
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+
+            if isExpanded {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    ForEach(steps) { step in
+                        ToolActivityStepCard(kind: kind, step: step)
+                    }
+                    if kind == .web, !deduplicatedSources.isEmpty {
+                        ToolSourcesView(sources: deduplicatedSources)
+                            .padding(.horizontal, 4)
+                    }
+                }
+                .padding(.top, 8)
+                .transition(.opacity)
             }
         }
         .padding(.vertical, 3)
         .accessibilityLabel("\(kind.title), \(summary)")
+        .accessibilityValue(isExpanded ? L10n.text("展開中") : L10n.text("折りたたみ中"))
     }
 
     private var summary: String {

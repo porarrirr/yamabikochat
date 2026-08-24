@@ -82,6 +82,7 @@ final class ConversationRepository: @unchecked Sendable {
         }
         .publisher(in: dbQueue)
         .replaceError(with: [])
+        .removeDuplicates()
         .eraseToAnyPublisher()
     }
 
@@ -404,6 +405,7 @@ final class ConversationRepository: @unchecked Sendable {
         }
         .publisher(in: dbQueue)
         .replaceError(with: [])
+        .removeDuplicates()
         .eraseToAnyPublisher()
     }
 
@@ -413,6 +415,7 @@ final class ConversationRepository: @unchecked Sendable {
         }
         .publisher(in: dbQueue)
         .replaceError(with: [])
+        .removeDuplicates()
         .eraseToAnyPublisher()
     }
 
@@ -486,6 +489,7 @@ final class ConversationRepository: @unchecked Sendable {
         }
         .publisher(in: dbQueue)
         .replaceError(with: [])
+        .removeDuplicates()
         .eraseToAnyPublisher()
     }
 
@@ -629,6 +633,80 @@ final class ConversationRepository: @unchecked Sendable {
             guard var mutable = try ChatMessage.fetchOne(db, key: messageId) else { return }
             mutable.text = text
             try mutable.update(db)
+        }
+    }
+
+    func saveStreamCheckpoint(
+        messageId: Int64?,
+        variantId: Int64?,
+        text: String,
+        thinking: String
+    ) throws {
+        precondition((messageId != nil) != (variantId != nil))
+        try dbQueue.write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO chat_stream_checkpoints (messageId, variantId, text, thinking, updatedAtMs)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT DO UPDATE SET
+                    text = excluded.text,
+                    thinking = excluded.thinking,
+                    updatedAtMs = excluded.updatedAtMs
+                """,
+                arguments: [messageId, variantId, text, thinking, Int64(Date().timeIntervalSince1970 * 1_000)]
+            )
+        }
+    }
+
+    func commitStreamCheckpoint(
+        messageId: Int64?,
+        variantId: Int64?,
+        text: String,
+        thinking: String
+    ) throws {
+        precondition((messageId != nil) != (variantId != nil))
+        try dbQueue.write { db in
+            if let messageId {
+                try db.execute(sql: "UPDATE chat_messages SET text = ? WHERE id = ?", arguments: [text, messageId])
+                if !thinking.isEmpty {
+                    try db.execute(
+                        sql: "INSERT INTO chat_message_thinking (messageId, thinkingStream) VALUES (?, ?) ON CONFLICT(messageId) DO UPDATE SET thinkingStream = excluded.thinkingStream",
+                        arguments: [messageId, thinking]
+                    )
+                }
+                try db.execute(sql: "DELETE FROM chat_stream_checkpoints WHERE messageId = ?", arguments: [messageId])
+            } else if let variantId {
+                try db.execute(
+                    sql: "UPDATE chat_message_variants SET text = ?, thinkingStream = CASE WHEN ? = '' THEN thinkingStream ELSE ? END WHERE id = ?",
+                    arguments: [text, thinking, thinking, variantId]
+                )
+                try db.execute(sql: "DELETE FROM chat_stream_checkpoints WHERE variantId = ?", arguments: [variantId])
+            }
+        }
+    }
+
+    func streamCheckpoint(messageId: Int64?, variantId: Int64?) throws -> (text: String, thinking: String)? {
+        try dbQueue.read { db in
+            let row: Row?
+            if let messageId {
+                row = try Row.fetchOne(db, sql: "SELECT text, thinking FROM chat_stream_checkpoints WHERE messageId = ?", arguments: [messageId])
+            } else if let variantId {
+                row = try Row.fetchOne(db, sql: "SELECT text, thinking FROM chat_stream_checkpoints WHERE variantId = ?", arguments: [variantId])
+            } else {
+                return nil
+            }
+            guard let row else { return nil }
+            return (row["text"] ?? "", row["thinking"] ?? "")
+        }
+    }
+
+    func deleteStreamCheckpoint(messageId: Int64?, variantId: Int64?) throws {
+        try dbQueue.write { db in
+            if let messageId {
+                try db.execute(sql: "DELETE FROM chat_stream_checkpoints WHERE messageId = ?", arguments: [messageId])
+            } else if let variantId {
+                try db.execute(sql: "DELETE FROM chat_stream_checkpoints WHERE variantId = ?", arguments: [variantId])
+            }
         }
     }
 
