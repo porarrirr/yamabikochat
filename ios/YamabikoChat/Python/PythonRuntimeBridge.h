@@ -17,6 +17,9 @@ NS_ASSUME_NONNULL_BEGIN
             optionsJSON:(NSString *)optionsJSON
              completion:(void (^)(NSString *resultJSON))completion;
 
+- (void)resetSession:(NSString *)sessionID
+           completion:(void (^)(NSString * _Nullable errorMessage))completion;
+
 - (void)requestInterruptWithExceptionName:(NSString *)exceptionName;
 - (uint64_t)physicalFootprintBytes;
 

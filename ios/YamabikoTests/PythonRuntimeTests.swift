@@ -57,15 +57,16 @@ plt.savefig("matplotlib.png")
         XCTAssertGreaterThan(matplotlibArtifact.size, 0)
         XCTAssertNil(artifacts["figure_1.png"], "An explicitly saved figure must not be auto-saved a second time")
 
-        let workspace = root
-            .appendingPathComponent("scientific-integration", isDirectory: true)
-            .appendingPathComponent("workspace", isDirectory: true)
+        let workspace = root.appendingPathComponent(
+            ConversationWorkspacePath.directoryName(for: "scientific-integration"),
+            isDirectory: true
+        )
         for filename in ["pillow.png", "matplotlib.png"] {
             let data = try Data(contentsOf: workspace.appendingPathComponent(filename))
             XCTAssertEqual(Array(data.prefix(8)), [137, 80, 78, 71, 13, 10, 26, 10])
         }
 
-        await worker.discard(sessionID: "scientific-integration")
+        await worker.resetSession(sessionID: "scientific-integration")
     }
 
     func testEmbeddedCPythonExecutesStatefulCells() async throws {
@@ -134,7 +135,7 @@ plt.savefig("matplotlib.png")
             try String(contentsOfFile: exportedArtifact.path, encoding: .utf8),
             "<svg/>"
         )
-        await worker.discard(sessionID: "integration")
+        await worker.resetSession(sessionID: "integration")
     }
 
     func testResultEnvelopeDecodesArtifactsAndError() throws {
@@ -147,29 +148,39 @@ plt.savefig("matplotlib.png")
         XCTAssertEqual(response.error?.type, "ValueError", response.error?.traceback ?? response.stderr)
     }
 
-    func testSessionStoreResetAndDeleteLifecycle() throws {
+    func testSessionStorePreparationPreservesConversationWorkspace() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("python-store-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let store = PythonSessionStore(rootOverride: root)
-        let paths = try store.prepare(sessionID: "42", reset: false)
+        let paths = try store.prepare(sessionID: "42")
         let file = paths.workspace.appendingPathComponent("state.txt")
         try Data("value".utf8).write(to: file)
 
-        let reset = try store.prepare(sessionID: "42", reset: true)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: reset.outputs.path))
+        let preparedAgain = try store.prepare(sessionID: "42")
+        XCTAssertEqual(try String(contentsOf: file), "value")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: preparedAgain.outputs.path))
 
         XCTAssertEqual(
             try store.artifactURL(sessionID: "42", root: "workspace", relativePath: "state.txt"),
-            reset.workspace.appendingPathComponent("state.txt")
+            preparedAgain.workspace.appendingPathComponent("state.txt")
         )
         XCTAssertThrowsError(
             try store.artifactURL(sessionID: "42", root: "workspace", relativePath: "../outputs/file.txt")
         )
+    }
 
-        try store.delete(sessionID: "42")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: reset.root.path))
+    func testPythonAndEditorUseTheSameConversationWorkspace() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("shared-workspace-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let python = PythonSessionStore(rootOverride: root)
+        let editor = EditorWorkspaceStore(rootOverride: root)
+        let paths = try python.prepare(sessionID: "shared")
+
+        try editor.withWorkspace(sessionID: "shared") { editorWorkspace in
+            XCTAssertEqual(editorWorkspace.standardizedFileURL, paths.workspace.standardizedFileURL)
+        }
     }
 
     func testAttachmentStagingUsesContentIdentityForDuplicateBasenames() throws {
@@ -186,7 +197,7 @@ plt.savefig("matplotlib.png")
         try Data("second".utf8).write(to: second)
 
         let store = PythonSessionStore(rootOverride: root.appendingPathComponent("sessions"))
-        let paths = try store.prepare(sessionID: "identity", reset: true)
+        let paths = try store.prepare(sessionID: "identity")
         let staged = try store.stageAttachments([first.path, second.path], in: paths)
 
         XCTAssertEqual(staged.count, 2)
@@ -204,7 +215,7 @@ plt.savefig("matplotlib.png")
             .appendingPathComponent("python-missing-attachment-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let store = PythonSessionStore(rootOverride: root)
-        let paths = try store.prepare(sessionID: "missing", reset: true)
+        let paths = try store.prepare(sessionID: "missing")
 
         XCTAssertThrowsError(try store.stageAttachments([root.appendingPathComponent("gone.csv").path], in: paths))
     }
@@ -214,7 +225,7 @@ plt.savefig("matplotlib.png")
             .appendingPathComponent("python-workspace-usage-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let store = PythonSessionStore(rootOverride: root)
-        let paths = try store.prepare(sessionID: "usage", reset: true)
+        let paths = try store.prepare(sessionID: "usage")
         let nested = paths.workspace.appendingPathComponent("a/b", isDirectory: true)
         try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
         try Data(repeating: 1, count: 7).write(to: paths.workspace.appendingPathComponent("one.bin"))
@@ -227,7 +238,7 @@ plt.savefig("matplotlib.png")
         XCTAssertEqual(usage.maximumDepth, 3)
     }
 
-    func testWorkerRejectsAndCleansUpOversizedGeneratedFile() async throws {
+    func testWorkerQuotaViolationPreservesSharedWorkspaceFiles() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("python-file-quota-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -241,6 +252,9 @@ plt.savefig("matplotlib.png")
             maximumFileBytes: 4,
             maximumPathDepth: 4
         )
+        let paths = try store.prepare(sessionID: "quota")
+        let editorFile = paths.workspace.appendingPathComponent("editor.txt")
+        try Data("keep".utf8).write(to: editorFile)
 
         let response = try await worker.execute(
             sessionID: "quota",
@@ -251,10 +265,11 @@ plt.savefig("matplotlib.png")
 
         XCTAssertEqual(response.status, "error")
         XCTAssertEqual(response.error?.type, "ResourceLimitExceeded")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("quota").path))
+        XCTAssertEqual(try String(contentsOf: editorFile), "keep")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: paths.workspace.appendingPathComponent("large.bin").path))
     }
 
-    func testWorkerCancellationInterruptsExecutionAndCleansSession() async throws {
+    func testWorkerCancellationResetsNamespaceAndPreservesWorkspace() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("python-cancellation-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -264,6 +279,9 @@ plt.savefig("matplotlib.png")
             timeoutSeconds: 10,
             memoryLimitBytes: 4_000_000_000
         )
+        let paths = try store.prepare(sessionID: "cancelled")
+        let editorFile = paths.workspace.appendingPathComponent("editor.txt")
+        try Data("keep".utf8).write(to: editorFile)
         let task = Task {
             try await worker.execute(
                 sessionID: "cancelled",
@@ -281,7 +299,39 @@ plt.savefig("matplotlib.png")
         } catch is CancellationError {
             // Expected.
         }
-        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("cancelled").path))
+        XCTAssertEqual(try String(contentsOf: editorFile), "keep")
+    }
+
+    func testResetClearsPythonNamespaceWithoutDeletingWorkspaceFiles() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("python-reset-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PythonSessionStore(rootOverride: root)
+        let worker = PythonWorker(sessions: store, timeoutSeconds: 10, memoryLimitBytes: 4_000_000_000)
+        let paths = try store.prepare(sessionID: "reset")
+        try Data("keep".utf8).write(to: paths.workspace.appendingPathComponent("editor.txt"))
+
+        let first = try await worker.execute(
+            sessionID: "reset",
+            code: "value = 42",
+            reset: true,
+            attachmentPaths: []
+        )
+        let reset = try await worker.execute(
+            sessionID: "reset",
+            code: "from pathlib import Path\n('value' in globals(), Path('editor.txt').read_text())",
+            reset: true,
+            attachmentPaths: []
+        )
+
+        XCTAssertEqual(first.status, "ok")
+        XCTAssertEqual(reset.status, "ok", reset.error?.traceback ?? reset.stderr)
+        XCTAssertEqual(reset.resultRepr, "(False, 'keep')")
+        XCTAssertEqual(
+            try String(contentsOf: paths.workspace.appendingPathComponent("editor.txt")),
+            "keep"
+        )
+        await worker.resetSession(sessionID: "reset")
     }
 
     func testLegacyToolResultDecodesWithoutArtifacts() throws {
@@ -358,7 +408,7 @@ Path("outputs/report.txt").write_text("ready")
             try String(contentsOf: store.outputURL(sessionID: "outputs-contract", relativePath: "report.txt")),
             "ready"
         )
-        await worker.discard(sessionID: "outputs-contract")
+        await worker.resetSession(sessionID: "outputs-contract")
     }
 
     func testFailedCellDoesNotAutoSaveOpenMatplotlibFigure() async throws {
@@ -376,7 +426,7 @@ Path("outputs/report.txt").write_text("ready")
             attachmentPaths: []
         )
         XCTAssertEqual(warmup.status, "ok", warmup.error?.traceback ?? warmup.stderr)
-        await worker.discard(sessionID: "figure-warmup")
+        await worker.resetSession(sessionID: "figure-warmup")
 
         let response = try await worker.execute(
             sessionID: "failed-figure",
@@ -388,6 +438,6 @@ Path("outputs/report.txt").write_text("ready")
         XCTAssertEqual(response.status, "error")
         XCTAssertEqual(response.error?.type, "ValueError")
         XCTAssertTrue(response.artifacts.isEmpty)
-        await worker.discard(sessionID: "failed-figure")
+        await worker.resetSession(sessionID: "failed-figure")
     }
 }

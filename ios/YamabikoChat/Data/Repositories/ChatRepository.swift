@@ -282,14 +282,14 @@ final class ChatRepository {
     func deleteConversation(id: Int64) throws {
         try conversations.deleteConversation(id: id)
         try editorWorkspaces.delete(sessionID: String(id))
-        Task { await PythonWorker.shared.discard(sessionID: String(id)) }
+        Task { await PythonWorker.shared.resetSession(sessionID: String(id)) }
     }
 
     func deleteConversations(ids: Set<Int64>) throws {
         try conversations.deleteConversations(ids: ids)
         for id in ids {
             try editorWorkspaces.delete(sessionID: String(id))
-            Task { await PythonWorker.shared.discard(sessionID: String(id)) }
+            Task { await PythonWorker.shared.resetSession(sessionID: String(id)) }
         }
     }
 
@@ -298,7 +298,7 @@ final class ChatRepository {
         let deleted = try conversations.deleteSecretConversationIfNeeded(id: id)
         if deleted {
             try editorWorkspaces.delete(sessionID: String(id))
-            Task { await PythonWorker.shared.discard(sessionID: String(id)) }
+            Task { await PythonWorker.shared.resetSession(sessionID: String(id)) }
         }
         return deleted
     }
@@ -306,7 +306,10 @@ final class ChatRepository {
     func purgeSecretConversations() throws {
         let ids = try conversations.secretConversationIDs()
         try conversations.purgeSecretConversations()
-        for id in ids { try editorWorkspaces.delete(sessionID: String(id)) }
+        for id in ids {
+            try editorWorkspaces.delete(sessionID: String(id))
+            Task { await PythonWorker.shared.resetSession(sessionID: String(id)) }
+        }
     }
 
     func deleteProject(id: Int64, mode: ProjectDeletionMode) throws {
@@ -318,7 +321,7 @@ final class ChatRepository {
             try conversations.deleteProjectWithConversations(id: id)
             for conversationID in conversationIDs {
                 try editorWorkspaces.delete(sessionID: String(conversationID))
-                Task { await PythonWorker.shared.discard(sessionID: String(conversationID)) }
+                Task { await PythonWorker.shared.resetSession(sessionID: String(conversationID)) }
             }
         }
     }

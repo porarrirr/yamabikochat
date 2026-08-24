@@ -288163,6 +288163,7 @@ var runs = /* @__PURE__ */ new Map();
 var pendingTools = /* @__PURE__ */ new Map();
 var authCredentials = new InMemoryCredentialStore();
 var RUNTIME_CONTRACT_VERSION = 2;
+var STREAM_HEARTBEAT_INTERVAL_MS = 15e3;
 registerBunOAuthFlows();
 var authModels = createModels({ credentials: authCredentials });
 authModels.setProvider(openaiCodexProvider());
@@ -289105,6 +289106,12 @@ async function runAgent(envelope, res) {
   });
   const initialMessageCount = agent.state.messages.length;
   runs.set(runId, agent);
+  const heartbeat = setInterval(() => {
+    if (!res.writableEnded && !res.destroyed) {
+      send(res, { type: "heartbeat", runId, timeMs: Date.now() });
+    }
+  }, STREAM_HEARTBEAT_INTERVAL_MS);
+  heartbeat.unref?.();
   let step = 0;
   let activeStep = null;
   const runAssistants = [];
@@ -289185,6 +289192,7 @@ async function runAgent(envelope, res) {
     });
     throw error;
   } finally {
+    clearInterval(heartbeat);
     runs.delete(runId);
   }
 }

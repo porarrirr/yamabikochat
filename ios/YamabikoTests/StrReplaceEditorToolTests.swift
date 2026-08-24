@@ -53,6 +53,14 @@ final class StrReplaceEditorToolTests: XCTestCase {
         XCTAssertEqual(command["enum"] as? [String], ["view", "create", "str_replace", "insert"])
     }
 
+    func testCreateBuildsMissingParentDirectories() async throws {
+        let created = try await call(#"{"command":"create","path":"/workspace/src/scene/main.js","file_text":"export {}"}"#)
+        XCTAssertEqual(created.artifacts.map(\.name), ["main.js"])
+
+        let viewed = try await call(#"{"command":"view","path":"/workspace/src/scene/main.js"}"#)
+        XCTAssertTrue(viewed.content.contains("export {}"))
+    }
+
     func testEmptyFileCRLFDirectoryFilteringAndClipping() async throws {
         _ = try await call(#"{"command":"create","path":"/workspace/empty.txt","file_text":""}"#)
         _ = try await call(#"{"command":"insert","path":"/workspace/empty.txt","insert_line":0,"new_str":"first"}"#)

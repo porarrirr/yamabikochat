@@ -2,7 +2,6 @@ import Foundation
 import CryptoKit
 
 struct PythonSessionPaths: Sendable, Equatable {
-    let root: URL
     let workspace: URL
     let outputs: URL
 }
@@ -26,12 +25,9 @@ final class PythonSessionStore: @unchecked Sendable {
         self.rootOverride = rootOverride
     }
 
-    func prepare(sessionID: String, reset: Bool) throws -> PythonSessionPaths {
+    func prepare(sessionID: String) throws -> PythonSessionPaths {
         try lock.withLock {
             let paths = try paths(sessionID: sessionID)
-            if reset, fileManager.fileExists(atPath: paths.root.path) {
-                try fileManager.removeItem(at: paths.root)
-            }
             try fileManager.createDirectory(at: paths.workspace, withIntermediateDirectories: true)
             try fileManager.createDirectory(at: paths.outputs, withIntermediateDirectories: true)
             return paths
@@ -79,24 +75,6 @@ final class PythonSessionStore: @unchecked Sendable {
             let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
             try manifestData.write(to: attachmentsDirectory.appendingPathComponent("manifest.json"), options: .atomic)
             return staged
-        }
-    }
-
-    func delete(sessionID: String) throws {
-        try lock.withLock {
-            let directory = try paths(sessionID: sessionID).root
-            if fileManager.fileExists(atPath: directory.path) {
-                try fileManager.removeItem(at: directory)
-            }
-        }
-    }
-
-    func purgeAll() throws {
-        try lock.withLock {
-            let root = try sessionsRoot()
-            if fileManager.fileExists(atPath: root.path) {
-                try fileManager.removeItem(at: root)
-            }
         }
     }
 
@@ -155,31 +133,18 @@ final class PythonSessionStore: @unchecked Sendable {
     }
 
     private func paths(sessionID: String) throws -> PythonSessionPaths {
-        let safeID = sessionID.replacingOccurrences(
-            of: #"[^A-Za-z0-9._-]+"#,
-            with: "_",
-            options: .regularExpression
+        guard !sessionID.isEmpty else { throw PythonToolError.missingSession }
+        let workspace = try ConversationWorkspacePath.workspace(
+            sessionID: sessionID,
+            fileManager: fileManager,
+            rootOverride: rootOverride
         )
-        guard !safeID.isEmpty else { throw PythonToolError.missingSession }
-        let root = try sessionsRoot().appendingPathComponent(safeID, isDirectory: true)
-        let workspace = root.appendingPathComponent("workspace", isDirectory: true)
         return PythonSessionPaths(
-            root: root,
             workspace: workspace,
             outputs: workspace.appendingPathComponent("outputs", isDirectory: true)
         )
     }
 
-    private func sessionsRoot() throws -> URL {
-        if let rootOverride { return rootOverride }
-        let support = try fileManager.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        return support.appendingPathComponent("YamabikoChat/PythonSessions", isDirectory: true)
-    }
 }
 
 private extension NSLock {

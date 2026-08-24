@@ -122,6 +122,7 @@
 		7AA55F94D1771B63F74DAE98 /* CodexAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = C470C52136C0F5806543DD92 /* CodexAuthRepository.swift */; };
 		7BFAACD8E93287663F02909C /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A4495C8B20F93382A8E4847 /* AppSettings.swift */; };
 		7E687F15AA9ED90CC7CABE7B /* ConversationListViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47940928BCA24ACBA0867772 /* ConversationListViewModelTests.swift */; };
+		7E8FA492AED45EBCC482588F /* ConversationWorkspacePath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B9CB80FD13964B0BC82FBD /* ConversationWorkspacePath.swift */; };
 		7EC42C1157E7CBC0E1DF65C9 /* StringTrimming.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71CD8E4DA7E0A67881EA450 /* StringTrimming.swift */; };
 		7ECFAF36ED62E3488F99484B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5E76571802BD1DCDB737AD8 /* RootView.swift */; };
 		80DA7300764E7325A04E3D26 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = C234800D608B5D72B219C315 /* Yams */; };
@@ -445,6 +446,7 @@
 		9232E21606568B977401E39A /* ConversationStatsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStatsTests.swift; sourceTree = "<group>"; };
 		9289A5E87008C89F9D936F2A /* SearchEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchEngine.swift; sourceTree = "<group>"; };
 		92AD8EA4D8A79FAA26B52BE9 /* FusionModelSlotForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionModelSlotForm.swift; sourceTree = "<group>"; };
+		92B9CB80FD13964B0BC82FBD /* ConversationWorkspacePath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationWorkspacePath.swift; sourceTree = "<group>"; };
 		961BCEE0B9725B362F606EA0 /* MathMarkdownViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathMarkdownViewTests.swift; sourceTree = "<group>"; };
 		9640B4B2BAEBA68E8C24CC6D /* OpenRouterModelService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterModelService.swift; sourceTree = "<group>"; };
 		96D261ED0503499732F4DAEB /* main.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = main.js; sourceTree = "<group>"; };
@@ -851,6 +853,7 @@
 		9629D888744E04FF429C6271 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				92B9CB80FD13964B0BC82FBD /* ConversationWorkspacePath.swift */,
 				A7157EAA30E777555648D356 /* LocalToolRegistry.swift */,
 				C093FE561B4B20D9C6ADF796 /* ToolDefinition.swift */,
 			);
@@ -1524,6 +1527,7 @@
 				E8DA2924C68103B34BDA3BBF /* ConversationListViewModel.swift in Sources */,
 				B913EC775D7E5EFB3A90770D /* ConversationRepository.swift in Sources */,
 				5E7A581E48231432BA9A57B3 /* ConversationStats.swift in Sources */,
+				7E8FA492AED45EBCC482588F /* ConversationWorkspacePath.swift in Sources */,
 				F04E2DFCF1423BE5612BDF21 /* DiagnosticsLogSanitizer.swift in Sources */,
 				9DDD92F6311397EE7798ECBE /* DiagnosticsLogger.swift in Sources */,
 				1ED088E445C932F7AAFD9864 /* DualAutoModelSideForm.swift in Sources */,

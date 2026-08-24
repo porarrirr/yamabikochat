@@ -449,6 +449,8 @@ actor PiAgentRuntime {
                         guard !line.isEmpty else { continue }
                         let event = try JSONDecoder().decode(PiRuntimeEvent.self, from: Data(line.utf8))
                         switch event.type {
+                        case "heartbeat":
+                            continue
                         case "diagnostic":
                             DiagnosticsLogger.log(
                                 event.message ?? "Pi runtime diagnostic",

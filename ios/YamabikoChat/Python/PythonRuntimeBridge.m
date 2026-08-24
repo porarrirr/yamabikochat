@@ -14,6 +14,14 @@
 @implementation YBPythonWorkItem
 @end
 
+@interface YBPythonResetItem : NSObject
+@property(nonatomic, copy) NSString *sessionID;
+@property(nonatomic, copy) void (^completion)(NSString * _Nullable);
+@end
+
+@implementation YBPythonResetItem
+@end
+
 @interface PythonRuntimeBridge ()
 @property(nonatomic, copy) NSString *pythonHome;
 @property(nonatomic, copy) NSString *harnessPath;
@@ -184,6 +192,42 @@
     Py_XDECREF(module);
     self.savedThreadState = PyEval_SaveThread();
     item.completion(result);
+}
+
+- (void)resetSession:(NSString *)sessionID
+           completion:(void (^)(NSString * _Nullable))completion {
+    if (self.startupError != nil) {
+        completion(self.startupError);
+        return;
+    }
+    YBPythonResetItem *item = [[YBPythonResetItem alloc] init];
+    item.sessionID = sessionID;
+    item.completion = completion;
+    [self performSelector:@selector(resetWorkItem:) onThread:self.pythonThread withObject:item waitUntilDone:NO];
+}
+
+- (void)resetWorkItem:(YBPythonResetItem *)item {
+    PyEval_RestoreThread(self.savedThreadState);
+    self.savedThreadState = NULL;
+    NSString *error = nil;
+    PyObject *module = PyImport_ImportModule("yamabiko_runtime");
+    PyObject *function = module == NULL ? NULL : PyObject_GetAttrString(module, "reset_session");
+    if (function != NULL && PyCallable_Check(function)) {
+        PyObject *args = Py_BuildValue("(s)", item.sessionID.UTF8String);
+        PyObject *value = PyObject_CallObject(function, args);
+        Py_DECREF(args);
+        if (value == NULL) {
+            error = [self fetchPythonError];
+        } else {
+            Py_DECREF(value);
+        }
+    } else {
+        error = [self fetchPythonError];
+    }
+    Py_XDECREF(function);
+    Py_XDECREF(module);
+    self.savedThreadState = PyEval_SaveThread();
+    item.completion(error);
 }
 
 - (void)requestInterruptWithExceptionName:(NSString *)exceptionName {

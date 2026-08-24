@@ -47,11 +47,6 @@ final class AppServices {
         } catch {
             DiagnosticsLogger.log("Editor workspace orphan cleanup failed", category: .app, error: error)
         }
-        do {
-            try PythonSessionStore.shared.purgeAll()
-        } catch {
-            DiagnosticsLogger.log("Python session cleanup failed", category: .app, error: error)
-        }
         let repository = AgentSkillRepository()
         skillRepository = repository
         openRouterModelService = OpenRouterModelService(credentialStore: credentialStore)

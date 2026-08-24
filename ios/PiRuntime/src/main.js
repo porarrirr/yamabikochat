@@ -16,6 +16,7 @@ const runs = new Map();
 const pendingTools = new Map();
 const authCredentials = new InMemoryCredentialStore();
 const RUNTIME_CONTRACT_VERSION = 2;
+const STREAM_HEARTBEAT_INTERVAL_MS = 15_000;
 // The iOS app ships one self-contained JS bundle. Register Pi's OAuth modules
 // statically so its intentionally opaque lazy imports do not look for sibling
 // files that are absent from the application bundle.
@@ -1027,6 +1028,14 @@ async function runAgent(envelope, res) {
   });
   const initialMessageCount = agent.state.messages.length;
   runs.set(runId, agent);
+  // URLSession applies an idle timeout to the loopback NDJSON bridge. Providers
+  // can legitimately reason without emitting tokens for longer than that timeout.
+  const heartbeat = setInterval(() => {
+    if (!res.writableEnded && !res.destroyed) {
+      send(res, { type: "heartbeat", runId, timeMs: Date.now() });
+    }
+  }, STREAM_HEARTBEAT_INTERVAL_MS);
+  heartbeat.unref?.();
   let step = 0;
   let activeStep = null;
   const runAssistants = [];
@@ -1109,6 +1118,7 @@ async function runAgent(envelope, res) {
     });
     throw error;
   } finally {
+    clearInterval(heartbeat);
     runs.delete(runId);
   }
 }

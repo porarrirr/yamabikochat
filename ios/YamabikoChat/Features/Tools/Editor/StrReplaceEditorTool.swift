@@ -46,7 +46,7 @@ final class EditorWorkspaceStore: @unchecked Sendable {
         defer { lock.unlock() }
         let base = try baseURL()
         guard fileManager.fileExists(atPath: base.path) else { return }
-        let validNames = Set(validSessionIDs.map(Self.hashSessionID))
+        let validNames = Set(validSessionIDs.map(ConversationWorkspacePath.directoryName))
         for entry in try fileManager.contentsOfDirectory(at: base, includingPropertiesForKeys: [.isDirectoryKey], options: []) {
             if !validNames.contains(entry.lastPathComponent) {
                 try fileManager.removeItem(at: entry)
@@ -56,25 +56,15 @@ final class EditorWorkspaceStore: @unchecked Sendable {
 
     private func workspaceURL(sessionID: String) throws -> URL {
         guard !sessionID.isEmpty else { throw StrReplaceEditorError.invalid("str_replace_editor requires a valid conversation session.") }
-        return try baseURL().appendingPathComponent(Self.hashSessionID(sessionID), isDirectory: true)
+        return try ConversationWorkspacePath.workspace(
+            sessionID: sessionID,
+            fileManager: fileManager,
+            rootOverride: rootOverride
+        )
     }
 
     private func baseURL() throws -> URL {
-        if let rootOverride {
-            return rootOverride
-        } else {
-            let support = try fileManager.url(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask,
-                appropriateFor: nil,
-                create: true
-            )
-            return support.appendingPathComponent("YamabikoChat/EditorWorkspaces", isDirectory: true)
-        }
-    }
-
-    private static func hashSessionID(_ sessionID: String) -> String {
-        SHA256.hash(data: Data(sessionID.utf8)).map { String(format: "%02x", $0) }.joined()
+        try ConversationWorkspacePath.sessionsRoot(fileManager: fileManager, override: rootOverride)
     }
 }
 
@@ -89,7 +79,7 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
     let definition = ToolDefinition(
         name: Self.name,
         description: """
-        Custom editing tool for viewing, creating and editing files in the persistent conversation workspace at /workspace. If path is a file, view displays numbered lines; if it is a directory, view lists visible entries up to 2 levels deep. create never overwrites an existing path. str_replace requires old_str to occur exactly once and replaces it literally. Long view output is clipped and marked with <response clipped>.
+        Custom editing tool for viewing, creating and editing files in the persistent conversation workspace at /workspace, shared with python_execute. If path is a file, view displays numbered lines; if it is a directory, view lists visible entries up to 2 levels deep. create creates missing parent directories but never overwrites an existing path. str_replace requires old_str to occur exactly once and replaces it literally. Long view output is clipped and marked with <response clipped>.
         """,
         parametersJSON: #"{"type":"object","properties":{"command":{"type":"string","description":"The command to run.","enum":["view","create","str_replace","insert"]},"path":{"type":"string","description":"Absolute virtual path under /workspace."},"file_text":{"type":"string","description":"Required content for create."},"insert_line":{"type":"integer","description":"Required for insert; new_str is inserted after this line (0 inserts before line 1)."},"new_str":{"type":"string","description":"Replacement or insertion text. Omission deletes old_str for str_replace."},"old_str":{"type":"string","description":"Required unique literal text for str_replace."},"view_range":{"type":"array","items":{"type":"integer"},"description":"Optional inclusive 1-based [start,end] range; end -1 means EOF."}},"required":["command","path"]}"#
     )
@@ -196,9 +186,7 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
             guard !fileManager.fileExists(atPath: target.path) else {
                 throw StrReplaceEditorError.invalid("File already exists at: \(arguments.path). Cannot overwrite files using command `create`.")
             }
-            guard fileManager.fileExists(atPath: target.deletingLastPathComponent().path) else {
-                throw StrReplaceEditorError.invalid("The parent directory does not exist: \(arguments.path)")
-            }
+            try createParentDirectories(for: target, workspace: workspace)
             return try mutate(target, virtualPath: arguments.path, workspace: workspace, content: text, create: true, sessionID: sessionID)
         case "str_replace":
             let old = try required(arguments.oldString, name: "old_str", command: "str_replace", allowEmpty: false)
@@ -255,6 +243,12 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
             }
         }
         return current.standardizedFileURL
+    }
+
+    private func createParentDirectories(for target: URL, workspace: URL) throws {
+        let parent = target.deletingLastPathComponent()
+        guard parent != workspace else { return }
+        try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
     }
 
     private func view(_ target: URL, virtualPath: String, range: [Int]?) throws -> String {

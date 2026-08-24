@@ -180,7 +180,7 @@ actor PythonWorker {
     ) async throws -> PythonExecutionResponse {
         guard !poisoned else { throw PythonToolError.poisoned }
         let bridge = try runtimeBridge()
-        let paths = try sessions.prepare(sessionID: sessionID, reset: reset)
+        let paths = try sessions.prepare(sessionID: sessionID)
         _ = try sessions.stageAttachments(attachmentPaths, in: paths)
         if let violation = workspaceLimitViolation(in: paths) {
             throw PythonToolError.resourceLimitExceeded(violation)
@@ -207,12 +207,12 @@ actor PythonWorker {
         do {
             try Task.checkCancellation()
         } catch {
-            await discard(sessionID: sessionID)
+            await resetSession(sessionID: sessionID)
             throw error
         }
         if let violation = workspaceLimitViolation(in: paths) {
             let response = Self.resourceLimitResponse(violation)
-            await discard(sessionID: sessionID)
+            await resetSession(sessionID: sessionID)
             return response
         }
         guard let resultData = resultJSON.data(using: .utf8),
@@ -223,24 +223,21 @@ actor PythonWorker {
         return result
     }
 
-    func discard(sessionID: String) async {
-        if let bridge {
-            let paths = try? sessions.prepare(sessionID: sessionID, reset: false)
-            if let paths,
-               let data = try? JSONSerialization.data(withJSONObject: [
-                   "workspace": paths.workspace.path,
-                   "outputs": paths.outputs.path,
-                   "read_roots": [Bundle.main.resourceURL?.path].compactMap { $0 },
-                   "reset": true,
-               ]) {
-                _ = await bridge.executeSession(
-                    sessionID,
-                    code: "",
-                    optionsJSON: String(decoding: data, as: UTF8.self)
-                )
+    func resetSession(sessionID: String) async {
+        guard let bridge else { return }
+        let error = await withCheckedContinuation { continuation in
+            bridge.resetSession(sessionID) { errorMessage in
+                continuation.resume(returning: errorMessage)
             }
         }
-        try? sessions.delete(sessionID: sessionID)
+        if let error {
+            DiagnosticsLogger.log(
+                "Python namespace reset failed",
+                category: .network,
+                metadata: ["sessionID": sessionID],
+                error: ProviderClientError.parseFailure(error)
+            )
+        }
     }
 
     private func runtimeBridge() throws -> PythonRuntimeBridge {
