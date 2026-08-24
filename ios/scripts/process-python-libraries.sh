@@ -40,6 +40,15 @@ export EXPANDED_CODE_SIGN_IDENTITY_NAME="${EXPANDED_CODE_SIGN_IDENTITY_NAME:-Ad 
 source "$PROJECT_DIR/Vendor/Python.xcframework/build/utils.sh"
 install_python Vendor/Python.xcframework PythonSitePackages
 
+# CPython's framework template declares its own runtime minimum (currently iOS
+# 13), while locally built scientific extensions target the app's deployment
+# version. App Store validation compares that declaration with each Mach-O load
+# command, so validate the binary contract and align the generated framework
+# plist before the final nested-code signature is produced.
+"$PROJECT_DIR/scripts/align-python-framework-minimum-os.sh" \
+  "$CODESIGNING_FOLDER_PATH/Frameworks" \
+  "$IPHONEOS_DEPLOYMENT_TARGET"
+
 for forbidden_pattern in '*.a' '*.so' '*.dylib'; do
   forbidden_binary="$(find "$package_destination" -type f -name "$forbidden_pattern" -print -quit)"
   if [[ -n "$forbidden_binary" ]]; then

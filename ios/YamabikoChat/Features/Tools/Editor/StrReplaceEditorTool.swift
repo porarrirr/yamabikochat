@@ -79,9 +79,9 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
     let definition = ToolDefinition(
         name: Self.name,
         description: """
-        Custom editing tool for viewing, creating and editing files in the persistent conversation workspace at /workspace, shared with python_execute. If path is a file, view displays numbered lines; if it is a directory, view lists visible entries up to 2 levels deep. create creates missing parent directories but never overwrites an existing path. str_replace requires old_str to occur exactly once and replaces it literally. Long view output is clipped and marked with <response clipped>.
+        Custom editing tool for viewing, creating and editing files in the persistent conversation workspace at /workspace, shared with python_execute. If path is a file, view displays numbered lines; set view_format to jsonl when exact whitespace must be copied for str_replace. If path is a directory, view lists visible entries up to 2 levels deep. create creates missing parent directories but never overwrites an existing path. str_replace requires old_str to occur exactly once and replaces it literally. Long view output is clipped and marked with <response clipped>.
         """,
-        parametersJSON: #"{"type":"object","properties":{"command":{"type":"string","description":"The command to run.","enum":["view","create","str_replace","insert"]},"path":{"type":"string","description":"Absolute virtual path under /workspace."},"file_text":{"type":"string","description":"Required content for create."},"insert_line":{"type":"integer","description":"Required for insert; new_str is inserted after this line (0 inserts before line 1)."},"new_str":{"type":"string","description":"Replacement or insertion text. Omission deletes old_str for str_replace."},"old_str":{"type":"string","description":"Required unique literal text for str_replace."},"view_range":{"type":"array","items":{"type":"integer"},"description":"Optional inclusive 1-based [start,end] range; end -1 means EOF."}},"required":["command","path"]}"#
+        parametersJSON: #"{"type":"object","properties":{"command":{"type":"string","description":"The command to run.","enum":["view","create","str_replace","insert"]},"path":{"type":"string","description":"Absolute virtual path under /workspace."},"file_text":{"type":"string","description":"Required content for create."},"insert_line":{"type":"integer","description":"Required for insert; new_str is inserted after this line (0 inserts before line 1)."},"new_str":{"type":"string","description":"Replacement or insertion text. Omission deletes old_str for str_replace."},"old_str":{"type":"string","description":"Required unique literal text for str_replace."},"view_range":{"type":"array","items":{"type":"integer"},"description":"Optional inclusive 1-based [start,end] range; end -1 means EOF."},"view_format":{"type":"string","enum":["numbered","jsonl"],"default":"numbered","description":"For file views, jsonl emits each exact line as a JSON string so whitespace is unambiguous."}},"required":["command","path"],"additionalProperties":false}"#
     )
 
     private let workspaces: EditorWorkspaceStore
@@ -124,6 +124,7 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
         let newString: String?
         let insertLine: Int?
         let viewRange: [Int]?
+        let viewFormat: String
     }
 
     private struct Execution {
@@ -166,7 +167,8 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
             oldString: object["old_str"] as? String,
             newString: object["new_str"] as? String,
             insertLine: insertLine,
-            viewRange: viewRange
+            viewRange: viewRange,
+            viewFormat: object["view_format"] as? String ?? "numbered"
         )
     }
 
@@ -178,7 +180,18 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
     ) throws -> Execution {
         switch arguments.command {
         case "view":
-            return Execution(content: try view(target, virtualPath: arguments.path, range: arguments.viewRange), artifact: nil)
+            guard ["numbered", "jsonl"].contains(arguments.viewFormat) else {
+                throw StrReplaceEditorError.invalid("Unsupported view_format: \(arguments.viewFormat)")
+            }
+            return Execution(
+                content: try view(
+                    target,
+                    virtualPath: arguments.path,
+                    range: arguments.viewRange,
+                    format: arguments.viewFormat
+                ),
+                artifact: nil
+            )
         case "create":
             guard let text = arguments.fileText else {
                 throw StrReplaceEditorError.invalid("Parameter `file_text` is required for command: create")
@@ -251,7 +264,7 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
         try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
     }
 
-    private func view(_ target: URL, virtualPath: String, range: [Int]?) throws -> String {
+    private func view(_ target: URL, virtualPath: String, range: [Int]?, format: String) throws -> String {
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: target.path, isDirectory: &isDirectory) else {
             throw StrReplaceEditorError.invalid("The path \(virtualPath) does not exist. Please provide a valid path.")
@@ -259,6 +272,9 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
         if isDirectory.boolValue {
             guard range == nil else {
                 throw StrReplaceEditorError.invalid("The `view_range` parameter is not allowed when `path` points to a directory.")
+            }
+            guard format == "numbered" else {
+                throw StrReplaceEditorError.invalid("The `view_format` parameter is not allowed when `path` points to a directory.")
             }
             return try listDirectory(target, virtualPath: virtualPath)
         }
@@ -278,10 +294,20 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
             }
             suffix = " with view_range=[\(range[0]), \(range[1])]"
         }
-        let numbered = allLines[(start - 1)..<end].enumerated().map {
-            String(format: "%6d  %@", start + $0.offset, $0.element)
-        }.joined(separator: "\n")
-        return clip("Here's the content of \(virtualPath) with line numbers (which has a total of \(allLines.count) lines)\(suffix):\n\(numbered)\n")
+        let selected = allLines[(start - 1)..<end].enumerated().map {
+            (line: start + $0.offset, text: $0.element)
+        }
+        if format == "jsonl" {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let rows = try selected.map { item -> String in
+                let data = try encoder.encode(ExactLine(line: item.line, text: item.text))
+                return String(decoding: data, as: UTF8.self)
+            }.joined(separator: "\n")
+            return clip("Exact JSONL lines from \(virtualPath) (total \(allLines.count) lines)\(suffix):\n\(rows)\n")
+        }
+        let numbered = selected.map { String(format: "%6d |%@", $0.line, $0.text) }.joined(separator: "\n")
+        return clip("Here's the content of \(virtualPath) with line numbers (which has a total of \(allLines.count) lines)\(suffix). Text begins immediately after `|`:\n\(numbered)\n")
     }
 
     private func listDirectory(_ directory: URL, virtualPath: String) throws -> String {
@@ -343,10 +369,11 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
             try? fileManager.removeItem(at: temporary)
             throw error
         }
+        let relativePath = String(virtualPath.dropFirst("/workspace/".count))
         let snapshot = try attachments.persistGeneratedFileReplacingExisting(
             data: data,
-            filename: target.lastPathComponent,
-            collection: "Editor \(sessionID)"
+            relativePath: relativePath,
+            collection: ConversationWorkspacePath.generatedFilesCollection(for: sessionID)
         )
         return Execution(
             content: create ? "New file created successfully at: \(virtualPath)" : "The file \(virtualPath) has been edited successfully.",
@@ -429,5 +456,10 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
         guard value.count > Self.maximumOutputCharacters else { return value }
         let end = value.index(value.startIndex, offsetBy: Self.maximumOutputCharacters)
         return String(value[..<end]) + "<response clipped><NOTE>To save on context only part of this output has been shown.</NOTE>"
+    }
+
+    private struct ExactLine: Encodable {
+        let line: Int
+        let text: String
     }
 }

@@ -10,6 +10,10 @@ enum ConversationWorkspaceError: LocalizedError {
 }
 
 enum ConversationWorkspacePath {
+    static func generatedFilesCollection(for sessionID: String) -> String {
+        "Workspace \(sessionID)"
+    }
+
     static func sessionsRoot(fileManager: FileManager = .default, override: URL? = nil) throws -> URL {
         if let override { return override }
         let support = try fileManager.url(

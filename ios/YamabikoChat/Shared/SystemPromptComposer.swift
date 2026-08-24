@@ -29,6 +29,7 @@ enum SystemPromptComposer {
 
     When using str_replace_editor:
     - Inspect the relevant file before modifying it.
+    - Use view_format=jsonl before whitespace-sensitive str_replace operations; copy only the JSON `text` value, without the line metadata.
     - Use create only for a path that does not already exist.
     - Use str_replace only when old_str uniquely identifies the intended text.
     - Preserve unrelated content.

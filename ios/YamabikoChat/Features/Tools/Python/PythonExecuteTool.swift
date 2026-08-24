@@ -6,7 +6,7 @@ struct PythonExecuteTool: LocalToolExecutor {
     let definition = ToolDefinition(
         name: Self.name,
         description: """
-        Execute Python 3.14 locally in a stateful namespace scoped to this chat. The current working directory is the same persistent workspace exposed by str_replace_editor as /workspace; use relative paths such as src/main.js from Python. NumPy, Matplotlib, and Pillow are bundled for local data analysis and image generation. Matplotlib includes Noto fonts for Japanese, Simplified Chinese, Hindi, Arabic, Bengali, Urdu, Latin, and Cyrillic text; use native-language labels directly without probing system fonts. Japanese is the default CJK style. For localized Han or Urdu forms, set `fontfamily="Noto Sans SC"` or `fontfamily="Noto Nastaliq Urdu"` on that text. Files created or updated in the workspace or ./outputs/ are automatically returned to the user as visible artifacts; open Matplotlib figures are automatically saved as PNG. Network, subprocess, and shell access are disabled. Files attached to the chat are copied into the current workspace.
+        Execute Python 3.14 locally in a stateful namespace scoped to this chat. The current working directory is the same persistent workspace exposed by str_replace_editor as /workspace. Both relative paths such as src/main.js and literal virtual paths such as /workspace/src/main.js address that workspace. NumPy, Matplotlib, and Pillow are bundled for local data analysis and image generation. Matplotlib includes Noto fonts for Japanese, Simplified Chinese, Hindi, Arabic, Bengali, Urdu, Latin, and Cyrillic text; use native-language labels directly without probing system fonts. Japanese is the default CJK style. For localized Han or Urdu forms, set `fontfamily="Noto Sans SC"` or `fontfamily="Noto Nastaliq Urdu"` on that text. Files created or updated in the workspace or ./outputs/ are automatically returned to the user as visible artifacts; open Matplotlib figures are automatically saved as PNG. Network, subprocess, and shell access are disabled. Files attached to the chat are copied into the current workspace.
         """,
         parametersJSON: #"{"type":"object","properties":{"code":{"type":"string","description":"Python source code to execute"},"reset":{"type":"boolean","description":"Reset this chat's Python namespace before executing; workspace files are preserved"}},"required":["code"],"additionalProperties":false}"#
     )
@@ -63,10 +63,13 @@ struct PythonExecuteTool: LocalToolExecutor {
                 relativePath: artifact.relpath
             )
             let data = try Data(contentsOf: source, options: .mappedIfSafe)
-            let persisted = try attachments.persistGeneratedFile(
+            let logicalPath = artifact.root == "outputs"
+                ? "outputs/\(artifact.relpath)"
+                : artifact.relpath
+            let persisted = try attachments.persistGeneratedFileReplacingExisting(
                 data: data,
-                filename: artifact.name,
-                collection: "Chat \(sessionID)"
+                relativePath: logicalPath,
+                collection: ConversationWorkspacePath.generatedFilesCollection(for: sessionID)
             )
             generated.append(ToolArtifact(path: persisted.path, name: artifact.name, mime: artifact.mime, size: artifact.size))
         }

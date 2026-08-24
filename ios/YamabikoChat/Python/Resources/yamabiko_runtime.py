@@ -84,6 +84,86 @@ def _is_within(path: Path, root: Path) -> bool:
         return False
 
 
+def _virtual_workspace_path(value: str) -> str:
+    """Resolve the public /workspace namespace without exposing the host path."""
+    if _active_workspace is None:
+        return value
+    if value == "/workspace":
+        return str(_active_workspace)
+    if value.startswith("/workspace/"):
+        relative = value[len("/workspace/"):]
+        return str(_active_workspace / relative)
+    return value
+
+
+class _VirtualWorkspaceTransformer(ast.NodeTransformer):
+    """Translate literal tool paths only in path-taking calls.
+
+    Restricting translation to path arguments prevents ordinary strings written
+    into files or printed to stdout from being changed.
+    """
+
+    _single_path_calls = {
+        "Path", "PurePath", "open", "exists", "isfile", "isdir", "getsize",
+        "join", "abspath", "realpath", "normpath",
+        "listdir", "scandir", "chdir", "mkdir", "makedirs", "remove", "unlink",
+        "rmdir", "removedirs", "stat", "lstat", "chmod", "chown", "truncate",
+        "utime", "readlink", "rmtree",
+    }
+    _two_path_calls = {"rename", "replace", "link", "symlink", "copy", "copy2", "move"}
+    _path_modules = {"builtins", "io", "os", "pathlib", "shutil"}
+
+    @staticmethod
+    def _call_name(function: ast.expr) -> str | None:
+        if isinstance(function, ast.Name):
+            return function.id
+        if isinstance(function, ast.Attribute):
+            return function.attr
+        return None
+
+    @staticmethod
+    def _root_name(expression: ast.expr) -> str | None:
+        current = expression
+        while isinstance(current, ast.Attribute):
+            current = current.value
+        return current.id if isinstance(current, ast.Name) else None
+
+    @classmethod
+    def _path_argument_count(cls, function: ast.expr) -> int:
+        name = cls._call_name(function)
+        if name is None:
+            return 0
+        if isinstance(function, ast.Name):
+            if name not in cls._single_path_calls and name not in cls._two_path_calls:
+                return 0
+        elif isinstance(function, ast.Attribute):
+            root = cls._root_name(function)
+            path_instance_call = isinstance(function.value, ast.Call) and cls._call_name(function.value.func) in {"Path", "PurePath"}
+            if root not in cls._path_modules and not path_instance_call:
+                return 0
+        return 2 if name in cls._two_path_calls else 1 if name in cls._single_path_calls else 0
+
+    @staticmethod
+    def _translated(node: ast.expr) -> ast.expr:
+        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+            return node
+        if node.value != "/workspace" and not node.value.startswith("/workspace/"):
+            return node
+        replacement = ast.Call(
+            func=ast.Name(id="__yamabiko_resolve_virtual_path", ctx=ast.Load()),
+            args=[node],
+            keywords=[],
+        )
+        return ast.copy_location(replacement, node)
+
+    def visit_Call(self, node: ast.Call) -> ast.AST:
+        self.generic_visit(node)
+        path_count = self._path_argument_count(node.func)
+        for index in range(min(path_count, len(node.args))):
+            node.args[index] = self._translated(node.args[index])
+        return node
+
+
 def _validate_path(value: object, *, writing: bool) -> None:
     if _active_workspace is None or isinstance(value, int):
         return
@@ -279,6 +359,8 @@ def _artifacts(
 
 def _execute(code: str, namespace: dict[str, Any]) -> str | None:
     tree = ast.parse(code, mode="exec")
+    tree = _VirtualWorkspaceTransformer().visit(tree)
+    ast.fix_missing_locations(tree)
     if not tree.body or not isinstance(tree.body[-1], ast.Expr):
         exec(compile(tree, "<python_execute>", "exec"), namespace, namespace)
         return None
@@ -320,7 +402,9 @@ def run_cell(session_id: str, code: str, options_json: str) -> str:
         artifact_roots = (("outputs", outputs), ("workspace", workspace))
         before = {name: _snapshot_files(root) for name, root in artifact_roots}
         sys.stdout, sys.stderr = stdout, stderr
-        result_repr = _execute(code, _namespace(session_id))
+        namespace = _namespace(session_id)
+        namespace["__yamabiko_resolve_virtual_path"] = _virtual_workspace_path
+        result_repr = _execute(code, namespace)
     except BaseException as exc:  # The bridge must always receive a JSON envelope.
         error = {
             "type": type(exc).__name__,

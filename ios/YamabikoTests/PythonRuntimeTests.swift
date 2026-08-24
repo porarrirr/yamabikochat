@@ -130,7 +130,7 @@ plt.savefig("matplotlib.png")
         ))
         let exportedArtifact = try XCTUnwrap(artifactResult.artifacts.first)
         XCTAssertEqual(exportedArtifact.name, "weather.svg")
-        XCTAssertTrue(exportedArtifact.path.contains("Chat integration/weather.svg"))
+        XCTAssertTrue(exportedArtifact.path.contains("Workspace integration/weather.svg"))
         XCTAssertEqual(
             try String(contentsOfFile: exportedArtifact.path, encoding: .utf8),
             "<svg/>"
@@ -181,6 +181,78 @@ plt.savefig("matplotlib.png")
         try editor.withWorkspace(sessionID: "shared") { editorWorkspace in
             XCTAssertEqual(editorWorkspace.standardizedFileURL, paths.workspace.standardizedFileURL)
         }
+    }
+
+    func testLiteralVirtualWorkspacePathsResolveForPythonFileAPIs() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("python-virtual-workspace-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PythonSessionStore(rootOverride: root)
+        let worker = PythonWorker(sessions: store, timeoutSeconds: 10, memoryLimitBytes: 4_000_000_000)
+
+        let response = try await worker.execute(
+            sessionID: "virtual-path",
+            code: #"""
+from pathlib import Path
+Path("/workspace/src").mkdir(parents=True, exist_ok=True)
+Path("/workspace/src/main.js").write_text("  renderer")
+with open("/workspace/src/main.js", "r", encoding="utf-8") as handle:
+    value = handle.read()
+(value, "/workspace/content".replace("content", "literal"))
+"""#,
+            reset: true,
+            attachmentPaths: []
+        )
+
+        XCTAssertEqual(response.status, "ok", response.error?.traceback ?? response.stderr)
+        XCTAssertEqual(response.resultRepr, "('  renderer', '/workspace/literal')")
+        let paths = try store.prepare(sessionID: "virtual-path")
+        XCTAssertEqual(
+            try String(contentsOf: paths.workspace.appendingPathComponent("src/main.js")),
+            "  renderer"
+        )
+        await worker.resetSession(sessionID: "virtual-path")
+    }
+
+    func testEditorAndPythonPublishOneCanonicalArtifactForTheSameLogicalPath() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("canonical-workspace-\(UUID().uuidString)", isDirectory: true)
+        let generated = FileManager.default.temporaryDirectory
+            .appendingPathComponent("canonical-artifacts-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: generated)
+        }
+        let store = PythonSessionStore(rootOverride: root)
+        let worker = PythonWorker(sessions: store, timeoutSeconds: 10, memoryLimitBytes: 4_000_000_000)
+        let attachments = AttachmentRepository(generatedFilesRootOverride: generated)
+        let editor = StrReplaceEditorTool(
+            workspaces: EditorWorkspaceStore(rootOverride: root),
+            attachments: attachments
+        )
+        let python = PythonExecuteTool(worker: worker, sessions: store, attachments: attachments)
+
+        let editorResult = try await editor.execute(call: ToolCall(
+            id: "editor-create",
+            name: StrReplaceEditorTool.name,
+            argumentsJSON: #"{"command":"create","path":"/workspace/src/main.js","file_text":"before"}"#,
+            providerMetadata: ["editorSessionId": "canonical"]
+        ))
+        let pythonResult = try await python.execute(call: ToolCall(
+            id: "python-edit",
+            name: PythonExecuteTool.name,
+            argumentsJSON: #"{"code":"from pathlib import Path\nPath('/workspace/src/main.js').write_text('after')"}"#,
+            providerMetadata: ["pythonSessionId": "canonical"]
+        ))
+
+        let editorArtifact = try XCTUnwrap(editorResult.artifacts.first)
+        let pythonArtifact = try XCTUnwrap(pythonResult.artifacts.first)
+        XCTAssertEqual(editorArtifact.path, pythonArtifact.path)
+        XCTAssertTrue(pythonArtifact.path.contains("Workspace canonical/src/main.js"))
+        XCTAssertEqual(try String(contentsOfFile: pythonArtifact.path, encoding: .utf8), "after")
+        let publishedDirectory = generated.appendingPathComponent("Workspace canonical/src")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: publishedDirectory.path), ["main.js"])
+        await worker.resetSession(sessionID: "canonical")
     }
 
     func testAttachmentStagingUsesContentIdentityForDuplicateBasenames() throws {

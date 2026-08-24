@@ -97,6 +97,7 @@ final class SystemPromptComposerTests: XCTestCase {
         XCTAssertTrue(composed?.contains("Use only the tools that are actually provided.") == true)
         XCTAssertTrue(composed?.contains("do not invent tool names or parameters") == true)
         XCTAssertTrue(composed?.contains("When using str_replace_editor:") == true)
+        XCTAssertTrue(composed?.contains("view_format=jsonl") == true)
         XCTAssertTrue(composed?.contains("Inspect the relevant file before modifying it.") == true)
         XCTAssertTrue(composed?.contains("Preserve unrelated content.") == true)
         XCTAssertTrue(composed?.hasSuffix("Today's date: 2026/06/27") == true)

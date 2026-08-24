@@ -100,8 +100,15 @@ final class AttachmentRepository: @unchecked Sendable {
     }
 
     func persistGeneratedFileReplacingExisting(data: Data, filename: String, collection: String? = nil) throws -> URL {
+        try persistGeneratedFileReplacingExisting(
+            data: data,
+            relativePath: filename,
+            collection: collection
+        )
+    }
+
+    func persistGeneratedFileReplacingExisting(data: Data, relativePath: String, collection: String? = nil) throws -> URL {
         try generatedFilesLock.withLock {
-            let safeName = safeGeneratedName(filename, fallback: "generated-file")
             var directory = try generatedFilesRoot()
             if let collection, !collection.isEmpty {
                 directory.appendPathComponent(
@@ -109,8 +116,23 @@ final class AttachmentRepository: @unchecked Sendable {
                     isDirectory: true
                 )
             }
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            let destination = directory.appendingPathComponent(safeName)
+            let components = relativePath
+                .replacingOccurrences(of: "\\", with: "/")
+                .split(separator: "/", omittingEmptySubsequences: true)
+                .map(String.init)
+            let safeComponents = components
+                .filter { $0 != "." && $0 != ".." }
+                .map { safeGeneratedName($0, fallback: "generated-file") }
+            guard !safeComponents.isEmpty, safeComponents.count == components.count else {
+                throw CocoaError(.fileWriteInvalidFileName)
+            }
+            let destination = safeComponents.reduce(directory) { partial, component in
+                partial.appendingPathComponent(component)
+            }
+            try fileManager.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
             try data.write(to: destination, options: [.atomic])
             return destination
         }

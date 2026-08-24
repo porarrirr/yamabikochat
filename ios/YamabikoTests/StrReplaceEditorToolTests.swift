@@ -28,18 +28,21 @@ final class StrReplaceEditorToolTests: XCTestCase {
         let artifactPath = try XCTUnwrap(created.artifacts.first?.path)
 
         let viewed = try await call(#"{"command":"view","path":"/workspace/sample.txt","view_range":[2,-1]}"#)
-        XCTAssertTrue(viewed.content.contains("     2  two"))
-        XCTAssertTrue(viewed.content.contains("     3  three"))
+        XCTAssertTrue(viewed.content.contains("     2 |two"))
+        XCTAssertTrue(viewed.content.contains("     3 |three"))
+
+        let exact = try await call(#"{"command":"view","path":"/workspace/sample.txt","view_range":[2,2],"view_format":"jsonl"}"#)
+        XCTAssertTrue(exact.content.contains(#"{"line":2,"text":"two"}"#))
 
         let replaced = try await call(#"{"command":"str_replace","path":"/workspace/sample.txt","old_str":"two","new_str":"TWO"}"#)
         let inserted = try await call(#"{"command":"insert","path":"/workspace/sample.txt","insert_line":1,"new_str":"between"}"#)
         let final = try await call(#"{"command":"view","path":"/workspace/sample.txt"}"#)
-        XCTAssertTrue(final.content.contains("     2  between"))
-        XCTAssertTrue(final.content.contains("     3  TWO"))
+        XCTAssertTrue(final.content.contains("     2 |between"))
+        XCTAssertTrue(final.content.contains("     3 |TWO"))
         XCTAssertEqual(replaced.artifacts.first?.path, artifactPath)
         XCTAssertEqual(inserted.artifacts.first?.path, artifactPath)
         XCTAssertEqual(
-            try FileManager.default.contentsOfDirectory(atPath: generated.appendingPathComponent("Editor session-one").path),
+            try FileManager.default.contentsOfDirectory(atPath: generated.appendingPathComponent("Workspace session-one").path),
             ["sample.txt"]
         )
         XCTAssertEqual(try String(contentsOfFile: artifactPath, encoding: .utf8), "one\nbetween\nTWO\nthree")
@@ -51,6 +54,8 @@ final class StrReplaceEditorToolTests: XCTestCase {
         let properties = try XCTUnwrap(object["properties"] as? [String: Any])
         let command = try XCTUnwrap(properties["command"] as? [String: Any])
         XCTAssertEqual(command["enum"] as? [String], ["view", "create", "str_replace", "insert"])
+        let format = try XCTUnwrap(properties["view_format"] as? [String: Any])
+        XCTAssertEqual(format["enum"] as? [String], ["numbered", "jsonl"])
     }
 
     func testCreateBuildsMissingParentDirectories() async throws {
@@ -65,7 +70,7 @@ final class StrReplaceEditorToolTests: XCTestCase {
         _ = try await call(#"{"command":"create","path":"/workspace/empty.txt","file_text":""}"#)
         _ = try await call(#"{"command":"insert","path":"/workspace/empty.txt","insert_line":0,"new_str":"first"}"#)
         let emptyView = try await call(#"{"command":"view","path":"/workspace/empty.txt"}"#)
-        XCTAssertTrue(emptyView.content.contains("     1  first"))
+        XCTAssertTrue(emptyView.content.contains("     1 |first"))
 
         _ = try await call(#"{"command":"create","path":"/workspace/crlf.txt","file_text":"a\r\nb"}"#)
         _ = try await call(#"{"command":"insert","path":"/workspace/crlf.txt","insert_line":1,"new_str":"x\ny"}"#)
@@ -101,8 +106,8 @@ final class StrReplaceEditorToolTests: XCTestCase {
             _ = try await self.call(#"{"command":"view","path":"/workspace/../outside"}"#)
         }
         let final = try await call(#"{"command":"view","path":"/workspace/repeated.txt"}"#)
-        XCTAssertTrue(final.content.contains("     1  same"))
-        XCTAssertTrue(final.content.contains("     3  same"))
+        XCTAssertTrue(final.content.contains("     1 |same"))
+        XCTAssertTrue(final.content.contains("     3 |same"))
     }
 
     func testSessionsAreIsolatedAndPersistentAcrossToolInstances() async throws {
