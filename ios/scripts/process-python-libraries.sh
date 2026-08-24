@@ -17,9 +17,9 @@ mkdir -p "$package_destination"
 # Wheel archives can contain static libraries intended only for compiling
 # downstream extension modules. They are not runtime resources and App Store
 # bundles reject standalone archives outside a framework.
-rsync -au --delete --exclude '*.a' \
-  "$PROJECT_DIR/Vendor/PythonSitePackages/$python_packages_slice/" \
-  "$package_destination/"
+"$PROJECT_DIR/scripts/sync-python-site-packages.sh" \
+  "$PROJECT_DIR/Vendor/PythonSitePackages/$python_packages_slice" \
+  "$package_destination"
 
 font_source="$PROJECT_DIR/YamabikoChat/Python/Resources/Fonts"
 font_destination="$package_destination/matplotlib/mpl-data/fonts/ttf"
