@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import YamabikoChat
 
 final class ChatPresentationArchitectureTests: XCTestCase {
@@ -36,6 +37,33 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             ),
             2_000
         )
+        XCTAssertFalse(TailFollowPolicy.shouldAdjustOffset(current: 100, target: 100.5))
+        XCTAssertTrue(TailFollowPolicy.shouldAdjustOffset(current: 100, target: 100.51))
+    }
+
+    func testStreamingMarkdownPreservesConfirmedHeadingAndListBlockIDs() async {
+        let parser = NativeMarkdownIncrementalParser()
+        let firstSource = "# Heading\n\n- first\n- second"
+        let first = await parser.streamingBlocks(for: firstSource)
+        let second = await parser.streamingBlocks(
+            for: firstSource + "\n\nTail with **emphasis**"
+        )
+
+        XCTAssertEqual(Array(second.prefix(first.count)).map(\.id), first.map(\.id))
+        XCTAssertEqual(first.first?.id, "block-0")
+        XCTAssertEqual(first.dropFirst().first?.id, "block-\("# Heading\n\n".utf8.count)")
+    }
+
+    func testStreamingMarkdownKeepsTailIDWhenBlankLineConfirmsIt() async throws {
+        let parser = NativeMarkdownIncrementalParser()
+        let prefix = "Intro\n\n"
+        let tail = "## Live heading"
+        let beforeConfirmation = await parser.streamingBlocks(for: prefix + tail)
+        let tailID = try XCTUnwrap(beforeConfirmation.last?.id)
+        let afterConfirmation = await parser.streamingBlocks(for: prefix + tail + "\n\nNext")
+
+        XCTAssertEqual(tailID, afterConfirmation.dropLast().last?.id)
+        XCTAssertEqual(tailID, "block-\(prefix.utf8.count)")
     }
 
     func testNativeMarkdownParserBuildsStableNativeBlocks() {
@@ -329,8 +357,12 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         )])
         var willChangeCount = 0
         var didChangeCount = 0
-        store.onRowContentWillChange = { willChangeCount += 1 }
-        store.onRowContentDidChange = { didChangeCount += 1 }
+        var changes: [(String, ChatTimelineRowChangeKind)] = []
+        store.onRowContentWillChange = { _, _ in willChangeCount += 1 }
+        store.onRowContentDidChange = { id, kind in
+            didChangeCount += 1
+            changes.append((id, kind))
+        }
         let snapshot = ChatStreamingSnapshot(
             targetId: 42,
             text: "streaming",
@@ -344,5 +376,159 @@ final class ChatPresentationArchitectureTests: XCTestCase {
 
         XCTAssertEqual(willChangeCount, 1)
         XCTAssertEqual(didChangeCount, 1)
+        XCTAssertEqual(changes.first?.0, "m-42")
+        XCTAssertEqual(changes.first?.1, .streamUpdate)
+    }
+
+    @MainActor
+    func testRapidStreamingUpdatesKeepCollectionCellFramesSeparated() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: (1...8).map { timelineMessage(id: Int64($0), text: "Message \($0)") })
+        let controller = configuredTimelineController(store: store)
+        await settleTimeline(controller)
+
+        for frame in 1...8 {
+            store.applyStreamingSnapshot(ChatStreamingSnapshot(
+                targetId: Int64(frame),
+                text: String(repeating: "stream \(frame) ", count: 80 + frame),
+                thinking: "",
+                toolActivity: nil,
+                isFinal: false
+            ))
+        }
+        await settleTimeline(controller)
+
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+        let frames = (0..<store.orderedIDs.count).compactMap {
+            collectionView.layoutAttributesForItem(at: IndexPath(item: $0, section: 0))?.frame
+        }
+        XCTAssertEqual(frames.count, store.orderedIDs.count)
+        for (previous, next) in zip(frames, frames.dropFirst()) {
+            XCTAssertLessThanOrEqual(previous.maxY, next.minY)
+        }
+    }
+
+    @MainActor
+    func testLatestMoveAndStreamCompletionKeepOffsetAndVisibleAnchor() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: (1...20).map {
+            timelineMessage(id: Int64($0), text: String(repeating: "Message \($0) line\n", count: 5))
+        })
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+        let initialOffset = collectionView.contentOffset.y
+        let initialAnchor = try XCTUnwrap(visibleAnchor(in: collectionView))
+
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 20,
+            text: String(repeating: "# Live heading\n\n- item\n", count: 40),
+            thinking: "",
+            toolActivity: nil,
+            isFinal: false
+        ))
+        await settleTimeline(controller)
+        XCTAssertEqual(collectionView.contentOffset.y, initialOffset, accuracy: 0.5)
+        assertVisibleAnchor(initialAnchor, in: collectionView)
+
+        let streamOffset = collectionView.contentOffset.y
+        let streamAnchor = try XCTUnwrap(visibleAnchor(in: collectionView))
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 20,
+            text: String(repeating: "# Final heading\n\n- item\n", count: 60),
+            thinking: "",
+            toolActivity: nil,
+            isFinal: true
+        ))
+        await settleTimeline(controller)
+        XCTAssertEqual(collectionView.contentOffset.y, streamOffset, accuracy: 0.5)
+        assertVisibleAnchor(streamAnchor, in: collectionView)
+    }
+
+    @MainActor
+    private func configuredTimelineController(
+        store: ChatTimelineStore,
+        scrollRequest: Int = 0
+    ) -> ChatTimelineViewController {
+        let controller = ChatTimelineViewController()
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 700)
+        controller.configure(
+            store: store,
+            scrollToLatestRequest: scrollRequest,
+            regeneratableMessageID: nil,
+            mathRenderingEnabled: true,
+            fusionDebugModeEnabled: false,
+            dualSplitLayout: "VERTICAL",
+            dualSplitRatio: 0.5,
+            fusionTraceForMessage: { _ in nil },
+            onRoute: { _ in },
+            onPreviousVariant: { _ in },
+            onNextVariant: { _ in },
+            onBranch: { _ in },
+            onRegenerate: {}
+        )
+        controller.view.setNeedsLayout()
+        controller.view.layoutIfNeeded()
+        return controller
+    }
+
+    private func timelineMessage(id: Int64, text: String) -> FullChatMessage {
+        FullChatMessage(
+            id: id,
+            message: ChatMessage(
+                id: id,
+                conversationId: 1,
+                role: "model",
+                text: text,
+                createdAtMs: id
+            ),
+            thinkingStream: nil,
+            variants: []
+        )
+    }
+
+    @MainActor
+    private func settleTimeline(_ controller: ChatTimelineViewController) async {
+        var previousContentSize = CGSize.zero
+        var previousOffset = CGFloat.infinity
+        var stablePasses = 0
+        for _ in 0..<50 {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+            controller.view.layoutIfNeeded()
+            guard let collectionView = findCollectionView(in: controller.view) else { continue }
+            if collectionView.contentSize == previousContentSize,
+               abs(collectionView.contentOffset.y - previousOffset) <= 0.01 {
+                stablePasses += 1
+                if stablePasses >= 3 { return }
+            } else {
+                stablePasses = 0
+                previousContentSize = collectionView.contentSize
+                previousOffset = collectionView.contentOffset.y
+            }
+        }
+    }
+
+    private func findCollectionView(in view: UIView) -> UICollectionView? {
+        if let collectionView = view as? UICollectionView { return collectionView }
+        return view.subviews.lazy.compactMap(findCollectionView).first
+    }
+
+    private func visibleAnchor(in collectionView: UICollectionView) -> (indexPath: IndexPath, offset: CGFloat)? {
+        guard let indexPath = collectionView.indexPathsForVisibleItems.sorted().first,
+              let attributes = collectionView.layoutAttributesForItem(at: indexPath)
+        else { return nil }
+        return (indexPath, attributes.frame.minY - collectionView.contentOffset.y)
+    }
+
+    private func assertVisibleAnchor(
+        _ anchor: (indexPath: IndexPath, offset: CGFloat),
+        in collectionView: UICollectionView,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let current = visibleAnchor(in: collectionView)
+        XCTAssertEqual(current?.indexPath, anchor.indexPath, file: file, line: line)
+        XCTAssertEqual(current?.offset ?? .infinity, anchor.offset, accuracy: 0.5, file: file, line: line)
     }
 }

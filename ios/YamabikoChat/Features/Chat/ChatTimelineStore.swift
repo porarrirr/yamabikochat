@@ -1,6 +1,12 @@
 import Combine
 import Foundation
 
+enum ChatTimelineRowChangeKind: Equatable, Sendable {
+    case streamUpdate
+    case completion
+    case normalUpdate
+}
+
 @MainActor
 final class ChatTimelineRowStore: ObservableObject, Identifiable {
     let id: String
@@ -37,8 +43,8 @@ final class ChatTimelineStore: ObservableObject {
     // UIKit uses these hooks to preserve the visible anchor around a self-sizing
     // row update. Streaming changes deliberately do not publish a collection-wide
     // generation because that would invalidate every visible cell each frame.
-    var onRowContentWillChange: (() -> Void)?
-    var onRowContentDidChange: (() -> Void)?
+    var onRowContentWillChange: ((String, ChatTimelineRowChangeKind) -> Void)?
+    var onRowContentDidChange: ((String, ChatTimelineRowChangeKind) -> Void)?
 
     func update(messages: [FullChatMessage]) {
         latestMessages = messages
@@ -66,20 +72,21 @@ final class ChatTimelineStore: ObservableObject {
             ? nil
             : snapshot
         guard row.streamingSnapshot != presentedSnapshot else { return }
-        onRowContentWillChange?()
+        let changeKind: ChatTimelineRowChangeKind = snapshot.isFinal ? .completion : .streamUpdate
+        onRowContentWillChange?(rowID, changeKind)
         row.apply(snapshot: presentedSnapshot)
-        onRowContentDidChange?()
+        onRowContentDidChange?(rowID, changeKind)
     }
 
     func clearTransientStreamingSnapshots() {
         pendingStreamingSnapshotsByMessageID = pendingStreamingSnapshotsByMessageID.filter { $0.value.isFinal }
         let changedRows = rowsByID.values.filter { $0.streamingSnapshot?.isFinal == false }
         guard !changedRows.isEmpty else { return }
-        onRowContentWillChange?()
         for row in changedRows {
+            onRowContentWillChange?(row.id, .completion)
             row.apply(snapshot: nil)
+            onRowContentDidChange?(row.id, .completion)
         }
-        onRowContentDidChange?()
     }
 
     private func rebuild() {
@@ -95,17 +102,16 @@ final class ChatTimelineStore: ObservableObject {
         }
 
         messageRowIDByDatabaseID.removeAll(keepingCapacity: true)
-        var hasRowContentChanges = false
+        var changedRows: [(id: String, kind: ChatTimelineRowChangeKind)] = []
         for item in snapshot.items {
             if let existing = rowsByID[item.id] {
                 let clearsFinalSnapshot = existing.streamingSnapshot.map {
                     $0.isFinal && self.item(item, containsPersistedContentsOf: $0)
                 } ?? false
                 if existing.item != item || clearsFinalSnapshot {
-                    if !hasRowContentChanges {
-                        onRowContentWillChange?()
-                    }
-                    hasRowContentChanges = true
+                    let kind: ChatTimelineRowChangeKind = clearsFinalSnapshot ? .completion : .normalUpdate
+                    onRowContentWillChange?(item.id, kind)
+                    changedRows.append((item.id, kind))
                 }
                 existing.replace(item: item)
                 if clearsFinalSnapshot {
@@ -130,16 +136,19 @@ final class ChatTimelineStore: ObservableObject {
                 ? nil
                 : streamingSnapshot
             guard row.streamingSnapshot != presentedSnapshot else { continue }
+            let kind: ChatTimelineRowChangeKind = streamingSnapshot.isFinal ? .completion : .streamUpdate
+            onRowContentWillChange?(rowID, kind)
             row.apply(snapshot: presentedSnapshot)
+            changedRows.append((rowID, kind))
         }
 
         if orderedIDs != nextIDs {
             orderedIDs = nextIDs
-        } else if hasRowContentChanges {
+        } else if !changedRows.isEmpty {
             mutationGeneration &+= 1
         }
-        if hasRowContentChanges {
-            onRowContentDidChange?()
+        for change in changedRows {
+            onRowContentDidChange?(change.id, change.kind)
         }
     }
 

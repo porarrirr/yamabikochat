@@ -27,19 +27,36 @@ enum NativeMarkdownParser {
     static func parse(
         _ source: String,
         rendersMath: Bool = true,
-        rootPath: String = "root"
+        baseUTF8Offset: Int = 0
     ) -> [NativeMarkdownBlock] {
         let document = Document(parsing: source)
-        return parseChildren(of: document, path: rootPath, rendersMath: rendersMath)
+        let offsets = SourceOffsetMap(source: source, baseUTF8Offset: baseUTF8Offset)
+        return parseChildren(of: document, path: "root", rendersMath: rendersMath, offsets: offsets)
     }
 
-    private static func parseChildren(of parent: Markup, path: String, rendersMath: Bool) -> [NativeMarkdownBlock] {
+    private static func parseChildren(
+        of parent: Markup,
+        path: String,
+        rendersMath: Bool,
+        offsets: SourceOffsetMap
+    ) -> [NativeMarkdownBlock] {
         parent.children.enumerated().flatMap { index, child in
-            parseBlock(child, path: "\(path)-\(index)", rendersMath: rendersMath)
+            let fallbackPath = "\(path)-\(index)"
+            return parseBlock(
+                child,
+                path: offsets.blockID(for: child, fallbackPath: fallbackPath),
+                rendersMath: rendersMath,
+                offsets: offsets
+            )
         }
     }
 
-    private static func parseBlock(_ markup: Markup, path: String, rendersMath: Bool) -> [NativeMarkdownBlock] {
+    private static func parseBlock(
+        _ markup: Markup,
+        path: String,
+        rendersMath: Bool,
+        offsets: SourceOffsetMap
+    ) -> [NativeMarkdownBlock] {
         if let paragraph = markup as? Paragraph {
             if rendersMath, containsMath(paragraph.plainText) {
                 return [.math(id: path, markdown: paragraph.plainText)]
@@ -53,7 +70,10 @@ enum NativeMarkdownParser {
             return [.code(id: path, language: code.language, code: code.code)]
         }
         if let quote = markup as? BlockQuote {
-            return [.quote(id: path, blocks: parseChildren(of: quote, path: path, rendersMath: rendersMath))]
+            return [.quote(
+                id: path,
+                blocks: parseChildren(of: quote, path: path, rendersMath: rendersMath, offsets: offsets)
+            )]
         }
         if let list = markup as? OrderedList {
             return [.list(
@@ -91,7 +111,32 @@ enum NativeMarkdownParser {
         if let html = markup as? HTMLBlock {
             return [.code(id: path, language: "html", code: html.rawHTML)]
         }
-        return parseChildren(of: markup, path: path, rendersMath: rendersMath)
+        return parseChildren(of: markup, path: path, rendersMath: rendersMath, offsets: offsets)
+    }
+
+    private struct SourceOffsetMap {
+        let lineStartUTF8Offsets: [Int]
+        let baseUTF8Offset: Int
+
+        init(source: String, baseUTF8Offset: Int) {
+            var starts = [0]
+            for (index, byte) in source.utf8.enumerated() where byte == 0x0A {
+                starts.append(index + 1)
+            }
+            lineStartUTF8Offsets = starts
+            self.baseUTF8Offset = baseUTF8Offset
+        }
+
+        func blockID(for markup: Markup, fallbackPath: String) -> String {
+            guard let location = markup.range?.lowerBound,
+                  location.line > 0,
+                  location.line <= lineStartUTF8Offsets.count
+            else {
+                return "block-\(baseUTF8Offset)-\(fallbackPath)"
+            }
+            let lineOffset = lineStartUTF8Offsets[location.line - 1]
+            return "block-\(baseUTF8Offset + lineOffset + max(0, location.column - 1))"
+        }
     }
 
     private static func containsMath(_ value: String) -> Bool {
@@ -174,14 +219,18 @@ private actor NativeMarkdownBlockCache {
     private var order: [String] = []
     private let capacity = 256
 
-    func blocks(for source: String, rendersMath: Bool, rootPath: String) -> [NativeMarkdownBlock] {
+    func blocks(for source: String, rendersMath: Bool, baseUTF8Offset: Int = 0) -> [NativeMarkdownBlock] {
         let digest = SHA256.hash(data: Data(source.utf8)).map { String(format: "%02x", $0) }.joined()
-        let key = "\(rendersMath ? 1 : 0):\(rootPath):\(digest)"
+        let key = "\(rendersMath ? 1 : 0):\(baseUTF8Offset):\(digest)"
         if let cached = values[key] {
             touch(key)
             return cached
         }
-        let parsed = NativeMarkdownParser.parse(source, rendersMath: rendersMath, rootPath: rootPath)
+        let parsed = NativeMarkdownParser.parse(
+            source,
+            rendersMath: rendersMath,
+            baseUTF8Offset: baseUTF8Offset
+        )
         values[key] = parsed
         order.append(key)
         if order.count > capacity {
@@ -198,6 +247,49 @@ private actor NativeMarkdownBlockCache {
     }
 }
 
+actor NativeMarkdownIncrementalParser {
+    private var stablePrefix = ""
+    private var stableBlocks: [NativeMarkdownBlock] = []
+
+    func streamingBlocks(for source: String) -> [NativeMarkdownBlock] {
+        if !source.hasPrefix(stablePrefix) {
+            stablePrefix = ""
+            stableBlocks = []
+        }
+
+        let split = Self.streamingSplit(source)
+        if split.prefix != stablePrefix {
+            let newStableSource = String(split.prefix.dropFirst(stablePrefix.count))
+            let appendedBlocks = NativeMarkdownParser.parse(
+                newStableSource,
+                rendersMath: false,
+                baseUTF8Offset: stablePrefix.utf8.count
+            )
+            stableBlocks.append(contentsOf: appendedBlocks)
+            stablePrefix = split.prefix
+        }
+
+        let tailBlocks = NativeMarkdownParser.parse(
+            split.tail,
+            rendersMath: false,
+            baseUTF8Offset: split.prefix.utf8.count
+        )
+        return stableBlocks + tailBlocks
+    }
+
+    func reset() {
+        stablePrefix = ""
+        stableBlocks = []
+    }
+
+    static func streamingSplit(_ source: String) -> (prefix: String, tail: String) {
+        guard let range = source.range(of: "\n\n", options: .backwards) else {
+            return ("", source)
+        }
+        return (String(source[..<range.upperBound]), String(source[range.upperBound...]))
+    }
+}
+
 struct NativeMarkdownView: View {
     let markdownText: String
     var isStreaming = false
@@ -205,8 +297,7 @@ struct NativeMarkdownView: View {
 
     @State private var blocks: [NativeMarkdownBlock] = []
     @State private var parsedRequest: ParseRequest?
-    @State private var stableStreamingPrefix = ""
-    @State private var stableStreamingBlocks: [NativeMarkdownBlock] = []
+    @State private var incrementalParser = NativeMarkdownIncrementalParser()
 
     private struct ParseRequest: Hashable {
         let source: String
@@ -245,46 +336,26 @@ struct NativeMarkdownView: View {
             guard parsedRequest != request else { return }
             let source = request.source
             let result: [NativeMarkdownBlock]
-            var nextStablePrefix = stableStreamingPrefix
-            var nextStableBlocks = stableStreamingBlocks
             if request.isStreaming {
-                let split = Self.streamingSplit(source)
-                if split.prefix != stableStreamingPrefix {
-                    nextStablePrefix = split.prefix
-                    nextStableBlocks = await NativeMarkdownBlockCache.shared.blocks(
-                        for: split.prefix,
-                        rendersMath: false,
-                        rootPath: "stable"
-                    )
-                }
-                let tailBlocks = await NativeMarkdownBlockCache.shared.blocks(
-                    for: split.tail,
-                    rendersMath: false,
-                    rootPath: "tail-\(split.prefix.utf8.count)"
-                )
-                result = nextStableBlocks + tailBlocks
+                result = await incrementalParser.streamingBlocks(for: source)
             } else {
                 result = await NativeMarkdownBlockCache.shared.blocks(
                     for: source,
-                    rendersMath: request.mathRenderingEnabled,
-                    rootPath: "root"
+                    rendersMath: request.mathRenderingEnabled
                 )
-                nextStablePrefix = ""
-                nextStableBlocks = []
+                await incrementalParser.reset()
             }
             guard !Task.isCancelled, request == parseRequest else { return }
-            blocks = result
-            parsedRequest = request
-            stableStreamingPrefix = nextStablePrefix
-            stableStreamingBlocks = nextStableBlocks
+            var transaction = Transaction()
+            transaction.animation = nil
+            withTransaction(transaction) {
+                blocks = result
+                parsedRequest = request
+            }
         }
-    }
-
-    private static func streamingSplit(_ source: String) -> (prefix: String, tail: String) {
-        guard let range = source.range(of: "\n\n", options: .backwards) else {
-            return ("", source)
+        .transaction { transaction in
+            transaction.animation = nil
         }
-        return (String(source[..<range.upperBound]), String(source[range.upperBound...]))
     }
 }
 

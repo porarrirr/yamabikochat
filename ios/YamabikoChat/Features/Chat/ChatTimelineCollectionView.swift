@@ -54,12 +54,16 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
     private weak var store: ChatTimelineStore?
     private var followState: TailFollowState = .followingTail
-    private var lastMutationGeneration = -1
     private var lastScrollRequest = -1
     private var configuredIDs: [String] = []
     private var unreadCount = 0
     private var lastViewportSize = CGSize.zero
     private var pendingContentAnchor: (id: String, offset: CGFloat)?
+    private var pendingViewportOffsetY: CGFloat?
+    private var pendingChangedRowIDs: Set<String> = []
+    private var pendingLocksViewport = false
+    private var viewportCompensationBottom: CGFloat = 0
+    private var viewportLockTargetY: CGFloat?
     private var isContentUpdateScheduled = false
     private var previousRegeneratableMessageID: Int64?
     private var previousMathRenderingEnabled = true
@@ -84,31 +88,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
 
-        let layout = UICollectionViewCompositionalLayout { _, environment in
-            let item = NSCollectionLayoutItem(
-                layoutSize: NSCollectionLayoutSize(
-                    widthDimension: .fractionalWidth(1),
-                    heightDimension: .estimated(120)
-                )
-            )
-            let group = NSCollectionLayoutGroup.vertical(
-                layoutSize: NSCollectionLayoutSize(
-                    widthDimension: .fractionalWidth(1),
-                    heightDimension: .estimated(120)
-                ),
-                subitems: [item]
-            )
-            let section = NSCollectionLayoutSection(group: group)
-            section.interGroupSpacing = 22
-            let horizontal = environment.container.effectiveContentSize.width >= 700 ? 28.0 : 18.0
-            section.contentInsets = NSDirectionalEdgeInsets(
-                top: 20,
-                leading: horizontal,
-                bottom: 24,
-                trailing: horizontal
-            )
-            return section
-        }
+        let layout = ChatTimelineLayout()
 
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.accessibilityIdentifier = "chat-timeline"
@@ -117,7 +97,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         collectionView.alwaysBounceVertical = true
         collectionView.keyboardDismissMode = .interactive
         collectionView.delegate = self
-        collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: "message")
+        collectionView.register(ChatTimelineCollectionCell.self, forCellWithReuseIdentifier: "message")
         view.addSubview(collectionView)
         NSLayoutConstraint.activate([
             collectionView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -155,9 +135,19 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        maintainViewportLockIfNeeded()
         let viewportSize = collectionView.bounds.size
         guard viewportSize != lastViewportSize else { return }
+        let widthChanged = abs(viewportSize.width - lastViewportSize.width)
+            > TailFollowPolicy.offsetTolerance
         lastViewportSize = viewportSize
+        if widthChanged,
+           let layout = collectionView.collectionViewLayout as? ChatTimelineLayout {
+            let horizontal: CGFloat = viewportSize.width >= 700 ? 28 : 18
+            layout.contentInsets = UIEdgeInsets(top: 20, left: horizontal, bottom: 24, right: horizontal)
+            layout.resetMeasuredHeights()
+            layout.invalidateLayout()
+        }
         guard case .followingTail = followState else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, case .followingTail = self.followState else { return }
@@ -189,12 +179,15 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             followState = .followingTail
             unreadCount = 0
             pendingContentAnchor = nil
-            lastMutationGeneration = -1
-            store.onRowContentWillChange = { [weak self] in
-                self?.prepareForRowContentChange()
+            pendingViewportOffsetY = nil
+            pendingChangedRowIDs.removeAll()
+            pendingLocksViewport = false
+            clearViewportCompensation()
+            store.onRowContentWillChange = { [weak self] rowID, kind in
+                self?.prepareForRowContentChange(rowID: rowID, kind: kind)
             }
-            store.onRowContentDidChange = { [weak self] in
-                self?.finishRowContentChange()
+            store.onRowContentDidChange = { [weak self] rowID, kind in
+                self?.finishRowContentChange(rowID: rowID, kind: kind)
             }
         }
         self.store = store
@@ -227,50 +220,79 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             unreadCount = 0
         }
 
-        let changed = store.mutationGeneration != lastMutationGeneration
-        lastMutationGeneration = store.mutationGeneration
         let shouldReconfigure = regeneratableMessageChanged
             || mathRenderingChanged
             || fusionDebugModeChanged
             || dualLayoutChanged
         apply(
             ids: store.orderedIDs,
-            forceLayout: changed || scrollToLatest,
-            reconfigureAll: shouldReconfigure
+            reconfigureAll: shouldReconfigure,
+            completion: scrollToLatest ? { [weak self] in self?.moveToLatestOnce() } : nil
         )
     }
 
-    private func prepareForRowContentChange() {
-        guard pendingContentAnchor == nil else { return }
-        pendingContentAnchor = captureVisibleAnchor()
-    }
-
-    private func finishRowContentChange() {
-        guard !isContentUpdateScheduled else { return }
-        isContentUpdateScheduled = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            UIView.performWithoutAnimation {
-                // UIHostingConfiguration observes the row store directly. Its SwiftUI
-                // content can therefore grow without a diffable-data-source update,
-                // leaving the compositional layout's estimated cell height cached.
-                // Invalidate that cache before laying out so subsequent cells are
-                // moved below the newly measured content instead of overlapping it.
-                self.collectionView.collectionViewLayout.invalidateLayout()
-                self.collectionView.layoutIfNeeded()
-                self.restorePosition(anchor: self.pendingContentAnchor)
-            }
-            self.pendingContentAnchor = nil
-            self.isContentUpdateScheduled = false
+    private func prepareForRowContentChange(rowID: String, kind: ChatTimelineRowChangeKind) {
+        if pendingContentAnchor == nil {
+            pendingContentAnchor = captureVisibleAnchor()
+            pendingViewportOffsetY = collectionView.contentOffset.y
+        }
+        pendingChangedRowIDs.insert(rowID)
+        if kind == .streamUpdate || kind == .completion {
+            pendingLocksViewport = true
+            detach(using: pendingContentAnchor)
         }
     }
 
-    private func apply(ids: [String], forceLayout: Bool, reconfigureAll: Bool) {
+    private func finishRowContentChange(rowID: String, kind: ChatTimelineRowChangeKind) {
+        pendingChangedRowIDs.insert(rowID)
+        guard !isContentUpdateScheduled else { return }
+        isContentUpdateScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            self?.completePendingRowMeasurement()
+        }
+    }
+
+    private func completePendingRowMeasurement() {
+        UIView.performWithoutAnimation {
+            let indexPaths = pendingChangedRowIDs.compactMap { id -> IndexPath? in
+                guard let index = configuredIDs.firstIndex(of: id) else { return nil }
+                return IndexPath(item: index, section: 0)
+            }
+            for indexPath in indexPaths {
+                guard let cell = collectionView.cellForItem(at: indexPath) else { continue }
+                cell.contentView.invalidateIntrinsicContentSize()
+                cell.setNeedsLayout()
+            }
+            if !indexPaths.isEmpty {
+                let context = ChatTimelineLayoutInvalidationContext()
+                context.invalidateItems(at: indexPaths)
+                collectionView.collectionViewLayout.invalidateLayout(with: context)
+            }
+            collectionView.layoutIfNeeded()
+            restorePosition(
+                anchor: pendingContentAnchor,
+                clampsToContentBounds: !pendingLocksViewport,
+                lockedOffsetY: pendingViewportOffsetY
+            )
+        }
+        pendingContentAnchor = nil
+        pendingViewportOffsetY = nil
+        pendingChangedRowIDs.removeAll()
+        pendingLocksViewport = false
+        isContentUpdateScheduled = false
+    }
+
+    private func apply(
+        ids: [String],
+        reconfigureAll: Bool,
+        completion: (() -> Void)? = nil
+    ) {
         let previousIDs = Set(configuredIDs)
         let idsChanged = configuredIDs != ids
         let anchor = captureVisibleAnchor()
 
         if idsChanged {
+            (collectionView.collectionViewLayout as? ChatTimelineLayout)?.resetMeasuredHeights()
             configuredIDs = ids
             var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
             snapshot.appendSections([0])
@@ -286,31 +308,33 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             }
             dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
                 self?.restorePosition(anchor: anchor)
+                completion?()
             }
         } else if reconfigureAll, !configuredIDs.isEmpty {
             var snapshot = dataSource.snapshot()
             snapshot.reconfigureItems(configuredIDs)
             dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
                 self?.restorePosition(anchor: anchor)
+                completion?()
             }
-        } else if forceLayout {
-            collectionView.collectionViewLayout.invalidateLayout()
-            DispatchQueue.main.async { [weak self] in
-                self?.restorePosition(anchor: anchor)
-            }
+        } else {
+            completion?()
         }
     }
 
     private func captureVisibleAnchor() -> (id: String, offset: CGFloat)? {
-        guard case .detached = followState,
-              let first = collectionView.indexPathsForVisibleItems.sorted().first,
+        guard let first = collectionView.indexPathsForVisibleItems.sorted().first,
               let id = dataSource.itemIdentifier(for: first),
               let attributes = collectionView.layoutAttributesForItem(at: first)
         else { return nil }
         return (id, attributes.frame.minY - collectionView.contentOffset.y)
     }
 
-    private func restorePosition(anchor: (id: String, offset: CGFloat)?) {
+    private func restorePosition(
+        anchor: (id: String, offset: CGFloat)?,
+        clampsToContentBounds: Bool = true,
+        lockedOffsetY: CGFloat? = nil
+    ) {
         collectionView.layoutIfNeeded()
         switch followState {
         case .followingTail:
@@ -321,8 +345,29 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                   let attributes = collectionView.layoutAttributesForItem(at: IndexPath(item: index, section: 0))
             else { return }
             let targetY = attributes.frame.minY - anchor.offset
-            collectionView.setContentOffset(CGPoint(x: 0, y: clampedOffset(targetY)), animated: false)
+            if !clampsToContentBounds {
+                viewportLockTargetY = lockedOffsetY ?? targetY
+                maintainViewportLockIfNeeded()
+                publishFollowState()
+                return
+            }
+            clearViewportCompensation()
+            let restoredY = clampedOffset(targetY)
+            if TailFollowPolicy.shouldAdjustOffset(current: collectionView.contentOffset.y, target: restoredY) {
+                collectionView.setContentOffset(CGPoint(x: 0, y: restoredY), animated: false)
+            }
         }
+        publishFollowState()
+    }
+
+    private func moveToLatestOnce() {
+        clearViewportCompensation()
+        UIView.performWithoutAnimation {
+            collectionView.layoutIfNeeded()
+            pinToTail()
+            detachAtVisibleAnchor()
+        }
+        unreadCount = 0
         publishFollowState()
     }
 
@@ -351,6 +396,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     }
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        clearViewportCompensation()
         detachAtVisibleAnchor()
     }
 
@@ -385,13 +431,14 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     }
 
     private func detachAtVisibleAnchor() {
-        guard let first = collectionView.indexPathsForVisibleItems.sorted().first,
-              let id = dataSource.itemIdentifier(for: first),
-              let attributes = collectionView.layoutAttributesForItem(at: first)
-        else { return }
+        detach(using: captureVisibleAnchor())
+    }
+
+    private func detach(using anchor: (id: String, offset: CGFloat)?) {
+        guard let anchor else { return }
         followState = .detached(
-            anchorMessageID: numericMessageID(for: id),
-            offset: attributes.frame.minY - collectionView.contentOffset.y
+            anchorMessageID: numericMessageID(for: anchor.id),
+            offset: anchor.offset
         )
     }
 
@@ -400,7 +447,146 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     }
 
     private func publishFollowState() {
-        onFollowStateChanged(followState == .followingTail, unreadCount)
+        onFollowStateChanged(isNearTail, unreadCount)
+    }
+
+    private func maintainViewportLockIfNeeded() {
+        guard let targetY = viewportLockTargetY else { return }
+        let inset = collectionView.adjustedContentInset
+        let lower = -inset.top
+        let naturalUpper = max(
+            lower,
+            collectionView.contentSize.height - collectionView.bounds.height
+                + inset.bottom - viewportCompensationBottom
+        )
+        let requiredCompensation = max(0, targetY - naturalUpper)
+        if abs(requiredCompensation - viewportCompensationBottom) > TailFollowPolicy.offsetTolerance {
+            collectionView.contentInset.bottom += requiredCompensation - viewportCompensationBottom
+            viewportCompensationBottom = requiredCompensation
+        }
+        if TailFollowPolicy.shouldAdjustOffset(current: collectionView.contentOffset.y, target: targetY) {
+            collectionView.setContentOffset(CGPoint(x: 0, y: targetY), animated: false)
+        }
+    }
+
+    private func clearViewportCompensation() {
+        viewportLockTargetY = nil
+        guard viewportCompensationBottom > 0 else { return }
+        collectionView.contentInset.bottom -= viewportCompensationBottom
+        viewportCompensationBottom = 0
+    }
+}
+
+private final class ChatTimelineLayoutInvalidationContext: UICollectionViewLayoutInvalidationContext {
+    var preferredHeights: [IndexPath: CGFloat] = [:]
+}
+
+private final class ChatTimelineLayout: UICollectionViewLayout {
+    var contentInsets = UIEdgeInsets(top: 20, left: 18, bottom: 24, right: 18)
+
+    private let estimatedHeight: CGFloat = 120
+    private let itemSpacing: CGFloat = 22
+    private var measuredHeights: [IndexPath: CGFloat] = [:]
+    private var attributesByIndexPath: [IndexPath: UICollectionViewLayoutAttributes] = [:]
+    private var calculatedContentSize = CGSize.zero
+
+    override class var invalidationContextClass: AnyClass {
+        ChatTimelineLayoutInvalidationContext.self
+    }
+
+    func resetMeasuredHeights() {
+        measuredHeights.removeAll()
+    }
+
+    override func prepare() {
+        super.prepare()
+        guard let collectionView else { return }
+        let itemCount = collectionView.numberOfSections > 0
+            ? collectionView.numberOfItems(inSection: 0)
+            : 0
+        let itemWidth = max(
+            1,
+            collectionView.bounds.width - contentInsets.left - contentInsets.right
+        )
+        var nextAttributes: [IndexPath: UICollectionViewLayoutAttributes] = [:]
+        var y = contentInsets.top
+        for item in 0..<itemCount {
+            let indexPath = IndexPath(item: item, section: 0)
+            let height = measuredHeights[indexPath] ?? estimatedHeight
+            let attributes = UICollectionViewLayoutAttributes(forCellWith: indexPath)
+            attributes.frame = CGRect(x: contentInsets.left, y: y, width: itemWidth, height: height)
+            nextAttributes[indexPath] = attributes
+            y += height + itemSpacing
+        }
+        if itemCount > 0 {
+            y -= itemSpacing
+        }
+        y += contentInsets.bottom
+        attributesByIndexPath = nextAttributes
+        calculatedContentSize = CGSize(width: collectionView.bounds.width, height: max(0, y))
+    }
+
+    override var collectionViewContentSize: CGSize {
+        calculatedContentSize
+    }
+
+    override func layoutAttributesForElements(in rect: CGRect) -> [UICollectionViewLayoutAttributes]? {
+        attributesByIndexPath.values
+            .filter { $0.frame.intersects(rect) }
+            .sorted { $0.indexPath < $1.indexPath }
+    }
+
+    override func layoutAttributesForItem(at indexPath: IndexPath) -> UICollectionViewLayoutAttributes? {
+        attributesByIndexPath[indexPath]
+    }
+
+    override func shouldInvalidateLayout(
+        forPreferredLayoutAttributes preferredAttributes: UICollectionViewLayoutAttributes,
+        withOriginalAttributes originalAttributes: UICollectionViewLayoutAttributes
+    ) -> Bool {
+        abs(preferredAttributes.size.height - originalAttributes.size.height)
+            > TailFollowPolicy.offsetTolerance
+    }
+
+    override func invalidationContext(
+        forPreferredLayoutAttributes preferredAttributes: UICollectionViewLayoutAttributes,
+        withOriginalAttributes originalAttributes: UICollectionViewLayoutAttributes
+    ) -> UICollectionViewLayoutInvalidationContext {
+        let context = ChatTimelineLayoutInvalidationContext()
+        context.preferredHeights[preferredAttributes.indexPath] = preferredAttributes.size.height
+        context.invalidateItems(at: [preferredAttributes.indexPath])
+        return context
+    }
+
+    override func invalidateLayout(with context: UICollectionViewLayoutInvalidationContext) {
+        if let context = context as? ChatTimelineLayoutInvalidationContext {
+            measuredHeights.merge(context.preferredHeights) { _, new in new }
+        }
+        super.invalidateLayout(with: context)
+    }
+
+    override func shouldInvalidateLayout(forBoundsChange newBounds: CGRect) -> Bool {
+        guard let collectionView else { return false }
+        return abs(newBounds.width - collectionView.bounds.width) > TailFollowPolicy.offsetTolerance
+    }
+}
+
+private final class ChatTimelineCollectionCell: UICollectionViewCell {
+    override func preferredLayoutAttributesFitting(
+        _ layoutAttributes: UICollectionViewLayoutAttributes
+    ) -> UICollectionViewLayoutAttributes {
+        let attributes = super.preferredLayoutAttributesFitting(layoutAttributes)
+        let targetSize = CGSize(
+            width: layoutAttributes.size.width,
+            height: UIView.layoutFittingCompressedSize.height
+        )
+        let measuredSize = contentView.systemLayoutSizeFitting(
+            targetSize,
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        )
+        attributes.size = CGSize(width: layoutAttributes.size.width, height: ceil(measuredSize.height))
+        return attributes
     }
 }
 
@@ -419,29 +605,34 @@ private struct ChatTimelineRowView: View {
     let onRegenerate: () -> Void
 
     var body: some View {
-        switch store.item {
-        case let .message(message):
-            ChatMessageRow(
-                message: message,
-                streamingSnapshot: store.streamingSnapshot,
-                canRegenerate: regeneratableMessageID == message.id,
-                mathRenderingEnabled: mathRenderingEnabled,
-                fusionDebugModeEnabled: fusionDebugModeEnabled,
-                fusionTrace: fusionTraceForMessage(message.message),
-                onRoute: onRoute,
-                onPreviousVariant: onPreviousVariant,
-                onNextVariant: onNextVariant,
-                onBranch: onBranch,
-                onRegenerate: onRegenerate
-            )
-        case let .dual(message):
-            DualChatMessageRow(
-                message: message,
-                mathRenderingEnabled: mathRenderingEnabled,
-                splitLayout: dualSplitLayout,
-                splitRatio: dualSplitRatio,
-                onRoute: onRoute
-            )
+        Group {
+            switch store.item {
+            case let .message(message):
+                ChatMessageRow(
+                    message: message,
+                    streamingSnapshot: store.streamingSnapshot,
+                    canRegenerate: regeneratableMessageID == message.id,
+                    mathRenderingEnabled: mathRenderingEnabled,
+                    fusionDebugModeEnabled: fusionDebugModeEnabled,
+                    fusionTrace: fusionTraceForMessage(message.message),
+                    onRoute: onRoute,
+                    onPreviousVariant: onPreviousVariant,
+                    onNextVariant: onNextVariant,
+                    onBranch: onBranch,
+                    onRegenerate: onRegenerate
+                )
+            case let .dual(message):
+                DualChatMessageRow(
+                    message: message,
+                    mathRenderingEnabled: mathRenderingEnabled,
+                    splitLayout: dualSplitLayout,
+                    splitRatio: dualSplitRatio,
+                    onRoute: onRoute
+                )
+            }
+        }
+        .transaction { transaction in
+            transaction.animation = nil
         }
     }
 }

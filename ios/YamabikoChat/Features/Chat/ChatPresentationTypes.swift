@@ -81,6 +81,7 @@ enum TailFollowState: Equatable {
 
 enum TailFollowPolicy {
     static let defaultThreshold: CGFloat = 96
+    static let offsetTolerance: CGFloat = 0.5
 
     static func isNearTail(distance: CGFloat, threshold: CGFloat = defaultThreshold) -> Bool {
         distance <= threshold
@@ -93,6 +94,14 @@ enum TailFollowPolicy {
         upperBound: CGFloat
     ) -> CGFloat {
         min(max(anchorMinY - offsetWithinViewport, lowerBound), max(lowerBound, upperBound))
+    }
+
+    static func shouldAdjustOffset(
+        current: CGFloat,
+        target: CGFloat,
+        tolerance: CGFloat = offsetTolerance
+    ) -> Bool {
+        abs(current - target) > tolerance
     }
 }
 
