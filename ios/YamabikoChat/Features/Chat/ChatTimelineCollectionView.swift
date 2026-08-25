@@ -250,10 +250,12 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         isContentUpdateScheduled = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.collectionView.performBatchUpdates(nil) { _ in
-                self.restorePosition(anchor: self.pendingContentAnchor)
-                self.pendingContentAnchor = nil
-                self.isContentUpdateScheduled = false
+            UIView.performWithoutAnimation {
+                self.collectionView.performBatchUpdates(nil) { _ in
+                    self.restorePosition(anchor: self.pendingContentAnchor)
+                    self.pendingContentAnchor = nil
+                    self.isContentUpdateScheduled = false
+                }
             }
         }
     }

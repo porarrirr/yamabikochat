@@ -3,6 +3,24 @@ import XCTest
 @testable import YamabikoChat
 
 final class ChatPerformancePolicyTests: XCTestCase {
+    func testStreamingMarkdownKeepsRenderedBlocksVisibleWhileNextParseIsPending() {
+        XCTAssertFalse(NativeMarkdownPresentationPolicy.showsInitialRawText(
+            hasParsedRequest: true,
+            hasRenderedBlocks: true,
+            sourceIsEmpty: false
+        ))
+        XCTAssertTrue(NativeMarkdownPresentationPolicy.showsInitialRawText(
+            hasParsedRequest: false,
+            hasRenderedBlocks: false,
+            sourceIsEmpty: false
+        ))
+        XCTAssertFalse(NativeMarkdownPresentationPolicy.showsInitialRawText(
+            hasParsedRequest: false,
+            hasRenderedBlocks: false,
+            sourceIsEmpty: true
+        ))
+    }
+
     func testToolActivityPreviewClipsBeforeSwiftUITextLayout() {
         let oversized = String(repeating: "あ", count: ToolActivityPreviewPolicy.maximumDisplayedCharacters + 50)
         let clipped = ToolActivityPreviewPolicy.displayText(oversized)

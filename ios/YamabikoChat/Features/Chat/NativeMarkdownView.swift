@@ -224,7 +224,11 @@ struct NativeMarkdownView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if parsedRequest != parseRequest, !markdownText.isEmpty {
+            if NativeMarkdownPresentationPolicy.showsInitialRawText(
+                hasParsedRequest: parsedRequest != nil,
+                hasRenderedBlocks: !blocks.isEmpty,
+                sourceIsEmpty: markdownText.isEmpty
+            ) {
                 Text(markdownText)
                     .font(.body)
                     .lineSpacing(3)
@@ -281,6 +285,16 @@ struct NativeMarkdownView: View {
             return ("", source)
         }
         return (String(source[..<range.upperBound]), String(source[range.upperBound...]))
+    }
+}
+
+enum NativeMarkdownPresentationPolicy {
+    static func showsInitialRawText(
+        hasParsedRequest: Bool,
+        hasRenderedBlocks: Bool,
+        sourceIsEmpty: Bool
+    ) -> Bool {
+        !sourceIsEmpty && !hasParsedRequest && !hasRenderedBlocks
     }
 }
 
