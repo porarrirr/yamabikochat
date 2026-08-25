@@ -251,12 +251,17 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             UIView.performWithoutAnimation {
-                self.collectionView.performBatchUpdates(nil) { _ in
-                    self.restorePosition(anchor: self.pendingContentAnchor)
-                    self.pendingContentAnchor = nil
-                    self.isContentUpdateScheduled = false
-                }
+                // UIHostingConfiguration observes the row store directly. Its SwiftUI
+                // content can therefore grow without a diffable-data-source update,
+                // leaving the compositional layout's estimated cell height cached.
+                // Invalidate that cache before laying out so subsequent cells are
+                // moved below the newly measured content instead of overlapping it.
+                self.collectionView.collectionViewLayout.invalidateLayout()
+                self.collectionView.layoutIfNeeded()
+                self.restorePosition(anchor: self.pendingContentAnchor)
             }
+            self.pendingContentAnchor = nil
+            self.isContentUpdateScheduled = false
         }
     }
 
