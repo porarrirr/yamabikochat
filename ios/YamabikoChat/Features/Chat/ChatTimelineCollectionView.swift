@@ -636,6 +636,8 @@ private struct ChatTimelineRowView: View {
                 )
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .transaction { transaction in
             transaction.animation = nil
         }

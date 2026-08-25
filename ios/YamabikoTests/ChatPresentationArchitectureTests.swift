@@ -627,6 +627,131 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testStreamingParagraphBoundariesNeverMoveViewportEvenTransiently() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: (1...20).map {
+            timelineMessage(id: Int64($0), text: String(repeating: "Message \($0) line\n", count: 5))
+        })
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+
+        var source = """
+        # 生成中の見出し
+
+        最初の段落です。十分な長さを持たせて複数行に折り返し、実際の生成表示と同じ高さ変化を起こします。
+        """
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 20,
+            text: source,
+            thinking: "",
+            toolActivity: nil,
+            isFinal: false
+        ))
+        await settleTimeline(controller)
+
+        let baseline = collectionView.contentOffset.y
+        var observedOffsets: [CGFloat] = []
+        let observation = collectionView.observe(\.contentOffset, options: [.new]) { _, change in
+            if let offset = change.newValue?.y {
+                observedOffsets.append(offset)
+            }
+        }
+        defer { observation.invalidate() }
+
+        for character in "\n\n次の段落です。この段落が追加される瞬間にも表示位置を動かしてはいけません。" {
+            source.append(character)
+            store.applyStreamingSnapshot(ChatStreamingSnapshot(
+                targetId: 20,
+                text: source,
+                thinking: "",
+                toolActivity: nil,
+                isFinal: false
+            ))
+            for _ in 0..<3 {
+                await Task.yield()
+                controller.view.layoutIfNeeded()
+            }
+        }
+
+        XCTAssertTrue(
+            observedOffsets.allSatisfy { abs($0 - baseline) <= 0.5 },
+            "Transient viewport movement: baseline=\(baseline), offsets=\(observedOffsets)"
+        )
+    }
+
+    @MainActor
+    func testStreamingMarkdownKeepsRenderedPriorParagraphStableWhileAppendingParagraph() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: [timelineMessage(id: 1, text: "")])
+        let controller = configuredTimelineController(store: store)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        var source = "# 見出し\n\n最初の段落は位置を変えてはいけません。"
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 1,
+            text: source,
+            thinking: "",
+            toolActivity: nil,
+            isFinal: false
+        ))
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+        let cell = try XCTUnwrap(collectionView.cellForItem(at: IndexPath(item: 0, section: 0)))
+        let cellFrame = cell.convert(cell.bounds, to: controller.view)
+        XCTAssertLessThan(cellFrame.height, 100, "Short content must shrink below the 120pt estimate")
+        let stableRegion = CGRect(
+            x: cellFrame.minX,
+            y: cellFrame.minY,
+            width: cellFrame.width,
+            height: max(cellFrame.height - 1, 1)
+        )
+        let baselineFrame = try XCTUnwrap(renderedPixels(of: controller.view))
+        let baselineInkRows = baselineFrame.darkPixelCountsByRow(in: stableRegion)
+        XCTAssertGreaterThan(baselineInkRows.max() ?? 0, 0)
+        var changedVerticalProfiles = 0
+        var firstChangedProfile: [Int]?
+
+        for character in "\n\n次の段落を生成しています。" {
+            source.append(character)
+            store.applyStreamingSnapshot(ChatStreamingSnapshot(
+                targetId: 1,
+                text: source,
+                thinking: "",
+                toolActivity: nil,
+                isFinal: false
+            ))
+            for _ in 0..<3 {
+                await Task.yield()
+                controller.view.layoutIfNeeded()
+                let renderedFrame = try XCTUnwrap(renderedPixels(of: controller.view))
+                let inkRows = renderedFrame.darkPixelCountsByRow(in: stableRegion)
+                if inkRows != baselineInkRows {
+                    changedVerticalProfiles += 1
+                    if firstChangedProfile == nil {
+                        firstChangedProfile = inkRows
+                    }
+                }
+            }
+        }
+
+        XCTAssertEqual(
+            changedVerticalProfiles,
+            0,
+            "Existing heading/paragraph moved vertically in \(changedVerticalProfiles) intermediate frames; baseline=\(baselineInkRows), firstChanged=\(firstChangedProfile ?? [])"
+        )
+        XCTAssertGreaterThan(
+            cell.bounds.height,
+            cellFrame.height,
+            "The test must exercise a real self-sizing cell height increase"
+        )
+    }
+
+    @MainActor
     func testLatestMoveAndStreamCompletionKeepOffsetAndVisibleAnchor() async throws {
         let store = ChatTimelineStore()
         store.update(messages: (1...20).map {
@@ -730,6 +855,60 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     private func findCollectionView(in view: UIView) -> UICollectionView? {
         if let collectionView = view as? UICollectionView { return collectionView }
         return view.subviews.lazy.compactMap(findCollectionView).first
+    }
+
+    private struct RenderedPixels {
+        let data: Data
+        let width: Int
+        let height: Int
+        let bytesPerRow: Int
+        let bytesPerPixel: Int
+
+        func darkPixelCountsByRow(in rect: CGRect) -> [Int] {
+            let integral = rect.integral.intersection(CGRect(x: 0, y: 0, width: width, height: height))
+            guard !integral.isEmpty else { return [] }
+            let minX = Int(integral.minX)
+            let maxX = Int(integral.maxX)
+            let minY = Int(integral.minY)
+            let maxY = Int(integral.maxY)
+            var output: [Int] = []
+            output.reserveCapacity(maxY - minY)
+            for y in minY..<maxY {
+                var darkPixels = 0
+                for x in minX..<maxX {
+                    let offset = y * bytesPerRow + x * bytesPerPixel
+                    guard offset + 2 < data.count else { continue }
+                    if data[offset] < 160, data[offset + 1] < 160, data[offset + 2] < 160 {
+                        darkPixels += 1
+                    }
+                }
+                output.append(darkPixels)
+            }
+            return output
+        }
+    }
+
+    @MainActor
+    private func renderedPixels(of view: UIView) -> RenderedPixels? {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        format.preferredRange = .standard
+        let image = UIGraphicsImageRenderer(bounds: view.bounds, format: format).image { context in
+            UIColor.systemBackground.setFill()
+            context.fill(view.bounds)
+            view.layer.render(in: context.cgContext)
+        }
+        guard let cgImage = image.cgImage,
+              let providerData = cgImage.dataProvider?.data
+        else { return nil }
+        return RenderedPixels(
+            data: providerData as Data,
+            width: cgImage.width,
+            height: cgImage.height,
+            bytesPerRow: cgImage.bytesPerRow,
+            bytesPerPixel: cgImage.bitsPerPixel / 8
+        )
     }
 
     private func visibleAnchor(in collectionView: UICollectionView) -> (indexPath: IndexPath, offset: CGFloat)? {

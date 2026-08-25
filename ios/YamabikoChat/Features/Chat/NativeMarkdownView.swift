@@ -366,25 +366,20 @@ struct NativeMarkdownView: View {
                     .lineSpacing(3)
                     .textSelection(.enabled)
             } else {
-                ForEach(renderedBlocks) { block in
+                ForEach(renderedBlocks, id: \.renderID) { block in
                     NativeMarkdownBlockView(block: block)
-                        .id(block.renderID)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
         .task(id: parseRequest) {
             let request = parseRequest
             guard parsedRequest != request else { return }
-            if request.isStreaming, let preparsedBlocks {
-                var transaction = Transaction()
-                transaction.animation = nil
-                withTransaction(transaction) {
-                    blocks = preparsedBlocks
-                    parsedRequest = request
-                }
-                return
-            }
+            // Streaming blocks are already published atomically with the snapshot.
+            // Do not mirror them into @State: that second mutation schedules another
+            // hosting-cell layout pass for the same frame and visibly bumps paragraphs.
+            if request.isStreaming, preparsedBlocks != nil { return }
             let source = request.source
             let result: [NativeMarkdownBlock]
             if request.isStreaming {
