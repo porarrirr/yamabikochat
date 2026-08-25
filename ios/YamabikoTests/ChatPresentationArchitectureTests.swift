@@ -41,11 +41,12 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         XCTAssertTrue(TailFollowPolicy.shouldAdjustOffset(current: 100, target: 100.51))
     }
 
-    func testStreamingMarkdownPreservesConfirmedHeadingAndListBlockIDs() async {
+    @MainActor
+    func testStreamingMarkdownPreservesConfirmedHeadingAndListBlockIDs() {
         let parser = NativeMarkdownIncrementalParser()
         let firstSource = "# Heading\n\n- first\n- second"
-        let first = await parser.streamingBlocks(for: firstSource)
-        let second = await parser.streamingBlocks(
+        let first = parser.streamingBlocks(for: firstSource)
+        let second = parser.streamingBlocks(
             for: firstSource + "\n\nTail with **emphasis**"
         )
 
@@ -54,16 +55,92 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         XCTAssertEqual(first.dropFirst().first?.id, "block-\("# Heading\n\n".utf8.count)")
     }
 
-    func testStreamingMarkdownKeepsTailIDWhenBlankLineConfirmsIt() async throws {
+    @MainActor
+    func testStreamingMarkdownKeepsTailIDWhenBlankLineConfirmsIt() throws {
         let parser = NativeMarkdownIncrementalParser()
         let prefix = "Intro\n\n"
         let tail = "## Live heading"
-        let beforeConfirmation = await parser.streamingBlocks(for: prefix + tail)
+        let beforeConfirmation = parser.streamingBlocks(for: prefix + tail)
         let tailID = try XCTUnwrap(beforeConfirmation.last?.id)
-        let afterConfirmation = await parser.streamingBlocks(for: prefix + tail + "\n\nNext")
+        let afterConfirmation = parser.streamingBlocks(for: prefix + tail + "\n\nNext")
 
         XCTAssertEqual(tailID, afterConfirmation.dropLast().last?.id)
         XCTAssertEqual(tailID, "block-\(prefix.utf8.count)")
+    }
+
+    @MainActor
+    func testStreamingMarkdownDoesNotCommitBlankLineInsideOpenCodeFence() {
+        let source = """
+        Intro
+
+        ```swift
+        let first = 1
+
+        let second = 2
+        """
+
+        let split = NativeMarkdownIncrementalParser.streamingSplit(source)
+
+        XCTAssertEqual(split.prefix, "Intro\n\n")
+        XCTAssertEqual(split.prefix + split.tail, source)
+        XCTAssertTrue(split.tail.hasPrefix("```swift"))
+    }
+
+    @MainActor
+    func testStreamingMarkdownMatchesFullParseAfterCodeFenceWithInternalBlankLine() {
+        let parser = NativeMarkdownIncrementalParser()
+        let openFence = """
+        Intro
+
+        ```swift
+        let first = 1
+
+        let second = 2
+        """
+        _ = parser.streamingBlocks(for: openFence)
+
+        let source = openFence + "\n```\n\nAfter"
+        let streamed = parser.streamingBlocks(for: source)
+        let fullyParsed = NativeMarkdownParser.parse(source, rendersMath: false)
+
+        XCTAssertEqual(streamed, fullyParsed)
+    }
+
+    @MainActor
+    func testStreamingMarkdownMatchesFullParseForEveryComplexMarkdownUpdate() {
+        let parser = NativeMarkdownIncrementalParser()
+        let source = """
+        # 日本語の見出し
+
+        最初の本文です。
+
+        > 引用の一段目です。
+        >
+        > 空行後も同じ引用です。
+
+        - 最初の項目
+
+          同じ項目の二段落目です。
+        - 次の項目
+
+        ```swift
+        let first = 1
+
+        let second = 2
+        ```
+
+        ## 次の見出し
+
+        最後の本文です。
+        """
+        var partial = ""
+
+        for character in source {
+            partial.append(character)
+            let streamed = parser.streamingBlocks(for: partial)
+            let fullyParsed = NativeMarkdownParser.parse(partial, rendersMath: false)
+            XCTAssertEqual(streamed, fullyParsed, "Mismatch after: \(partial)")
+        }
     }
 
     func testNativeMarkdownParserBuildsStableNativeBlocks() {
@@ -494,6 +571,59 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             accuracy: 0.5,
             "The cell must track the asynchronously rendered Markdown height"
         )
+    }
+
+    @MainActor
+    func testStreamingMarkdownNeverPresentsContentTallerThanItsCell() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: [timelineMessage(id: 1, text: "")])
+        let controller = configuredTimelineController(store: store)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+        let indexPath = IndexPath(item: 0, section: 0)
+        let paragraphs = [
+            "# ストリーミング表示\n\n",
+            "最初の段落は、セル幅で複数行に折り返されるだけの長さを持つ文章です。表示中に上へ潜り込んではいけません。\n\n",
+            "二番目の段落も、生成途中で少しずつ伸びていきます。上の段落を一行隠してから元へ戻す動きは不正です。\n\n",
+            "三番目の段落で高さ更新をもう一度発生させます。"
+        ]
+        var source = ""
+
+        for paragraph in paragraphs {
+            for character in paragraph {
+                source.append(character)
+                store.applyStreamingSnapshot(ChatStreamingSnapshot(
+                    targetId: 1,
+                    text: source,
+                    thinking: "",
+                    toolActivity: nil,
+                    isFinal: false
+                ))
+                for _ in 0..<3 {
+                    await Task.yield()
+                    controller.view.layoutIfNeeded()
+                    guard let cell = collectionView.cellForItem(at: indexPath),
+                          let attributes = collectionView.layoutAttributesForItem(at: indexPath)
+                    else { continue }
+                    let fittedHeight = ceil(cell.contentView.systemLayoutSizeFitting(
+                        CGSize(
+                            width: attributes.size.width,
+                            height: UIView.layoutFittingCompressedSize.height
+                        ),
+                        withHorizontalFittingPriority: .required,
+                        verticalFittingPriority: .fittingSizeLevel
+                    ).height)
+                    XCTAssertGreaterThanOrEqual(
+                        attributes.size.height + 0.5,
+                        fittedHeight,
+                        "Rendered content escaped its cell for source: \(source)"
+                    )
+                }
+            }
+        }
     }
 
     @MainActor

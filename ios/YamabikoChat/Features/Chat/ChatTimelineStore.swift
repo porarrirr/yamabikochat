@@ -9,9 +9,23 @@ enum ChatTimelineRowChangeKind: Equatable, Sendable {
 
 @MainActor
 final class ChatTimelineRowStore: ObservableObject, Identifiable {
+    struct StreamingPresentation: Equatable {
+        let snapshot: ChatStreamingSnapshot
+        let markdownBlocks: [NativeMarkdownBlock]
+    }
+
     let id: String
     @Published private(set) var item: ChatTimelineItem
-    @Published private(set) var streamingSnapshot: ChatStreamingSnapshot?
+    @Published private(set) var streamingPresentation: StreamingPresentation?
+    private let markdownParser = NativeMarkdownIncrementalParser()
+
+    var streamingSnapshot: ChatStreamingSnapshot? {
+        streamingPresentation?.snapshot
+    }
+
+    var streamingMarkdownBlocks: [NativeMarkdownBlock]? {
+        streamingPresentation?.markdownBlocks
+    }
 
     init(item: ChatTimelineItem) {
         id = item.id
@@ -25,7 +39,32 @@ final class ChatTimelineRowStore: ObservableObject, Identifiable {
 
     func apply(snapshot: ChatStreamingSnapshot?) {
         guard streamingSnapshot != snapshot else { return }
-        streamingSnapshot = snapshot
+        guard let snapshot else {
+            markdownParser.reset()
+            streamingPresentation = nil
+            return
+        }
+        let responseText: String
+        if !snapshot.text.isEmpty {
+            responseText = snapshot.text
+        } else if case let .message(message) = item {
+            responseText = message.displayText
+        } else {
+            responseText = ""
+        }
+        let artifacts = ChatArtifactPresentation.items(
+            from: responseText,
+            isStreaming: !snapshot.isFinal
+        )
+        let markdownSource = ExtractedFenceRemover.remove(
+            from: responseText,
+            ranges: artifacts.map { ($0.startIndex, $0.endIndex) }
+        )
+        let blocks = markdownParser.streamingBlocks(for: markdownSource)
+        streamingPresentation = StreamingPresentation(snapshot: snapshot, markdownBlocks: blocks)
+        if snapshot.isFinal {
+            markdownParser.reset()
+        }
     }
 }
 

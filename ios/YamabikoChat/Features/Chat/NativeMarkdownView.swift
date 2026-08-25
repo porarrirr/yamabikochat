@@ -129,7 +129,7 @@ enum NativeMarkdownParser {
         return parseChildren(of: markup, path: path, rendersMath: rendersMath, offsets: offsets)
     }
 
-    private struct SourceOffsetMap {
+    fileprivate struct SourceOffsetMap {
         let lineStartUTF8Offsets: [Int]
         let baseUTF8Offset: Int
 
@@ -144,13 +144,18 @@ enum NativeMarkdownParser {
 
         func blockID(for markup: Markup, fallbackPath: String) -> String {
             guard let location = markup.range?.lowerBound,
-                  location.line > 0,
-                  location.line <= lineStartUTF8Offsets.count
+                  let offset = utf8Offset(for: location)
             else {
                 return "block-\(baseUTF8Offset)-\(fallbackPath)"
             }
-            let lineOffset = lineStartUTF8Offsets[location.line - 1]
-            return "block-\(baseUTF8Offset + lineOffset + max(0, location.column - 1))"
+            return "block-\(baseUTF8Offset + offset)"
+        }
+
+        func utf8Offset(for location: SourceLocation) -> Int? {
+            guard location.line > 0,
+                  location.line <= lineStartUTF8Offsets.count
+            else { return nil }
+            return lineStartUTF8Offsets[location.line - 1] + max(0, location.column - 1)
         }
     }
 
@@ -262,7 +267,8 @@ private actor NativeMarkdownBlockCache {
     }
 }
 
-actor NativeMarkdownIncrementalParser {
+@MainActor
+final class NativeMarkdownIncrementalParser {
     private var stablePrefix = ""
     private var stableBlocks: [NativeMarkdownBlock] = []
 
@@ -298,10 +304,27 @@ actor NativeMarkdownIncrementalParser {
     }
 
     static func streamingSplit(_ source: String) -> (prefix: String, tail: String) {
-        guard let range = source.range(of: "\n\n", options: .backwards) else {
+        let document = Document(parsing: source)
+        guard document.childCount > 1,
+              let lastBlock = document.child(at: document.childCount - 1),
+              let location = lastBlock.range?.lowerBound
+        else {
             return ("", source)
         }
-        return (String(source[..<range.upperBound]), String(source[range.upperBound...]))
+        let offsets = NativeMarkdownParser.SourceOffsetMap(source: source, baseUTF8Offset: 0)
+        guard let boundaryOffset = offsets.utf8Offset(for: location),
+              boundaryOffset > 0,
+              boundaryOffset <= source.utf8.count
+        else {
+            return ("", source)
+        }
+        let utf8Boundary = source.utf8.index(source.utf8.startIndex, offsetBy: boundaryOffset)
+        guard let boundary = String.Index(utf8Boundary, within: source) else {
+            return ("", source)
+        }
+        let split = (prefix: String(source[..<boundary]), tail: String(source[boundary...]))
+        assert(split.prefix + split.tail == source)
+        return split
     }
 }
 
@@ -309,6 +332,7 @@ struct NativeMarkdownView: View {
     let markdownText: String
     var isStreaming = false
     var mathRenderingEnabled = true
+    var preparsedBlocks: [NativeMarkdownBlock]? = nil
 
     @State private var blocks: [NativeMarkdownBlock] = []
     @State private var parsedRequest: ParseRequest?
@@ -329,10 +353,12 @@ struct NativeMarkdownView: View {
     }
 
     var body: some View {
+        let hasCompletedFinalParse = !isStreaming && parsedRequest == parseRequest
+        let renderedBlocks = hasCompletedFinalParse ? blocks : (preparsedBlocks ?? blocks)
         VStack(alignment: .leading, spacing: 12) {
             if NativeMarkdownPresentationPolicy.showsInitialRawText(
-                hasParsedRequest: parsedRequest != nil,
-                hasRenderedBlocks: !blocks.isEmpty,
+                hasParsedRequest: preparsedBlocks != nil || parsedRequest != nil,
+                hasRenderedBlocks: !renderedBlocks.isEmpty,
                 sourceIsEmpty: markdownText.isEmpty
             ) {
                 Text(markdownText)
@@ -340,7 +366,7 @@ struct NativeMarkdownView: View {
                     .lineSpacing(3)
                     .textSelection(.enabled)
             } else {
-                ForEach(blocks) { block in
+                ForEach(renderedBlocks) { block in
                     NativeMarkdownBlockView(block: block)
                         .id(block.renderID)
                 }
@@ -350,16 +376,25 @@ struct NativeMarkdownView: View {
         .task(id: parseRequest) {
             let request = parseRequest
             guard parsedRequest != request else { return }
+            if request.isStreaming, let preparsedBlocks {
+                var transaction = Transaction()
+                transaction.animation = nil
+                withTransaction(transaction) {
+                    blocks = preparsedBlocks
+                    parsedRequest = request
+                }
+                return
+            }
             let source = request.source
             let result: [NativeMarkdownBlock]
             if request.isStreaming {
-                result = await incrementalParser.streamingBlocks(for: source)
+                result = incrementalParser.streamingBlocks(for: source)
             } else {
                 result = await NativeMarkdownBlockCache.shared.blocks(
                     for: source,
                     rendersMath: request.mathRenderingEnabled
                 )
-                await incrementalParser.reset()
+                incrementalParser.reset()
             }
             guard !Task.isCancelled, request == parseRequest else { return }
             var transaction = Transaction()
