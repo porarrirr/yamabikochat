@@ -574,13 +574,18 @@ private final class ChatTimelineLayout: UICollectionViewLayout {
     }
 }
 
-private final class ChatTimelineCollectionCell: UICollectionViewCell {
+final class ChatTimelineCollectionCell: UICollectionViewCell {
     override func preferredLayoutAttributesFitting(
         _ layoutAttributes: UICollectionViewLayoutAttributes
     ) -> UICollectionViewLayoutAttributes {
         let attributes = super.preferredLayoutAttributesFitting(layoutAttributes)
         let height = measuredContentHeight(for: layoutAttributes.size.width)
-        attributes.size = CGSize(width: layoutAttributes.size.width, height: height)
+        attributes.frame = CGRect(
+            x: layoutAttributes.frame.minX,
+            y: layoutAttributes.frame.minY,
+            width: layoutAttributes.frame.width,
+            height: height
+        )
         return attributes
     }
 

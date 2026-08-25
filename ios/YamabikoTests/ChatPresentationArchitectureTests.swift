@@ -52,6 +52,29 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testPreferredCellHeightPreservesOriginalTopEdge() {
+        let cell = ChatTimelineCollectionCell(frame: CGRect(x: 18, y: 240, width: 354, height: 120))
+        let label = UILabel()
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.numberOfLines = 0
+        label.text = String(repeating: "tool summary and streamed answer ", count: 30)
+        cell.contentView.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor),
+            label.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor),
+            label.topAnchor.constraint(equalTo: cell.contentView.topAnchor),
+            label.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor)
+        ])
+        let attributes = UICollectionViewLayoutAttributes(forCellWith: IndexPath(item: 0, section: 0))
+        attributes.frame = CGRect(x: 18, y: 240, width: 354, height: 120)
+
+        let fitted = cell.preferredLayoutAttributesFitting(attributes)
+
+        XCTAssertGreaterThan(fitted.frame.height, attributes.frame.height)
+        XCTAssertEqual(fitted.frame.minY, attributes.frame.minY, accuracy: 0.01)
+    }
+
+    @MainActor
     func testStreamingMarkdownPreservesConfirmedHeadingAndListBlockIDs() {
         let parser = NativeMarkdownIncrementalParser()
         let firstSource = "# Heading\n\n- first\n- second"
@@ -784,25 +807,47 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
         let targetIndexPath = IndexPath(item: 23, section: 0)
         let cell = try XCTUnwrap(collectionView.cellForItem(at: targetIndexPath))
-        let baselineTop = cell.convert(cell.bounds, to: controller.view).minY
+        let baselineFrame = cell.convert(cell.bounds, to: controller.view)
+        let baselineTop = baselineFrame.minY
+        let stableTopRegion = CGRect(
+            x: baselineFrame.minX,
+            y: baselineFrame.minY,
+            width: baselineFrame.width,
+            height: min(baselineFrame.height, 100)
+        )
+        let baselinePixels = try XCTUnwrap(renderedPixels(of: controller.view))
+        let baselineFirstInkRow = try XCTUnwrap(
+            baselinePixels.darkPixelCountsByRow(in: stableTopRegion).firstIndex { $0 >= 8 }
+        )
         var observedTops: [CGFloat] = []
+        var observedFirstInkRows: [Int] = []
 
         for update in 1...6 {
-            source += "\n\n更新\(update)です。回答の高さを増やしながら、ツール表示と回答全体の位置が動かないことを確認します。"
-            steps.append(toolActivityStep(id: "tool-\(update)", status: .completed))
-            store.applyStreamingSnapshot(ChatStreamingSnapshot(
-                targetId: 24,
-                text: source,
-                thinking: "",
-                toolActivity: ToolActivityPayload(steps: steps),
-                isFinal: false
-            ))
-            for _ in 0..<10 {
-                try? await Task.sleep(nanoseconds: 4_000_000)
-                controller.view.layoutIfNeeded()
-                observedTops.append(cell.convert(cell.bounds, to: controller.view).minY)
-                if let presentationFrame = cell.layer.presentation()?.frame {
-                    observedTops.append(presentationFrame.minY - collectionView.contentOffset.y)
+            for status in [ToolActivityStep.Status.running, .completed] {
+                if status == .running {
+                    steps.append(toolActivityStep(id: "tool-\(update)", status: .running))
+                } else {
+                    steps[steps.index(before: steps.endIndex)].status = .completed
+                    source += "\n\n更新\(update)です。回答の高さを増やしながら、ツール表示と回答全体の位置が動かないことを確認します。"
+                }
+                store.applyStreamingSnapshot(ChatStreamingSnapshot(
+                    targetId: 24,
+                    text: source,
+                    thinking: "",
+                    toolActivity: ToolActivityPayload(steps: steps),
+                    isFinal: false
+                ))
+                for _ in 0..<10 {
+                    try? await Task.sleep(nanoseconds: 4_000_000)
+                    controller.view.layoutIfNeeded()
+                    observedTops.append(cell.convert(cell.bounds, to: controller.view).minY)
+                    let pixels = try XCTUnwrap(renderedPixels(of: controller.view))
+                    if let firstInkRow = pixels.darkPixelCountsByRow(in: stableTopRegion).firstIndex(where: { $0 >= 8 }) {
+                        observedFirstInkRows.append(firstInkRow)
+                    }
+                    if let presentationFrame = cell.layer.presentation()?.frame {
+                        observedTops.append(presentationFrame.minY - collectionView.contentOffset.y)
+                    }
                 }
             }
         }
@@ -810,6 +855,10 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         XCTAssertTrue(
             observedTops.allSatisfy { abs($0 - baselineTop) <= 0.5 },
             "Tool summary + answer moved together: baseline=\(baselineTop), observed=\(observedTops)"
+        )
+        XCTAssertTrue(
+            observedFirstInkRows.allSatisfy { $0 == baselineFirstInkRow },
+            "Hosted tool summary + answer moved inside the cell: baseline=\(baselineFirstInkRow), observed=\(observedFirstInkRows)"
         )
     }
 
