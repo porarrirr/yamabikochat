@@ -97,7 +97,10 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         collectionView.alwaysBounceVertical = true
         collectionView.keyboardDismissMode = .interactive
         collectionView.delegate = self
-        collectionView.selfSizingInvalidation = .enabled
+        // Streaming rows are measured explicitly in completePendingRowMeasurement().
+        // Leaving this enabled makes invalidateIntrinsicContentSize() start a second,
+        // UIKit-owned resize before our custom layout commits the measured height.
+        collectionView.selfSizingInvalidation = .disabled
         collectionView.register(ChatTimelineCollectionCell.self, forCellWithReuseIdentifier: "message")
         view.addSubview(collectionView)
         NSLayoutConstraint.activate([
@@ -259,14 +262,19 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                 guard let index = configuredIDs.firstIndex(of: id) else { return nil }
                 return IndexPath(item: index, section: 0)
             }
+            let context = ChatTimelineLayoutInvalidationContext()
             for indexPath in indexPaths {
-                guard let cell = collectionView.cellForItem(at: indexPath) else { continue }
+                guard let cell = collectionView.cellForItem(at: indexPath),
+                      let originalAttributes = collectionView.layoutAttributesForItem(at: indexPath)
+                else { continue }
                 cell.contentView.invalidateIntrinsicContentSize()
                 cell.setNeedsLayout()
+                cell.layoutIfNeeded()
+                let fittedAttributes = cell.preferredLayoutAttributesFitting(originalAttributes)
+                context.preferredHeights[indexPath] = fittedAttributes.size.height
             }
-            if !indexPaths.isEmpty {
-                let context = ChatTimelineLayoutInvalidationContext()
-                context.invalidateItems(at: indexPaths)
+            if !context.preferredHeights.isEmpty {
+                context.invalidateItems(at: Array(context.preferredHeights.keys))
                 collectionView.collectionViewLayout.invalidateLayout(with: context)
             }
             collectionView.layoutIfNeeded()
@@ -614,38 +622,70 @@ private struct ChatTimelineRowView: View {
     let onRegenerate: () -> Void
 
     var body: some View {
-        Group {
-            switch store.item {
-            case let .message(message):
-                ChatMessageRow(
-                    message: message,
-                    streamingSnapshot: store.streamingSnapshot,
-                    streamingMarkdownBlocks: store.streamingMarkdownBlocks,
-                    canRegenerate: regeneratableMessageID == message.id,
-                    mathRenderingEnabled: mathRenderingEnabled,
-                    fusionDebugModeEnabled: fusionDebugModeEnabled,
-                    fusionTrace: fusionTraceForMessage(message.message),
-                    onRoute: onRoute,
-                    onPreviousVariant: onPreviousVariant,
-                    onNextVariant: onNextVariant,
-                    onBranch: onBranch,
-                    onRegenerate: onRegenerate
-                )
-            case let .dual(message):
-                DualChatMessageRow(
-                    message: message,
-                    mathRenderingEnabled: mathRenderingEnabled,
-                    splitLayout: dualSplitLayout,
-                    splitRatio: dualSplitRatio,
-                    onRoute: onRoute
-                )
+        ChatTimelineTopPinnedLayout {
+            Group {
+                switch store.item {
+                case let .message(message):
+                    ChatMessageRow(
+                        message: message,
+                        streamingSnapshot: store.streamingSnapshot,
+                        streamingMarkdownBlocks: store.streamingMarkdownBlocks,
+                        canRegenerate: regeneratableMessageID == message.id,
+                        mathRenderingEnabled: mathRenderingEnabled,
+                        fusionDebugModeEnabled: fusionDebugModeEnabled,
+                        fusionTrace: fusionTraceForMessage(message.message),
+                        onRoute: onRoute,
+                        onPreviousVariant: onPreviousVariant,
+                        onNextVariant: onNextVariant,
+                        onBranch: onBranch,
+                        onRegenerate: onRegenerate
+                    )
+                case let .dual(message):
+                    DualChatMessageRow(
+                        message: message,
+                        mathRenderingEnabled: mathRenderingEnabled,
+                        splitLayout: dualSplitLayout,
+                        splitRatio: dualSplitRatio,
+                        onRoute: onRoute
+                    )
+                }
             }
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .transaction { transaction in
             transaction.animation = nil
         }
+    }
+}
+
+private struct ChatTimelineTopPinnedLayout: Layout {
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        guard let subview = subviews.first else { return .zero }
+        let contentSize = subview.sizeThatFits(.init(width: proposal.width, height: nil))
+        let proposedHeight = proposal.height.flatMap { $0.isFinite ? $0 : nil }
+        return CGSize(
+            width: proposal.width ?? contentSize.width,
+            height: proposedHeight ?? contentSize.height
+        )
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        guard let subview = subviews.first else { return }
+        subview.place(
+            at: bounds.origin,
+            anchor: .topLeading,
+            proposal: .init(width: bounds.width, height: nil)
+        )
     }
 }
 

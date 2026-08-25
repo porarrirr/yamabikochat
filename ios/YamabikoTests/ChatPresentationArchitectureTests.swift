@@ -75,6 +75,16 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testTimelineUsesOnlyItsManualStreamingSelfSizingPath() throws {
+        let store = ChatTimelineStore()
+        store.update(messages: [timelineMessage(id: 1, text: "Initial")])
+        let controller = configuredTimelineController(store: store)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+
+        XCTAssertEqual(collectionView.selfSizingInvalidation, .disabled)
+    }
+
+    @MainActor
     func testStreamingMarkdownPreservesConfirmedHeadingAndListBlockIDs() {
         let parser = NativeMarkdownIncrementalParser()
         let firstSource = "# Heading\n\n- first\n- second"
