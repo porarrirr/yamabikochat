@@ -8,6 +8,12 @@ import QuickLook
 
 private let maximumPhotoSelectionCount = 10
 
+enum ChatComposerFocusPolicy {
+    static func focusState(current: Bool, isSending: Bool) -> Bool {
+        isSending ? false : current
+    }
+}
+
 struct ChatScreen: View {
     @ObservedObject var viewModel: ChatViewModel
     @ObservedObject var questionCoordinator: UserQuestionCoordinator
@@ -119,6 +125,12 @@ struct ChatScreen: View {
                 .background(Color.chatScreenBackground)
         }
         .background(Color.chatScreenBackground)
+        .onChange(of: viewModel.isSending) { _, isSending in
+            isComposerFocused = ChatComposerFocusPolicy.focusState(
+                current: isComposerFocused,
+                isSending: isSending
+            )
+        }
         .task {
             recentPhotoLibrary.refresh()
         }
@@ -417,6 +429,10 @@ struct ChatScreen: View {
             if viewModel.isSending {
                 viewModel.cancelActiveRun()
             } else if canSend {
+                isComposerFocused = ChatComposerFocusPolicy.focusState(
+                    current: isComposerFocused,
+                    isSending: true
+                )
                 scrollToLatestRequest &+= 1
                 viewModel.sendMessage()
             }

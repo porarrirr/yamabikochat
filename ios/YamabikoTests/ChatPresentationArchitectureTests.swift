@@ -3,6 +3,16 @@ import UIKit
 @testable import YamabikoChat
 
 final class ChatPresentationArchitectureTests: XCTestCase {
+    func testComposerFocusClearsAtGenerationStartAndDoesNotRestoreAtCompletion() {
+        var isFocused = true
+
+        isFocused = ChatComposerFocusPolicy.focusState(current: isFocused, isSending: true)
+        XCTAssertFalse(isFocused)
+
+        isFocused = ChatComposerFocusPolicy.focusState(current: isFocused, isSending: false)
+        XCTAssertFalse(isFocused)
+    }
+
     func testChatModeNormalizesLegacyFlagsToExactlyOneMode() {
         for mode in ChatMode.allCases {
             let settings = mode.applying(to: AppSettings())
@@ -684,6 +694,126 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testStreamingSelfSizingNeverMovesWholeTimelineBetweenMeasurementPasses() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: (1...24).map {
+            timelineMessage(id: Int64($0), text: String(repeating: "Message \($0) line\n", count: 4))
+        })
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+        let anchor = try XCTUnwrap(visibleAnchor(in: collectionView))
+        var observedAnchorOffsets: [CGFloat] = []
+        var source = "# 生成中\n\n最初の段落です。"
+
+        for paragraph in 1...8 {
+            source += "\n\n段落\(paragraph)です。セルの高さを確実に増やすため、十分に長い文章を追加して複数行へ折り返します。"
+            store.applyStreamingSnapshot(ChatStreamingSnapshot(
+                targetId: 24,
+                text: source,
+                thinking: "",
+                toolActivity: nil,
+                isFinal: false
+            ))
+            for _ in 0..<8 {
+                await Task.yield()
+                controller.view.layoutIfNeeded()
+                if let attributes = collectionView.layoutAttributesForItem(at: anchor.indexPath) {
+                    observedAnchorOffsets.append(attributes.frame.minY - collectionView.contentOffset.y)
+                }
+            }
+        }
+
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 24,
+            text: source,
+            thinking: "",
+            toolActivity: nil,
+            isFinal: true
+        ))
+        for _ in 0..<12 {
+            await Task.yield()
+            controller.view.layoutIfNeeded()
+            if let attributes = collectionView.layoutAttributesForItem(at: anchor.indexPath) {
+                observedAnchorOffsets.append(attributes.frame.minY - collectionView.contentOffset.y)
+            }
+        }
+        store.update(messages: (1...24).map {
+            timelineMessage(
+                id: Int64($0),
+                text: $0 == 24 ? source : String(repeating: "Message \($0) line\n", count: 4)
+            )
+        })
+        for _ in 0..<12 {
+            await Task.yield()
+            controller.view.layoutIfNeeded()
+            if let attributes = collectionView.layoutAttributesForItem(at: anchor.indexPath) {
+                observedAnchorOffsets.append(attributes.frame.minY - collectionView.contentOffset.y)
+            }
+        }
+
+        XCTAssertTrue(
+            observedAnchorOffsets.allSatisfy { abs($0 - anchor.offset) <= 0.5 },
+            "Whole-timeline movement: baseline=\(anchor.offset), observed=\(observedAnchorOffsets)"
+        )
+    }
+
+    @MainActor
+    func testToolSummaryAndAnswerNeverMoveTogetherDuringStreamingUpdates() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: (1...24).map {
+            timelineMessage(id: Int64($0), text: String(repeating: "Message \($0) line\n", count: 4))
+        })
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        var source = "# 回答\n\nツールを使った回答を生成中です。"
+        var steps = [toolActivityStep(id: "tool-0", status: .completed)]
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 24,
+            text: source,
+            thinking: "",
+            toolActivity: ToolActivityPayload(steps: steps),
+            isFinal: false
+        ))
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+        let targetIndexPath = IndexPath(item: 23, section: 0)
+        let cell = try XCTUnwrap(collectionView.cellForItem(at: targetIndexPath))
+        let baselineTop = cell.convert(cell.bounds, to: controller.view).minY
+        var observedTops: [CGFloat] = []
+
+        for update in 1...6 {
+            source += "\n\n更新\(update)です。回答の高さを増やしながら、ツール表示と回答全体の位置が動かないことを確認します。"
+            steps.append(toolActivityStep(id: "tool-\(update)", status: .completed))
+            store.applyStreamingSnapshot(ChatStreamingSnapshot(
+                targetId: 24,
+                text: source,
+                thinking: "",
+                toolActivity: ToolActivityPayload(steps: steps),
+                isFinal: false
+            ))
+            for _ in 0..<10 {
+                try? await Task.sleep(nanoseconds: 4_000_000)
+                controller.view.layoutIfNeeded()
+                observedTops.append(cell.convert(cell.bounds, to: controller.view).minY)
+                if let presentationFrame = cell.layer.presentation()?.frame {
+                    observedTops.append(presentationFrame.minY - collectionView.contentOffset.y)
+                }
+            }
+        }
+
+        XCTAssertTrue(
+            observedTops.allSatisfy { abs($0 - baselineTop) <= 0.5 },
+            "Tool summary + answer moved together: baseline=\(baselineTop), observed=\(observedTops)"
+        )
+    }
+
+    @MainActor
     func testStreamingMarkdownKeepsRenderedPriorParagraphStableWhileAppendingParagraph() async throws {
         let store = ChatTimelineStore()
         store.update(messages: [timelineMessage(id: 1, text: "")])
@@ -828,6 +958,21 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             ),
             thinkingStream: nil,
             variants: []
+        )
+    }
+
+    private func toolActivityStep(id: String, status: ToolActivityStep.Status) -> ToolActivityStep {
+        ToolActivityStep(
+            id: id,
+            round: 1,
+            toolName: "test_tool",
+            title: "Tool",
+            detail: id,
+            status: status,
+            resultCount: 1,
+            sources: [],
+            errorMessage: nil,
+            createdAtMs: 1
         )
     }
 
