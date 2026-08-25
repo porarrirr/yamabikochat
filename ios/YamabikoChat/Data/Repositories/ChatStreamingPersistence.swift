@@ -1,6 +1,6 @@
 import Foundation
 
-/// Live UI snapshot published on every stream delta (not throttled).
+/// Live UI snapshot delivered through the frame-coalesced timeline path.
 struct ChatStreamingSnapshot: Sendable, Equatable {
     var targetId: Int64
     var text: String

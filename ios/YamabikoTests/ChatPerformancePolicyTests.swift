@@ -3,45 +3,6 @@ import XCTest
 @testable import YamabikoChat
 
 final class ChatPerformancePolicyTests: XCTestCase {
-    func testTimelineFollowUsesLayoutHeightOnlyWhileActivelyFollowing() {
-        XCTAssertTrue(ChatScrollPolicy.shouldFollowTimelineLayoutChange(
-            isAutoFollowing: true,
-            isUserInteracting: false,
-            previousHeight: 700,
-            currentHeight: 730
-        ))
-        XCTAssertTrue(ChatScrollPolicy.shouldFollowTimelineLayoutChange(
-            isAutoFollowing: true,
-            isUserInteracting: false,
-            previousHeight: 730,
-            currentHeight: 700
-        ))
-        XCTAssertFalse(ChatScrollPolicy.shouldFollowTimelineLayoutChange(
-            isAutoFollowing: false,
-            isUserInteracting: false,
-            previousHeight: 700,
-            currentHeight: 730
-        ))
-        XCTAssertFalse(ChatScrollPolicy.shouldFollowTimelineLayoutChange(
-            isAutoFollowing: true,
-            isUserInteracting: true,
-            previousHeight: 700,
-            currentHeight: 730
-        ))
-        XCTAssertFalse(ChatScrollPolicy.shouldFollowTimelineLayoutChange(
-            isAutoFollowing: true,
-            isUserInteracting: false,
-            previousHeight: 0,
-            currentHeight: 730
-        ))
-        XCTAssertFalse(ChatScrollPolicy.shouldFollowTimelineLayoutChange(
-            isAutoFollowing: true,
-            isUserInteracting: false,
-            previousHeight: 700,
-            currentHeight: 700.5
-        ))
-    }
-
     func testToolActivityPreviewClipsBeforeSwiftUITextLayout() {
         let oversized = String(repeating: "あ", count: ToolActivityPreviewPolicy.maximumDisplayedCharacters + 50)
         let clipped = ToolActivityPreviewPolicy.displayText(oversized)

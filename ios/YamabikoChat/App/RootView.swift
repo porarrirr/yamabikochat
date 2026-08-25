@@ -39,7 +39,7 @@ struct RootView: View {
     @StateObject private var settingsViewModel = SettingsViewModel()
     @State private var isSettingsPresented = false
     @State private var screenshotSettingsTab: SettingsScreen.SettingsTab?
-    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
     @State private var dynamicColorEnabled = true
     @State private var themeColor = "BLUE_PURPLE"
@@ -228,6 +228,12 @@ struct RootView: View {
             preferredCompactColumn = .sidebar
         case .chat:
             if let conversationID = launch.conversationID ?? listViewModel.conversations.first?.id {
+                selectConversation(id: conversationID)
+            }
+        case .performance:
+            if let conversationID = listViewModel.conversations.first(where: {
+                $0.title == "Timeline Performance Fixture"
+            })?.id {
                 selectConversation(id: conversationID)
             }
         case .settingsAPI:

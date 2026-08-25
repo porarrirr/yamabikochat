@@ -134,5 +134,23 @@ enum AppStoreScreenshotDemoSeeder {
                 )
             )
         }
+
+        if ProcessInfo.processInfo.arguments.contains("-ChatTimelinePerformanceFixture") {
+            let conversationId = try chatRepository.createConversation(title: "Timeline Performance Fixture")
+            for index in 0..<200 {
+                let isLast = index == 199
+                let text = isLast
+                    ? "Fixture message 199\n\n" + String(repeating: "Long streaming content for native Markdown. ", count: 750)
+                    : "Fixture message \(index)\n\n- Stable row identity\n- Native Markdown block"
+                _ = try conversations.insertMessage(
+                    ChatMessage(
+                        conversationId: conversationId,
+                        role: index.isMultiple(of: 2) ? "user" : "assistant",
+                        text: text,
+                        createdAtMs: baseTime + 300_000 + Int64(index)
+                    )
+                )
+            }
+        }
     }
 }

@@ -100,6 +100,38 @@ final class AppStoreScreenshotTests: XCTestCase {
         XCTAssertTrue(updatedProviderField.label.contains("Google Gemini"))
     }
 
+    func testNativeTimelineKeepsTheLastMessageInsideTheViewport() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-AppStoreScreenshotDemo",
+            "-ChatTimelinePerformanceFixture",
+            "-ScreenshotScene", "performance"
+        ]
+        app.launch()
+
+        let timeline = app.collectionViews["chat-timeline"].firstMatch
+        let composer = app.descendants(matching: .any)
+            .matching(identifier: "chat-composer")
+            .firstMatch
+        XCTAssertTrue(timeline.waitForExistence(timeout: 20))
+        XCTAssertTrue(composer.waitForExistence(timeout: 20))
+
+        let finalMessage = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Fixture message 199")
+        ).firstMatch
+        XCTAssertTrue(finalMessage.waitForExistence(timeout: 20))
+        XCTAssertTrue(finalMessage.isHittable)
+        XCTAssertLessThanOrEqual(finalMessage.frame.maxY, composer.frame.minY + 1)
+
+        timeline.swipeDown()
+        timeline.swipeDown()
+        XCTAssertTrue(app.buttons["chat-latest-button"].waitForExistence(timeout: 5))
+
+        composer.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["chat-latest-button"].exists)
+    }
+
     private func navigateToConversationList(app: XCUIApplication) {
         if listIsVisible(app: app) {
             return

@@ -6,56 +6,6 @@ import UIKit
 import ImageIO
 import QuickLook
 
-enum ChatTimelineItem: Identifiable, Equatable {
-    case message(FullChatMessage)
-    case dual(DualChatMessage)
-
-    var id: String {
-        switch self {
-        case let .message(item):
-            return "m-\(item.id)"
-        case let .dual(item):
-            return "d-\(item.id ?? 0)"
-        }
-    }
-
-    var createdAtMs: Int64 {
-        switch self {
-        case let .message(item):
-            return item.message.createdAtMs
-        case let .dual(item):
-            return item.createdAtMs
-        }
-    }
-}
-
-struct ChatTimelineSnapshot: Equatable {
-    let items: [ChatTimelineItem]
-
-    init(messages: [FullChatMessage], dualMessages: [DualChatMessage]) {
-        items = (messages.map(ChatTimelineItem.message) + dualMessages.map(ChatTimelineItem.dual))
-            .sorted { $0.createdAtMs < $1.createdAtMs }
-    }
-}
-
-private struct ChatBottomAnchorMaxYPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = .infinity
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-private struct ChatTimelineHeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-private let chatTimelineHorizontalPadding: CGFloat = 20
-private let chatTimelineVerticalPadding: CGFloat = 24
 private let maximumPhotoSelectionCount = 10
 
 struct ChatScreen: View {
@@ -69,226 +19,104 @@ struct ChatScreen: View {
     @State private var showRecentPhotoSheet = false
     @State private var showCameraPicker = false
     @State private var photoItems: [PhotosPickerItem] = []
-    @State private var isUserNearBottom = true
-    @State private var isUserDraggingScroll = false
-    @State private var isAutoFollowingTimeline = true
-    @State private var timelineLayoutHeight: CGFloat = 0
-    @State private var scrollInteractionToken = 0
+    @State private var isFollowingTail = true
+    @State private var unreadCount = 0
+    @State private var scrollToLatestRequest = 0
+    @State private var workspaceRoute: ChatWorkspaceRoute?
     @State private var addingRecentPhotoIDs: Set<String> = []
     @State private var recentPhotoSelection = RecentPhotoSelection(limit: maximumPhotoSelectionCount)
     @StateObject private var recentPhotoLibrary = RecentPhotoLibrary()
     @FocusState private var isComposerFocused: Bool
-    private let bottomAnchorID = "chat-bottom-anchor"
-    private let scrollCoordinateSpace = "chat-scroll-coordinate-space"
-    private let bottomProximityThreshold: CGFloat = 96
-
-    private var timeline: [ChatTimelineItem] {
-        ChatTimelineSnapshot(
-            messages: viewModel.fullMessages,
-            dualMessages: viewModel.dualMessages
-        ).items
-    }
 
     var body: some View {
-        GeometryReader { rootGeometry in
-            VStack(spacing: 0) {
-                ScrollViewReader { proxy in
-                    GeometryReader { scrollGeometry in
-                        let measuredWidth = rootGeometry.size.width
-                        let timelineWidth = max(measuredWidth - chatTimelineHorizontalPadding * 2, 0)
-                        let timelineMinHeight = max(scrollGeometry.size.height - chatTimelineVerticalPadding * 2, 0)
-
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 24) {
-                                if timeline.isEmpty {
-                                    ContentUnavailableView(
-                                        emptyStateTitle,
-                                        systemImage: emptyStateSystemImage,
-                                        description: Text(emptyStateDescription)
-                                    )
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.top, 56)
-                                } else {
-                                    ForEach(timeline) { item in
-                                        switch item {
-                                        case let .message(message):
-                                            MessageBubble(
-                                                message: message,
-                                                rowWidth: timelineWidth,
-                                                mathRenderingEnabled: viewModel.settings.mathRenderingEnabled,
-                                                streamingSnapshot: viewModel.streamingSnapshot(for: message.id),
-                                                isActivelyStreaming: viewModel.isMessageStreaming(message.id),
-                                                canRegenerate: viewModel.canRegenerateLastAssistant && message.id == viewModel.fullMessages.last?.id,
-                                                fusionDebugModeEnabled: viewModel.settings.fusionDebugModeEnabled,
-                                                fusionTrace: viewModel.fusionTrace(for: message.message),
-                                                onPrevVariant: { viewModel.showPrevVariant(messageId: message.id) },
-                                                onNextVariant: { viewModel.showNextVariant(messageId: message.id) },
-                                                onCopy: {
-                                                    UIPasteboard.general.string = message.displayText
-                                                },
-                                                onBranch: {
-                                                    guard let newConversationId = viewModel.branchConversation(from: message.id) else { return }
-                                                    onNavigateToConversation?(newConversationId)
-                                                },
-                                                onRegenerate: {
-                                                    viewModel.regenerateLastAssistantVariant()
-                                                }
-                                            )
-                                            .equatable()
-                                            .id(item.id)
-                                        case let .dual(message):
-                                            DualMessageCard(
-                                                message: message,
-                                                rowWidth: timelineWidth,
-                                                settings: viewModel.settings,
-                                                mathRenderingEnabled: viewModel.settings.mathRenderingEnabled
-                                            )
-                                            .equatable()
-                                            .id(item.id)
-                                        }
-                                    }
-                                }
-
-                                Color.clear
-                                    .frame(height: 1)
-                                    .id(bottomAnchorID)
-                                    .background {
-                                        GeometryReader { anchorGeometry in
-                                            Color.clear.preference(
-                                                key: ChatBottomAnchorMaxYPreferenceKey.self,
-                                                value: anchorGeometry.frame(in: .named(scrollCoordinateSpace)).maxY
-                                            )
-                                        }
-                                    }
-                            }
-                            .frame(width: timelineWidth, alignment: .topLeading)
-                            .frame(
-                                minHeight: timeline.isEmpty ? nil : timelineMinHeight,
-                                alignment: .topLeading
-                            )
-                            .background {
-                                GeometryReader { timelineGeometry in
-                                    Color.clear.preference(
-                                        key: ChatTimelineHeightPreferenceKey.self,
-                                        value: timelineGeometry.size.height
-                                    )
-                                }
-                            }
-                            .scrollTargetLayout()
-                            .padding(.horizontal, chatTimelineHorizontalPadding)
-                            .padding(.vertical, chatTimelineVerticalPadding)
-                        }
-                        .coordinateSpace(name: scrollCoordinateSpace)
-                        .environment(\.toolActivityWillToggle) {
-                            isAutoFollowingTimeline = false
-                        }
-                        .background(Color.chatScreenBackground)
-                        .overlay(alignment: .bottomTrailing) {
-                            if !isUserNearBottom {
-                                Button {
-                                    resumeAutoFollowing(proxy: proxy, animated: true)
-                                } label: {
-                                    Image(systemName: "arrow.down")
-                                        .font(.system(size: 15, weight: .semibold))
-                                        .foregroundStyle(.primary)
-                                        .frame(width: 42, height: 42)
-                                        .background(.regularMaterial, in: Circle())
-                                        .shadow(color: .black.opacity(0.14), radius: 5, y: 2)
-                                }
-                                .buttonStyle(.plain)
-                                .padding(.trailing, 14)
-                                .padding(.bottom, 12)
-                                .accessibilityLabel(Text(L10n.text("最新メッセージへ移動")))
-                            }
-                        }
-                        .scrollDismissesKeyboard(.interactively)
-                        .simultaneousGesture(
-                            TapGesture().onEnded {
-                                dismissComposerChrome()
-                            }
-                        )
-                        .simultaneousGesture(
-                            DragGesture(minimumDistance: 8)
-                                .onChanged { _ in
-                                    beginScrollInteraction()
-                                }
-                                .onEnded { _ in
-                                    endScrollInteraction()
-                                }
-                        )
-                        .onPreferenceChange(ChatBottomAnchorMaxYPreferenceKey.self) { maxY in
-                            updateIsUserNearBottom(bottomAnchorMaxY: maxY, viewportHeight: scrollGeometry.size.height)
-                        }
-                        .onPreferenceChange(ChatTimelineHeightPreferenceKey.self) { height in
-                            handleTimelineLayoutHeightChange(height, proxy: proxy)
-                        }
-                        .onAppear {
-                            isUserNearBottom = true
-                            isAutoFollowingTimeline = true
-                            scrollToBottom(proxy: proxy, animated: false)
-                        }
-                        .onChange(of: timeline.count) { _, _ in
-                            scrollToBottomIfFollowing(proxy: proxy)
-                        }
-                        .onChange(of: isComposerFocused) { _, focused in
-                            if focused {
-                                resumeAutoFollowing(proxy: proxy, animated: false)
-                            } else {
-                                scrollToBottomIfFollowing(proxy: proxy)
-                            }
-                        }
-                        .onChange(of: viewModel.isSending) { oldValue, newValue in
-                            if !oldValue, newValue {
-                                resumeAutoFollowing(proxy: proxy, animated: false)
-                            } else if oldValue, !newValue {
-                                scrollToBottomIfFollowing(proxy: proxy)
-                            }
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                if !viewModel.attachments.isEmpty {
-                    AttachmentPreviewRow(
-                        attachments: viewModel.attachments,
-                        onRemove: { id in viewModel.removeAttachment(id: id) }
+        VStack(spacing: 0) {
+            ChatTimelineCollectionView(
+                store: viewModel.timelineStore,
+                isFollowingTail: $isFollowingTail,
+                unreadCount: $unreadCount,
+                scrollToLatestRequest: scrollToLatestRequest,
+                regeneratableMessageID: viewModel.canRegenerateLastAssistant
+                    ? viewModel.fullMessages.last?.id
+                    : nil,
+                mathRenderingEnabled: viewModel.settings.mathRenderingEnabled,
+                fusionDebugModeEnabled: viewModel.settings.fusionDebugModeEnabled,
+                dualSplitLayout: viewModel.settings.dualSplitLayout,
+                dualSplitRatio: viewModel.settings.dualSplitRatio,
+                fusionTraceForMessage: { viewModel.fusionTrace(for: $0) },
+                onRoute: { workspaceRoute = $0 },
+                onPreviousVariant: { viewModel.showPrevVariant(messageId: $0) },
+                onNextVariant: { viewModel.showNextVariant(messageId: $0) },
+                onBranch: { messageID in
+                    guard let newID = viewModel.branchConversation(from: messageID) else { return }
+                    onNavigateToConversation?(newID)
+                },
+                onRegenerate: { viewModel.regenerateLastAssistantVariant() }
+            )
+            .overlay {
+                if viewModel.timelineStore.orderedIDs.isEmpty {
+                    ChatEmptyState(
+                        title: emptyStateTitle,
+                        systemImage: emptyStateSystemImage,
+                        description: emptyStateDescription
                     )
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 4)
-                }
-
-                if !viewModel.chatStatsGroups.isEmpty {
-                    ChatStatsLine(groups: viewModel.chatStatsGroups)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 5)
-                }
-
-                if let error = viewModel.errorMessage {
-                    ChatErrorToast(
-                        formatted: UserFacingErrorFormatter.format(error),
-                        onDismiss: { viewModel.clearErrorMessage() }
-                    )
-                    .id(error)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-                }
-
-                if questionCoordinator.pending != nil {
-                    AskUserQuestionCard(coordinator: questionCoordinator)
-                        .padding(.horizontal, 10)
-                        .padding(.top, 5)
-                        .padding(.bottom, 8)
-                        .background(Color.chatScreenBackground)
-                } else {
-                    composerBar
-                        .padding(.horizontal, 14)
-                        .padding(.top, 4)
-                        .padding(.bottom, 8)
-                        .background(Color.chatScreenBackground)
                 }
             }
-            .frame(width: rootGeometry.size.width, height: rootGeometry.size.height)
-            .background(Color.chatScreenBackground)
+            .overlay(alignment: .bottomTrailing) {
+                if !isFollowingTail {
+                    Button {
+                        scrollToLatestRequest &+= 1
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.down")
+                            if unreadCount > 0 {
+                                Text("\(unreadCount)")
+                                    .font(.caption.monospacedDigit().weight(.semibold))
+                            }
+                        }
+                        .foregroundStyle(.primary)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .padding(.horizontal, unreadCount > 0 ? 8 : 0)
+                        .background(.regularMaterial, in: Capsule())
+                        .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(14)
+                    .accessibilityLabel(Text(L10n.text("最新メッセージへ移動")))
+                    .accessibilityIdentifier("chat-latest-button")
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if !viewModel.attachments.isEmpty {
+                AttachmentPreviewRow(
+                    attachments: viewModel.attachments,
+                    onRemove: { id in viewModel.removeAttachment(id: id) }
+                )
+                .padding(.horizontal, 14)
+                .padding(.bottom, 4)
+            }
+
+            if !viewModel.chatStatsGroups.isEmpty {
+                ChatStatsLine(groups: viewModel.chatStatsGroups)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 5)
+            }
+
+            if let error = viewModel.errorMessage {
+                ChatErrorToast(
+                    formatted: UserFacingErrorFormatter.format(error),
+                    onDismiss: { viewModel.clearErrorMessage() }
+                )
+                .id(error)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+            }
+
+            composerBar
+                .padding(.horizontal, 14)
+                .padding(.top, 4)
+                .padding(.bottom, 8)
+                .background(Color.chatScreenBackground)
         }
         .background(Color.chatScreenBackground)
         .task {
@@ -349,6 +177,18 @@ struct ChatScreen: View {
                 handleCapturedCameraImage(capturedImage)
             }
             .ignoresSafeArea()
+        }
+        .sheet(item: $workspaceRoute) { route in
+            ChatWorkspaceRouteSheet(route: route)
+        }
+        .sheet(isPresented: Binding(
+            get: { questionCoordinator.pending != nil },
+            set: { _ in }
+        )) {
+            AskUserQuestionCard(coordinator: questionCoordinator)
+                .padding(16)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -450,21 +290,21 @@ struct ChatScreen: View {
                 }
 
                 TextField(viewModel.composerPlaceholder, text: $viewModel.inputText, axis: .vertical)
+                    .accessibilityIdentifier("chat-composer")
                     .lineLimit(isComposerExpanded ? 8 : 1)
                     .focused($isComposerFocused)
                     .font(.system(size: 16))
                     .padding(.horizontal, isComposerExpanded ? 14 : 0)
                     .padding(.top, isComposerExpanded ? 12 : 9)
                     .padding(.bottom, isComposerExpanded ? 6 : 9)
-                    .foregroundStyle(Color.chatComposerText)
-                    .tint(Color.chatOrange)
+                    .foregroundStyle(.primary)
+                    .tint(.accentColor)
                     .disabled(viewModel.isSpeechRecording || viewModel.isSending)
 
                 if !isComposerExpanded {
                     if let contextUsage = viewModel.visibleContextUsage {
                         ContextUsageMeter(usage: contextUsage)
                     }
-
                     composerCollapsedVoiceButton
                 }
             }
@@ -472,29 +312,25 @@ struct ChatScreen: View {
             .padding(.vertical, isComposerExpanded ? 0 : 2)
 
             if isComposerExpanded {
-                HStack(alignment: .center, spacing: 8) {
+                HStack(alignment: .center, spacing: 6) {
                     composerPlusMenuButton
-
                     Spacer(minLength: 4)
-
                     if let contextUsage = viewModel.visibleContextUsage {
                         ContextUsageMeter(usage: contextUsage)
                     }
-
                     composerMicButton
-
                     composerExpandedSendButton
                 }
-                .padding(.horizontal, 10)
-                .padding(.bottom, 8)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 7)
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
-        .background(Color.chatInputCardBackground)
+        .background(Color(uiColor: .secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: isComposerExpanded ? 22 : 26, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: isComposerExpanded ? 22 : 26, style: .continuous)
-                .stroke(Color.chatBubbleBorder.opacity(0.14), lineWidth: 1)
+                .stroke(Color(uiColor: .separator).opacity(0.16), lineWidth: 1)
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: isComposerExpanded)
     }
@@ -525,7 +361,7 @@ struct ChatScreen: View {
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(Color.chatComposerIcon)
+                .foregroundStyle(.primary)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
@@ -540,7 +376,7 @@ struct ChatScreen: View {
         } label: {
             Image(systemName: viewModel.isSpeechRecording ? "mic.fill" : "mic")
                 .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(viewModel.isSpeechRecording ? Color.red : Color.chatComposerIcon)
+                .foregroundStyle(viewModel.isSpeechRecording ? Color.red : Color.primary)
                 .symbolEffect(.pulse, isActive: viewModel.isSpeechRecording)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
@@ -581,28 +417,30 @@ struct ChatScreen: View {
             if viewModel.isSending {
                 viewModel.cancelActiveRun()
             } else if canSend {
+                scrollToLatestRequest &+= 1
                 viewModel.sendMessage()
             }
         } label: {
             ZStack {
                 Circle()
-                    .fill((canSend || viewModel.isSending) ? Color.chatOrange : Color.chatSendDisabled)
+                    .fill((canSend || viewModel.isSending) ? Color.primary : Color(uiColor: .tertiaryLabel))
                     .frame(width: 44, height: 44)
 
                 if viewModel.isSending {
                     Image(systemName: "stop.fill")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color(uiColor: .systemBackground))
                 } else {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color(uiColor: .systemBackground))
                 }
             }
         }
         .buttonStyle(.plain)
         .disabled(!viewModel.isSending && !canSend)
         .accessibilityLabel(viewModel.isSending ? Text("生成を停止") : Text("送信"))
+        .accessibilityIdentifier("chat-send-button")
     }
 
     private struct ContextUsageMeter: View {
@@ -804,84 +642,6 @@ struct ChatScreen: View {
         showFileImporter = true
     }
 
-    private func dismissComposerChrome() {
-        isComposerFocused = false
-        isAutoFollowingTimeline = false
-    }
-
-    private func beginScrollInteraction() {
-        isUserDraggingScroll = true
-        isAutoFollowingTimeline = false
-        scrollInteractionToken += 1
-    }
-
-    private func endScrollInteraction() {
-        scrollInteractionToken += 1
-        let token = scrollInteractionToken
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            guard scrollInteractionToken == token else { return }
-            isUserDraggingScroll = false
-            if isUserNearBottom {
-                isAutoFollowingTimeline = true
-            }
-        }
-    }
-
-    private func handleTimelineLayoutHeightChange(_ height: CGFloat, proxy: ScrollViewProxy) {
-        let previousHeight = timelineLayoutHeight
-        timelineLayoutHeight = height
-        guard ChatScrollPolicy.shouldFollowTimelineLayoutChange(
-            isAutoFollowing: isAutoFollowingTimeline,
-            isUserInteracting: isUserDraggingScroll,
-            previousHeight: previousHeight,
-            currentHeight: height
-        ) else { return }
-        DispatchQueue.main.async {
-            guard isAutoFollowingTimeline, !isUserDraggingScroll else { return }
-            scrollToBottom(proxy: proxy, animated: false)
-        }
-    }
-
-    private func updateIsUserNearBottom(bottomAnchorMaxY: CGFloat, viewportHeight: CGFloat) {
-        isUserNearBottom = timeline.isEmpty || bottomAnchorMaxY <= viewportHeight + bottomProximityThreshold
-    }
-
-    private func scrollToBottomIfFollowing(proxy: ScrollViewProxy) {
-        guard isAutoFollowingTimeline, !isUserDraggingScroll else { return }
-        DispatchQueue.main.async {
-            guard isAutoFollowingTimeline, !isUserDraggingScroll else { return }
-            scrollToBottom(proxy: proxy, animated: false)
-        }
-    }
-
-    private func resumeAutoFollowing(proxy: ScrollViewProxy, animated: Bool) {
-        // Run after the current gesture finishes. The bottom button lives
-        // inside the scroll view's simultaneous tap gesture, which otherwise
-        // could cancel the follow state again in the same event cycle.
-        DispatchQueue.main.async {
-            isAutoFollowingTimeline = true
-            scrollToBottom(proxy: proxy, animated: animated)
-        }
-    }
-
-    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
-        let scrollAction = {
-            proxy.scrollTo(bottomAnchorID, anchor: .bottom)
-            isUserNearBottom = true
-        }
-        if animated {
-            withAnimation {
-                scrollAction()
-            }
-        } else {
-            var transaction = Transaction()
-            transaction.animation = nil
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                scrollAction()
-            }
-        }
-    }
 }
 
 private struct AttachmentPreviewRow: View {
@@ -938,7 +698,7 @@ private struct AttachmentPreviewRow: View {
     }
 }
 
-private struct ChatAttachmentItem: Identifiable, Equatable {
+struct ChatAttachmentItem: Identifiable, Equatable {
     let rawValue: String
 
     var id: String { rawValue }
@@ -964,7 +724,7 @@ private struct ChatAttachmentItem: Identifiable, Equatable {
     var isHTML: Bool { ["html", "htm"].contains(url?.pathExtension.lowercased() ?? "") }
 }
 
-private struct MessageAttachmentList: View {
+struct MessageAttachmentList: View {
     let attachments: [ChatAttachmentItem]
     let isOutgoing: Bool
     @State private var previewURL: URL?
@@ -1342,658 +1102,6 @@ private struct ChatStatsLine: View {
         .frame(minHeight: 18)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(groups.joined(separator: ", ")))
-    }
-}
-
-private struct MessageBubble: View, Equatable {
-    let message: FullChatMessage
-    let rowWidth: CGFloat
-    let mathRenderingEnabled: Bool
-    let streamingSnapshot: ChatStreamingSnapshot?
-    let isActivelyStreaming: Bool
-    let canRegenerate: Bool
-    let fusionDebugModeEnabled: Bool
-    let fusionTrace: FusionTrace?
-    let onPrevVariant: () -> Void
-    let onNextVariant: () -> Void
-    let onCopy: () -> Void
-    let onBranch: () -> Void
-    let onRegenerate: () -> Void
-    @State private var isThinkingSheetPresented = false
-    @State private var isFusionDetailPresented = false
-
-    static func == (lhs: MessageBubble, rhs: MessageBubble) -> Bool {
-        lhs.message == rhs.message &&
-            lhs.rowWidth == rhs.rowWidth &&
-            lhs.mathRenderingEnabled == rhs.mathRenderingEnabled &&
-            lhs.streamingSnapshot == rhs.streamingSnapshot &&
-            lhs.isActivelyStreaming == rhs.isActivelyStreaming &&
-            lhs.canRegenerate == rhs.canRegenerate &&
-            lhs.fusionDebugModeEnabled == rhs.fusionDebugModeEnabled &&
-            lhs.fusionTrace == rhs.fusionTrace
-    }
-
-    private var isUser: Bool {
-        message.message.role == "user"
-    }
-
-    private var responseText: String {
-        if let overlay = streamingSnapshot?.text, !overlay.isEmpty {
-            return overlay
-        }
-        return message.displayText
-    }
-
-    private var thinkingText: String? {
-        if let overlay = streamingSnapshot?.thinking.trimmingCharacters(in: .whitespacesAndNewlines),
-           !overlay.isEmpty {
-            return overlay
-        }
-        guard let value = message.displayThinkingStream?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !value.isEmpty
-        else {
-            return nil
-        }
-        return value
-    }
-
-    private var attachmentItems: [ChatAttachmentItem] {
-        guard let data = message.displayAttachmentsJSON.data(using: .utf8),
-              let values = try? JSONDecoder().decode([String].self, from: data)
-        else {
-            return []
-        }
-        return values.map { ChatAttachmentItem(rawValue: $0) }
-    }
-
-    private var toolActivitySteps: [ToolActivityStep] {
-        if let live = streamingSnapshot?.toolActivity?.steps, !live.isEmpty {
-            return live
-        }
-        return message.displayToolActivity?.steps ?? []
-    }
-
-    var body: some View {
-        let userContentWidth = min(300, rowWidth)
-        let userLeadingWidth = max(rowWidth - userContentWidth, 0)
-        let activitySteps = toolActivitySteps
-
-        HStack(alignment: .top, spacing: 0) {
-            if isUser {
-                Spacer(minLength: userLeadingWidth)
-            }
-
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 8) {
-                if isUser {
-                    if !attachmentItems.isEmpty {
-                        MessageAttachmentList(
-                            attachments: attachmentItems,
-                            isOutgoing: true
-                        )
-                    }
-
-                    if !responseText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(responseText)
-                            .textSelection(.enabled)
-                            .foregroundStyle(Color.chatUserText)
-                            .font(.body)
-                            .lineSpacing(2)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.chatUserBubble)
-                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    }
-                } else {
-                    if !activitySteps.isEmpty {
-                        ToolActivityDisclosure(steps: activitySteps)
-                            .equatable()
-                    }
-
-                    if thinkingText != nil {
-                        Button {
-                            isThinkingSheetPresented = true
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "brain.head.profile")
-                                    .font(.caption)
-                                Text("Thinking")
-                                    .font(.caption)
-                                Spacer()
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.caption2)
-                            }
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 4)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    let isChatError = UserFacingErrorFormatter.looksLikeChatError(responseText)
-                    let svgBlocks = isChatError ? [] : SvgCodeExtractor.extract(from: responseText)
-                    let htmlBlocks = HtmlPreviewPolicy.blocks(
-                        from: responseText,
-                        isChatError: isChatError,
-                        isActivelyStreaming: isActivelyStreaming
-                    )
-                    let mediaBlocks = (
-                        svgBlocks.map(ExtractedMediaBlock.svg) +
-                        htmlBlocks.map(ExtractedMediaBlock.html)
-                    ).sorted { $0.startIndex < $1.startIndex }
-                    let markdownText = isChatError
-                        ? ""
-                        : ExtractedFenceRemover.remove(
-                            from: responseText,
-                            ranges: mediaBlocks.map { (start: $0.startIndex, end: $0.endIndex) }
-                        )
-                    let hasAssistantBubbleContent = isChatError
-                        || !attachmentItems.isEmpty
-                        || !mediaBlocks.isEmpty
-                        || !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-
-                    if hasAssistantBubbleContent {
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundStyle(Color.chatAssistantMark)
-                                .frame(width: 32, height: 32)
-                                .background(Color.chatInputChipBackground)
-                                .clipShape(Circle())
-                                .padding(.top, 2)
-
-                            VStack(alignment: .leading, spacing: 10) {
-                                if !attachmentItems.isEmpty {
-                                    MessageAttachmentList(
-                                        attachments: attachmentItems,
-                                        isOutgoing: false
-                                    )
-                                }
-
-                                if isChatError {
-                                    ChatErrorCard(text: responseText)
-                                } else {
-                                    if !mediaBlocks.isEmpty {
-                                        ForEach(mediaBlocks) { block in
-                                            switch block {
-                                            case .html(let htmlBlock):
-                                                HtmlPreviewCard(block: htmlBlock)
-                                            case .svg(let svgBlock):
-                                                SvgPreviewCard(block: svgBlock)
-                                            }
-                                        }
-                                    }
-
-                                    if !markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        MathMarkdownView(
-                                            markdownText: markdownText,
-                                            mathRenderingEnabled: mathRenderingEnabled,
-                                            isStreaming: isActivelyStreaming
-                                        )
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-
-                    if let fusionTrace, !isActivelyStreaming {
-                        FusionMessageSummary(trace: fusionTrace) {
-                            isFusionDetailPresented = true
-                        }
-                    }
-
-                    if message.variantCount > 1 {
-                        HStack(spacing: 10) {
-                            Button {
-                                onPrevVariant()
-                            } label: {
-                                Image(systemName: "chevron.left")
-                                    .font(.caption.weight(.semibold))
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(!message.canSelectPreviousVariant)
-
-                            Text("\(message.selectedVariantOrdinal)/\(message.variantCount)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-
-                            Button {
-                                onNextVariant()
-                            } label: {
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.semibold))
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(!message.canSelectNextVariant)
-                        }
-                        .padding(.horizontal, 4)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .frame(width: isUser ? userContentWidth : rowWidth, alignment: isUser ? .trailing : .leading)
-
-            if !isUser {
-                Spacer(minLength: 0)
-            }
-        }
-        .frame(width: rowWidth, alignment: isUser ? .trailing : .leading)
-        .modifier(MessageBubbleContextMenuModifier(
-            isEnabled: !isActivelyStreaming,
-            canRegenerate: canRegenerate,
-            showsFusionDetail: fusionTrace != nil,
-            onCopy: onCopy,
-            onBranch: onBranch,
-            onRegenerate: onRegenerate,
-            onShowFusionDetail: { isFusionDetailPresented = true }
-        ))
-        .sheet(isPresented: $isThinkingSheetPresented) {
-            if let thinkingText {
-                ThinkingSheet(thinkingText: thinkingText)
-            }
-        }
-        .sheet(isPresented: $isFusionDetailPresented) {
-            if let fusionTrace {
-                FusionDetailSheet(
-                    trace: fusionTrace,
-                    debugModeEnabled: fusionDebugModeEnabled
-                )
-            }
-        }
-    }
-}
-
-private struct DualMessageCard: View, Equatable {
-    let message: DualChatMessage
-    let rowWidth: CGFloat
-    let settings: AppSettings
-    let mathRenderingEnabled: Bool
-    @State private var showThinkingA = false
-    @State private var showThinkingB = false
-
-    static func == (lhs: DualMessageCard, rhs: DualMessageCard) -> Bool {
-        lhs.message == rhs.message &&
-            lhs.rowWidth == rhs.rowWidth &&
-            lhs.settings == rhs.settings &&
-            lhs.mathRenderingEnabled == rhs.mathRenderingEnabled
-    }
-
-    private var resolvedLayout: String {
-        let normalized = settings.dualSplitLayout.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        return normalized == "HORIZONTAL" ? "HORIZONTAL" : "VERTICAL"
-    }
-
-    private var splitRatio: Double {
-        if settings.dualSplitRatio.isNaN || !settings.dualSplitRatio.isFinite {
-            return 0.5
-        }
-        return min(max(settings.dualSplitRatio, 0.1), 0.9)
-    }
-
-    private var modelAText: String {
-        message.modelAText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var modelBText: String {
-        message.modelBText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var userText: String {
-        message.userText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var attachmentItems: [ChatAttachmentItem] {
-        message.attachments.map { ChatAttachmentItem(rawValue: $0) }
-    }
-
-    var body: some View {
-        let userContentWidth = min(300, rowWidth)
-        let userLeadingWidth = max(rowWidth - userContentWidth, 0)
-
-        Group {
-            switch message.parsedRole {
-            case .user:
-                HStack(alignment: .top, spacing: 0) {
-                    Spacer(minLength: userLeadingWidth)
-
-                    VStack(alignment: .trailing, spacing: 8) {
-                        if !attachmentItems.isEmpty {
-                            MessageAttachmentList(
-                                attachments: attachmentItems,
-                                isOutgoing: true
-                            )
-                        }
-                        if !userText.isEmpty {
-                            Text(userText)
-                                .textSelection(.enabled)
-                        }
-                    }
-                    .padding(12)
-                    .background(Color.chatUserBubble)
-                    .foregroundStyle(Color.chatUserText)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .frame(width: userContentWidth, alignment: .trailing)
-                }
-                .frame(width: rowWidth, alignment: .trailing)
-            case .dualModel:
-                VStack(alignment: .leading, spacing: 10) {
-                    DualSplitContainer(
-                        layout: resolvedLayout,
-                        splitRatio: splitRatio
-                    ) {
-                        DualResponsePane(
-                            title: "A · \(ProviderCatalog.displayName(for: message.providerA)) · \(message.modelAName)",
-                            content: modelAText,
-                            status: message.parsedModelAStatus,
-                            error: message.modelAError,
-                            thinking: message.modelAThinking,
-                            toolSteps: message.modelAToolActivity?.steps ?? [],
-                            attachments: message.modelAToolActivity?.attachmentPaths.map { ChatAttachmentItem(rawValue: $0) } ?? [],
-                            showThinking: $showThinkingA,
-                            mathRenderingEnabled: mathRenderingEnabled
-                        )
-                    } second: {
-                        DualResponsePane(
-                            title: "B · \(ProviderCatalog.displayName(for: message.providerB)) · \(message.modelBName)",
-                            content: modelBText,
-                            status: message.parsedModelBStatus,
-                            error: message.modelBError,
-                            thinking: message.modelBThinking,
-                            toolSteps: message.modelBToolActivity?.steps ?? [],
-                            attachments: message.modelBToolActivity?.attachmentPaths.map { ChatAttachmentItem(rawValue: $0) } ?? [],
-                            showThinking: $showThinkingB,
-                            mathRenderingEnabled: mathRenderingEnabled
-                        )
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .background(Color.chatDualCard)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .frame(width: rowWidth, alignment: .leading)
-            case .legacy:
-                VStack(alignment: .leading, spacing: 10) {
-                    if !userText.isEmpty {
-                        Text(userText)
-                            .font(.body)
-                    }
-                    Divider()
-                    Text("A · \(ProviderCatalog.displayName(for: message.providerA)) · \(message.modelAName)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if UserFacingErrorFormatter.looksLikeChatError(modelAText) {
-                        ChatErrorCard(text: modelAText)
-                    } else {
-                        Text(modelAText)
-                            .textSelection(.enabled)
-                    }
-                    Divider()
-                    Text("B · \(ProviderCatalog.displayName(for: message.providerB)) · \(message.modelBName)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if UserFacingErrorFormatter.looksLikeChatError(modelBText) {
-                        ChatErrorCard(text: modelBText)
-                    } else {
-                        Text(modelBText)
-                            .textSelection(.enabled)
-                    }
-                }
-                .padding(12)
-                .background(Color.chatDualCard)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .frame(width: rowWidth, alignment: .leading)
-            }
-        }
-    }
-}
-
-private struct DualSplitContainer<First: View, Second: View>: View {
-    let layout: String
-    let splitRatio: Double
-    let first: () -> First
-    let second: () -> Second
-
-    init(
-        layout: String,
-        splitRatio: Double,
-        @ViewBuilder first: @escaping () -> First,
-        @ViewBuilder second: @escaping () -> Second
-    ) {
-        self.layout = layout
-        self.splitRatio = splitRatio
-        self.first = first
-        self.second = second
-    }
-
-    var body: some View {
-        if layout == "HORIZONTAL" {
-            VStack(alignment: .leading, spacing: 8) {
-                first()
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                second()
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-        } else {
-            ViewThatFits(in: .horizontal) {
-                DualRatioLayout(ratio: splitRatio, spacing: 8) {
-                    first()
-                    second()
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    first()
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                    second()
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                }
-            }
-        }
-    }
-}
-
-private struct DualRatioLayout: Layout {
-    let ratio: Double
-    let spacing: CGFloat
-    private let minimumPaneWidth: CGFloat = 220
-
-    func sizeThatFits(
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) -> CGSize {
-        guard subviews.count == 2 else { return .zero }
-        let minimumWidth = minimumPaneWidth * 2 + spacing
-        let width = max(proposal.width ?? minimumWidth, minimumWidth)
-        let paneWidths = resolvedPaneWidths(totalWidth: width)
-        let firstSize = subviews[0].sizeThatFits(.init(width: paneWidths.0, height: proposal.height))
-        let secondSize = subviews[1].sizeThatFits(.init(width: paneWidths.1, height: proposal.height))
-        return CGSize(width: width, height: max(firstSize.height, secondSize.height))
-    }
-
-    func placeSubviews(
-        in bounds: CGRect,
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) {
-        guard subviews.count == 2 else { return }
-        let paneWidths = resolvedPaneWidths(totalWidth: bounds.width)
-        subviews[0].place(
-            at: bounds.origin,
-            anchor: .topLeading,
-            proposal: .init(width: paneWidths.0, height: proposal.height)
-        )
-        subviews[1].place(
-            at: CGPoint(x: bounds.minX + paneWidths.0 + spacing, y: bounds.minY),
-            anchor: .topLeading,
-            proposal: .init(width: paneWidths.1, height: proposal.height)
-        )
-    }
-
-    private func resolvedPaneWidths(totalWidth: CGFloat) -> (CGFloat, CGFloat) {
-        let available = max(0, totalWidth - spacing)
-        let minimumRatio = available > 0 ? min(0.5, minimumPaneWidth / available) : 0.5
-        let clampedRatio = min(max(CGFloat(ratio), minimumRatio), 1 - minimumRatio)
-        return (available * clampedRatio, available * (1 - clampedRatio))
-    }
-}
-
-private struct DualResponsePane: View {
-    let title: String
-    let content: String
-    let status: DualChatMessage.SideStatus
-    let error: String?
-    let thinking: String?
-    let toolSteps: [ToolActivityStep]
-    let attachments: [ChatAttachmentItem]
-    @Binding var showThinking: Bool
-    let mathRenderingEnabled: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.85)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            if !toolSteps.isEmpty {
-                ToolActivityDisclosure(steps: toolSteps)
-                    .equatable()
-            }
-
-            if !attachments.isEmpty {
-                MessageAttachmentList(attachments: attachments, isOutgoing: false)
-            }
-
-            if let thinking = thinking?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !thinking.isEmpty {
-                Button {
-                    showThinking.toggle()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "brain.head.profile")
-                            .font(.caption2)
-                        Text(showThinking ? L10n.text("Thinkingを隠す") : L10n.text("Thinkingを表示"))
-                            .font(.caption2)
-                    }
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-
-                if showThinking {
-                    ThinkingStreamTextView(text: thinking)
-                        .frame(minHeight: 80, maxHeight: 220)
-                        .padding(8)
-                        .background(Color.chatInputBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-            }
-
-            switch status {
-            case .pending:
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text(L10n.text("応答待ち"))
-                        .foregroundStyle(.secondary)
-                }
-            case .failed:
-                ChatErrorCard(text: error ?? L10n.text("応答の生成に失敗しました。"))
-            case .canceled:
-                Text(L10n.text("キャンセルしました"))
-                    .foregroundStyle(.secondary)
-            case .completed:
-                MathMarkdownView(
-                    markdownText: content.isEmpty ? L10n.text("応答がありません") : content,
-                    mathRenderingEnabled: mathRenderingEnabled,
-                    isStreaming: false
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
-        .padding(10)
-        .background(Color.chatAssistantBubble)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.chatBubbleBorder.opacity(0.4), lineWidth: 1)
-        }
-    }
-}
-
-private struct MessageBubbleContextMenuModifier: ViewModifier {
-    let isEnabled: Bool
-    let canRegenerate: Bool
-    let showsFusionDetail: Bool
-    let onCopy: () -> Void
-    let onBranch: () -> Void
-    let onRegenerate: () -> Void
-    let onShowFusionDetail: () -> Void
-
-    func body(content: Content) -> some View {
-        if isEnabled {
-            content.contextMenu {
-                Button {
-                    onCopy()
-                } label: {
-                    Label("コピー", systemImage: "doc.on.doc")
-                }
-
-                Button("ここからブランチ") {
-                    onBranch()
-                }
-
-                Button("再生成") {
-                    onRegenerate()
-                }
-                .disabled(!canRegenerate)
-
-                if showsFusionDetail {
-                    Button {
-                        onShowFusionDetail()
-                    } label: {
-                        Label(L10n.text("Fusion 詳細"), systemImage: "arrow.triangle.merge")
-                    }
-                }
-            }
-        } else {
-            content
-        }
-    }
-}
-
-private enum ExtractedMediaBlock: Identifiable {
-    case svg(ExtractedSvgBlock)
-    case html(ExtractedHtmlBlock)
-
-    var id: String {
-        switch self {
-        case .svg(let block):
-            return "svg-\(block.id)"
-        case .html(let block):
-            return "html-\(block.id)"
-        }
-    }
-
-    var startIndex: Int {
-        switch self {
-        case .svg(let block):
-            return block.startIndex
-        case .html(let block):
-            return block.startIndex
-        }
-    }
-
-    var endIndex: Int {
-        switch self {
-        case .svg(let block):
-            return block.endIndex
-        case .html(let block):
-            return block.endIndex
-        }
     }
 }
 

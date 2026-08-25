@@ -1,26 +1,20 @@
-import Foundation
 import Combine
-
-struct AttachmentDraft: Identifiable, Equatable {
-    let id: UUID
-    var url: URL
-    var displayName: String
-
-    init(url: URL, displayName: String? = nil) {
-        id = UUID()
-        self.url = url
-        self.displayName = displayName ?? url.lastPathComponent
-    }
-}
+import Foundation
 
 @MainActor
 final class ChatViewModel: ObservableObject {
+    let timelineStore = ChatTimelineStore()
+    let composerStore = ChatComposerStore()
+    let sessionController = ChatSessionController()
     @Published private(set) var messageSummaries: [ChatMessageSummary] = []
     @Published private(set) var fullMessages: [FullChatMessage] = []
     @Published private(set) var dualMessages: [DualChatMessage] = []
     @Published private(set) var settings: AppSettings = .init()
 
-    @Published var inputText: String = ""
+    var inputText: String {
+        get { composerStore.inputText }
+        set { composerStore.inputText = newValue }
+    }
     @Published var isSending: Bool = false
     @Published var isAutoConversationRunning: Bool = false
     @Published var isAutoConversationPaused: Bool = false
@@ -29,13 +23,21 @@ final class ChatViewModel: ObservableObject {
     @Published var fusionStreamingStatus: String?
     @Published var fusionProgress: FusionProgressSnapshot?
     @Published var errorMessage: String?
-    @Published var attachments: [AttachmentDraft] = []
-    @Published private(set) var isSpeechRecording: Bool = false
+    var attachments: [AttachmentDraft] {
+        get { composerStore.attachments }
+        set { composerStore.attachments = newValue }
+    }
+    private(set) var isSpeechRecording: Bool {
+        get { composerStore.isSpeechRecording }
+        set { composerStore.isSpeechRecording = newValue }
+    }
     @Published private(set) var activeChatPresetName: String?
     @Published private(set) var activeSystemPromptPresetName: String?
     @Published private(set) var contextUsage: ContextUsage?
-    @Published private(set) var canAttachImages: Bool = false
-    @Published private(set) var streamingSnapshots: [Int64: ChatStreamingSnapshot] = [:]
+    private(set) var canAttachImages: Bool {
+        get { composerStore.canAttachImages }
+        set { composerStore.canAttachImages = newValue }
+    }
     @Published private(set) var isSecretConversation: Bool = false
     @Published private(set) var conversationTitle: String = "New Chat"
     @Published private(set) var enabledSkillNames: [String] = []
@@ -57,13 +59,18 @@ final class ChatViewModel: ObservableObject {
     private var latestTokenUsageRecord: TokenUsageRecord?
     private var activeConversationProvider: String = ""
     private var activeConversationModel: String = ""
-    private var pendingStreamingSnapshots: [Int64: ChatStreamingSnapshot] = [:]
-    private var lastStreamingPublishAt: [Int64: Date] = [:]
-    private var streamingFlushTasks: [Int64: Task<Void, Never>] = [:]
-    private let streamingThrottleInterval: TimeInterval = 0.1
 
     init(conversationID: Int64) {
         self.conversationID = conversationID
+        composerStore.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+        sessionController.onSnapshot = { [weak self] snapshot in
+            self?.timelineStore.applyStreamingSnapshot(snapshot)
+        }
+        sessionController.onClear = { [weak self] in
+            self?.timelineStore.clearTransientStreamingSnapshots()
+        }
         speechService.onTranscription = { [weak self] text in
             guard let self else { return }
             if self.inputTextBeforeSpeech.isEmpty {
@@ -120,6 +127,7 @@ final class ChatViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
                 self?.fullMessages = $0
+                self?.timelineStore.update(messages: $0)
             }
             .store(in: &cancellables)
 
@@ -127,6 +135,7 @@ final class ChatViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
                 self?.dualMessages = $0
+                self?.timelineStore.update(dualMessages: $0)
             }
             .store(in: &cancellables)
 
@@ -492,55 +501,11 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func clearStreamingState() {
-        streamingFlushTasks.values.forEach { $0.cancel() }
-        streamingFlushTasks.removeAll()
-        pendingStreamingSnapshots.removeAll()
-        lastStreamingPublishAt.removeAll()
-        streamingSnapshots.removeAll()
-    }
-
-    func streamingSnapshot(for messageId: Int64) -> ChatStreamingSnapshot? {
-        streamingSnapshots[messageId]
-    }
-
-    func isMessageStreaming(_ messageId: Int64) -> Bool {
-        guard isSending, let snapshot = streamingSnapshots[messageId] else { return false }
-        return !snapshot.isFinal
+        sessionController.clear()
     }
 
     private func handleStreamingSnapshot(_ snapshot: ChatStreamingSnapshot) {
-        let targetId = snapshot.targetId
-        if snapshot.isFinal {
-            streamingFlushTasks[targetId]?.cancel()
-            streamingFlushTasks.removeValue(forKey: targetId)
-            pendingStreamingSnapshots.removeValue(forKey: targetId)
-            lastStreamingPublishAt.removeValue(forKey: targetId)
-            streamingSnapshots.removeValue(forKey: targetId)
-            return
-        }
-
-        pendingStreamingSnapshots[targetId] = snapshot
-        let elapsed = Date().timeIntervalSince(lastStreamingPublishAt[targetId] ?? .distantPast)
-        if elapsed >= streamingThrottleInterval {
-            publishPendingStreamingSnapshot(targetId: targetId)
-            return
-        }
-
-        guard streamingFlushTasks[targetId] == nil else { return }
-        let delay = streamingThrottleInterval - elapsed
-        streamingFlushTasks[targetId] = Task { @MainActor [weak self] in
-            let nanoseconds = UInt64(max(delay, 0) * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: nanoseconds)
-            guard !Task.isCancelled, let self else { return }
-            self.publishPendingStreamingSnapshot(targetId: targetId)
-            self.streamingFlushTasks.removeValue(forKey: targetId)
-        }
-    }
-
-    private func publishPendingStreamingSnapshot(targetId: Int64) {
-        guard let snapshot = pendingStreamingSnapshots[targetId] else { return }
-        lastStreamingPublishAt[targetId] = Date()
-        streamingSnapshots[targetId] = snapshot
+        sessionController.handle(snapshot)
     }
 
     var canRegenerateLastAssistant: Bool {
@@ -693,6 +658,24 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    func setChatMode(_ mode: ChatMode) {
+        guard !isSending else { return }
+        guard let repository else {
+            errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
+            return
+        }
+        if mode != .autoConversation, isAutoConversationRunning || isAutoConversationPaused {
+            stopAutoConversation()
+        }
+        do {
+            try repository.setChatMode(mode)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log("Set chat mode failed", category: .chat, metadata: ["mode": mode.rawValue], error: error)
+        }
+    }
+
     func toggleFusionMode() {
         guard !isSending else { return }
         guard let repository else {
@@ -730,7 +713,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     var isFusionAnalyzing: Bool {
-        settings.isFusionModeEnabled && isSending && streamingSnapshots.isEmpty
+        settings.isFusionModeEnabled && isSending && sessionController.isEmpty
     }
 
     var fusionActivePhaseLabel: String? {

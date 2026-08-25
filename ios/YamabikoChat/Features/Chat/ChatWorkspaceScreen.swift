@@ -11,6 +11,7 @@ struct ChatWorkspaceScreen: View {
     var onSelectConversation: ((Int64) -> Void)?
     @State private var exportedArchive: ConversationExportShareItem?
     @State private var isExporting = false
+    @StateObject private var workspaceStore = ChatWorkspaceStore()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,6 +50,9 @@ struct ChatWorkspaceScreen: View {
         }
         .sheet(item: $exportedArchive) { item in
             ConversationExportShareSheet(url: item.url)
+        }
+        .sheet(item: $workspaceStore.presentedRoute) { route in
+            workspaceSheet(for: route)
         }
     }
 
@@ -161,6 +165,7 @@ struct ChatWorkspaceScreen: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("チャット履歴"))
+            .accessibilityIdentifier("chat-history-button")
 
             modelTitleControl
                 .frame(minWidth: 0, maxWidth: .infinity)
@@ -171,14 +176,10 @@ struct ChatWorkspaceScreen: View {
                 Button {
                     createConversation()
                 } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 19, weight: .semibold))
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(.primary)
                         .frame(width: 44, height: 44)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(Color(uiColor: .label), lineWidth: 1.7)
-                        }
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("新規チャット"))
@@ -202,34 +203,19 @@ struct ChatWorkspaceScreen: View {
 
     @ViewBuilder
     private var modelTitleControl: some View {
-        if canSwitchChatModel {
-            Menu {
-                let chatPresets = viewModel.availableChatPresets()
-                if chatPresets.isEmpty {
-                    Button("利用可能なプリセットがありません") {}
-                        .disabled(true)
-                } else {
-                    ForEach(chatPresets) { preset in
-                        Button {
-                            viewModel.applyChatPreset(preset)
-                        } label: {
-                            if isActiveChatPreset(preset) {
-                                Label(preset.name, systemImage: "checkmark")
-                            } else {
-                                Text(preset.name)
-                            }
-                        }
-                    }
-                }
-            } label: {
-                modelTitleLabel(showsChevron: true)
+        Button {
+            if canSwitchChatModel {
+                workspaceStore.present(.modelPicker)
+            } else {
+                workspaceStore.present(.modePicker)
             }
-            .buttonStyle(.plain)
-            .disabled(viewModel.isSending)
-            .accessibilityLabel(Text("モデルを切り替え"))
-        } else {
-            modelTitleLabel(showsChevron: false)
+        } label: {
+            modelTitleLabel(showsChevron: true)
         }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isSending)
+        .accessibilityLabel(Text(canSwitchChatModel ? "モデルを切り替え" : "会話モードを変更"))
+        .accessibilityIdentifier("chat-model-button")
     }
 
     private var moreMenu: some View {
@@ -254,35 +240,9 @@ struct ChatWorkspaceScreen: View {
                 .disabled(isExporting)
 
                 Button {
-                    viewModel.toggleDualMode()
+                    workspaceStore.present(.modePicker)
                 } label: {
-                    if viewModel.settings.isDualModeEnabled {
-                        Label(L10n.text("デュアルモード"), systemImage: "checkmark")
-                    } else {
-                        Text(L10n.text("デュアルモード"))
-                    }
-                }
-                .disabled(viewModel.isSending)
-
-                Button {
-                    viewModel.toggleFusionMode()
-                } label: {
-                    if viewModel.settings.isFusionModeEnabled {
-                        Label(L10n.text("Fusion モード"), systemImage: "checkmark")
-                    } else {
-                        Text(L10n.text("Fusion モード"))
-                    }
-                }
-                .disabled(viewModel.isSending)
-
-                Button {
-                    viewModel.toggleAutoConversation()
-                } label: {
-                    if viewModel.settings.isAutoConversationEnabled {
-                        Label(L10n.text("自動会話"), systemImage: "checkmark")
-                    } else {
-                        Text(L10n.text("自動会話"))
-                    }
+                    Label(L10n.text("会話モード"), systemImage: ChatMode(settings: viewModel.settings).systemImage)
                 }
                 .disabled(viewModel.isSending)
 
@@ -331,6 +291,18 @@ struct ChatWorkspaceScreen: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("その他"))
+    }
+
+    @ViewBuilder
+    private func workspaceSheet(for route: ChatWorkspaceRoute) -> some View {
+        switch route {
+        case .modelPicker:
+            ChatModelPickerSheet(viewModel: viewModel)
+        case .modePicker:
+            ChatModePickerSheet(viewModel: viewModel)
+        default:
+            ChatWorkspaceRouteSheet(route: route)
+        }
     }
 
     private func modelTitleLabel(showsChevron: Bool) -> some View {

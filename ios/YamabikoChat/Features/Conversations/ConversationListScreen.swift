@@ -129,24 +129,21 @@ struct ConversationListScreen: View {
                             }
                         }
 
-                        drawerActionRow(
-                            title: L10n.text("秘密チャット"),
-                            systemImage: "lock"
-                        ) {
-                            createConversation(secret: true)
-                        }
                     }
                 }
 
-                Section {
-                    if viewModel.filteredConversations.isEmpty {
+                if viewModel.filteredConversations.isEmpty {
+                    Section {
                         Text(L10n.text("会話がありません"))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .padding(.vertical, 6)
                             .listRowSeparator(.hidden)
-                    } else {
-                        ForEach(viewModel.filteredConversations) { entry in
+                    }
+                } else {
+                    ForEach(groupedConversations, id: \.title) { group in
+                        Section {
+                            ForEach(group.entries) { entry in
                             conversationRow(entry)
                                 .listRowInsets(
                                     EdgeInsets(
@@ -157,15 +154,14 @@ struct ConversationListScreen: View {
                                     )
                                 )
                                 .listRowSeparator(.hidden)
+                            }
+                        } header: {
+                            Text(group.title)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .textCase(nil)
+                                .padding(.leading, -4)
                         }
-                    }
-                } header: {
-                    if !viewModel.filteredConversations.isEmpty && !viewModel.isSelectionMode {
-                        Text(L10n.text("最近"))
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .textCase(nil)
-                            .padding(.leading, -4)
                     }
                 }
             }
@@ -230,15 +226,23 @@ struct ConversationListScreen: View {
                 }
                 .buttonStyle(.plain)
 
-                Button {
-                    createConversation(secret: false)
+                Menu {
+                    Button {
+                        createConversation(secret: false)
+                    } label: {
+                        Label(L10n.text("新しいチャット"), systemImage: "bubble.left")
+                    }
+                    Button {
+                        createConversation(secret: true)
+                    } label: {
+                        Label(L10n.text("秘密チャット"), systemImage: "lock")
+                    }
                 } label: {
                     Image(systemName: "square.and.pencil")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(.primary)
                         .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.plain)
             }
 
             if let onClose {
@@ -256,6 +260,39 @@ struct ConversationListScreen: View {
         .padding(.horizontal, 14)
         .padding(.top, 8)
         .padding(.bottom, 6)
+    }
+
+    private var groupedConversations: [(title: String, entries: [ConversationListEntry])] {
+        let calendar = Calendar.current
+        let now = Date()
+        let today = calendar.startOfDay(for: now)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
+        let lastWeek = calendar.date(byAdding: .day, value: -7, to: today) ?? today
+
+        var todayEntries: [ConversationListEntry] = []
+        var yesterdayEntries: [ConversationListEntry] = []
+        var weekEntries: [ConversationListEntry] = []
+        var olderEntries: [ConversationListEntry] = []
+
+        for entry in viewModel.filteredConversations {
+            let date = Date(timeIntervalSince1970: Double(entry.updatedAtMs) / 1_000)
+            if date >= today {
+                todayEntries.append(entry)
+            } else if date >= yesterday {
+                yesterdayEntries.append(entry)
+            } else if date >= lastWeek {
+                weekEntries.append(entry)
+            } else {
+                olderEntries.append(entry)
+            }
+        }
+
+        return [
+            (L10n.text("今日"), todayEntries),
+            (L10n.text("昨日"), yesterdayEntries),
+            (L10n.text("過去7日間"), weekEntries),
+            (L10n.text("それ以前"), olderEntries)
+        ].filter { !$0.entries.isEmpty }
     }
 
     // MARK: - Settings Footer

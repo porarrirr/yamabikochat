@@ -24,7 +24,7 @@ struct ProjectDetailScreen: View {
         VStack(spacing: 0) {
             headerBar
 
-            tabPillSection
+            projectContextSection
 
             conversationList
 
@@ -161,24 +161,39 @@ struct ProjectDetailScreen: View {
         .padding(.bottom, 10)
     }
 
-    // MARK: - Tab Pills
+    // MARK: - Project Context
 
-    private var tabPillSection: some View {
-        HStack(spacing: 8) {
-            Text(L10n.text("チャット"))
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(
-                    Capsule()
-                        .fill(Color(uiColor: .secondarySystemFill))
-                )
-
-            Spacer()
+    private var projectContextSection: some View {
+        Button {
+            isInstructionsPresented = true
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "text.alignleft")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 8))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.text("プロジェクトの指示"))
+                        .font(.subheadline.weight(.semibold))
+                    Text(project?.instructions?.trimmedNonEmpty ?? L10n.text("指示はまだ設定されていません"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 7)
+            }
+            .padding(13)
+            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .padding(.horizontal, 16)
-        .padding(.vertical, 6)
+        .padding(.bottom, 8)
     }
 
     // MARK: - Conversation List
