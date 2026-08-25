@@ -90,6 +90,14 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         XCTAssertTrue(first.contains { if case .table = $0 { return true }; return false })
     }
 
+    func testNativeMarkdownRenderIdentityChangesWhenBlockKindChangesAtSameOffset() {
+        let paragraph = NativeMarkdownBlock.paragraph(id: "block-0", text: AttributedString("Title"))
+        let heading = NativeMarkdownBlock.heading(id: "block-0", level: 1, text: AttributedString("Title"))
+
+        XCTAssertEqual(paragraph.id, heading.id)
+        XCTAssertNotEqual(paragraph.renderID, heading.renderID)
+    }
+
     func testNativeMarkdownParserHonorsDisabledMathRendering() {
         let markdown = "Energy is $E = mc^2$."
 
@@ -406,6 +414,86 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         for (previous, next) in zip(frames, frames.dropFirst()) {
             XCTAssertLessThanOrEqual(previous.maxY, next.minY)
         }
+        for indexPath in collectionView.indexPathsForVisibleItems {
+            guard let cell = collectionView.cellForItem(at: indexPath),
+                  let attributes = collectionView.layoutAttributesForItem(at: indexPath)
+            else { continue }
+            let fittedHeight = cell.contentView.systemLayoutSizeFitting(
+                CGSize(
+                    width: attributes.size.width,
+                    height: UIView.layoutFittingCompressedSize.height
+                ),
+                withHorizontalFittingPriority: .required,
+                verticalFittingPriority: .fittingSizeLevel
+            ).height
+            XCTAssertEqual(
+                attributes.size.height,
+                ceil(fittedHeight),
+                accuracy: 0.5,
+                "The layout must contain the asynchronously rendered Markdown content"
+            )
+        }
+    }
+
+    @MainActor
+    func testStreamingMarkdownKeepsShortResponseViewportStable() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: [timelineMessage(id: 1, text: "")])
+        let controller = configuredTimelineController(store: store)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+        var offsets: [CGFloat] = []
+        let source = """
+        # 📰 今日のニュースまとめ（フィクション）
+        2026年8月25日（月）
+
+        ### 🌍 国際ニュース
+        月面基地「アルテミス・ゲート」が正式運用開始
+        アメリカ航空宇宙局（NASA）と国際パートナーは今日、月面基地「アルテミス・ゲート」の運用を正式に開始したと発表した。
+
+        ### 🔬 科学技術
+        量子コンピュータが新薬開発に革命 — 開発期間を10分の1に
+
+        Google Quantum AI
+        """
+        for boundary in stride(from: 12, through: source.count, by: 12) {
+            store.applyStreamingSnapshot(ChatStreamingSnapshot(
+                targetId: 1,
+                text: String(source.prefix(boundary)),
+                thinking: "",
+                toolActivity: nil,
+                isFinal: false
+            ))
+            try? await Task.sleep(nanoseconds: 20_000_000)
+            controller.view.layoutIfNeeded()
+            _ = UIGraphicsImageRenderer(bounds: controller.view.bounds).image { _ in
+                controller.view.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
+            }
+            offsets.append(collectionView.contentOffset.y)
+        }
+        await settleTimeline(controller)
+        let drift = try XCTUnwrap(offsets.max()) - (try XCTUnwrap(offsets.min()))
+        XCTAssertLessThanOrEqual(drift, 0.5, "Unexpected streaming offsets: \(offsets)")
+        let indexPath = IndexPath(item: 0, section: 0)
+        let cell = try XCTUnwrap(collectionView.cellForItem(at: indexPath))
+        let attributes = try XCTUnwrap(collectionView.layoutAttributesForItem(at: indexPath))
+        let fittedHeight = cell.contentView.systemLayoutSizeFitting(
+            CGSize(
+                width: attributes.size.width,
+                height: UIView.layoutFittingCompressedSize.height
+            ),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        ).height
+        XCTAssertEqual(
+            attributes.size.height,
+            ceil(fittedHeight),
+            accuracy: 0.5,
+            "The cell must track the asynchronously rendered Markdown height"
+        )
     }
 
     @MainActor

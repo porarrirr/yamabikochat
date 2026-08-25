@@ -61,6 +61,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var pendingContentAnchor: (id: String, offset: CGFloat)?
     private var pendingViewportOffsetY: CGFloat?
     private var pendingChangedRowIDs: Set<String> = []
+    private var pendingPreferredHeights: [String: CGFloat] = [:]
     private var pendingLocksViewport = false
     private var viewportCompensationBottom: CGFloat = 0
     private var viewportLockTargetY: CGFloat?
@@ -129,6 +130,11 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                 )
             }
             .margins(.all, 0)
+            if let cell = cell as? ChatTimelineCollectionCell {
+                cell.onPreferredHeightChange = { [weak self] height in
+                    self?.preferredHeightDidChange(for: id, height: height)
+                }
+            }
             return cell
         }
     }
@@ -181,6 +187,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             pendingContentAnchor = nil
             pendingViewportOffsetY = nil
             pendingChangedRowIDs.removeAll()
+            pendingPreferredHeights.removeAll()
             pendingLocksViewport = false
             clearViewportCompensation()
             store.onRowContentWillChange = { [weak self] rowID, kind in
@@ -252,6 +259,27 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         }
     }
 
+    private func preferredHeightDidChange(for rowID: String, height: CGFloat) {
+        guard height.isFinite, height > 0,
+              configuredIDs.contains(rowID)
+        else { return }
+        if pendingContentAnchor == nil {
+            pendingContentAnchor = captureVisibleAnchor()
+            pendingViewportOffsetY = collectionView.contentOffset.y
+        }
+        pendingChangedRowIDs.insert(rowID)
+        pendingPreferredHeights[rowID] = height
+        if store?.row(id: rowID)?.streamingSnapshot?.isFinal == false {
+            pendingLocksViewport = true
+            detach(using: pendingContentAnchor)
+        }
+        guard !isContentUpdateScheduled else { return }
+        isContentUpdateScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            self?.completePendingRowMeasurement()
+        }
+    }
+
     private func completePendingRowMeasurement() {
         UIView.performWithoutAnimation {
             let indexPaths = pendingChangedRowIDs.compactMap { id -> IndexPath? in
@@ -265,6 +293,10 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             }
             if !indexPaths.isEmpty {
                 let context = ChatTimelineLayoutInvalidationContext()
+                for (rowID, height) in pendingPreferredHeights {
+                    guard let index = configuredIDs.firstIndex(of: rowID) else { continue }
+                    context.preferredHeights[IndexPath(item: index, section: 0)] = height
+                }
                 context.invalidateItems(at: indexPaths)
                 collectionView.collectionViewLayout.invalidateLayout(with: context)
             }
@@ -278,6 +310,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         pendingContentAnchor = nil
         pendingViewportOffsetY = nil
         pendingChangedRowIDs.removeAll()
+        pendingPreferredHeights.removeAll()
         pendingLocksViewport = false
         isContentUpdateScheduled = false
     }
@@ -572,21 +605,45 @@ private final class ChatTimelineLayout: UICollectionViewLayout {
 }
 
 private final class ChatTimelineCollectionCell: UICollectionViewCell {
+    var onPreferredHeightChange: ((CGFloat) -> Void)?
+    private var lastReportedHeight: CGFloat?
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        onPreferredHeightChange = nil
+        lastReportedHeight = nil
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.width > 0 else { return }
+        let height = measuredContentHeight(for: bounds.width)
+        guard height > 0,
+              lastReportedHeight.map({ abs($0 - height) > TailFollowPolicy.offsetTolerance }) ?? true
+        else { return }
+        lastReportedHeight = height
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.lastReportedHeight == height else { return }
+            self.onPreferredHeightChange?(height)
+        }
+    }
+
     override func preferredLayoutAttributesFitting(
         _ layoutAttributes: UICollectionViewLayoutAttributes
     ) -> UICollectionViewLayoutAttributes {
         let attributes = super.preferredLayoutAttributesFitting(layoutAttributes)
-        let targetSize = CGSize(
-            width: layoutAttributes.size.width,
-            height: UIView.layoutFittingCompressedSize.height
-        )
+        let height = measuredContentHeight(for: layoutAttributes.size.width)
+        attributes.size = CGSize(width: layoutAttributes.size.width, height: height)
+        return attributes
+    }
+
+    private func measuredContentHeight(for width: CGFloat) -> CGFloat {
         let measuredSize = contentView.systemLayoutSizeFitting(
-            targetSize,
+            CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
             withHorizontalFittingPriority: .required,
             verticalFittingPriority: .fittingSizeLevel
         )
-        attributes.size = CGSize(width: layoutAttributes.size.width, height: ceil(measuredSize.height))
-        return attributes
+        return ceil(measuredSize.height)
     }
 }
 

@@ -21,6 +21,21 @@ enum NativeMarkdownBlock: Identifiable, Equatable, Sendable {
              let .divider(id): id
         }
     }
+
+    var renderID: String {
+        let kind: String
+        switch self {
+        case .paragraph: kind = "paragraph"
+        case let .heading(_, level, _): kind = "heading-\(level)"
+        case .code: kind = "code"
+        case .math: kind = "math"
+        case .quote: kind = "quote"
+        case let .list(_, ordered, _, _): kind = ordered ? "ordered-list" : "unordered-list"
+        case .table: kind = "table"
+        case .divider: kind = "divider"
+        }
+        return "\(id):\(kind)"
+    }
 }
 
 enum NativeMarkdownParser {
@@ -327,6 +342,7 @@ struct NativeMarkdownView: View {
             } else {
                 ForEach(blocks) { block in
                     NativeMarkdownBlockView(block: block)
+                        .id(block.renderID)
                 }
             }
         }
@@ -396,6 +412,7 @@ private struct NativeMarkdownBlockView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(blocks) { child in
                         NativeMarkdownBlockView(block: child)
+                            .id(child.renderID)
                     }
                 }
             }
