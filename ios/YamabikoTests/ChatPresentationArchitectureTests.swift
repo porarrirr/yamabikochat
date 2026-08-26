@@ -696,6 +696,18 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         ))
         await settleTimeline(controller)
 
+        controller.scrollViewWillBeginDragging(collectionView)
+        collectionView.setContentOffset(
+            CGPoint(x: 0, y: max(
+                -collectionView.adjustedContentInset.top,
+                collectionView.contentOffset.y - 150
+            )),
+            animated: false
+        )
+        controller.scrollViewDidScroll(collectionView)
+        controller.scrollViewDidEndDragging(collectionView, willDecelerate: false)
+        await settleTimeline(controller)
+
         let baseline = collectionView.contentOffset.y
         var observedOffsets: [CGFloat] = []
         let observation = collectionView.observe(\.contentOffset, options: [.new]) { _, change in
@@ -738,6 +750,18 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         window.makeKeyAndVisible()
         await settleTimeline(controller)
         let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+
+        controller.scrollViewWillBeginDragging(collectionView)
+        collectionView.setContentOffset(
+            CGPoint(x: 0, y: max(
+                -collectionView.adjustedContentInset.top,
+                collectionView.contentOffset.y - 150
+            )),
+            animated: false
+        )
+        controller.scrollViewDidScroll(collectionView)
+        controller.scrollViewDidEndDragging(collectionView, willDecelerate: false)
+        await settleTimeline(controller)
         let anchor = try XCTUnwrap(visibleAnchor(in: collectionView))
         var observedAnchorOffsets: [CGFloat] = []
         var source = "# 生成中\n\n最初の段落です。"
@@ -864,6 +888,131 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testReturningToTailDuringGenerationContinuesFollowingNewContent() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: (1...24).map {
+            timelineMessage(id: Int64($0), text: String(repeating: "Message \($0) line\n", count: 4))
+        })
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+
+        var source = String(repeating: "生成中の回答です。\n\n", count: 20)
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 24,
+            text: source,
+            thinking: "",
+            toolActivity: nil,
+            isFinal: false
+        ))
+        await settleTimeline(controller)
+
+        controller.scrollViewWillBeginDragging(collectionView)
+        collectionView.setContentOffset(
+            CGPoint(x: 0, y: maximumContentOffset(in: collectionView)),
+            animated: false
+        )
+        controller.scrollViewDidScroll(collectionView)
+        controller.scrollViewDidEndDragging(collectionView, willDecelerate: false)
+        let previousTailOffset = collectionView.contentOffset.y
+
+        source += String(repeating: "さらに生成された文章です。\n\n", count: 30)
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 24,
+            text: source,
+            thinking: "",
+            toolActivity: nil,
+            isFinal: false
+        ))
+        await settleTimeline(controller)
+
+        XCTAssertGreaterThan(collectionView.contentOffset.y, previousTailOffset)
+        XCTAssertEqual(
+            collectionView.contentOffset.y,
+            maximumContentOffset(in: collectionView),
+            accuracy: 0.5,
+            "A reader who returns to the tail must follow newly streamed text"
+        )
+    }
+
+    @MainActor
+    func testReleasedDetachedScrollRemainsStableAcrossNextStreamFrame() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: (1...24).map {
+            timelineMessage(id: Int64($0), text: String(repeating: "Message \($0) line\n", count: 4))
+        })
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+
+        controller.scrollViewWillBeginDragging(collectionView)
+        let detachedOffset = max(
+            -collectionView.adjustedContentInset.top,
+            collectionView.contentOffset.y - 500
+        )
+        collectionView.setContentOffset(CGPoint(x: 0, y: detachedOffset), animated: false)
+        controller.scrollViewDidScroll(collectionView)
+        controller.scrollViewDidEndDragging(collectionView, willDecelerate: false)
+        await settleTimeline(controller)
+        let settledOffset = collectionView.contentOffset.y
+        let anchor = try XCTUnwrap(visibleAnchor(in: collectionView))
+
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 24,
+            text: String(repeating: "生成中の長い回答です。\n", count: 80),
+            thinking: "",
+            toolActivity: nil,
+            isFinal: false
+        ))
+        await settleTimeline(controller)
+
+        XCTAssertEqual(collectionView.contentOffset.y, settledOffset, accuracy: 0.5)
+        assertVisibleAnchor(anchor, in: collectionView)
+    }
+
+    @MainActor
+    func testPendingLatestMoveDoesNotOverrideAUserScroll() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: (1...20).map {
+            timelineMessage(id: Int64($0), text: String(repeating: "Message \($0) line\n", count: 4))
+        })
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+
+        store.update(messages: (1...21).map {
+            timelineMessage(id: Int64($0), text: String(repeating: "Message \($0) line\n", count: 4))
+        })
+        configure(controller, store: store, scrollRequest: 2)
+
+        controller.scrollViewWillBeginDragging(collectionView)
+        let userOffset = max(
+            -collectionView.adjustedContentInset.top,
+            collectionView.contentOffset.y - 500
+        )
+        collectionView.setContentOffset(CGPoint(x: 0, y: userOffset), animated: false)
+        controller.scrollViewDidScroll(collectionView)
+        controller.scrollViewDidEndDragging(collectionView, willDecelerate: false)
+        await settleTimeline(controller)
+
+        XCTAssertEqual(
+            collectionView.contentOffset.y,
+            userOffset,
+            accuracy: 0.5,
+            "A delayed diffable-data-source completion must not jump back to the tail"
+        )
+    }
+
+    @MainActor
     func testToolSummaryAndAnswerNeverMoveTogetherDuringStreamingUpdates() async throws {
         let store = ChatTimelineStore()
         store.update(messages: (1...24).map {
@@ -873,7 +1022,10 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
         window.rootViewController = controller
         window.makeKeyAndVisible()
-        var source = "# 回答\n\nツールを使った回答を生成中です。"
+        var source = "# 回答\n\n" + String(
+            repeating: "ツールを使った回答を生成中です。表示位置を確認する段落です。\n\n",
+            count: 10
+        )
         var steps = [toolActivityStep(id: "tool-0", status: .completed)]
         store.applyStreamingSnapshot(ChatStreamingSnapshot(
             targetId: 24,
@@ -885,6 +1037,18 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         await settleTimeline(controller)
         let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
         let targetIndexPath = IndexPath(item: 23, section: 0)
+
+        controller.scrollViewWillBeginDragging(collectionView)
+        collectionView.setContentOffset(
+            CGPoint(x: 0, y: max(
+                -collectionView.adjustedContentInset.top,
+                collectionView.contentOffset.y - 120
+            )),
+            animated: false
+        )
+        controller.scrollViewDidScroll(collectionView)
+        controller.scrollViewDidEndDragging(collectionView, willDecelerate: false)
+        await settleTimeline(controller)
         let cell = try XCTUnwrap(collectionView.cellForItem(at: targetIndexPath))
         let baselineFrame = cell.convert(cell.bounds, to: controller.view)
         let baselineTop = baselineFrame.minY
@@ -1010,7 +1174,7 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
-    func testLatestMoveAndStreamCompletionKeepOffsetAndVisibleAnchor() async throws {
+    func testLatestMoveFollowsStreamGrowthAndCompletion() async throws {
         let store = ChatTimelineStore()
         store.update(messages: (1...20).map {
             timelineMessage(id: Int64($0), text: String(repeating: "Message \($0) line\n", count: 5))
@@ -1019,31 +1183,41 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         await settleTimeline(controller)
         let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
         let initialOffset = collectionView.contentOffset.y
-        let initialAnchor = try XCTUnwrap(visibleAnchor(in: collectionView))
 
+        let firstStream = String(repeating: "# Live heading\n\n- item\n\n", count: 40)
         store.applyStreamingSnapshot(ChatStreamingSnapshot(
             targetId: 20,
-            text: String(repeating: "# Live heading\n\n- item\n", count: 40),
+            text: firstStream,
             thinking: "",
             toolActivity: nil,
             isFinal: false
         ))
         await settleTimeline(controller)
-        XCTAssertEqual(collectionView.contentOffset.y, initialOffset, accuracy: 0.5)
-        assertVisibleAnchor(initialAnchor, in: collectionView)
+        XCTAssertGreaterThan(collectionView.contentOffset.y, initialOffset)
+        XCTAssertEqual(collectionView.contentOffset.y, maximumContentOffset(in: collectionView), accuracy: 0.5)
 
         let streamOffset = collectionView.contentOffset.y
-        let streamAnchor = try XCTUnwrap(visibleAnchor(in: collectionView))
+        let secondStream = firstStream + String(repeating: "追加の生成段落です。\n\n", count: 40)
         store.applyStreamingSnapshot(ChatStreamingSnapshot(
             targetId: 20,
-            text: String(repeating: "# Final heading\n\n- item\n", count: 60),
+            text: secondStream,
+            thinking: "",
+            toolActivity: nil,
+            isFinal: false
+        ))
+        await settleTimeline(controller)
+        XCTAssertGreaterThan(collectionView.contentOffset.y, streamOffset)
+        XCTAssertEqual(collectionView.contentOffset.y, maximumContentOffset(in: collectionView), accuracy: 0.5)
+
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 20,
+            text: secondStream,
             thinking: "",
             toolActivity: nil,
             isFinal: true
         ))
         await settleTimeline(controller)
-        XCTAssertEqual(collectionView.contentOffset.y, streamOffset, accuracy: 0.5)
-        assertVisibleAnchor(streamAnchor, in: collectionView)
+        XCTAssertEqual(collectionView.contentOffset.y, maximumContentOffset(in: collectionView), accuracy: 0.5)
     }
 
     @MainActor
@@ -1054,6 +1228,18 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         let controller = ChatTimelineViewController()
         controller.loadViewIfNeeded()
         controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 700)
+        configure(controller, store: store, scrollRequest: scrollRequest)
+        controller.view.setNeedsLayout()
+        controller.view.layoutIfNeeded()
+        return controller
+    }
+
+    @MainActor
+    private func configure(
+        _ controller: ChatTimelineViewController,
+        store: ChatTimelineStore,
+        scrollRequest: Int
+    ) {
         controller.configure(
             store: store,
             scrollToLatestRequest: scrollRequest,
@@ -1069,9 +1255,6 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             onBranch: { _ in },
             onRegenerate: {}
         )
-        controller.view.setNeedsLayout()
-        controller.view.layoutIfNeeded()
-        return controller
     }
 
     private func timelineMessage(id: Int64, text: String) -> FullChatMessage {
@@ -1189,6 +1372,15 @@ final class ChatPresentationArchitectureTests: XCTestCase {
               let attributes = collectionView.layoutAttributesForItem(at: indexPath)
         else { return nil }
         return (indexPath, attributes.frame.minY - collectionView.contentOffset.y)
+    }
+
+    private func maximumContentOffset(in collectionView: UICollectionView) -> CGFloat {
+        max(
+            -collectionView.adjustedContentInset.top,
+            collectionView.contentSize.height
+                - collectionView.bounds.height
+                + collectionView.adjustedContentInset.bottom
+        )
     }
 
     private func assertVisibleAnchor(

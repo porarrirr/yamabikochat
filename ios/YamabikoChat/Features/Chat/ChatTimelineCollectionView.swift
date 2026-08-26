@@ -66,6 +66,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var viewportLockTargetY: CGFloat?
     private var isContentUpdateScheduled = false
     private var isUserScrollInProgress = false
+    private var userScrollGeneration = 0
     private var previousRegeneratableMessageID: Int64?
     private var previousMathRenderingEnabled = true
     private var previousFusionDebugModeEnabled = false
@@ -250,9 +251,9 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             pendingContentAnchor = captureVisibleAnchor()
             pendingViewportOffsetY = collectionView.contentOffset.y
         }
-        if kind == .streamUpdate || kind == .completion {
+        if (kind == .streamUpdate || kind == .completion),
+           case .detached = followState {
             pendingLocksViewport = true
-            detach(using: pendingContentAnchor)
         }
     }
 
@@ -285,6 +286,11 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             if !context.preferredHeights.isEmpty {
                 context.invalidateItems(at: Array(context.preferredHeights.keys))
                 collectionView.collectionViewLayout.invalidateLayout(with: context)
+                // Item-only invalidation updates the attributes but UIKit does
+                // not ask this custom layout for a new collection content size.
+                // Fully invalidate after preserving the measured heights so the
+                // scrollable range grows with the streamed cell.
+                collectionView.collectionViewLayout.invalidateLayout()
             }
             collectionView.layoutIfNeeded()
             if isUserScrolling {
@@ -312,9 +318,13 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         let previousIDs = Set(configuredIDs)
         let idsChanged = configuredIDs != ids
         let anchor = captureVisibleAnchor()
+        let capturedUserScrollGeneration = userScrollGeneration
 
         if idsChanged {
-            (collectionView.collectionViewLayout as? ChatTimelineLayout)?.resetMeasuredHeights()
+            (collectionView.collectionViewLayout as? ChatTimelineLayout)?.remapMeasuredHeights(
+                from: configuredIDs,
+                to: ids
+            )
             configuredIDs = ids
             var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
             snapshot.appendSections([0])
@@ -329,14 +339,22 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                 unreadCount += ids.lazy.filter { !previousIDs.contains($0) }.count
             }
             dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
-                self?.restorePosition(anchor: anchor)
+                guard let self else { return }
+                if self.userScrollGeneration == capturedUserScrollGeneration,
+                   !self.isUserScrolling {
+                    self.restorePosition(anchor: anchor)
+                }
                 completion?()
             }
         } else if reconfigureAll, !configuredIDs.isEmpty {
             var snapshot = dataSource.snapshot()
             snapshot.reconfigureItems(configuredIDs)
             dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
-                self?.restorePosition(anchor: anchor)
+                guard let self else { return }
+                if self.userScrollGeneration == capturedUserScrollGeneration,
+                   !self.isUserScrolling {
+                    self.restorePosition(anchor: anchor)
+                }
                 completion?()
             }
         } else {
@@ -383,11 +401,14 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     }
 
     private func moveToLatestOnce() {
+        guard !isUserScrolling, case .followingTail = followState else {
+            publishFollowState()
+            return
+        }
         clearViewportCompensation()
         UIView.performWithoutAnimation {
             collectionView.layoutIfNeeded()
             pinToTail()
-            detachAtVisibleAnchor()
         }
         unreadCount = 0
         publishFollowState()
@@ -425,6 +446,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     }
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        userScrollGeneration &+= 1
         isUserScrollInProgress = true
         cancelPendingViewportRestoreForUserScroll()
         detachAtVisibleAnchor()
@@ -535,6 +557,21 @@ private final class ChatTimelineLayout: UICollectionViewLayout {
 
     func resetMeasuredHeights() {
         measuredHeights.removeAll()
+    }
+
+    func remapMeasuredHeights(from previousIDs: [String], to nextIDs: [String]) {
+        guard !measuredHeights.isEmpty else { return }
+        var heightsByID: [String: CGFloat] = [:]
+        for (indexPath, height) in measuredHeights where previousIDs.indices.contains(indexPath.item) {
+            heightsByID[previousIDs[indexPath.item]] = height
+        }
+        var remapped: [IndexPath: CGFloat] = [:]
+        for (index, id) in nextIDs.enumerated() {
+            if let height = heightsByID[id] {
+                remapped[IndexPath(item: index, section: 0)] = height
+            }
+        }
+        measuredHeights = remapped
     }
 
     override func prepare() {
