@@ -795,6 +795,75 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testStreamingMeasurementNeverRewindsActiveUserScroll() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: (1...24).map {
+            timelineMessage(id: Int64($0), text: String(repeating: "Message \($0) line\n", count: 4))
+        })
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+        let minimumOffset = -collectionView.adjustedContentInset.top
+        let initialContentHeight = collectionView.contentSize.height
+        var source = "# 生成中\n\n最初の段落です。"
+        var expectedOffset = collectionView.contentOffset.y
+
+        controller.scrollViewWillBeginDragging(collectionView)
+        for paragraph in 1...6 {
+            source += "\n\n段落\(paragraph)です。高さを増やしながら指で上へスクロールします。"
+            store.applyStreamingSnapshot(ChatStreamingSnapshot(
+                targetId: 24,
+                text: source,
+                thinking: "",
+                toolActivity: nil,
+                isFinal: false
+            ))
+
+            // The finger moves after the stream update captured its pre-measurement state.
+            // A delayed height measurement must not restore that older offset.
+            expectedOffset = max(minimumOffset, expectedOffset - 18)
+            collectionView.setContentOffset(CGPoint(x: 0, y: expectedOffset), animated: false)
+            controller.scrollViewDidScroll(collectionView)
+            for _ in 0..<6 {
+                await Task.yield()
+                controller.view.layoutIfNeeded()
+            }
+            XCTAssertEqual(collectionView.contentOffset.y, expectedOffset, accuracy: 0.5)
+        }
+
+        controller.scrollViewDidEndDragging(collectionView, willDecelerate: true)
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 24,
+            text: source + "\n\n慣性スクロール中の更新です。",
+            thinking: "",
+            toolActivity: nil,
+            isFinal: false
+        ))
+        expectedOffset = max(minimumOffset, expectedOffset - 24)
+        collectionView.setContentOffset(CGPoint(x: 0, y: expectedOffset), animated: false)
+        controller.scrollViewDidScroll(collectionView)
+        for _ in 0..<8 {
+            await Task.yield()
+            controller.view.layoutIfNeeded()
+        }
+        XCTAssertEqual(
+            collectionView.contentOffset.y,
+            expectedOffset,
+            accuracy: 0.5,
+            "Streaming must not fight deceleration"
+        )
+        XCTAssertGreaterThan(
+            abs(collectionView.contentSize.height - initialContentHeight),
+            0.5,
+            "Streaming height measurement must still be applied while the user scrolls"
+        )
+        controller.scrollViewDidEndDecelerating(collectionView)
+    }
+
+    @MainActor
     func testToolSummaryAndAnswerNeverMoveTogetherDuringStreamingUpdates() async throws {
         let store = ChatTimelineStore()
         store.update(messages: (1...24).map {

@@ -65,6 +65,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var viewportCompensationBottom: CGFloat = 0
     private var viewportLockTargetY: CGFloat?
     private var isContentUpdateScheduled = false
+    private var isUserScrollInProgress = false
     private var previousRegeneratableMessageID: Int64?
     private var previousMathRenderingEnabled = true
     private var previousFusionDebugModeEnabled = false
@@ -152,9 +153,12 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             layout.resetMeasuredHeights()
             layout.invalidateLayout()
         }
-        guard case .followingTail = followState else { return }
+        guard !isUserScrolling, case .followingTail = followState else { return }
         DispatchQueue.main.async { [weak self] in
-            guard let self, case .followingTail = self.followState else { return }
+            guard let self,
+                  !self.isUserScrolling,
+                  case .followingTail = self.followState
+            else { return }
             self.collectionView.layoutIfNeeded()
             self.pinToTail()
             self.publishFollowState()
@@ -186,6 +190,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             pendingViewportOffsetY = nil
             pendingChangedRowIDs.removeAll()
             pendingLocksViewport = false
+            isUserScrollInProgress = false
             clearViewportCompensation()
             store.onRowContentWillChange = { [weak self] rowID, kind in
                 self?.prepareForRowContentChange(rowID: rowID, kind: kind)
@@ -236,11 +241,15 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     }
 
     private func prepareForRowContentChange(rowID: String, kind: ChatTimelineRowChangeKind) {
+        pendingChangedRowIDs.insert(rowID)
+        guard !isUserScrolling else {
+            cancelPendingViewportRestoreForUserScroll()
+            return
+        }
         if pendingContentAnchor == nil {
             pendingContentAnchor = captureVisibleAnchor()
             pendingViewportOffsetY = collectionView.contentOffset.y
         }
-        pendingChangedRowIDs.insert(rowID)
         if kind == .streamUpdate || kind == .completion {
             pendingLocksViewport = true
             detach(using: pendingContentAnchor)
@@ -278,11 +287,15 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                 collectionView.collectionViewLayout.invalidateLayout(with: context)
             }
             collectionView.layoutIfNeeded()
-            restorePosition(
-                anchor: pendingContentAnchor,
-                clampsToContentBounds: !pendingLocksViewport,
-                lockedOffsetY: pendingViewportOffsetY
-            )
+            if isUserScrolling {
+                cancelPendingViewportRestoreForUserScroll()
+            } else {
+                restorePosition(
+                    anchor: pendingContentAnchor,
+                    clampsToContentBounds: !pendingLocksViewport,
+                    lockedOffsetY: pendingViewportOffsetY
+                )
+            }
         }
         pendingContentAnchor = nil
         pendingViewportOffsetY = nil
@@ -404,13 +417,21 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         return TailFollowPolicy.isNearTail(distance: collectionView.contentSize.height - visibleBottom)
     }
 
+    private var isUserScrolling: Bool {
+        isUserScrollInProgress
+            || collectionView?.isTracking == true
+            || collectionView?.isDragging == true
+            || collectionView?.isDecelerating == true
+    }
+
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
-        clearViewportCompensation()
+        isUserScrollInProgress = true
+        cancelPendingViewportRestoreForUserScroll()
         detachAtVisibleAnchor()
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        guard scrollView.isDragging || scrollView.isDecelerating else { return }
+        guard isUserScrolling else { return }
         if isNearTail {
             followState = .followingTail
             unreadCount = 0
@@ -422,10 +443,12 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
 
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
         guard !decelerate else { return }
+        isUserScrollInProgress = false
         settleFollowState()
     }
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        isUserScrollInProgress = false
         settleFollowState()
     }
 
@@ -460,7 +483,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     }
 
     private func maintainViewportLockIfNeeded() {
-        guard let targetY = viewportLockTargetY else { return }
+        guard !isUserScrolling, let targetY = viewportLockTargetY else { return }
         let inset = collectionView.adjustedContentInset
         let lower = -inset.top
         let naturalUpper = max(
@@ -483,6 +506,13 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         guard viewportCompensationBottom > 0 else { return }
         collectionView.contentInset.bottom -= viewportCompensationBottom
         viewportCompensationBottom = 0
+    }
+
+    private func cancelPendingViewportRestoreForUserScroll() {
+        pendingContentAnchor = nil
+        pendingViewportOffsetY = nil
+        pendingLocksViewport = false
+        clearViewportCompensation()
     }
 }
 
