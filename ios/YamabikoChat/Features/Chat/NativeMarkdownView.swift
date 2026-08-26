@@ -522,6 +522,7 @@ private struct NativeMarkdownTable: View {
                         ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
                             Text(cell)
                                 .font(rowIndex == 0 ? .caption.weight(.semibold) : .caption)
+                                .textSelection(.enabled)
                                 .frame(minWidth: 110, maxWidth: 220, alignment: .leading)
                                 .padding(9)
                                 .background(rowIndex == 0 ? Color.secondary.opacity(0.12) : Color.clear)

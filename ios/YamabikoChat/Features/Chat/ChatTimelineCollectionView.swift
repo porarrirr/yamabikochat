@@ -842,6 +842,7 @@ private struct ChatMessageRow: View {
                         Text(responseText)
                             .font(.callout)
                             .foregroundStyle(.red)
+                            .textSelection(.enabled)
                             .padding(12)
                             .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
                     } else if !markdownText.isEmpty {
@@ -900,18 +901,9 @@ private struct ChatMessageRow: View {
                 .frame(maxWidth: 760, alignment: .leading)
             }
         }
-        .modifier(ChatMessageContextMenuModifier(
-            isEnabled: !isStreaming,
-            canRegenerate: canRegenerate,
-            showsFusionDetail: fusionTrace != nil,
-            onCopy: { UIPasteboard.general.string = responseText },
-            onBranch: { onBranch(message.id) },
-            onRegenerate: onRegenerate,
-            onShowFusionDetail: {
-                guard let fusionTrace else { return }
-                showFusionDetails(fusionTrace)
-            }
-        ))
+        // A message-wide context menu intercepts the long press before SwiftUI's
+        // selectable Text can resolve the character under the user's finger.
+        // Message commands remain available in ChatMessageActions below the body.
     }
 
     private func showFusionDetails(_ trace: FusionTrace) {
@@ -931,40 +923,6 @@ private struct ChatMessageRow: View {
 
     private var attachmentItems: [ChatAttachmentItem] {
         attachmentPaths.map(ChatAttachmentItem.init(rawValue:))
-    }
-}
-
-private struct ChatMessageContextMenuModifier: ViewModifier {
-    let isEnabled: Bool
-    let canRegenerate: Bool
-    let showsFusionDetail: Bool
-    let onCopy: () -> Void
-    let onBranch: () -> Void
-    let onRegenerate: () -> Void
-    let onShowFusionDetail: () -> Void
-
-    func body(content: Content) -> some View {
-        if isEnabled {
-            content.contextMenu {
-                Button(action: onCopy) {
-                    Label(L10n.text("コピー"), systemImage: "doc.on.doc")
-                }
-                Button(action: onBranch) {
-                    Label(L10n.text("ここからブランチ"), systemImage: "arrow.branch")
-                }
-                Button(action: onRegenerate) {
-                    Label(L10n.text("再生成"), systemImage: "arrow.clockwise")
-                }
-                .disabled(!canRegenerate)
-                if showsFusionDetail {
-                    Button(action: onShowFusionDetail) {
-                        Label(L10n.text("Fusion 詳細"), systemImage: "arrow.triangle.merge")
-                    }
-                }
-            }
-        } else {
-            content
-        }
     }
 }
 

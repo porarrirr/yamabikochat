@@ -132,6 +132,30 @@ final class AppStoreScreenshotTests: XCTestCase {
         XCTAssertTrue(app.buttons["chat-latest-button"].exists)
     }
 
+    func testLongPressOnChatTextUsesNativeTextSelection() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-AppStoreScreenshotDemo",
+            "-ScreenshotScene", "chat"
+        ]
+        app.launch()
+
+        let selectableText = app.staticTexts["移動は地下鉄 + 徒歩がおすすめです。"].firstMatch
+        XCTAssertTrue(selectableText.waitForExistence(timeout: 20))
+        XCTAssertTrue(selectableText.isHittable)
+
+        selectableText.press(forDuration: 1)
+
+        XCTAssertTrue(
+            app.menuItems["コピー"].firstMatch.waitForExistence(timeout: 5),
+            "Long-pressing message text should open the native text-selection menu"
+        )
+        XCTAssertFalse(
+            app.buttons["ここからブランチ"].firstMatch.exists,
+            "The message-wide context menu must not intercept text selection"
+        )
+    }
+
     private func navigateToConversationList(app: XCUIApplication) {
         if listIsVisible(app: app) {
             return
