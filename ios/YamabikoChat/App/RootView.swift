@@ -13,17 +13,16 @@ enum ConversationListSelectionResolver {
         selectedConversationExists: Bool,
         keepSidebarAfterSecretDiscard: Bool
     ) -> ConversationListSelectionResolution {
-        if let selectedConversationID,
-           ids.contains(selectedConversationID) {
+        if let selectedConversationID {
+            if selectedConversationExists {
+                return .keepCurrentSelection
+            }
+        } else if keepSidebarAfterSecretDiscard {
             return .keepCurrentSelection
         }
 
         guard !ids.isEmpty else {
             return .clearSelection
-        }
-
-        if keepSidebarAfterSecretDiscard, selectedConversationID == nil {
-            return .keepCurrentSelection
         }
 
         return .select(ids[0])

@@ -60,7 +60,8 @@ private struct ChatComposerTextView: UIViewRepresentable {
         container.textView.onDeleteAtBeginning = { [weak coordinator = context.coordinator] in
             coordinator?.deleteSelectedText()
         }
-        configure(container, placeCursorAtEnd: true)
+        context.coordinator.lastReportedText = text
+        configure(container, context: context, placeCursorAtEnd: true)
         return container
     }
 
@@ -74,7 +75,7 @@ private struct ChatComposerTextView: UIViewRepresentable {
                 context.coordinator.requestFocus(for: container)
             }
         }
-        configure(container, placeCursorAtEnd: false)
+        configure(container, context: context, placeCursorAtEnd: false)
 
         if !isEnabled {
             context.coordinator.cancelFocusRequest()
@@ -110,15 +111,17 @@ private struct ChatComposerTextView: UIViewRepresentable {
         return CGSize(width: width, height: min(max(fittingSize.height, lineHeight), lineHeight * 8))
     }
 
-    private func configure(_ container: ComposerContainerView, placeCursorAtEnd: Bool) {
+    private func configure(_ container: ComposerContainerView, context: Context, placeCursorAtEnd: Bool) {
         container.setSelectedText(selectedText)
         container.textView.placeholderLabel.text = placeholder
         let suffix = ChatComposerSelectionPolicy.editableSuffix(in: text, selectedText: selectedText)
+        let isExternalChange = context.coordinator.lastReportedText != text
         if container.textView.markedTextRange == nil,
-           !container.textView.isFirstResponder,
+           (!container.textView.isFirstResponder || isExternalChange),
            container.textView.text != suffix {
             container.textView.text = suffix
-            if placeCursorAtEnd {
+            context.coordinator.lastReportedText = text
+            if placeCursorAtEnd || (isExternalChange && container.textView.isFirstResponder) {
                 container.textView.selectedRange = NSRange(location: (suffix as NSString).length, length: 0)
             }
         } else if placeCursorAtEnd || container.textView.isFirstResponder,
@@ -141,6 +144,7 @@ private struct ChatComposerTextView: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: ChatComposerTextView
+        var lastReportedText: String?
         private var focusRequest: DispatchWorkItem?
 
         init(parent: ChatComposerTextView) {
@@ -177,6 +181,7 @@ private struct ChatComposerTextView: UIViewRepresentable {
 
         func deleteSelectedText() {
             guard parent.selectedText != nil else { return }
+            lastReportedText = ""
             parent.text = ""
             parent.selectedText = nil
             parent.isFocused.wrappedValue = true
@@ -184,10 +189,12 @@ private struct ChatComposerTextView: UIViewRepresentable {
 
         func textViewDidChange(_ textView: UITextView) {
             let suffix = textView.text ?? ""
-            parent.text = ChatComposerSelectionPolicy.combinedInput(
+            let combined = ChatComposerSelectionPolicy.combinedInput(
                 selectedText: parent.selectedText,
                 suffix: suffix
             )
+            lastReportedText = combined
+            parent.text = combined
             (textView as? ComposerTextView)?.placeholderLabel.isHidden = parent.selectedText != nil || !suffix.isEmpty
         }
 

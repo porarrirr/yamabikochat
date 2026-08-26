@@ -24,7 +24,7 @@ private final class ConversationListTestCredentialStore: SecureCredentialStore {
 
 @MainActor
 final class ConversationListViewModelTests: XCTestCase {
-    func testSelectionResolverSelectsVisibleConversationWhenCurrentSelectionIsFilteredOut() {
+    func testSelectionResolverKeepsValidSelectedConversationEvenIfNotInVisibleList() {
         let resolution = ConversationListSelectionResolver.resolve(
             visibleConversationIDs: [10, 9],
             selectedConversationID: 42,
@@ -32,7 +32,7 @@ final class ConversationListViewModelTests: XCTestCase {
             keepSidebarAfterSecretDiscard: false
         )
 
-        XCTAssertEqual(resolution, .select(10))
+        XCTAssertEqual(resolution, .keepCurrentSelection)
     }
 
     func testSelectionResolverSelectsLatestVisibleConversationWhenSelectedConversationWasDeleted() {
