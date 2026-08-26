@@ -65,6 +65,42 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         XCTAssertEqual(container.textView.frame.height, 40, accuracy: 0.5)
     }
 
+    @MainActor
+    func testSelectedTextOnlyReservesSpaceOnFirstEditorLine() {
+        let container = ChatComposerTextView.ComposerContainerView()
+        container.frame = CGRect(x: 0, y: 0, width: 300, height: 80)
+        container.setSelectedText(String(repeating: "長い選択文", count: 30))
+        container.textView.text = String(repeating: "question ", count: 20)
+
+        container.setNeedsLayout()
+        container.layoutIfNeeded()
+
+        XCTAssertEqual(container.textView.frame.width, 300, accuracy: 0.5)
+        XCTAssertEqual(container.textView.textContainer.exclusionPaths.count, 1)
+        let reservedRect = container.textView.textContainer.exclusionPaths[0].bounds
+        XCTAssertEqual(
+            reservedRect.height,
+            container.textView.font?.lineHeight ?? 19,
+            accuracy: 0.5
+        )
+        XCTAssertGreaterThanOrEqual(
+            container.textView.frame.width - reservedRect.width,
+            ChatComposerSelectionPolicy.minimumEditorWidth - 0.5
+        )
+
+        let layoutManager = container.textView.layoutManager
+        layoutManager.ensureLayout(for: container.textView.textContainer)
+        var lineRects: [CGRect] = []
+        layoutManager.enumerateLineFragments(
+            forGlyphRange: NSRange(location: 0, length: layoutManager.numberOfGlyphs)
+        ) { _, usedRect, _, _, _ in
+            lineRects.append(usedRect)
+        }
+        XCTAssertGreaterThan(lineRects.count, 1)
+        XCTAssertGreaterThan(lineRects[0].minX, 0)
+        XCTAssertEqual(lineRects[1].minX, 0, accuracy: 0.5)
+    }
+
     func testSelectedChatTextStartsWithOneTrailingHalfWidthSpace() {
         XCTAssertEqual(ChatComposerSelectionPolicy.initialInput(for: "選択部分"), "選択部分 ")
     }
@@ -88,6 +124,11 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     func testSelectedChatTextMeasuresEditorFromActualTokenWidth() {
+        XCTAssertEqual(
+            ChatComposerSelectionPolicy.editorWidth(totalWidth: .infinity, selectedTextWidth: 500),
+            0,
+            accuracy: 0.001
+        )
         XCTAssertEqual(
             ChatComposerSelectionPolicy.editorWidth(totalWidth: 300, selectedTextWidth: nil),
             300,

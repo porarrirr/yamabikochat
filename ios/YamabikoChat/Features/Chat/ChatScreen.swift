@@ -39,6 +39,7 @@ enum ChatComposerSelectionPolicy {
     }
 
     static func editorWidth(totalWidth: CGFloat, selectedTextWidth: CGFloat?) -> CGFloat {
+        guard totalWidth.isFinite, totalWidth > 0 else { return 0 }
         guard let selectedTextWidth else { return totalWidth }
         let iconAndSpacingWidth: CGFloat = 26
         let availableWidth = max(totalWidth - iconAndSpacingWidth, 0)
@@ -131,13 +132,10 @@ struct ChatComposerTextView: UIViewRepresentable {
         uiView: ComposerContainerView,
         context: Context
     ) -> CGSize? {
-        guard let width = proposal.width else { return nil }
-        let editorWidth = ChatComposerSelectionPolicy.editorWidth(
-            totalWidth: width,
-            selectedTextWidth: selectedText.map { uiView.selectionWidth(for: $0) }
-        )
+        guard let width = proposal.width, width.isFinite, width > 0 else { return nil }
+        uiView.prepareForMeasurement(width: width)
         let fittingSize = uiView.textView.sizeThatFits(
-            CGSize(width: editorWidth, height: .greatestFiniteMagnitude)
+            CGSize(width: width, height: .greatestFiniteMagnitude)
         )
         let lineHeight = uiView.textView.font?.lineHeight ?? 19
         return CGSize(width: width, height: min(max(fittingSize.height, lineHeight), lineHeight * 8))
@@ -290,7 +288,8 @@ struct ChatComposerTextView: UIViewRepresentable {
         let textView = ComposerTextView()
         private let iconView = UIImageView()
         private let selectionLabel = UILabel()
-        private let stackView = UIStackView()
+        private let selectionContainer = UIView()
+        private var selectedText: String?
 
         override init(frame: CGRect) {
             super.init(frame: frame)
@@ -302,42 +301,17 @@ struct ChatComposerTextView: UIViewRepresentable {
             iconView.image = UIImage(systemName: "bubble.left", withConfiguration: configuration)
             iconView.tintColor = UIColor(Color.chatAccent)
             iconView.contentMode = .scaleAspectFit
-            iconView.setContentHuggingPriority(.required, for: .horizontal)
-            NSLayoutConstraint.activate([
-                iconView.widthAnchor.constraint(equalToConstant: 18),
-                iconView.heightAnchor.constraint(equalToConstant: 18)
-            ])
 
             selectionLabel.font = .systemFont(ofSize: 16)
             selectionLabel.textColor = UIColor(Color.chatAccent)
             selectionLabel.numberOfLines = 1
             selectionLabel.lineBreakMode = .byTruncatingTail
-            selectionLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-            stackView.axis = .horizontal
-            stackView.alignment = .top
-            stackView.spacing = 4
-            stackView.translatesAutoresizingMaskIntoConstraints = false
-            stackView.addArrangedSubview(iconView)
-            stackView.addArrangedSubview(selectionLabel)
-            textView.translatesAutoresizingMaskIntoConstraints = false
-            stackView.addArrangedSubview(textView)
-            addSubview(stackView)
-
-            textView.widthAnchor.constraint(
-                greaterThanOrEqualToConstant: ChatComposerSelectionPolicy.minimumEditorWidth
-            ).isActive = true
-            textView.heightAnchor.constraint(equalTo: stackView.heightAnchor).isActive = true
-            selectionLabel.widthAnchor.constraint(
-                lessThanOrEqualTo: widthAnchor,
-                multiplier: ChatComposerSelectionPolicy.maximumSelectionWidthFraction
-            ).isActive = true
-            NSLayoutConstraint.activate([
-                stackView.leadingAnchor.constraint(equalTo: leadingAnchor),
-                stackView.trailingAnchor.constraint(equalTo: trailingAnchor),
-                stackView.topAnchor.constraint(equalTo: topAnchor),
-                stackView.bottomAnchor.constraint(equalTo: bottomAnchor)
-            ])
+            selectionContainer.isUserInteractionEnabled = false
+            selectionContainer.addSubview(iconView)
+            selectionContainer.addSubview(selectionLabel)
+            addSubview(textView)
+            addSubview(selectionContainer)
         }
 
         @available(*, unavailable)
@@ -346,12 +320,13 @@ struct ChatComposerTextView: UIViewRepresentable {
         }
 
         func setSelectedText(_ selectedText: String?) {
+            self.selectedText = selectedText
             let isHidden = selectedText == nil
-            iconView.isHidden = isHidden
-            selectionLabel.isHidden = isHidden
+            selectionContainer.isHidden = isHidden
             selectionLabel.text = selectedText?
                 .replacingOccurrences(of: "\n", with: " ")
                 .replacingOccurrences(of: "\r", with: " ")
+            setNeedsLayout()
         }
 
         func selectionWidth(for selectedText: String) -> CGFloat {
@@ -367,6 +342,46 @@ struct ChatComposerTextView: UIViewRepresentable {
                 context: nil
             ).size
             return ceil(size.width)
+        }
+
+        func prepareForMeasurement(width: CGFloat) {
+            guard width.isFinite, width > 0 else { return }
+            let measurementHeight = max(bounds.height, textView.font?.lineHeight ?? 19)
+            bounds.size = CGSize(width: width, height: measurementHeight)
+            setNeedsLayout()
+            layoutIfNeeded()
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            textView.frame = bounds
+
+            guard let selectedText, !selectedText.isEmpty, bounds.width > 0 else {
+                selectionContainer.frame = .zero
+                textView.textContainer.exclusionPaths = []
+                return
+            }
+
+            let iconWidth: CGFloat = 18
+            let spacing: CGFloat = 4
+            let naturalTextWidth = selectionWidth(for: selectedText)
+            let editorWidth = ChatComposerSelectionPolicy.editorWidth(
+                totalWidth: bounds.width,
+                selectedTextWidth: naturalTextWidth
+            )
+            let prefixWidth = max(bounds.width - editorWidth, 0)
+            let lineHeight = textView.font?.lineHeight ?? 19
+            let labelWidth = max(prefixWidth - iconWidth - spacing, 0)
+
+            selectionContainer.frame = CGRect(x: 0, y: 0, width: prefixWidth, height: lineHeight)
+            iconView.frame = CGRect(x: 0, y: 0, width: iconWidth, height: lineHeight)
+            selectionLabel.frame = CGRect(x: iconWidth + spacing, y: 0, width: labelWidth, height: lineHeight)
+
+            // Reserve only the first line for the selection preview. The editor still
+            // owns the full width, so subsequent question lines wrap across the card.
+            textView.textContainer.exclusionPaths = [
+                UIBezierPath(rect: CGRect(x: 0, y: 0, width: prefixWidth, height: lineHeight))
+            ]
         }
 
         @objc private func focusTextView() {
