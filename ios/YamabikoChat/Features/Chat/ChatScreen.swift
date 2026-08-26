@@ -15,6 +15,9 @@ enum ChatComposerFocusPolicy {
 }
 
 enum ChatComposerSelectionPolicy {
+    static let minimumEditorWidth: CGFloat = 120
+    static let maximumSelectionWidthFraction: CGFloat = 0.5
+
     static func initialInput(for selectedText: String, preserving existingInput: String = "") -> String {
         selectedText + " " + existingInput
     }
@@ -38,8 +41,13 @@ enum ChatComposerSelectionPolicy {
     static func editorWidth(totalWidth: CGFloat, selectedTextWidth: CGFloat?) -> CGFloat {
         guard let selectedTextWidth else { return totalWidth }
         let iconAndSpacingWidth: CGFloat = 26
-        let maximumSelectionWidth = totalWidth * 0.82
-        return max(totalWidth - iconAndSpacingWidth - min(selectedTextWidth, maximumSelectionWidth), 8)
+        let availableWidth = max(totalWidth - iconAndSpacingWidth, 0)
+        let reservedEditorWidth = min(minimumEditorWidth, availableWidth)
+        let maximumSelectionWidth = min(
+            totalWidth * maximumSelectionWidthFraction,
+            max(availableWidth - reservedEditorWidth, 0)
+        )
+        return max(totalWidth - iconAndSpacingWidth - min(selectedTextWidth, maximumSelectionWidth), 0)
     }
 }
 
@@ -316,9 +324,14 @@ struct ChatComposerTextView: UIViewRepresentable {
             stackView.addArrangedSubview(textView)
             addSubview(stackView)
 
-            textView.widthAnchor.constraint(greaterThanOrEqualToConstant: 8).isActive = true
+            textView.widthAnchor.constraint(
+                greaterThanOrEqualToConstant: ChatComposerSelectionPolicy.minimumEditorWidth
+            ).isActive = true
             textView.heightAnchor.constraint(equalTo: stackView.heightAnchor).isActive = true
-            selectionLabel.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, multiplier: 0.82).isActive = true
+            selectionLabel.widthAnchor.constraint(
+                lessThanOrEqualTo: widthAnchor,
+                multiplier: ChatComposerSelectionPolicy.maximumSelectionWidthFraction
+            ).isActive = true
             NSLayoutConstraint.activate([
                 stackView.leadingAnchor.constraint(equalTo: leadingAnchor),
                 stackView.trailingAnchor.constraint(equalTo: trailingAnchor),

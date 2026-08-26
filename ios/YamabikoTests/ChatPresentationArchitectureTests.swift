@@ -100,8 +100,27 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         )
         XCTAssertEqual(
             ChatComposerSelectionPolicy.editorWidth(totalWidth: 300, selectedTextWidth: 500),
-            28,
+            124,
             accuracy: 0.001
+        )
+    }
+
+    @MainActor
+    func testLongSelectedChatTextKeepsQuestionEditorUsable() {
+        let container = ChatComposerTextView.ComposerContainerView()
+        container.frame = CGRect(x: 0, y: 0, width: 300, height: 80)
+        container.setSelectedText(String(repeating: "長い選択文", count: 30))
+
+        container.setNeedsLayout()
+        container.layoutIfNeeded()
+
+        XCTAssertGreaterThanOrEqual(
+            container.textView.frame.width,
+            ChatComposerSelectionPolicy.minimumEditorWidth - 0.5
+        )
+        XCTAssertLessThanOrEqual(
+            container.textView.frame.maxX,
+            container.bounds.maxX + 0.5
         )
     }
 
