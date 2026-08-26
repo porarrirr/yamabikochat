@@ -13,6 +13,58 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         XCTAssertFalse(isFocused)
     }
 
+    func testComposerSynchronizationPreservesCaretForLocalEdits() {
+        XCTAssertEqual(
+            ChatComposerSynchronizationPolicy.action(
+                isInitialConfiguration: false,
+                hasMarkedText: false,
+                isFirstResponder: true,
+                isExternalChange: false,
+                nativeTextMatchesBinding: true
+            ),
+            .none
+        )
+    }
+
+    func testComposerSynchronizationDoesNotOverwriteMarkedText() {
+        XCTAssertEqual(
+            ChatComposerSynchronizationPolicy.action(
+                isInitialConfiguration: false,
+                hasMarkedText: true,
+                isFirstResponder: true,
+                isExternalChange: true,
+                nativeTextMatchesBinding: false
+            ),
+            .none
+        )
+    }
+
+    func testComposerSynchronizationMovesCaretForExternalFocusedChange() {
+        XCTAssertEqual(
+            ChatComposerSynchronizationPolicy.action(
+                isInitialConfiguration: false,
+                hasMarkedText: false,
+                isFirstResponder: true,
+                isExternalChange: true,
+                nativeTextMatchesBinding: false
+            ),
+            .replaceText(moveCaretToEnd: true)
+        )
+    }
+
+    @MainActor
+    func testComposerNativeTextViewFillsItsMeasuredContainer() {
+        let container = ChatComposerTextView.ComposerContainerView()
+        container.frame = CGRect(x: 0, y: 0, width: 320, height: 40)
+
+        container.setNeedsLayout()
+        container.layoutIfNeeded()
+
+        XCTAssertGreaterThan(container.textView.bounds.height, 0)
+        XCTAssertEqual(container.textView.frame.minY, 0, accuracy: 0.5)
+        XCTAssertEqual(container.textView.frame.height, 40, accuracy: 0.5)
+    }
+
     func testSelectedChatTextStartsWithOneTrailingHalfWidthSpace() {
         XCTAssertEqual(ChatComposerSelectionPolicy.initialInput(for: "選択部分"), "選択部分 ")
     }
@@ -38,15 +90,18 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     func testSelectedChatTextMeasuresEditorFromActualTokenWidth() {
         XCTAssertEqual(
             ChatComposerSelectionPolicy.editorWidth(totalWidth: 300, selectedTextWidth: nil),
-            300
+            300,
+            accuracy: 0.001
         )
         XCTAssertEqual(
             ChatComposerSelectionPolicy.editorWidth(totalWidth: 300, selectedTextWidth: 40),
-            234
+            234,
+            accuracy: 0.001
         )
         XCTAssertEqual(
             ChatComposerSelectionPolicy.editorWidth(totalWidth: 300, selectedTextWidth: 500),
-            28
+            28,
+            accuracy: 0.001
         )
     }
 

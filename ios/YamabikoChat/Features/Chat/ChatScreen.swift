@@ -43,11 +43,35 @@ enum ChatComposerSelectionPolicy {
     }
 }
 
-private struct ChatComposerTextView: UIViewRepresentable {
+enum ChatComposerSynchronizationPolicy {
+    enum Action: Equatable {
+        case none
+        case replaceText(moveCaretToEnd: Bool)
+        case moveCaretToEnd
+    }
+
+    static func action(
+        isInitialConfiguration: Bool,
+        hasMarkedText: Bool,
+        isFirstResponder: Bool,
+        isExternalChange: Bool,
+        nativeTextMatchesBinding: Bool
+    ) -> Action {
+        guard !hasMarkedText else { return .none }
+        if !nativeTextMatchesBinding, !isFirstResponder || isExternalChange {
+            return .replaceText(
+                moveCaretToEnd: isInitialConfiguration || (isExternalChange && isFirstResponder)
+            )
+        }
+        return isInitialConfiguration && nativeTextMatchesBinding ? .moveCaretToEnd : .none
+    }
+}
+
+struct ChatComposerTextView: UIViewRepresentable {
     @Environment(\.isEnabled) private var isEnabled
     @Binding var text: String
     @Binding var selectedText: String?
-    var isFocused: FocusState<Bool>.Binding
+    @Binding var isFocused: Bool
     let placeholder: String
 
     func makeCoordinator() -> Coordinator {
@@ -71,7 +95,7 @@ private struct ChatComposerTextView: UIViewRepresentable {
         if container.textView.isEditable != isEnabled {
             let wasFirstResponder = container.textView.isFirstResponder
             container.textView.isEditable = isEnabled
-            if wasFirstResponder, isEnabled, !container.textView.isFirstResponder, isFocused.wrappedValue {
+            if wasFirstResponder, isEnabled, !container.textView.isFirstResponder, isFocused {
                 context.coordinator.requestFocus(for: container)
             }
         }
@@ -82,9 +106,9 @@ private struct ChatComposerTextView: UIViewRepresentable {
             if container.textView.isFirstResponder {
                 container.textView.resignFirstResponder()
             }
-        } else if isFocused.wrappedValue, !container.textView.isFirstResponder {
+        } else if isFocused, !container.textView.isFirstResponder {
             context.coordinator.requestFocus(for: container)
-        } else if !isFocused.wrappedValue, container.textView.isFirstResponder {
+        } else if !isFocused, container.textView.isFirstResponder {
             context.coordinator.cancelFocusRequest()
             container.textView.resignFirstResponder()
         }
@@ -116,22 +140,30 @@ private struct ChatComposerTextView: UIViewRepresentable {
         container.textView.placeholderLabel.text = placeholder
         let suffix = ChatComposerSelectionPolicy.editableSuffix(in: text, selectedText: selectedText)
         let isExternalChange = context.coordinator.lastReportedText != text
-        if container.textView.markedTextRange == nil,
-           (!container.textView.isFirstResponder || isExternalChange),
-           container.textView.text != suffix {
+        let synchronizationAction = ChatComposerSynchronizationPolicy.action(
+            isInitialConfiguration: placeCursorAtEnd,
+            hasMarkedText: container.textView.markedTextRange != nil,
+            isFirstResponder: container.textView.isFirstResponder,
+            isExternalChange: isExternalChange,
+            nativeTextMatchesBinding: container.textView.text == suffix
+        )
+        switch synchronizationAction {
+        case let .replaceText(moveCaretToEnd):
             container.textView.text = suffix
             context.coordinator.lastReportedText = text
-            if placeCursorAtEnd || (isExternalChange && container.textView.isFirstResponder) {
-                container.textView.selectedRange = NSRange(location: (suffix as NSString).length, length: 0)
+            if moveCaretToEnd {
+                container.textView.selectedRange = NSRange(
+                    location: (suffix as NSString).length,
+                    length: 0
+                )
             }
-        } else if placeCursorAtEnd || container.textView.isFirstResponder,
-                  container.textView.markedTextRange == nil,
-                  container.textView.text == suffix {
-            // Ensure cursor stays at end when externally requested, without overwriting firstResponder content
-            let desired = NSRange(location: (suffix as NSString).length, length: 0)
-            if container.textView.selectedRange != desired {
-                container.textView.selectedRange = desired
+        case .moveCaretToEnd:
+            let desiredRange = NSRange(location: (suffix as NSString).length, length: 0)
+            if container.textView.selectedRange != desiredRange {
+                container.textView.selectedRange = desiredRange
             }
+        case .none:
+            break
         }
         container.textView.placeholderLabel.isHidden = selectedText != nil || !suffix.isEmpty
         let accessibilityValue = ChatComposerSelectionPolicy.accessibilityValue(
@@ -155,16 +187,16 @@ private struct ChatComposerTextView: UIViewRepresentable {
             guard focusRequest == nil else { return }
             // If window is available, becomeFirstResponder synchronously to avoid stale Binding race.
             if container.window != nil,
-               parent.isFocused.wrappedValue,
+               parent.isFocused,
                parent.isEnabled,
-               container.textView.isEditable {
-                container.textView.becomeFirstResponder()
+               container.textView.isEditable,
+               container.textView.becomeFirstResponder() {
                 return
             }
             let request = DispatchWorkItem { [weak self, weak container] in
                 guard let self, let container else { return }
                 self.focusRequest = nil
-                guard self.parent.isFocused.wrappedValue,
+                guard self.parent.isFocused,
                       self.parent.isEnabled,
                       container.window != nil,
                       container.textView.isEditable else { return }
@@ -184,7 +216,7 @@ private struct ChatComposerTextView: UIViewRepresentable {
             lastReportedText = ""
             parent.text = ""
             parent.selectedText = nil
-            parent.isFocused.wrappedValue = true
+            parent.isFocused = true
         }
 
         func textViewDidChange(_ textView: UITextView) {
@@ -200,11 +232,11 @@ private struct ChatComposerTextView: UIViewRepresentable {
 
         func textViewDidBeginEditing(_ textView: UITextView) {
             cancelFocusRequest()
-            parent.isFocused.wrappedValue = true
+            parent.isFocused = true
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
-            parent.isFocused.wrappedValue = false
+            parent.isFocused = false
         }
     }
 
@@ -280,10 +312,12 @@ private struct ChatComposerTextView: UIViewRepresentable {
             stackView.translatesAutoresizingMaskIntoConstraints = false
             stackView.addArrangedSubview(iconView)
             stackView.addArrangedSubview(selectionLabel)
+            textView.translatesAutoresizingMaskIntoConstraints = false
             stackView.addArrangedSubview(textView)
             addSubview(stackView)
 
             textView.widthAnchor.constraint(greaterThanOrEqualToConstant: 8).isActive = true
+            textView.heightAnchor.constraint(equalTo: stackView.heightAnchor).isActive = true
             selectionLabel.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, multiplier: 0.82).isActive = true
             NSLayoutConstraint.activate([
                 stackView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -348,7 +382,7 @@ struct ChatScreen: View {
     @State private var recentPhotoSelection = RecentPhotoSelection(limit: maximumPhotoSelectionCount)
     @State private var composerSelection: String?
     @StateObject private var recentPhotoLibrary = RecentPhotoLibrary()
-    @FocusState private var isComposerFocused: Bool
+    @State private var isComposerFocused = false
 
     var body: some View {
         VStack(spacing: 0) {

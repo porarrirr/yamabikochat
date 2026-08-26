@@ -133,6 +133,32 @@ final class AppStoreScreenshotTests: XCTestCase {
         XCTAssertTrue(app.buttons["chat-latest-button"].exists)
     }
 
+    func testChatComposerKeepsSoftwareKeyboardVisibleAcrossTypingAndNewline() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-AppStoreScreenshotDemo",
+            "-ScreenshotScene", "chat"
+        ]
+        app.launch()
+
+        let composer = app.descendants(matching: .any)
+            .matching(identifier: "chat-composer")
+            .firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 20))
+
+        composer.tap()
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+
+        composer.typeText("あ")
+        XCTAssertTrue(keyboard.exists, "The first edit must not resign the native text view")
+        XCTAssertEqual(composer.value as? String, "あ")
+
+        composer.typeText("\nい")
+        XCTAssertTrue(keyboard.exists, "A newline must keep the composer focused")
+        XCTAssertEqual(composer.value as? String, "あ\nい")
+    }
+
     func testLongPressOnChatTextUsesNativeTextSelection() throws {
         let app = XCUIApplication()
         app.launchArguments = [
