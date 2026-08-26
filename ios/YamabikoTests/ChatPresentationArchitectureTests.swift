@@ -13,6 +13,66 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         XCTAssertFalse(isFocused)
     }
 
+    func testSelectedChatTextStartsWithOneTrailingHalfWidthSpace() {
+        XCTAssertEqual(ChatComposerSelectionPolicy.initialInput(for: "選択部分"), "選択部分 ")
+    }
+
+    func testSelectedChatTextPreservesExistingDraft() {
+        XCTAssertEqual(
+            ChatComposerSelectionPolicy.initialInput(for: "選択部分", preserving: "この点を説明して"),
+            "選択部分 この点を説明して"
+        )
+    }
+
+    func testSelectedChatTextDoesNotExposeInternalSeparatorToAccessibility() {
+        XCTAssertEqual(
+            ChatComposerSelectionPolicy.accessibilityValue(selectedText: "選択部分", suffix: " "),
+            "選択部分"
+        )
+        XCTAssertEqual(
+            ChatComposerSelectionPolicy.accessibilityValue(selectedText: "選択部分", suffix: " 質問"),
+            "選択部分 質問"
+        )
+    }
+
+    func testSelectedChatTextMeasuresEditorFromActualTokenWidth() {
+        XCTAssertEqual(
+            ChatComposerSelectionPolicy.editorWidth(totalWidth: 300, selectedTextWidth: nil),
+            300
+        )
+        XCTAssertEqual(
+            ChatComposerSelectionPolicy.editorWidth(totalWidth: 300, selectedTextWidth: 40),
+            234
+        )
+        XCTAssertEqual(
+            ChatComposerSelectionPolicy.editorWidth(totalWidth: 300, selectedTextWidth: 500),
+            28
+        )
+    }
+
+    func testSelectedChatTextDeletesSpaceBeforeDeletingWholeToken() {
+        let selectedText = "選択部分"
+        let initialInput = ChatComposerSelectionPolicy.initialInput(for: selectedText)
+        let suffix = ChatComposerSelectionPolicy.editableSuffix(
+            in: initialInput,
+            selectedText: selectedText
+        )
+        XCTAssertEqual(suffix, " ")
+
+        let suffixAfterFirstDeletion = String(suffix.dropLast())
+        XCTAssertEqual(
+            ChatComposerSelectionPolicy.combinedInput(
+                selectedText: selectedText,
+                suffix: suffixAfterFirstDeletion
+            ),
+            selectedText
+        )
+        XCTAssertEqual(
+            ChatComposerSelectionPolicy.combinedInput(selectedText: nil, suffix: ""),
+            ""
+        )
+    }
+
     func testChatModeNormalizesLegacyFlagsToExactlyOneMode() {
         for mode in ChatMode.allCases {
             let settings = mode.applying(to: AppSettings())
@@ -210,6 +270,55 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         XCTAssertTrue(first.contains { if case .table = $0 { return true }; return false })
     }
 
+    func testNativeMarkdownParserDisplaysNamedLinkWithoutRawURL() throws {
+        let blocks = NativeMarkdownParser.parse("[Google 日本](https://www.google.co.jp/search?q=test)")
+
+        guard case let .paragraph(_, text) = blocks.first else {
+            return XCTFail("Expected a native paragraph")
+        }
+        XCTAssertEqual(String(text.characters), "Google 日本↗")
+        XCTAssertFalse(String(text.characters).contains("https://"))
+        XCTAssertEqual(text.runs.compactMap(\.link).first, URL(string: "https://www.google.co.jp/search?q=test"))
+    }
+
+    func testNativeMarkdownParserCompactsBareURLIntoLinkedHost() throws {
+        let blocks = NativeMarkdownParser.parse(
+            "朝日新聞「ニュースの要点」: https://www.asahi.com/pickup-news-summary/20260826/"
+        )
+
+        guard case let .paragraph(_, text) = blocks.first else {
+            return XCTFail("Expected a native paragraph")
+        }
+        XCTAssertEqual(String(text.characters), "朝日新聞「ニュースの要点」: asahi.com↗")
+        XCTAssertFalse(String(text.characters).contains("https://"))
+        XCTAssertEqual(
+            text.runs.compactMap(\.link).first,
+            URL(string: "https://www.asahi.com/pickup-news-summary/20260826/")
+        )
+    }
+
+    func testNativeMarkdownParserKeepsPunctuationAfterBareURL() throws {
+        let blocks = NativeMarkdownParser.parse("See https://example.com/article。 Next")
+
+        guard case let .paragraph(_, text) = blocks.first else {
+            return XCTFail("Expected a native paragraph")
+        }
+        XCTAssertEqual(String(text.characters), "See example.com↗。 Next")
+        XCTAssertEqual(text.runs.compactMap(\.link).first, URL(string: "https://example.com/article"))
+    }
+
+    func testChatTextSelectionPolicyReturnsOnlySelectedText() {
+        let text = "Before selected text after"
+        let range = (text as NSString).range(of: "selected text")
+
+        XCTAssertEqual(ChatTextSelectionPolicy.selectedText(in: text, range: range), "selected text")
+    }
+
+    func testChatTextSelectionPolicyRejectsCaretAndWhitespaceSelection() {
+        XCTAssertNil(ChatTextSelectionPolicy.selectedText(in: "text", range: NSRange(location: 2, length: 0)))
+        XCTAssertNil(ChatTextSelectionPolicy.selectedText(in: "   ", range: NSRange(location: 0, length: 3)))
+    }
+
     func testNativeMarkdownRenderIdentityChangesWhenBlockKindChangesAtSameOffset() {
         let paragraph = NativeMarkdownBlock.paragraph(id: "block-0", text: AttributedString("Title"))
         let heading = NativeMarkdownBlock.heading(id: "block-0", level: 1, text: AttributedString("Title"))
@@ -265,7 +374,7 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             return XCTFail("Expected a native table")
         }
         XCTAssertEqual(String(rows[1][0].characters), "Bold")
-        XCTAssertEqual(String(rows[1][1].characters), "Open")
+        XCTAssertEqual(String(rows[1][1].characters), "Open↗")
         XCTAssertNotEqual(rows[1][0], AttributedString("Bold"))
         XCTAssertNotEqual(rows[1][1], AttributedString("Open"))
     }
@@ -1253,7 +1362,8 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             onPreviousVariant: { _ in },
             onNextVariant: { _ in },
             onBranch: { _ in },
-            onRegenerate: {}
+            onRegenerate: {},
+            onAskChatWithSelection: { _ in }
         )
     }
 

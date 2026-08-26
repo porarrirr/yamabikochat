@@ -72,7 +72,8 @@ final class SystemPromptComposerTests: XCTestCase {
         XCTAssertTrue(composed?.contains("Read titles and snippets") == true)
         XCTAssertTrue(composed?.contains("fetch_url(url, goal)") == true)
         XCTAssertTrue(composed?.contains("superficial wording changes") == true)
-        XCTAssertTrue(composed?.contains("cite the URLs of the sources actually used") == true)
+        XCTAssertTrue(composed?.contains("Format every source as a descriptive Markdown link") == true)
+        XCTAssertTrue(composed?.contains("Never expose a bare URL") == true)
         XCTAssertTrue(composed?.hasSuffix("Today's date: 2026/06/27") == true)
     }
 

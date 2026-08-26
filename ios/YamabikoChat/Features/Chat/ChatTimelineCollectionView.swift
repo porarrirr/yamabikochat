@@ -18,6 +18,7 @@ struct ChatTimelineCollectionView: UIViewControllerRepresentable {
     let onNextVariant: (Int64) -> Void
     let onBranch: (Int64) -> Void
     let onRegenerate: () -> Void
+    let onAskChatWithSelection: (String) -> Void
 
     func makeUIViewController(context: Context) -> ChatTimelineViewController {
         let controller = ChatTimelineViewController()
@@ -44,7 +45,8 @@ struct ChatTimelineCollectionView: UIViewControllerRepresentable {
             onPreviousVariant: onPreviousVariant,
             onNextVariant: onNextVariant,
             onBranch: onBranch,
-            onRegenerate: onRegenerate
+            onRegenerate: onRegenerate,
+            onAskChatWithSelection: onAskChatWithSelection
         )
     }
 }
@@ -84,6 +86,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     var onNextVariant: (Int64) -> Void = { _ in }
     var onBranch: (Int64) -> Void = { _ in }
     var onRegenerate: () -> Void = {}
+    var onAskChatWithSelection: (String) -> Void = { _ in }
     var onFollowStateChanged: (Bool, Int) -> Void = { _, _ in }
 
     override func viewDidLoad() {
@@ -131,7 +134,8 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                     onPreviousVariant: self.onPreviousVariant,
                     onNextVariant: self.onNextVariant,
                     onBranch: self.onBranch,
-                    onRegenerate: self.onRegenerate
+                    onRegenerate: self.onRegenerate,
+                    onAskChatWithSelection: self.onAskChatWithSelection
                 )
             }
             .margins(.all, 0)
@@ -179,7 +183,8 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         onPreviousVariant: @escaping (Int64) -> Void,
         onNextVariant: @escaping (Int64) -> Void,
         onBranch: @escaping (Int64) -> Void,
-        onRegenerate: @escaping () -> Void
+        onRegenerate: @escaping () -> Void,
+        onAskChatWithSelection: @escaping (String) -> Void
     ) {
         let storeChanged = self.store !== store
         if storeChanged {
@@ -222,6 +227,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         self.onNextVariant = onNextVariant
         self.onBranch = onBranch
         self.onRegenerate = onRegenerate
+        self.onAskChatWithSelection = onAskChatWithSelection
 
         let scrollToLatest = storeChanged || scrollToLatestRequest != lastScrollRequest
         if scrollToLatest {
@@ -687,6 +693,7 @@ private struct ChatTimelineRowView: View {
     let onNextVariant: (Int64) -> Void
     let onBranch: (Int64) -> Void
     let onRegenerate: () -> Void
+    let onAskChatWithSelection: (String) -> Void
 
     var body: some View {
         ChatTimelineTopPinnedLayout {
@@ -720,6 +727,7 @@ private struct ChatTimelineRowView: View {
             .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .environment(\.onAskChatWithSelection, onAskChatWithSelection)
         .transaction { transaction in
             transaction.animation = nil
         }

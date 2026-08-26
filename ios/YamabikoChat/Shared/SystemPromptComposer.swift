@@ -19,7 +19,7 @@ enum SystemPromptComposer {
     7. Prefer primary, official, and authoritative sources. Compare multiple independent sources when accuracy, recency, or controversy matters.
     8. Stop searching once the important claims are sufficiently supported. Do not repeat equivalent searches with superficial wording changes or fetch irrelevant pages.
     9. Clearly distinguish sourced facts from inference. If reliable evidence cannot be found or sources conflict, state the limitation.
-    10. In the final answer, cite the URLs of the sources actually used.
+    10. In the final answer, cite only the sources actually used. Format every source as a descriptive Markdown link such as [source or article title](https://example.com/article). Never expose a bare URL when a descriptive link label is available.
 
     For simple lookups, one search or one source may be sufficient. Match the depth of the search to the complexity and risk of the question.
     """

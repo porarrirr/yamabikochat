@@ -14,6 +14,283 @@ enum ChatComposerFocusPolicy {
     }
 }
 
+enum ChatComposerSelectionPolicy {
+    static func initialInput(for selectedText: String, preserving existingInput: String = "") -> String {
+        selectedText + " " + existingInput
+    }
+
+    static func editableSuffix(in input: String, selectedText: String?) -> String {
+        guard let selectedText, input.hasPrefix(selectedText) else { return input }
+        return String(input.dropFirst(selectedText.count))
+    }
+
+    static func combinedInput(selectedText: String?, suffix: String) -> String {
+        (selectedText ?? "") + suffix
+    }
+
+    static func accessibilityValue(selectedText: String?, suffix: String) -> String {
+        guard let selectedText, suffix == " " else {
+            return combinedInput(selectedText: selectedText, suffix: suffix)
+        }
+        return selectedText
+    }
+
+    static func editorWidth(totalWidth: CGFloat, selectedTextWidth: CGFloat?) -> CGFloat {
+        guard let selectedTextWidth else { return totalWidth }
+        let iconAndSpacingWidth: CGFloat = 26
+        let maximumSelectionWidth = totalWidth * 0.82
+        return max(totalWidth - iconAndSpacingWidth - min(selectedTextWidth, maximumSelectionWidth), 8)
+    }
+}
+
+private struct ChatComposerTextView: UIViewRepresentable {
+    @Environment(\.isEnabled) private var isEnabled
+    @Binding var text: String
+    @Binding var selectedText: String?
+    var isFocused: FocusState<Bool>.Binding
+    let placeholder: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> ComposerContainerView {
+        let container = ComposerContainerView()
+        container.textView.delegate = context.coordinator
+        container.textView.onDeleteAtBeginning = { [weak coordinator = context.coordinator] in
+            coordinator?.deleteSelectedText()
+        }
+        configure(container, placeCursorAtEnd: true)
+        return container
+    }
+
+    func updateUIView(_ container: ComposerContainerView, context: Context) {
+        context.coordinator.parent = self
+        container.textView.isEditable = isEnabled
+        configure(container, placeCursorAtEnd: false)
+
+        if !isEnabled {
+            context.coordinator.cancelFocusRequest()
+            if container.textView.isFirstResponder {
+                container.textView.resignFirstResponder()
+            }
+        } else if isFocused.wrappedValue, !container.textView.isFirstResponder {
+            context.coordinator.requestFocus(for: container)
+        } else if !isFocused.wrappedValue, container.textView.isFirstResponder {
+            context.coordinator.cancelFocusRequest()
+            container.textView.resignFirstResponder()
+        } else if !isFocused.wrappedValue {
+            context.coordinator.cancelFocusRequest()
+        }
+    }
+
+    static func dismantleUIView(_ uiView: ComposerContainerView, coordinator: Coordinator) {
+        coordinator.cancelFocusRequest()
+    }
+
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        uiView: ComposerContainerView,
+        context: Context
+    ) -> CGSize? {
+        guard let width = proposal.width else { return nil }
+        let editorWidth = ChatComposerSelectionPolicy.editorWidth(
+            totalWidth: width,
+            selectedTextWidth: selectedText.map { uiView.selectionWidth(for: $0) }
+        )
+        let fittingSize = uiView.textView.sizeThatFits(
+            CGSize(width: editorWidth, height: .greatestFiniteMagnitude)
+        )
+        let lineHeight = uiView.textView.font?.lineHeight ?? 19
+        return CGSize(width: width, height: min(max(fittingSize.height, lineHeight), lineHeight * 8))
+    }
+
+    private func configure(_ container: ComposerContainerView, placeCursorAtEnd: Bool) {
+        container.setSelectedText(selectedText)
+        container.textView.placeholderLabel.text = placeholder
+        let suffix = ChatComposerSelectionPolicy.editableSuffix(in: text, selectedText: selectedText)
+        if container.textView.text != suffix, container.textView.markedTextRange == nil {
+            container.textView.text = suffix
+            if placeCursorAtEnd || container.textView.isFirstResponder {
+                container.textView.selectedRange = NSRange(location: (suffix as NSString).length, length: 0)
+            }
+        }
+        container.textView.placeholderLabel.isHidden = selectedText != nil || !suffix.isEmpty
+        let accessibilityValue = ChatComposerSelectionPolicy.accessibilityValue(
+            selectedText: selectedText,
+            suffix: suffix
+        )
+        container.textView.accessibilityValue = accessibilityValue
+        container.accessibilityValue = accessibilityValue
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: ChatComposerTextView
+        private var focusRequest: DispatchWorkItem?
+
+        init(parent: ChatComposerTextView) {
+            self.parent = parent
+        }
+
+        func requestFocus(for container: ComposerContainerView) {
+            guard focusRequest == nil else { return }
+            let request = DispatchWorkItem { [weak self, weak container] in
+                guard let self, let container else { return }
+                self.focusRequest = nil
+                guard self.parent.isFocused.wrappedValue,
+                      self.parent.isEnabled,
+                      container.window != nil,
+                      container.textView.isEditable else { return }
+                container.textView.becomeFirstResponder()
+            }
+            focusRequest = request
+            DispatchQueue.main.async(execute: request)
+        }
+
+        func cancelFocusRequest() {
+            focusRequest?.cancel()
+            focusRequest = nil
+        }
+
+        func deleteSelectedText() {
+            guard parent.selectedText != nil else { return }
+            parent.text = ""
+            parent.selectedText = nil
+            parent.isFocused.wrappedValue = true
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            let suffix = textView.text ?? ""
+            parent.text = ChatComposerSelectionPolicy.combinedInput(
+                selectedText: parent.selectedText,
+                suffix: suffix
+            )
+            (textView as? ComposerTextView)?.placeholderLabel.isHidden = parent.selectedText != nil || !suffix.isEmpty
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            cancelFocusRequest()
+            parent.isFocused.wrappedValue = true
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            parent.isFocused.wrappedValue = false
+        }
+    }
+
+    final class ComposerTextView: UITextView {
+        let placeholderLabel = UILabel()
+        var onDeleteAtBeginning: (() -> Void)?
+
+        override init(frame: CGRect, textContainer: NSTextContainer?) {
+            super.init(frame: frame, textContainer: textContainer)
+            backgroundColor = .clear
+            font = .systemFont(ofSize: 16)
+            textColor = .label
+            tintColor = UIColor(Color.chatAccent)
+            textContainerInset = .zero
+            self.textContainer.lineFragmentPadding = 0
+            isScrollEnabled = true
+            keyboardDismissMode = .interactive
+            placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
+            placeholderLabel.font = .systemFont(ofSize: 16)
+            placeholderLabel.textColor = .placeholderText
+            addSubview(placeholderLabel)
+            NSLayoutConstraint.activate([
+                placeholderLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
+                placeholderLabel.topAnchor.constraint(equalTo: topAnchor)
+            ])
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func deleteBackward() {
+            if text.isEmpty, let onDeleteAtBeginning {
+                onDeleteAtBeginning()
+                return
+            }
+            super.deleteBackward()
+        }
+    }
+
+    final class ComposerContainerView: UIView {
+        let textView = ComposerTextView()
+        private let iconView = UIImageView()
+        private let selectionLabel = UILabel()
+        private let stackView = UIStackView()
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            let focusRecognizer = UITapGestureRecognizer(target: self, action: #selector(focusTextView))
+            focusRecognizer.cancelsTouchesInView = false
+            addGestureRecognizer(focusRecognizer)
+
+            let configuration = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+            iconView.image = UIImage(systemName: "bubble.left", withConfiguration: configuration)
+            iconView.tintColor = UIColor(Color.chatAccent)
+            iconView.contentMode = .scaleAspectFit
+            iconView.setContentHuggingPriority(.required, for: .horizontal)
+            NSLayoutConstraint.activate([
+                iconView.widthAnchor.constraint(equalToConstant: 18),
+                iconView.heightAnchor.constraint(equalToConstant: 18)
+            ])
+
+            selectionLabel.font = .systemFont(ofSize: 16)
+            selectionLabel.textColor = UIColor(Color.chatAccent)
+            selectionLabel.numberOfLines = 1
+            selectionLabel.lineBreakMode = .byTruncatingTail
+            selectionLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+            stackView.axis = .horizontal
+            stackView.alignment = .top
+            stackView.spacing = 4
+            stackView.translatesAutoresizingMaskIntoConstraints = false
+            stackView.addArrangedSubview(iconView)
+            stackView.addArrangedSubview(selectionLabel)
+            stackView.addArrangedSubview(textView)
+            addSubview(stackView)
+
+            textView.widthAnchor.constraint(greaterThanOrEqualToConstant: 8).isActive = true
+            selectionLabel.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, multiplier: 0.82).isActive = true
+            NSLayoutConstraint.activate([
+                stackView.leadingAnchor.constraint(equalTo: leadingAnchor),
+                stackView.trailingAnchor.constraint(equalTo: trailingAnchor),
+                stackView.topAnchor.constraint(equalTo: topAnchor),
+                stackView.bottomAnchor.constraint(equalTo: bottomAnchor)
+            ])
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        func setSelectedText(_ selectedText: String?) {
+            let isHidden = selectedText == nil
+            iconView.isHidden = isHidden
+            selectionLabel.isHidden = isHidden
+            selectionLabel.text = selectedText?
+                .replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "\r", with: " ")
+        }
+
+        func selectionWidth(for selectedText: String) -> CGFloat {
+            selectionLabel.text = selectedText
+                .replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "\r", with: " ")
+            return selectionLabel.intrinsicContentSize.width
+        }
+
+        @objc private func focusTextView() {
+            guard textView.isEditable, textView.isUserInteractionEnabled else { return }
+            textView.becomeFirstResponder()
+        }
+    }
+}
+
 struct ChatScreen: View {
     @ObservedObject var viewModel: ChatViewModel
     @ObservedObject var questionCoordinator: UserQuestionCoordinator
@@ -31,6 +308,7 @@ struct ChatScreen: View {
     @State private var workspaceRoute: ChatWorkspaceRoute?
     @State private var addingRecentPhotoIDs: Set<String> = []
     @State private var recentPhotoSelection = RecentPhotoSelection(limit: maximumPhotoSelectionCount)
+    @State private var composerSelection: String?
     @StateObject private var recentPhotoLibrary = RecentPhotoLibrary()
     @FocusState private var isComposerFocused: Bool
 
@@ -56,7 +334,18 @@ struct ChatScreen: View {
                     guard let newID = viewModel.branchConversation(from: messageID) else { return }
                     onNavigateToConversation?(newID)
                 },
-                onRegenerate: { viewModel.regenerateLastAssistantVariant() }
+                onRegenerate: { viewModel.regenerateLastAssistantVariant() },
+                onAskChatWithSelection: { selectedText in
+                    let existingInput = viewModel.inputText
+                    composerSelection = selectedText
+                    viewModel.inputText = ChatComposerSelectionPolicy.initialInput(
+                        for: selectedText,
+                        preserving: existingInput
+                    )
+                    DispatchQueue.main.async {
+                        isComposerFocused = true
+                    }
+                }
             )
             .overlay {
                 if viewModel.timelineStore.orderedIDs.isEmpty {
@@ -130,6 +419,12 @@ struct ChatScreen: View {
                 current: isComposerFocused,
                 isSending: isSending
             )
+        }
+        .onChange(of: viewModel.inputText) { _, inputText in
+            guard let composerSelection else { return }
+            if !inputText.hasPrefix(composerSelection) {
+                self.composerSelection = nil
+            }
         }
         .task {
             recentPhotoLibrary.refresh()
@@ -301,16 +596,16 @@ struct ChatScreen: View {
                     composerPlusMenuButton
                 }
 
-                TextField(viewModel.composerPlaceholder, text: $viewModel.inputText, axis: .vertical)
+                ChatComposerTextView(
+                    text: $viewModel.inputText,
+                    selectedText: $composerSelection,
+                    isFocused: $isComposerFocused,
+                    placeholder: viewModel.composerPlaceholder
+                )
                     .accessibilityIdentifier("chat-composer")
-                    .lineLimit(isComposerExpanded ? 8 : 1)
-                    .focused($isComposerFocused)
-                    .font(.system(size: 16))
                     .padding(.horizontal, isComposerExpanded ? 14 : 0)
                     .padding(.top, isComposerExpanded ? 12 : 9)
                     .padding(.bottom, isComposerExpanded ? 6 : 9)
-                    .foregroundStyle(.primary)
-                    .tint(.accentColor)
                     .disabled(viewModel.isSpeechRecording || viewModel.isSending)
 
                 if !isComposerExpanded {

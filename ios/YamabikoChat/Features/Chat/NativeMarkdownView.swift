@@ -4,6 +4,17 @@ import Markdown
 import SwiftUI
 import UIKit
 
+private struct AskChatWithSelectionEnvironmentKey: EnvironmentKey {
+    static let defaultValue: (String) -> Void = { _ in }
+}
+
+extension EnvironmentValues {
+    var onAskChatWithSelection: (String) -> Void {
+        get { self[AskChatWithSelectionEnvironmentKey.self] }
+        set { self[AskChatWithSelectionEnvironmentKey.self] = newValue }
+    }
+}
+
 enum NativeMarkdownBlock: Identifiable, Equatable, Sendable {
     case paragraph(id: String, text: AttributedString)
     case heading(id: String, level: Int, text: AttributedString)
@@ -196,7 +207,7 @@ enum NativeMarkdownParser {
 
     private static func inlineText(_ markup: Markup) -> AttributedString {
         if let text = markup as? Markdown.Text {
-            return AttributedString(text.string)
+            return linkifiedText(text.string)
         }
         if let code = markup as? InlineCode {
             var value = AttributedString(code.code)
@@ -226,7 +237,59 @@ enum NativeMarkdownParser {
         } else if let link = markup as? Markdown.Link,
                   let destination = link.destination,
                   let url = URL(string: destination) {
+            if !String(value.characters).hasSuffix("↗") {
+                value.append(AttributedString("↗"))
+            }
             value.link = url
+        }
+        return value
+    }
+
+    /// Markdown parsers preserve a model-emitted bare URL as ordinary text. Keep
+    /// the original destination while presenting a compact, readable link label.
+    private static func linkifiedText(_ source: String) -> AttributedString {
+        var result = AttributedString()
+        var remaining = source[...]
+
+        while let match = remaining.range(
+            of: #"https?://[^\s<>\[\]{}\"']+"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) {
+            result.append(AttributedString(String(remaining[..<match.lowerBound])))
+
+            let matchedText = String(remaining[match])
+            let trimmedURL = matchedText.trimmingTrailingLinkPunctuation()
+            guard let url = URL(string: trimmedURL),
+                  let host = url.host,
+                  !host.isEmpty else {
+                result.append(AttributedString(matchedText))
+                remaining = remaining[match.upperBound...]
+                continue
+            }
+
+            let displayHost = host.replacingOccurrences(
+                of: "www.",
+                with: "",
+                options: [.anchored, .caseInsensitive]
+            )
+            var link = AttributedString("\(displayHost)↗")
+            link.link = url
+            result.append(link)
+            result.append(AttributedString(String(matchedText.dropFirst(trimmedURL.count))))
+            remaining = remaining[match.upperBound...]
+        }
+
+        result.append(AttributedString(String(remaining)))
+        return result
+    }
+}
+
+private extension String {
+    func trimmingTrailingLinkPunctuation() -> String {
+        let punctuation = CharacterSet(charactersIn: ".,!?;:。、！？；：)]}」』》〉")
+        var value = self
+        while let scalar = value.unicodeScalars.last, punctuation.contains(scalar) {
+            value.removeLast()
         }
         return value
     }
@@ -361,10 +424,7 @@ struct NativeMarkdownView: View {
                 hasRenderedBlocks: !renderedBlocks.isEmpty,
                 sourceIsEmpty: markdownText.isEmpty
             ) {
-                Text(markdownText)
-                    .font(.body)
-                    .lineSpacing(3)
-                    .textSelection(.enabled)
+                SelectableChatText(text: AttributedString(markdownText), style: .body)
             } else {
                 ForEach(renderedBlocks, id: \.renderID) { block in
                     NativeMarkdownBlockView(block: block)
@@ -421,14 +481,9 @@ private struct NativeMarkdownBlockView: View {
     var body: some View {
         switch block {
         case let .paragraph(_, text):
-            Text(text)
-                .font(.body)
-                .lineSpacing(3)
-                .textSelection(.enabled)
+            SelectableChatText(text: text, style: .body)
         case let .heading(_, level, text):
-            Text(text)
-                .font(headingFont(level))
-                .textSelection(.enabled)
+            SelectableChatText(text: text, style: headingTextStyle(level), weight: .bold)
                 .padding(.top, level <= 2 ? 4 : 0)
         case let .code(_, language, code):
             NativeCodeBlock(language: language, code: code)
@@ -453,9 +508,8 @@ private struct NativeMarkdownBlockView: View {
                         Text(ordered ? "\(start + index)." : "•")
                             .foregroundStyle(.secondary)
                             .frame(minWidth: 18, alignment: .trailing)
-                        Text(row)
+                        SelectableChatText(text: row, style: .body)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
                     }
                 }
             }
@@ -466,10 +520,10 @@ private struct NativeMarkdownBlockView: View {
         }
     }
 
-    private func headingFont(_ level: Int) -> Font {
+    private func headingTextStyle(_ level: Int) -> UIFont.TextStyle {
         switch level {
-        case 1: .title2.bold()
-        case 2: .title3.bold()
+        case 1: .title2
+        case 2: .title3
         default: .headline
         }
     }
@@ -520,9 +574,11 @@ private struct NativeMarkdownTable: View {
                 ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
                     GridRow {
                         ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                            Text(cell)
-                                .font(rowIndex == 0 ? .caption.weight(.semibold) : .caption)
-                                .textSelection(.enabled)
+                            SelectableChatText(
+                                text: cell,
+                                style: .caption1,
+                                weight: rowIndex == 0 ? .semibold : .regular
+                            )
                                 .frame(minWidth: 110, maxWidth: 220, alignment: .leading)
                                 .padding(9)
                                 .background(rowIndex == 0 ? Color.secondary.opacity(0.12) : Color.clear)
@@ -532,5 +588,261 @@ private struct NativeMarkdownTable: View {
                 }
             }
         }
+    }
+}
+
+enum ChatTextSelectionPolicy {
+    static func selectedText(in text: String, range: NSRange) -> String? {
+        guard range.location != NSNotFound,
+              range.length > 0,
+              let swiftRange = Range(range, in: text) else { return nil }
+        let selection = String(text[swiftRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return selection.isEmpty ? nil : selection
+    }
+}
+
+private struct SelectableChatText: UIViewRepresentable {
+    let text: AttributedString
+    let style: UIFont.TextStyle
+    var weight: UIFont.Weight = .regular
+
+    @Environment(\.onAskChatWithSelection) private var onAskChatWithSelection
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onAskChatWithSelection: onAskChatWithSelection)
+    }
+
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.delegate = context.coordinator
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isScrollEnabled = false
+        textView.backgroundColor = .clear
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.adjustsFontForContentSizeCategory = true
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        textView.setContentHuggingPriority(.required, for: .vertical)
+        textView.accessibilityIdentifier = "selectable-chat-text"
+        return textView
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        context.coordinator.onAskChatWithSelection = onAskChatWithSelection
+        let rendered = renderedText()
+        if textView.attributedText != rendered {
+            let selectedRange = textView.selectedRange
+            textView.attributedText = rendered
+            if NSMaxRange(selectedRange) <= rendered.length {
+                textView.selectedRange = selectedRange
+            }
+        }
+        textView.linkTextAttributes = [
+            .foregroundColor: UIColor.label,
+            .underlineStyle: NSUnderlineStyle.single.rawValue
+        ]
+    }
+
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        uiView: UITextView,
+        context: Context
+    ) -> CGSize? {
+        guard let width = proposal.width, width > 0 else { return nil }
+        let measured = uiView.sizeThatFits(
+            CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        )
+        return CGSize(width: width, height: ceil(measured.height))
+    }
+
+    private func renderedText() -> NSAttributedString {
+        let rendered = NSMutableAttributedString(attributedString: NSAttributedString(text))
+        let baseFont = UIFont.systemFont(
+            ofSize: UIFont.preferredFont(forTextStyle: style).pointSize,
+            weight: weight
+        )
+        let fullRange = NSRange(location: 0, length: rendered.length)
+        rendered.addAttributes([
+            .font: baseFont,
+            .foregroundColor: UIColor.label
+        ], range: fullRange)
+
+        rendered.enumerateAttribute(.inlinePresentationIntent, in: fullRange) { value, range, _ in
+            guard let intent = value as? InlinePresentationIntent else { return }
+            var traits = baseFont.fontDescriptor.symbolicTraits
+            if intent.contains(.stronglyEmphasized) { traits.insert(.traitBold) }
+            if intent.contains(.emphasized) { traits.insert(.traitItalic) }
+            if let descriptor = baseFont.fontDescriptor.withSymbolicTraits(traits) {
+                rendered.addAttribute(.font, value: UIFont(descriptor: descriptor, size: 0), range: range)
+            }
+            if intent.contains(.strikethrough) {
+                rendered.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+            }
+        }
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 3
+        rendered.addAttribute(.paragraphStyle, value: paragraph, range: fullRange)
+        return rendered
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var onAskChatWithSelection: (String) -> Void
+
+        init(onAskChatWithSelection: @escaping (String) -> Void) {
+            self.onAskChatWithSelection = onAskChatWithSelection
+        }
+
+        func textView(
+            _ textView: UITextView,
+            editMenuForTextIn range: NSRange,
+            suggestedActions: [UIMenuElement]
+        ) -> UIMenu? {
+            return menu(for: textView, range: range, suggestedActions: suggestedActions)
+        }
+
+        private func menu(
+            for textView: UITextView,
+            range: NSRange,
+            suggestedActions: [UIMenuElement]
+        ) -> UIMenu? {
+            guard ChatTextSelectionPolicy.selectedText(in: textView.text, range: range) != nil else {
+                return nil
+            }
+
+            let selectAllMenu = UIMenu(
+                title: L10n.text("すべて"),
+                image: UIImage(systemName: "selection.pin.in.out"),
+                children: [
+                    UIDeferredMenuElement.uncached { [weak self, weak textView] completion in
+                        guard let self, let textView else {
+                            completion([])
+                            return
+                        }
+                        textView.selectedRange = NSRange(
+                            location: 0,
+                            length: textView.textStorage.length
+                        )
+                        completion(self.expandedMenuActions(for: textView))
+                    }
+                ]
+            )
+
+            return UIMenu(
+                options: .displayInline,
+                children: [askAction(for: textView), copyAction(for: textView), selectAllMenu]
+            )
+        }
+
+        private func askAction(for textView: UITextView) -> UIAction {
+            UIAction(
+                title: L10n.text("チャットで質問する"),
+                image: UIImage(systemName: "text.bubble")
+            ) { [weak self, weak textView] _ in
+                guard let self,
+                      let textView,
+                      let selection = ChatTextSelectionPolicy.selectedText(
+                        in: textView.text,
+                        range: textView.selectedRange
+                      ) else { return }
+                textView.resignFirstResponder()
+                DispatchQueue.main.async {
+                    self.onAskChatWithSelection(selection)
+                }
+            }
+        }
+
+        private func copyAction(for textView: UITextView) -> UIAction {
+            UIAction(
+                title: L10n.text("コピー"),
+                image: UIImage(systemName: "doc.on.doc")
+            ) { [weak textView] _ in
+                textView?.copy(nil)
+            }
+        }
+
+        private func expandedMenuActions(for textView: UITextView) -> [UIMenuElement] {
+            let selectAll = UIAction(
+                title: L10n.text("すべてを選択"),
+                image: UIImage(systemName: "selection.pin.in.out")
+            ) { [weak textView] _ in
+                guard let textView else { return }
+                textView.selectedRange = NSRange(location: 0, length: textView.textStorage.length)
+            }
+            let lookup = UIAction(
+                title: L10n.text("調べる"),
+                image: UIImage(systemName: "info.circle")
+            ) { [weak self, weak textView] _ in
+                guard let self,
+                      let textView,
+                      let selection = self.selection(in: textView),
+                      let presenter = self.presenter(for: textView) else { return }
+                presenter.present(UIReferenceLibraryViewController(term: selection), animated: true)
+            }
+            let translate = UIAction(
+                title: L10n.text("翻訳"),
+                image: UIImage(systemName: "character.bubble")
+            ) { [weak self, weak textView] _ in
+                guard let self,
+                      let textView,
+                      let selection = self.selection(in: textView),
+                      var components = URLComponents(string: "https://translate.google.com/") else { return }
+                components.queryItems = [
+                    URLQueryItem(name: "sl", value: "auto"),
+                    URLQueryItem(name: "tl", value: "en"),
+                    URLQueryItem(name: "text", value: selection),
+                    URLQueryItem(name: "op", value: "translate")
+                ]
+                if let url = components.url { UIApplication.shared.open(url) }
+            }
+            let webSearch = UIAction(
+                title: L10n.text("ウェブを検索"),
+                image: UIImage(systemName: "magnifyingglass")
+            ) { [weak self, weak textView] _ in
+                guard let self,
+                      let textView,
+                      let selection = self.selection(in: textView),
+                      var components = URLComponents(string: "https://www.google.com/search") else { return }
+                components.queryItems = [URLQueryItem(name: "q", value: selection)]
+                if let url = components.url { UIApplication.shared.open(url) }
+            }
+            let share = UIAction(
+                title: L10n.text("共有…"),
+                image: UIImage(systemName: "square.and.arrow.up")
+            ) { [weak self, weak textView] _ in
+                guard let self,
+                      let textView,
+                      let selection = self.selection(in: textView),
+                      let presenter = self.presenter(for: textView) else { return }
+                let controller = UIActivityViewController(
+                    activityItems: [selection],
+                    applicationActivities: nil
+                )
+                controller.popoverPresentationController?.sourceView = textView
+                controller.popoverPresentationController?.sourceRect = textView.bounds
+                presenter.present(controller, animated: true)
+            }
+            return [
+                askAction(for: textView),
+                copyAction(for: textView),
+                selectAll,
+                UIMenu(options: .displayInline, children: [lookup, translate, webSearch]),
+                UIMenu(options: .displayInline, children: [share])
+            ]
+        }
+
+        private func selection(in textView: UITextView) -> String? {
+            ChatTextSelectionPolicy.selectedText(in: textView.text, range: textView.selectedRange)
+        }
+
+        private func presenter(for textView: UITextView) -> UIViewController? {
+            var presenter = textView.window?.rootViewController
+            while let presented = presenter?.presentedViewController {
+                presenter = presented
+            }
+            return presenter
+        }
+
     }
 }
