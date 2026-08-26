@@ -426,8 +426,13 @@ struct NativeMarkdownView: View {
             ) {
                 SelectableChatText(text: AttributedString(markdownText), style: .body)
             } else {
-                ForEach(renderedBlocks, id: \.renderID) { block in
-                    NativeMarkdownBlockView(block: block)
+                ForEach(NativeMarkdownRenderGroup.groups(for: renderedBlocks)) { group in
+                    switch group {
+                    case let .selectableText(_, blocks):
+                        SelectableChatText(blocks: blocks)
+                    case let .standalone(block):
+                        NativeMarkdownBlockView(block: block)
+                    }
                 }
             }
         }
@@ -475,6 +480,58 @@ enum NativeMarkdownPresentationPolicy {
     }
 }
 
+enum NativeMarkdownRenderGroup: Identifiable, Equatable {
+    case selectableText(id: String, blocks: [NativeMarkdownBlock])
+    case standalone(block: NativeMarkdownBlock)
+
+    var id: String {
+        switch self {
+        case let .selectableText(id, _): id
+        case let .standalone(block): block.renderID
+        }
+    }
+
+    static func groups(for blocks: [NativeMarkdownBlock]) -> [NativeMarkdownRenderGroup] {
+        var result: [NativeMarkdownRenderGroup] = []
+        var selectableBlocks: [NativeMarkdownBlock] = []
+
+        func flushSelectableBlocks() {
+            guard let first = selectableBlocks.first else { return }
+            result.append(.selectableText(id: "selectable-\(first.id)", blocks: selectableBlocks))
+            selectableBlocks.removeAll(keepingCapacity: true)
+        }
+
+        for block in blocks {
+            switch block {
+            case .paragraph, .heading:
+                selectableBlocks.append(block)
+            default:
+                flushSelectableBlocks()
+                result.append(.standalone(block: block))
+            }
+        }
+        flushSelectableBlocks()
+        return result
+    }
+}
+
+private struct NativeMarkdownGroupedBlocksView: View {
+    let blocks: [NativeMarkdownBlock]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(NativeMarkdownRenderGroup.groups(for: blocks)) { group in
+                switch group {
+                case let .selectableText(_, blocks):
+                    SelectableChatText(blocks: blocks)
+                case let .standalone(block):
+                    NativeMarkdownBlockView(block: block)
+                }
+            }
+        }
+    }
+}
+
 private struct NativeMarkdownBlockView: View {
     let block: NativeMarkdownBlock
 
@@ -494,12 +551,7 @@ private struct NativeMarkdownBlockView: View {
                 Capsule()
                     .fill(Color.secondary.opacity(0.45))
                     .frame(width: 3)
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(blocks) { child in
-                        NativeMarkdownBlockView(block: child)
-                            .id(child.renderID)
-                    }
-                }
+                NativeMarkdownGroupedBlocksView(blocks: blocks)
             }
         case let .list(_, ordered, start, rows):
             VStack(alignment: .leading, spacing: 7) {
@@ -601,18 +653,33 @@ enum ChatTextSelectionPolicy {
     }
 }
 
-enum ChatTextLayoutPolicy {
-    static func fittedWidth(naturalWidth: CGFloat, proposedWidth: CGFloat) -> CGFloat {
-        min(proposedWidth, max(1, ceil(naturalWidth)))
-    }
-}
-
 private struct SelectableChatText: UIViewRepresentable {
-    let text: AttributedString
-    let style: UIFont.TextStyle
-    var weight: UIFont.Weight = .regular
+    private struct Fragment {
+        let text: AttributedString
+        let style: UIFont.TextStyle
+        let weight: UIFont.Weight
+    }
+
+    private let fragments: [Fragment]
 
     @Environment(\.onAskChatWithSelection) private var onAskChatWithSelection
+
+    init(text: AttributedString, style: UIFont.TextStyle, weight: UIFont.Weight = .regular) {
+        fragments = [Fragment(text: text, style: style, weight: weight)]
+    }
+
+    init(blocks: [NativeMarkdownBlock]) {
+        fragments = blocks.compactMap { block in
+            switch block {
+            case let .paragraph(_, text):
+                Fragment(text: text, style: .body, weight: .regular)
+            case let .heading(_, level, text):
+                Fragment(text: text, style: Self.headingTextStyle(level), weight: .bold)
+            default:
+                nil
+            }
+        }
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onAskChatWithSelection: onAskChatWithSelection)
@@ -656,31 +723,41 @@ private struct SelectableChatText: UIViewRepresentable {
         context: Context
     ) -> CGSize? {
         guard let width = proposal.width, width > 0 else { return nil }
-        let naturalBounds = uiView.attributedText.boundingRect(
-            with: CGSize(
-                width: CGFloat.greatestFiniteMagnitude,
-                height: CGFloat.greatestFiniteMagnitude
-            ),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            context: nil
-        )
-        let fittedWidth = ChatTextLayoutPolicy.fittedWidth(
-            naturalWidth: naturalBounds.width,
-            proposedWidth: width
-        )
         let measured = uiView.sizeThatFits(
-            CGSize(width: fittedWidth, height: CGFloat.greatestFiniteMagnitude)
+            CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
         )
-        return CGSize(width: fittedWidth, height: ceil(measured.height))
+        return CGSize(width: width, height: ceil(measured.height))
     }
 
     private func renderedText() -> NSAttributedString {
-        let rendered = NSMutableAttributedString(attributedString: NSAttributedString(text))
+        let rendered = NSMutableAttributedString()
+        for (index, fragment) in fragments.enumerated() {
+            let start = rendered.length
+            rendered.append(NSAttributedString(fragment.text))
+            applyBaseStyle(
+                to: rendered,
+                range: NSRange(location: start, length: rendered.length - start),
+                style: fragment.style,
+                weight: fragment.weight
+            )
+            if index < fragments.count - 1, rendered.length > 0 {
+                let attributes = rendered.attributes(at: rendered.length - 1, effectiveRange: nil)
+                rendered.append(NSAttributedString(string: "\n", attributes: attributes))
+            }
+        }
+        return rendered
+    }
+
+    private func applyBaseStyle(
+        to rendered: NSMutableAttributedString,
+        range fullRange: NSRange,
+        style: UIFont.TextStyle,
+        weight: UIFont.Weight
+    ) {
         let baseFont = UIFont.systemFont(
             ofSize: UIFont.preferredFont(forTextStyle: style).pointSize,
             weight: weight
         )
-        let fullRange = NSRange(location: 0, length: rendered.length)
         rendered.addAttributes([
             .font: baseFont,
             .foregroundColor: UIColor.label
@@ -701,8 +778,16 @@ private struct SelectableChatText: UIViewRepresentable {
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = 3
+        paragraph.paragraphSpacing = 12
         rendered.addAttribute(.paragraphStyle, value: paragraph, range: fullRange)
-        return rendered
+    }
+
+    private static func headingTextStyle(_ level: Int) -> UIFont.TextStyle {
+        switch level {
+        case 1: .title2
+        case 2: .title3
+        default: .headline
+        }
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {

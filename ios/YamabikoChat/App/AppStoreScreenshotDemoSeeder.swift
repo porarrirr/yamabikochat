@@ -32,6 +32,25 @@ enum AppStoreScreenshotDemoSeeder {
         settings.dualModelB = "gemini-2.5-flash-preview"
         _ = try chatRepository.saveSettings(settings)
 
+        let baseTime = Int64(Date().timeIntervalSince1970 * 1000)
+        if ProcessInfo.processInfo.arguments.contains("-ChatTextSelectionFixture") {
+            let conversationId = try chatRepository.createConversation(title: "Text Selection Fixture")
+            _ = try conversations.insertMessage(
+                ChatMessage(
+                    conversationId: conversationId,
+                    role: "assistant",
+                    text: """
+                    First selectable paragraph.
+
+                    Second selectable paragraph.
+
+                    Third selectable paragraph.
+                    """,
+                    createdAtMs: baseTime + 240_000
+                )
+            )
+        }
+
         let projectId = try chatRepository.createProject(
             title: "仕事用",
             instructions: "簡潔で実務的な日本語で回答してください。"
@@ -110,7 +129,6 @@ enum AppStoreScreenshotDemoSeeder {
             )
         ]
 
-        let baseTime = Int64(Date().timeIntervalSince1970 * 1000)
         for (index, sample) in samples.enumerated() {
             let conversationId = try chatRepository.createConversation(
                 title: sample.title,

@@ -441,12 +441,27 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         XCTAssertEqual(ChatTextSelectionPolicy.selectedText(in: text, range: range), "Cost\n$0")
     }
 
-    func testChatTextLayoutPolicyDoesNotExtendShortHardWrappedTextAcrossAvailableWidth() {
-        XCTAssertEqual(ChatTextLayoutPolicy.fittedWidth(naturalWidth: 143.2, proposedWidth: 360), 144)
+    func testNativeMarkdownRenderGroupsMergeParagraphsAndHeadingsForContinuousSelection() {
+        let blocks = NativeMarkdownParser.parse("# Heading\n\nFirst paragraph.\n\nSecond paragraph.")
+        let groups = NativeMarkdownRenderGroup.groups(for: blocks)
+
+        XCTAssertEqual(groups.count, 1)
+        guard case let .selectableText(_, groupedBlocks) = groups.first else {
+            return XCTFail("Expected one continuously selectable text group")
+        }
+        XCTAssertEqual(groupedBlocks, blocks)
     }
 
-    func testChatTextLayoutPolicyStillUsesAvailableWidthForLongWrappingText() {
-        XCTAssertEqual(ChatTextLayoutPolicy.fittedWidth(naturalWidth: 720, proposedWidth: 360), 360)
+    func testNativeMarkdownRenderGroupsStopContinuousSelectionAtStandaloneBlock() {
+        let blocks = NativeMarkdownParser.parse("Before.\n\n```swift\nprint(1)\n```\n\nAfter.")
+        let groups = NativeMarkdownRenderGroup.groups(for: blocks)
+
+        XCTAssertEqual(groups.count, 3)
+        guard case .selectableText = groups[0],
+              case .standalone = groups[1],
+              case .selectableText = groups[2] else {
+            return XCTFail("Code blocks must remain standalone between selectable text groups")
+        }
     }
 
     func testNativeMarkdownRenderIdentityChangesWhenBlockKindChangesAtSameOffset() {

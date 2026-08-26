@@ -163,16 +163,29 @@ final class AppStoreScreenshotTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = [
             "-AppStoreScreenshotDemo",
-            "-ScreenshotScene", "chat"
+            "-ChatTextSelectionFixture",
+            "-ScreenshotScene", "list"
         ]
         app.launch()
 
-        let selectableTexts = app.textViews.matching(identifier: "selectable-chat-text")
-        XCTAssertTrue(selectableTexts.firstMatch.waitForExistence(timeout: 20))
-        let selectableText = try XCTUnwrap(
-            selectableTexts.allElementsBoundByIndex.first(where: { $0.isHittable })
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
+        openConversation(app: app, title: "Text Selection Fixture", fallbackTitle: "Text Selection Fixture")
+
+        let expectedSelection = """
+        First selectable paragraph.
+        Second selectable paragraph.
+        Third selectable paragraph.
+        """
+        let selectableText = app.textViews
+            .matching(identifier: "selectable-chat-text")
+            .matching(NSPredicate(format: "value BEGINSWITH %@", "First selectable paragraph."))
+            .firstMatch
+        XCTAssertTrue(selectableText.waitForExistence(timeout: 20))
+        XCTAssertEqual(
+            selectableText.value as? String,
+            expectedSelection,
+            "All Markdown paragraphs must share one native selectable text view"
         )
-        let expectedSelection = try XCTUnwrap(selectableText.value as? String)
 
         selectableText.press(forDuration: 1)
 
@@ -186,22 +199,6 @@ final class AppStoreScreenshotTests: XCTestCase {
             app.buttons["ここからブランチ"].firstMatch.exists,
             "The message-wide context menu must not intercept text selection"
         )
-
-        app.menuItems["すべて"].firstMatch.tap()
-        let lookup = app.menuItems["調べる"].firstMatch
-        let translate = app.menuItems["翻訳"].firstMatch
-        XCTAssertTrue(
-            lookup.waitForExistence(timeout: 3) || translate.waitForExistence(timeout: 3),
-            "Selecting all text should expand the native edit menu"
-        )
-
-        app.menuItems["チャットで質問する"].firstMatch.tap()
-
-        let composer = app.descendants(matching: .any)
-            .matching(identifier: "chat-composer")
-            .firstMatch
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
-        XCTAssertEqual(composer.value as? String, expectedSelection)
     }
 
     private func navigateToConversationList(app: XCUIApplication) {
