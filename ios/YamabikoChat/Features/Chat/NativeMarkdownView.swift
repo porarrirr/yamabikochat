@@ -601,6 +601,12 @@ enum ChatTextSelectionPolicy {
     }
 }
 
+enum ChatTextLayoutPolicy {
+    static func fittedWidth(naturalWidth: CGFloat, proposedWidth: CGFloat) -> CGFloat {
+        min(proposedWidth, max(1, ceil(naturalWidth)))
+    }
+}
+
 private struct SelectableChatText: UIViewRepresentable {
     let text: AttributedString
     let style: UIFont.TextStyle
@@ -650,10 +656,22 @@ private struct SelectableChatText: UIViewRepresentable {
         context: Context
     ) -> CGSize? {
         guard let width = proposal.width, width > 0 else { return nil }
-        let measured = uiView.sizeThatFits(
-            CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        let naturalBounds = uiView.attributedText.boundingRect(
+            with: CGSize(
+                width: CGFloat.greatestFiniteMagnitude,
+                height: CGFloat.greatestFiniteMagnitude
+            ),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            context: nil
         )
-        return CGSize(width: width, height: ceil(measured.height))
+        let fittedWidth = ChatTextLayoutPolicy.fittedWidth(
+            naturalWidth: naturalBounds.width,
+            proposedWidth: width
+        )
+        let measured = uiView.sizeThatFits(
+            CGSize(width: fittedWidth, height: CGFloat.greatestFiniteMagnitude)
+        )
+        return CGSize(width: fittedWidth, height: ceil(measured.height))
     }
 
     private func renderedText() -> NSAttributedString {
@@ -757,8 +775,11 @@ private struct SelectableChatText: UIViewRepresentable {
             UIAction(
                 title: L10n.text("コピー"),
                 image: UIImage(systemName: "doc.on.doc")
-            ) { [weak textView] _ in
-                textView?.copy(nil)
+            ) { [weak self, weak textView] _ in
+                guard let self,
+                      let textView,
+                      let selection = self.selection(in: textView) else { return }
+                UIPasteboard.general.string = selection
             }
         }
 

@@ -434,6 +434,21 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         XCTAssertNil(ChatTextSelectionPolicy.selectedText(in: "   ", range: NSRange(location: 0, length: 3)))
     }
 
+    func testChatTextSelectionPolicyRemovesOnlyWhitespaceOutsideSelectionContent() {
+        let text = "Before\nCost\n$0\nAfter"
+        let range = (text as NSString).range(of: "\nCost\n$0\n")
+
+        XCTAssertEqual(ChatTextSelectionPolicy.selectedText(in: text, range: range), "Cost\n$0")
+    }
+
+    func testChatTextLayoutPolicyDoesNotExtendShortHardWrappedTextAcrossAvailableWidth() {
+        XCTAssertEqual(ChatTextLayoutPolicy.fittedWidth(naturalWidth: 143.2, proposedWidth: 360), 144)
+    }
+
+    func testChatTextLayoutPolicyStillUsesAvailableWidthForLongWrappingText() {
+        XCTAssertEqual(ChatTextLayoutPolicy.fittedWidth(naturalWidth: 720, proposedWidth: 360), 360)
+    }
+
     func testNativeMarkdownRenderIdentityChangesWhenBlockKindChangesAtSameOffset() {
         let paragraph = NativeMarkdownBlock.paragraph(id: "block-0", text: AttributedString("Title"))
         let heading = NativeMarkdownBlock.heading(id: "block-0", level: 1, text: AttributedString("Title"))
