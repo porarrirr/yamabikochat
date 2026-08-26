@@ -11,10 +11,7 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var dualMessages: [DualChatMessage] = []
     @Published private(set) var settings: AppSettings = .init()
 
-    var inputText: String {
-        get { composerStore.inputText }
-        set { composerStore.inputText = newValue }
-    }
+    @Published var inputText: String = ""
     @Published var isSending: Bool = false
     @Published var isAutoConversationRunning: Bool = false
     @Published var isAutoConversationPaused: Bool = false

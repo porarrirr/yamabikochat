@@ -66,7 +66,14 @@ private struct ChatComposerTextView: UIViewRepresentable {
 
     func updateUIView(_ container: ComposerContainerView, context: Context) {
         context.coordinator.parent = self
-        container.textView.isEditable = isEnabled
+        // Preserve firstResponder across isEditable toggles to avoid spurious resign.
+        if container.textView.isEditable != isEnabled {
+            let wasFirstResponder = container.textView.isFirstResponder
+            container.textView.isEditable = isEnabled
+            if wasFirstResponder, isEnabled, !container.textView.isFirstResponder, isFocused.wrappedValue {
+                context.coordinator.requestFocus(for: container)
+            }
+        }
         configure(container, placeCursorAtEnd: false)
 
         if !isEnabled {
@@ -79,8 +86,6 @@ private struct ChatComposerTextView: UIViewRepresentable {
         } else if !isFocused.wrappedValue, container.textView.isFirstResponder {
             context.coordinator.cancelFocusRequest()
             container.textView.resignFirstResponder()
-        } else if !isFocused.wrappedValue {
-            context.coordinator.cancelFocusRequest()
         }
     }
 
@@ -109,10 +114,20 @@ private struct ChatComposerTextView: UIViewRepresentable {
         container.setSelectedText(selectedText)
         container.textView.placeholderLabel.text = placeholder
         let suffix = ChatComposerSelectionPolicy.editableSuffix(in: text, selectedText: selectedText)
-        if container.textView.text != suffix, container.textView.markedTextRange == nil {
+        if container.textView.markedTextRange == nil,
+           !container.textView.isFirstResponder,
+           container.textView.text != suffix {
             container.textView.text = suffix
-            if placeCursorAtEnd || container.textView.isFirstResponder {
+            if placeCursorAtEnd {
                 container.textView.selectedRange = NSRange(location: (suffix as NSString).length, length: 0)
+            }
+        } else if placeCursorAtEnd || container.textView.isFirstResponder,
+                  container.textView.markedTextRange == nil,
+                  container.textView.text == suffix {
+            // Ensure cursor stays at end when externally requested, without overwriting firstResponder content
+            let desired = NSRange(location: (suffix as NSString).length, length: 0)
+            if container.textView.selectedRange != desired {
+                container.textView.selectedRange = desired
             }
         }
         container.textView.placeholderLabel.isHidden = selectedText != nil || !suffix.isEmpty
@@ -134,6 +149,14 @@ private struct ChatComposerTextView: UIViewRepresentable {
 
         func requestFocus(for container: ComposerContainerView) {
             guard focusRequest == nil else { return }
+            // If window is available, becomeFirstResponder synchronously to avoid stale Binding race.
+            if container.window != nil,
+               parent.isFocused.wrappedValue,
+               parent.isEnabled,
+               container.textView.isEditable {
+                container.textView.becomeFirstResponder()
+                return
+            }
             let request = DispatchWorkItem { [weak self, weak container] in
                 guard let self, let container else { return }
                 self.focusRequest = nil
@@ -278,10 +301,18 @@ private struct ChatComposerTextView: UIViewRepresentable {
         }
 
         func selectionWidth(for selectedText: String) -> CGFloat {
-            selectionLabel.text = selectedText
+            let normalized = selectedText
                 .replacingOccurrences(of: "\n", with: " ")
                 .replacingOccurrences(of: "\r", with: " ")
-            return selectionLabel.intrinsicContentSize.width
+            let font = selectionLabel.font ?? UIFont.systemFont(ofSize: 16)
+            let attributes: [NSAttributedString.Key: Any] = [.font: font]
+            let size = (normalized as NSString).boundingRect(
+                with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: attributes,
+                context: nil
+            ).size
+            return ceil(size.width)
         }
 
         @objc private func focusTextView() {
@@ -591,10 +622,13 @@ struct ChatScreen: View {
 
     private var composerInputCard: some View {
         VStack(spacing: 0) {
-            HStack(alignment: isComposerExpanded ? .top : .center, spacing: 8) {
-                if !isComposerExpanded {
-                    composerPlusMenuButton
-                }
+            HStack(alignment: isComposerExpanded ? .top : .center, spacing: isComposerExpanded ? 0 : 8) {
+                composerPlusMenuButton
+                    .opacity(isComposerExpanded ? 0 : 1)
+                    .frame(width: isComposerExpanded ? 0 : nil, height: isComposerExpanded ? 0 : nil)
+                    .clipped()
+                    .allowsHitTesting(!isComposerExpanded)
+                    .accessibilityHidden(isComposerExpanded)
 
                 ChatComposerTextView(
                     text: $viewModel.inputText,
@@ -602,18 +636,26 @@ struct ChatScreen: View {
                     isFocused: $isComposerFocused,
                     placeholder: viewModel.composerPlaceholder
                 )
+                    .id("chat.composer")
                     .accessibilityIdentifier("chat-composer")
                     .padding(.horizontal, isComposerExpanded ? 14 : 0)
                     .padding(.top, isComposerExpanded ? 12 : 9)
                     .padding(.bottom, isComposerExpanded ? 6 : 9)
                     .disabled(viewModel.isSpeechRecording || viewModel.isSending)
+                    .transaction { transaction in transaction.animation = nil }
+                    .animation(nil, value: isComposerExpanded)
 
-                if !isComposerExpanded {
+                HStack(spacing: 6) {
                     if let contextUsage = viewModel.visibleContextUsage {
                         ContextUsageMeter(usage: contextUsage)
                     }
                     composerCollapsedVoiceButton
                 }
+                .opacity(isComposerExpanded ? 0 : 1)
+                .frame(width: isComposerExpanded ? 0 : nil, height: isComposerExpanded ? 0 : nil)
+                .clipped()
+                .allowsHitTesting(!isComposerExpanded)
+                .accessibilityHidden(isComposerExpanded)
             }
             .padding(.horizontal, isComposerExpanded ? 0 : 8)
             .padding(.vertical, isComposerExpanded ? 0 : 2)
