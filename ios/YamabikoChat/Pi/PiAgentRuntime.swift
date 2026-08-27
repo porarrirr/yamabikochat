@@ -59,6 +59,19 @@ private struct PiHealthResponse: Decodable {
     var contractVersion: Int
 }
 
+struct PiRuntimeReadinessConfiguration: Sendable {
+    var startupAttempts: Int = 100
+    var resumeAttempts: Int = 20
+    var retryDelay: Duration = .milliseconds(100)
+    var requestTimeout: TimeInterval = 0.75
+}
+
+protocol PiRuntimeHealthClient: Sendable {
+    func data(for request: URLRequest) async throws -> (Data, URLResponse)
+}
+
+extension URLSession: PiRuntimeHealthClient {}
+
 struct PiAttachment: Codable, Sendable {
     var data: String
     var mimeType: String
@@ -239,16 +252,24 @@ struct PiToolResultEnvelope: Encodable {
 actor PiAgentRuntime {
     static let shared = PiAgentRuntime()
 
-    private enum Readiness {
-        static let startupAttempts = 100
-        static let resumeAttempts = 10
-        static let retryDelay = Duration.milliseconds(100)
-        static let requestTimeout: TimeInterval = 0.5
-    }
-
     private var endpoint: URL?
     private var token: String?
     private var startupTask: Task<(URL, String), Error>?
+    private var healthTask: Task<PiHealthResponse, Error>?
+    private let readiness: PiRuntimeReadinessConfiguration
+    private let healthClient: any PiRuntimeHealthClient
+
+    init(
+        endpoint: URL? = nil,
+        token: String? = nil,
+        readiness: PiRuntimeReadinessConfiguration = PiRuntimeReadinessConfiguration(),
+        healthClient: any PiRuntimeHealthClient = URLSession(configuration: .ephemeral)
+    ) {
+        self.endpoint = endpoint
+        self.token = token
+        self.readiness = readiness
+        self.healthClient = healthClient
+    }
 
     func verifyReady() async throws {
         _ = try await startIfNeeded()
@@ -259,10 +280,10 @@ actor PiAgentRuntime {
     /// endpoint must be proven live instead of being replaced with another embedded runtime.
     func prepareForForeground() async throws {
         guard let endpoint, let token else { return }
-        _ = try await waitUntilHealthy(
+        _ = try await waitUntilHealthySingleFlight(
             endpoint: endpoint,
             token: token,
-            attempts: Readiness.resumeAttempts,
+            attempts: readiness.resumeAttempts,
             context: "foreground"
         )
     }
@@ -634,10 +655,10 @@ actor PiAgentRuntime {
 
     private func startIfNeeded() async throws -> (URL, String) {
         if let endpoint, let token {
-            _ = try await waitUntilHealthy(
+            _ = try await waitUntilHealthySingleFlight(
                 endpoint: endpoint,
                 token: token,
-                attempts: Readiness.resumeAttempts,
+                attempts: readiness.resumeAttempts,
                 context: "request"
             )
             return (endpoint, token)
@@ -664,10 +685,10 @@ actor PiAgentRuntime {
             )
             PiNodeRunner.startEngine(withArguments: ["node", script.path, String(port), token])
 
-            _ = try await self.waitUntilHealthy(
+            _ = try await self.waitUntilHealthySingleFlight(
                 endpoint: endpoint,
                 token: token,
-                attempts: Readiness.startupAttempts,
+                attempts: self.readiness.startupAttempts,
                 context: "startup"
             )
             return (endpoint, token)
@@ -687,38 +708,86 @@ actor PiAgentRuntime {
     }
 
     @discardableResult
-    private func waitUntilHealthy(
+    private func waitUntilHealthySingleFlight(
         endpoint: URL,
         token: String,
         attempts: Int,
         context: String
     ) async throws -> PiHealthResponse {
+        if let healthTask {
+            DiagnosticsLogger.log(
+                "Pi runtime health check already in progress",
+                category: .network,
+                metadata: ["context": context]
+            )
+            return try await healthTask.value
+        }
+
+        let readiness = readiness
+        let healthClient = healthClient
+        let task = Task<PiHealthResponse, Error> {
+            try await Self.waitUntilHealthy(
+                endpoint: endpoint,
+                token: token,
+                attempts: attempts,
+                context: context,
+                readiness: readiness,
+                healthClient: healthClient
+            )
+        }
+        healthTask = task
+        do {
+            let result = try await task.value
+            healthTask = nil
+            return result
+        } catch {
+            healthTask = nil
+            throw error
+        }
+    }
+
+    private static func waitUntilHealthy(
+        endpoint: URL,
+        token: String,
+        attempts: Int,
+        context: String,
+        readiness: PiRuntimeReadinessConfiguration,
+        healthClient: any PiRuntimeHealthClient
+    ) async throws -> PiHealthResponse {
         var health = URLRequest(
             url: endpoint.appendingPathComponent("health"),
-            timeoutInterval: Readiness.requestTimeout
+            timeoutInterval: readiness.requestTimeout
         )
         health.cachePolicy = .reloadIgnoringLocalCacheData
         health.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        var lastFailure = "no response"
 
         for attempt in 0 ..< attempts {
             try Task.checkCancellation()
-            if let (data, response) = try? await URLSession(configuration: .ephemeral).data(for: health),
-               (response as? HTTPURLResponse)?.statusCode == 200,
-               let status = try? JSONDecoder().decode(PiHealthResponse.self, from: data),
-               status.ok, status.contractVersion == 2 {
-                DiagnosticsLogger.log(
-                    "Pi runtime health check succeeded",
-                    category: .network,
-                    metadata: [
-                        "attempt": String(attempt + 1),
-                        "context": context,
-                        "port": endpoint.port.map(String.init) ?? "unknown"
-                    ]
-                )
-                return status
+            do {
+                let (data, response) = try await healthClient.data(for: health)
+                let statusCode = (response as? HTTPURLResponse)?.statusCode
+                if statusCode == 200,
+                   let status = try? JSONDecoder().decode(PiHealthResponse.self, from: data),
+                   status.ok, status.contractVersion == 2 {
+                    DiagnosticsLogger.log(
+                        "Pi runtime health check succeeded",
+                        category: .network,
+                        metadata: [
+                            "attempt": String(attempt + 1),
+                            "context": context,
+                            "port": endpoint.port.map(String.init) ?? "unknown"
+                        ]
+                    )
+                    return status
+                }
+                lastFailure = statusCode.map { "HTTP \($0) or invalid health payload" }
+                    ?? "non-HTTP health response"
+            } catch {
+                lastFailure = "\(type(of: error)): \(error.localizedDescription)"
             }
             if attempt + 1 < attempts {
-                try await Task.sleep(for: Readiness.retryDelay)
+                try await Task.sleep(for: readiness.retryDelay)
             }
         }
 
@@ -732,6 +801,7 @@ actor PiAgentRuntime {
             metadata: [
                 "attempts": String(attempts),
                 "context": context,
+                "lastFailure": lastFailure,
                 "port": endpoint.port.map(String.init) ?? "unknown"
             ],
             error: error

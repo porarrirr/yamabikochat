@@ -29,6 +29,40 @@ private struct PiGatewayHTTPClient: HTTPClientProtocol {
     }
 }
 
+private actor ScriptedPiRuntimeHealthClient: PiRuntimeHealthClient {
+    private var failuresRemaining: Int
+    private let responseDelay: Duration
+    private var requestCount = 0
+
+    init(failures: Int = 0, responseDelay: Duration = .zero) {
+        failuresRemaining = failures
+        self.responseDelay = responseDelay
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        requestCount += 1
+        if responseDelay != .zero {
+            try await Task.sleep(for: responseDelay)
+        }
+        if failuresRemaining > 0 {
+            failuresRemaining -= 1
+            throw URLError(.cannotConnectToHost)
+        }
+        let data = Data(#"{"ok":true,"contractVersion":2}"#.utf8)
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        return (data, response)
+    }
+
+    func count() -> Int {
+        requestCount
+    }
+}
+
 final class PiAgentGatewayTests: XCTestCase {
     func testAttachmentFileURLResolvesFilesystemPath() {
         let path = "/tmp/Yamabiko Chat/photo.png"
@@ -54,6 +88,48 @@ final class PiAgentGatewayTests: XCTestCase {
         try await PiAgentRuntime.shared.verifyReady()
         try await PiAgentRuntime.shared.prepareForForeground()
         try await PiAgentRuntime.shared.verifyReady()
+    }
+
+    func testForegroundAndRequestReadinessShareOneHealthCheck() async throws {
+        let healthClient = ScriptedPiRuntimeHealthClient(responseDelay: .milliseconds(100))
+        let runtime = PiAgentRuntime(
+            endpoint: URL(string: "http://127.0.0.1:54321/")!,
+            token: "test-token",
+            readiness: PiRuntimeReadinessConfiguration(
+                startupAttempts: 1,
+                resumeAttempts: 1,
+                retryDelay: .zero,
+                requestTimeout: 1
+            ),
+            healthClient: healthClient
+        )
+
+        async let foreground: Void = runtime.prepareForForeground()
+        async let request: Void = runtime.verifyReady()
+        _ = try await (foreground, request)
+
+        let requestCount = await healthClient.count()
+        XCTAssertEqual(requestCount, 1)
+    }
+
+    func testReadinessRetriesTransientConnectionFailures() async throws {
+        let healthClient = ScriptedPiRuntimeHealthClient(failures: 3)
+        let runtime = PiAgentRuntime(
+            endpoint: URL(string: "http://127.0.0.1:54321/")!,
+            token: "test-token",
+            readiness: PiRuntimeReadinessConfiguration(
+                startupAttempts: 1,
+                resumeAttempts: 4,
+                retryDelay: .zero,
+                requestTimeout: 1
+            ),
+            healthClient: healthClient
+        )
+
+        try await runtime.verifyReady()
+
+        let requestCount = await healthClient.count()
+        XCTAssertEqual(requestCount, 4)
     }
 
     func testBundledPiRuntimeResolvesCurrentOpenCodeAndOpenRouterModels() async throws {
