@@ -1231,6 +1231,49 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testStreamCompletionRemovesTemporaryBottomWhitespace() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: [timelineMessage(id: 1, text: "Persisted answer")])
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 1,
+            text: String(repeating: "A long streaming paragraph that fills the viewport.\n\n", count: 80),
+            thinking: "",
+            toolActivity: nil,
+            isFinal: false
+        ))
+        await settleTimeline(controller)
+
+        controller.scrollViewWillBeginDragging(collectionView)
+        collectionView.setContentOffset(
+            CGPoint(x: 0, y: max(
+                -collectionView.adjustedContentInset.top,
+                maximumContentOffset(in: collectionView) - 150
+            )),
+            animated: false
+        )
+        controller.scrollViewDidScroll(collectionView)
+        controller.scrollViewDidEndDragging(collectionView, willDecelerate: false)
+        await settleTimeline(controller)
+
+        store.clearTransientStreamingSnapshots()
+        await settleTimeline(controller)
+
+        XCTAssertEqual(collectionView.contentInset.bottom, 0, accuracy: 0.5)
+        XCTAssertLessThanOrEqual(
+            collectionView.contentOffset.y,
+            maximumContentOffset(in: collectionView) + 0.5,
+            "Completion must clamp to real content instead of preserving the offset with blank inset"
+        )
+    }
+
+    @MainActor
     func testPendingLatestMoveDoesNotOverrideAUserScroll() async throws {
         let store = ChatTimelineStore()
         store.update(messages: (1...20).map {

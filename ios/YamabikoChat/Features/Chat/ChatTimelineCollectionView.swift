@@ -257,9 +257,19 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             pendingContentAnchor = captureVisibleAnchor()
             pendingViewportOffsetY = collectionView.contentOffset.y
         }
-        if (kind == .streamUpdate || kind == .completion),
-           case .detached = followState {
-            pendingLocksViewport = true
+        switch kind {
+        case .streamUpdate:
+            if case .detached = followState {
+                pendingLocksViewport = true
+            }
+        case .completion:
+            // A stream frame may need temporary bottom inset to hold a detached
+            // reader's viewport while the row is remeasured. Completion is the
+            // terminal measurement pass, so it must remove that compensation
+            // instead of turning it into permanent scrollable whitespace.
+            pendingLocksViewport = false
+        case .normalUpdate:
+            break
         }
     }
 
