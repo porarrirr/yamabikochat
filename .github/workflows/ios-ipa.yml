@@ -52,7 +52,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ios/Vendor/PythonWheelhouse
-          key: ios-python-wheels-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('ios/python-scientific-sources.env', 'ios/python-wheels.sha256', 'ios/scripts/build-python-scientific-wheels.sh', 'ios/scripts/run-ios-cibuildwheel.py') }}
+          key: ios-python-wheels-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('ios/app-store-build.env', 'ios/python-scientific-sources.env', 'ios/python-wheels.sha256', 'ios/scripts/build-python-scientific-wheels.sh', 'ios/scripts/validate-active-app-store-sdk.sh', 'ios/scripts/run-ios-cibuildwheel.py') }}
 
       - name: Install XcodeGen
         run: brew install xcodegen

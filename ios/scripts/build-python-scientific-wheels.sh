@@ -11,6 +11,10 @@ generated_lock="$wheelhouse/source-built.sha256"
 generated_sdk_lock="$wheelhouse/source-built.sdk"
 active_sdk_version="$(xcrun --sdk iphoneos --show-sdk-version)"
 
+# Native extension load commands preserve the SDK used here. Reject an SDK
+# that App Store Connect does not accept before it can enter the wheel cache.
+"$ios_dir/scripts/validate-active-app-store-sdk.sh"
+
 if [[ ! -d "$framework" ]]; then
   echo "Missing $framework; run ios/scripts/bootstrap-python.sh --runtime-only first." >&2
   exit 1

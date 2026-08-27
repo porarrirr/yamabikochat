@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "$EFFECTIVE_PLATFORM_NAME" == "-iphoneos" && "$CONFIGURATION" == "Release" ]]; then
+  # Archive builds must fail before packaging or signing when the selected
+  # toolchain would stamp an App Store-rejected SDK into bundled extensions.
+  "$PROJECT_DIR/scripts/validate-active-app-store-sdk.sh"
+fi
+
 if [[ "$EFFECTIVE_PLATFORM_NAME" == "-iphoneos" ]]; then
   python_packages_slice="iphoneos-arm64"
 elif [[ "$EFFECTIVE_PLATFORM_NAME" == "-iphonesimulator" && "$ARCHS" == *"x86_64"* ]]; then

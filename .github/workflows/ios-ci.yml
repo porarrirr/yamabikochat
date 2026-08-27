@@ -54,7 +54,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ios/Vendor/PythonWheelhouse
-          key: ios-python-wheels-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('ios/python-scientific-sources.env', 'ios/python-wheels.sha256', 'ios/scripts/build-python-scientific-wheels.sh', 'ios/scripts/run-ios-cibuildwheel.py') }}
+          key: ios-python-wheels-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('ios/app-store-build.env', 'ios/python-scientific-sources.env', 'ios/python-wheels.sha256', 'ios/scripts/build-python-scientific-wheels.sh', 'ios/scripts/validate-active-app-store-sdk.sh', 'ios/scripts/run-ios-cibuildwheel.py') }}
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -71,6 +71,7 @@ jobs:
           (cd ios/PiRuntime && npm test)
           python3 -m unittest ios/PythonTests/test_yamabiko_runtime.py
           ios/scripts/test-align-python-framework-minimum-os.sh
+          ios/scripts/test-validate-active-app-store-sdk.sh
           ios/scripts/test-validate-app-sdk-versions.sh
 
       - name: Build
