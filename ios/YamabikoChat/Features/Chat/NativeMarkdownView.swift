@@ -503,7 +503,7 @@ enum NativeMarkdownRenderGroup: Identifiable, Equatable {
 
         for block in blocks {
             switch block {
-            case .paragraph, .heading:
+            case .paragraph, .heading, .quote, .list:
                 selectableBlocks.append(block)
             default:
                 flushSelectableBlocks()
@@ -653,11 +653,48 @@ enum ChatTextSelectionPolicy {
     }
 }
 
+private extension NSAttributedString.Key {
+    static let yamabikoQuoteDepth = NSAttributedString.Key("com.porarri.yamabikochat.quote-depth")
+}
+
+private final class SelectableChatTextView: UITextView {
+    static let quoteIndent: CGFloat = 15
+
+    override func draw(_ rect: CGRect) {
+        super.draw(rect)
+        guard textStorage.length > 0 else { return }
+
+        let fullRange = NSRange(location: 0, length: textStorage.length)
+        textStorage.enumerateAttribute(.yamabikoQuoteDepth, in: fullRange) { value, range, _ in
+            guard let depth = value as? Int, depth > 0 else { return }
+            let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            var quoteBounds = CGRect.null
+            layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, usedRect, _, _, _ in
+                quoteBounds = quoteBounds.union(usedRect)
+            }
+            guard !quoteBounds.isNull else { return }
+
+            UIColor.secondaryLabel.withAlphaComponent(0.45).setFill()
+            for level in 0..<depth {
+                let barRect = CGRect(
+                    x: textContainerInset.left + CGFloat(level) * Self.quoteIndent,
+                    y: textContainerInset.top + quoteBounds.minY,
+                    width: 3,
+                    height: quoteBounds.height
+                )
+                UIBezierPath(roundedRect: barRect, cornerRadius: 1.5).fill()
+            }
+        }
+    }
+}
+
 private struct SelectableChatText: UIViewRepresentable {
     private struct Fragment {
         let text: AttributedString
         let style: UIFont.TextStyle
         let weight: UIFont.Weight
+        let prefixLength: Int
+        let quoteDepth: Int
     }
 
     private let fragments: [Fragment]
@@ -665,20 +702,17 @@ private struct SelectableChatText: UIViewRepresentable {
     @Environment(\.onAskChatWithSelection) private var onAskChatWithSelection
 
     init(text: AttributedString, style: UIFont.TextStyle, weight: UIFont.Weight = .regular) {
-        fragments = [Fragment(text: text, style: style, weight: weight)]
+        fragments = [Fragment(
+            text: text,
+            style: style,
+            weight: weight,
+            prefixLength: 0,
+            quoteDepth: 0
+        )]
     }
 
     init(blocks: [NativeMarkdownBlock]) {
-        fragments = blocks.compactMap { block in
-            switch block {
-            case let .paragraph(_, text):
-                Fragment(text: text, style: .body, weight: .regular)
-            case let .heading(_, level, text):
-                Fragment(text: text, style: Self.headingTextStyle(level), weight: .bold)
-            default:
-                nil
-            }
-        }
+        fragments = blocks.flatMap { Self.fragments(for: $0) }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -686,7 +720,7 @@ private struct SelectableChatText: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> UITextView {
-        let textView = UITextView()
+        let textView = SelectableChatTextView()
         textView.delegate = context.coordinator
         textView.isEditable = false
         textView.isSelectable = true
@@ -738,8 +772,16 @@ private struct SelectableChatText: UIViewRepresentable {
                 to: rendered,
                 range: NSRange(location: start, length: rendered.length - start),
                 style: fragment.style,
-                weight: fragment.weight
+                weight: fragment.weight,
+                quoteDepth: fragment.quoteDepth
             )
+            if fragment.prefixLength > 0 {
+                rendered.addAttribute(
+                    .foregroundColor,
+                    value: UIColor.secondaryLabel,
+                    range: NSRange(location: start, length: fragment.prefixLength)
+                )
+            }
             if index < fragments.count - 1, rendered.length > 0 {
                 let attributes = rendered.attributes(at: rendered.length - 1, effectiveRange: nil)
                 rendered.append(NSAttributedString(string: "\n", attributes: attributes))
@@ -748,11 +790,63 @@ private struct SelectableChatText: UIViewRepresentable {
         return rendered
     }
 
+    private static func fragments(
+        for block: NativeMarkdownBlock,
+        quoteDepth: Int = 0
+    ) -> [Fragment] {
+        switch block {
+        case let .paragraph(_, text):
+            return [fragment(text: text, style: .body, weight: .regular, quoteDepth: quoteDepth)]
+        case let .heading(_, level, text):
+            return [fragment(
+                text: text,
+                style: headingTextStyle(level),
+                weight: .bold,
+                quoteDepth: quoteDepth
+            )]
+        case let .quote(_, blocks):
+            return blocks.flatMap { fragments(for: $0, quoteDepth: quoteDepth + 1) }
+        case let .list(_, ordered, start, rows):
+            return rows.enumerated().map { index, row in
+                let marker = ordered ? "\(start + index). " : "• "
+                return fragment(
+                    text: row,
+                    style: .body,
+                    weight: .regular,
+                    quoteDepth: quoteDepth,
+                    marker: marker
+                )
+            }
+        case .code, .math, .table, .divider:
+            return []
+        }
+    }
+
+    private static func fragment(
+        text: AttributedString,
+        style: UIFont.TextStyle,
+        weight: UIFont.Weight,
+        quoteDepth: Int,
+        marker: String = ""
+    ) -> Fragment {
+        let prefix = marker
+        var prefixedText = AttributedString(prefix)
+        prefixedText.append(text)
+        return Fragment(
+            text: prefixedText,
+            style: style,
+            weight: weight,
+            prefixLength: (prefix as NSString).length,
+            quoteDepth: quoteDepth
+        )
+    }
+
     private func applyBaseStyle(
         to rendered: NSMutableAttributedString,
         range fullRange: NSRange,
         style: UIFont.TextStyle,
-        weight: UIFont.Weight
+        weight: UIFont.Weight,
+        quoteDepth: Int
     ) {
         let baseFont = UIFont.systemFont(
             ofSize: UIFont.preferredFont(forTextStyle: style).pointSize,
@@ -779,6 +873,16 @@ private struct SelectableChatText: UIViewRepresentable {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = 3
         paragraph.paragraphSpacing = 12
+        if quoteDepth > 0 {
+            let quoteIndent = CGFloat(quoteDepth) * SelectableChatTextView.quoteIndent
+            paragraph.firstLineHeadIndent = quoteIndent
+            paragraph.headIndent = quoteIndent
+            rendered.addAttribute(
+                .yamabikoQuoteDepth,
+                value: quoteDepth,
+                range: fullRange
+            )
+        }
         rendered.addAttribute(.paragraphStyle, value: paragraph, range: fullRange)
     }
 

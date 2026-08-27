@@ -452,6 +452,29 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         XCTAssertEqual(groupedBlocks, blocks)
     }
 
+    func testNativeMarkdownRenderGroupsMergeQuotesAndListsForContinuousSelection() {
+        let markdown = """
+        ### News
+
+        > Important notice.
+
+        1. First item
+        2. Second item
+
+        Closing paragraph.
+        """
+        let blocks = NativeMarkdownParser.parse(markdown)
+        let groups = NativeMarkdownRenderGroup.groups(for: blocks)
+
+        XCTAssertEqual(groups.count, 1)
+        guard case let .selectableText(_, groupedBlocks) = groups.first else {
+            return XCTFail("Expected quote and list text in one continuously selectable text view")
+        }
+        XCTAssertEqual(groupedBlocks, blocks)
+        XCTAssertTrue(groupedBlocks.contains { if case .quote = $0 { return true }; return false })
+        XCTAssertTrue(groupedBlocks.contains { if case .list = $0 { return true }; return false })
+    }
+
     func testNativeMarkdownRenderGroupsStopContinuousSelectionAtStandaloneBlock() {
         let blocks = NativeMarkdownParser.parse("Before.\n\n```swift\nprint(1)\n```\n\nAfter.")
         let groups = NativeMarkdownRenderGroup.groups(for: blocks)

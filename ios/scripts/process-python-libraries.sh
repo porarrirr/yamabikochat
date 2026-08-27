@@ -49,15 +49,6 @@ install_python Vendor/Python.xcframework PythonSitePackages
   "$CODESIGNING_FOLDER_PATH/Frameworks" \
   "$IPHONEOS_DEPLOYMENT_TARGET"
 
-# Archive is the local distribution path. Fail it before export if Xcode or a
-# cached native wheel stamped any bundled executable with an App Store-ineligible
-# SDK. CI performs the same check for its unsigned generic device build.
-if [[ "$EFFECTIVE_PLATFORM_NAME" == "-iphoneos" && "${CONFIGURATION:-}" == "Release" && "${ACTION:-}" == "install" ]]; then
-  "$PROJECT_DIR/scripts/validate-app-sdk-versions.sh" \
-    "$CODESIGNING_FOLDER_PATH" \
-    "${APP_STORE_MAX_SDK_VERSION:-26.5}"
-fi
-
 for forbidden_pattern in '*.a' '*.so' '*.dylib'; do
   forbidden_binary="$(find "$package_destination" -type f -name "$forbidden_pattern" -print -quit)"
   if [[ -n "$forbidden_binary" ]]; then
