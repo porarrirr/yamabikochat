@@ -62,7 +62,7 @@ struct SettingsScreen: View {
             case .conversation:
                 return "プロンプト・モード"
             case .display:
-                return "テーマ・数式"
+                return "テーマ・プリセット・数式"
             case .management:
                 return "使用状況・診断"
             }
@@ -335,8 +335,21 @@ struct SettingsScreen: View {
     private var displayCategoryContent: some View {
         Group {
             appearanceSection
+            globalProviderPresetManagementSection
             mathRenderingSection
             chatStatsSection
+        }
+    }
+
+    private var globalProviderPresetManagementSection: some View {
+        Section {
+            NavigationLink {
+                GlobalProviderPresetManagementScreen(viewModel: viewModel)
+            } label: {
+                Label("グローバルプリセット管理", systemImage: "switch.2")
+            }
+        } footer: {
+            Text("チャットのプリセット一覧に表示するグローバル設定を、プロバイダーごとに管理します。")
         }
     }
 
@@ -2002,6 +2015,61 @@ struct SettingsScreen: View {
             return String(format: "%.1fK", Double(value) / 1_000)
         }
         return "\(value)"
+    }
+}
+
+private struct GlobalProviderPresetManagementScreen: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    private var presets: [ModelPreset] {
+        viewModel.settings.buildGlobalProviderPresets()
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                if presets.isEmpty {
+                    ContentUnavailableView(
+                        "グローバルプリセットがありません",
+                        systemImage: "slider.horizontal.3",
+                        description: Text("接続設定でプロバイダーとモデルを設定すると、ここから表示を管理できます。")
+                    )
+                } else {
+                    ForEach(presets, id: \.apiProvider) { preset in
+                        Toggle(isOn: visibilityBinding(for: preset.apiProvider)) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(ProviderCatalog.displayName(for: preset.apiProvider))
+                                Text(preset.model)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+            } header: {
+                Text("チャットに表示")
+            } footer: {
+                Text("オンにしたプロバイダーのグローバル設定が、チャットのプリセット一覧に表示されます。")
+            }
+        }
+        .navigationTitle("グローバルプリセット管理")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func visibilityBinding(for provider: String) -> Binding<Bool> {
+        Binding(
+            get: {
+                viewModel.settings.shouldShowGlobalProviderPresetInChat(provider: provider)
+            },
+            set: { isVisible in
+                viewModel.settings.setShowGlobalProviderPresetInChat(
+                    provider: provider,
+                    visible: isVisible
+                )
+            }
+        )
     }
 }
 
