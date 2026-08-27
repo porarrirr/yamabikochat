@@ -28,6 +28,7 @@ data class PiAgentConfiguration(
 
 @Serializable
 data class PiCatalogModelContract(
+    val providerName: String? = null,
     val npm: String? = null,
     val api: String? = null,
     val shape: String? = null,

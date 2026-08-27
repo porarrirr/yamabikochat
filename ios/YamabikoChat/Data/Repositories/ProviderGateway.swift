@@ -364,6 +364,7 @@ final class ProviderGateway {
             headers: [:],
             env: env,
             catalogContract: PiCatalogModelContract(
+                providerName: catalog.name,
                 npm: model.providerContract?.npm,
                 api: model.providerContract?.api,
                 shape: model.providerContract?.shape,

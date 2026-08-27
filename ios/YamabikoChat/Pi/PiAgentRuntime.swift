@@ -17,6 +17,7 @@ struct PiAgentConfiguration: Codable, Sendable {
 }
 
 struct PiCatalogModelContract: Codable, Sendable {
+    var providerName: String? = nil
     var npm: String?
     var api: String?
     var shape: String?
