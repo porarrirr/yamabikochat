@@ -63,12 +63,16 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var pendingContentAnchor: (id: String, offset: CGFloat)?
     private var pendingViewportOffsetY: CGFloat?
     private var pendingChangedRowIDs: Set<String> = []
+    private var pendingIntrinsicHeights: [String: CGFloat] = [:]
+    private var pendingContentChangeUserScrollGeneration: Int?
+    private var parsedRowsRemeasured: Set<String> = []
     private var pendingLocksViewport = false
     private var viewportCompensationBottom: CGFloat = 0
     private var viewportLockTargetY: CGFloat?
     private var isContentUpdateScheduled = false
     private var isUserScrollInProgress = false
     private var userScrollGeneration = 0
+    private var hasUserInteractedSinceStoreChange = false
     private var previousRegeneratableMessageID: Int64?
     private var previousMathRenderingEnabled = true
     private var previousFusionDebugModeEnabled = false
@@ -125,6 +129,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             cell.contentConfiguration = UIHostingConfiguration {
                 ChatTimelineRowView(
                     store: row,
+                    isLastRow: self.configuredIDs.last == id,
                     regeneratableMessageID: self.regeneratableMessageID,
                     mathRenderingEnabled: self.mathRenderingEnabled,
                     fusionDebugModeEnabled: self.fusionDebugModeEnabled,
@@ -136,7 +141,15 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                     onNextVariant: self.onNextVariant,
                     onBranch: self.onBranch,
                     onRegenerate: self.onRegenerate,
-                    onAskChatWithSelection: self.onAskChatWithSelection
+                    onAskChatWithSelection: self.onAskChatWithSelection,
+                    onIntrinsicHeightChange: { [weak self] height in
+                        guard self?.configuredIDs.last == id else { return }
+                        self?.applyIntrinsicHeight(height, rowID: id)
+                    },
+                    onContentLayoutChange: { [weak self] in
+                        guard self?.configuredIDs.last == id else { return }
+                        self?.remeasureRow(rowID: id)
+                    }
                 )
             }
             .margins(.all, 0)
@@ -211,8 +224,12 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             pendingContentAnchor = nil
             pendingViewportOffsetY = nil
             pendingChangedRowIDs.removeAll()
+            pendingIntrinsicHeights.removeAll()
+            pendingContentChangeUserScrollGeneration = nil
+            parsedRowsRemeasured.removeAll()
             pendingLocksViewport = false
             isUserScrollInProgress = false
+            hasUserInteractedSinceStoreChange = false
             clearViewportCompensation()
             store.onRowContentWillChange = { [weak self] rowID, kind in
                 self?.prepareForRowContentChange(rowID: rowID, kind: kind)
@@ -220,6 +237,10 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             store.onRowContentDidChange = { [weak self] rowID, kind in
                 self?.finishRowContentChange(rowID: rowID, kind: kind)
             }
+            // A newly selected conversation renders from its persisted rows.
+            // Presentation-only stream frames belong to the previous attachment
+            // of this controller and must not keep their provisional cell height.
+            store.clearTransientStreamingSnapshots()
         }
         self.store = store
         let regeneratableMessageChanged = previousRegeneratableMessageID != regeneratableMessageID
@@ -272,6 +293,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         if pendingContentAnchor == nil {
             pendingContentAnchor = captureVisibleAnchor()
             pendingViewportOffsetY = collectionView.contentOffset.y
+            pendingContentChangeUserScrollGeneration = userScrollGeneration
         }
         switch kind {
         case .streamUpdate:
@@ -298,14 +320,35 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         }
     }
 
+    private func applyIntrinsicHeight(_ height: CGFloat, rowID: String) {
+        guard height.isFinite, height > 0, configuredIDs.contains(rowID) else { return }
+        pendingIntrinsicHeights[rowID] = ceil(height)
+        prepareForRowContentChange(rowID: rowID, kind: .normalUpdate)
+        finishRowContentChange(rowID: rowID, kind: .normalUpdate)
+    }
+
+    private func remeasureRow(rowID: String) {
+        guard !hasUserInteractedSinceStoreChange,
+              configuredIDs.contains(rowID),
+              parsedRowsRemeasured.insert(rowID).inserted
+        else { return }
+        prepareForRowContentChange(rowID: rowID, kind: .normalUpdate)
+        finishRowContentChange(rowID: rowID, kind: .normalUpdate)
+    }
+
     private func completePendingRowMeasurement() {
         UIView.performWithoutAnimation {
+            let context = ChatTimelineLayoutInvalidationContext()
             let indexPaths = pendingChangedRowIDs.compactMap { id -> IndexPath? in
                 guard let index = configuredIDs.firstIndex(of: id) else { return nil }
                 return IndexPath(item: index, section: 0)
             }
-            let context = ChatTimelineLayoutInvalidationContext()
             for indexPath in indexPaths {
+                guard let id = dataSource.itemIdentifier(for: indexPath) else { continue }
+                if let intrinsicHeight = pendingIntrinsicHeights[id] {
+                    context.preferredHeights[indexPath] = intrinsicHeight
+                    continue
+                }
                 guard let cell = collectionView.cellForItem(at: indexPath),
                       let originalAttributes = collectionView.layoutAttributesForItem(at: indexPath)
                 else { continue }
@@ -325,7 +368,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                 collectionView.collectionViewLayout.invalidateLayout()
             }
             collectionView.layoutIfNeeded()
-            if isUserScrolling {
+            if isUserScrolling || pendingContentChangeUserScrollGeneration != userScrollGeneration {
                 cancelPendingViewportRestoreForUserScroll()
             } else {
                 restorePosition(
@@ -338,6 +381,8 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         pendingContentAnchor = nil
         pendingViewportOffsetY = nil
         pendingChangedRowIDs.removeAll()
+        pendingIntrinsicHeights.removeAll()
+        pendingContentChangeUserScrollGeneration = nil
         pendingLocksViewport = false
         isContentUpdateScheduled = false
     }
@@ -479,6 +524,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         userScrollGeneration &+= 1
+        hasUserInteractedSinceStoreChange = true
         isUserScrollInProgress = true
         cancelPendingViewportRestoreForUserScroll()
         detachAtVisibleAnchor()
@@ -566,6 +612,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         pendingContentAnchor = nil
         pendingViewportOffsetY = nil
         pendingLocksViewport = false
+        pendingContentChangeUserScrollGeneration = nil
         clearViewportCompensation()
     }
 
@@ -573,6 +620,8 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         pendingContentAnchor = nil
         pendingViewportOffsetY = nil
         pendingChangedRowIDs.removeAll()
+        pendingIntrinsicHeights.removeAll()
+        pendingContentChangeUserScrollGeneration = nil
         pendingLocksViewport = false
         clearViewportCompensation()
         collectionView.layoutIfNeeded()
@@ -724,6 +773,7 @@ final class ChatTimelineCollectionCell: UICollectionViewCell {
 
 private struct ChatTimelineRowView: View {
     @ObservedObject var store: ChatTimelineRowStore
+    let isLastRow: Bool
     let regeneratableMessageID: Int64?
     let mathRenderingEnabled: Bool
     let fusionDebugModeEnabled: Bool
@@ -736,9 +786,18 @@ private struct ChatTimelineRowView: View {
     let onBranch: (Int64) -> Void
     let onRegenerate: () -> Void
     let onAskChatWithSelection: (String) -> Void
+    let onIntrinsicHeightChange: (CGFloat) -> Void
+    let onContentLayoutChange: () -> Void
+
+    private var shouldReportIntrinsicHeight: Bool {
+        guard store.streamingSnapshot?.isFinal != false,
+              case let .message(message) = store.item
+        else { return false }
+        return message.message.role != "user" && message.displayText.contains("\n\n")
+    }
 
     var body: some View {
-        ChatTimelineTopPinnedLayout {
+        ChatTimelineTopPinnedLayout(usesIntrinsicHeight: isLastRow && shouldReportIntrinsicHeight) {
             Group {
                 switch store.item {
                 case let .message(message):
@@ -754,7 +813,10 @@ private struct ChatTimelineRowView: View {
                         onPreviousVariant: onPreviousVariant,
                         onNextVariant: onNextVariant,
                         onBranch: onBranch,
-                        onRegenerate: onRegenerate
+                        onRegenerate: onRegenerate,
+                        onMarkdownLayoutChange: shouldReportIntrinsicHeight
+                            ? onContentLayoutChange
+                            : {}
                     )
                 case let .dual(message):
                     DualChatMessageRow(
@@ -767,16 +829,38 @@ private struct ChatTimelineRowView: View {
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: ChatTimelineIntrinsicHeightPreference.self,
+                        value: proxy.size.height
+                    )
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .environment(\.onAskChatWithSelection, onAskChatWithSelection)
         .transaction { transaction in
             transaction.animation = nil
         }
+        .onPreferenceChange(ChatTimelineIntrinsicHeightPreference.self) { height in
+            guard shouldReportIntrinsicHeight else { return }
+            onIntrinsicHeightChange(height)
+        }
+    }
+}
+
+private struct ChatTimelineIntrinsicHeightPreference: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
 private struct ChatTimelineTopPinnedLayout: Layout {
+    let usesIntrinsicHeight: Bool
+
     func sizeThatFits(
         proposal: ProposedViewSize,
         subviews: Subviews,
@@ -787,7 +871,7 @@ private struct ChatTimelineTopPinnedLayout: Layout {
         let proposedHeight = proposal.height.flatMap { $0.isFinite ? $0 : nil }
         return CGSize(
             width: proposal.width ?? contentSize.width,
-            height: proposedHeight ?? contentSize.height
+            height: usesIntrinsicHeight ? contentSize.height : (proposedHeight ?? contentSize.height)
         )
     }
 
@@ -819,6 +903,7 @@ private struct ChatMessageRow: View {
     let onNextVariant: (Int64) -> Void
     let onBranch: (Int64) -> Void
     let onRegenerate: () -> Void
+    let onMarkdownLayoutChange: () -> Void
 
     private var isUser: Bool { message.message.role == "user" }
     private var isStreaming: Bool { streamingSnapshot?.isFinal == false }
@@ -900,7 +985,8 @@ private struct ChatMessageRow: View {
                             markdownText: markdownText,
                             isStreaming: isStreaming,
                             mathRenderingEnabled: mathRenderingEnabled,
-                            preparsedBlocks: streamingMarkdownBlocks
+                            preparsedBlocks: streamingMarkdownBlocks,
+                            onFinalParse: onMarkdownLayoutChange
                         )
                     }
 

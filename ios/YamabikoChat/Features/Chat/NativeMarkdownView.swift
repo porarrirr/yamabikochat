@@ -396,6 +396,7 @@ struct NativeMarkdownView: View {
     var isStreaming = false
     var mathRenderingEnabled = true
     var preparsedBlocks: [NativeMarkdownBlock]? = nil
+    var onFinalParse: (() -> Void)? = nil
 
     @State private var blocks: [NativeMarkdownBlock] = []
     @State private var parsedRequest: ParseRequest?
@@ -463,6 +464,11 @@ struct NativeMarkdownView: View {
                 blocks = result
                 parsedRequest = request
             }
+            guard !request.isStreaming else { return }
+            await Task.yield()
+            await Task.yield()
+            guard !Task.isCancelled, request == parseRequest, !isStreaming else { return }
+            onFinalParse?()
         }
         .transaction { transaction in
             transaction.animation = nil

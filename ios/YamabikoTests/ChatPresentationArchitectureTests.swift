@@ -1354,6 +1354,101 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testReturningToShortConversationDoesNotReuseTallCellHeight() async throws {
+        let originalStore = ChatTimelineStore()
+        originalStore.update(messages: [timelineMessage(id: 1, text: "Short original answer")])
+        let controller = configuredTimelineController(store: originalStore, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+        let originalHeight = try XCTUnwrap(collectionView.cellForItem(at: IndexPath(item: 0, section: 0)))
+            .bounds.height
+
+        originalStore.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 1,
+            text: String(repeating: "A transient streaming response.\n\n", count: 100),
+            thinking: "",
+            toolActivity: nil,
+            isFinal: false
+        ))
+        await settleTimeline(controller)
+        let tallHeight = try XCTUnwrap(collectionView.cellForItem(at: IndexPath(item: 0, section: 0)))
+            .bounds.height
+        XCTAssertGreaterThan(tallHeight, originalHeight + 500)
+
+        controller.viewDidDisappear(false)
+        originalStore.clearTransientStreamingSnapshots()
+        await settleTimeline(controller)
+        controller.viewWillAppear(false)
+        await settleTimeline(controller)
+        let restoredHeight = try XCTUnwrap(collectionView.cellForItem(at: IndexPath(item: 0, section: 0)))
+            .bounds.height
+
+        XCTAssertEqual(
+            restoredHeight,
+            originalHeight,
+            accuracy: 1,
+            "Returning to a conversation must measure its contents instead of retaining a reused cell height"
+        )
+    }
+
+    @MainActor
+    func testLoadedConversationMeasuresPersistedRowsBeforePinningTail() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: (1...6).map {
+            timelineMessage(id: Int64($0), text: "Short persisted answer \($0)")
+        })
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+
+        for indexPath in collectionView.indexPathsForVisibleItems {
+            let cell = try XCTUnwrap(collectionView.cellForItem(at: indexPath))
+            let attributes = try XCTUnwrap(collectionView.layoutAttributesForItem(at: indexPath))
+            let fitted = cell.preferredLayoutAttributesFitting(attributes)
+            XCTAssertEqual(
+                attributes.size.height,
+                fitted.size.height,
+                accuracy: 1,
+                "Loaded rows must replace estimates with their measured content heights"
+            )
+        }
+    }
+
+    @MainActor
+    func testLoadedMarkdownRemeasuresAfterAsyncParse() async throws {
+        let markdown = (1...12).map { index in
+            "## Section \(index)\n\n- First item with explanatory text\n- Second item with explanatory text"
+        }.joined(separator: "\n\n")
+        let store = ChatTimelineStore()
+        store.update(messages: [timelineMessage(id: 1, text: markdown)])
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+        let indexPath = IndexPath(item: 0, section: 0)
+        let cell = try XCTUnwrap(collectionView.cellForItem(at: indexPath))
+        let attributes = try XCTUnwrap(collectionView.layoutAttributesForItem(at: indexPath))
+        let fitted = cell.preferredLayoutAttributesFitting(attributes)
+
+        XCTAssertEqual(
+            attributes.size.height,
+            fitted.size.height,
+            accuracy: 1,
+            "The parsed Markdown height must replace the provisional raw-text height"
+        )
+    }
+
+    @MainActor
     func testPendingLatestMoveDoesNotOverrideAUserScroll() async throws {
         let store = ChatTimelineStore()
         store.update(messages: (1...20).map {
