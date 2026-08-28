@@ -1553,7 +1553,7 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
-    func testAsyncUserAttachmentHeightDoesNotOverlapFollowingAnswer() async throws {
+    func testGeneratedHTMLAnswerDoesNotOverlapPrecedingUserInstruction() async throws {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
@@ -1570,33 +1570,42 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             timelineMessage(
                 id: 1,
                 role: "user",
-                text: "マーメイドで簡単な図を作ってみて",
-                attachmentsJSON: attachmentsJSON
+                text: "マーメイドで簡単な図を作ってみて\nマーメイドを生かす内容の"
             ),
-            timelineMessage(id: 2, text: "作りました。以下が回答です。")
+            timelineMessage(
+                id: 2,
+                text: "作りました！Mermaidの得意分野を活かした6種類の図を1つのHTMLにまとめました。\n\n## 中に入っている図の内容",
+                attachmentsJSON: attachmentsJSON
+            )
         ])
         let controller = configuredTimelineController(store: store, scrollRequest: 1)
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
         window.rootViewController = controller
         window.makeKeyAndVisible()
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+
+        // The failing production row first entered the viewport only after the
+        // reader had already scrolled. Its delayed HTML height must still be
+        // accepted after that interaction.
+        controller.scrollViewWillBeginDragging(collectionView)
+        controller.scrollViewDidEndDragging(collectionView, willDecelerate: false)
 
         try? await Task.sleep(nanoseconds: 500_000_000)
         await settleTimeline(controller)
-        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
         let userAttributes = try XCTUnwrap(
             collectionView.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))
         )
         let answerAttributes = try XCTUnwrap(
             collectionView.layoutAttributesForItem(at: IndexPath(item: 1, section: 0))
         )
-        let userCell = try XCTUnwrap(collectionView.cellForItem(at: IndexPath(item: 0, section: 0)))
-        let fittedUserHeight = userCell.preferredLayoutAttributesFitting(userAttributes).size.height
+        let answerCell = try XCTUnwrap(collectionView.cellForItem(at: IndexPath(item: 1, section: 0)))
+        let fittedAnswerHeight = answerCell.preferredLayoutAttributesFitting(answerAttributes).size.height
 
-        XCTAssertEqual(userAttributes.size.height, fittedUserHeight, accuracy: 1)
+        XCTAssertEqual(answerAttributes.size.height, fittedAnswerHeight, accuracy: 1)
         XCTAssertGreaterThanOrEqual(
             answerAttributes.frame.minY,
             userAttributes.frame.maxY + 21,
-            "An asynchronously expanded user attachment must push the following answer down"
+            "A generated HTML answer must start below the preceding user instruction"
         )
     }
 

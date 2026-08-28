@@ -74,7 +74,6 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var isUserScrollInProgress = false
     private var userScrollGeneration = 0
     private var lastUserDrivenOffsetY: CGFloat?
-    private var hasUserInteractedSinceStoreChange = false
     private var previousRegeneratableMessageID: Int64?
     private var previousMathRenderingEnabled = true
     private var previousFusionDebugModeEnabled = false
@@ -229,7 +228,6 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             pendingLocksViewport = false
             isUserScrollInProgress = false
             lastUserDrivenOffsetY = nil
-            hasUserInteractedSinceStoreChange = false
             clearViewportCompensation()
             store.onRowContentWillChange = { [weak self] rowID, kind in
                 self?.prepareForRowContentChange(rowID: rowID, kind: kind)
@@ -328,13 +326,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     }
 
     private func remeasureRow(rowID: String) {
-        // Content-layout notifications are an imprecise signal and can repeat
-        // during scrolling as hosted SwiftUI views enter the viewport. The
-        // explicit intrinsic-height channel still accepts late Mermaid and
-        // attachment sizes; only this fitted-size probe stops after interaction.
-        guard !hasUserInteractedSinceStoreChange,
-              configuredIDs.contains(rowID)
-        else { return }
+        guard configuredIDs.contains(rowID) else { return }
         if store?.row(id: rowID)?.streamingSnapshot?.isFinal == false {
             guard parsedRowsRemeasured.insert(rowID).inserted,
                   !isCompletingRowMeasurement
@@ -560,7 +552,6 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         userScrollGeneration &+= 1
-        hasUserInteractedSinceStoreChange = true
         isUserScrollInProgress = true
         lastUserDrivenOffsetY = scrollView.contentOffset.y
         cancelPendingViewportRestoreForUserScroll()
