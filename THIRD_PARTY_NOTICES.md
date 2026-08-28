@@ -11,6 +11,7 @@ Production npm packages pulled in by the Pi Agent runtime are listed in [third_p
 | Component | Version / pin | SPDX | Use | Source |
 | --- | --- | --- | --- | --- |
 | MathJax (`tex-svg.js`) | vendored component build | Apache-2.0 | Chat math rendering | https://github.com/mathjax/MathJax |
+| Mermaid (`mermaid.min.js`) | 11.17.2 (`sha256:581ed7d74bd9048d0e3a91363927d72ef22942d7722546b27f7cc29e35390eb8`) | MIT | Chat diagram rendering | https://github.com/mermaid-js/mermaid |
 | `@earendil-works/pi-agent-core` | 0.84.2 | MIT | Pi Agent runtime | https://www.npmjs.com/package/@earendil-works/pi-agent-core |
 | `@earendil-works/pi-ai` | 0.84.2 | MIT | Pi Agent runtime | https://www.npmjs.com/package/@earendil-works/pi-ai |
 | `pi-grok` | 0.10.1 (`8b304e65c088f84ccb932959d97739245fe47d97`) | MIT | SuperGrok / xAI helper | https://github.com/stnly/pi-grok |
@@ -20,6 +21,8 @@ Production npm packages pulled in by the Pi Agent runtime are listed in [third_p
 `markdown-renderer.js` in the MathJax resource folders is original YamabikoChat code (MIT).
 
 MathJax 3 does not ship a `NOTICE` file. Its Apache-2.0 license text is also bundled next to the MathJax assets.
+
+Mermaid's MIT license text is bundled next to the Mermaid browser asset.
 
 ## Android libraries
 

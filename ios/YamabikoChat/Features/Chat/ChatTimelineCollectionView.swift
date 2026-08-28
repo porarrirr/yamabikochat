@@ -986,7 +986,13 @@ private struct ChatMessageRow: View {
                             isStreaming: isStreaming,
                             mathRenderingEnabled: mathRenderingEnabled,
                             preparsedBlocks: streamingMarkdownBlocks,
-                            onFinalParse: onMarkdownLayoutChange
+                            onFinalParse: onMarkdownLayoutChange,
+                            onOpenMermaid: { blockID, source in
+                                onRoute(.mermaidViewer(
+                                    id: "\(message.id)-\(blockID)",
+                                    source: source
+                                ))
+                            }
                         )
                     }
 
@@ -1387,7 +1393,13 @@ private struct DualResponseColumn: View {
             } else {
                 NativeMarkdownView(
                     markdownText: presentation.text.trimmedNonEmpty ?? L10n.text("応答がありません"),
-                    mathRenderingEnabled: mathRenderingEnabled
+                    mathRenderingEnabled: mathRenderingEnabled,
+                    onOpenMermaid: { blockID, source in
+                        onRoute(.mermaidViewer(
+                            id: "\(messageID)-\(title)-\(blockID)",
+                            source: source
+                        ))
+                    }
                 )
             }
         }

@@ -168,6 +168,7 @@ enum ChatWorkspaceRoute: Identifiable {
     case thinkingInspector(messageID: Int64, text: String)
     case fusionInspector(messageID: Int64, trace: FusionTrace, debugModeEnabled: Bool)
     case artifactViewer(id: String, block: ChatArtifactBlock)
+    case mermaidViewer(id: String, source: String)
 
     var id: String {
         switch self {
@@ -177,6 +178,7 @@ enum ChatWorkspaceRoute: Identifiable {
         case let .thinkingInspector(messageID, _): "thinking-\(messageID)"
         case let .fusionInspector(messageID, _, _): "fusion-\(messageID)"
         case let .artifactViewer(id, _): "artifact-\(id)"
+        case let .mermaidViewer(id, _): "mermaid-\(id)"
         }
     }
 }

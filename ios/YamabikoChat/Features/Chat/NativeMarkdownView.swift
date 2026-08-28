@@ -19,6 +19,7 @@ enum NativeMarkdownBlock: Identifiable, Equatable, Sendable {
     case paragraph(id: String, text: AttributedString)
     case heading(id: String, level: Int, text: AttributedString)
     case code(id: String, language: String?, code: String)
+    case mermaid(id: String, source: String)
     case math(id: String, markdown: String)
     case quote(id: String, blocks: [NativeMarkdownBlock])
     case list(id: String, ordered: Bool, start: Int, rows: [AttributedString])
@@ -27,7 +28,7 @@ enum NativeMarkdownBlock: Identifiable, Equatable, Sendable {
 
     var id: String {
         switch self {
-        case let .paragraph(id, _), let .heading(id, _, _), let .code(id, _, _), let .math(id, _),
+        case let .paragraph(id, _), let .heading(id, _, _), let .code(id, _, _), let .mermaid(id, _), let .math(id, _),
              let .quote(id, _), let .list(id, _, _, _), let .table(id, _),
              let .divider(id): id
         }
@@ -39,6 +40,7 @@ enum NativeMarkdownBlock: Identifiable, Equatable, Sendable {
         case .paragraph: kind = "paragraph"
         case let .heading(_, level, _): kind = "heading-\(level)"
         case .code: kind = "code"
+        case .mermaid: kind = "mermaid"
         case .math: kind = "math"
         case .quote: kind = "quote"
         case let .list(_, ordered, _, _): kind = ordered ? "ordered-list" : "unordered-list"
@@ -93,6 +95,10 @@ enum NativeMarkdownParser {
             return [.heading(id: path, level: heading.level, text: inlineText(heading))]
         }
         if let code = markup as? CodeBlock {
+            if code.language?.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare("mermaid") == .orderedSame {
+                return [.mermaid(id: path, source: code.code)]
+            }
             return [.code(id: path, language: code.language, code: code.code)]
         }
         if let quote = markup as? BlockQuote {
@@ -397,6 +403,7 @@ struct NativeMarkdownView: View {
     var mathRenderingEnabled = true
     var preparsedBlocks: [NativeMarkdownBlock]? = nil
     var onFinalParse: (() -> Void)? = nil
+    var onOpenMermaid: ((_ blockID: String, _ source: String) -> Void)? = nil
 
     @State private var blocks: [NativeMarkdownBlock] = []
     @State private var parsedRequest: ParseRequest?
@@ -432,7 +439,12 @@ struct NativeMarkdownView: View {
                     case let .selectableText(_, blocks):
                         SelectableChatText(blocks: blocks)
                     case let .standalone(block):
-                        NativeMarkdownBlockView(block: block)
+                        NativeMarkdownBlockView(
+                            block: block,
+                            isStreaming: isStreaming,
+                            onOpenMermaid: onOpenMermaid,
+                            onContentLayoutChange: onFinalParse
+                        )
                     }
                 }
             }
@@ -523,6 +535,9 @@ enum NativeMarkdownRenderGroup: Identifiable, Equatable {
 
 private struct NativeMarkdownGroupedBlocksView: View {
     let blocks: [NativeMarkdownBlock]
+    var isStreaming = false
+    var onOpenMermaid: ((_ blockID: String, _ source: String) -> Void)? = nil
+    var onContentLayoutChange: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -531,7 +546,12 @@ private struct NativeMarkdownGroupedBlocksView: View {
                 case let .selectableText(_, blocks):
                     SelectableChatText(blocks: blocks)
                 case let .standalone(block):
-                    NativeMarkdownBlockView(block: block)
+                    NativeMarkdownBlockView(
+                        block: block,
+                        isStreaming: isStreaming,
+                        onOpenMermaid: onOpenMermaid,
+                        onContentLayoutChange: onContentLayoutChange
+                    )
                 }
             }
         }
@@ -540,6 +560,9 @@ private struct NativeMarkdownGroupedBlocksView: View {
 
 private struct NativeMarkdownBlockView: View {
     let block: NativeMarkdownBlock
+    var isStreaming = false
+    var onOpenMermaid: ((_ blockID: String, _ source: String) -> Void)? = nil
+    var onContentLayoutChange: (() -> Void)? = nil
 
     var body: some View {
         switch block {
@@ -550,6 +573,18 @@ private struct NativeMarkdownBlockView: View {
                 .padding(.top, level <= 2 ? 4 : 0)
         case let .code(_, language, code):
             NativeCodeBlock(language: language, code: code)
+        case let .mermaid(id, source):
+            if MermaidPresentationPolicy.shouldRender(isStreaming: isStreaming) {
+                MermaidDiagramView(
+                    source: source,
+                    onExpand: onOpenMermaid.map { open in
+                        { open(id, source) }
+                    },
+                    onLayoutChange: onContentLayoutChange
+                )
+            } else {
+                NativeCodeBlock(language: "mermaid", code: source)
+            }
         case let .math(_, markdown):
             MathMarkdownView(markdownText: markdown, mathRenderingEnabled: true, isStreaming: false)
         case let .quote(_, blocks):
@@ -557,7 +592,12 @@ private struct NativeMarkdownBlockView: View {
                 Capsule()
                     .fill(Color.secondary.opacity(0.45))
                     .frame(width: 3)
-                NativeMarkdownGroupedBlocksView(blocks: blocks)
+                NativeMarkdownGroupedBlocksView(
+                    blocks: blocks,
+                    isStreaming: isStreaming,
+                    onOpenMermaid: onOpenMermaid,
+                    onContentLayoutChange: onContentLayoutChange
+                )
             }
         case let .list(_, ordered, start, rows):
             VStack(alignment: .leading, spacing: 7) {
@@ -584,6 +624,12 @@ private struct NativeMarkdownBlockView: View {
         case 2: .title3
         default: .headline
         }
+    }
+}
+
+enum MermaidPresentationPolicy {
+    static func shouldRender(isStreaming: Bool) -> Bool {
+        !isStreaming
     }
 }
 
@@ -823,7 +869,7 @@ private struct SelectableChatText: UIViewRepresentable {
                     marker: marker
                 )
             }
-        case .code, .math, .table, .divider:
+        case .code, .mermaid, .math, .table, .divider:
             return []
         }
     }

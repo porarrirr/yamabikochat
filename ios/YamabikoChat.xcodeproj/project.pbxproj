@@ -79,6 +79,7 @@
 		46480822411C11B4D869E2D7 /* AskUserQuestionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 982C2AC2672831194061A41F /* AskUserQuestionCard.swift */; };
 		493CB5E5A87943A6E57770E0 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = B035B29CBD761489AE1F2C66 /* ZIPFoundation */; };
 		4AF8DCF064E32B3DD82E1D65 /* ModelPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE1F31BD54AADF6461CBC67C /* ModelPreset.swift */; };
+		4BF5E6F2C35B31DA046538E9 /* mermaid.min.js in Resources */ = {isa = PBXBuildFile; fileRef = 30635B4EFB5F8EA938318536 /* mermaid.min.js */; };
 		52B64544F3C434797BB9506D /* NodeMobile.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B3D8A5EF7A77209D4FC05951 /* NodeMobile.xcframework */; };
 		553A93E0D9B67A81C73BC1CF /* RunYamabikoModelIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDCCF3C300EEC33D5F958B01 /* RunYamabikoModelIntent.swift */; };
 		559990A849565C8C664CEDF7 /* FusionTracePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD89EC3E4E42F747C4DC4BA4 /* FusionTracePresentation.swift */; };
@@ -199,6 +200,7 @@
 		CC796C4E31F5856C31B44400 /* AppGroupShareStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 649A758B922A87BCDED9F80D /* AppGroupShareStorage.swift */; };
 		CCBF52696EF86F126CE26F50 /* Python.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 746C1014C219313E89E73158 /* Python.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		CCE3607D52D31D494CFB22EE /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 2C422A3B4BFC259370545EE3 /* Markdown */; };
+		CD45864AEF7F44B6F37E9E1C /* MermaidDiagramView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2812306A9713C977E9A21BB5 /* MermaidDiagramView.swift */; };
 		CDCE3B5FFAE6504211442595 /* ChatTimelineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59358E54E6643D7CAA9ABB7C /* ChatTimelineStore.swift */; };
 		CDF7E678C1F8B14473705C2B /* ChatSessionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A920B3F9E7A90CE9F1CD8240 /* ChatSessionController.swift */; };
 		CE67F1C6513857BEBB98C462 /* TokenUsageStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89C94BED57FA07CCF9938A80 /* TokenUsageStats.swift */; };
@@ -234,6 +236,7 @@
 		ECF51BE8733840FBB3DE8298 /* OpenRouterModelPickerField.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9EB908ED95DE4E138D7A19F /* OpenRouterModelPickerField.swift */; };
 		EDB1770BF9F70E1B87ABD0EE /* ShortcutModelOptionsBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ECF80CEF579F07A3B1E23A6 /* ShortcutModelOptionsBuilder.swift */; };
 		EF12AD93CA25107FB63F52E2 /* SvgPreviewSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51CC989E2C978463E973E22C /* SvgPreviewSanitizerTests.swift */; };
+		EF2CB758E13EC422661B33C8 /* MermaidDiagramViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66260DE7BAE8B783CB1E0FEE /* MermaidDiagramViewTests.swift */; };
 		EF5022EB47336D42B2853A2B /* HtmlPreviewBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CC7F85F9386D12E2252E7AB /* HtmlPreviewBrowser.swift */; };
 		EFA22EA04DE8E60D8BB09073 /* ChatMessageToolActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68E251DA917600FC2DF85D85 /* ChatMessageToolActivity.swift */; };
 		F04E2DFCF1423BE5612BDF21 /* DiagnosticsLogSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CA72EEADA1AFB25A6BF0819 /* DiagnosticsLogSanitizer.swift */; };
@@ -246,6 +249,7 @@
 		F59F98D988ECB2F6244F94F8 /* SuperGrokAuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B87B752F42B76EA2490112 /* SuperGrokAuthModels.swift */; };
 		F69F0939F13B693EE461FF79 /* AppStoreScreenshotDemoSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A338F8BAA2B2E3E8F2D0096A /* AppStoreScreenshotDemoSeeder.swift */; };
 		F748208B581CA725BC4C76F9 /* CameraPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C0EB557B6A96FE9A47038F8 /* CameraPicker.swift */; };
+		F7A27E1FEAEA9079063BD0E6 /* MERMAID_LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3DE14C2260D3EE9FE5B5694C /* MERMAID_LICENSE.txt */; };
 		F7E8A6A4B495FAF9230EB610 /* RelevantPageReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E64092198F686EF08BC626FC /* RelevantPageReader.swift */; };
 		F8231D000F08B94E914D57DC /* PythonRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E96ECC433DE8209831BD059 /* PythonRuntimeTests.swift */; };
 		F83EFAD8650B49B29FD63F50 /* AutoConversationMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E0AF024AFDE4AE3554BA68 /* AutoConversationMessage.swift */; };
@@ -350,6 +354,7 @@
 		25A763322738B5CC6FA3C5F6 /* FusionOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionOrchestrator.swift; sourceTree = "<group>"; };
 		25B179C43C1498EFC4B1DF4B /* AuthRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepositoryTests.swift; sourceTree = "<group>"; };
 		272961B0AC4AC5B1A1389611 /* FusionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionService.swift; sourceTree = "<group>"; };
+		2812306A9713C977E9A21BB5 /* MermaidDiagramView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MermaidDiagramView.swift; sourceTree = "<group>"; };
 		2A07E6645A76A58193A146DE /* AppStoreScreenshotRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotRouting.swift; sourceTree = "<group>"; };
 		2A2EC2EECD80DBB1F0CACA5D /* AgentSkillRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSkillRepositoryTests.swift; sourceTree = "<group>"; };
 		2A4495C8B20F93382A8E4847 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -363,6 +368,7 @@
 		2ECE967CBAB3BDDC5E028715 /* ReasoningExtractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReasoningExtractionTests.swift; sourceTree = "<group>"; };
 		2ECF80CEF579F07A3B1E23A6 /* ShortcutModelOptionsBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutModelOptionsBuilder.swift; sourceTree = "<group>"; };
 		2F24E32C72E6148FCB826148 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		30635B4EFB5F8EA938318536 /* mermaid.min.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = mermaid.min.js; sourceTree = "<group>"; };
 		30C87143D0BE6FBCA48B6232 /* ProjectInstructionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectInstructionsSheet.swift; sourceTree = "<group>"; };
 		318066D32E1B6D4FC5C655AD /* ShareExtensionItemLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionItemLoader.swift; sourceTree = "<group>"; };
 		321B02A1F52280A6AF7BD4EE /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
@@ -380,6 +386,7 @@
 		3BB73A6E778AA23087EEB852 /* ConversationListScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListScreen.swift; sourceTree = "<group>"; };
 		3C19A7AE41E0E5052471F871 /* AlibabaCodingPlanModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlibabaCodingPlanModelCatalog.swift; sourceTree = "<group>"; };
 		3CADE94861B9B35E0399D0B8 /* FusionPanelRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionPanelRunner.swift; sourceTree = "<group>"; };
+		3DE14C2260D3EE9FE5B5694C /* MERMAID_LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = MERMAID_LICENSE.txt; sourceTree = "<group>"; };
 		3E1D0EFA706A16A6042D477B /* OpenSourceLicensesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenSourceLicensesView.swift; sourceTree = "<group>"; };
 		3E7D208E27D2F5AC314C73D9 /* RelativeDateFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelativeDateFormatter.swift; sourceTree = "<group>"; };
 		41CC56251ECE1833FCA591E2 /* openrouter-glm-5-2-endpoints.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "openrouter-glm-5-2-endpoints.json"; sourceTree = "<group>"; };
@@ -420,6 +427,7 @@
 		64E1AF94E06C82079C8F7761 /* ChatTimelineCollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTimelineCollectionView.swift; sourceTree = "<group>"; };
 		652A626C556E53B0EB120BFD /* SettingsFormHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsFormHelpers.swift; sourceTree = "<group>"; };
 		65438877F0411D1956AB70FB /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
+		66260DE7BAE8B783CB1E0FEE /* MermaidDiagramViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MermaidDiagramViewTests.swift; sourceTree = "<group>"; };
 		675569E061B2D501C62AC37B /* ChatRepositoryBranchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepositoryBranchTests.swift; sourceTree = "<group>"; };
 		68417249749E064D56E23ACE /* tex-svg.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "tex-svg.js"; sourceTree = "<group>"; };
 		68E251DA917600FC2DF85D85 /* ChatMessageToolActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageToolActivity.swift; sourceTree = "<group>"; };
@@ -725,6 +733,7 @@
 				73BA993BC9257C4A41707F4E /* InfoPlist.strings */,
 				F797EB5B4E9A1A120BD718DB /* Localizable.strings */,
 				E83CFF0DED67E322E8A458B7 /* mathjax */,
+				5333A376D1A2A2FADD1FB238 /* mermaid */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -797,6 +806,15 @@
 				41CC56251ECE1833FCA591E2 /* openrouter-glm-5-2-endpoints.json */,
 			);
 			path = Fixtures;
+			sourceTree = "<group>";
+		};
+		5333A376D1A2A2FADD1FB238 /* mermaid */ = {
+			isa = PBXGroup;
+			children = (
+				3DE14C2260D3EE9FE5B5694C /* MERMAID_LICENSE.txt */,
+				30635B4EFB5F8EA938318536 /* mermaid.min.js */,
+			);
+			path = mermaid;
 			sourceTree = "<group>";
 		};
 		684536ACF3A94FE8EE1108B7 /* Python */ = {
@@ -958,6 +976,7 @@
 				4CC7F85F9386D12E2252E7AB /* HtmlPreviewBrowser.swift */,
 				12D11ABE6D40DCFD9C7D73B1 /* HtmlPreviewCard.swift */,
 				E24B2D0E1B8B5D9D45FF6161 /* MathMarkdownView.swift */,
+				2812306A9713C977E9A21BB5 /* MermaidDiagramView.swift */,
 				ED6F8E8998CF132F34FBE5ED /* NativeMarkdownView.swift */,
 				71E38ECB6FCC39AB8BABE949 /* RecentPhotoLibrary.swift */,
 				9FC8486AA5F99F999DB590DB /* RecentPhotoSheet.swift */,
@@ -1068,6 +1087,7 @@
 				FD8C62E150759B38B2CA27A9 /* LegalMarkdownParserTests.swift */,
 				354A655F2DAC30AF82690AAD /* LiteLlmPricingRepositoryTests.swift */,
 				961BCEE0B9725B362F606EA0 /* MathMarkdownViewTests.swift */,
+				66260DE7BAE8B783CB1E0FEE /* MermaidDiagramViewTests.swift */,
 				7077367178B8D0B29308F183 /* ModelsDevCatalogTests.swift */,
 				4C3E31EC64A965F4851AE80A /* OpenRouterModelTests.swift */,
 				8090A935C0BB2117BC04547F /* OpenRouterRoutingTests.swift */,
@@ -1350,9 +1370,11 @@
 				E2A1B28A639545AE6CCE732B /* InfoPlist.strings in Resources */,
 				D35C69654837A8E5939A04FB /* LICENSE.txt in Resources */,
 				2AB5391EDBA3C46611B33496 /* Localizable.strings in Resources */,
+				F7A27E1FEAEA9079063BD0E6 /* MERMAID_LICENSE.txt in Resources */,
 				327128F66F2B0EDC0FADD90D /* PrivacyInfo.xcprivacy in Resources */,
 				82E1E4D9255FAED0A56C3B3C /* main.js in Resources */,
 				E92E653594F51DA8DB04B311 /* markdown-renderer.js in Resources */,
+				4BF5E6F2C35B31DA046538E9 /* mermaid.min.js in Resources */,
 				8647CA0CCFA82D5C469B4853 /* tex-svg.js in Resources */,
 				85B623F14C602E7BB9A82891 /* yamabiko_runtime.py in Resources */,
 			);
@@ -1489,6 +1511,7 @@
 				C3087DD5EC12E6FECC903EE5 /* LegalMarkdownParserTests.swift in Sources */,
 				69A868E7A0FE2AB17FD68584 /* LiteLlmPricingRepositoryTests.swift in Sources */,
 				D63F06CADBC32DCDED7D808E /* MathMarkdownViewTests.swift in Sources */,
+				EF2CB758E13EC422661B33C8 /* MermaidDiagramViewTests.swift in Sources */,
 				AE52105AF8D4506C8B4FFC3D /* ModelsDevCatalogTests.swift in Sources */,
 				615791B4B229DB6A6AD8D4C5 /* OpenRouterModelTests.swift in Sources */,
 				92F3FF4AEE8C134A7DC83453 /* OpenRouterRoutingTests.swift in Sources */,
@@ -1631,6 +1654,7 @@
 				2A8999A902854B3C516715B5 /* LiteLlmPricingRepository.swift in Sources */,
 				179EE6035B35FBC617EED27F /* LocalToolRegistry.swift in Sources */,
 				9BD931169E39B228157F7725 /* MathMarkdownView.swift in Sources */,
+				CD45864AEF7F44B6F37E9E1C /* MermaidDiagramView.swift in Sources */,
 				4AF8DCF064E32B3DD82E1D65 /* ModelPreset.swift in Sources */,
 				ECDE193C2F8AA008090274F3 /* ModelsDevCatalog.swift in Sources */,
 				F96F8931673091505236216B /* ModelsDevCatalogRepository.swift in Sources */,

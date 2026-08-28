@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ChatEmptyState: View {
     let title: String
@@ -38,9 +39,39 @@ struct ChatWorkspaceRouteSheet: View {
             FusionDetailSheet(trace: trace, debugModeEnabled: debugModeEnabled)
         case let .artifactViewer(_, block):
             ChatArtifactViewer(block: block)
+        case let .mermaidViewer(_, source):
+            MermaidDiagramViewer(source: source)
         case .modelPicker, .modePicker:
             EmptyView()
         }
+    }
+}
+
+private struct MermaidDiagramViewer: View {
+    let source: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            MermaidDiagramView(source: source, expanded: true)
+                .ignoresSafeArea(edges: .bottom)
+                .navigationTitle("Mermaid")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button {
+                            UIPasteboard.general.string = source
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .accessibilityLabel(Text(L10n.text("コピー")))
+
+                        Button(L10n.text("閉じる")) { dismiss() }
+                    }
+                }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
     }
 }
 
