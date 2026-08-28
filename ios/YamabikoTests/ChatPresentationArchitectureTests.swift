@@ -1607,6 +1607,51 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             userAttributes.frame.maxY + 21,
             "A generated HTML answer must start below the preceding user instruction"
         )
+
+        let otherStore = ChatTimelineStore()
+        otherStore.update(messages: [timelineMessage(id: 100, text: "別の会話です")])
+        configure(controller, store: otherStore, scrollRequest: 2)
+        await settleTimeline(controller)
+        configure(controller, store: store, scrollRequest: 3)
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        await settleTimeline(controller)
+
+        let returnedAttributes = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 1, section: 0))
+        )
+        let returnedCell = try XCTUnwrap(
+            collectionView.cellForItem(at: IndexPath(item: 1, section: 0))
+        )
+        let returnedFittedHeight = returnedCell
+            .preferredLayoutAttributesFitting(returnedAttributes).size.height
+        XCTAssertEqual(
+            returnedAttributes.size.height,
+            returnedFittedHeight,
+            accuracy: 1,
+            "Returning from another conversation must remeasure the generated HTML row"
+        )
+
+        let relaunchedController = configuredTimelineController(store: store, scrollRequest: 1)
+        let relaunchedWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        relaunchedWindow.rootViewController = relaunchedController
+        relaunchedWindow.makeKeyAndVisible()
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        await settleTimeline(relaunchedController)
+        let relaunchedCollectionView = try XCTUnwrap(
+            findCollectionView(in: relaunchedController.view)
+        )
+        let relaunchedAttributes = try XCTUnwrap(
+            relaunchedCollectionView.layoutAttributesForItem(at: IndexPath(item: 1, section: 0))
+        )
+        let relaunchedCell = try XCTUnwrap(
+            relaunchedCollectionView.cellForItem(at: IndexPath(item: 1, section: 0))
+        )
+        XCTAssertEqual(
+            relaunchedAttributes.size.height,
+            relaunchedCell.preferredLayoutAttributesFitting(relaunchedAttributes).size.height,
+            accuracy: 1,
+            "Relaunching must remeasure the persisted generated HTML row"
+        )
     }
 
     @MainActor
