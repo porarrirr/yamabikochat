@@ -188,7 +188,13 @@ final class AppStoreScreenshotTests: XCTestCase {
         XCTAssertTrue(slider.waitForExistence(timeout: 5))
         capture("reasoning-effort-slider-medium", app: app)
 
-        slider.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+        slider.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5))
+            .press(
+                forDuration: 0.1,
+                thenDragTo: slider.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)
+                )
+            )
         let selectedLabel = app.descendants(matching: .any)
             .matching(identifier: "chat-reasoning-effort-value")
             .firstMatch

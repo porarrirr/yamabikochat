@@ -103,6 +103,20 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         ), 4)
     }
 
+    func testReasoningEffortSliderPreservesContinuousDragPositionBetweenOptions() {
+        XCTAssertEqual(ChatReasoningEffortPresentationPolicy.sliderFraction(
+            for: 121.5,
+            width: 300,
+            horizontalInset: 36
+        ) ?? -1, 0.375, accuracy: 0.0001)
+        XCTAssertEqual(ChatReasoningEffortPresentationPolicy.optionIndex(
+            for: 121.5,
+            width: 300,
+            optionCount: 5,
+            horizontalInset: 36
+        ), 2)
+    }
+
     func testComposerSynchronizationPreservesCaretForLocalEdits() {
         XCTAssertEqual(
             ChatComposerSynchronizationPolicy.action(

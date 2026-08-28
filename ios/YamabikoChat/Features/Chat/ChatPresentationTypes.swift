@@ -64,11 +64,29 @@ enum ChatReasoningEffortPresentationPolicy {
         optionCount: Int,
         horizontalInset: CGFloat
     ) -> Int? {
-        guard optionCount > 0, width.isFinite, width > 0 else { return nil }
+        guard optionCount > 0,
+              let fraction = sliderFraction(
+                  for: locationX,
+                  width: width,
+                  horizontalInset: horizontalInset
+              )
+        else { return nil }
         guard optionCount > 1 else { return 0 }
-        let usableWidth = max(width - horizontalInset * 2, 1)
-        let fraction = min(max((locationX - horizontalInset) / usableWidth, 0), 1)
         return Int((fraction * CGFloat(optionCount - 1)).rounded())
+    }
+
+    static func sliderFraction(
+        for locationX: CGFloat,
+        width: CGFloat,
+        horizontalInset: CGFloat
+    ) -> CGFloat? {
+        guard locationX.isFinite,
+              width.isFinite,
+              width > 0,
+              horizontalInset.isFinite
+        else { return nil }
+        let usableWidth = max(width - horizontalInset * 2, 1)
+        return min(max((locationX - horizontalInset) / usableWidth, 0), 1)
     }
 
     static func gaugeSymbolName(selectedValue: String, options: [String]) -> String {

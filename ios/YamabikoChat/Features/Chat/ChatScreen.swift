@@ -1177,10 +1177,18 @@ struct ChatScreen: View {
 private struct ChatReasoningEffortPanel: View {
     let configuration: ChatReasoningEffortConfiguration
     let onSelect: (String) -> Void
+    @State private var previewValue: String?
+
+    private var displayedValue: String {
+        ChatReasoningEffortPresentationPolicy.matchingOption(
+            previewValue,
+            in: configuration.options
+        ) ?? configuration.selectedValue
+    }
 
     var body: some View {
         VStack(spacing: 18) {
-            Text(verbatim: "\(configuration.modelLabel)  \(configuration.selectedValue)")
+            Text(verbatim: "\(configuration.modelLabel)  \(displayedValue)")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
@@ -1189,21 +1197,29 @@ private struct ChatReasoningEffortPanel: View {
 
             ChatDiscreteReasoningEffortSlider(
                 options: configuration.options,
-                selectedValue: configuration.selectedValue,
-                onSelect: onSelect
+                selectedValue: displayedValue,
+                onPreview: { previewValue = $0 },
+                onCommit: { value in
+                    onSelect(value)
+                    previewValue = nil
+                }
             )
         }
         .padding(.horizontal, 18)
         .padding(.top, 20)
         .padding(.bottom, 18)
-        .sensoryFeedback(.selection, trigger: configuration.selectedValue)
+        .sensoryFeedback(.selection, trigger: displayedValue)
     }
 }
 
 private struct ChatDiscreteReasoningEffortSlider: View {
     let options: [String]
     let selectedValue: String
-    let onSelect: (String) -> Void
+    let onPreview: (String) -> Void
+    let onCommit: (String) -> Void
+
+    @State private var dragFraction: CGFloat?
+    @State private var previewedIndex: Int?
 
     private let trackHeight: CGFloat = 72
     private let thumbDiameter: CGFloat = 58
@@ -1213,8 +1229,10 @@ private struct ChatDiscreteReasoningEffortSlider: View {
             let width = geometry.size.width
             let horizontalInset = trackHeight / 2
             let selectedIndex = options.firstIndex(of: selectedValue) ?? 0
+            let restingFraction = fraction(index: selectedIndex)
+            let visualFraction = dragFraction ?? restingFraction
             let thumbCenterX = centerX(
-                index: selectedIndex,
+                fraction: visualFraction,
                 width: width,
                 horizontalInset: horizontalInset
             )
@@ -1231,14 +1249,15 @@ private struct ChatDiscreteReasoningEffortSlider: View {
                     )
 
                 ForEach(options.indices, id: \.self) { index in
+                    let optionFraction = fraction(index: index)
                     Circle()
-                        .fill(index <= selectedIndex
+                        .fill(optionFraction <= visualFraction
                             ? Color(uiColor: .systemBackground).opacity(0.42)
                             : Color(uiColor: .secondaryLabel).opacity(0.5))
                         .frame(width: 8, height: 8)
                         .position(
                             x: centerX(
-                                index: index,
+                                fraction: optionFraction,
                                 width: width,
                                 horizontalInset: horizontalInset
                             ),
@@ -1261,12 +1280,23 @@ private struct ChatDiscreteReasoningEffortSlider: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        selectOption(
+                        updateDrag(
                             at: value.location.x,
                             width: width,
                             horizontalInset: horizontalInset
                         )
                     }
+                    .onEnded { value in
+                        finishDrag(
+                            at: value.location.x,
+                            width: width,
+                            horizontalInset: horizontalInset
+                        )
+                    }
+            )
+            .animation(
+                dragFraction == nil ? .smooth(duration: 0.22) : nil,
+                value: selectedValue
             )
         }
         .frame(height: trackHeight)
@@ -1285,27 +1315,66 @@ private struct ChatDiscreteReasoningEffortSlider: View {
                 return
             }
             guard nextIndex != currentIndex else { return }
-            onSelect(options[nextIndex])
+            withAnimation(.smooth(duration: 0.22)) {
+                onCommit(options[nextIndex])
+            }
         }
         .accessibilityIdentifier("chat-reasoning-effort-slider")
     }
 
-    private func centerX(index: Int, width: CGFloat, horizontalInset: CGFloat) -> CGFloat {
-        guard options.count > 1 else { return width / 2 }
-        let usableWidth = max(width - horizontalInset * 2, 1)
-        return horizontalInset + usableWidth * CGFloat(index) / CGFloat(options.count - 1)
+    private func fraction(index: Int) -> CGFloat {
+        guard options.count > 1 else { return 0.5 }
+        return CGFloat(index) / CGFloat(options.count - 1)
     }
 
-    private func selectOption(at locationX: CGFloat, width: CGFloat, horizontalInset: CGFloat) {
-        guard let index = ChatReasoningEffortPresentationPolicy.optionIndex(
+    private func centerX(fraction: CGFloat, width: CGFloat, horizontalInset: CGFloat) -> CGFloat {
+        let usableWidth = max(width - horizontalInset * 2, 1)
+        return horizontalInset + usableWidth * fraction
+    }
+
+    private func updateDrag(at locationX: CGFloat, width: CGFloat, horizontalInset: CGFloat) {
+        guard let fraction = ChatReasoningEffortPresentationPolicy.sliderFraction(
+            for: locationX,
+            width: width,
+            horizontalInset: horizontalInset
+        ),
+        let index = ChatReasoningEffortPresentationPolicy.optionIndex(
             for: locationX,
             width: width,
             optionCount: options.count,
             horizontalInset: horizontalInset
         ) else { return }
+
+        let previousIndex = previewedIndex ?? options.firstIndex(of: selectedValue)
+        dragFraction = fraction
+        previewedIndex = index
+        guard index != previousIndex else { return }
+        onPreview(options[index])
+    }
+
+    private func finishDrag(at locationX: CGFloat, width: CGFloat, horizontalInset: CGFloat) {
+        guard let index = ChatReasoningEffortPresentationPolicy.optionIndex(
+            for: locationX,
+            width: width,
+            optionCount: options.count,
+            horizontalInset: horizontalInset
+        ) else {
+            withAnimation(.smooth(duration: 0.22)) {
+                dragFraction = nil
+            }
+            previewedIndex = nil
+            return
+        }
+
         let value = options[index]
-        guard value != selectedValue else { return }
-        onSelect(value)
+        if previewedIndex != index {
+            onPreview(value)
+        }
+        onCommit(value)
+        previewedIndex = nil
+        withAnimation(.smooth(duration: 0.22)) {
+            dragFraction = nil
+        }
     }
 }
 

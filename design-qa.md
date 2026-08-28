@@ -57,9 +57,9 @@ final result: passed
 # Design QA: reasoning-effort slider
 
 - Source visual truth: `/var/folders/5w/7hrzp8fx3b9dh79n6jk19l980000gn/T/codex-clipboard-b883615e-c73d-441e-b352-9065a8625cc5.png`
-- Implementation screenshot: `/Users/porari/.codex/visualizations/2026/08/28/01a0467c-1533-7b80-aa87-003e67489601/reasoning-effort/reasoning-effort-slider-medium-final.png`
-- Full normalized comparison: `/Users/porari/.codex/visualizations/2026/08/28/01a0467c-1533-7b80-aa87-003e67489601/reasoning-effort/reference-vs-implementation.png`
-- Focused normalized comparison: `/Users/porari/.codex/visualizations/2026/08/28/01a0467c-1533-7b80-aa87-003e67489601/reasoning-effort/reference-vs-implementation-focused.png`
+- Implementation screenshot: `/Users/porari/.codex/visualizations/2026/08/28/01a0467c-1533-7b80-aa87-003e67489601/reasoning-effort/reasoning-effort-slider-smooth-medium.png`
+- Full normalized comparison: `/Users/porari/.codex/visualizations/2026/08/28/01a0467c-1533-7b80-aa87-003e67489601/reasoning-effort/reference-vs-smooth-implementation.png`
+- Focused normalized comparison: `/Users/porari/.codex/visualizations/2026/08/28/01a0467c-1533-7b80-aa87-003e67489601/reasoning-effort/reference-vs-smooth-implementation-focused.png`
 - Viewport: iPhone 17 simulator, portrait, iOS 26.5, dark appearance, software keyboard visible
 - Source pixels: 1170 x 2532; implementation pixels: 1206 x 2622; both are native 3x-density iPhone captures
 - Normalization: full captures were proportionally scaled and padded to equal 585 x 1266 panels before horizontal comparison; focused crops were normalized to equal 585 x 325 panels
@@ -71,7 +71,9 @@ final result: passed
 - With no focused composer or software keyboard, the reasoning-effort meter is absent.
 - Focusing the composer and showing the software keyboard reveals the meter for a supported model.
 - Tapping the meter opens the slider without dismissing the keyboard.
-- The discrete thumb selects only values supported by the active model/provider contract.
+- During a drag, the thumb and selected fill follow the finger continuously instead of jumping between stops.
+- Crossing a stop previews its exact label and triggers selection feedback; the supported discrete value is committed only when the drag ends.
+- The slider selects only values supported by the active model/provider contract.
 - Moving from `medium` to `ultra` updates the exact English value and persists it through the existing Pi Agents configuration path.
 - The full-screen transparent dismissal target closes the panel without adding a second execution or fallback path.
 
@@ -94,12 +96,13 @@ No actionable P0, P1, or P2 mismatch remains. The reference has three illustrati
 3. Second capture review found a P2 mismatch: full-screen material obscured too much conversation context. The material was constrained to a short bottom gradient.
 4. Third capture review found a P2 mismatch: composer controls remained visible behind the slider. The composer is now visually hidden with opacity while retaining its first-responder state, so the keyboard does not collapse.
 5. Post-fix evidence: the final full and focused comparisons show a floating label and capsule over a dark gradient, with the software keyboard retained and exact model effort visible.
+6. Motion refinement: the original implementation derived the thumb position directly from the persisted discrete selection, causing visible jumps and synchronous preference writes while dragging. The thumb/fill now use a continuous clamped drag fraction, labels preview only at stop boundaries, persistence occurs once on release, and the thumb settles to the selected stop with a short smooth animation. The refreshed full and focused comparisons confirm no resting-state visual regression.
 
 ## Verification
 
 - [x] Focused reasoning policy/repository/view-model tests pass for Codex, SuperGrok, Gemini, OpenRouter, and models.dev.
-- [x] Discrete ordering, exact-label preservation, focus/keyboard gating, and track mapping tests pass.
-- [x] UI automation verifies hidden-before-focus, visible-with-keyboard, panel presentation, exact `medium` label, `ultra` selection, and retained keyboard.
+- [x] Discrete ordering, exact-label preservation, focus/keyboard gating, track mapping, and continuous between-stop drag-fraction tests pass.
+- [x] UI automation verifies hidden-before-focus, visible-with-keyboard, panel presentation, a real drag from `medium` to `ultra`, exact final label, and retained keyboard.
 - [x] Native iOS simulator build succeeds with code signing disabled.
 - [x] Full-view and focused source/implementation comparisons were inspected together.
 
