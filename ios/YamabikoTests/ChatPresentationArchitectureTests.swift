@@ -1553,6 +1553,91 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testAsyncUserAttachmentHeightDoesNotOverlapFollowingAnswer() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+        let htmlURL = temporaryDirectory.appendingPathComponent("mermaid-demo.html")
+        try Data("<html><body><h1>Mermaid demo</h1></body></html>".utf8).write(to: htmlURL)
+        let attachmentsJSON = String(
+            data: try JSONEncoder().encode([htmlURL.path]),
+            encoding: .utf8
+        ) ?? "[]"
+
+        let store = ChatTimelineStore()
+        store.update(messages: [
+            timelineMessage(
+                id: 1,
+                role: "user",
+                text: "マーメイドで簡単な図を作ってみて",
+                attachmentsJSON: attachmentsJSON
+            ),
+            timelineMessage(id: 2, text: "作りました。以下が回答です。")
+        ])
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+        let userAttributes = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))
+        )
+        let answerAttributes = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 1, section: 0))
+        )
+        let userCell = try XCTUnwrap(collectionView.cellForItem(at: IndexPath(item: 0, section: 0)))
+        let fittedUserHeight = userCell.preferredLayoutAttributesFitting(userAttributes).size.height
+
+        XCTAssertEqual(userAttributes.size.height, fittedUserHeight, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(
+            answerAttributes.frame.minY,
+            userAttributes.frame.maxY + 21,
+            "An asynchronously expanded user attachment must push the following answer down"
+        )
+    }
+
+    @MainActor
+    func testMultipleMermaidRendersExpandScrollableContentToFinalHeight() async throws {
+        let diagram = """
+        ```mermaid
+        pie title 休日の過ごし方
+            "趣味" : 35
+            "勉強" : 25
+            "友達と遊ぶ" : 20
+            "睡眠" : 15
+            "その他" : 5
+        ```
+        """
+        let markdown = (1...6).map { "## \($0). 円グラフ\n\n\(diagram)" }
+            .joined(separator: "\n\n説明文です。\n\n")
+        let store = ChatTimelineStore()
+        store.update(messages: [timelineMessage(id: 1, text: markdown)])
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+        let indexPath = IndexPath(item: 0, section: 0)
+        let attributes = try XCTUnwrap(collectionView.layoutAttributesForItem(at: indexPath))
+        let cell = try XCTUnwrap(collectionView.cellForItem(at: indexPath))
+        let fitted = cell.preferredLayoutAttributesFitting(attributes)
+
+        XCTAssertEqual(attributes.size.height, fitted.size.height, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(
+            collectionView.contentSize.height + 0.5,
+            attributes.frame.maxY + 24,
+            "The scroll range must include the final height of every Mermaid render"
+        )
+    }
+
+    @MainActor
     func testPendingLatestMoveDoesNotOverrideAUserScroll() async throws {
         let store = ChatTimelineStore()
         store.update(messages: (1...20).map {
@@ -1834,14 +1919,20 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         )
     }
 
-    private func timelineMessage(id: Int64, text: String) -> FullChatMessage {
+    private func timelineMessage(
+        id: Int64,
+        role: String = "model",
+        text: String,
+        attachmentsJSON: String = "[]"
+    ) -> FullChatMessage {
         FullChatMessage(
             id: id,
             message: ChatMessage(
                 id: id,
                 conversationId: 1,
-                role: "model",
+                role: role,
                 text: text,
+                attachmentsJSON: attachmentsJSON,
                 createdAtMs: id
             ),
             thinkingStream: nil,

@@ -70,8 +70,10 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var viewportCompensationBottom: CGFloat = 0
     private var viewportLockTargetY: CGFloat?
     private var isContentUpdateScheduled = false
+    private var isCompletingRowMeasurement = false
     private var isUserScrollInProgress = false
     private var userScrollGeneration = 0
+    private var lastUserDrivenOffsetY: CGFloat?
     private var hasUserInteractedSinceStoreChange = false
     private var previousRegeneratableMessageID: Int64?
     private var previousMathRenderingEnabled = true
@@ -129,7 +131,6 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             cell.contentConfiguration = UIHostingConfiguration {
                 ChatTimelineRowView(
                     store: row,
-                    isLastRow: self.configuredIDs.last == id,
                     regeneratableMessageID: self.regeneratableMessageID,
                     mathRenderingEnabled: self.mathRenderingEnabled,
                     fusionDebugModeEnabled: self.fusionDebugModeEnabled,
@@ -143,11 +144,9 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                     onRegenerate: self.onRegenerate,
                     onAskChatWithSelection: self.onAskChatWithSelection,
                     onIntrinsicHeightChange: { [weak self] height in
-                        guard self?.configuredIDs.last == id else { return }
                         self?.applyIntrinsicHeight(height, rowID: id)
                     },
                     onContentLayoutChange: { [weak self] in
-                        guard self?.configuredIDs.last == id else { return }
                         self?.remeasureRow(rowID: id)
                     }
                 )
@@ -229,6 +228,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             parsedRowsRemeasured.removeAll()
             pendingLocksViewport = false
             isUserScrollInProgress = false
+            lastUserDrivenOffsetY = nil
             hasUserInteractedSinceStoreChange = false
             clearViewportCompensation()
             store.onRowContentWillChange = { [weak self] rowID, kind in
@@ -328,24 +328,52 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     }
 
     private func remeasureRow(rowID: String) {
+        // Content-layout notifications are an imprecise signal and can repeat
+        // during scrolling as hosted SwiftUI views enter the viewport. The
+        // explicit intrinsic-height channel still accepts late Mermaid and
+        // attachment sizes; only this fitted-size probe stops after interaction.
         guard !hasUserInteractedSinceStoreChange,
-              configuredIDs.contains(rowID),
-              parsedRowsRemeasured.insert(rowID).inserted
+              configuredIDs.contains(rowID)
         else { return }
+        if store?.row(id: rowID)?.streamingSnapshot?.isFinal == false {
+            guard parsedRowsRemeasured.insert(rowID).inserted,
+                  !isCompletingRowMeasurement
+            else { return }
+        }
         prepareForRowContentChange(rowID: rowID, kind: .normalUpdate)
         finishRowContentChange(rowID: rowID, kind: .normalUpdate)
     }
 
     private func completePendingRowMeasurement() {
+        // Consume one immutable batch. A Mermaid/attachment callback can arrive
+        // synchronously while layoutIfNeeded() below is measuring this batch.
+        // Clearing the queue up front lets that callback enqueue a second pass;
+        // clearing it at the end would silently discard the newer height.
+        let changedRowIDs = pendingChangedRowIDs
+        let intrinsicHeights = pendingIntrinsicHeights
+        let contentAnchor = pendingContentAnchor
+        let viewportOffsetY = pendingViewportOffsetY
+        let contentChangeUserScrollGeneration = pendingContentChangeUserScrollGeneration
+        let locksViewport = pendingLocksViewport
+        let measurementOffsetY = collectionView.contentOffset.y
+        pendingContentAnchor = nil
+        pendingViewportOffsetY = nil
+        pendingChangedRowIDs.removeAll()
+        pendingIntrinsicHeights.removeAll()
+        pendingContentChangeUserScrollGeneration = nil
+        pendingLocksViewport = false
+        isContentUpdateScheduled = false
+
+        isCompletingRowMeasurement = true
         UIView.performWithoutAnimation {
             let context = ChatTimelineLayoutInvalidationContext()
-            let indexPaths = pendingChangedRowIDs.compactMap { id -> IndexPath? in
+            let indexPaths = changedRowIDs.compactMap { id -> IndexPath? in
                 guard let index = configuredIDs.firstIndex(of: id) else { return nil }
                 return IndexPath(item: index, section: 0)
             }
             for indexPath in indexPaths {
                 guard let id = dataSource.itemIdentifier(for: indexPath) else { continue }
-                if let intrinsicHeight = pendingIntrinsicHeights[id] {
+                if let intrinsicHeight = intrinsicHeights[id] {
                     context.preferredHeights[indexPath] = intrinsicHeight
                     continue
                 }
@@ -368,23 +396,31 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                 collectionView.collectionViewLayout.invalidateLayout()
             }
             collectionView.layoutIfNeeded()
-            if isUserScrolling || pendingContentChangeUserScrollGeneration != userScrollGeneration {
+            if isUserScrolling || contentChangeUserScrollGeneration != userScrollGeneration {
                 cancelPendingViewportRestoreForUserScroll()
+                // UIKit may adjust contentOffset as soon as invalidation starts,
+                // before this pass reaches layoutIfNeeded(). Preserve the last
+                // offset delivered by the scroll delegate, which is the actual
+                // finger/deceleration position, rather than that adjusted value.
+                let preservedOffsetY = clampedOffset(lastUserDrivenOffsetY ?? measurementOffsetY)
+                if TailFollowPolicy.shouldAdjustOffset(
+                    current: collectionView.contentOffset.y,
+                    target: preservedOffsetY
+                ) {
+                    collectionView.setContentOffset(
+                        CGPoint(x: 0, y: preservedOffsetY),
+                        animated: false
+                    )
+                }
             } else {
                 restorePosition(
-                    anchor: pendingContentAnchor,
-                    clampsToContentBounds: !pendingLocksViewport,
-                    lockedOffsetY: pendingViewportOffsetY
+                    anchor: contentAnchor,
+                    clampsToContentBounds: !locksViewport,
+                    lockedOffsetY: viewportOffsetY
                 )
             }
         }
-        pendingContentAnchor = nil
-        pendingViewportOffsetY = nil
-        pendingChangedRowIDs.removeAll()
-        pendingIntrinsicHeights.removeAll()
-        pendingContentChangeUserScrollGeneration = nil
-        pendingLocksViewport = false
-        isContentUpdateScheduled = false
+        isCompletingRowMeasurement = false
     }
 
     private func apply(
@@ -526,12 +562,14 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         userScrollGeneration &+= 1
         hasUserInteractedSinceStoreChange = true
         isUserScrollInProgress = true
+        lastUserDrivenOffsetY = scrollView.contentOffset.y
         cancelPendingViewportRestoreForUserScroll()
         detachAtVisibleAnchor()
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         guard isUserScrolling else { return }
+        lastUserDrivenOffsetY = scrollView.contentOffset.y
         if isNearTail {
             followState = .followingTail
             unreadCount = 0
@@ -773,7 +811,6 @@ final class ChatTimelineCollectionCell: UICollectionViewCell {
 
 private struct ChatTimelineRowView: View {
     @ObservedObject var store: ChatTimelineRowStore
-    let isLastRow: Bool
     let regeneratableMessageID: Int64?
     let mathRenderingEnabled: Bool
     let fusionDebugModeEnabled: Bool
@@ -793,11 +830,22 @@ private struct ChatTimelineRowView: View {
         guard store.streamingSnapshot?.isFinal != false,
               case let .message(message) = store.item
         else { return false }
-        return message.message.role != "user" && message.displayText.contains("\n\n")
+        let hasAttachments = (
+            try? JSONDecoder().decode(
+                [String].self,
+                from: Data(message.displayAttachmentsJSON.utf8)
+            )
+        )?.isEmpty == false
+        // Attachment previews and parsed multi-block assistant Markdown can
+        // expand after their initial estimate. Plain rows stay on the existing
+        // fitted-size path so unrelated late hosting layouts cannot perturb an
+        // active scroll position.
+        return hasAttachments
+            || (message.message.role != "user" && message.displayText.contains("\n\n"))
     }
 
     var body: some View {
-        ChatTimelineTopPinnedLayout(usesIntrinsicHeight: isLastRow && shouldReportIntrinsicHeight) {
+        ChatTimelineTopPinnedLayout(usesIntrinsicHeight: shouldReportIntrinsicHeight) {
             Group {
                 switch store.item {
                 case let .message(message):
