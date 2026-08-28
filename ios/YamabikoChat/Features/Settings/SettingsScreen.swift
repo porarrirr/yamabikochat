@@ -12,6 +12,7 @@ struct SettingsScreen: View {
     @State private var showDiagnosticsSheet = false
     @State private var modelsDevFieldDrafts: [String: String] = [:]
     @State private var showAgentSkillImporter = false
+    @State private var pendingAgentSkillDeletionName: String?
 
     enum SettingsTab: String, Identifiable {
         case api
@@ -191,6 +192,29 @@ struct SettingsScreen: View {
                     viewModel.installAgentSkill(trusted: trusted, allowReplacement: preview.replacesExisting)
                 }
             )
+        }
+        .confirmationDialog(
+            "Agent Skillを削除しますか？",
+            isPresented: Binding(
+                get: { pendingAgentSkillDeletionName != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingAgentSkillDeletionName = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingAgentSkillDeletionName
+        ) { skillName in
+            Button("削除", role: .destructive) {
+                viewModel.deleteAgentSkill(name: skillName)
+                pendingAgentSkillDeletionName = nil
+            }
+            Button("キャンセル", role: .cancel) {
+                pendingAgentSkillDeletionName = nil
+            }
+        } message: { skillName in
+            Text("$\(skillName) を完全に削除します。この操作は取り消せません。")
         }
     }
 
@@ -452,8 +476,17 @@ struct SettingsScreen: View {
                         .font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
                     }
-                    Button("削除", role: .destructive) { viewModel.deleteAgentSkill(name: skill.manifest.name) }
-                        .font(.caption)
+                    HStack {
+                        Spacer()
+                        Button(role: .destructive) {
+                            pendingAgentSkillDeletionName = skill.manifest.name
+                        } label: {
+                            Label("削除", systemImage: "trash")
+                                .frame(minHeight: 44)
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityHint("確認後にこのSkillを削除します")
+                    }
                 }
                 .padding(.vertical, 4)
             }
