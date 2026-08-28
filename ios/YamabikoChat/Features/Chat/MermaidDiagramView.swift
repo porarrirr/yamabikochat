@@ -155,14 +155,22 @@ enum MermaidResourceResolver {
 }
 
 enum MermaidWebResourceLoader {
-    static func preparedResourceDirectory(
+    struct Document {
+        let url: URL
+        let readAccessURL: URL
+    }
+
+    static func prepareDocument(
+        html: String,
         bundle: Bundle = .main,
-        fileManager: FileManager = .default
-    ) throws -> URL {
+        fileManager: FileManager = .default,
+        cacheRoot: URL? = nil
+    ) throws -> Document {
         guard let scriptURL = MermaidResourceResolver.scriptURL(in: bundle) else {
             throw MermaidRenderError.missingResource
         }
-        guard let cacheRoot = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+        guard let cacheRoot = cacheRoot
+            ?? fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
             throw MermaidRenderError.unavailableCacheDirectory
         }
 
@@ -172,10 +180,22 @@ enum MermaidWebResourceLoader {
         )
         try fileManager.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
         let destinationURL = destinationDirectory.appendingPathComponent("mermaid.min.js")
-        if !fileManager.fileExists(atPath: destinationURL.path) {
-            try fileManager.copyItem(at: scriptURL, to: destinationURL)
+        let sourceSize = try fileManager.attributesOfItem(atPath: scriptURL.path)[.size] as? NSNumber
+        let cachedSize = try? fileManager.attributesOfItem(atPath: destinationURL.path)[.size] as? NSNumber
+        if cachedSize != sourceSize {
+            let sourceScript = try Data(contentsOf: scriptURL)
+            try sourceScript.write(to: destinationURL, options: .atomic)
         }
-        return destinationDirectory
+
+        let documentURL = destinationDirectory
+            .appendingPathComponent("document-\(UUID().uuidString).html")
+        try Data(html.utf8).write(to: documentURL, options: .atomic)
+        return Document(url: documentURL, readAccessURL: destinationDirectory)
+    }
+
+    static func removeDocument(_ documentURL: URL?, fileManager: FileManager = .default) {
+        guard let documentURL else { return }
+        try? fileManager.removeItem(at: documentURL)
     }
 }
 
@@ -343,14 +363,15 @@ private struct MermaidWebView: UIViewRepresentable {
             guard source.count <= MermaidHTMLBuilder.maximumSourceLength else {
                 throw MermaidRenderError.sourceTooLarge(limit: MermaidHTMLBuilder.maximumSourceLength)
             }
-            let resourceDirectory = try MermaidWebResourceLoader.preparedResourceDirectory()
             let html = MermaidHTMLBuilder.buildHTML(
                 sourcePayload: source.mermaidJSONStringLiteral,
                 colorScheme: colorScheme,
                 allowsZoom: allowsInteraction
             )
+            let document = try MermaidWebResourceLoader.prepareDocument(html: html)
+            context.coordinator.replaceDocument(with: document.url)
             renderError = nil
-            webView.loadHTMLString(html, baseURL: resourceDirectory)
+            webView.loadFileURL(document.url, allowingReadAccessTo: document.readAccessURL)
         } catch {
             context.coordinator.fail(error.localizedDescription)
         }
@@ -359,6 +380,7 @@ private struct MermaidWebView: UIViewRepresentable {
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
         webView.navigationDelegate = nil
         webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.messageName)
+        coordinator.removeDocument()
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
@@ -371,6 +393,7 @@ private struct MermaidWebView: UIViewRepresentable {
         static let messageName = "mermaidRenderState"
         var parent: MermaidWebView
         private var signature: Signature?
+        private var documentURL: URL?
 
         init(parent: MermaidWebView) {
             self.parent = parent
@@ -380,6 +403,16 @@ private struct MermaidWebView: UIViewRepresentable {
             guard self.signature != signature else { return false }
             self.signature = signature
             return true
+        }
+
+        func replaceDocument(with documentURL: URL) {
+            MermaidWebResourceLoader.removeDocument(self.documentURL)
+            self.documentURL = documentURL
+        }
+
+        func removeDocument() {
+            MermaidWebResourceLoader.removeDocument(documentURL)
+            documentURL = nil
         }
 
         func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {

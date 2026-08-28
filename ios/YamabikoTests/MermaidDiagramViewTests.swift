@@ -155,6 +155,25 @@ final class MermaidDiagramViewTests: XCTestCase {
         ))
     }
 
+    func testPreparedDocumentCopiesVerifiedScriptAndWritesLocalHTML() throws {
+        let cacheRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: cacheRoot) }
+
+        let document = try MermaidWebResourceLoader.prepareDocument(
+            html: "<html><body>diagram</body></html>",
+            cacheRoot: cacheRoot
+        )
+
+        XCTAssertEqual(document.url.deletingLastPathComponent(), document.readAccessURL)
+        XCTAssertEqual(try String(contentsOf: document.url, encoding: .utf8), "<html><body>diagram</body></html>")
+        let copiedScript = document.readAccessURL.appendingPathComponent("mermaid.min.js")
+        XCTAssertEqual(try Data(contentsOf: copiedScript), try Data(contentsOf: sourceResourceDirectory().appendingPathComponent("mermaid.min.js")))
+
+        MermaidWebResourceLoader.removeDocument(document.url)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: document.url.path))
+    }
+
     @MainActor
     func testVendoredMermaidRendersJapaneseFlowchartToSVG() async throws {
         let state = try await render(
@@ -166,6 +185,64 @@ final class MermaidDiagramViewTests: XCTestCase {
 
         XCTAssertEqual(state["status"] as? String, "success")
         XCTAssertGreaterThan((state["height"] as? NSNumber)?.doubleValue ?? 0, 0)
+    }
+
+    @MainActor
+    func testMultipleVendoredMermaidDocumentsRenderConcurrently() async throws {
+        let cacheRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        var controllers: [WKUserContentController] = []
+        var recorders: [MermaidRenderMessageRecorder] = []
+        var webViews: [WKWebView] = []
+        var documents: [MermaidWebResourceLoader.Document] = []
+        var expectations: [XCTestExpectation] = []
+        defer {
+            for controller in controllers {
+                controller.removeScriptMessageHandler(forName: "mermaidRenderState")
+            }
+            for document in documents {
+                MermaidWebResourceLoader.removeDocument(document.url)
+            }
+            try? FileManager.default.removeItem(at: cacheRoot)
+        }
+
+        for index in 0..<4 {
+            let expectation = expectation(description: "Mermaid render result \(index)")
+            let recorder = MermaidRenderMessageRecorder(expectation: expectation)
+            let controller = WKUserContentController()
+            controller.add(recorder, name: "mermaidRenderState")
+            let configuration = WKWebViewConfiguration()
+            configuration.userContentController = controller
+            configuration.websiteDataStore = .nonPersistent()
+            let webView = WKWebView(
+                frame: CGRect(x: 0, y: 0, width: 390, height: 800),
+                configuration: configuration
+            )
+            let html = MermaidHTMLBuilder.buildHTML(
+                sourcePayload: try jsonLiteral("flowchart LR\nA\(index)[開始] --> B\(index)[完了]"),
+                colorScheme: .light,
+                allowsZoom: false
+            )
+            let document = try MermaidWebResourceLoader.prepareDocument(
+                html: html,
+                cacheRoot: cacheRoot
+            )
+
+            controllers.append(controller)
+            recorders.append(recorder)
+            webViews.append(webView)
+            documents.append(document)
+            expectations.append(expectation)
+            webView.loadFileURL(document.url, allowingReadAccessTo: document.readAccessURL)
+        }
+
+        await fulfillment(of: expectations, timeout: 15)
+        XCTAssertEqual(recorders.count, 4)
+        for recorder in recorders {
+            XCTAssertEqual(recorder.message?["status"] as? String, "success")
+            XCTAssertGreaterThan((recorder.message?["height"] as? NSNumber)?.doubleValue ?? 0, 0)
+        }
+        XCTAssertEqual(webViews.count, 4)
     }
 
     @MainActor
@@ -190,7 +267,12 @@ final class MermaidDiagramViewTests: XCTestCase {
             colorScheme: .light,
             allowsZoom: false
         )
-        webView.loadHTMLString(html, baseURL: try sourceResourceDirectory())
+        let document = try MermaidWebResourceLoader.prepareDocument(
+            html: html,
+            cacheRoot: FileManager.default.temporaryDirectory
+        )
+        defer { MermaidWebResourceLoader.removeDocument(document.url) }
+        webView.loadFileURL(document.url, allowingReadAccessTo: document.readAccessURL)
 
         await fulfillment(of: [expectation], timeout: 15)
         controller.removeScriptMessageHandler(forName: "mermaidRenderState")
