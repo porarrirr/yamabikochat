@@ -12,6 +12,7 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var settings: AppSettings = .init()
 
     @Published var inputText: String = ""
+    @Published private(set) var speechAudioLevels = SpeechAudioLevelHistory().values
     @Published var isSending: Bool = false
     @Published var isAutoConversationRunning: Bool = false
     @Published var isAutoConversationPaused: Bool = false
@@ -94,6 +95,13 @@ final class ChatViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] isRecording in
                 self?.isSpeechRecording = isRecording
+            }
+            .store(in: &cancellables)
+
+        speechService.$audioLevels
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] levels in
+                self?.speechAudioLevels = levels
             }
             .store(in: &cancellables)
     }
@@ -311,11 +319,20 @@ final class ChatViewModel: ObservableObject {
 
     func toggleSpeechRecognition() {
         if isSpeechRecording {
-            speechService.stopRecording()
+            stopSpeechRecognition()
         } else {
             inputTextBeforeSpeech = inputText
             speechService.startRecording()
         }
+    }
+
+    func cancelSpeechRecognition() {
+        speechService.stopRecording()
+        inputText = inputTextBeforeSpeech
+    }
+
+    func stopSpeechRecognition() {
+        speechService.stopRecording()
     }
 
     func sendMessage() {

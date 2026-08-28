@@ -111,3 +111,72 @@ No actionable P0, P1, or P2 mismatch remains. The reference has three illustrati
 None required for this feature.
 
 final result: passed
+
+---
+
+# Speech recording bar design QA
+
+- Source visual truth: `/var/folders/5w/7hrzp8fx3b9dh79n6jk19l980000gn/T/codex-clipboard-82dae369-21b1-43ce-a5db-48cc6a497f6e.png`
+- Implementation screenshot: `/tmp/yamabiko-speech-recording-ui-final-v2.png`
+- Focused comparison: `/tmp/yamabiko-speech-ui-comparison-final.png`
+- Viewport: iPhone 17 simulator, 402 × 874 pt
+- Source pixels: 1170 × 287 px
+- Implementation pixels: 1206 × 2622 px at 3× (402 × 874 pt)
+- Focused crops: source 970 × 160 px; implementation 1126 × 180 px
+- Density normalization: component proportions were compared using native-pixel focused crops, vertically stacked on a shared 1126 px canvas without stretching either crop.
+- State: active speech recording with representative waveform activity and enabled send action. The simulator cannot initialize `SFSpeechRecognizer`, so the screenshot uses a DEBUG-only presentation argument while rendering the production SwiftUI component.
+
+## Full-view comparison evidence
+
+The implementation screenshot shows the recording bar in its real bottom-composer position on the iPhone 17 viewport. It respects the existing chat screen's 14 pt horizontal margins and bottom safe area. No clipping, overlap, or persistent-control overflow is visible.
+
+## Focused comparison evidence
+
+The focused comparison places the supplied reference above the rendered implementation. The pill silhouette, control order, centered waveform, dark palette, circular controls, stop glyph, and white send button follow the reference. A focused comparison was required because the reference contains only the recording control rather than a complete app screen.
+
+## Required fidelity surfaces
+
+- Fonts and typography: no visible text exists in the reference or implementation component. Accessibility labels supply the semantic names without adding visible copy.
+- Spacing and layout rhythm: the 56 pt pill, 34 pt visual circles inside 44 pt tap targets, 8 pt edge padding, and expanded waveform closely match the source proportions.
+- Colors and visual tokens: dark charcoal fill, subtle light border, translucent secondary controls, white glyphs, and white primary action match the source hierarchy in both light and dark app contexts.
+- Image quality and asset fidelity: the reference contains no raster imagery or brand assets. All controls use native SF Symbols; the waveform is live audio data rendered as vector capsules and remains sharp at every scale.
+- Copy and content: there is no visible component copy. Voice actions have localized accessibility labels.
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain.
+
+- P3: The reference has a slightly more dimensional surface highlight than the app's flatter system-aligned charcoal treatment. This is acceptable because the implementation keeps the existing YamabikoChat visual language and contrast behavior.
+
+## Comparison history
+
+1. Initial implementation screenshot: `/tmp/yamabiko-speech-recording-ui.png`
+   - P2: circular controls occupied too much of the pill height.
+   - P2: waveform was visually too short relative to the available center span.
+2. Fixes applied:
+   - Reduced the bar from 64 pt to 56 pt.
+   - Kept 44 pt accessible tap targets while reducing visible circles to 34 pt.
+   - Increased waveform bar width and spacing to use the center span.
+3. Post-fix evidence:
+   - `/tmp/yamabiko-speech-recording-ui-final-v2.png`
+   - `/tmp/yamabiko-speech-ui-comparison-final.png`
+   - The earlier P2 proportion and waveform-span differences are resolved.
+
+## Primary interactions verified
+
+- Cancel stops recognition and restores the input text that existed before recording.
+- Stop ends recognition while retaining the transcription.
+- Send ends recognition and sends the current transcription.
+- Live waveform history stays at a fixed size and clamps audio levels to the display range.
+- Accessibility identifiers and labels are present for all three actions.
+
+## Implementation checklist
+
+- [x] Recording-only composer state
+- [x] Live microphone waveform
+- [x] Cancel, stop, and send semantics
+- [x] Accessible 44 pt tap targets
+- [x] Build and focused regression tests
+- [x] Simulator visual comparison
+
+final result: passed

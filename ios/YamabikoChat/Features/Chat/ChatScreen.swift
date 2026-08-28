@@ -8,6 +8,25 @@ import QuickLook
 
 private let maximumPhotoSelectionCount = 10
 
+private struct SpeechWaveformView: View {
+    let levels: [Float]
+
+    var body: some View {
+        HStack(spacing: 2.5) {
+            ForEach(Array(levels.enumerated()), id: \.offset) { _, level in
+                Capsule()
+                    .fill(Color.white.opacity(0.34 + (Double(level) * 0.56)))
+                    .frame(
+                        width: 3,
+                        height: max(3, 3 + (CGFloat(level) * 27))
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .animation(.linear(duration: 0.08), value: levels)
+    }
+}
+
 enum ChatComposerFocusPolicy {
     static func focusState(current: Bool, isSending: Bool) -> Bool {
         isSending ? false : current
@@ -658,6 +677,38 @@ struct ChatScreen: View {
         isComposerFocused || !viewModel.inputText.isEmpty || !viewModel.attachments.isEmpty
     }
 
+    private var isSpeechRecordingBarPresented: Bool {
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-showSpeechRecordingBarForScreenshots") {
+            return true
+        }
+#endif
+        return viewModel.isSpeechRecording
+    }
+
+    private var displayedSpeechAudioLevels: [Float] {
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-showSpeechRecordingBarForScreenshots") {
+            return [
+                0.02, 0.04, 0.03, 0.05, 0.04, 0.07, 0.05, 0.08, 0.06,
+                0.09, 0.12, 0.16, 0.22, 0.31, 0.48, 0.66, 0.88,
+                0.62, 0.44, 0.35, 0.27, 0.21, 0.17, 0.12, 0.09,
+                0.07, 0.06, 0.05, 0.04, 0.03, 0.04, 0.03, 0.02, 0.02
+            ]
+        }
+#endif
+        return viewModel.speechAudioLevels
+    }
+
+    private var isSpeechSendButtonEnabled: Bool {
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-showSpeechRecordingBarForScreenshots") {
+            return true
+        }
+#endif
+        return canSend
+    }
+
     private var showsReasoningEffortMeter: Bool {
         !viewModel.isSending && ChatReasoningEffortPresentationPolicy.showsMeter(
             isComposerFocused: isComposerFocused,
@@ -733,6 +784,19 @@ struct ChatScreen: View {
     }
 
     private var composerInputCard: some View {
+        Group {
+            if isSpeechRecordingBarPresented {
+                speechRecordingBar
+                    .transition(.scale(scale: 0.97).combined(with: .opacity))
+            } else {
+                standardComposerInputCard
+                    .transition(.opacity)
+            }
+        }
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isSpeechRecordingBarPresented)
+    }
+
+    private var standardComposerInputCard: some View {
         VStack(spacing: 0) {
             HStack(alignment: isComposerExpanded ? .top : .center, spacing: isComposerExpanded ? 0 : 8) {
                 composerPlusMenuButton
@@ -797,6 +861,78 @@ struct ChatScreen: View {
                 .stroke(Color(uiColor: .separator).opacity(0.16), lineWidth: 1)
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: isComposerExpanded)
+    }
+
+    private var speechRecordingBar: some View {
+        HStack(spacing: 10) {
+            Button {
+                viewModel.cancelSpeechRecognition()
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.13))
+                        .frame(width: 34, height: 34)
+                    Image(systemName: "xmark")
+                        .font(.system(size: 23, weight: .medium))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(L10n.text("音声入力をキャンセル")))
+            .accessibilityIdentifier("chat-speech-cancel-button")
+
+            SpeechWaveformView(levels: displayedSpeechAudioLevels)
+                .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32)
+                .accessibilityHidden(true)
+
+            Button {
+                viewModel.stopSpeechRecognition()
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.13))
+                        .frame(width: 34, height: 34)
+                    RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                        .fill(.white)
+                        .frame(width: 17, height: 17)
+                }
+                .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(L10n.text("音声入力を停止")))
+            .accessibilityIdentifier("chat-speech-stop-button")
+
+            Button {
+                isComposerFocused = false
+                scrollToLatestRequest &+= 1
+                viewModel.sendMessage()
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(.white)
+                        .frame(width: 34, height: 34)
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(.black)
+                }
+                .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .disabled(!isSpeechSendButtonEnabled)
+            .opacity(isSpeechSendButtonEnabled ? 1 : 0.45)
+            .accessibilityLabel(Text(L10n.text("音声入力を送信")))
+            .accessibilityIdentifier("chat-speech-send-button")
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 56)
+        .background(Color(uiColor: UIColor(white: 0.12, alpha: 1)))
+        .clipShape(Capsule())
+        .overlay {
+            Capsule()
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.22), radius: 8, y: 3)
     }
 
     @ViewBuilder

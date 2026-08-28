@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import Speech
 import AVFoundation
+import Accelerate
 
 enum SpeechRecognitionError: LocalizedError {
     case notAvailable
@@ -38,9 +39,25 @@ struct SpeechRecognitionSessionState {
     }
 }
 
+struct SpeechAudioLevelHistory {
+    static let capacity = 34
+
+    private(set) var values = Array(repeating: Float.zero, count: capacity)
+
+    mutating func reset() {
+        values = Array(repeating: .zero, count: Self.capacity)
+    }
+
+    mutating func append(_ level: Float) {
+        values.removeFirst()
+        values.append(min(max(level, 0), 1))
+    }
+}
+
 @MainActor
 final class SpeechRecognitionService: ObservableObject {
     @Published private(set) var isRecording = false
+    @Published private(set) var audioLevels = SpeechAudioLevelHistory().values
     @Published var error: SpeechRecognitionError?
 
     var onTranscription: ((String) -> Void)?
@@ -52,6 +69,7 @@ final class SpeechRecognitionService: ObservableObject {
     private var pendingStartTask: Task<Void, Never>?
     private var hasInstalledInputTap = false
     private var sessionState = SpeechRecognitionSessionState()
+    private var audioLevelHistory = SpeechAudioLevelHistory()
 
     init() {
         speechRecognizer = SFSpeechRecognizer(locale: Locale.current)
@@ -175,6 +193,8 @@ final class SpeechRecognitionService: ObservableObject {
         }
         recognitionRequest = request
         let sessionID = sessionState.begin()
+        audioLevelHistory.reset()
+        audioLevels = audioLevelHistory.values
 
         recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
             Task { @MainActor [weak self] in
@@ -204,8 +224,14 @@ final class SpeechRecognitionService: ObservableObject {
 
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             request.append(buffer)
+            let level = Self.normalizedAudioLevel(from: buffer)
+            Task { @MainActor [weak self] in
+                guard let self, self.sessionState.isActive(sessionID) else { return }
+                self.audioLevelHistory.append(level)
+                self.audioLevels = self.audioLevelHistory.values
+            }
         }
         hasInstalledInputTap = true
 
@@ -218,5 +244,23 @@ final class SpeechRecognitionService: ObservableObject {
             DiagnosticsLogger.log("Audio engine start failed", category: .app, error: error)
             stopRecording(cancelPendingStart: false)
         }
+    }
+
+    nonisolated private static func normalizedAudioLevel(from buffer: AVAudioPCMBuffer) -> Float {
+        guard let channelData = buffer.floatChannelData?.pointee,
+              buffer.frameLength > 0 else {
+            return 0
+        }
+
+        var meanSquare: Float = 0
+        vDSP_measqv(
+            channelData,
+            1,
+            &meanSquare,
+            vDSP_Length(buffer.frameLength)
+        )
+        let rootMeanSquare = sqrt(max(meanSquare, 0.000_000_1))
+        let decibels = 20 * log10(rootMeanSquare)
+        return min(max((decibels + 55) / 50, 0), 1)
     }
 }
