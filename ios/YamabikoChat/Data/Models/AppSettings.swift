@@ -54,6 +54,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var defaultModel: String
     var apiProvider: String
     var systemPrompt: String?
+    var isSystemPromptEnabled: Bool
     var systemPromptPresetsJSON: String
     var selectedSystemPromptPreset: String?
 
@@ -128,7 +129,6 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
 
     var isFusionModeEnabled: Bool
     var fusionPresetName: String
-    var fusionTaskType: String
     var fusionDebugModeEnabled: Bool
     var fusionLogPromptsEnabled: Bool
     var fusionCustomPresetJSON: String
@@ -209,6 +209,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         defaultModel = "gemini-2.5-flash"
         apiProvider = "GEMINI"
         systemPrompt = nil
+        isSystemPromptEnabled = true
         systemPromptPresetsJSON = "[]"
         selectedSystemPromptPreset = nil
 
@@ -283,7 +284,6 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
 
         isFusionModeEnabled = false
         fusionPresetName = "custom"
-        fusionTaskType = "auto"
         fusionDebugModeEnabled = false
         fusionLogPromptsEnabled = false
         fusionCustomPresetJSON = ""
@@ -383,10 +383,6 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         }
         normalized.fusionPresetName = FusionPresetLoader.presetLabel
         normalized.fusionCustomPresetJSON = normalized.normalizedFusionCustomPresetJSON()
-        let fusionTask = normalized.fusionTaskType
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        normalized.fusionTaskType = FusionTaskType(rawValue: fusionTask)?.rawValue ?? "auto"
         let layout = normalized.dualSplitLayout
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased()
@@ -834,6 +830,11 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         return systemPromptPresets().first { $0.name.caseInsensitiveCompare(selectedSystemPromptPreset) == .orderedSame }
     }
 
+    func effectiveSystemPrompt() -> String? {
+        guard isSystemPromptEnabled else { return nil }
+        return resolveSelectedSystemPromptPreset()?.prompt.nilIfBlank ?? systemPrompt?.nilIfBlank
+    }
+
     func buildGlobalProviderPresets(includeSystemPrompt: Bool = false) -> [ModelPreset] {
         let models = providerModelMap()
         if models.isEmpty {
@@ -860,7 +861,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
 
         let resolvedPrompt: String?
         if includeSystemPrompt {
-            resolvedPrompt = resolveSelectedSystemPromptPreset()?.prompt ?? systemPrompt
+            resolvedPrompt = effectiveSystemPrompt()
         } else {
             resolvedPrompt = nil
         }

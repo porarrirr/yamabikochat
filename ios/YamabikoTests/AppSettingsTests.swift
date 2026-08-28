@@ -87,6 +87,24 @@ final class AppSettingsTests: XCTestCase {
         }
         XCTAssertEqual(settings?.superGrokReasoningEnabled, true)
         XCTAssertEqual(settings?.superGrokReasoningEffort, "medium")
+        XCTAssertEqual(settings?.isSystemPromptEnabled, true)
+    }
+
+    func testDisabledSystemPromptResolvesToNilWithoutDestroyingDraft() throws {
+        var settings = AppSettings()
+        settings.systemPrompt = "draft prompt"
+        settings.systemPromptPresetsJSON = String(
+            data: try JSONEncoder().encode([
+                SystemPromptPreset(name: "Review", prompt: "preset prompt")
+            ]),
+            encoding: .utf8
+        ) ?? "[]"
+        settings.selectedSystemPromptPreset = "Review"
+        settings.isSystemPromptEnabled = false
+
+        XCTAssertNil(settings.effectiveSystemPrompt())
+        XCTAssertEqual(settings.systemPrompt, "draft prompt")
+        XCTAssertEqual(settings.selectedSystemPromptPreset, "Review")
     }
 
     func testModelForProviderReturnsAppleIntelligenceDisplayModel() {

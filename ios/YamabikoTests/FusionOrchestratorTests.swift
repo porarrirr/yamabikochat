@@ -37,7 +37,6 @@ final class FusionOrchestratorTests: XCTestCase {
             preset: "quality",
             timeoutMs: 5_000,
             allowWebSearch: false,
-            taskType: .research,
             metadata: [:]
         )
     }

@@ -117,6 +117,7 @@ enum AppDatabase {
                 t.column("defaultModel", .text).notNull()
                 t.column("apiProvider", .text).notNull()
                 t.column("systemPrompt", .text)
+                t.column("isSystemPromptEnabled", .boolean).notNull().defaults(to: true)
                 t.column("systemPromptPresetsJSON", .text).notNull().defaults(to: "[]")
                 t.column("selectedSystemPromptPreset", .text)
 
@@ -882,6 +883,15 @@ enum AppDatabase {
                 unique: true,
                 ifNotExists: true
             )
+        }
+
+        migrator.registerMigration("v25_system_prompt_enabled") { db in
+            let columns = Set(try db.columns(in: "settings").map(\.name))
+            if !columns.contains("isSystemPromptEnabled") {
+                try db.alter(table: "settings") { table in
+                    table.add(column: "isSystemPromptEnabled", .boolean).notNull().defaults(to: true)
+                }
+            }
         }
 
         return migrator

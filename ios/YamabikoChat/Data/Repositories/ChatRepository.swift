@@ -136,7 +136,7 @@ final class ChatRepository {
             title: "New Chat",
             model: currentSettings.currentModel(),
             provider: currentSettings.apiProvider,
-            systemPrompt: currentSettings.systemPrompt
+            systemPrompt: currentSettings.effectiveSystemPrompt()
         )
     }
 
@@ -148,7 +148,10 @@ final class ChatRepository {
         }
 
         let currentSettings = try settingsForNewConversation()
-        let resolvedPrompt = try resolveSystemPromptForProject(projectId: projectId, fallbackPrompt: currentSettings.systemPrompt)
+        let resolvedPrompt = try resolveSystemPromptForProject(
+            projectId: projectId,
+            fallbackPrompt: currentSettings.effectiveSystemPrompt()
+        )
         return try conversations.createConversation(
             title: title,
             model: currentSettings.currentModel(),
@@ -169,7 +172,7 @@ final class ChatRepository {
         let currentSettings = try settingsForNewConversation()
         let resolvedPrompt = try resolveSystemPromptForProject(
             projectId: projectId,
-            fallbackPrompt: currentSettings.systemPrompt
+            fallbackPrompt: currentSettings.effectiveSystemPrompt()
         )
         return try conversations.createConversation(
             title: "New Chat",
@@ -187,7 +190,10 @@ final class ChatRepository {
 
     func createSecretConversation(projectId: Int64? = nil) throws -> Int64 {
         let currentSettings = try settingsForNewConversation()
-        let resolvedPrompt = try resolveSystemPromptForProject(projectId: projectId, fallbackPrompt: currentSettings.systemPrompt)
+        let resolvedPrompt = try resolveSystemPromptForProject(
+            projectId: projectId,
+            fallbackPrompt: currentSettings.effectiveSystemPrompt()
+        )
         return try conversations.createConversation(
             title: "Secret Chat",
             model: currentSettings.currentModel(),
@@ -417,7 +423,8 @@ final class ChatRepository {
         if let previousSettings {
             let previousProvider = previousSettings.apiProvider.uppercased()
             let previousModel = previousSettings.currentModel()
-            let previousPrompt = previousSettings.systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let previousPrompt = previousSettings.effectiveSystemPrompt()?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
 
             let conversationProvider = conversation.apiProvider.uppercased()
             let conversationModel = conversation.model.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -436,7 +443,8 @@ final class ChatRepository {
 
         let nextProvider = currentSettings.apiProvider.uppercased()
         let nextModel = currentSettings.currentModel()
-        let nextPrompt = currentSettings.systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nextPrompt = currentSettings.effectiveSystemPrompt()?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
 
         if conversation.apiProvider.uppercased() == nextProvider &&
             conversation.model == nextModel &&
@@ -1179,14 +1187,12 @@ final class ChatRepository {
         let isFirstMessage = try conversations.isConversationEmpty(conversationId: conversationId)
         let normalizedAttachments = attachments.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
-        let taskType = FusionTaskType(rawValue: settings.fusionTaskType.lowercased()) ?? .auto
         let allowWebSearchOverride: Bool? = settings.clientWebSearchToolEnabled ? nil : false
         let fusionRequest: FusionRequest
         do {
             fusionRequest = try FusionPresetLoader.buildRequest(
                 userPrompt: text,
                 systemPrompt: conversation.systemPrompt,
-                taskTypeOverride: taskType,
                 allowWebSearchOverride: allowWebSearchOverride,
                 customPresetJSON: settings.fusionCustomPresetJSON
             )
@@ -1410,7 +1416,7 @@ final class ChatRepository {
         if let trimmedOverride, !trimmedOverride.isEmpty {
             resolvedSystemPrompt = trimmedOverride
         } else {
-            resolvedSystemPrompt = settings.systemPrompt
+            resolvedSystemPrompt = settings.effectiveSystemPrompt()
         }
 
         let request = try await buildSingleTurnRequest(

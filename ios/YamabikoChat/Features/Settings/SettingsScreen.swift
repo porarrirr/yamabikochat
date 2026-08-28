@@ -329,12 +329,14 @@ struct SettingsScreen: View {
         Group {
             systemPromptPresetSection
 
-            Section("システムプロンプト") {
-                TextField("System prompt", text: Binding(
-                    get: { viewModel.settings.systemPrompt ?? "" },
-                    set: { viewModel.settings.systemPrompt = $0.nilIfBlank }
-                ), axis: .vertical)
-                .lineLimit(4 ... 12)
+            if viewModel.settings.isSystemPromptEnabled {
+                Section("システムプロンプト") {
+                    TextField("システムプロンプトを入力", text: Binding(
+                        get: { viewModel.settings.systemPrompt ?? "" },
+                        set: { viewModel.settings.systemPrompt = $0.nilIfBlank }
+                    ), axis: .vertical)
+                    .lineLimit(4 ... 12)
+                }
             }
         }
     }
@@ -1371,32 +1373,37 @@ struct SettingsScreen: View {
     }
 
     private var systemPromptPresetSection: some View {
-        Section("System Prompt Preset") {
+        Section("システムプロンプトプリセット") {
             Picker("選択中のプリセット", selection: Binding(
-                get: { viewModel.settings.selectedSystemPromptPreset ?? "" },
-                set: { newValue in
-                    viewModel.selectSystemPromptPreset(newValue.nilIfBlank)
-                }
+                get: { viewModel.systemPromptPickerSelection },
+                set: viewModel.selectSystemPromptOption
             )) {
-                Text("Custom").tag("")
+                Text("設定しない（オフ）").tag(SettingsViewModel.disabledSystemPromptSelection)
+                Text("新規作成").tag(SettingsViewModel.newSystemPromptSelection)
                 ForEach(viewModel.systemPromptPresets) { preset in
                     Text(preset.name).tag(preset.name)
                 }
             }
 
-            TextField("Preset Name", text: $viewModel.systemPromptPresetNameInput)
+            if viewModel.settings.isSystemPromptEnabled {
+                TextField("プリセット名", text: $viewModel.systemPromptPresetNameInput)
 
-            HStack {
-                Button("Save/Update Preset") {
-                    viewModel.addOrUpdateSystemPromptPreset()
-                }
-                .buttonStyle(.bordered)
+                HStack {
+                    Button(viewModel.settings.selectedSystemPromptPreset == nil ? "プリセットを作成" : "変更を保存") {
+                        viewModel.addOrUpdateSystemPromptPreset()
+                    }
+                    .buttonStyle(.borderedProminent)
 
-                Button("Remove Selected") {
-                    viewModel.removeSelectedSystemPromptPreset()
+                    Button("選択中を削除", role: .destructive) {
+                        viewModel.removeSelectedSystemPromptPreset()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.settings.selectedSystemPromptPreset == nil)
                 }
-                .buttonStyle(.bordered)
-                .disabled((viewModel.settings.selectedSystemPromptPreset ?? "").isEmpty)
+            } else {
+                Text("新しい会話にシステムプロンプトを設定しません。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             if viewModel.systemPromptPresets.isEmpty {

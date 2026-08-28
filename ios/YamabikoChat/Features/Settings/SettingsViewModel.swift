@@ -6,6 +6,9 @@ private let tokenStatsModelLimit = 12
 
 @MainActor
 final class SettingsViewModel: ObservableObject {
+    static let disabledSystemPromptSelection = "__SYSTEM_PROMPT_DISABLED__"
+    static let newSystemPromptSelection = "__SYSTEM_PROMPT_NEW__"
+
     @Published var settings: AppSettings = .init()
     @Published var apiKeyDraft: String = ""
 
@@ -538,6 +541,13 @@ final class SettingsViewModel: ObservableObject {
         settings.systemPromptPresets()
     }
 
+    var systemPromptPickerSelection: String {
+        if !settings.isSystemPromptEnabled {
+            return Self.disabledSystemPromptSelection
+        }
+        return settings.resolveSelectedSystemPromptPreset()?.name ?? Self.newSystemPromptSelection
+    }
+
     func addOrUpdateOpenAICompatPreset() {
         guard let name = openAICompatPresetNameInput.nilIfBlank else {
             errorMessage = L10n.text("プリセット名を入力してください")
@@ -883,6 +893,24 @@ final class SettingsViewModel: ObservableObject {
         saveFusionCustomPreset(preset)
     }
 
+    func applyFusionModelToAllSlots(provider: String, modelId: String) {
+        let normalizedProvider = provider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let normalizedModel = modelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedProvider.isEmpty, !normalizedModel.isEmpty else { return }
+
+        var preset = fusionCustomPreset
+        for index in preset.panelModels.indices {
+            preset.panelModels[index].provider = normalizedProvider
+            preset.panelModels[index].modelId = normalizedModel
+        }
+        preset.judgeModel.provider = normalizedProvider
+        preset.judgeModel.modelId = normalizedModel
+        preset.synthesizerModel.provider = normalizedProvider
+        preset.synthesizerModel.modelId = normalizedModel
+        saveFusionCustomPreset(preset)
+        statusMessage = L10n.text("Fusionの全モデルに一括設定を適用しました")
+    }
+
     func setAutoConversationEnabled(_ enabled: Bool) {
         settings.isAutoConversationEnabled = enabled
         if enabled {
@@ -891,15 +919,26 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    func selectSystemPromptOption(_ selection: String) {
+        switch selection {
+        case Self.disabledSystemPromptSelection:
+            settings.isSystemPromptEnabled = false
+        case Self.newSystemPromptSelection:
+            settings.isSystemPromptEnabled = true
+            settings.selectedSystemPromptPreset = nil
+            settings.systemPrompt = nil
+            systemPromptPresetNameInput = ""
+        default:
+            selectSystemPromptPreset(selection)
+        }
+    }
+
     func selectSystemPromptPreset(_ name: String?) {
-        guard let selected = name?.nilIfBlank else {
-            settings.selectedSystemPromptPreset = nil
-            return
-        }
-        guard let preset = systemPromptPresets.first(where: { $0.name.caseInsensitiveCompare(selected) == .orderedSame }) else {
-            settings.selectedSystemPromptPreset = nil
-            return
-        }
+        guard let selected = name?.nilIfBlank,
+              let preset = systemPromptPresets.first(where: {
+                  $0.name.caseInsensitiveCompare(selected) == .orderedSame
+              }) else { return }
+        settings.isSystemPromptEnabled = true
         settings.selectedSystemPromptPreset = preset.name
         settings.systemPrompt = preset.prompt
         systemPromptPresetNameInput = preset.name
@@ -916,7 +955,20 @@ final class SettingsViewModel: ObservableObject {
         }
 
         var presets = systemPromptPresets
-        if let index = presets.firstIndex(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+        if let selected = settings.selectedSystemPromptPreset?.nilIfBlank,
+           let index = presets.firstIndex(where: {
+               $0.name.caseInsensitiveCompare(selected) == .orderedSame
+           }) {
+            if presets.enumerated().contains(where: { candidateIndex, preset in
+                candidateIndex != index && preset.name.caseInsensitiveCompare(name) == .orderedSame
+            }) {
+                errorMessage = L10n.text("同じ名前のプリセットがすでにあります")
+                return
+            }
+            presets[index] = SystemPromptPreset(name: name, prompt: prompt)
+        } else if let index = presets.firstIndex(where: {
+            $0.name.caseInsensitiveCompare(name) == .orderedSame
+        }) {
             presets[index] = SystemPromptPreset(name: name, prompt: prompt)
         } else {
             presets.append(SystemPromptPreset(name: name, prompt: prompt))
@@ -924,6 +976,7 @@ final class SettingsViewModel: ObservableObject {
 
         if let data = try? JSONEncoder().encode(presets), let json = String(data: data, encoding: .utf8) {
             settings.systemPromptPresetsJSON = json
+            settings.isSystemPromptEnabled = true
             settings.selectedSystemPromptPreset = name
             statusMessage = L10n.text("システムプロンプトプリセットを保存しました")
         } else {
@@ -940,6 +993,7 @@ final class SettingsViewModel: ObservableObject {
         if let data = try? JSONEncoder().encode(presets), let json = String(data: data, encoding: .utf8) {
             settings.systemPromptPresetsJSON = json
             settings.selectedSystemPromptPreset = nil
+            settings.systemPrompt = nil
             systemPromptPresetNameInput = ""
             statusMessage = L10n.text("システムプロンプトプリセットを削除しました")
         } else {
@@ -1205,6 +1259,8 @@ final class SettingsViewModel: ObservableObject {
     private func syncSystemPromptPresetName() {
         if let selected = settings.selectedSystemPromptPreset?.nilIfBlank {
             systemPromptPresetNameInput = selected
+        } else {
+            systemPromptPresetNameInput = ""
         }
     }
 

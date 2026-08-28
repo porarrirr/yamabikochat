@@ -1,7 +1,6 @@
 import Foundation
 
 struct FusionPresetDefinition: Codable, Sendable, Equatable {
-    var taskType: FusionTaskType
     /// Legacy persisted field retained for backward-compatible decoding.
     var timeoutMs: Int
     var allowWebSearch: Bool
@@ -38,18 +37,11 @@ enum FusionPresetLoader {
     static func buildRequest(
         userPrompt: String,
         systemPrompt: String? = nil,
-        taskTypeOverride: FusionTaskType = .auto,
         allowWebSearchOverride: Bool? = nil,
         customPresetJSON: String = "",
         metadata: [String: String] = [:]
     ) throws -> FusionRequest {
         let preset = try resolveDefinition(customPresetJSON: customPresetJSON)
-        let resolvedTaskType: FusionTaskType
-        if taskTypeOverride == .auto {
-            resolvedTaskType = preset.taskType
-        } else {
-            resolvedTaskType = taskTypeOverride
-        }
         let allowWebSearch = allowWebSearchOverride ?? preset.allowWebSearch
 
         return FusionRequest(
@@ -61,7 +53,6 @@ enum FusionPresetLoader {
             preset: presetLabel,
             timeoutMs: preset.timeoutMs,
             allowWebSearch: allowWebSearch,
-            taskType: resolvedTaskType,
             metadata: metadata
         )
     }

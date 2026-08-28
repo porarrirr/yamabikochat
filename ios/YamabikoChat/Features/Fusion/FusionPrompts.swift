@@ -5,25 +5,6 @@ enum FusionPrompts {
         You are one member of an analysis panel. Answer the user's request independently. Be precise. State uncertainty. Include assumptions. Do not mention other models.
         """
 
-    static let researchAddendum = """
-        Structure your answer with:
-        - Direct answer
-        - Evidence
-        - Assumptions
-        - Uncertainty
-        - Missing information
-        - Possible counterarguments
-        """
-
-    static let codingAddendum = """
-        Structure your answer with:
-        - Diagnosis
-        - Proposed implementation
-        - Risks
-        - Tests
-        - Edge cases
-        """
-
     static let judgeJSONSchema = """
         {
           "consensus": ["..."],
@@ -62,13 +43,8 @@ enum FusionPrompts {
         }
         """
 
-    static func panelSystemPrompt(taskType: FusionTaskType) -> String {
-        switch taskType {
-        case .coding:
-            return panelBase + "\n\n" + codingAddendum
-        case .research, .auto:
-            return panelBase + "\n\n" + researchAddendum
-        }
+    static func panelSystemPrompt() -> String {
+        panelBase
     }
 
     static func judgeSystemPrompt() -> String {

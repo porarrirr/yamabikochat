@@ -24,6 +24,83 @@ private final class SettingsViewModelCredentialStore: SecureCredentialStore {
 
 final class SettingsViewModelTests: XCTestCase {
     @MainActor
+    func testSelectingNewSystemPromptClearsPreviousPresetDraft() throws {
+        let viewModel = SettingsViewModel()
+        viewModel.settings.systemPromptPresetsJSON = String(
+            data: try JSONEncoder().encode([
+                SystemPromptPreset(name: "Review", prompt: "Review carefully")
+            ]),
+            encoding: .utf8
+        ) ?? "[]"
+        viewModel.selectSystemPromptPreset("Review")
+
+        viewModel.selectSystemPromptOption(SettingsViewModel.newSystemPromptSelection)
+
+        XCTAssertTrue(viewModel.settings.isSystemPromptEnabled)
+        XCTAssertNil(viewModel.settings.selectedSystemPromptPreset)
+        XCTAssertNil(viewModel.settings.systemPrompt)
+        XCTAssertEqual(viewModel.systemPromptPresetNameInput, "")
+        XCTAssertEqual(viewModel.systemPromptPickerSelection, SettingsViewModel.newSystemPromptSelection)
+    }
+
+    @MainActor
+    func testSelectingDisabledSystemPromptKeepsDraftButStopsApplyingIt() throws {
+        let viewModel = SettingsViewModel()
+        viewModel.settings.systemPromptPresetsJSON = String(
+            data: try JSONEncoder().encode([
+                SystemPromptPreset(name: "Review", prompt: "Review carefully")
+            ]),
+            encoding: .utf8
+        ) ?? "[]"
+        viewModel.selectSystemPromptPreset("Review")
+
+        viewModel.selectSystemPromptOption(SettingsViewModel.disabledSystemPromptSelection)
+
+        XCTAssertFalse(viewModel.settings.isSystemPromptEnabled)
+        XCTAssertNil(viewModel.settings.effectiveSystemPrompt())
+        XCTAssertEqual(viewModel.settings.selectedSystemPromptPreset, "Review")
+        XCTAssertEqual(viewModel.systemPromptPickerSelection, SettingsViewModel.disabledSystemPromptSelection)
+    }
+
+    @MainActor
+    func testSavingSelectedSystemPromptPresetRenamesInsteadOfDuplicatingIt() throws {
+        let viewModel = SettingsViewModel()
+        viewModel.settings.systemPromptPresetsJSON = String(
+            data: try JSONEncoder().encode([
+                SystemPromptPreset(name: "Review", prompt: "Old prompt")
+            ]),
+            encoding: .utf8
+        ) ?? "[]"
+        viewModel.selectSystemPromptPreset("Review")
+        viewModel.systemPromptPresetNameInput = "Careful Review"
+        viewModel.settings.systemPrompt = "New prompt"
+
+        viewModel.addOrUpdateSystemPromptPreset()
+
+        XCTAssertEqual(viewModel.systemPromptPresets, [
+            SystemPromptPreset(name: "Careful Review", prompt: "New prompt")
+        ])
+        XCTAssertEqual(viewModel.settings.selectedSystemPromptPreset, "Careful Review")
+    }
+
+    @MainActor
+    func testApplyFusionModelToAllSlotsUpdatesEveryExecutionRole() {
+        let viewModel = SettingsViewModel()
+        viewModel.ensureFusionCustomPresetInitialized()
+
+        viewModel.applyFusionModelToAllSlots(provider: " openai ", modelId: " gpt-5 ")
+
+        let preset = viewModel.fusionCustomPreset
+        XCTAssertTrue(preset.panelModels.allSatisfy {
+            $0.provider == "OPENAI" && $0.modelId == "gpt-5"
+        })
+        XCTAssertEqual(preset.judgeModel.provider, "OPENAI")
+        XCTAssertEqual(preset.judgeModel.modelId, "gpt-5")
+        XCTAssertEqual(preset.synthesizerModel.provider, "OPENAI")
+        XCTAssertEqual(preset.synthesizerModel.modelId, "gpt-5")
+    }
+
+    @MainActor
     func testGeminiRotationCatalogProviderUsesModelsDevGoogleModels() throws {
         let providers = try ModelsDevCatalogRepository.parseCatalog(Data(Self.modelsDevGeminiFixture.utf8))
         let viewModel = SettingsViewModel()

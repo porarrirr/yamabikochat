@@ -38,7 +38,6 @@ final class FusionService {
         let request = try FusionPresetLoader.buildRequest(
             userPrompt: userPrompt,
             systemPrompt: options.systemPrompt,
-            taskTypeOverride: options.taskType,
             allowWebSearchOverride: allowWebSearch ? nil : false,
             customPresetJSON: settings.fusionCustomPresetJSON
         )

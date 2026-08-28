@@ -29,7 +29,7 @@ struct FusionOrchestrator: Sendable {
 
         let panelResults = await FusionPanelRunner.runAll(
             request: request,
-            panelSystemPrompt: FusionPrompts.panelSystemPrompt(taskType: request.taskType),
+            panelSystemPrompt: FusionPrompts.panelSystemPrompt(),
             buildPanelRequest: { panel, systemPrompt in
                 try await buildRequest(panel, systemPrompt, .panel, request.allowWebSearch)
             },

@@ -1252,17 +1252,9 @@ private struct DualSplitContainer<First: View, Second: View>: View {
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         } else {
-            ViewThatFits(in: .horizontal) {
-                DualRatioLayout(ratio: splitRatio, spacing: 12) {
-                    first()
-                    second()
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    first()
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                    second()
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                }
+            DualRatioLayout(ratio: splitRatio, spacing: 12) {
+                first()
+                second()
             }
         }
     }
@@ -1271,7 +1263,6 @@ private struct DualSplitContainer<First: View, Second: View>: View {
 private struct DualRatioLayout: Layout {
     let ratio: Double
     let spacing: CGFloat
-    private let minimumPaneWidth: CGFloat = 220
 
     func sizeThatFits(
         proposal: ProposedViewSize,
@@ -1279,8 +1270,10 @@ private struct DualRatioLayout: Layout {
         cache: inout ()
     ) -> CGSize {
         guard subviews.count == 2 else { return .zero }
-        let minimumWidth = minimumPaneWidth * 2 + spacing
-        let width = max(proposal.width ?? minimumWidth, minimumWidth)
+        let intrinsicWidth = subviews.reduce(CGFloat.zero) {
+            $0 + $1.sizeThatFits(.unspecified).width
+        } + spacing
+        let width = max(proposal.width ?? intrinsicWidth, 0)
         let paneWidths = resolvedPaneWidths(totalWidth: width)
         let firstSize = subviews[0].sizeThatFits(.init(width: paneWidths.0, height: proposal.height))
         let secondSize = subviews[1].sizeThatFits(.init(width: paneWidths.1, height: proposal.height))
@@ -1308,9 +1301,22 @@ private struct DualRatioLayout: Layout {
     }
 
     private func resolvedPaneWidths(totalWidth: CGFloat) -> (CGFloat, CGFloat) {
+        DualSplitLayoutMetrics.paneWidths(
+            totalWidth: totalWidth,
+            spacing: spacing,
+            ratio: ratio
+        )
+    }
+}
+
+enum DualSplitLayoutMetrics {
+    static func paneWidths(
+        totalWidth: CGFloat,
+        spacing: CGFloat,
+        ratio: Double
+    ) -> (first: CGFloat, second: CGFloat) {
         let available = max(0, totalWidth - spacing)
-        let minimumRatio = available > 0 ? min(0.5, minimumPaneWidth / available) : 0.5
-        let clampedRatio = min(max(CGFloat(ratio), minimumRatio), 1 - minimumRatio)
+        let clampedRatio = min(max(CGFloat(ratio), 0.1), 0.9)
         return (available * clampedRatio, available * (1 - clampedRatio))
     }
 }

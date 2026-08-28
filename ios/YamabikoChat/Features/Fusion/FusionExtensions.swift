@@ -21,7 +21,6 @@ extension AppSettings {
 
     static func defaultFusionCustomPreset() -> FusionPresetDefinition {
         FusionPresetDefinition(
-            taskType: .research,
             timeoutMs: 120_000,
             allowWebSearch: true,
             panelModels: [

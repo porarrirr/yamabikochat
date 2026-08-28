@@ -3,6 +3,29 @@ import UIKit
 @testable import YamabikoChat
 
 final class ChatPresentationArchitectureTests: XCTestCase {
+    func testDualSideBySideLayoutFitsBothPanesInsidePhoneWidth() {
+        let widths = DualSplitLayoutMetrics.paneWidths(
+            totalWidth: 358,
+            spacing: 12,
+            ratio: 0.43
+        )
+
+        XCTAssertEqual(widths.first, 148.78, accuracy: 0.01)
+        XCTAssertEqual(widths.second, 197.22, accuracy: 0.01)
+        XCTAssertEqual(widths.first + 12 + widths.second, 358, accuracy: 0.01)
+    }
+
+    func testDualSideBySideLayoutClampsInvalidRatioWithoutChangingAxis() {
+        let widths = DualSplitLayoutMetrics.paneWidths(
+            totalWidth: 358,
+            spacing: 12,
+            ratio: 3
+        )
+
+        XCTAssertEqual(widths.first, 311.4, accuracy: 0.01)
+        XCTAssertEqual(widths.second, 34.6, accuracy: 0.01)
+    }
+
     func testComposerFocusClearsAtGenerationStartAndDoesNotRestoreAtCompletion() {
         var isFocused = true
 

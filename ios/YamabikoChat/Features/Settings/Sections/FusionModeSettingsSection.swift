@@ -3,6 +3,8 @@ import SwiftUI
 struct FusionModeSettingsSection: View {
     @ObservedObject var viewModel: SettingsViewModel
     @State private var panelPendingDeletion: PanelModelConfig?
+    @State private var bulkProvider = ""
+    @State private var bulkModel = ""
 
     private var chatVisibleProviderPresets: [ModelPreset] {
         viewModel.settings.chatVisibleGlobalProviderPresets()
@@ -28,15 +30,51 @@ struct FusionModeSettingsSection: View {
 
             if viewModel.settings.isFusionModeEnabled {
                 Section(L10n.text("Fusion 設定")) {
-                    Picker(L10n.text("Task type"), selection: $viewModel.settings.fusionTaskType) {
-                        Text(L10n.text("Auto")).tag("auto")
-                        Text(L10n.text("Research")).tag("research")
-                        Text(L10n.text("Coding")).tag("coding")
+                    DisclosureGroup(L10n.text("詳細設定")) {
+                        Toggle(L10n.text("Debug mode"), isOn: $viewModel.settings.fusionDebugModeEnabled)
+                        Toggle(L10n.text("Log prompts in trace"), isOn: $viewModel.settings.fusionLogPromptsEnabled)
                     }
-
-                    Toggle(L10n.text("Debug mode"), isOn: $viewModel.settings.fusionDebugModeEnabled)
-                    Toggle(L10n.text("Log prompts in trace"), isOn: $viewModel.settings.fusionLogPromptsEnabled)
                 }
+
+                Section(L10n.text("モデルを一括設定")) {
+                    FusionModelSlotForm(
+                        providerTitleKey: "Provider",
+                        provider: $bulkProvider,
+                        modelTitleKey: "Model",
+                        model: $bulkModel,
+                        providerPresets: chatVisibleProviderPresets,
+                        catalogProviders: viewModel.modelsDevCatalogState.providers,
+                        onProviderPresetSelected: { preset in
+                            bulkProvider = preset.apiProvider
+                            bulkModel = preset.model
+                        },
+                        openRouterModels: viewModel.openRouterModels,
+                        openRouterModelsLoading: viewModel.openRouterModelsLoading,
+                        openRouterModelsError: viewModel.openRouterModelsError,
+                        onRefreshOpenRouterModels: refreshOpenRouterModels,
+                        onProviderChanged: handleProviderChanged
+                    )
+
+                    Button {
+                        viewModel.applyFusionModelToAllSlots(
+                            provider: bulkProvider,
+                            modelId: bulkModel
+                        )
+                    } label: {
+                        Label(L10n.text("すべてのモデルに適用"), systemImage: "square.stack.3d.up.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(
+                        bulkProvider.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        bulkModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
+
+                    Text(L10n.text("Panel・Judge・Synthesizerを同じモデルにまとめて設定します。"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .onAppear(perform: initializeBulkModelIfNeeded)
 
                 modelSections
             }
@@ -156,6 +194,13 @@ struct FusionModeSettingsSection: View {
         guard provider.caseInsensitiveCompare("OPENROUTER") == .orderedSame,
               viewModel.openRouterModels.isEmpty else { return }
         refreshOpenRouterModels()
+    }
+
+    private func initializeBulkModelIfNeeded() {
+        guard bulkProvider.isEmpty, bulkModel.isEmpty,
+              let firstPanel = viewModel.fusionCustomPreset.panelModels.first else { return }
+        bulkProvider = firstPanel.provider
+        bulkModel = firstPanel.modelId
     }
 
     private func panelProviderBinding(at index: Int, fallback: String) -> Binding<String> {

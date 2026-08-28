@@ -80,12 +80,6 @@ struct FusionProgressSnapshot: Sendable, Equatable {
     }
 }
 
-enum FusionTaskType: String, Codable, Sendable, CaseIterable {
-    case research
-    case coding
-    case auto
-}
-
 enum FusionConfidence: String, Codable, Sendable {
     case low
     case medium
@@ -142,7 +136,6 @@ struct FusionRequest: Codable, Sendable, Equatable {
     /// Legacy preset field retained for compatibility; Fusion does not enforce it.
     var timeoutMs: Int
     var allowWebSearch: Bool
-    var taskType: FusionTaskType
     var metadata: [String: String]
 }
 
@@ -264,7 +257,6 @@ struct FusionContext: Sendable, Equatable {
 }
 
 struct FusionRunOptions: Sendable, Equatable {
-    var taskType: FusionTaskType
     var systemPrompt: String?
     var debugMode: Bool
     var logPrompts: Bool
@@ -273,7 +265,6 @@ struct FusionRunOptions: Sendable, Equatable {
     var allowWebSearch: Bool?
 
     init(
-        taskType: FusionTaskType = .auto,
         systemPrompt: String? = nil,
         debugMode: Bool = false,
         logPrompts: Bool = false,
@@ -281,7 +272,6 @@ struct FusionRunOptions: Sendable, Equatable {
         conversationId: Int64? = nil,
         allowWebSearch: Bool? = nil
     ) {
-        self.taskType = taskType
         self.systemPrompt = systemPrompt
         self.debugMode = debugMode
         self.logPrompts = logPrompts

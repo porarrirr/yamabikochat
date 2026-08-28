@@ -15,7 +15,6 @@ final class FusionProgressSnapshotTests: XCTestCase {
             preset: "quality",
             timeoutMs: 5_000,
             allowWebSearch: false,
-            taskType: .auto,
             metadata: [:]
         )
     }
