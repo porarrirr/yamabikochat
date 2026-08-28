@@ -74,6 +74,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var previousFusionDebugModeEnabled = false
     private var previousDualSplitLayout = "VERTICAL"
     private var previousDualSplitRatio = 0.5
+    private var isTimelineVisible = true
 
     var regeneratableMessageID: Int64?
     var mathRenderingEnabled = true
@@ -170,6 +171,21 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         }
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        isTimelineVisible = true
+        // Viewport compensation is only valid for the exact visible streaming
+        // frame that created it. A cached conversation can otherwise restore a
+        // temporary bottom inset after navigating back to it.
+        cancelPendingViewportRestoreForNavigation()
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        isTimelineVisible = false
+        cancelPendingViewportRestoreForNavigation()
+    }
+
     func configure(
         store: ChatTimelineStore,
         scrollToLatestRequest: Int,
@@ -259,7 +275,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         }
         switch kind {
         case .streamUpdate:
-            if case .detached = followState {
+            if isTimelineVisible, case .detached = followState {
                 pendingLocksViewport = true
             }
         case .completion:
@@ -551,6 +567,22 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         pendingViewportOffsetY = nil
         pendingLocksViewport = false
         clearViewportCompensation()
+    }
+
+    private func cancelPendingViewportRestoreForNavigation() {
+        pendingContentAnchor = nil
+        pendingViewportOffsetY = nil
+        pendingChangedRowIDs.removeAll()
+        pendingLocksViewport = false
+        clearViewportCompensation()
+        collectionView.layoutIfNeeded()
+        let boundedOffsetY = clampedOffset(collectionView.contentOffset.y)
+        if TailFollowPolicy.shouldAdjustOffset(
+            current: collectionView.contentOffset.y,
+            target: boundedOffsetY
+        ) {
+            collectionView.setContentOffset(CGPoint(x: 0, y: boundedOffsetY), animated: false)
+        }
     }
 }
 
