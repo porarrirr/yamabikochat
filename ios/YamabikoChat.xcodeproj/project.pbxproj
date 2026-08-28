@@ -193,6 +193,7 @@
 		C87C65B5CBF14396F4EEA0EF /* DiagnosticsLogSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05C37D0D1E0B6B81B135B457 /* DiagnosticsLogSanitizerTests.swift */; };
 		C912D70FEA5AD0AAB1133DC4 /* DualChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B5936D9B9C6967F14740D01 /* DualChatMessage.swift */; };
 		C95EBEEE38A3DB89CA703642 /* ChatRepositoryTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0EDF115D91DB6320D9ABDFB /* ChatRepositoryTestSupport.swift */; };
+		CB12D7CFB1B8C29BAE817866 /* SpeechRecognitionSessionStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026BA46E097022144B39AE5E /* SpeechRecognitionSessionStateTests.swift */; };
 		CB84951B547ABF8B5F8165A8 /* FusionChatRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52D76F0593BAF0C81C185D1A /* FusionChatRepositoryTests.swift */; };
 		CBA43EB2F7316E1E500DD052 /* Python.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 746C1014C219313E89E73158 /* Python.xcframework */; };
 		CC796C4E31F5856C31B44400 /* AppGroupShareStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 649A758B922A87BCDED9F80D /* AppGroupShareStorage.swift */; };
@@ -312,6 +313,7 @@
 		0034572985CEC32177512AA8 /* SettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModelTests.swift; sourceTree = "<group>"; };
 		00BE476866FB6887397FFD9C /* SharePayloadStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharePayloadStorageTests.swift; sourceTree = "<group>"; };
 		01D935EEC1AA59D41CD535CC /* LegalMarkdownParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMarkdownParser.swift; sourceTree = "<group>"; };
+		026BA46E097022144B39AE5E /* SpeechRecognitionSessionStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognitionSessionStateTests.swift; sourceTree = "<group>"; };
 		02841C260164C20D9258C6B7 /* YamabikoShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YamabikoShareExtension.entitlements; sourceTree = "<group>"; };
 		034AE03104FDC60C5D61A61C /* ConversationExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationExportService.swift; sourceTree = "<group>"; };
 		05C37D0D1E0B6B81B135B457 /* DiagnosticsLogSanitizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsLogSanitizerTests.swift; sourceTree = "<group>"; };
@@ -1082,6 +1084,7 @@
 				00BE476866FB6887397FFD9C /* SharePayloadStorageTests.swift */,
 				96F5E643C3B8B25C7549BF97 /* ShortcutModelOptionsTests.swift */,
 				4D4722F97724588E0999ECF0 /* ShortcutRunTests.swift */,
+				026BA46E097022144B39AE5E /* SpeechRecognitionSessionStateTests.swift */,
 				9178993F37A8DA121B60998F /* StrReplaceEditorToolTests.swift */,
 				BC0B20D5E71F535CE4C00984 /* SuperGrokAuthRepositoryTests.swift */,
 				0F0B056D22F60CAD49BD2587 /* SvgCodeExtractorTests.swift */,
@@ -1502,6 +1505,7 @@
 				1A99660ADDB01688C1C504C1 /* SharePayloadStorageTests.swift in Sources */,
 				B1072B8314BBF69CF1E144CF /* ShortcutModelOptionsTests.swift in Sources */,
 				309AC42FDD9CC6EFE435D1EA /* ShortcutRunTests.swift in Sources */,
+				CB12D7CFB1B8C29BAE817866 /* SpeechRecognitionSessionStateTests.swift in Sources */,
 				42B1B372E647BD23FA2CEA43 /* StrReplaceEditorToolTests.swift in Sources */,
 				9F821BBC03A11DCF2E9CE3E1 /* SuperGrokAuthRepositoryTests.swift in Sources */,
 				F385BC565CFD26EB915C163B /* SvgCodeExtractorTests.swift in Sources */,

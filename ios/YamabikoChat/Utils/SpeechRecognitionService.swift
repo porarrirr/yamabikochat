@@ -20,6 +20,24 @@ enum SpeechRecognitionError: LocalizedError {
     }
 }
 
+struct SpeechRecognitionSessionState {
+    private(set) var activeID: UUID?
+
+    mutating func begin() -> UUID {
+        let id = UUID()
+        activeID = id
+        return id
+    }
+
+    mutating func end() {
+        activeID = nil
+    }
+
+    func isActive(_ id: UUID) -> Bool {
+        activeID == id
+    }
+}
+
 @MainActor
 final class SpeechRecognitionService: ObservableObject {
     @Published private(set) var isRecording = false
@@ -33,6 +51,7 @@ final class SpeechRecognitionService: ObservableObject {
     private var speechRecognizer: SFSpeechRecognizer?
     private var pendingStartTask: Task<Void, Never>?
     private var hasInstalledInputTap = false
+    private var sessionState = SpeechRecognitionSessionState()
 
     init() {
         speechRecognizer = SFSpeechRecognizer(locale: Locale.current)
@@ -106,6 +125,9 @@ final class SpeechRecognitionService: ObservableObject {
             pendingStartTask = nil
         }
 
+        // Invalidate the session before cancelling. SFSpeechRecognizer can report
+        // cancellation as "No speech detected" even after partial text was delivered.
+        sessionState.end()
         audioEngine.stop()
         if hasInstalledInputTap {
             audioEngine.inputNode.removeTap(onBus: 0)
@@ -152,10 +174,15 @@ final class SpeechRecognitionService: ObservableObject {
             request.requiresOnDeviceRecognition = true
         }
         recognitionRequest = request
+        let sessionID = sessionState.begin()
 
         recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard self.sessionState.isActive(sessionID) else {
+                    // A callback from a manually stopped or superseded session.
+                    return
+                }
 
                 if let result {
                     let text = result.bestTranscription.formattedString
@@ -163,16 +190,11 @@ final class SpeechRecognitionService: ObservableObject {
 
                     if result.isFinal {
                         self.stopRecording()
+                        return
                     }
                 }
 
                 if let error {
-                    // Ignore cancellation errors from manual stop
-                    let nsError = error as NSError
-                    if nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 216 {
-                        // Recognition cancelled – expected on manual stop
-                        return
-                    }
                     self.error = .recognitionFailed(error.localizedDescription)
                     DiagnosticsLogger.log("Speech recognition failed", category: .app, error: error)
                     self.stopRecording()
