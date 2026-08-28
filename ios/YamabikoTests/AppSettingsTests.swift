@@ -107,6 +107,21 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.selectedSystemPromptPreset, "Review")
     }
 
+    func testBlankSelectedSystemPromptPresetFallsBackToTrimmedDraft() throws {
+        var settings = AppSettings()
+        settings.systemPrompt = "  draft prompt\n"
+        settings.systemPromptPresetsJSON = String(
+            data: try JSONEncoder().encode([
+                SystemPromptPreset(name: "Review", prompt: "  \n")
+            ]),
+            encoding: .utf8
+        ) ?? "[]"
+        settings.selectedSystemPromptPreset = "Review"
+        settings.isSystemPromptEnabled = true
+
+        XCTAssertEqual(settings.effectiveSystemPrompt(), "draft prompt")
+    }
+
     func testModelForProviderReturnsAppleIntelligenceDisplayModel() {
         var settings = AppSettings()
         settings.providerDefaultModelsJSON = #"{"APPLE_INTELLIGENCE":"legacy-model-id"}"#

@@ -832,7 +832,8 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
 
     func effectiveSystemPrompt() -> String? {
         guard isSystemPromptEnabled else { return nil }
-        return resolveSelectedSystemPromptPreset()?.prompt.nilIfBlank ?? systemPrompt?.nilIfBlank
+        return resolveSelectedSystemPromptPreset().flatMap { Self.nonBlank($0.prompt) }
+            ?? systemPrompt.flatMap(Self.nonBlank)
     }
 
     func buildGlobalProviderPresets(includeSystemPrompt: Bool = false) -> [ModelPreset] {
@@ -968,6 +969,11 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             return fallback
         }
         return trimmed
+    }
+
+    private static func nonBlank(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func resolveRemoteMCPURL(_ value: String) -> String? {
