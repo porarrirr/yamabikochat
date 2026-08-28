@@ -96,8 +96,8 @@ final class PiAgentGatewayTests: XCTestCase {
             endpoint: URL(string: "http://127.0.0.1:54321/")!,
             token: "test-token",
             readiness: PiRuntimeReadinessConfiguration(
-                startupAttempts: 1,
-                resumeAttempts: 1,
+                startupTimeout: .seconds(1),
+                resumeTimeout: .seconds(1),
                 retryDelay: .zero,
                 requestTimeout: 1
             ),
@@ -118,8 +118,8 @@ final class PiAgentGatewayTests: XCTestCase {
             endpoint: URL(string: "http://127.0.0.1:54321/")!,
             token: "test-token",
             readiness: PiRuntimeReadinessConfiguration(
-                startupAttempts: 1,
-                resumeAttempts: 4,
+                startupTimeout: .seconds(1),
+                resumeTimeout: .seconds(1),
                 retryDelay: .zero,
                 requestTimeout: 1
             ),
@@ -130,6 +130,26 @@ final class PiAgentGatewayTests: XCTestCase {
 
         let requestCount = await healthClient.count()
         XCTAssertEqual(requestCount, 4)
+    }
+
+    func testResumeReadinessUsesElapsedTimeInsteadOfAFragileAttemptLimit() async throws {
+        let healthClient = ScriptedPiRuntimeHealthClient(failures: 25)
+        let runtime = PiAgentRuntime(
+            endpoint: URL(string: "http://127.0.0.1:54321/")!,
+            token: "test-token",
+            readiness: PiRuntimeReadinessConfiguration(
+                startupTimeout: .seconds(1),
+                resumeTimeout: .seconds(1),
+                retryDelay: .milliseconds(1),
+                requestTimeout: 1
+            ),
+            healthClient: healthClient
+        )
+
+        try await runtime.prepareForForeground()
+
+        let requestCount = await healthClient.count()
+        XCTAssertEqual(requestCount, 26)
     }
 
     func testBundledPiRuntimeResolvesCurrentOpenCodeAndOpenRouterModels() async throws {

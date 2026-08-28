@@ -60,10 +60,10 @@ private struct PiHealthResponse: Decodable {
 }
 
 struct PiRuntimeReadinessConfiguration: Sendable {
-    var startupAttempts: Int = 100
-    var resumeAttempts: Int = 20
+    var startupTimeout: Duration = .seconds(30)
+    var resumeTimeout: Duration = .seconds(30)
     var retryDelay: Duration = .milliseconds(100)
-    var requestTimeout: TimeInterval = 0.75
+    var requestTimeout: TimeInterval = 1
 }
 
 protocol PiRuntimeHealthClient: Sendable {
@@ -283,7 +283,7 @@ actor PiAgentRuntime {
         _ = try await waitUntilHealthySingleFlight(
             endpoint: endpoint,
             token: token,
-            attempts: readiness.resumeAttempts,
+            timeout: readiness.resumeTimeout,
             context: "foreground"
         )
     }
@@ -658,7 +658,7 @@ actor PiAgentRuntime {
             _ = try await waitUntilHealthySingleFlight(
                 endpoint: endpoint,
                 token: token,
-                attempts: readiness.resumeAttempts,
+                timeout: readiness.resumeTimeout,
                 context: "request"
             )
             return (endpoint, token)
@@ -688,7 +688,7 @@ actor PiAgentRuntime {
             _ = try await self.waitUntilHealthySingleFlight(
                 endpoint: endpoint,
                 token: token,
-                attempts: self.readiness.startupAttempts,
+                timeout: self.readiness.startupTimeout,
                 context: "startup"
             )
             return (endpoint, token)
@@ -711,7 +711,7 @@ actor PiAgentRuntime {
     private func waitUntilHealthySingleFlight(
         endpoint: URL,
         token: String,
-        attempts: Int,
+        timeout: Duration,
         context: String
     ) async throws -> PiHealthResponse {
         if let healthTask {
@@ -729,7 +729,7 @@ actor PiAgentRuntime {
             try await Self.waitUntilHealthy(
                 endpoint: endpoint,
                 token: token,
-                attempts: attempts,
+                timeout: timeout,
                 context: context,
                 readiness: readiness,
                 healthClient: healthClient
@@ -749,7 +749,7 @@ actor PiAgentRuntime {
     private static func waitUntilHealthy(
         endpoint: URL,
         token: String,
-        attempts: Int,
+        timeout: Duration,
         context: String,
         readiness: PiRuntimeReadinessConfiguration,
         healthClient: any PiRuntimeHealthClient
@@ -761,9 +761,13 @@ actor PiAgentRuntime {
         health.cachePolicy = .reloadIgnoringLocalCacheData
         health.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         var lastFailure = "no response"
+        var attempt = 0
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
 
-        for attempt in 0 ..< attempts {
+        repeat {
             try Task.checkCancellation()
+            attempt += 1
             do {
                 let (data, response) = try await healthClient.data(for: health)
                 let statusCode = (response as? HTTPURLResponse)?.statusCode
@@ -774,7 +778,7 @@ actor PiAgentRuntime {
                         "Pi runtime health check succeeded",
                         category: .network,
                         metadata: [
-                            "attempt": String(attempt + 1),
+                            "attempt": String(attempt),
                             "context": context,
                             "port": endpoint.port.map(String.init) ?? "unknown"
                         ]
@@ -786,10 +790,11 @@ actor PiAgentRuntime {
             } catch {
                 lastFailure = "\(type(of: error)): \(error.localizedDescription)"
             }
-            if attempt + 1 < attempts {
-                try await Task.sleep(for: readiness.retryDelay)
-            }
-        }
+            let now = clock.now
+            guard now < deadline else { break }
+            let remaining = now.duration(to: deadline)
+            try await Task.sleep(for: min(readiness.retryDelay, remaining))
+        } while true
 
         let message = context == "startup"
             ? "Pi agent runtime did not start"
@@ -799,7 +804,7 @@ actor PiAgentRuntime {
             "Pi runtime health check timed out",
             category: .network,
             metadata: [
-                "attempts": String(attempts),
+                "attempts": String(attempt),
                 "context": context,
                 "lastFailure": lastFailure,
                 "port": endpoint.port.map(String.init) ?? "unknown"
