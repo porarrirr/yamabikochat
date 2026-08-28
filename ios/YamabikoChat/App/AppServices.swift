@@ -113,6 +113,7 @@ final class AppServices {
             providers: providerGateway,
             credentialStore: credentialStore,
             modelService: openRouterModelService,
+            modelsDevCatalogRepository: modelsDevCatalogRepository,
             skillRepository: skillRepository,
             requestSettingsResolver: requestSettingsResolver,
             codexAuthRepository: codexAuthRepository,

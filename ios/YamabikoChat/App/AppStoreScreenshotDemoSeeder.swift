@@ -19,13 +19,19 @@ enum AppStoreScreenshotDemoSeeder {
 
     @MainActor
     private static func seed(chatRepository: ChatRepository, conversations: ConversationRepository) throws {
+        let isReasoningEffortFixture = ProcessInfo.processInfo.arguments.contains(
+            "-ReasoningEffortSliderFixture"
+        )
         var settings = try chatRepository.loadSettings()
-        settings.themeMode = "LIGHT"
+        settings.themeMode = isReasoningEffortFixture ? "DARK" : "LIGHT"
         settings.dynamicColorEnabled = true
-        settings.isDualModeEnabled = true
+        settings.isDualModeEnabled = !isReasoningEffortFixture
+        settings.isFusionModeEnabled = false
         settings.isAutoConversationEnabled = false
-        settings.apiProvider = "OPENROUTER"
-        settings.defaultModel = "openai/gpt-4o-mini"
+        settings.apiProvider = isReasoningEffortFixture ? "CODEX_AUTH" : "OPENROUTER"
+        settings.defaultModel = isReasoningEffortFixture ? "gpt-5.6-terra" : "openai/gpt-4o-mini"
+        settings.codexReasoningEnabled = true
+        settings.codexReasoningEffort = "medium"
         settings.dualProviderA = "OPENAI"
         settings.dualModelA = "gpt-4o-mini"
         settings.dualProviderB = "GEMINI"

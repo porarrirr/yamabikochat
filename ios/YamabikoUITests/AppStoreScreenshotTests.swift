@@ -159,6 +159,47 @@ final class AppStoreScreenshotTests: XCTestCase {
         XCTAssertEqual(composer.value as? String, "あ\nい")
     }
 
+    func testReasoningEffortMeterOnlyAppearsWithKeyboardAndSliderChangesEffort() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-AppStoreScreenshotDemo",
+            "-ReasoningEffortSliderFixture",
+            "-ScreenshotScene", "chat"
+        ]
+        app.launch()
+
+        let composer = app.descendants(matching: .any)
+            .matching(identifier: "chat-composer")
+            .firstMatch
+        let meter = app.buttons["chat-reasoning-effort-button"].firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 20))
+        XCTAssertFalse(meter.exists)
+
+        composer.tap()
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        XCTAssertTrue(meter.waitForExistence(timeout: 5))
+        XCTAssertEqual(meter.value as? String, "medium")
+
+        meter.tap()
+        let slider = app.descendants(matching: .any)
+            .matching(identifier: "chat-reasoning-effort-slider")
+            .firstMatch
+        XCTAssertTrue(slider.waitForExistence(timeout: 5))
+        capture("reasoning-effort-slider-medium", app: app)
+
+        slider.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+        let selectedLabel = app.descendants(matching: .any)
+            .matching(identifier: "chat-reasoning-effort-value")
+            .firstMatch
+        XCTAssertTrue(selectedLabel.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            selectedLabel.label.contains("ultra"),
+            "The slider must expose the exact selected effort label"
+        )
+        XCTAssertTrue(keyboard.exists, "Adjusting effort must keep the software keyboard visible")
+    }
+
     func testLongPressOnChatTextUsesNativeTextSelection() throws {
         let app = XCUIApplication()
         app.launchArguments = [

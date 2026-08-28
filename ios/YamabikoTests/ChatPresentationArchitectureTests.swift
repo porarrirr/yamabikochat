@@ -36,6 +36,73 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         XCTAssertFalse(isFocused)
     }
 
+    func testReasoningEffortMeterRequiresFocusedComposerAndSoftwareKeyboard() {
+        let configuration = ChatReasoningEffortConfiguration(
+            providerID: "CODEX_AUTH",
+            modelID: "gpt-5.6-terra",
+            modelLabel: "GPT-5.6-Terra",
+            options: ["low", "medium", "high"],
+            selectedValue: "medium"
+        )
+
+        XCTAssertFalse(ChatReasoningEffortPresentationPolicy.showsMeter(
+            isComposerFocused: false,
+            isSoftwareKeyboardVisible: false,
+            configuration: configuration
+        ))
+        XCTAssertFalse(ChatReasoningEffortPresentationPolicy.showsMeter(
+            isComposerFocused: true,
+            isSoftwareKeyboardVisible: false,
+            configuration: configuration
+        ))
+        XCTAssertTrue(ChatReasoningEffortPresentationPolicy.showsMeter(
+            isComposerFocused: true,
+            isSoftwareKeyboardVisible: true,
+            configuration: configuration
+        ))
+        XCTAssertFalse(ChatReasoningEffortPresentationPolicy.showsMeter(
+            isComposerFocused: true,
+            isSoftwareKeyboardVisible: true,
+            configuration: nil
+        ))
+    }
+
+    func testReasoningEffortsUseIntuitiveOrderWithoutTranslatingLabels() {
+        XCTAssertEqual(
+            ChatReasoningEffortPresentationPolicy.orderedOptions(
+                ["xhigh", "high", "medium", "low", "minimal"]
+            ),
+            ["minimal", "low", "medium", "high", "xhigh"]
+        )
+        XCTAssertEqual(
+            ChatReasoningEffortPresentationPolicy.orderedOptions(
+                ["高程度", "中程度", "低程度"]
+            ),
+            ["高程度", "中程度", "低程度"]
+        )
+    }
+
+    func testReasoningEffortSliderMapsTrackEdgesAndMidpointToDiscreteOptions() {
+        XCTAssertEqual(ChatReasoningEffortPresentationPolicy.optionIndex(
+            for: 0,
+            width: 300,
+            optionCount: 5,
+            horizontalInset: 36
+        ), 0)
+        XCTAssertEqual(ChatReasoningEffortPresentationPolicy.optionIndex(
+            for: 150,
+            width: 300,
+            optionCount: 5,
+            horizontalInset: 36
+        ), 2)
+        XCTAssertEqual(ChatReasoningEffortPresentationPolicy.optionIndex(
+            for: 300,
+            width: 300,
+            optionCount: 5,
+            horizontalInset: 36
+        ), 4)
+    }
+
     func testComposerSynchronizationPreservesCaretForLocalEdits() {
         XCTAssertEqual(
             ChatComposerSynchronizationPolicy.action(

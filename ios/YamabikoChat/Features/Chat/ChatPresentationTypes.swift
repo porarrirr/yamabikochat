@@ -1,6 +1,95 @@
 import Foundation
 import SwiftUI
 
+struct ChatReasoningEffortConfiguration: Equatable, Sendable {
+    let providerID: String
+    let modelID: String
+    let modelLabel: String
+    let options: [String]
+    var selectedValue: String
+}
+
+enum ChatReasoningEffortPresentationPolicy {
+    private static let canonicalRanks: [String: Int] = [
+        "none": 0,
+        "minimal": 1,
+        "low": 2,
+        "medium": 3,
+        "high": 4,
+        "xhigh": 5,
+        "max": 6,
+        "ultra": 7
+    ]
+
+    static func orderedOptions(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        let unique = values.compactMap { rawValue -> String? in
+            let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let comparisonKey = value.lowercased()
+            guard !value.isEmpty, seen.insert(comparisonKey).inserted else { return nil }
+            return value
+        }
+
+        let ranked = unique.enumerated().map { index, value in
+            (index: index, value: value, rank: canonicalRanks[canonicalKey(value)])
+        }
+        guard ranked.allSatisfy({ $0.rank != nil }) else {
+            // Provider-specific or localized effort names remain in authoritative order.
+            return unique
+        }
+        return ranked.sorted { lhs, rhs in
+            guard lhs.rank == rhs.rank else { return lhs.rank! < rhs.rank! }
+            return lhs.index < rhs.index
+        }.map(\.value)
+    }
+
+    static func matchingOption(_ value: String?, in options: [String]) -> String? {
+        guard let value else { return nil }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        return options.first { $0.caseInsensitiveCompare(normalized) == .orderedSame }
+    }
+
+    static func showsMeter(
+        isComposerFocused: Bool,
+        isSoftwareKeyboardVisible: Bool,
+        configuration: ChatReasoningEffortConfiguration?
+    ) -> Bool {
+        isComposerFocused && isSoftwareKeyboardVisible && configuration != nil
+    }
+
+    static func optionIndex(
+        for locationX: CGFloat,
+        width: CGFloat,
+        optionCount: Int,
+        horizontalInset: CGFloat
+    ) -> Int? {
+        guard optionCount > 0, width.isFinite, width > 0 else { return nil }
+        guard optionCount > 1 else { return 0 }
+        let usableWidth = max(width - horizontalInset * 2, 1)
+        let fraction = min(max((locationX - horizontalInset) / usableWidth, 0), 1)
+        return Int((fraction * CGFloat(optionCount - 1)).rounded())
+    }
+
+    static func gaugeSymbolName(selectedValue: String, options: [String]) -> String {
+        guard let index = options.firstIndex(of: selectedValue), options.count > 1 else {
+            return "gauge.with.dots.needle.50percent"
+        }
+        let fraction = Double(index) / Double(options.count - 1)
+        switch fraction {
+        case ..<0.17: return "gauge.with.dots.needle.0percent"
+        case ..<0.42: return "gauge.with.dots.needle.33percent"
+        case ..<0.59: return "gauge.with.dots.needle.50percent"
+        case ..<0.84: return "gauge.with.dots.needle.67percent"
+        default: return "gauge.with.dots.needle.100percent"
+        }
+    }
+
+    private static func canonicalKey(_ value: String) -> String {
+        value.lowercased().filter { $0.isLetter || $0.isNumber }
+    }
+}
+
 enum ChatMode: String, CaseIterable, Identifiable, Sendable {
     case standard
     case dual

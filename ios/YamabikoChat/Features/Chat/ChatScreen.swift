@@ -411,6 +411,8 @@ struct ChatScreen: View {
     @State private var composerSelection: String?
     @StateObject private var recentPhotoLibrary = RecentPhotoLibrary()
     @State private var isComposerFocused = false
+    @State private var isSoftwareKeyboardVisible = false
+    @State private var isReasoningEffortPanelPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -512,19 +514,48 @@ struct ChatScreen: View {
                 .padding(.top, 4)
                 .padding(.bottom, 8)
                 .background(Color.chatScreenBackground)
+                .opacity(showsReasoningEffortPanel ? 0 : 1)
         }
         .background(Color.chatScreenBackground)
+        .overlay {
+            if showsReasoningEffortPanel,
+               let configuration = viewModel.reasoningEffortConfiguration {
+                reasoningEffortOverlay(configuration: configuration)
+                    .transition(.opacity)
+                    .zIndex(10)
+            }
+        }
         .onChange(of: viewModel.isSending) { _, isSending in
             isComposerFocused = ChatComposerFocusPolicy.focusState(
                 current: isComposerFocused,
                 isSending: isSending
             )
+            if isSending {
+                isReasoningEffortPanelPresented = false
+            }
+        }
+        .onChange(of: isComposerFocused) { _, isFocused in
+            if !isFocused {
+                isReasoningEffortPanelPresented = false
+            }
+        }
+        .onChange(of: viewModel.reasoningEffortConfiguration) { _, configuration in
+            if configuration == nil {
+                isReasoningEffortPanelPresented = false
+            }
         }
         .onChange(of: viewModel.inputText) { _, inputText in
             guard let composerSelection else { return }
             if !inputText.hasPrefix(composerSelection) {
                 self.composerSelection = nil
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            isSoftwareKeyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isSoftwareKeyboardVisible = false
+            isReasoningEffortPanelPresented = false
         }
         .task {
             recentPhotoLibrary.refresh()
@@ -625,6 +656,18 @@ struct ChatScreen: View {
 
     private var isComposerExpanded: Bool {
         isComposerFocused || !viewModel.inputText.isEmpty || !viewModel.attachments.isEmpty
+    }
+
+    private var showsReasoningEffortMeter: Bool {
+        !viewModel.isSending && ChatReasoningEffortPresentationPolicy.showsMeter(
+            isComposerFocused: isComposerFocused,
+            isSoftwareKeyboardVisible: isSoftwareKeyboardVisible,
+            configuration: viewModel.reasoningEffortConfiguration
+        )
+    }
+
+    private var showsReasoningEffortPanel: Bool {
+        isReasoningEffortPanelPresented && showsReasoningEffortMeter
     }
 
     private var composerBar: some View {
@@ -736,6 +779,9 @@ struct ChatScreen: View {
                     if let contextUsage = viewModel.visibleContextUsage {
                         ContextUsageMeter(usage: contextUsage)
                     }
+                    if showsReasoningEffortMeter {
+                        composerReasoningEffortButton
+                    }
                     composerMicButton
                     composerExpandedSendButton
                 }
@@ -802,6 +848,68 @@ struct ChatScreen: View {
         .buttonStyle(.plain)
         .disabled(viewModel.isSending)
         .accessibilityLabel(Text("音声入力"))
+    }
+
+    @ViewBuilder
+    private var composerReasoningEffortButton: some View {
+        if let configuration = viewModel.reasoningEffortConfiguration {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) {
+                    isReasoningEffortPanelPresented.toggle()
+                }
+            } label: {
+                Image(systemName: ChatReasoningEffortPresentationPolicy.gaugeSymbolName(
+                    selectedValue: configuration.selectedValue,
+                    options: configuration.options
+                ))
+                .font(.system(size: 21, weight: .medium))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("推論エフォート"))
+            .accessibilityValue(Text(verbatim: configuration.selectedValue))
+            .accessibilityIdentifier("chat-reasoning-effort-button")
+        }
+    }
+
+    private func reasoningEffortOverlay(
+        configuration: ChatReasoningEffortConfiguration
+    ) -> some View {
+        ZStack(alignment: .bottom) {
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    isReasoningEffortPanelPresented = false
+                }
+            } label: {
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("推論エフォートを閉じる"))
+
+            Rectangle()
+                .fill(Color.black.opacity(0.12))
+                .background(.ultraThinMaterial)
+                .mask {
+                    LinearGradient(
+                        colors: [.clear, .black.opacity(0.92), .black],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                .frame(height: 250)
+                .allowsHitTesting(false)
+
+            ChatReasoningEffortPanel(
+                configuration: configuration,
+                onSelect: viewModel.setReasoningEffort
+            )
+            .padding(.horizontal, 18)
+            .padding(.bottom, 12)
+        }
     }
 
     private var composerCollapsedVoiceButton: some View {
@@ -1064,6 +1172,141 @@ struct ChatScreen: View {
         showFileImporter = true
     }
 
+}
+
+private struct ChatReasoningEffortPanel: View {
+    let configuration: ChatReasoningEffortConfiguration
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Text(verbatim: "\(configuration.modelLabel)  \(configuration.selectedValue)")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .accessibilityIdentifier("chat-reasoning-effort-value")
+
+            ChatDiscreteReasoningEffortSlider(
+                options: configuration.options,
+                selectedValue: configuration.selectedValue,
+                onSelect: onSelect
+            )
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 20)
+        .padding(.bottom, 18)
+        .sensoryFeedback(.selection, trigger: configuration.selectedValue)
+    }
+}
+
+private struct ChatDiscreteReasoningEffortSlider: View {
+    let options: [String]
+    let selectedValue: String
+    let onSelect: (String) -> Void
+
+    private let trackHeight: CGFloat = 72
+    private let thumbDiameter: CGFloat = 58
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let horizontalInset = trackHeight / 2
+            let selectedIndex = options.firstIndex(of: selectedValue) ?? 0
+            let thumbCenterX = centerX(
+                index: selectedIndex,
+                width: width,
+                horizontalInset: horizontalInset
+            )
+
+            ZStack(alignment: .leading) {
+                Capsule(style: .continuous)
+                    .fill(Color(uiColor: .tertiarySystemFill))
+
+                Capsule(style: .continuous)
+                    .fill(Color.primary)
+                    .frame(
+                        width: min(width, thumbCenterX + trackHeight / 2),
+                        height: trackHeight
+                    )
+
+                ForEach(options.indices, id: \.self) { index in
+                    Circle()
+                        .fill(index <= selectedIndex
+                            ? Color(uiColor: .systemBackground).opacity(0.42)
+                            : Color(uiColor: .secondaryLabel).opacity(0.5))
+                        .frame(width: 8, height: 8)
+                        .position(
+                            x: centerX(
+                                index: index,
+                                width: width,
+                                horizontalInset: horizontalInset
+                            ),
+                            y: trackHeight / 2
+                        )
+                }
+
+                Circle()
+                    .fill(Color(uiColor: .systemBackground))
+                    .frame(width: thumbDiameter, height: thumbDiameter)
+                    .overlay {
+                        Circle()
+                            .stroke(Color.primary, lineWidth: 3)
+                    }
+                    .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                    .position(x: thumbCenterX, y: trackHeight / 2)
+            }
+            .frame(height: trackHeight)
+            .contentShape(Capsule(style: .continuous))
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        selectOption(
+                            at: value.location.x,
+                            width: width,
+                            horizontalInset: horizontalInset
+                        )
+                    }
+            )
+        }
+        .frame(height: trackHeight)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("推論エフォート"))
+        .accessibilityValue(Text(verbatim: selectedValue))
+        .accessibilityAdjustableAction { direction in
+            guard let currentIndex = options.firstIndex(of: selectedValue) else { return }
+            let nextIndex: Int
+            switch direction {
+            case .increment:
+                nextIndex = min(currentIndex + 1, options.count - 1)
+            case .decrement:
+                nextIndex = max(currentIndex - 1, 0)
+            @unknown default:
+                return
+            }
+            guard nextIndex != currentIndex else { return }
+            onSelect(options[nextIndex])
+        }
+        .accessibilityIdentifier("chat-reasoning-effort-slider")
+    }
+
+    private func centerX(index: Int, width: CGFloat, horizontalInset: CGFloat) -> CGFloat {
+        guard options.count > 1 else { return width / 2 }
+        let usableWidth = max(width - horizontalInset * 2, 1)
+        return horizontalInset + usableWidth * CGFloat(index) / CGFloat(options.count - 1)
+    }
+
+    private func selectOption(at locationX: CGFloat, width: CGFloat, horizontalInset: CGFloat) {
+        guard let index = ChatReasoningEffortPresentationPolicy.optionIndex(
+            for: locationX,
+            width: width,
+            optionCount: options.count,
+            horizontalInset: horizontalInset
+        ) else { return }
+        let value = options[index]
+        guard value != selectedValue else { return }
+        onSelect(value)
+    }
 }
 
 private struct AttachmentPreviewRow: View {

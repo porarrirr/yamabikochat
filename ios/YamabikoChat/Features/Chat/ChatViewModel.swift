@@ -31,6 +31,7 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var activeChatPresetName: String?
     @Published private(set) var activeSystemPromptPresetName: String?
     @Published private(set) var contextUsage: ContextUsage?
+    @Published private(set) var reasoningEffortConfiguration: ChatReasoningEffortConfiguration?
     private(set) var canAttachImages: Bool {
         get { composerStore.canAttachImages }
         set { composerStore.canAttachImages = newValue }
@@ -113,6 +114,11 @@ final class ChatViewModel: ObservableObject {
             .sink { [weak self] in self?.enabledSkillNames = $0 }
             .store(in: &cancellables)
 
+        repository.reasoningEffortCatalogPublisher()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.refreshReasoningEffortConfiguration() }
+            .store(in: &cancellables)
+
         repository.observeMessages(conversationId: conversationID)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
@@ -162,6 +168,7 @@ final class ChatViewModel: ObservableObject {
                 self.syncNewChatWithSettingsIfEmpty(settings: $0, previousSettings: previous)
                 self.updateActiveChatPresetName()
                 self.updateActiveSystemPromptPresetName()
+                self.refreshReasoningEffortConfiguration()
                 Task { [weak self] in
                     await self?.refreshVisionSupport()
                 }
@@ -177,8 +184,10 @@ final class ChatViewModel: ObservableObject {
                 conversationTitle = conversation.title
                 updateActiveChatPresetName()
                 updateActiveSystemPromptPresetName()
+                refreshReasoningEffortConfiguration()
                 Task { [weak self] in
                     await self?.refreshVisionSupport()
+                    await self?.refreshReasoningEffortCatalog()
                 }
             }
         } catch {
@@ -1003,8 +1012,10 @@ final class ChatViewModel: ObservableObject {
             try repository.saveSettings(updated)
             settings = updated
             updateActiveChatPresetName()
+            refreshReasoningEffortConfiguration()
             Task { [weak self] in
                 await self?.refreshVisionSupport()
+                await self?.refreshReasoningEffortCatalog()
             }
             errorMessage = nil
         } catch {
@@ -1012,6 +1023,41 @@ final class ChatViewModel: ObservableObject {
             DiagnosticsLogger.log(
                 "Apply chat preset failed conversation=\(conversationID)",
                 category: .chat,
+                error: error
+            )
+        }
+    }
+
+    func setReasoningEffort(_ effort: String) {
+        guard !isSending,
+              let repository,
+              var configuration = reasoningEffortConfiguration,
+              let selectedValue = ChatReasoningEffortPresentationPolicy.matchingOption(
+                  effort,
+                  in: configuration.options
+              ),
+              selectedValue != configuration.selectedValue
+        else { return }
+
+        do {
+            try repository.setReasoningEffort(
+                selectedValue,
+                provider: configuration.providerID,
+                model: configuration.modelID
+            )
+            configuration.selectedValue = selectedValue
+            reasoningEffortConfiguration = configuration
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log(
+                "Chat reasoning effort update failed",
+                category: .settings,
+                metadata: [
+                    "provider": configuration.providerID,
+                    "model": configuration.modelID,
+                    "effort": selectedValue
+                ],
                 error: error
             )
         }
@@ -1217,8 +1263,10 @@ final class ChatViewModel: ObservableObject {
                 isSecretConversation = conversation.isSecret
                 updateActiveChatPresetName()
                 updateActiveSystemPromptPresetName()
+                refreshReasoningEffortConfiguration()
                 Task { [weak self] in
                     await self?.refreshVisionSupport()
+                    await self?.refreshReasoningEffortCatalog()
                 }
             }
         } catch {
@@ -1260,6 +1308,25 @@ final class ChatViewModel: ObservableObject {
                     $0.model.trimmingCharacters(in: .whitespacesAndNewlines) == currentModel
             }?
             .name
+    }
+
+    private func refreshReasoningEffortConfiguration() {
+        guard ChatMode(settings: settings) == .standard, let repository else {
+            reasoningEffortConfiguration = nil
+            return
+        }
+        reasoningEffortConfiguration = repository.reasoningEffortConfiguration(
+            settings: settings,
+            provider: conversationProvider,
+            model: conversationModel
+        )
+    }
+
+    private func refreshReasoningEffortCatalog() async {
+        guard let repository else { return }
+        await repository.refreshReasoningEffortCatalog(for: conversationProvider)
+        guard !Task.isCancelled else { return }
+        refreshReasoningEffortConfiguration()
     }
 
     private func refreshVisionSupport() async {

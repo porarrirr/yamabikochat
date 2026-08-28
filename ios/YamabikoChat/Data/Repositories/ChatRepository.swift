@@ -29,6 +29,7 @@ final class ChatRepository {
     private let providers: ProviderGateway
     private let credentialStore: SecureCredentialStore
     private let modelService: OpenRouterModelService
+    private let modelsDevCatalogRepository: ModelsDevCatalogRepository?
     private let skillRepository: AgentSkillRepository
     private let requestSettingsResolver: ProviderRequestSettingsResolver
     private let codexAuthRepository: CodexAuthRepository
@@ -45,6 +46,7 @@ final class ChatRepository {
         providers: ProviderGateway,
         credentialStore: SecureCredentialStore,
         modelService: OpenRouterModelService,
+        modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
         skillRepository: AgentSkillRepository = AgentSkillRepository(),
         requestSettingsResolver: ProviderRequestSettingsResolver,
         codexAuthRepository: CodexAuthRepository,
@@ -60,6 +62,7 @@ final class ChatRepository {
         self.providers = providers
         self.credentialStore = credentialStore
         self.modelService = modelService
+        self.modelsDevCatalogRepository = modelsDevCatalogRepository
         self.skillRepository = skillRepository
         self.requestSettingsResolver = requestSettingsResolver
         self.codexAuthRepository = codexAuthRepository
@@ -108,6 +111,210 @@ final class ChatRepository {
     func saveSettings(_ value: AppSettings) throws {
         let normalized = value.normalizedForPersistence()
         try settings.save(normalized)
+    }
+
+    func reasoningEffortCatalogPublisher() -> AnyPublisher<Void, Never> {
+        let openRouter = modelService.modelsPublisher
+            .map { _ in () }
+            .eraseToAnyPublisher()
+        guard let modelsDevCatalogRepository else { return openRouter }
+        let modelsDev = modelsDevCatalogRepository.statePublisher
+            .map { _ in () }
+            .eraseToAnyPublisher()
+        return Publishers.Merge(openRouter, modelsDev).eraseToAnyPublisher()
+    }
+
+    func refreshReasoningEffortCatalog(for provider: String) async {
+        if provider.caseInsensitiveCompare("OPENROUTER") == .orderedSame {
+            _ = await modelService.getAvailableModels()
+            return
+        }
+        if ProviderReference(persistedID: provider).isModelsDev {
+            _ = await modelsDevCatalogRepository?.load()
+        }
+    }
+
+    func reasoningEffortConfiguration(
+        settings: AppSettings,
+        provider: String,
+        model: String
+    ) -> ChatReasoningEffortConfiguration? {
+        let normalizedProvider = provider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedProvider.isEmpty, !normalizedModel.isEmpty else { return nil }
+
+        let reference = ProviderReference(persistedID: normalizedProvider)
+        if let providerID = reference.modelsDevID {
+            guard let catalogProvider = modelsDevCatalogRepository?.provider(for: reference),
+                  let catalogModel = catalogProvider.models.first(where: { $0.id == normalizedModel })
+            else { return nil }
+            let saved = try? credentialStore.readSecret(
+                key: ModelsDevReasoningPreference.storageKey(
+                    providerID: providerID,
+                    modelID: normalizedModel
+                )
+            )
+            return makeReasoningEffortConfiguration(
+                providerID: normalizedProvider,
+                modelID: normalizedModel,
+                modelLabel: catalogModel.name,
+                options: catalogModel.supportedReasoningEfforts,
+                selectedValue: saved ?? nil
+            )
+        }
+
+        switch normalizedProvider {
+        case "CODEX_AUTH":
+            guard settings.codexReasoningEnabled,
+                  let preset = CodexModelCatalog.findPreset(normalizedModel)
+            else { return nil }
+            return makeReasoningEffortConfiguration(
+                providerID: normalizedProvider,
+                modelID: normalizedModel,
+                modelLabel: preset.displayName,
+                options: preset.supportedReasoningEfforts.map(\.effort),
+                selectedValue: settings.codexReasoningEffort
+            )
+        case "SUPERGROK":
+            guard settings.superGrokReasoningEnabled,
+                  let catalogModel = SuperGrokModelCatalog.model(for: normalizedModel),
+                  catalogModel.supportsReasoning
+            else { return nil }
+            return makeReasoningEffortConfiguration(
+                providerID: normalizedProvider,
+                modelID: normalizedModel,
+                modelLabel: catalogModel.displayName,
+                options: ["low", "medium", "high"],
+                selectedValue: settings.superGrokReasoningEffort
+            )
+        case "GEMINI":
+            let options = GeminiModelUtils.getThinkingLevelOptions(model: normalizedModel)
+            let selectedValue: String?
+            if !GeminiModelUtils.isThinkingAlwaysOn(model: normalizedModel),
+               !settings.geminiThinkingEnabled,
+               let minimal = GeminiModelUtils.getMinimalThinkingLevel(model: normalizedModel) {
+                selectedValue = minimal
+            } else {
+                selectedValue = GeminiModelUtils.normalizeThinkingLevel(
+                    model: normalizedModel,
+                    level: settings.geminiThinkingLevel
+                ) ?? GeminiModelUtils.getDefaultThinkingLevel(model: normalizedModel)
+            }
+            return makeReasoningEffortConfiguration(
+                providerID: normalizedProvider,
+                modelID: normalizedModel,
+                modelLabel: normalizedModel,
+                options: options,
+                selectedValue: selectedValue
+            )
+        case "OPENROUTER":
+            guard let modelInfo = modelService.getModelById(normalizedModel),
+                  let capabilities = modelInfo.reasoning,
+                  capabilities.mandatory || settings.openRouterThinkingEnabled,
+                  settings.openRouterReasoningMode.caseInsensitiveCompare("effort") == .orderedSame
+            else { return nil }
+            let options = capabilities.selectableEfforts
+            let selectedValue = ChatReasoningEffortPresentationPolicy.matchingOption(
+                settings.openRouterReasoningEffort,
+                in: options
+            ) ?? ChatReasoningEffortPresentationPolicy.matchingOption(
+                capabilities.defaultEffort,
+                in: options
+            ) ?? options.first
+            return makeReasoningEffortConfiguration(
+                providerID: normalizedProvider,
+                modelID: normalizedModel,
+                modelLabel: modelInfo.name,
+                options: options,
+                selectedValue: selectedValue
+            )
+        default:
+            return nil
+        }
+    }
+
+    func setReasoningEffort(_ effort: String, provider: String, model: String) throws {
+        let currentSettings = try loadSettings()
+        guard let configuration = reasoningEffortConfiguration(
+            settings: currentSettings,
+            provider: provider,
+            model: model
+        ),
+        let selectedValue = ChatReasoningEffortPresentationPolicy.matchingOption(
+            effort,
+            in: configuration.options
+        ) else {
+            throw ProviderClientError.parseFailure(
+                L10n.text("このモデルでは推論エフォートを変更できません。")
+            )
+        }
+
+        let reference = ProviderReference(persistedID: configuration.providerID)
+        if let providerID = reference.modelsDevID {
+            try credentialStore.saveSecret(
+                selectedValue,
+                key: ModelsDevReasoningPreference.storageKey(
+                    providerID: providerID,
+                    modelID: configuration.modelID
+                )
+            )
+        } else {
+            var updated = currentSettings
+            switch configuration.providerID {
+            case "CODEX_AUTH":
+                updated.codexReasoningEnabled = true
+                updated.codexReasoningEffort = selectedValue
+            case "SUPERGROK":
+                updated.superGrokReasoningEnabled = true
+                updated.superGrokReasoningEffort = selectedValue
+            case "GEMINI":
+                updated.geminiThinkingEnabled = true
+                updated.geminiThinkingLevel = selectedValue
+            case "OPENROUTER":
+                updated.openRouterThinkingEnabled = true
+                updated.openRouterReasoningMode = "effort"
+                updated.openRouterReasoningEffort = selectedValue
+            default:
+                throw ProviderClientError.parseFailure(
+                    L10n.text("このプロバイダーでは推論エフォートを変更できません。")
+                )
+            }
+            try saveSettings(updated)
+        }
+
+        DiagnosticsLogger.log(
+            "Chat reasoning effort changed",
+            category: .settings,
+            metadata: [
+                "provider": configuration.providerID,
+                "model": configuration.modelID,
+                "effort": selectedValue
+            ]
+        )
+    }
+
+    private func makeReasoningEffortConfiguration(
+        providerID: String,
+        modelID: String,
+        modelLabel: String,
+        options: [String],
+        selectedValue: String?
+    ) -> ChatReasoningEffortConfiguration? {
+        let orderedOptions = ChatReasoningEffortPresentationPolicy.orderedOptions(options)
+        guard orderedOptions.count > 1,
+              let selectedValue = ChatReasoningEffortPresentationPolicy.matchingOption(
+                  selectedValue,
+                  in: orderedOptions
+              )
+        else { return nil }
+        let normalizedLabel = modelLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ChatReasoningEffortConfiguration(
+            providerID: providerID,
+            modelID: modelID,
+            modelLabel: normalizedLabel.isEmpty ? modelID : normalizedLabel,
+            options: orderedOptions,
+            selectedValue: selectedValue
+        )
     }
 
     func setSelectedVariant(messageId: Int64, variantIndex: Int) throws {
