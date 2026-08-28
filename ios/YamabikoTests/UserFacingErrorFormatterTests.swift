@@ -50,6 +50,36 @@ final class UserFacingErrorFormatterTests: XCTestCase {
         XCTAssertEqual(formatted.detail, "HTTP 503: upstream unavailable")
     }
 
+    func testPiRuntimeStartupAndResumeFailuresTellTheUserToRestartTheApp() {
+        for reason in [
+            "Pi agent runtime did not start",
+            "Pi agent runtime did not resume"
+        ] {
+            let raw = "Response parse failed: \(reason)"
+            let formatted = UserFacingErrorFormatter.format(raw)
+
+            XCTAssertEqual(formatted.title, L10n.text("AIを起動できませんでした"))
+            XCTAssertEqual(
+                formatted.summary,
+                L10n.text("アプリを再起動して、もう一度お試しください。")
+            )
+            XCTAssertEqual(formatted.detail, raw)
+        }
+    }
+
+    func testPiRuntimeRestartGuidanceSurvivesPlaceholderRoundTrip() {
+        let placeholder = UserFacingErrorFormatter.placeholder(
+            for: ProviderClientError.parseFailure("Pi agent runtime did not resume")
+        )
+        let formatted = UserFacingErrorFormatter.format(placeholder)
+
+        XCTAssertEqual(formatted.title, L10n.text("AIを起動できませんでした"))
+        XCTAssertEqual(
+            formatted.summary,
+            L10n.text("アプリを再起動して、もう一度お試しください。")
+        )
+    }
+
     func testLeavesShortJapaneseErrorsUnchanged() {
         let raw = L10n.format("添付ファイルが%.1fMBで上限10MBを超えています。", 12.3)
         let formatted = UserFacingErrorFormatter.format(raw)

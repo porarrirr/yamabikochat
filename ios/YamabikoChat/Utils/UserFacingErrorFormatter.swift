@@ -46,6 +46,13 @@ enum UserFacingErrorFormatter {
         "Veuillez réessayer dans un instant.",
         "请稍后再试。"
     ]
+    private static let runtimeRestartSummaries: Set<String> = [
+        "アプリを再起動して、もう一度お試しください。",
+        "Restart the app, then try again.",
+        "Reinicia la aplicación y vuelve a intentarlo.",
+        "Redémarrez l’application, puis réessayez.",
+        "请重启应用，然后重试。"
+    ]
     private static let fallbackSummaries: Set<String> = [
         "応答を取得できませんでした",
         "Couldn't get a response",
@@ -66,6 +73,14 @@ enum UserFacingErrorFormatter {
         }
 
         let stripped = stripWrappers(stripChatErrorPrefix(original))
+        if stripped == "Pi agent runtime did not start"
+            || stripped == "Pi agent runtime did not resume" {
+            return UserFacingError(
+                title: L10n.text("AIを起動できませんでした"),
+                summary: L10n.text("アプリを再起動して、もう一度お試しください。"),
+                detail: original
+            )
+        }
         let fields = extractFields(from: original, stripped: stripped)
         if let mapped = mapKnown(fields) {
             return UserFacingError(title: mapped.title, summary: mapped.summary, detail: original)
@@ -204,6 +219,13 @@ enum UserFacingErrorFormatter {
             return (
                 L10n.text("サーバーエラー"),
                 L10n.text("しばらくしてから再試行してください。")
+            )
+        }
+        if text == L10n.text("アプリを再起動して、もう一度お試しください。")
+            || runtimeRestartSummaries.contains(text) {
+            return (
+                L10n.text("AIを起動できませんでした"),
+                L10n.text("アプリを再起動して、もう一度お試しください。")
             )
         }
         if text == L10n.text("応答を取得できませんでした") || fallbackSummaries.contains(text) {

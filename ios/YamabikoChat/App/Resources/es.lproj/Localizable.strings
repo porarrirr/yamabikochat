@@ -476,6 +476,8 @@
 "サーバーエラー" = "Error del servidor";
 "しばらくしてから再試行してください。" = "Inténtalo de nuevo en un momento.";
 "応答を取得できませんでした" = "No se pudo obtener una respuesta";
+"AIを起動できませんでした" = "No se pudo iniciar la IA";
+"アプリを再起動して、もう一度お試しください。" = "Reinicia la aplicación y vuelve a intentarlo.";
 "詳細" = "Detalles";
 "参照ファイルを完全に書き出せませんでした: %@" = "No se pudo exportar completamente un archivo de referencia: %@";
 "書き出し対象の保存データが壊れています: %@" = "Los datos guardados necesarios para la exportación están dañados: %@";
