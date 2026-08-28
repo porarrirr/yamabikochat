@@ -147,12 +147,6 @@ struct ChatWorkspaceScreen: View {
         return preset.name.caseInsensitiveCompare(active) == .orderedSame
     }
 
-    private var isCustomSystemPromptActive: Bool {
-        let active = viewModel.activeSystemPromptPresetName?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return active?.isEmpty ?? true
-    }
-
     private var topBar: some View {
         HStack(spacing: 8) {
             Button {
@@ -264,9 +258,18 @@ struct ChatWorkspaceScreen: View {
 
                 Divider()
                 Button {
-                    viewModel.applySystemPromptPreset(name: nil)
+                    viewModel.disableSystemPromptForConversation()
                 } label: {
-                    if isCustomSystemPromptActive {
+                    if viewModel.isSystemPromptDisabledForConversation {
+                        Label(L10n.text("Prompt: なし"), systemImage: "checkmark")
+                    } else {
+                        Text(L10n.text("Prompt: なし"))
+                    }
+                }
+                Button {
+                    viewModel.applyCustomSystemPrompt()
+                } label: {
+                    if viewModel.isCustomSystemPromptActive {
                         Label(L10n.text("Prompt: Custom"), systemImage: "checkmark")
                     } else {
                         Text(L10n.text("Prompt: Custom"))

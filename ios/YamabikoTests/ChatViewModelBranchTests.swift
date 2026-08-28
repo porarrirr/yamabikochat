@@ -79,6 +79,31 @@ final class ChatViewModelBranchTests: XCTestCase {
         XCTAssertTrue(viewModel.isSecretConversation)
     }
 
+    func testDisablingConversationSystemPromptClearsPersistedPromptAndSelectionState() throws {
+        let fixture = try makeFixture()
+        let conversationId = try fixture.repository.createConversation(title: "Prompt Test")
+        try fixture.repository.updateConversationSystemPrompt(
+            conversationId: conversationId,
+            systemPrompt: "Conversation instructions"
+        )
+        let viewModel = ChatViewModel(conversationID: conversationId)
+        viewModel.bind(
+            repository: fixture.repository,
+            attachmentRepository: AttachmentRepository()
+        )
+
+        XCTAssertTrue(viewModel.isCustomSystemPromptActive)
+        XCTAssertFalse(viewModel.isSystemPromptDisabledForConversation)
+
+        viewModel.disableSystemPromptForConversation()
+
+        XCTAssertNil(try fixture.repository.conversation(id: conversationId)?.systemPrompt)
+        XCTAssertTrue(viewModel.isSystemPromptDisabledForConversation)
+        XCTAssertFalse(viewModel.isCustomSystemPromptActive)
+        XCTAssertEqual(viewModel.systemPromptContextLabel, L10n.text("Prompt: なし"))
+        XCTAssertNil(viewModel.errorMessage)
+    }
+
     private func makeFixture() throws -> (
         repository: ChatRepository,
         conversations: ConversationRepository

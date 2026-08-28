@@ -134,12 +134,6 @@ struct SettingsScreen: View {
     private var settingsIndex: some View {
         Form {
             Section {
-                Text("変更は自動で保存されます。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
                 ForEach(SettingsCategory.allCases) { category in
                     NavigationLink(value: category) {
                         VStack(alignment: .leading, spacing: 3) {
@@ -172,6 +166,7 @@ struct SettingsScreen: View {
             }
         }
         .navigationTitle(category.title)
+        .navigationBarTitleDisplayMode(.inline)
         .fileImporter(
             isPresented: $showAgentSkillImporter,
             allowedContentTypes: [.zip, .folder],
@@ -429,73 +424,120 @@ struct SettingsScreen: View {
     }
 
     private var agentSkillsSection: some View {
-        Section("Agent Skills") {
-            Button {
-                showAgentSkillImporter = true
-            } label: {
-                Label("ZIPまたはフォルダからインストール", systemImage: "square.and.arrow.down")
-            }
+        Group {
+            Section {
+                Button {
+                    showAgentSkillImporter = true
+                } label: {
+                    Label("Skillをインストール", systemImage: "square.and.arrow.down")
+                }
 
-            if viewModel.installedAgentSkills.isEmpty {
-                Text("インストール済みSkillはありません。URL取得や公開カタログには対応していません。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if viewModel.installedAgentSkills.isEmpty {
+                    ContentUnavailableView(
+                        "インストール済みSkillはありません",
+                        systemImage: "puzzlepiece.extension",
+                        description: Text("ZIPまたはフォルダから追加できます。")
+                    )
+                }
+            } header: {
+                Text("Agent Skills")
+            } footer: {
+                Text("端末内のZIPまたはフォルダを選択してインストールします。")
             }
 
             ForEach(viewModel.installedAgentSkills) { skill in
-                VStack(alignment: .leading, spacing: 6) {
-                    Toggle(isOn: Binding(
-                        get: { skill.isEnabled },
-                        set: { viewModel.setAgentSkillEnabled($0, name: skill.manifest.name) }
-                    )) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("$\(skill.manifest.name)").font(.headline)
-                            Text(skill.manifest.description).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    HStack {
-                        Text(skill.hasScripts ? "スクリプトあり" : "指示・資料のみ")
-                        if skill.hasScripts { Text("実行対象外") }
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    Text("\(skill.files.count)ファイル · SHA-256 \(skill.contentHash.prefix(12))…")
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
-                    DisclosureGroup("詳細を表示") {
-                        VStack(alignment: .leading, spacing: 5) {
-                            if let license = skill.manifest.license { Text("license: \(license)") }
-                            if let compatibility = skill.manifest.compatibility { Text("compatibility: \(compatibility)") }
-                            Text("allowed-tools: \(skill.manifest.allowedTools.isEmpty ? "なし" : skill.manifest.allowedTools.joined(separator: ", "))")
-                            ForEach(skill.manifest.metadata.sorted(by: { $0.key < $1.key }), id: \.key) { entry in
-                                Text("\(entry.key): \(entry.value)")
-                            }
-                            Divider()
-                            ForEach(skill.files) { file in
-                                Text("\(file.isScript ? "⚠ " : "")\(file.path) · \(ByteCountFormatter.string(fromByteCount: file.size, countStyle: .file))")
-                            }
-                        }
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
-                    }
-                    HStack {
-                        Spacer()
-                        Button(role: .destructive) {
-                            pendingAgentSkillDeletionName = skill.manifest.name
-                        } label: {
-                            Label("削除", systemImage: "trash")
-                                .frame(minHeight: 44)
-                        }
-                        .buttonStyle(.bordered)
-                        .accessibilityHint("確認後にこのSkillを削除します")
-                    }
-                }
-                .padding(.vertical, 4)
+                agentSkillSection(skill)
             }
 
-            Text("Pi AgentにはSkillの指示とUTF-8資料だけを提供し、同梱スクリプトは実行しません。")
-                .font(.caption2)
+            if !viewModel.installedAgentSkills.isEmpty {
+                Section {
+                    Label {
+                        Text("Pi AgentにはSkillの指示とUTF-8資料だけを提供します。同梱スクリプトは実行しません。")
+                    } icon: {
+                        Image(systemName: "checkmark.shield")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func agentSkillSection(_ skill: InstalledAgentSkill) -> some View {
+        Section {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("$\(skill.manifest.name)")
+                        .font(.headline)
+                        .textSelection(.enabled)
+                    Text(skill.isEnabled ? "有効" : "無効")
+                        .font(.caption)
+                        .foregroundStyle(skill.isEnabled ? Color.green : Color.secondary)
+                }
+
+                Spacer(minLength: 8)
+
+                Toggle("", isOn: Binding(
+                    get: { skill.isEnabled },
+                    set: { viewModel.setAgentSkillEnabled($0, name: skill.manifest.name) }
+                ))
+                .labelsHidden()
+                .accessibilityLabel("$\(skill.manifest.name)を有効化")
+            }
+            .padding(.vertical, 2)
+
+            Text(skill.manifest.description)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .lineLimit(3)
+
+            HStack(spacing: 16) {
+                Label("\(skill.files.count)ファイル", systemImage: "doc.on.doc")
+                Label(
+                    skill.hasScripts ? "スクリプトあり・実行対象外" : "指示・資料のみ",
+                    systemImage: skill.hasScripts ? "exclamationmark.triangle" : "doc.text"
+                )
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            DisclosureGroup("技術情報") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(skill.manifest.description)
+                        .font(.caption)
+
+                    Divider()
+
+                    Group {
+                        Text("SHA-256: \(skill.contentHash)")
+                        if let license = skill.manifest.license { Text("license: \(license)") }
+                        if let compatibility = skill.manifest.compatibility { Text("compatibility: \(compatibility)") }
+                        Text("allowed-tools: \(skill.manifest.allowedTools.isEmpty ? "なし" : skill.manifest.allowedTools.joined(separator: ", "))")
+                        ForEach(skill.manifest.metadata.sorted(by: { $0.key < $1.key }), id: \.key) { entry in
+                            Text("\(entry.key): \(entry.value)")
+                        }
+                    }
+                    .font(.caption2.monospaced())
+
+                    Divider()
+
+                    ForEach(skill.files) { file in
+                        Text("\(file.isScript ? "⚠ " : "")\(file.path) · \(ByteCountFormatter.string(fromByteCount: file.size, countStyle: .file))")
+                            .font(.caption2.monospaced())
+                    }
+                }
+                .foregroundStyle(.secondary)
+                .padding(.top, 8)
+            }
+
+            Button(role: .destructive) {
+                pendingAgentSkillDeletionName = skill.manifest.name
+            } label: {
+                Label("このSkillを削除", systemImage: "trash")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .accessibilityHint("確認後にこのSkillを削除します")
         }
     }
 

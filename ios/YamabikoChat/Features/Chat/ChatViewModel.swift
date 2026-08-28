@@ -50,7 +50,7 @@ final class ChatViewModel: ObservableObject {
     private var activeSendTask: Task<Void, Never>?
     private var activeSendID: UUID?
     private var activeAutoConversationID: Int64?
-    private var conversationSystemPrompt: String?
+    @Published private(set) var conversationSystemPrompt: String?
     private var lastSettingsSnapshot: AppSettings?
     private var inputTextBeforeSpeech: String = ""
     private var latestTokenUsageRecord: TokenUsageRecord?
@@ -794,6 +794,14 @@ final class ChatViewModel: ObservableObject {
         )
     }
 
+    var isSystemPromptDisabledForConversation: Bool {
+        conversationSystemPrompt?.nilIfBlank == nil
+    }
+
+    var isCustomSystemPromptActive: Bool {
+        activeSystemPromptPresetName?.nilIfBlank == nil && !isSystemPromptDisabledForConversation
+    }
+
     var workspaceTitleLabel: String {
         if isSecretConversation {
             return L10n.text("シークレット")
@@ -1009,25 +1017,38 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    func applySystemPromptPreset(name: String?) {
-        guard !isSending else { return }
-        guard let repository else { return }
+    func disableSystemPromptForConversation() {
+        applySystemPrompt(nil, presetName: nil)
+    }
 
-        let selectedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+    func applyCustomSystemPrompt() {
+        applySystemPrompt(settings.systemPrompt?.nilIfBlank, presetName: nil)
+    }
+
+    func applySystemPromptPreset(name: String) {
+        guard !isSending else { return }
+
+        let selectedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let selectedPreset = settings.systemPromptPresets().first {
-            guard let selectedName, !selectedName.isEmpty else { return false }
+            guard !selectedName.isEmpty else { return false }
             return $0.name.caseInsensitiveCompare(selectedName) == .orderedSame
         }
+        guard let selectedPreset else { return }
 
-        let targetPrompt = selectedPreset?.prompt.nilIfBlank ?? settings.systemPrompt?.nilIfBlank
+        applySystemPrompt(selectedPreset.prompt.nilIfBlank, presetName: selectedPreset.name)
+    }
+
+    private func applySystemPrompt(_ prompt: String?, presetName: String?) {
+        guard !isSending else { return }
+        guard let repository else { return }
 
         do {
             try repository.updateConversationSystemPrompt(
                 conversationId: conversationID,
-                systemPrompt: targetPrompt
+                systemPrompt: prompt
             )
-            conversationSystemPrompt = targetPrompt
-            activeSystemPromptPresetName = selectedPreset?.name
+            conversationSystemPrompt = prompt
+            activeSystemPromptPresetName = presetName
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
