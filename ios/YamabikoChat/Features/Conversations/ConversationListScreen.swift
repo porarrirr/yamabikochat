@@ -226,23 +226,16 @@ struct ConversationListScreen: View {
                 }
                 .buttonStyle(.plain)
 
-                Menu {
-                    Button {
-                        createConversation(secret: false)
-                    } label: {
-                        Label(L10n.text("新しいチャット"), systemImage: "bubble.left")
-                    }
-                    Button {
-                        createConversation(secret: true)
-                    } label: {
-                        Label(L10n.text("秘密チャット"), systemImage: "lock")
-                    }
+                Button {
+                    createConversation(secret: false)
                 } label: {
                     Image(systemName: "square.and.pencil")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(.primary)
                         .frame(width: 44, height: 44)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(L10n.text("新しいチャット")))
             }
 
             if let onClose {

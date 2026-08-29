@@ -135,6 +135,54 @@ final class ProjectFeatureTests: XCTestCase {
         XCTAssertNotNil(try fixture.repository.conversation(id: regularConversationId))
     }
 
+    func testEmptyConversationCanSwitchBetweenRegularAndSecretMode() throws {
+        let fixture = try makeFixture()
+        let conversationId = try fixture.repository.createConversation()
+
+        let secret = try fixture.repository.setSecretMode(conversationId: conversationId, enabled: true)
+        XCTAssertTrue(secret.isSecret)
+        XCTAssertEqual(secret.title, "Secret Chat")
+
+        let regular = try fixture.repository.setSecretMode(conversationId: conversationId, enabled: false)
+        XCTAssertFalse(regular.isSecret)
+        XCTAssertEqual(regular.title, "New Chat")
+    }
+
+    func testConversationWithContentCannotSwitchSecretMode() throws {
+        let fixture = try makeFixture()
+        let conversationId = try fixture.repository.createConversation()
+        _ = try fixture.conversations.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "user", text: "content")
+        )
+
+        XCTAssertThrowsError(
+            try fixture.repository.setSecretMode(conversationId: conversationId, enabled: true)
+        )
+        XCTAssertFalse(try fixture.repository.conversation(id: conversationId)?.isSecret ?? true)
+    }
+
+    func testConversationWithDualContentCannotSwitchSecretMode() throws {
+        let fixture = try makeFixture()
+        let conversationId = try fixture.repository.createConversation()
+        _ = try fixture.conversations.insertDualMessage(
+            DualChatMessage(
+                conversationId: conversationId,
+                userText: "content",
+                modelAText: "",
+                modelBText: "",
+                modelAName: "A",
+                modelBName: "B",
+                providerA: "OPENAI",
+                providerB: "OPENAI"
+            )
+        )
+
+        XCTAssertThrowsError(
+            try fixture.repository.setSecretMode(conversationId: conversationId, enabled: true)
+        )
+        XCTAssertFalse(try fixture.repository.conversation(id: conversationId)?.isSecret ?? true)
+    }
+
     func testUpdateProjectInstructionsUpdatesProjectAndConversations() throws {
         let fixture = try makeFixture()
         let projectId = try fixture.repository.createProject(title: "テストプロジェクト", instructions: "初期の指示")

@@ -195,6 +195,40 @@ final class ConversationRepository: @unchecked Sendable {
         }
     }
 
+    func setSecretModeIfEmpty(id: Int64, enabled: Bool) throws -> Conversation {
+        try dbQueue.write { db in
+            guard var conversation = try Conversation.fetchOne(db, key: id) else {
+                throw ProviderClientError.parseFailure("Conversation not found")
+            }
+
+            let chatMessageCount = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM chat_messages WHERE conversationId = ?",
+                arguments: [id]
+            ) ?? 0
+            let dualMessageCount = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM dual_chat_messages WHERE conversationId = ?",
+                arguments: [id]
+            ) ?? 0
+            let hasPendingInitialMessage = conversation.pendingInitialMessage?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty == false
+
+            guard chatMessageCount == 0, dualMessageCount == 0, !hasPendingInitialMessage else {
+                throw ProviderClientError.parseFailure("Only an empty conversation can change secret mode")
+            }
+
+            conversation.isSecret = enabled
+            if conversation.title == "New Chat" || conversation.title == "Secret Chat" {
+                conversation.title = enabled ? "Secret Chat" : "New Chat"
+            }
+            conversation.updatedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
+            try conversation.update(db)
+            return conversation
+        }
+    }
+
     func deleteConversation(id: Int64) throws {
         try dbQueue.write { db in
             try db.execute(

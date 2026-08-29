@@ -1,6 +1,19 @@
 import SwiftUI
 import UIKit
 
+enum ChatWorkspacePrimaryAction: Equatable {
+    case createConversation
+    case enableSecretMode
+    case disableSecretMode
+
+    static func resolve(hasConversationContent: Bool, isSecretConversation: Bool) -> Self {
+        if hasConversationContent {
+            return .createConversation
+        }
+        return isSecretConversation ? .disableSecretMode : .enableSecretMode
+    }
+}
+
 struct ChatWorkspaceScreen: View {
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var appState: AppState
@@ -168,15 +181,13 @@ struct ChatWorkspaceScreen: View {
 
             HStack(spacing: 8) {
                 Button {
-                    createConversation()
+                    performPrimaryAction()
                 } label: {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .frame(width: 44, height: 44)
+                    primaryActionLabel
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text("新規チャット"))
+                .accessibilityLabel(Text(primaryActionAccessibilityLabel))
+                .accessibilityIdentifier("chat-primary-action-button")
 
                 moreMenu
             }
@@ -193,6 +204,50 @@ struct ChatWorkspaceScreen: View {
                         .opacity(0.18)
                 }
         )
+    }
+
+    private var primaryAction: ChatWorkspacePrimaryAction {
+        ChatWorkspacePrimaryAction.resolve(
+            hasConversationContent: viewModel.hasConversationContent,
+            isSecretConversation: viewModel.isSecretConversation
+        )
+    }
+
+    @ViewBuilder
+    private var primaryActionLabel: some View {
+        switch primaryAction {
+        case .createConversation:
+            Image(systemName: "square.and.pencil")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+        case .enableSecretMode:
+            SecretChatToggleIcon(isSecret: false)
+        case .disableSecretMode:
+            SecretChatToggleIcon(isSecret: true)
+        }
+    }
+
+    private var primaryActionAccessibilityLabel: String {
+        switch primaryAction {
+        case .createConversation:
+            L10n.text("新しいチャット")
+        case .enableSecretMode:
+            L10n.text("シークレットチャットに切り替え")
+        case .disableSecretMode:
+            L10n.text("通常チャットに戻す")
+        }
+    }
+
+    private func performPrimaryAction() {
+        switch primaryAction {
+        case .createConversation:
+            createConversation()
+        case .enableSecretMode:
+            viewModel.setSecretModeForEmptyConversation(true)
+        case .disableSecretMode:
+            viewModel.setSecretModeForEmptyConversation(false)
+        }
     }
 
     @ViewBuilder
@@ -377,6 +432,29 @@ struct ChatWorkspaceScreen: View {
         } else {
             appState.requestConversationSidebarReveal()
         }
+    }
+}
+
+private struct SecretChatToggleIcon: View {
+    let isSecret: Bool
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color(uiColor: .separator).opacity(0.7), lineWidth: 0.75)
+
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 22, weight: .medium))
+
+            if isSecret {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .offset(y: 1)
+            }
+        }
+        .foregroundStyle(.primary)
+        .frame(width: 44, height: 44)
+        .contentShape(Circle())
     }
 }
 

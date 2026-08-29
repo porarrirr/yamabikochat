@@ -413,6 +413,8 @@
 "%@: Exclude reasoning" = "%@: Exclude reasoning";
 "シークレット" = "Secret";
 "シークレットチャット" = "Secret Chat";
+"シークレットチャットに切り替え" = "Switch to Secret Chat";
+"通常チャットに戻す" = "Return to standard chat";
 "閉じると破棄 · %@" = "Discarded on close · %@";
 "このチャットは閉じると破棄されます。" = "This chat will be discarded when closed.";
 "クライアントツール" = "Client Tools";

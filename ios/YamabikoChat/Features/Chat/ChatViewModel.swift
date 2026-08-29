@@ -221,6 +221,35 @@ final class ChatViewModel: ObservableObject {
         return contextUsage
     }
 
+    var hasConversationContent: Bool {
+        !fullMessages.isEmpty || !dualMessages.isEmpty || isSending
+    }
+
+    func setSecretModeForEmptyConversation(_ enabled: Bool) {
+        guard !hasConversationContent, !isSending else { return }
+        guard let repository else {
+            errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
+            return
+        }
+
+        do {
+            let conversation = try repository.setSecretMode(
+                conversationId: conversationID,
+                enabled: enabled
+            )
+            isSecretConversation = conversation.isSecret
+            conversationTitle = conversation.title
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log(
+                "Switch secret mode failed conversation=\(conversationID)",
+                category: .chat,
+                error: error
+            )
+        }
+    }
+
     func selectSkillAutocomplete(_ name: String) {
         guard let match = inputText.range(of: #"(?:^|\s)\$([a-z0-9-]*)$"#, options: .regularExpression),
               let dollar = inputText[match].lastIndex(of: "$") else { return }

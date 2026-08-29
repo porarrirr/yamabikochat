@@ -539,12 +539,9 @@ final class ChatRepository {
         }
     }
 
-    func setSecretMode(conversationId: Int64, enabled: Bool) throws {
-        guard var conversation = try conversations.fetchConversation(id: conversationId) else {
-            throw ProviderClientError.parseFailure("Conversation not found")
-        }
-        conversation.isSecret = enabled
-        _ = try conversations.upsertConversation(conversation)
+    @discardableResult
+    func setSecretMode(conversationId: Int64, enabled: Bool) throws -> Conversation {
+        try conversations.setSecretModeIfEmpty(id: conversationId, enabled: enabled)
     }
 
     func updateConversationSystemPrompt(conversationId: Int64, systemPrompt: String?) throws {
