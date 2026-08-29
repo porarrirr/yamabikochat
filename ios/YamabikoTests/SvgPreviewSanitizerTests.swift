@@ -47,4 +47,29 @@ final class SvgPreviewSanitizerTests: XCTestCase {
         XCTAssertTrue(sanitized.contains("fill=\"none\""))
         XCTAssertTrue(sanitized.contains("url(#grad1)"))
     }
+
+    func testInlineHTMLUsesMermaidStyleSizingAndLockedViewport() {
+        let html = SvgPreviewHTMLBuilder.buildHTML(
+            svgContent: #"<svg viewBox="0 0 10 10"></svg>"#,
+            maxHeight: 360,
+            allowsZoom: false
+        )
+
+        XCTAssertTrue(html.contains("maximum-scale=1"))
+        XCTAssertTrue(html.contains("user-scalable=no"))
+        XCTAssertTrue(html.contains("width: 100%; max-width: 100%; max-height: 360px; height: auto;"))
+        XCTAssertTrue(html.contains("connect-src 'none'"))
+    }
+
+    func testExpandedHTMLAllowsZoomAndUsesViewportHeight() {
+        let html = SvgPreviewHTMLBuilder.buildHTML(
+            svgContent: #"<svg viewBox="0 0 10 10"></svg>"#,
+            maxHeight: 360,
+            allowsZoom: true
+        )
+
+        XCTAssertTrue(html.contains("maximum-scale=5"))
+        XCTAssertTrue(html.contains("user-scalable=yes"))
+        XCTAssertTrue(html.contains("max-height: calc(100vh - 24px)"))
+    }
 }

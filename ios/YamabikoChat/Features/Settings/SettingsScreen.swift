@@ -188,7 +188,7 @@ struct SettingsScreen: View {
                 }
             )
         }
-        .confirmationDialog(
+        .alert(
             "Agent Skillを削除しますか？",
             isPresented: Binding(
                 get: { pendingAgentSkillDeletionName != nil },
@@ -198,7 +198,6 @@ struct SettingsScreen: View {
                     }
                 }
             ),
-            titleVisibility: .visible,
             presenting: pendingAgentSkillDeletionName
         ) { skillName in
             Button("削除", role: .destructive) {

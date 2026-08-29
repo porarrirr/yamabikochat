@@ -108,34 +108,39 @@ enum SvgPreviewSanitizer {
 }
 
 enum SvgPreviewHTMLBuilder {
-    static func buildHTML(svgContent: String, maxHeight: CGFloat) -> String {
-        """
+    static func buildHTML(svgContent: String, maxHeight: CGFloat, allowsZoom: Bool = false) -> String {
+        let viewport = allowsZoom
+            ? "width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes"
+            : "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+        let svgSizing = allowsZoom
+            ? "width: auto; max-width: 100%; max-height: calc(100vh - 24px); height: auto;"
+            : "width: 100%; max-width: 100%; max-height: \(Int(maxHeight))px; height: auto;"
+
+        return """
         <!doctype html>
         <html>
         <head>
           <meta charset="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <meta name="viewport" content="\(viewport)" />
+          <meta name="color-scheme" content="light dark" />
+          <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
           <style>
             html, body {
               margin: 0;
               padding: 0;
               background: transparent;
-              height: 100%;
             }
             body {
               display: flex;
-              align-items: center;
+              align-items: flex-start;
               justify-content: center;
               min-height: 0;
-              padding: 8px;
+              padding: 12px;
               box-sizing: border-box;
             }
             svg {
-              max-width: 100%;
-              max-height: \(Int(maxHeight))px;
-              width: auto;
-              height: auto;
               display: block;
+              \(svgSizing)
             }
           </style>
         </head>
@@ -150,10 +155,12 @@ enum SvgPreviewHTMLBuilder {
 struct SvgPreviewWebView: UIViewRepresentable {
     let svgContent: String
     var maxHeight: CGFloat = 260
+    var allowsInteraction = false
+    var onHeightChange: ((CGFloat) -> Void)? = nil
     var onError: ((String) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onError: onError)
+        Coordinator(onHeightChange: onHeightChange, onError: onError)
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -165,16 +172,30 @@ struct SvgPreviewWebView: UIViewRepresentable {
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
         webView.navigationDelegate = context.coordinator
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.bounces = false
+        webView.scrollView.isScrollEnabled = allowsInteraction
+        webView.scrollView.bounces = allowsInteraction
+        webView.scrollView.pinchGestureRecognizer?.isEnabled = allowsInteraction
+        context.coordinator.observeContentSize(of: webView)
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        context.coordinator.onHeightChange = onHeightChange
         context.coordinator.onError = onError
-        guard context.coordinator.shouldRender(svgContent: svgContent, maxHeight: maxHeight) else { return }
+        webView.scrollView.isScrollEnabled = allowsInteraction
+        webView.scrollView.bounces = allowsInteraction
+        webView.scrollView.pinchGestureRecognizer?.isEnabled = allowsInteraction
+        guard context.coordinator.shouldRender(
+            svgContent: svgContent,
+            maxHeight: maxHeight,
+            allowsInteraction: allowsInteraction
+        ) else { return }
         let sanitized = SvgPreviewSanitizer.sanitize(svgContent)
-        let html = SvgPreviewHTMLBuilder.buildHTML(svgContent: sanitized, maxHeight: maxHeight)
+        let html = SvgPreviewHTMLBuilder.buildHTML(
+            svgContent: sanitized,
+            maxHeight: maxHeight,
+            allowsZoom: allowsInteraction
+        )
         guard context.coordinator.lastHTML != html else { return }
 
         context.coordinator.lastHTML = html
@@ -183,23 +204,51 @@ struct SvgPreviewWebView: UIViewRepresentable {
 
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
         webView.navigationDelegate = nil
+        coordinator.stopObservingContentSize()
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {
+        var onHeightChange: ((CGFloat) -> Void)?
         var onError: ((String) -> Void)?
         var lastHTML: String?
         private var lastSVGContent: String?
         private var lastMaxHeight: CGFloat?
+        private var lastAllowsInteraction: Bool?
+        private var contentSizeObservation: NSKeyValueObservation?
 
-        init(onError: ((String) -> Void)?) {
+        init(onHeightChange: ((CGFloat) -> Void)?, onError: ((String) -> Void)?) {
+            self.onHeightChange = onHeightChange
             self.onError = onError
         }
 
-        func shouldRender(svgContent: String, maxHeight: CGFloat) -> Bool {
-            guard lastSVGContent != svgContent || lastMaxHeight != maxHeight else { return false }
+        func shouldRender(svgContent: String, maxHeight: CGFloat, allowsInteraction: Bool) -> Bool {
+            guard lastSVGContent != svgContent
+                    || lastMaxHeight != maxHeight
+                    || lastAllowsInteraction != allowsInteraction
+            else { return false }
             lastSVGContent = svgContent
             lastMaxHeight = maxHeight
+            lastAllowsInteraction = allowsInteraction
             return true
+        }
+
+        func observeContentSize(of webView: WKWebView) {
+            contentSizeObservation = webView.scrollView.observe(\.contentSize, options: [.new]) { [weak self] scrollView, _ in
+                self?.reportContentHeight(scrollView.contentSize.height)
+            }
+        }
+
+        func stopObservingContentSize() {
+            contentSizeObservation?.invalidate()
+            contentSizeObservation = nil
+        }
+
+        private func reportContentHeight(_ height: CGFloat) {
+            guard height.isFinite, height > 0 else { return }
+            let measuredHeight = max(44, height.rounded(.up))
+            DispatchQueue.main.async { [weak self] in
+                self?.onHeightChange?(measuredHeight)
+            }
         }
 
         func webView(
@@ -225,7 +274,7 @@ struct SvgPreviewWebView: UIViewRepresentable {
             didFail navigation: WKNavigation!,
             withError error: Error
         ) {
-            onError?(error.localizedDescription)
+            fail(error.localizedDescription)
         }
 
         func webView(
@@ -233,7 +282,118 @@ struct SvgPreviewWebView: UIViewRepresentable {
             didFailProvisionalNavigation navigation: WKNavigation!,
             withError error: Error
         ) {
-            onError?(error.localizedDescription)
+            fail(error.localizedDescription)
         }
+
+        func webViewWebContentProcessDidTerminate(_: WKWebView) {
+            fail("SVG renderer process terminated unexpectedly.")
+        }
+
+        private func fail(_ detail: String) {
+            DiagnosticsLogger.log(
+                "SVG rendering failed",
+                level: .warning,
+                category: .chat,
+                metadata: ["detail": detail]
+            )
+            DispatchQueue.main.async { [weak self] in
+                self?.onError?(detail)
+            }
+        }
+    }
+}
+
+struct SvgDiagramView: View {
+    let source: String
+    var expanded = false
+    var onExpand: (() -> Void)?
+    var onLayoutChange: (() -> Void)?
+
+    @State private var measuredHeight: CGFloat = 180
+    @State private var renderError: String?
+
+    private let inlineMaximumHeight: CGFloat = 360
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if !expanded {
+                HStack(spacing: 12) {
+                    Text("SVG")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        UIPasteboard.general.string = source
+                    } label: {
+                        Label(L10n.text("コピー"), systemImage: "doc.on.doc")
+                            .font(.caption.weight(.medium))
+                    }
+                    .buttonStyle(.plain)
+                    if let onExpand, renderError == nil {
+                        Button(action: onExpand) {
+                            Label(L10n.text("拡大"), systemImage: "arrow.up.left.and.arrow.down.right")
+                                .font(.caption.weight(.medium))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 38)
+                Divider()
+            }
+
+            if let renderError {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(L10n.text("SVGを描画できません"), systemImage: "exclamationmark.triangle")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.red)
+                    Text(renderError)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+            } else {
+                ZStack(alignment: .bottom) {
+                    SvgPreviewWebView(
+                        svgContent: source,
+                        maxHeight: inlineMaximumHeight,
+                        allowsInteraction: expanded,
+                        onHeightChange: { height in
+                            guard abs(measuredHeight - height) > 1 else { return }
+                            measuredHeight = height
+                            onLayoutChange?()
+                        },
+                        onError: { error in
+                            renderError = error
+                            onLayoutChange?()
+                        }
+                    )
+                    .frame(height: expanded ? nil : min(measuredHeight, inlineMaximumHeight))
+                    .frame(maxHeight: expanded ? .infinity : inlineMaximumHeight)
+
+                    if !expanded, measuredHeight > inlineMaximumHeight {
+                        LinearGradient(
+                            colors: [.clear, Color(uiColor: .secondarySystemBackground)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 44)
+                        .allowsHitTesting(false)
+                    }
+
+                    if !expanded, let onExpand {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture(perform: onExpand)
+                            .accessibilityLabel(Text(L10n.text("SVGを拡大")))
+                            .accessibilityAddTraits(.isButton)
+                    }
+                }
+            }
+        }
+        .background(Color(uiColor: expanded ? .systemBackground : .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: expanded ? 0 : 12, style: .continuous))
     }
 }

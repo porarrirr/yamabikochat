@@ -103,9 +103,9 @@ struct SvgPreviewCard: View {
                             .font(.caption)
                             .foregroundStyle(.red)
                     } else {
-                        SvgPreviewWebView(svgContent: block.content) { error in
+                        SvgPreviewWebView(svgContent: block.content, onError: { error in
                             renderError = error
-                        }
+                        })
                         .frame(maxWidth: .infinity)
                         .frame(height: 260)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))

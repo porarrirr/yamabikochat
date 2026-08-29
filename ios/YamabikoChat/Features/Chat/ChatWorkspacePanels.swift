@@ -190,7 +190,6 @@ private struct ChatArtifactViewer: View {
     let block: ChatArtifactBlock
     @Environment(\.dismiss) private var dismiss
     @State private var htmlTitle = ""
-    @State private var svgError: String?
 
     var body: some View {
         NavigationStack {
@@ -199,22 +198,22 @@ private struct ChatArtifactViewer: View {
                 case let .html(content):
                     HtmlPreviewWebView(html: content, pageTitle: $htmlTitle)
                 case let .svg(content):
-                    if let svgError {
-                        ContentUnavailableView(
-                            L10n.text("プレビューを表示できません"),
-                            systemImage: "exclamationmark.triangle",
-                            description: Text(svgError)
-                        )
-                    } else {
-                        SvgPreviewWebView(svgContent: content) { svgError = $0 }
-                            .padding(16)
-                    }
+                    SvgDiagramView(source: content, expanded: true)
                 }
             }
             .navigationTitle(block.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if case let .svg(content) = block {
+                        Button {
+                            UIPasteboard.general.string = content
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .accessibilityLabel(Text(L10n.text("コピー")))
+                    }
+
                     Button(L10n.text("閉じる")) { dismiss() }
                 }
             }
