@@ -9,6 +9,7 @@ import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-code
 import * as grokOAuth from "pi-grok/oauth.ts";
 import { buildProxyHeaders, CLI_PROXY_BASE_URL, FALLBACK_MODELS } from "pi-grok/models.ts";
 import { sanitizePayload as sanitizeGrokPayload } from "pi-grok/sanitize.ts";
+import { providerErrorDetails } from "./provider-error.js";
 
 const port = Number(process.argv[2]);
 const token = process.argv[3];
@@ -205,6 +206,17 @@ async function body(req) {
 
 function send(res, event) {
   res.write(`${JSON.stringify(event)}\n`);
+}
+
+function errorEvent(error, stage) {
+  const details = providerErrorDetails(error);
+  return {
+    type: "error",
+    ...(stage ? { stage } : {}),
+    message: details.message,
+    ...(details.statusCode !== undefined ? { statusCode: details.statusCode } : {}),
+    ...(details.errorCode ? { errorCode: details.errorCode } : {})
+  };
 }
 
 function oauthCredential(value) {
@@ -1324,7 +1336,7 @@ const server = http.createServer(async (req, res) => {
       const value = await body(req);
       res.writeHead(200, { "content-type": "application/x-ndjson", "cache-control": "no-store" });
       try { await loginOAuth(value.provider, value.method || "browser", res); res.end(); }
-      catch (error) { send(res, { type: "error", message: error?.message || String(error) }); res.end(); }
+      catch (error) { send(res, errorEvent(error)); res.end(); }
       return;
     }
     if (req.method === "POST" && req.url === "/v1/auth/resolve") {
@@ -1348,13 +1360,13 @@ const server = http.createServer(async (req, res) => {
       const envelope = await body(req);
       res.writeHead(200, { "content-type": "application/x-ndjson", "cache-control": "no-store" });
       try { await runAgent(envelope, res); res.end(); }
-      catch (error) { send(res, { type: "error", stage: "run", message: error?.message || String(error) }); res.end(); }
+      catch (error) { send(res, errorEvent(error, "run")); res.end(); }
       return;
     }
     json(res, 404, { error: "not found" });
   } catch (error) {
     if (!res.headersSent) json(res, 500, { error: error?.message || String(error) });
-    else { send(res, { type: "error", message: error?.message || String(error) }); res.end(); }
+    else { send(res, errorEvent(error)); res.end(); }
   }
 });
 

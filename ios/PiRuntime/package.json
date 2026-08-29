@@ -7,7 +7,7 @@
     "build": "esbuild src/main.js --bundle --platform=node --format=esm --target=node24 --banner:js=\"import{createRequire as __yamabikoCreateRequire}from'node:module';const require=__yamabikoCreateRequire(import.meta.url);\" --outfile=bundle/main.js && cp bundle/main.js ../../app/src/main/assets/pi-runtime/main.js",
     "check": "node --check src/main.js",
     "check:contracts": "python3 ../../scripts/check-opencode-go-contract.py && python3 ../../scripts/check-models-dev-pi-identities.py",
-    "test": "node --test test/model-resolution.test.js"
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.84.2",

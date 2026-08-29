@@ -63,6 +63,34 @@ private actor ScriptedPiRuntimeHealthClient: PiRuntimeHealthClient {
     }
 }
 
+private final class ThrowingPiStreamSpy: @unchecked Sendable {
+    typealias Handler = @Sendable (
+        ProviderRequest,
+        PiAgentConfiguration
+    ) -> AsyncThrowingStream<ProviderStreamEvent, Error>
+
+    private let lock = NSLock()
+    private var recordedCalls: [PiStreamSpy.Call] = []
+    private let handler: Handler
+
+    init(handler: @escaping Handler) {
+        self.handler = handler
+    }
+
+    var calls: [PiStreamSpy.Call] {
+        lock.withLock { recordedCalls }
+    }
+
+    var stream: PiAgentStream {
+        { [self] request, configuration, _ in
+            lock.withLock {
+                recordedCalls.append(.init(request: request, configuration: configuration))
+            }
+            return handler(request, configuration)
+        }
+    }
+}
+
 final class PiAgentGatewayTests: XCTestCase {
     func testAttachmentFileURLResolvesFilesystemPath() {
         let path = "/tmp/Yamabiko Chat/photo.png"
@@ -423,6 +451,188 @@ final class PiAgentGatewayTests: XCTestCase {
         XCTAssertEqual(configuration.provider, "google")
         XCTAssertEqual(configuration.thinkingLevel, "high")
         XCTAssertEqual(configuration.contractVersion, 2)
+    }
+
+    func testGeminiRotatesToNextModelThroughPiAfterRateLimitBeforeOutput() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let settingsRepository = SettingsRepository(dbQueue: database)
+        var settings = try settingsRepository.load()
+        settings.setGeminiRotationModelsList(["gemini-2.5-flash-lite"])
+        try settingsRepository.save(settings)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.setCredential("gemini-key", for: .gemini)
+        let pi = ThrowingPiStreamSpy { _, configuration in
+            AsyncThrowingStream { continuation in
+                continuation.yield(.answerStart)
+                if configuration.model == "gemini-2.5-flash" {
+                    continuation.yield(.executionSnapshot(.object(["failed": .bool(true)])))
+                    continuation.finish(throwing: ProviderClientError.providerFailure(
+                        statusCode: 429,
+                        code: "RESOURCE_EXHAUSTED",
+                        message: "quota exhausted"
+                    ))
+                } else {
+                    continuation.yield(.textDelta("rotated"))
+                    continuation.yield(.completed(ProviderResponse(text: "rotated")))
+                    continuation.finish()
+                }
+            }
+        }
+        let gateway = ProviderGateway(
+            settingsRepository: settingsRepository,
+            credentialStore: credentials,
+            piStream: pi.stream
+        )
+
+        let stream = try await gateway.stream(
+            request: ProviderRequest(
+                model: "gemini-2.5-flash",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")]
+            ),
+            provider: .gemini
+        )
+        var events: [ProviderStreamEvent] = []
+        for try await event in stream {
+            events.append(event)
+        }
+
+        XCTAssertEqual(pi.calls.map(\.configuration.model), ["gemini-2.5-flash", "gemini-2.5-flash-lite"])
+        XCTAssertEqual(events.filter { $0 == .answerStart }.count, 1)
+        XCTAssertFalse(events.contains(.executionSnapshot(.object(["failed": .bool(true)]))))
+        XCTAssertTrue(events.contains(.completed(ProviderResponse(text: "rotated"))))
+    }
+
+    func testGeminiAuthFailureSkipsRemainingModelsForBadKeyAndRemembersGoodCandidate() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let settingsRepository = SettingsRepository(dbQueue: database)
+        var settings = try settingsRepository.load()
+        settings.setGeminiKeyNames(["slot-a"])
+        settings.setGeminiRotationModelsList(["gemini-2.5-flash-lite"])
+        try settingsRepository.save(settings)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.setCredential("bad-key", for: .gemini)
+        try credentials.setGeminiAPIKey(name: "slot-a", value: "good-key")
+        let pi = ThrowingPiStreamSpy { _, configuration in
+            AsyncThrowingStream { continuation in
+                if configuration.apiKey == "bad-key" {
+                    continuation.finish(throwing: ProviderClientError.providerFailure(
+                        statusCode: 401,
+                        code: "UNAUTHENTICATED",
+                        message: "API key not valid"
+                    ))
+                } else {
+                    continuation.yield(.completed(ProviderResponse(text: "ok")))
+                    continuation.finish()
+                }
+            }
+        }
+        let gateway = ProviderGateway(
+            settingsRepository: settingsRepository,
+            credentialStore: credentials,
+            piStream: pi.stream
+        )
+
+        let response = try await gateway.generate(
+            request: ProviderRequest(
+                model: "gemini-2.5-flash",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")]
+            ),
+            provider: .gemini
+        )
+
+        XCTAssertEqual(response.text, "ok")
+        XCTAssertEqual(pi.calls.map(\.configuration.apiKey), ["bad-key", "good-key"])
+        XCTAssertEqual(pi.calls.map(\.configuration.model), ["gemini-2.5-flash", "gemini-2.5-flash"])
+
+        _ = try await gateway.generate(
+            request: ProviderRequest(
+                model: "gemini-2.5-flash",
+                messages: [ProviderRequestMessage(role: "user", content: "again")]
+            ),
+            provider: .gemini
+        )
+
+        XCTAssertEqual(pi.calls.map(\.configuration.apiKey), ["bad-key", "good-key", "good-key"])
+        XCTAssertEqual(pi.calls.map(\.configuration.model), [
+            "gemini-2.5-flash",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash"
+        ])
+    }
+
+    func testGeminiConfiguredKeyWorksWithoutDefaultCredential() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let settingsRepository = SettingsRepository(dbQueue: database)
+        var settings = try settingsRepository.load()
+        settings.setGeminiKeyNames(["slot-only"])
+        try settingsRepository.save(settings)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.setGeminiAPIKey(name: "slot-only", value: "rotation-only-key")
+        let pi = PiStreamSpy()
+        let gateway = ProviderGateway(
+            settingsRepository: settingsRepository,
+            credentialStore: credentials,
+            piStream: pi.stream
+        )
+
+        _ = try await gateway.stream(
+            request: ProviderRequest(
+                model: "gemini-2.5-flash",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")]
+            ),
+            provider: .gemini
+        )
+
+        XCTAssertEqual(pi.calls.first?.configuration.apiKey, "rotation-only-key")
+    }
+
+    func testGeminiDoesNotRotateAfterProviderOutputWasEmitted() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let settingsRepository = SettingsRepository(dbQueue: database)
+        var settings = try settingsRepository.load()
+        settings.setGeminiRotationModelsList(["gemini-2.5-flash-lite"])
+        try settingsRepository.save(settings)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.setCredential("gemini-key", for: .gemini)
+        let pi = ThrowingPiStreamSpy { _, _ in
+            AsyncThrowingStream { continuation in
+                continuation.yield(.answerStart)
+                continuation.yield(.textDelta("partial"))
+                continuation.finish(throwing: ProviderClientError.providerFailure(
+                    statusCode: 429,
+                    code: "RESOURCE_EXHAUSTED",
+                    message: "quota exhausted"
+                ))
+            }
+        }
+        let gateway = ProviderGateway(
+            settingsRepository: settingsRepository,
+            credentialStore: credentials,
+            piStream: pi.stream
+        )
+
+        let stream = try await gateway.stream(
+            request: ProviderRequest(
+                model: "gemini-2.5-flash",
+                messages: [ProviderRequestMessage(role: "user", content: "hello")]
+            ),
+            provider: .gemini
+        )
+        var text = ""
+        do {
+            for try await event in stream {
+                if case let .textDelta(delta) = event { text += delta }
+            }
+            XCTFail("Expected the committed candidate failure")
+        } catch {
+            XCTAssertEqual(text, "partial")
+        }
+
+        XCTAssertEqual(pi.calls.map(\.configuration.model), ["gemini-2.5-flash"])
     }
 
     func testGemma4ThinkingLevelIsPassedThroughPiConfiguration() async throws {

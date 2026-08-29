@@ -5,6 +5,7 @@ enum ProviderClientError: LocalizedError, Sendable {
     case invalidBaseURL(String)
     case invalidResponse
     case httpStatus(Int, String)
+    case providerFailure(statusCode: Int?, code: String?, message: String)
     case parseFailure(String)
     case unsupportedModel(provider: String, model: String)
 
@@ -21,6 +22,10 @@ enum ProviderClientError: LocalizedError, Sendable {
             return "Invalid API response."
         case let .httpStatus(status, body):
             return "HTTP \(status): \(body)"
+        case let .providerFailure(statusCode, code, message):
+            let status = statusCode.map { "HTTP \($0)" } ?? "Provider error"
+            let suffix = code?.trimmedNonEmpty.map { " [\($0)]" } ?? ""
+            return "\(status)\(suffix): \(message)"
         case let .parseFailure(reason):
             return "Response parse failed: \(reason)"
         case let .unsupportedModel(provider, model):

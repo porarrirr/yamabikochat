@@ -110,6 +110,8 @@ private struct PiRuntimeEvent: Decodable {
     var stage: String?
     var delta: String?
     var message: String?
+    var statusCode: Int?
+    var errorCode: String?
     var metadata: [String: String]?
     var requestId: String?
     var toolCallId: String?
@@ -603,7 +605,17 @@ actor PiAgentRuntime {
                             }
                             continuation.yield(.executionSnapshot(execution))
                         case "error":
-                            let error = ProviderClientError.parseFailure(event.message ?? "Pi agent failed")
+                            let message = event.message ?? "Pi agent failed"
+                            let error: ProviderClientError
+                            if event.statusCode != nil || event.errorCode?.trimmedNonEmpty != nil {
+                                error = .providerFailure(
+                                    statusCode: event.statusCode,
+                                    code: event.errorCode,
+                                    message: message
+                                )
+                            } else {
+                                error = .parseFailure(message)
+                            }
                             DiagnosticsLogger.log(
                                 "Pi runtime reported an error",
                                 category: .network,

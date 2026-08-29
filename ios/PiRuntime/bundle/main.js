@@ -288156,6 +288156,74 @@ function sanitizePayload(params, modelId, sessionId, reasoning = false) {
   return next;
 }
 
+// src/provider-error.js
+function numericStatus(value2) {
+  if (typeof value2 === "number" && Number.isInteger(value2) && value2 >= 100 && value2 <= 599) {
+    return value2;
+  }
+  if (typeof value2 === "string" && /^\d{3}$/.test(value2.trim())) {
+    const parsed = Number(value2);
+    return parsed >= 100 && parsed <= 599 ? parsed : void 0;
+  }
+  return void 0;
+}
+function errorChain(error) {
+  const values = [];
+  const seen = /* @__PURE__ */ new Set();
+  let current = error;
+  while (current && !seen.has(current) && values.length < 8) {
+    values.push(current);
+    if (typeof current !== "object" && typeof current !== "function") break;
+    seen.add(current);
+    current = current.cause;
+  }
+  return values;
+}
+function statusFromMessage(message) {
+  const patterns = [
+    /(?:^|\D)HTTP\s+(\d{3})(?:\D|$)/i,
+    /(?:^|\D)status(?:\s+code)?\s*[:=]?\s*(\d{3})(?:\D|$)/i,
+    /(?:^|\D)\[(\d{3})\s+[^\]]+\]/,
+    /(?:^|\D)\((\d{3})\)\s*:/,
+    /^\s*(?:Pi provider failed:\s*)?(\d{3})\s*:/i
+  ];
+  for (const pattern of patterns) {
+    const match2 = message.match(pattern);
+    const status = numericStatus(match2?.[1]);
+    if (status !== void 0) return status;
+  }
+  return void 0;
+}
+function codeFromMessage(message) {
+  const jsonStatus = message.match(/["']status["']\s*:\s*["']([A-Z][A-Z0-9_]+)["']/i)?.[1];
+  if (jsonStatus) return jsonStatus.toUpperCase();
+  const named = message.match(/\b(RESOURCE_EXHAUSTED|UNAUTHENTICATED|PERMISSION_DENIED|API_KEY_INVALID)\b/i)?.[1];
+  return named?.toUpperCase();
+}
+function providerErrorDetails(error) {
+  const chain = errorChain(error);
+  const message = error instanceof Error ? error.message : String(error);
+  let statusCode;
+  let errorCode;
+  for (const value2 of chain) {
+    if (typeof value2 !== "object" || value2 === null) continue;
+    statusCode ??= numericStatus(value2.statusCode);
+    statusCode ??= numericStatus(value2.status);
+    statusCode ??= numericStatus(value2.response?.status);
+    statusCode ??= numericStatus(value2.$metadata?.httpStatusCode);
+    errorCode ??= typeof value2.providerCode === "string" ? value2.providerCode : void 0;
+    errorCode ??= typeof value2.code === "string" ? value2.code : void 0;
+    errorCode ??= typeof value2.error?.status === "string" ? value2.error.status : void 0;
+  }
+  statusCode ??= statusFromMessage(message);
+  errorCode ??= codeFromMessage(message);
+  return {
+    message,
+    ...statusCode !== void 0 ? { statusCode } : {},
+    ...errorCode ? { errorCode: errorCode.toUpperCase() } : {}
+  };
+}
+
 // src/main.js
 var port = Number(process.argv[2]);
 var token = process.argv[3];
@@ -288335,6 +288403,16 @@ async function body(req) {
 function send(res, event) {
   res.write(`${JSON.stringify(event)}
 `);
+}
+function errorEvent(error, stage) {
+  const details = providerErrorDetails(error);
+  return {
+    type: "error",
+    ...stage ? { stage } : {},
+    message: details.message,
+    ...details.statusCode !== void 0 ? { statusCode: details.statusCode } : {},
+    ...details.errorCode ? { errorCode: details.errorCode } : {}
+  };
 }
 function oauthCredential(value2) {
   if (!value2 || typeof value2 !== "object" || !value2.access || !value2.refresh || !Number.isFinite(value2.expires)) {
@@ -289382,7 +289460,7 @@ var server = http5.createServer(async (req, res) => {
         await loginOAuth(value2.provider, value2.method || "browser", res);
         res.end();
       } catch (error) {
-        send(res, { type: "error", message: error?.message || String(error) });
+        send(res, errorEvent(error));
         res.end();
       }
       return;
@@ -289411,7 +289489,7 @@ var server = http5.createServer(async (req, res) => {
         await runAgent(envelope, res);
         res.end();
       } catch (error) {
-        send(res, { type: "error", stage: "run", message: error?.message || String(error) });
+        send(res, errorEvent(error, "run"));
         res.end();
       }
       return;
@@ -289420,7 +289498,7 @@ var server = http5.createServer(async (req, res) => {
   } catch (error) {
     if (!res.headersSent) json(res, 500, { error: error?.message || String(error) });
     else {
-      send(res, { type: "error", message: error?.message || String(error) });
+      send(res, errorEvent(error));
       res.end();
     }
   }
