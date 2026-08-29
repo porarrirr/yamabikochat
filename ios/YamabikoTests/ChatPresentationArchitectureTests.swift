@@ -691,6 +691,43 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         )
     }
 
+    func testResponseContentKeepsMultipleSvgBlocksAtTheirOriginalPositions() {
+        let response = """
+        最初の説明
+
+        ```svg
+        <svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" /></svg>
+        ```
+
+        中間の説明
+
+        ```svg
+        <svg viewBox="0 0 10 10"><rect width="10" height="10" /></svg>
+        ```
+
+        最後の説明
+        """
+        let artifacts = ChatArtifactPresentation.items(from: response, isStreaming: false)
+        let segments = ChatResponseContentPresentation.segments(from: response, artifacts: artifacts)
+
+        XCTAssertEqual(segments.count, 5)
+        guard case let .markdown(_, firstText) = segments[0],
+              case let .artifact(firstArtifact) = segments[1],
+              case let .markdown(_, middleText) = segments[2],
+              case let .artifact(secondArtifact) = segments[3],
+              case let .markdown(_, lastText) = segments[4]
+        else {
+            return XCTFail("Expected markdown and SVG artifacts to alternate in source order")
+        }
+
+        XCTAssertTrue(firstText.contains("最初の説明"))
+        XCTAssertTrue(middleText.contains("中間の説明"))
+        XCTAssertTrue(lastText.contains("最後の説明"))
+        guard case .svg = firstArtifact.block, case .svg = secondArtifact.block else {
+            return XCTFail("Expected both artifacts to remain SVG previews")
+        }
+    }
+
     @MainActor
     func testTwoHundredMessageTimelineKeepsStableIdentityDuringStreamUpdate() {
         let store = ChatTimelineStore()

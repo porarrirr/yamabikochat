@@ -309,6 +309,65 @@ struct ChatArtifactPresentationItem: Identifiable, Equatable, Sendable {
     let endIndex: Int
 }
 
+enum ChatResponseContentSegment: Identifiable, Equatable, Sendable {
+    case markdown(id: String, text: String)
+    case artifact(ChatArtifactPresentationItem)
+
+    var id: String {
+        switch self {
+        case let .markdown(id, _): id
+        case let .artifact(item): "artifact-\(item.id)"
+        }
+    }
+}
+
+enum ChatResponseContentPresentation {
+    static func segments(
+        from text: String,
+        artifacts: [ChatArtifactPresentationItem]
+    ) -> [ChatResponseContentSegment] {
+        guard !artifacts.isEmpty else {
+            return text.isEmpty ? [] : [.markdown(id: "markdown-0", text: text)]
+        }
+
+        let source = text as NSString
+        let sortedArtifacts = artifacts.sorted { $0.startIndex < $1.startIndex }
+        var cursor = 0
+        var segments: [ChatResponseContentSegment] = []
+
+        for artifact in sortedArtifacts {
+            guard artifact.startIndex >= cursor,
+                  artifact.endIndex > artifact.startIndex,
+                  artifact.endIndex <= source.length
+            else {
+                assertionFailure("Artifact range is outside the response text")
+                continue
+            }
+
+            if artifact.startIndex > cursor {
+                let markdown = source.substring(
+                    with: NSRange(location: cursor, length: artifact.startIndex - cursor)
+                )
+                if !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    segments.append(.markdown(id: "markdown-\(cursor)", text: markdown))
+                }
+            }
+
+            segments.append(.artifact(artifact))
+            cursor = artifact.endIndex
+        }
+
+        if cursor < source.length {
+            let markdown = source.substring(from: cursor)
+            if !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                segments.append(.markdown(id: "markdown-\(cursor)", text: markdown))
+            }
+        }
+
+        return segments
+    }
+}
+
 enum ChatArtifactPresentation {
     static func items(from text: String, isStreaming: Bool) -> [ChatArtifactPresentationItem] {
         let isChatError = UserFacingErrorFormatter.looksLikeChatError(text)

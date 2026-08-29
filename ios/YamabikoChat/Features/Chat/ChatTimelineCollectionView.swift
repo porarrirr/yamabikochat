@@ -960,11 +960,8 @@ private struct ChatMessageRow: View {
     private var artifacts: [ChatArtifactPresentationItem] {
         ChatArtifactPresentation.items(from: responseText, isStreaming: isStreaming)
     }
-    private var markdownText: String {
-        ExtractedFenceRemover.remove(
-            from: responseText,
-            ranges: artifacts.map { ($0.startIndex, $0.endIndex) }
-        )
+    private var responseSegments: [ChatResponseContentSegment] {
+        ChatResponseContentPresentation.segments(from: responseText, artifacts: artifacts)
     }
 
     var body: some View {
@@ -1019,9 +1016,9 @@ private struct ChatMessageRow: View {
                             .textSelection(.enabled)
                             .padding(12)
                             .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                    } else if !markdownText.isEmpty {
+                    } else if artifacts.isEmpty, !responseText.isEmpty {
                         NativeMarkdownView(
-                            markdownText: markdownText,
+                            markdownText: responseText,
                             isStreaming: isStreaming,
                             mathRenderingEnabled: mathRenderingEnabled,
                             preparsedBlocks: streamingMarkdownBlocks,
@@ -1033,42 +1030,26 @@ private struct ChatMessageRow: View {
                                 ))
                             }
                         )
-                    }
-
-                    ForEach(artifacts) { artifact in
-                        switch artifact.block {
-                        case let .svg(source):
-                            SvgDiagramView(
-                                source: source,
-                                onExpand: {
-                                    onRoute(.artifactViewer(id: artifact.id, block: artifact.block))
-                                },
-                                onLayoutChange: onMarkdownLayoutChange
-                            )
-                        case .html:
-                            Button {
-                                onRoute(.artifactViewer(id: artifact.id, block: artifact.block))
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: artifact.block.systemImage)
-                                        .font(.title3)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(artifact.block.title)
-                                            .font(.subheadline.weight(.semibold))
-                                        Text(L10n.text("専用ビューアで開く"))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(responseSegments) { segment in
+                            switch segment {
+                            case let .markdown(segmentID, markdown):
+                                NativeMarkdownView(
+                                    markdownText: markdown,
+                                    isStreaming: isStreaming,
+                                    mathRenderingEnabled: mathRenderingEnabled,
+                                    preparsedBlocks: nil,
+                                    onFinalParse: onMarkdownLayoutChange,
+                                    onOpenMermaid: { blockID, source in
+                                        onRoute(.mermaidViewer(
+                                            id: "\(message.id)-\(segmentID)-\(blockID)",
+                                            source: source
+                                        ))
                                     }
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(13)
-                                .background(Color(uiColor: .secondarySystemBackground))
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                )
+                            case let .artifact(artifact):
+                                artifactView(artifact)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
 
@@ -1096,6 +1077,44 @@ private struct ChatMessageRow: View {
         // A message-wide context menu intercepts the long press before SwiftUI's
         // selectable Text can resolve the character under the user's finger.
         // Message commands remain available in ChatMessageActions below the body.
+    }
+
+    @ViewBuilder
+    private func artifactView(_ artifact: ChatArtifactPresentationItem) -> some View {
+        switch artifact.block {
+        case let .svg(source):
+            SvgDiagramView(
+                source: source,
+                onExpand: {
+                    onRoute(.artifactViewer(id: artifact.id, block: artifact.block))
+                },
+                onLayoutChange: onMarkdownLayoutChange
+            )
+        case .html:
+            Button {
+                onRoute(.artifactViewer(id: artifact.id, block: artifact.block))
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: artifact.block.systemImage)
+                        .font(.title3)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(artifact.block.title)
+                            .font(.subheadline.weight(.semibold))
+                        Text(L10n.text("専用ビューアで開く"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(13)
+                .background(Color(uiColor: .secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private func showFusionDetails(_ trace: FusionTrace) {
