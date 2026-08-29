@@ -100,6 +100,26 @@ final class AppStoreScreenshotTests: XCTestCase {
         XCTAssertTrue(updatedProviderField.label.contains("Google Gemini"))
     }
 
+    func testCaptureTemporaryChatIconStates() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-AppStoreScreenshotDemo",
+            "-ScreenshotScene", "temporary-chat"
+        ]
+        app.launch()
+
+        let button = app.buttons["chat-primary-action-button"].firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 20))
+        XCTAssertEqual(button.label, "シークレットチャットに切り替え")
+        capture("temporary-chat-icon-inactive", element: button)
+
+        button.tap()
+        let selectedButton = app.buttons["chat-primary-action-button"].firstMatch
+        XCTAssertTrue(selectedButton.waitForExistence(timeout: 5))
+        XCTAssertEqual(selectedButton.label, "通常チャットに戻す")
+        capture("temporary-chat-icon-selected", element: selectedButton)
+    }
+
     func testNativeTimelineKeepsTheLastMessageInsideTheViewport() throws {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -363,6 +383,21 @@ final class AppStoreScreenshotTests: XCTestCase {
         let url = outputDirectory.appendingPathComponent("\(name).png")
         let image = screenshot.image
         guard let data = image.pngData() else {
+            XCTFail("Could not encode screenshot \(name)")
+            return
+        }
+        XCTAssertNoThrow(try data.write(to: url, options: .atomic))
+    }
+
+    private func capture(_ name: String, element: XCUIElement) {
+        let screenshot = element.screenshot()
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        let url = outputDirectory.appendingPathComponent("\(name).png")
+        guard let data = screenshot.image.pngData() else {
             XCTFail("Could not encode screenshot \(name)")
             return
         }

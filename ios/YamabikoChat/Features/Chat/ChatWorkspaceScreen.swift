@@ -441,69 +441,18 @@ private struct SecretChatToggleIcon: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color(uiColor: .separator).opacity(0.7), lineWidth: 0.75)
+                .strokeBorder(Color.black.opacity(0.22), lineWidth: 0.45)
 
-            TemporaryChatMark()
-                .stroke(
-                    Color.primary,
-                    style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
-                )
+            Image(isSecret ? "TemporaryChatMarkSelected" : "TemporaryChatMark")
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
                 .frame(width: 21, height: 21)
-
-            if isSecret {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 9, weight: .bold))
-                    .offset(y: 1)
-            }
+                .offset(x: -1.0 / 3.0, y: -1.0 / 3.0)
         }
         .foregroundStyle(.primary)
-        .frame(width: 44, height: 44)
+        .frame(width: 45, height: 45)
         .contentShape(Circle())
-    }
-}
-
-private struct TemporaryChatMark: Shape {
-    func path(in rect: CGRect) -> Path {
-        let scaleX = rect.width / 26
-        let scaleY = rect.height / 26
-        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-            CGPoint(x: rect.minX + (x * scaleX), y: rect.minY + (y * scaleY))
-        }
-
-        var path = Path()
-
-        // The reference mark is three distinct strokes: a top arc and two
-        // speech-bubble side strokes. Keeping these gaps visible is what gives
-        // the control its temporary-chat appearance.
-        path.move(to: point(4.5, 6.2))
-        path.addCurve(
-            to: point(22, 5.9),
-            control1: point(8.7, 0.9),
-            control2: point(17.7, 0.5)
-        )
-
-        path.move(to: point(2.7, 10.3))
-        path.addCurve(
-            to: point(5.8, 21.7),
-            control1: point(1.1, 14.8),
-            control2: point(2.1, 18.8)
-        )
-        path.addLine(to: point(4.8, 25))
-        path.addLine(to: point(9.6, 23.3))
-        path.addCurve(
-            to: point(13.4, 24.8),
-            control1: point(10.8, 24.1),
-            control2: point(12.1, 24.6)
-        )
-
-        path.move(to: point(17.3, 9.8))
-        path.addCurve(
-            to: point(16.1, 24.8),
-            control1: point(24.2, 10.7),
-            control2: point(27.2, 20.8)
-        )
-
-        return path
     }
 }
 

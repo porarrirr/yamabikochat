@@ -4,6 +4,7 @@ enum AppStoreScreenshotRouting {
     enum Scene: String {
         case list
         case chat
+        case temporaryChat = "temporary-chat"
         case performance
         case settingsAPI = "settings-api"
         case settingsAppearance = "settings-appearance"

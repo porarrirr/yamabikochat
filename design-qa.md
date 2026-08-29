@@ -1,3 +1,47 @@
+# Design QA: temporary-chat toggle icon
+
+- Source visual truth (inactive): `/var/folders/5w/7hrzp8fx3b9dh79n6jk19l980000gn/T/codex-clipboard-10e61496-3c13-47c7-9563-bc2843ebc3f6.jpg`
+- Source visual truth (selected): `/var/folders/5w/7hrzp8fx3b9dh79n6jk19l980000gn/T/codex-clipboard-f3cdae53-19b0-4875-9975-f511ed46ae4c.png`
+- Implementation screenshot (inactive): `/tmp/yamabiko-icon-qa-final.u02kON/69D11BE8-F226-4610-A00F-27D091FF5713.png`
+- Implementation screenshot (selected): `/tmp/yamabiko-icon-qa-final.u02kON/46948E8C-BFB0-4F63-9FAD-3D7BBAE93190.png`
+- Combined comparison: `/tmp/yamabiko-icon-qa-final.u02kON/reference-vs-implementation-final.png`
+- Viewport: iPhone 17 Pro simulator, iOS 26.5, portrait, light appearance
+- Component size: 45 × 45 pt; XCUITest element captures are 134 × 134 px at native 3× density
+- Comparison normalization: each supplied reference was cropped to the same 134 × 134 px component bounds without scaling; the inactive and selected source/implementation pairs were inspected together
+- States: empty normal chat and empty secret chat
+
+## Required fidelity surfaces
+
+- Typography and copy: the icon has no visible text. UI automation verifies the localized accessibility labels `シークレットチャットに切り替え` and `通常チャットに戻す`.
+- Spacing and layout: the 21 pt mark is optically centered inside the 45 pt circular control. The source mark's one-pixel left/up optical offset is preserved at 3× density.
+- Colors and visual tokens: the mark remains semantic primary color. The outer ring was tuned to the source's thin, restrained gray treatment while keeping dark-mode tinting isolated to the template mark.
+- Image fidelity: both three-stroke marks are template assets mechanically extracted from the supplied visual truth. The selected state uses the supplied check shape rather than an overlaid SF Symbol or an approximate hand-drawn path.
+- Copy and content: no additional menu or label is introduced by this icon change.
+
+## Comparison history
+
+1. P1: the initial implementation recreated the mark with a custom SwiftUI `Shape`; its three strokes, tail, and selected check did not match the supplied source. The approximation was removed.
+2. P2: the first source-derived implementation rendered a 44 pt outer circle, producing a 132 px diameter against the source's approximately 135 px circle. The control was corrected to 45 pt.
+3. P2: the first 45 pt capture left the mark one pixel right/down and rendered the outer ring too thick and light. The source's optical center was restored and the ring changed to a 0.45 pt inset stroke at 22% black.
+4. Post-fix evidence: the final side-by-side comparison has identical dark-mark bounding boxes for both states (`x 36...96`, `y 37...94`) and no visible P0, P1, or P2 mismatch.
+
+## Verification
+
+- [x] Actual app-rendered inactive and selected states captured from the simulator
+- [x] Reference and implementation inspected in one same-size comparison image
+- [x] Toggle interaction and both accessibility labels verified by UI automation
+- [x] All four primary-action state combinations verified by focused unit tests
+- [x] iOS build and focused UI test passed with zero failures
+- [x] `git diff --check` passed
+
+## Follow-up polish
+
+None required for this icon fix.
+
+final result: passed
+
+---
+
 # Design QA: selection-aware chat composer
 
 - Source visual truth: `/var/folders/5w/7hrzp8fx3b9dh79n6jk19l980000gn/T/codex-clipboard-7890948e-581f-41e2-bcfb-c9d12a5084de.png`

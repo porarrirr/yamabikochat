@@ -229,6 +229,12 @@ struct RootView: View {
             if let conversationID = launch.conversationID ?? listViewModel.conversations.first?.id {
                 selectConversation(id: conversationID)
             }
+        case .temporaryChat:
+            if let conversationID = try? container.chatRepository.createConversation(
+                title: "Temporary Chat Screenshot Fixture"
+            ) {
+                selectConversation(id: conversationID)
+            }
         case .performance:
             if let conversationID = listViewModel.conversations.first(where: {
                 $0.title == "Timeline Performance Fixture"
