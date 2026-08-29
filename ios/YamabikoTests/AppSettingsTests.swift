@@ -210,6 +210,34 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertFalse(normalized.isAutoConversationEnabled)
     }
 
+    func testNormalizedForPersistenceDisablesClientToolsWhenGeminiToolIsEnabled() {
+        var settings = AppSettings()
+        settings.apiProvider = "GEMINI"
+        settings.clientWebSearchToolEnabled = true
+        settings.pythonToolEnabled = true
+        settings.geminiURLContextEnabled = true
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertTrue(normalized.geminiURLContextEnabled)
+        XCTAssertFalse(normalized.clientWebSearchToolEnabled)
+        XCTAssertFalse(normalized.pythonToolEnabled)
+    }
+
+    func testNormalizedForPersistenceKeepsClientToolsForNonGeminiProvider() {
+        var settings = AppSettings()
+        settings.apiProvider = "OPENAI"
+        settings.clientWebSearchToolEnabled = true
+        settings.pythonToolEnabled = true
+        settings.geminiURLContextEnabled = true
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertTrue(normalized.clientWebSearchToolEnabled)
+        XCTAssertTrue(normalized.pythonToolEnabled)
+        XCTAssertTrue(normalized.geminiURLContextEnabled)
+    }
+
     func testNormalizedForPersistenceEnforcesSingleModeAmongDualAutoFusion() {
         var settings = AppSettings()
         settings.isFusionModeEnabled = true

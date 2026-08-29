@@ -370,6 +370,50 @@ final class SettingsViewModel: ObservableObject {
         settings.isStreamingEnabled = enabled
     }
 
+    func setClientWebSearchToolEnabled(_ enabled: Bool) {
+        settings.clientWebSearchToolEnabled = enabled
+        if enabled, settings.apiProvider.caseInsensitiveCompare("GEMINI") == .orderedSame {
+            settings.disableGeminiTools()
+        }
+    }
+
+    func setPythonToolEnabled(_ enabled: Bool) {
+        settings.pythonToolEnabled = enabled
+        if enabled, settings.apiProvider.caseInsensitiveCompare("GEMINI") == .orderedSame {
+            settings.disableGeminiTools()
+        }
+    }
+
+    func setGeminiGoogleSearchEnabled(_ enabled: Bool) {
+        setGeminiToolEnabled(enabled, at: \AppSettings.geminiGoogleSearchEnabled)
+    }
+
+    func setGeminiURLContextEnabled(_ enabled: Bool) {
+        setGeminiToolEnabled(enabled, at: \AppSettings.geminiURLContextEnabled)
+    }
+
+    func setGeminiCodeExecutionEnabled(_ enabled: Bool) {
+        setGeminiToolEnabled(enabled, at: \AppSettings.geminiCodeExecutionEnabled)
+    }
+
+    func setGeminiGoogleMapsEnabled(_ enabled: Bool) {
+        setGeminiToolEnabled(enabled, at: \AppSettings.geminiGoogleMapsEnabled)
+    }
+
+    func setGeminiComputerUseEnabled(_ enabled: Bool) {
+        setGeminiToolEnabled(enabled, at: \AppSettings.geminiComputerUseEnabled)
+    }
+
+    private func setGeminiToolEnabled(
+        _ enabled: Bool,
+        at keyPath: WritableKeyPath<AppSettings, Bool>
+    ) {
+        settings[keyPath: keyPath] = enabled
+        if enabled {
+            settings.disableClientTools()
+        }
+    }
+
     func saveSettings() {
         persistSettings(showSuccessMessage: true)
     }
@@ -499,6 +543,9 @@ final class SettingsViewModel: ObservableObject {
         }
 
         settings.apiProvider = nextProvider
+        if nextProvider == "GEMINI", settings.hasEnabledGeminiTool {
+            settings.disableClientTools()
+        }
         let nextModel = nextProvider == "APPLE_INTELLIGENCE"
             ? AppleIntelligenceModelCatalog.displayModel
             : (providerMap[nextProvider] ?? (ProviderReference(persistedID: nextProvider).isModelsDev ? "" : defaultModelForProvider(nextProvider)))

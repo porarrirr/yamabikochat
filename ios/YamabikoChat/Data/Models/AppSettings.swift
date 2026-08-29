@@ -368,9 +368,34 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         modelForProvider(apiProvider)
     }
 
+    var hasEnabledGeminiTool: Bool {
+        geminiGoogleSearchEnabled ||
+            geminiCodeExecutionEnabled ||
+            geminiURLContextEnabled ||
+            geminiGoogleMapsEnabled ||
+            geminiComputerUseEnabled
+    }
+
+    mutating func disableGeminiTools() {
+        geminiGoogleSearchEnabled = false
+        geminiCodeExecutionEnabled = false
+        geminiURLContextEnabled = false
+        geminiGoogleMapsEnabled = false
+        geminiComputerUseEnabled = false
+    }
+
+    mutating func disableClientTools() {
+        clientWebSearchToolEnabled = false
+        pythonToolEnabled = false
+    }
+
     func normalizedForPersistence() -> AppSettings {
         var normalized = self
         normalized.setVisibleChatStatsFields(normalized.visibleChatStatsFields())
+        if normalized.apiProvider.caseInsensitiveCompare("GEMINI") == .orderedSame,
+           normalized.hasEnabledGeminiTool {
+            normalized.disableClientTools()
+        }
         if normalized.isDualModeEnabled {
             normalized.isAutoConversationEnabled = false
             normalized.isFusionModeEnabled = false

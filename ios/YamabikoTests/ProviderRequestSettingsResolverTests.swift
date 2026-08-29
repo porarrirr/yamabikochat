@@ -35,7 +35,7 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         XCTAssertFalse(nonPi)
     }
 
-    func testDualContextInheritsProviderGlobalsIncludingClientWebSearch() async throws {
+    func testGeminiProviderToolsExcludeClientWebSearchInDualContext() async throws {
         let resolver = makeResolver()
         var settings = AppSettings()
         settings.clientWebSearchToolEnabled = true
@@ -58,8 +58,8 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         XCTAssertEqual(resolved.thinking?.budget, 2048)
         XCTAssertTrue(resolved.tools.contains { $0.type == "google_search" })
         XCTAssertTrue(resolved.tools.contains { $0.type == "code_execution" })
-        XCTAssertTrue(resolved.tools.contains { $0.payload["name"] == WebSearchTool.name })
-        XCTAssertTrue(resolved.tools.contains { $0.payload["name"] == FetchUrlTool.name })
+        XCTAssertFalse(resolved.tools.contains { $0.payload["name"] == WebSearchTool.name })
+        XCTAssertFalse(resolved.tools.contains { $0.payload["name"] == FetchUrlTool.name })
     }
 
     func testDualOverridesTakePriorityOverProviderGlobals() async throws {
@@ -137,6 +137,39 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
 
         XCTAssertTrue(resolved.tools.contains { $0.payload["name"] == PythonExecuteTool.name })
         XCTAssertFalse(resolved.tools.containsWebSearchTool)
+    }
+
+    func testGeminiProviderToolExcludesClientPython() async throws {
+        let resolver = makeResolver()
+        var settings = AppSettings()
+        settings.pythonToolEnabled = true
+        settings.geminiCodeExecutionEnabled = true
+
+        let resolved = try await resolver.resolve(
+            settings: settings,
+            provider: "GEMINI",
+            model: "gemini-2.5-flash"
+        )
+
+        XCTAssertTrue(resolved.tools.contains { $0.type == "code_execution" })
+        XCTAssertFalse(resolved.tools.contains { $0.payload["name"] == PythonExecuteTool.name })
+    }
+
+    func testGeminiSavedToolsDoNotExcludeClientToolsForAnotherProvider() async throws {
+        let resolver = makeResolver()
+        var settings = AppSettings()
+        settings.clientWebSearchToolEnabled = true
+        settings.pythonToolEnabled = true
+        settings.geminiCodeExecutionEnabled = true
+
+        let resolved = try await resolver.resolve(
+            settings: settings,
+            provider: "OPENAI",
+            model: "gpt-4.1"
+        )
+
+        XCTAssertTrue(resolved.tools.contains { $0.payload["name"] == WebSearchTool.name })
+        XCTAssertTrue(resolved.tools.contains { $0.payload["name"] == PythonExecuteTool.name })
     }
 
     func testPythonToolIsOmittedFromFusionPanelScope() async throws {

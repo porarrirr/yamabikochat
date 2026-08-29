@@ -251,7 +251,10 @@ struct SettingsScreen: View {
             Section(L10n.text("クライアントツール")) {
                 Toggle(
                     L10n.text("クライアント側Web検索"),
-                    isOn: $viewModel.settings.clientWebSearchToolEnabled
+                    isOn: Binding(
+                        get: { viewModel.settings.clientWebSearchToolEnabled },
+                        set: { viewModel.setClientWebSearchToolEnabled($0) }
+                    )
                 )
                 Text(L10n.text("LLMが必要に応じてWeb検索とページ取得を実行します。外部検索APIキーは不要です。"))
                     .font(.caption2)
@@ -259,7 +262,10 @@ struct SettingsScreen: View {
 
                 Toggle(
                     L10n.text("ローカルPython実行"),
-                    isOn: $viewModel.settings.pythonToolEnabled
+                    isOn: Binding(
+                        get: { viewModel.settings.pythonToolEnabled },
+                        set: { viewModel.setPythonToolEnabled($0) }
+                    )
                 )
                 Text(L10n.text("LLMが必要に応じて会話専用のPython 3.14環境でコードを実行します。ネットワーク、シェル、会話外のファイルにはアクセスできません。"))
                     .font(.caption2)
@@ -269,6 +275,11 @@ struct SettingsScreen: View {
                     Text(L10n.text("現在のプロバイダーではこのツールは使用されません。"))
                         .font(.caption2)
                         .foregroundStyle(.orange)
+                }
+                if isGeminiProvider {
+                    Text(L10n.text("Geminiツールとクライアント側Web検索・ローカルPython実行は同時に有効化できません。"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -1201,23 +1212,23 @@ struct SettingsScreen: View {
                 Section("Gemini Tools") {
                     Toggle("Google Search", isOn: Binding(
                         get: { viewModel.settings.geminiGoogleSearchEnabled },
-                        set: { viewModel.settings.geminiGoogleSearchEnabled = $0 }
+                        set: { viewModel.setGeminiGoogleSearchEnabled($0) }
                     ))
                     Toggle("URL Context", isOn: Binding(
                         get: { viewModel.settings.geminiURLContextEnabled },
-                        set: { viewModel.settings.geminiURLContextEnabled = $0 }
+                        set: { viewModel.setGeminiURLContextEnabled($0) }
                     ))
                     Toggle("Code Execution", isOn: Binding(
                         get: { viewModel.settings.geminiCodeExecutionEnabled },
-                        set: { viewModel.settings.geminiCodeExecutionEnabled = $0 }
+                        set: { viewModel.setGeminiCodeExecutionEnabled($0) }
                     ))
                     Toggle("Google Maps", isOn: Binding(
                         get: { viewModel.settings.geminiGoogleMapsEnabled },
-                        set: { viewModel.settings.geminiGoogleMapsEnabled = $0 }
+                        set: { viewModel.setGeminiGoogleMapsEnabled($0) }
                     ))
                     Toggle("Computer Use", isOn: Binding(
                         get: { viewModel.settings.geminiComputerUseEnabled },
-                        set: { viewModel.settings.geminiComputerUseEnabled = $0 }
+                        set: { viewModel.setGeminiComputerUseEnabled($0) }
                     ))
                 }
 

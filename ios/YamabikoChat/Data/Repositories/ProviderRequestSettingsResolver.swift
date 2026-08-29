@@ -201,9 +201,11 @@ final class ProviderRequestSettingsResolver {
         }
 
         let supportsClientWebSearch = supportsClientTools(provider: provider, model: model)
+        let hasGeminiProviderTool = provider.caseInsensitiveCompare("GEMINI") == .orderedSame && !tools.isEmpty
         if toolScope.allowsClientWebSearch,
            settings.clientWebSearchToolEnabled,
-           supportsClientWebSearch {
+           supportsClientWebSearch,
+           !hasGeminiProviderTool {
             tools.append(contentsOf: localToolRegistry.definitions
                 .filter { $0.name == WebSearchTool.name || $0.name == FetchUrlTool.name }
                 .map(\.providerTool))
@@ -211,6 +213,7 @@ final class ProviderRequestSettingsResolver {
         if toolScope.allowsClientPython,
            settings.pythonToolEnabled,
            supportsClientWebSearch,
+           !hasGeminiProviderTool,
            let definition = localToolRegistry.definitions.first(where: { $0.name == PythonExecuteTool.name }) {
             tools.append(definition.providerTool)
         }

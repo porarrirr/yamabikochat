@@ -136,9 +136,9 @@ final class FusionServiceTests: XCTestCase {
         XCTAssertEqual(request.thinking?.budget, 1536)
         XCTAssertTrue(request.tools.contains { $0.type == "google_search" })
         XCTAssertTrue(request.tools.contains { $0.type == "code_execution" })
-        XCTAssertTrue(request.tools.contains { $0.payload["name"] == WebSearchTool.name })
-        XCTAssertTrue(request.tools.contains { $0.payload["name"] == FetchUrlTool.name })
-        XCTAssertTrue(request.systemPrompt?.contains("Search agentically when the task requires investigation:") == true)
+        XCTAssertFalse(request.tools.contains { $0.payload["name"] == WebSearchTool.name })
+        XCTAssertFalse(request.tools.contains { $0.payload["name"] == FetchUrlTool.name })
+        XCTAssertFalse(request.systemPrompt?.contains("Search agentically when the task requires investigation:") == true)
     }
 
     func testPanelRequestOmitsWebSearchInstructionsWhenToolsAreDisallowed() async throws {

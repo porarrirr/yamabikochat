@@ -164,6 +164,67 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testEnablingGeminiToolDisablesClientSearchAndPython() {
+        let viewModel = SettingsViewModel()
+        viewModel.settings.apiProvider = "GEMINI"
+        viewModel.settings.clientWebSearchToolEnabled = true
+        viewModel.settings.pythonToolEnabled = true
+
+        viewModel.setGeminiGoogleSearchEnabled(true)
+
+        XCTAssertTrue(viewModel.settings.geminiGoogleSearchEnabled)
+        XCTAssertFalse(viewModel.settings.clientWebSearchToolEnabled)
+        XCTAssertFalse(viewModel.settings.pythonToolEnabled)
+    }
+
+    @MainActor
+    func testEnablingClientToolForGeminiDisablesEveryGeminiTool() {
+        let viewModel = SettingsViewModel()
+        viewModel.settings.apiProvider = "GEMINI"
+        viewModel.settings.geminiGoogleSearchEnabled = true
+        viewModel.settings.geminiURLContextEnabled = true
+        viewModel.settings.geminiCodeExecutionEnabled = true
+        viewModel.settings.geminiGoogleMapsEnabled = true
+        viewModel.settings.geminiComputerUseEnabled = true
+
+        viewModel.setPythonToolEnabled(true)
+
+        XCTAssertTrue(viewModel.settings.pythonToolEnabled)
+        XCTAssertFalse(viewModel.settings.hasEnabledGeminiTool)
+    }
+
+    @MainActor
+    func testEnablingClientSearchForGeminiDisablesEveryGeminiTool() {
+        let viewModel = SettingsViewModel()
+        viewModel.settings.apiProvider = "GEMINI"
+        viewModel.settings.geminiGoogleSearchEnabled = true
+        viewModel.settings.geminiURLContextEnabled = true
+        viewModel.settings.geminiCodeExecutionEnabled = true
+        viewModel.settings.geminiGoogleMapsEnabled = true
+        viewModel.settings.geminiComputerUseEnabled = true
+
+        viewModel.setClientWebSearchToolEnabled(true)
+
+        XCTAssertTrue(viewModel.settings.clientWebSearchToolEnabled)
+        XCTAssertFalse(viewModel.settings.hasEnabledGeminiTool)
+    }
+
+    @MainActor
+    func testSwitchingToGeminiResolvesExistingToolConflictInFavorOfGeminiTools() {
+        let viewModel = SettingsViewModel()
+        viewModel.settings.apiProvider = "OPENAI"
+        viewModel.settings.clientWebSearchToolEnabled = true
+        viewModel.settings.pythonToolEnabled = true
+        viewModel.settings.geminiCodeExecutionEnabled = true
+
+        viewModel.setProvider("GEMINI")
+
+        XCTAssertTrue(viewModel.settings.geminiCodeExecutionEnabled)
+        XCTAssertFalse(viewModel.settings.clientWebSearchToolEnabled)
+        XCTAssertFalse(viewModel.settings.pythonToolEnabled)
+    }
+
+    @MainActor
     func testBindLoadsAlibabaApiKeyFromCredentialStore() throws {
         let fixture = try makeFixture()
         var settings = try fixture.repository.loadSettings()
