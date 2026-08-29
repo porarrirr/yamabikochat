@@ -108,6 +108,8 @@ enum SvgPreviewSanitizer {
 }
 
 enum SvgPreviewHTMLBuilder {
+    static let previewRootID = "yamabiko-svg-preview-root"
+
     static func buildHTML(svgContent: String, maxHeight: CGFloat, allowsZoom: Bool = false) -> String {
         let viewport = allowsZoom
             ? "width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes"
@@ -131,10 +133,12 @@ enum SvgPreviewHTMLBuilder {
               background: transparent;
             }
             body {
+              min-height: 0;
+            }
+            #\(previewRootID) {
               display: flex;
               align-items: flex-start;
               justify-content: center;
-              min-height: 0;
               padding: 12px;
               box-sizing: border-box;
             }
@@ -145,11 +149,35 @@ enum SvgPreviewHTMLBuilder {
           </style>
         </head>
         <body>
-          \(svgContent)
+          <div id="\(previewRootID)">
+            \(svgContent)
+          </div>
         </body>
         </html>
         """
     }
+}
+
+enum SvgPreviewHeightBridge {
+    static let messageName = "svgPreviewContentHeight"
+
+    static let measurementScript = """
+    (() => {
+      const root = document.getElementById('\(SvgPreviewHTMLBuilder.previewRootID)');
+      if (!root) return;
+
+      let lastHeight = 0;
+      const reportHeight = () => {
+        const height = Math.ceil(root.getBoundingClientRect().height);
+        if (height <= 0 || height === lastHeight) return;
+        lastHeight = height;
+        window.webkit.messageHandlers.\(messageName).postMessage(height);
+      };
+
+      new ResizeObserver(reportHeight).observe(root);
+      reportHeight();
+    })();
+    """
 }
 
 struct SvgPreviewWebView: UIViewRepresentable {
@@ -164,7 +192,16 @@ struct SvgPreviewWebView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> WKWebView {
-        let configuration = YamabikoWebKitSupport.makeConfiguration()
+        let userContentController = WKUserContentController()
+        userContentController.addUserScript(WKUserScript(
+            source: SvgPreviewHeightBridge.measurementScript,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
+        userContentController.add(context.coordinator, name: SvgPreviewHeightBridge.messageName)
+        let configuration = YamabikoWebKitSupport.makeConfiguration(
+            userContentController: userContentController
+        )
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -175,7 +212,6 @@ struct SvgPreviewWebView: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = allowsInteraction
         webView.scrollView.bounces = allowsInteraction
         webView.scrollView.pinchGestureRecognizer?.isEnabled = allowsInteraction
-        context.coordinator.observeContentSize(of: webView)
         return webView
     }
 
@@ -204,17 +240,18 @@ struct SvgPreviewWebView: UIViewRepresentable {
 
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
         webView.navigationDelegate = nil
-        coordinator.stopObservingContentSize()
+        webView.configuration.userContentController.removeScriptMessageHandler(
+            forName: SvgPreviewHeightBridge.messageName
+        )
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         var onHeightChange: ((CGFloat) -> Void)?
         var onError: ((String) -> Void)?
         var lastHTML: String?
         private var lastSVGContent: String?
         private var lastMaxHeight: CGFloat?
         private var lastAllowsInteraction: Bool?
-        private var contentSizeObservation: NSKeyValueObservation?
 
         init(onHeightChange: ((CGFloat) -> Void)?, onError: ((String) -> Void)?) {
             self.onHeightChange = onHeightChange
@@ -232,15 +269,11 @@ struct SvgPreviewWebView: UIViewRepresentable {
             return true
         }
 
-        func observeContentSize(of webView: WKWebView) {
-            contentSizeObservation = webView.scrollView.observe(\.contentSize, options: [.new]) { [weak self] scrollView, _ in
-                self?.reportContentHeight(scrollView.contentSize.height)
-            }
-        }
-
-        func stopObservingContentSize() {
-            contentSizeObservation?.invalidate()
-            contentSizeObservation = nil
+        func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == SvgPreviewHeightBridge.messageName,
+                  let value = message.body as? NSNumber
+            else { return }
+            reportContentHeight(CGFloat(truncating: value))
         }
 
         private func reportContentHeight(_ height: CGFloat) {
