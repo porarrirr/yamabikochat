@@ -100,6 +100,37 @@ final class AppStoreScreenshotTests: XCTestCase {
         XCTAssertTrue(updatedProviderField.label.contains("Google Gemini"))
     }
 
+    func testSwipingDownProviderPickerReturnsToConnectionSettings() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppStoreScreenshotDemo"]
+        app.launch()
+
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
+        XCTAssertTrue(openSettings(app: app))
+
+        let connectionRow = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "API・モデル")
+        ).firstMatch
+        XCTAssertTrue(connectionRow.waitForExistence(timeout: 5))
+        connectionRow.tap()
+        XCTAssertTrue(app.navigationBars["接続"].waitForExistence(timeout: 5))
+
+        let providerField = app.buttons["provider-picker-field"].firstMatch
+        XCTAssertTrue(providerField.waitForExistence(timeout: 5))
+        providerField.tap()
+
+        let providerNavigationBar = app.navigationBars["プロバイダー"].firstMatch
+        XCTAssertTrue(providerNavigationBar.waitForExistence(timeout: 5))
+        providerNavigationBar.swipeDown()
+
+        XCTAssertTrue(app.navigationBars["接続"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.buttons["provider-picker-field"].firstMatch.waitForExistence(timeout: 5),
+            "Dismissing the provider picker must keep the parent settings sheet open"
+        )
+        XCTAssertFalse(providerNavigationBar.exists)
+    }
+
     func testCaptureTemporaryChatIconStates() throws {
         let app = XCUIApplication()
         app.launchArguments = [

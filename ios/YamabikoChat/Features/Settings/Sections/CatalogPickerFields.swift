@@ -4,6 +4,7 @@ struct CatalogProviderPickerField: View {
     @Binding var providerID: String
     private let catalogProviders: [CatalogProviderOption]
     var title: String = "API Provider"
+    @State private var isProviderPickerPresented = false
 
     init(
         providerID: Binding<String>,
@@ -22,20 +23,40 @@ struct CatalogProviderPickerField: View {
     }
 
     var body: some View {
-        NavigationLink {
-            CatalogProviderListView(
-                selectedProviderID: providerID,
-                catalogProviders: catalogProviders,
-                onSelect: { providerID = $0 }
-            )
+        Button {
+            isProviderPickerPresented = true
         } label: {
             HStack {
                 Text(L10n.text(title))
                 Spacer()
                 Text(selectedLabel).foregroundStyle(.secondary).lineLimit(1)
+                Image(systemName: "chevron.forward")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("provider-picker-field")
+        .sheet(isPresented: $isProviderPickerPresented) {
+            NavigationStack {
+                CatalogProviderListView(
+                    selectedProviderID: providerID,
+                    catalogProviders: catalogProviders,
+                    onSelect: { providerID = $0 }
+                )
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            isProviderPickerPresented = false
+                        } label: {
+                            Image(systemName: "chevron.backward")
+                        }
+                        .accessibilityLabel(Text(L10n.text("戻る")))
+                    }
+                }
             }
         }
-        .accessibilityIdentifier("provider-picker-field")
     }
 }
 
