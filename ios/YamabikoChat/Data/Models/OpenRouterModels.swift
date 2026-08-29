@@ -81,6 +81,14 @@ struct OpenRouterModel: Codable, Sendable {
         var prompt: String?
         var completion: String?
         var request: String?
+        var inputCacheRead: String? = nil
+
+        enum CodingKeys: String, CodingKey {
+            case prompt
+            case completion
+            case request
+            case inputCacheRead = "input_cache_read"
+        }
     }
 
     struct TopProvider: Codable, Sendable {
@@ -216,6 +224,7 @@ struct OpenRouterEndpointOption: Sendable, Equatable, Identifiable {
     var supportedParameters: [String]
     var status: Int?
     var promptPricePerMillion: Double? = nil
+    var cachedInputPricePerMillion: Double? = nil
     var completionPricePerMillion: Double? = nil
 }
 

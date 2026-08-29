@@ -336,6 +336,7 @@
 "Preset name" = "Preset name";
 "price" = "price";
 "Input %@ · Output %@ / 1M tokens" = "Input %@ · Output %@ / 1M tokens";
+"Input %@ · Cached input %@ · Output %@ / 1M tokens" = "Input %@ · Cached input %@ · Output %@ / 1M tokens";
 "Price unavailable" = "Price unavailable";
 "Project ID" = "Project ID";
 "Prompt Cache" = "Prompt Cache";

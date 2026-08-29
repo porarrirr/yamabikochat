@@ -282,6 +282,9 @@ final class OpenRouterModelService {
                     promptPricePerMillion: endpoint.pricing?.prompt
                         .flatMap(Double.init)
                         .map { $0 * 1_000_000 },
+                    cachedInputPricePerMillion: endpoint.pricing?.inputCacheRead
+                        .flatMap(Double.init)
+                        .map { $0 * 1_000_000 },
                     completionPricePerMillion: endpoint.pricing?.completion
                         .flatMap(Double.init)
                         .map { $0 * 1_000_000 }

@@ -2051,12 +2051,21 @@ struct SettingsScreen: View {
     }
 
     private func openRouterEndpointPricingText(_ endpoint: OpenRouterEndpointOption) -> String {
-        guard endpoint.promptPricePerMillion != nil || endpoint.completionPricePerMillion != nil else {
+        guard endpoint.promptPricePerMillion != nil ||
+                endpoint.cachedInputPricePerMillion != nil ||
+                endpoint.completionPricePerMillion != nil
+        else {
             return L10n.text("Price unavailable")
         }
         let prompt = endpoint.promptPricePerMillion.map(formatOpenRouterPrice) ?? "—"
+        let cachedInput = endpoint.cachedInputPricePerMillion.map(formatOpenRouterPrice) ?? "—"
         let completion = endpoint.completionPricePerMillion.map(formatOpenRouterPrice) ?? "—"
-        return L10n.format("Input %@ · Output %@ / 1M tokens", prompt, completion)
+        return L10n.format(
+            "Input %@ · Cached input %@ · Output %@ / 1M tokens",
+            prompt,
+            cachedInput,
+            completion
+        )
     }
 
     private func formatOpenRouterPrice(_ value: Double) -> String {

@@ -336,6 +336,7 @@
 "Preset name" = "プリセット名";
 "price" = "価格";
 "Input %@ · Output %@ / 1M tokens" = "入力 %@ · 出力 %@ / 100万トークン";
+"Input %@ · Cached input %@ · Output %@ / 1M tokens" = "入力 %@ · キャッシュ入力 %@ · 出力 %@ / 100万トークン";
 "Price unavailable" = "価格情報なし";
 "Project ID" = "プロジェクトID";
 "Prompt Cache" = "プロンプトキャッシュ";

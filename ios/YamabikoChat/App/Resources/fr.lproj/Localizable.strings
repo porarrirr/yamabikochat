@@ -372,6 +372,7 @@
 "Preset name" = "Nom du preset";
 "price" = "prix";
 "Input %@ · Output %@ / 1M tokens" = "Entrée %@ · Sortie %@ / 1 M de jetons";
+"Input %@ · Cached input %@ · Output %@ / 1M tokens" = "Entrée %@ · Entrée en cache %@ · Sortie %@ / 1 M de jetons";
 "Price unavailable" = "Prix indisponible";
 "Project ID" = "Identifiant de projet";
 "Prompt Cache" = "Cache de prompts";

@@ -336,6 +336,7 @@
 "Preset name" = "预设名称";
 "price" = "价格";
 "Input %@ · Output %@ / 1M tokens" = "输入 %@ · 输出 %@ / 100万 token";
+"Input %@ · Cached input %@ · Output %@ / 1M tokens" = "输入 %@ · 缓存输入 %@ · 输出 %@ / 100万 token";
 "Price unavailable" = "价格不可用";
 "Project ID" = "项目 ID";
 "Prompt Cache" = "提示词缓存";
