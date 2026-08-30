@@ -271,6 +271,10 @@ struct SettingsScreen: View {
                 }
             }
 
+            if isOpenCodeGoProvider {
+                openCodeGoUsageSection
+            }
+
             if currentModelsDevProvider == nil,
                currentProviderKey != "CODEX_AUTH", currentProviderKey != "SUPERGROK", currentProviderKey != "APPLE_INTELLIGENCE" {
                 Section("APIキー") {
@@ -1072,92 +1076,92 @@ struct SettingsScreen: View {
     }
 
     private var openCodeGoSection: some View {
+        Section("OpenCode Go") {
+            Text("Endpoint: \(AppConstants.defaultOpenCodeGoBaseURL.absoluteString)")
+                .font(.caption)
+                .textSelection(.enabled)
+        }
+    }
+
+    private var openCodeGoUsageSection: some View {
         let apiKey = openCodeGoUsageAPIKeyDraft
         let hasAPIKey = apiKey.trimmedNonEmpty != nil
-        return Group {
-            Section("OpenCode Go") {
-                Text("Endpoint: \(AppConstants.defaultOpenCodeGoBaseURL.absoluteString)")
-                    .font(.caption)
-                    .textSelection(.enabled)
-            }
-
-            Section {
-                HStack(alignment: .center, spacing: 12) {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Goプラン使用状況")
-                                .font(.headline)
-                            if let updatedAt = viewModel.openCodeGoUsageLastUpdated {
-                                HStack(spacing: 3) {
-                                    Text("最終更新")
-                                    Text(updatedAt, style: .relative)
-                                }
+        return Section {
+            HStack(alignment: .center, spacing: 12) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Goプラン使用状況")
+                            .font(.headline)
+                        if let updatedAt = viewModel.openCodeGoUsageLastUpdated {
+                            HStack(spacing: 3) {
+                                Text("最終更新")
+                                Text(updatedAt, style: .relative)
+                            }
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        } else {
+                            Text("rolling・weekly・monthly")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
-                            } else {
-                                Text("rolling・weekly・monthly")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    } icon: {
-                        Image(systemName: "chart.bar.fill")
-                            .foregroundStyle(.tint)
-                    }
-
-                    Spacer(minLength: 8)
-
-                    Button {
-                        Task { await viewModel.retrieveOpenCodeGoUsage(apiKey: apiKey) }
-                    } label: {
-                        if viewModel.isOpenCodeGoUsageLoading {
-                            ProgressView()
-                                .controlSize(.small)
-                                .accessibilityLabel("使用状況を更新中")
-                        } else {
-                            Label("更新", systemImage: "arrow.clockwise")
                         }
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(viewModel.isOpenCodeGoUsageLoading || !hasAPIKey)
+                } icon: {
+                    Image(systemName: "chart.bar.fill")
+                        .foregroundStyle(.tint)
                 }
 
-                if !hasAPIKey {
-                    Label("APIキーを入力すると使用状況を確認できます", systemImage: "key")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 6)
-                } else if viewModel.isOpenCodeGoUsageLoading,
-                          viewModel.openCodeGoUsageStatus == nil {
-                    HStack(spacing: 10) {
+                Spacer(minLength: 8)
+
+                Button {
+                    Task { await viewModel.retrieveOpenCodeGoUsage(apiKey: apiKey) }
+                } label: {
+                    if viewModel.isOpenCodeGoUsageLoading {
                         ProgressView()
-                        Text("使用状況を取得中…")
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 14)
-                }
-
-                if let usage = viewModel.openCodeGoUsageStatus {
-                    VStack(spacing: 0) {
-                        ForEach(Array(usage.windows.enumerated()), id: \.element.period) { index, window in
-                            if index > 0 { Divider() }
-                            OpenCodeGoUsageWindowView(window: window)
-                                .padding(.vertical, 12)
-                        }
+                            .controlSize(.small)
+                            .accessibilityLabel("使用状況を更新中")
+                    } else {
+                        Label("更新", systemImage: "arrow.clockwise")
                     }
                 }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isOpenCodeGoUsageLoading || !hasAPIKey)
+            }
 
-                if let error = viewModel.openCodeGoUsageError {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .padding(.vertical, 4)
+            if !hasAPIKey {
+                Label("APIキーを入力すると使用状況を確認できます", systemImage: "key")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 6)
+            } else if viewModel.isOpenCodeGoUsageLoading,
+                      viewModel.openCodeGoUsageStatus == nil {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("使用状況を取得中…")
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 14)
+            }
+
+            if let usage = viewModel.openCodeGoUsageStatus {
+                VStack(spacing: 0) {
+                    ForEach(Array(usage.windows.enumerated()), id: \.element.period) { index, window in
+                        if index > 0 { Divider() }
+                        OpenCodeGoUsageWindowView(window: window)
+                            .padding(.vertical, 12)
+                    }
                 }
             }
-            .task {
-                await viewModel.retrieveOpenCodeGoUsageIfNeeded(apiKey: apiKey)
+
+            if let error = viewModel.openCodeGoUsageError {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.vertical, 4)
             }
+        }
+        .task {
+            await viewModel.retrieveOpenCodeGoUsageIfNeeded(apiKey: apiKey)
         }
     }
 
