@@ -1575,9 +1575,6 @@ struct SettingsScreen: View {
                             }
                         )
                         .id("\(dynamicProvider.id)\u{0}\(selectedModel.id)")
-                        Text("models.devがこのモデルについて公開している対応値だけを表示します。")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
                     }
                 }
                 if viewModel.settings.defaultModel.isEmpty {
