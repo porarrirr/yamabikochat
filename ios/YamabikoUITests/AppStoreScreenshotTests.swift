@@ -36,7 +36,7 @@ final class AppStoreScreenshotTests: XCTestCase {
         capture("03-settings-api", app: app)
 
         XCTAssertTrue(returnToSettingsIndex(app: app))
-        XCTAssertTrue(openSettingsCategory(app: app, subtitle: "テーマ・数式", title: "表示"))
+        XCTAssertTrue(openSettingsCategory(app: app, subtitle: "テーマ・プリセット・数式", title: "表示"))
         capture("04-settings-appearance", app: app)
 
         XCTAssertTrue(returnToSettingsIndex(app: app))

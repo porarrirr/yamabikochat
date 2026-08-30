@@ -24,6 +24,18 @@ private final class ConversationListTestCredentialStore: SecureCredentialStore {
 
 @MainActor
 final class ConversationListViewModelTests: XCTestCase {
+    func testRootNavigationUsesCompactColumnOnlyInCompactSizeClass() {
+        XCTAssertTrue(
+            RootNavigationPresentationPolicy.usesCompactColumnNavigation(horizontalSizeClass: .compact)
+        )
+        XCTAssertFalse(
+            RootNavigationPresentationPolicy.usesCompactColumnNavigation(horizontalSizeClass: .regular)
+        )
+        XCTAssertFalse(
+            RootNavigationPresentationPolicy.usesCompactColumnNavigation(horizontalSizeClass: nil)
+        )
+    }
+
     func testSelectionResolverKeepsValidSelectedConversationEvenIfNotInVisibleList() {
         let resolution = ConversationListSelectionResolver.resolve(
             visibleConversationIDs: [10, 9],

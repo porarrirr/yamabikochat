@@ -11,6 +11,8 @@ struct ConversationListScreen: View {
     @ObservedObject var viewModel: ConversationListViewModel
     @Binding var selection: Int64?
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     var onSelect: (Int64) -> Void
     var onOpenSettings: () -> Void
     var onClose: (() -> Void)? = nil
@@ -134,11 +136,26 @@ struct ConversationListScreen: View {
 
                 if viewModel.filteredConversations.isEmpty {
                     Section {
-                        Text(L10n.text("会話がありません"))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 6)
-                            .listRowSeparator(.hidden)
+                        VStack(spacing: 12) {
+                            Image(systemName: "bubble.left.and.bubble.right")
+                                .font(.system(size: 28))
+                                .foregroundStyle(.secondary)
+
+                            Text(L10n.text("会話がありません"))
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.secondary)
+
+                            Button {
+                                createConversation(secret: false)
+                            } label: {
+                                Label(L10n.text("新しいチャット"), systemImage: "square.and.pencil")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
+                        .listRowSeparator(.hidden)
                     }
                 } else {
                     ForEach(groupedConversations, id: \.title) { group in
@@ -182,77 +199,116 @@ struct ConversationListScreen: View {
     // MARK: - Top Header
 
     private var topHeader: some View {
-        HStack(spacing: 8) {
+        VStack(spacing: 10) {
             HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
+                Text(viewModel.isSelectionMode ? L10n.text("会話を選択") : L10n.text("チャット"))
+                    .font(.title2.weight(.bold))
+                    .lineLimit(1)
 
-                TextField("検索", text: $viewModel.searchQuery)
-                    .textInputAutocapitalization(.never)
-                    .disableAutocorrection(true)
+                Spacer(minLength: 8)
 
-                if !viewModel.searchQuery.isEmpty {
+                if viewModel.isSelectionMode {
                     Button {
-                        viewModel.searchQuery = ""
+                        viewModel.exitSelectionMode()
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                        Text(L10n.text("完了"))
+                            .font(.body.weight(.semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("conversation-selection-done")
+                } else {
+                    selectionButton
+                    createConversationButton
+                }
+
+                if let onClose {
+                    Button {
+                        onClose()
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 12)
-            .frame(height: 38)
-            .background(Color(uiColor: .secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
-            if viewModel.isSelectionMode {
-                Button {
-                    viewModel.exitSelectionMode()
-                } label: {
-                    Text("キャンセル")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.primary)
-                }
-                .buttonStyle(.plain)
-            } else {
-                Button {
-                    viewModel.toggleSelectionMode()
-                } label: {
-                    Image(systemName: "checkmark.circle")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    createConversation(secret: false)
-                } label: {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text(L10n.text("新しいチャット")))
-            }
-
-            if let onClose {
-                Button {
-                    onClose()
-                } label: {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
+            if !viewModel.isSelectionMode {
+                searchField
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 8)
-        .padding(.bottom, 6)
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+
+            TextField(L10n.text("会話を検索"), text: $viewModel.searchQuery)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+
+            if !viewModel.searchQuery.isEmpty {
+                Button {
+                    viewModel.searchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(L10n.text("検索を消去")))
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 42)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityIdentifier("conversation-search-field")
+    }
+
+    @ViewBuilder
+    private var selectionButton: some View {
+        Button {
+            viewModel.toggleSelectionMode()
+        } label: {
+            if showsExpandedHeaderActions {
+                Label(L10n.text("選択"), systemImage: "checkmark.circle")
+            } else {
+                Image(systemName: "checkmark.circle")
+                    .frame(width: 44, height: 44)
+            }
+        }
+        .font(.body.weight(.semibold))
+        .buttonStyle(.bordered)
+        .accessibilityLabel(Text(L10n.text("会話を選択")))
+        .accessibilityIdentifier("conversation-selection-button")
+    }
+
+    @ViewBuilder
+    private var createConversationButton: some View {
+        Button {
+            createConversation(secret: false)
+        } label: {
+            if showsExpandedHeaderActions {
+                Label(L10n.text("新規"), systemImage: "square.and.pencil")
+            } else {
+                Image(systemName: "square.and.pencil")
+                    .frame(width: 44, height: 44)
+            }
+        }
+        .font(.body.weight(.semibold))
+        .buttonStyle(.borderedProminent)
+        .accessibilityLabel(Text(L10n.text("新しいチャット")))
+        .accessibilityIdentifier("sidebar-new-chat")
+    }
+
+    private var showsExpandedHeaderActions: Bool {
+        horizontalSizeClass == .regular || UIDevice.current.userInterfaceIdiom == .pad
     }
 
     private var groupedConversations: [(title: String, entries: [ConversationListEntry])] {
@@ -294,14 +350,23 @@ struct ConversationListScreen: View {
         Button {
             onOpenSettings()
         } label: {
-            HStack {
+            HStack(spacing: 12) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.secondary)
+
+                Text(L10n.text("設定"))
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+
                 Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .frame(minHeight: 52)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

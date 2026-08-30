@@ -29,10 +29,17 @@ enum ConversationListSelectionResolver {
     }
 }
 
+enum RootNavigationPresentationPolicy {
+    static func usesCompactColumnNavigation(horizontalSizeClass: UserInterfaceSizeClass?) -> Bool {
+        horizontalSizeClass == .compact
+    }
+}
+
 struct RootView: View {
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var appState: AppState
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @StateObject private var listViewModel = ConversationListViewModel()
     @StateObject private var settingsViewModel = SettingsViewModel()
@@ -61,6 +68,7 @@ struct RootView: View {
                     isSettingsPresented = true
                 }
             )
+            .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 360)
         } detail: {
             if let conversationID = appState.selectedConversationID {
                 ConversationDetailHost(
@@ -71,11 +79,20 @@ struct RootView: View {
                 )
                 .id(conversationID)
             } else {
-                ContentUnavailableView(
-                    "会話がありません",
-                    systemImage: "bubble.left.and.bubble.right",
-                    description: Text("新規作成するか既存の会話を選択してください。")
-                )
+                ContentUnavailableView {
+                    Label(L10n.text("会話を始めましょう"), systemImage: "bubble.left.and.bubble.right")
+                } description: {
+                    Text(L10n.text("既存の会話を選ぶか、新しいチャットを作成してください。"))
+                } actions: {
+                    Button {
+                        createConversationFromEmptyDetail()
+                    } label: {
+                        Label(L10n.text("新しいチャット"), systemImage: "square.and.pencil")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .accessibilityIdentifier("empty-detail-new-chat")
+                }
             }
         }
         .task {
@@ -122,13 +139,13 @@ struct RootView: View {
         }
         .onChange(of: appState.conversationSidebarRevealGeneration) { _, _ in
             columnVisibility = .all
-            preferredCompactColumn = .sidebar
+            setPreferredCompactColumn(.sidebar)
         }
         .onChange(of: listViewModel.filteredConversations.map(\.id)) { _, ids in
             guard !AppStoreScreenshotRouting.isEnabled else { return }
             if let draft = appState.shareImportDraft, ids.contains(draft.conversationID) {
                 appState.selectedConversationID = draft.conversationID
-                preferredCompactColumn = .detail
+                setPreferredCompactColumn(.detail)
                 return
             }
 
@@ -146,16 +163,16 @@ struct RootView: View {
             case .keepCurrentSelection:
                 if keepSidebarAfterSecretDiscard, appState.selectedConversationID == nil {
                     keepSidebarAfterSecretDiscard = false
-                    preferredCompactColumn = .sidebar
+                    setPreferredCompactColumn(.sidebar)
                 }
             case .clearSelection:
                 appState.selectedConversationID = nil
                 keepSidebarAfterSecretDiscard = false
-                preferredCompactColumn = .sidebar
+                setPreferredCompactColumn(.sidebar)
             case let .select(id):
                 appState.selectedConversationID = id
                 keepSidebarAfterSecretDiscard = false
-                preferredCompactColumn = .detail
+                setPreferredCompactColumn(.detail)
             }
         }
         .sheet(isPresented: $isSettingsPresented) {
@@ -176,7 +193,6 @@ struct RootView: View {
         }
         .preferredColorScheme(resolvedColorScheme)
         .tint(resolvedTintColor)
-        .privacySensitive()
         .overlay {
             if privacyCoverVisible {
                 ZStack {
@@ -247,7 +263,7 @@ struct RootView: View {
             if appState.selectedConversationID == nil {
                 appState.selectedConversationID = listViewModel.conversations.first?.id
                 if appState.selectedConversationID != nil {
-                    preferredCompactColumn = .detail
+                    setPreferredCompactColumn(.detail)
                 }
             }
             return
@@ -258,7 +274,7 @@ struct RootView: View {
         switch launch.scene {
         case .list:
             appState.selectedConversationID = nil
-            preferredCompactColumn = .sidebar
+            setPreferredCompactColumn(.sidebar)
         case .chat:
             if let conversationID = launch.conversationID ?? listViewModel.conversations.first?.id {
                 selectConversation(id: conversationID)
@@ -292,7 +308,7 @@ struct RootView: View {
                 listViewModel.selectProject(projectID)
             }
             appState.selectedConversationID = nil
-            preferredCompactColumn = .sidebar
+            setPreferredCompactColumn(.sidebar)
         }
 
         try? await Task.sleep(nanoseconds: 500_000_000)
@@ -305,7 +321,7 @@ struct RootView: View {
         listViewModel.resetProjectFilterForNonProjectConversation(conversationId: id)
         appState.selectedConversationID = id
         keepSidebarAfterSecretDiscard = false
-        preferredCompactColumn = .detail
+        setPreferredCompactColumn(.detail)
         if closeHistory {
             appState.isConversationHistoryPresented = false
         }
@@ -320,7 +336,7 @@ struct RootView: View {
             importedAny = true
         }
         if importedAny {
-            preferredCompactColumn = .detail
+            setPreferredCompactColumn(.detail)
         }
     }
 
@@ -335,11 +351,33 @@ struct RootView: View {
             if deleted, appState.selectedConversationID == id {
                 appState.selectedConversationID = nil
                 keepSidebarAfterSecretDiscard = keepSidebar
-                preferredCompactColumn = .sidebar
+                setPreferredCompactColumn(.sidebar)
             }
         } catch {
             DiagnosticsLogger.log(
                 "Discard secret conversation failed conversation=\(id)",
+                category: .chat,
+                error: error
+            )
+        }
+    }
+
+    private func setPreferredCompactColumn(_ column: NavigationSplitViewColumn) {
+        guard RootNavigationPresentationPolicy.usesCompactColumnNavigation(
+            horizontalSizeClass: horizontalSizeClass
+        ) else {
+            return
+        }
+        preferredCompactColumn = column
+    }
+
+    private func createConversationFromEmptyDetail() {
+        do {
+            let id = try container.chatRepository.createConversation()
+            selectConversation(id: id)
+        } catch {
+            DiagnosticsLogger.log(
+                "Create conversation from empty detail failed",
                 category: .chat,
                 error: error
             )
