@@ -303,7 +303,7 @@ struct SettingsScreen: View {
             if currentProviderKey == "OPENROUTER" {
                 openRouterSection
             }
-            if currentProviderKey == "OPENCODE_GO" {
+            if isOpenCodeGoProvider {
                 openCodeGoSection
             }
             if currentProviderKey == "CLINEPASS" {
@@ -1084,14 +1084,98 @@ struct SettingsScreen: View {
     }
 
     private var openCodeGoSection: some View {
-        Section("OpenCode Go") {
-            Text("Endpoint: \(AppConstants.defaultOpenCodeGoBaseURL.absoluteString)")
-                .font(.caption)
-                .textSelection(.enabled)
+        let apiKey = openCodeGoUsageAPIKeyDraft
+        let hasAPIKey = apiKey.trimmedNonEmpty != nil
+        return Group {
+            Section("OpenCode Go") {
+                Text("Endpoint: \(AppConstants.defaultOpenCodeGoBaseURL.absoluteString)")
+                    .font(.caption)
+                    .textSelection(.enabled)
 
-            Text("OpenCode Go の API key を保存してください。MiniMax M2.7/M2.5 と Qwen3.5/3.6 Plus、Qwen3.7 Max は `/messages`、それ以外の公式 Go モデルは `/chat/completions` に送信します。Chat Completions 系には会話単位の prompt cache key を付けて、同じ長い prefix が同じ cache route に乗りやすいようにします。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                Text("OpenCode Go の API key を保存してください。モデルごとの公式プロトコルを Pi Runtime で使用します。Chat Completions 系には会話単位の prompt cache key を付け、同じ長い prefix が同じ cache route に乗りやすくします。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                HStack(alignment: .center, spacing: 12) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Goプラン使用状況")
+                                .font(.headline)
+                            if let updatedAt = viewModel.openCodeGoUsageLastUpdated {
+                                HStack(spacing: 3) {
+                                    Text("最終更新")
+                                    Text(updatedAt, style: .relative)
+                                }
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            } else {
+                                Text("rolling・weekly・monthly")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } icon: {
+                        Image(systemName: "chart.bar.fill")
+                            .foregroundStyle(.tint)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Button {
+                        Task { await viewModel.retrieveOpenCodeGoUsage(apiKey: apiKey) }
+                    } label: {
+                        if viewModel.isOpenCodeGoUsageLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                                .accessibilityLabel("使用状況を更新中")
+                        } else {
+                            Label("更新", systemImage: "arrow.clockwise")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.isOpenCodeGoUsageLoading || !hasAPIKey)
+                }
+
+                if !hasAPIKey {
+                    Label("APIキーを入力すると使用状況を確認できます", systemImage: "key")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 6)
+                } else if viewModel.isOpenCodeGoUsageLoading,
+                          viewModel.openCodeGoUsageStatus == nil {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("使用状況を取得中…")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 14)
+                }
+
+                if let usage = viewModel.openCodeGoUsageStatus {
+                    VStack(spacing: 0) {
+                        ForEach(Array(usage.windows.enumerated()), id: \.element.period) { index, window in
+                            if index > 0 { Divider() }
+                            OpenCodeGoUsageWindowView(window: window)
+                                .padding(.vertical, 12)
+                        }
+                    }
+                }
+
+                if let error = viewModel.openCodeGoUsageError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text("percentは使用済み割合です。残りは100 − percentで表示します。OpenCode公式サーバーの未文書化usage APIを参照し、Zenのドル残高は含みません。")
+            }
+            .task {
+                await viewModel.retrieveOpenCodeGoUsageIfNeeded(apiKey: apiKey)
+            }
         }
     }
 
@@ -1889,7 +1973,12 @@ struct SettingsScreen: View {
                 let draftKey = modelsDevDraftKey(providerID: provider.id, fieldName: field)
                 let binding = Binding(
                     get: { modelsDevFieldDrafts[draftKey] ?? viewModel.modelsDevField(providerID: provider.id, fieldName: field) },
-                    set: { modelsDevFieldDrafts[draftKey] = $0 }
+                    set: {
+                        modelsDevFieldDrafts[draftKey] = $0
+                        if provider.id == "opencode-go", field == "OPENCODE_API_KEY" {
+                            viewModel.openCodeGoUsageCredentialDidChange()
+                        }
+                    }
                 )
                 if isSecretModelsDevField(field) {
                     SecureField(field, text: binding)
@@ -1931,7 +2020,16 @@ struct SettingsScreen: View {
     }
 
     private var isOpenCodeGoProvider: Bool {
-        currentProviderKey == "OPENCODE_GO"
+        ModelsDevMergedProvider.isOpenCodeGo(viewModel.settings.apiProvider)
+    }
+
+    private var openCodeGoUsageAPIKeyDraft: String {
+        guard ProviderReference(persistedID: viewModel.settings.apiProvider).modelsDevID == "opencode-go" else {
+            return viewModel.apiKeyDraft
+        }
+        let key = modelsDevDraftKey(providerID: "opencode-go", fieldName: "OPENCODE_API_KEY")
+        return modelsDevFieldDrafts[key]
+            ?? viewModel.modelsDevField(providerID: "opencode-go", fieldName: "OPENCODE_API_KEY")
     }
 
     private var isSuperGrokProvider: Bool {
@@ -2116,6 +2214,101 @@ struct SettingsScreen: View {
             return String(format: "%.1fK", Double(value) / 1_000)
         }
         return "\(value)"
+    }
+}
+
+private struct OpenCodeGoUsageWindowView: View {
+    let window: OpenCodeGoUsageWindow
+
+    private var title: String {
+        switch window.period {
+        case .rolling: return L10n.text("ローリング")
+        case .weekly: return L10n.text("週間")
+        case .monthly: return L10n.text("月間")
+        }
+    }
+
+    private var usageColor: Color {
+        switch window.boundedUsedPercent {
+        case 85...: return .red
+        case 60 ..< 85: return .orange
+        default: return .green
+        }
+    }
+
+    private var remainingText: String {
+        window.remainingPercent.formatted(.number.precision(.fractionLength(0 ... 1)))
+    }
+
+    private var usedText: String {
+        window.usedPercent.formatted(.number.precision(.fractionLength(0 ... 1)))
+    }
+
+    private var resetText: String {
+        L10n.format(
+            "リセット %@",
+            window.resetsAt.formatted(date: .abbreviated, time: .shortened)
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+
+                if window.status.caseInsensitiveCompare("ok") == .orderedSame {
+                    Label("正常", systemImage: "checkmark.circle.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.green)
+                        .labelStyle(.titleAndIcon)
+                } else {
+                    Text(window.status)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(.orange.opacity(0.12), in: Capsule())
+                }
+
+                Spacer()
+
+                Text(L10n.format("残り %@%%", remainingText))
+                    .font(.subheadline.monospacedDigit().weight(.bold))
+                    .foregroundStyle(usageColor)
+            }
+
+            ProgressView(value: window.boundedUsedPercent, total: 100)
+                .tint(usageColor)
+                .accessibilityLabel(L10n.format("%@の使用済み割合", title))
+                .accessibilityValue(L10n.format("%@パーセント", usedText))
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    usedLabel
+                    Spacer()
+                    resetLabel
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    usedLabel
+                    resetLabel
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var usedLabel: some View {
+        Text(L10n.format("使用済み %@%%", usedText))
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+    }
+
+    private var resetLabel: some View {
+        Label(resetText, systemImage: "clock.arrow.circlepath")
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 }
 

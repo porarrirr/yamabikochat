@@ -35,6 +35,11 @@ final class SettingsViewModel: ObservableObject {
     @Published var codexUsageStatus: CodexUsageStatus?
     @Published var isCodexAuthActionRunning: Bool = false
 
+    @Published var openCodeGoUsageStatus: OpenCodeGoUsageStatus?
+    @Published var openCodeGoUsageError: String?
+    @Published var openCodeGoUsageLastUpdated: Date?
+    @Published var isOpenCodeGoUsageLoading: Bool = false
+
     @Published var superGrokAuthState: SuperGrokAuthState = .init()
     @Published var isSuperGrokAuthActionRunning: Bool = false
     @Published var superGrokEmailInput: String = ""
@@ -330,6 +335,10 @@ final class SettingsViewModel: ObservableObject {
             .sink { [weak self] value in
                 guard let self else { return }
                 self.apiKeyDraftsByProvider[self.settings.apiProvider.uppercased()] = value
+                if !self.isHydratingFromPersistence,
+                   ModelsDevMergedProvider.isOpenCodeGo(self.settings.apiProvider) {
+                    self.openCodeGoUsageCredentialDidChange()
+                }
                 self.scheduleAutoSave()
             }
             .store(in: &cancellables)
@@ -1281,6 +1290,85 @@ final class SettingsViewModel: ObservableObject {
         case let .failure(error):
             errorMessage = error.localizedDescription
             DiagnosticsLogger.log("Codex usage refresh failed", error: error)
+        }
+    }
+
+    func openCodeGoUsageCredentialDidChange() {
+        openCodeGoUsageStatus = nil
+        openCodeGoUsageError = nil
+        openCodeGoUsageLastUpdated = nil
+    }
+
+    func retrieveOpenCodeGoUsageIfNeeded(apiKey: String) async {
+        guard openCodeGoUsageStatus == nil,
+              openCodeGoUsageError == nil,
+              apiKey.trimmedNonEmpty != nil
+        else { return }
+        await retrieveOpenCodeGoUsage(apiKey: apiKey)
+    }
+
+    func retrieveOpenCodeGoUsage(apiKey: String) async {
+        guard !isOpenCodeGoUsageLoading else { return }
+        guard let repository = requireRepository(action: "opencode_go_usage"),
+              let credentialStore
+        else { return }
+        guard let apiKey = apiKey.trimmedNonEmpty else {
+            statusMessage = nil
+            openCodeGoUsageError = L10n.text("OpenCode Go APIキーを入力してください")
+            return
+        }
+
+        isOpenCodeGoUsageLoading = true
+        statusMessage = nil
+        openCodeGoUsageError = nil
+        defer {
+            isOpenCodeGoUsageLoading = false
+            refreshDiagnosticsLog()
+        }
+
+        do {
+            // The visible draft is authoritative when the user taps refresh, even if
+            // the settings debounce has not fired yet.
+            if ProviderReference(persistedID: settings.apiProvider).modelsDevID == "opencode-go" {
+                try credentialStore.saveSecret(
+                    apiKey,
+                    key: modelsDevFieldKey(providerID: "opencode-go", fieldName: "OPENCODE_API_KEY")
+                )
+            } else {
+                try credentialStore.setCredential(apiKey, for: .openCodeGo)
+            }
+        } catch {
+            openCodeGoUsageError = error.localizedDescription
+            DiagnosticsLogger.log(
+                "OpenCode Go API key save failed before usage refresh",
+                category: .settings,
+                error: error
+            )
+            return
+        }
+
+        let result = await repository.retrieveOpenCodeGoUsage(apiKey: apiKey)
+        switch result {
+        case let .success(status):
+            openCodeGoUsageStatus = status
+            openCodeGoUsageLastUpdated = Date()
+            statusMessage = L10n.text("OpenCode Go使用状況を更新しました")
+            DiagnosticsLogger.log(
+                "OpenCode Go usage refresh succeeded",
+                category: .network,
+                metadata: [
+                    "rolling_percent": String(status.rolling.usedPercent),
+                    "weekly_percent": String(status.weekly.usedPercent),
+                    "monthly_percent": String(status.monthly.usedPercent)
+                ]
+            )
+        case let .failure(error):
+            openCodeGoUsageError = error.localizedDescription
+            DiagnosticsLogger.log(
+                "OpenCode Go usage refresh failed",
+                category: .network,
+                error: error
+            )
         }
     }
 

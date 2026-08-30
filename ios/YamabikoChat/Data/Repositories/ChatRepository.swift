@@ -34,6 +34,7 @@ final class ChatRepository {
     private let requestSettingsResolver: ProviderRequestSettingsResolver
     private let codexAuthRepository: CodexAuthRepository
     private let superGrokAuthRepository: SuperGrokAuthRepository
+    private let openCodeGoUsageRepository: OpenCodeGoUsageRepository
     private let pricingRepository: any LiteLlmPricingEstimating
     private let fusionService: FusionService
     private let fusionTraceStore: FusionTraceStore
@@ -51,6 +52,7 @@ final class ChatRepository {
         requestSettingsResolver: ProviderRequestSettingsResolver,
         codexAuthRepository: CodexAuthRepository,
         superGrokAuthRepository: SuperGrokAuthRepository,
+        openCodeGoUsageRepository: OpenCodeGoUsageRepository? = nil,
         pricingRepository: any LiteLlmPricingEstimating = LiteLlmPricingRepository(),
         fusionService: FusionService,
         fusionTraceStore: FusionTraceStore,
@@ -67,6 +69,8 @@ final class ChatRepository {
         self.requestSettingsResolver = requestSettingsResolver
         self.codexAuthRepository = codexAuthRepository
         self.superGrokAuthRepository = superGrokAuthRepository
+        self.openCodeGoUsageRepository = openCodeGoUsageRepository
+            ?? OpenCodeGoUsageRepository()
         self.pricingRepository = pricingRepository
         self.fusionService = fusionService
         self.fusionTraceStore = fusionTraceStore
@@ -1876,6 +1880,10 @@ final class ChatRepository {
 
     func retrieveCodexAuthUsage() async -> Result<CodexUsageStatus, Error> {
         await codexAuthRepository.retrieveUsageStatus()
+    }
+
+    func retrieveOpenCodeGoUsage(apiKey: String) async -> Result<OpenCodeGoUsageStatus, Error> {
+        await openCodeGoUsageRepository.retrieveUsage(apiKey: apiKey)
     }
 
     func superGrokAuthStatePublisher() -> AnyPublisher<SuperGrokAuthState, Never> {

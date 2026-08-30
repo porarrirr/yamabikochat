@@ -28,6 +28,7 @@ enum ChatRepositoryTestSupport {
         piStream: @escaping PiAgentStream = PiStreamSpy().stream,
         modelService: OpenRouterModelService? = nil,
         modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
+        openCodeGoUsageRepository: OpenCodeGoUsageRepository? = nil,
         pricingRepository: (any LiteLlmPricingEstimating)? = nil
     ) -> ChatRepository {
         let resolvedModelService = modelService ?? OpenRouterModelService(credentialStore: credentials)
@@ -61,6 +62,7 @@ enum ChatRepositoryTestSupport {
             requestSettingsResolver: requestSettingsResolver,
             codexAuthRepository: codexAuth,
             superGrokAuthRepository: superGrokAuth,
+            openCodeGoUsageRepository: openCodeGoUsageRepository,
             pricingRepository: pricingRepository ?? LiteLlmPricingRepository(),
             fusionService: fusionService,
             fusionTraceStore: fusionTraceStore

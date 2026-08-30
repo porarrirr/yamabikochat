@@ -22,6 +22,29 @@ private final class SettingsViewModelCredentialStore: SecureCredentialStore {
     }
 }
 
+private final class SettingsOpenCodeGoUsageHTTPClient: HTTPClientProtocol {
+    private(set) var requests: [HTTPRequest] = []
+
+    func send(_ request: HTTPRequest) async throws -> (Data, HTTPURLResponse) {
+        requests.append(request)
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: request.url,
+            statusCode: 200,
+            httpVersion: "HTTP/2",
+            headerFields: ["Content-Type": "application/json"]
+        ))
+        return (Data(Self.fixture.utf8), response)
+    }
+
+    private static let fixture = #"""
+    {"usage":{
+      "rolling":{"status":"ok","percent":4,"resetsAt":"2026-08-30T16:27:38.287Z"},
+      "weekly":{"status":"ok","percent":40,"resetsAt":"2026-08-31T00:00:00.023Z"},
+      "monthly":{"status":"ok","percent":43,"resetsAt":"2026-09-07T07:32:38.023Z"}
+    }}
+    """#
+}
+
 final class SettingsViewModelTests: XCTestCase {
     @MainActor
     func testSelectingNewSystemPromptClearsPreviousPresetDraft() throws {
@@ -390,6 +413,52 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testOpenCodeGoUsageRefreshPersistsVisibleDraftBeforeRequest() async throws {
+        let client = SettingsOpenCodeGoUsageHTTPClient()
+        let fixture = try makeFixture(openCodeGoUsageHTTPClient: client)
+        var settings = try fixture.repository.loadSettings()
+        settings.apiProvider = "OPENCODE_GO"
+        try fixture.repository.saveSettings(settings)
+
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.apiKeyDraft = "new-visible-key"
+
+        await viewModel.retrieveOpenCodeGoUsage(apiKey: viewModel.apiKeyDraft)
+
+        XCTAssertEqual(try fixture.credentials.credential(for: .openCodeGo), "new-visible-key")
+        XCTAssertEqual(client.requests.first?.headers["Authorization"], "Bearer new-visible-key")
+        XCTAssertEqual(viewModel.openCodeGoUsageStatus?.weekly.usedPercent, 40)
+        XCTAssertNotNil(viewModel.openCodeGoUsageLastUpdated)
+        XCTAssertNil(viewModel.openCodeGoUsageError)
+    }
+
+    @MainActor
+    func testModelsDevOpenCodeGoUsageUsesCatalogIdentityAndCredentialKey() async throws {
+        let client = SettingsOpenCodeGoUsageHTTPClient()
+        let fixture = try makeFixture(openCodeGoUsageHTTPClient: client)
+        var settings = try fixture.repository.loadSettings()
+        settings.apiProvider = "MODELS_DEV:opencode-go"
+        try fixture.repository.saveSettings(settings)
+
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+
+        XCTAssertTrue(ModelsDevMergedProvider.isOpenCodeGo(viewModel.settings.apiProvider))
+
+        await viewModel.retrieveOpenCodeGoUsage(apiKey: "catalog-visible-key")
+
+        let fieldKey = ModelsDevReasoningPreference.fieldKey(
+            providerID: "opencode-go",
+            fieldName: "OPENCODE_API_KEY"
+        )
+        XCTAssertEqual(try fixture.credentials.readSecret(key: fieldKey), "catalog-visible-key")
+        XCTAssertNil(try fixture.credentials.credential(for: .openCodeGo))
+        XCTAssertEqual(client.requests.first?.headers["Authorization"], "Bearer catalog-visible-key")
+        XCTAssertEqual(viewModel.openCodeGoUsageStatus?.monthly.usedPercent, 43)
+    }
+
+    @MainActor
     func testSaveSettingsRejectsInvalidAlibabaMCPURLWhenEnabled() throws {
         let fixture = try makeFixture()
         let viewModel = SettingsViewModel()
@@ -405,21 +474,24 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(try fixture.repository.loadSettings().themeMode, "DARK")
     }
 
-    private func makeFixture() throws -> (repository: ChatRepository, credentials: SettingsViewModelCredentialStore) {
+    private func makeFixture(
+        openCodeGoUsageHTTPClient: HTTPClientProtocol? = nil
+    ) throws -> (repository: ChatRepository, credentials: SettingsViewModelCredentialStore) {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)
 
         let settings = SettingsRepository(dbQueue: dbQueue)
         let conversations = ConversationRepository(dbQueue: dbQueue)
         let credentials = SettingsViewModelCredentialStore()
-        let providers = ProviderGateway(settingsRepository: settings, credentialStore: credentials)
-        let modelService = OpenRouterModelService(credentialStore: credentials)
-        let codexAuth = CodexAuthRepository(credentialStore: credentials)
+        let usageRepository = openCodeGoUsageHTTPClient.map {
+            OpenCodeGoUsageRepository(httpClient: $0)
+        }
         let repository = ChatRepositoryTestSupport.makeRepository(
             dbQueue: dbQueue,
             settings: settings,
             conversations: conversations,
-            credentials: credentials
+            credentials: credentials,
+            openCodeGoUsageRepository: usageRepository
         )
 
         return (repository, credentials)

@@ -32,6 +32,13 @@ enum ModelsDevMergedProvider {
     static func isSelectableCatalogProvider(_ providerID: String) -> Bool {
         !catalogProviderIDsRepresentedByBuiltIns.contains(providerID.lowercased())
     }
+
+    static func isOpenCodeGo(_ persistedID: String) -> Bool {
+        if persistedID.caseInsensitiveCompare("OPENCODE_GO") == .orderedSame {
+            return true
+        }
+        return ProviderReference(persistedID: persistedID).modelsDevID == "opencode-go"
+    }
 }
 
 struct CatalogReasoningOption: Codable, Equatable, Sendable {
