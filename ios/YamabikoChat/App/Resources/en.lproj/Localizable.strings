@@ -144,7 +144,6 @@
 "強制更新" = "Force Refresh";
 "空欄は送信されません。JSONが不正な場合は無視されます。" = "Empty fields are not sent. Invalid JSON is ignored.";
 "検索" = "Search";
-"現在のプロバイダー（%@）のグローバル設定をチャットプリセットに追加します。" = "Adds global settings of the current provider (%@) to chat presets.";
 "現在の入力をデュアル送信" = "Send current input in dual mode";
 "更新" = "Refresh";
 "高度なプロバイダー設定" = "Advanced provider settings";
@@ -420,7 +419,6 @@
 "このチャットは閉じると破棄されます。" = "This chat will be discarded when closed.";
 "クライアントツール" = "Client Tools";
 "クライアント側Web検索" = "Client-side Web Search";
-"LLMが必要に応じてWeb検索とページ取得を実行します。外部検索APIキーは不要です。" = "Lets the LLM search the web and fetch pages when needed. No external search API key is required.";
 "現在のプロバイダーではこのツールは使用されません。" = "This tool is not used with the current provider.";
 "Web検索" = "Web Search";
 "ツール実行" = "Tool Execution";
@@ -551,7 +549,6 @@
 "使用状況を更新中" = "Refreshing usage";
 "APIキーを入力すると使用状況を確認できます" = "Enter an API key to view usage";
 "使用状況を取得中…" = "Fetching usage…";
-"percentは使用済み割合です。残りは100 − percentで表示します。OpenCode公式サーバーの未文書化usage APIを参照し、Zenのドル残高は含みません。" = "Percent is the amount used; remaining is shown as 100 − percent. This uses OpenCode's undocumented official usage endpoint and does not include the Zen dollar balance.";
 "ローリング" = "Rolling";
 "週間" = "Weekly";
 "月間" = "Monthly";

@@ -240,12 +240,6 @@ struct SettingsScreen: View {
                         )
                     }
                 ))
-                Text(L10n.format(
-                    "現在のプロバイダー（%@）のグローバル設定をチャットプリセットに追加します。",
-                    ProviderCatalog.displayName(for: viewModel.settings.apiProvider)
-                ))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
 
             Section(L10n.text("クライアントツール")) {
@@ -256,9 +250,6 @@ struct SettingsScreen: View {
                         set: { viewModel.setClientWebSearchToolEnabled($0) }
                     )
                 )
-                Text(L10n.text("LLMが必要に応じてWeb検索とページ取得を実行します。外部検索APIキーは不要です。"))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
 
                 Toggle(
                     L10n.text("ローカルPython実行"),
@@ -267,9 +258,6 @@ struct SettingsScreen: View {
                         set: { viewModel.setPythonToolEnabled($0) }
                     )
                 )
-                Text(L10n.text("LLMが必要に応じて会話専用のPython 3.14環境でコードを実行します。ネットワーク、シェル、会話外のファイルにはアクセスできません。"))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
 
                 if !LLMProvider(rawOrDefault: viewModel.settings.apiProvider).supportsClientWebSearchTool {
                     Text(L10n.text("現在のプロバイダーではこのツールは使用されません。"))
@@ -1091,10 +1079,6 @@ struct SettingsScreen: View {
                 Text("Endpoint: \(AppConstants.defaultOpenCodeGoBaseURL.absoluteString)")
                     .font(.caption)
                     .textSelection(.enabled)
-
-                Text("OpenCode Go の API key を保存してください。モデルごとの公式プロトコルを Pi Runtime で使用します。Chat Completions 系には会話単位の prompt cache key を付け、同じ長い prefix が同じ cache route に乗りやすくします。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -1170,8 +1154,6 @@ struct SettingsScreen: View {
                         .foregroundStyle(.red)
                         .padding(.vertical, 4)
                 }
-            } footer: {
-                Text("percentは使用済み割合です。残りは100 − percentで表示します。OpenCode公式サーバーの未文書化usage APIを参照し、Zenのドル残高は含みません。")
             }
             .task {
                 await viewModel.retrieveOpenCodeGoUsageIfNeeded(apiKey: apiKey)
