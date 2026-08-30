@@ -5,6 +5,7 @@ import GRDB
 // DatabaseQueue serializes database access and is safe to share across tasks.
 final class ConversationRepository: @unchecked Sendable {
     private let dbQueue: DatabaseQueue
+    private let secretVault = SecretConversationVault.shared
 
     init(dbQueue: DatabaseQueue) {
         self.dbQueue = dbQueue
@@ -21,16 +22,23 @@ final class ConversationRepository: @unchecked Sendable {
     ) throws -> Int64 {
         try dbQueue.write { db in
             var conversation = Conversation(
-                title: title,
-                systemPrompt: systemPrompt,
+                title: isSecret ? "Secret Chat" : title,
+                systemPrompt: isSecret ? nil : systemPrompt,
                 model: model,
                 apiProvider: provider,
                 isSecret: isSecret,
                 projectId: projectId,
-                pendingInitialMessage: pendingInitialMessage
+                pendingInitialMessage: isSecret ? nil : pendingInitialMessage
             )
             try conversation.insert(db)
-            return conversation.id ?? 0
+            let id = conversation.id ?? 0
+            if isSecret {
+                secretVault.activate(conversationID: id)
+                conversation.systemPrompt = try systemPrompt.map { try secretVault.seal($0, conversationID: id) }
+                conversation.pendingInitialMessage = try pendingInitialMessage.map { try secretVault.seal($0, conversationID: id) }
+                try conversation.update(db)
+            }
+            return id
         }
     }
 
@@ -148,7 +156,7 @@ final class ConversationRepository: @unchecked Sendable {
 
             if updateConversationsPrompt, previousInstructions != nextInstructions {
                 try db.execute(
-                    sql: "UPDATE conversations SET systemPrompt = ? WHERE projectId = ?",
+                    sql: "UPDATE conversations SET systemPrompt = ? WHERE projectId = ? AND isSecret = 0",
                     arguments: [conversationsSystemPrompt, id]
                 )
             }
@@ -165,11 +173,18 @@ final class ConversationRepository: @unchecked Sendable {
     }
 
     func deleteProjectWithConversations(id: Int64) throws {
+        var secretIDs: [Int64] = []
         try dbQueue.write { db in
             let project = try ChatProject.fetchOne(db, key: id)
             guard project != nil else {
                 throw ProviderClientError.parseFailure("Project not found")
             }
+
+            secretIDs = try Int64.fetchAll(
+                db,
+                sql: "SELECT id FROM conversations WHERE projectId = ? AND isSecret = 1",
+                arguments: [id]
+            )
 
             try db.execute(
                 sql: """
@@ -179,17 +194,36 @@ final class ConversationRepository: @unchecked Sendable {
                 arguments: [id]
             )
             try db.execute(
+                sql: """
+                DELETE FROM fusion_traces
+                WHERE conversationId IN (SELECT id FROM conversations WHERE projectId = ?)
+                """,
+                arguments: [id]
+            )
+            try deleteAutoConversationsBoundToConversations(
+                db,
+                idsSQL: "SELECT id FROM conversations WHERE projectId = ?",
+                arguments: StatementArguments([id])
+            )
+            try db.execute(
                 sql: "DELETE FROM conversations WHERE projectId = ?",
                 arguments: [id]
             )
             _ = try ChatProject.deleteOne(db, key: id)
         }
+        secretIDs.forEach { secretVault.destroy(conversationID: $0) }
     }
 
     func upsertConversation(_ conversation: Conversation) throws -> Int64 {
         try dbQueue.write { db in
             var updated = conversation
             updated.updatedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
+            if updated.isSecret, let id = updated.id {
+                secretVault.activate(conversationID: id)
+                updated.title = "Secret Chat"
+                updated.systemPrompt = try updated.systemPrompt.map { try secretVault.seal($0, conversationID: id) }
+                updated.pendingInitialMessage = try updated.pendingInitialMessage.map { try secretVault.seal($0, conversationID: id) }
+            }
             try updated.save(db)
             return updated.id ?? 0
         }
@@ -224,42 +258,71 @@ final class ConversationRepository: @unchecked Sendable {
                 conversation.title = enabled ? "Secret Chat" : "New Chat"
             }
             conversation.updatedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
+            if enabled {
+                secretVault.activate(conversationID: id)
+                conversation.title = "Secret Chat"
+                conversation.systemPrompt = try conversation.systemPrompt.map { try secretVault.seal($0, conversationID: id) }
+                conversation.pendingInitialMessage = try conversation.pendingInitialMessage.map { try secretVault.seal($0, conversationID: id) }
+            } else {
+                conversation.systemPrompt = try conversation.systemPrompt.map { try secretVault.open($0, conversationID: id) }
+                conversation.pendingInitialMessage = try conversation.pendingInitialMessage.map { try secretVault.open($0, conversationID: id) }
+            }
             try conversation.update(db)
+            if !enabled { secretVault.destroy(conversationID: id) }
             return conversation
         }
     }
 
     func deleteConversation(id: Int64) throws {
+        var wasSecret = false
         try dbQueue.write { db in
+            wasSecret = try Bool.fetchOne(
+                db,
+                sql: "SELECT isSecret FROM conversations WHERE id = ?",
+                arguments: [id]
+            ) ?? false
             try db.execute(
                 sql: "DELETE FROM token_usage_records WHERE conversationId = ?",
                 arguments: [id]
             )
+            try db.execute(sql: "DELETE FROM fusion_traces WHERE conversationId = ?", arguments: [id])
             try deleteAutoConversationsBoundToConversations(db, idsSQL: "?", arguments: StatementArguments([id]))
             _ = try Conversation.deleteOne(db, key: id)
         }
+        if wasSecret { secretVault.destroy(conversationID: id) }
     }
 
     func deleteConversations(ids: Set<Int64>) throws {
         guard !ids.isEmpty else { return }
+        var secretIDs: [Int64] = []
         try dbQueue.write { db in
             let idArray = Array(ids)
+            let placeholders = idArray.map { _ in "?" }.joined(separator: ",")
+            secretIDs = try Int64.fetchAll(
+                db,
+                sql: "SELECT id FROM conversations WHERE isSecret = 1 AND id IN (\(placeholders))",
+                arguments: StatementArguments(idArray)
+            )
             try TokenUsageRecord
+                .filter(idArray.contains(Column("conversationId")))
+                .deleteAll(db)
+            try FusionTraceRecord
                 .filter(idArray.contains(Column("conversationId")))
                 .deleteAll(db)
             try deleteAutoConversationsBoundToConversations(
                 db,
-                idsSQL: idArray.map { _ in "?" }.joined(separator: ","),
+                idsSQL: placeholders,
                 arguments: StatementArguments(idArray)
             )
             try Conversation
                 .filter(idArray.contains(Column("id")))
                 .deleteAll(db)
         }
+        secretIDs.forEach { secretVault.destroy(conversationID: $0) }
     }
 
     func deleteSecretConversationIfNeeded(id: Int64) throws -> Bool {
-        try dbQueue.write { db in
+        let deleted = try dbQueue.write { db in
             guard let isSecret = try Bool.fetchOne(
                 db,
                 sql: "SELECT isSecret FROM conversations WHERE id = ?",
@@ -272,14 +335,21 @@ final class ConversationRepository: @unchecked Sendable {
                 sql: "DELETE FROM token_usage_records WHERE conversationId = ?",
                 arguments: [id]
             )
+            try db.execute(sql: "DELETE FROM fusion_traces WHERE conversationId = ?", arguments: [id])
             try deleteAutoConversationsBoundToConversations(db, idsSQL: "?", arguments: StatementArguments([id]))
             _ = try Conversation.deleteOne(db, key: id)
             return true
         }
+        if deleted { secretVault.destroy(conversationID: id) }
+        return deleted
     }
 
     func purgeSecretConversations() throws {
+        let ids = try secretConversationIDs()
         try dbQueue.write { db in
+            try db.execute(
+                sql: "DELETE FROM fusion_traces WHERE conversationId IN (SELECT id FROM conversations WHERE isSecret = 1)"
+            )
             try db.execute(
                 sql: """
                 DELETE FROM token_usage_records
@@ -307,21 +377,73 @@ final class ConversationRepository: @unchecked Sendable {
                 .filter(Column("isSecret") == true)
                 .deleteAll(db)
         }
+        ids.forEach { secretVault.destroy(conversationID: $0) }
     }
 
     func fetchConversation(id: Int64) throws -> Conversation? {
         try dbQueue.read { db in
-            try Conversation.fetchOne(db, key: id)
+            guard var conversation = try Conversation.fetchOne(db, key: id) else { return nil }
+            if conversation.isSecret {
+                conversation.systemPrompt = try conversation.systemPrompt.map { try secretVault.open($0, conversationID: id) }
+                conversation.pendingInitialMessage = try conversation.pendingInitialMessage.map { try secretVault.open($0, conversationID: id) }
+            }
+            return conversation
         }
     }
 
     func pendingInitialMessage(conversationId: Int64) throws -> String? {
         try dbQueue.read { db in
-            try String.fetchOne(
+            let value = try String.fetchOne(
                 db,
                 sql: "SELECT pendingInitialMessage FROM conversations WHERE id = ?",
                 arguments: [conversationId]
             )
+            guard try isSecret(db: db, conversationID: conversationId), let value else { return value }
+            return try secretVault.open(value, conversationID: conversationId)
+        }
+    }
+
+    func attachmentPathsForSecretConversation(id: Int64) throws -> [String] {
+        let secret = try dbQueue.read { db in
+            try isSecret(db: db, conversationID: id)
+        }
+        guard secret else { return [] }
+        return try attachmentPathsForConversation(id: id)
+    }
+
+    func attachmentPathsForConversation(id: Int64) throws -> [String] {
+        try dbQueue.read { db in
+            let secret = try isSecret(db: db, conversationID: id)
+            var rawValues = try String.fetchAll(
+                db,
+                sql: "SELECT attachmentsJSON FROM chat_messages WHERE conversationId = ?",
+                arguments: [id]
+            )
+            rawValues += try String.fetchAll(
+                db,
+                sql: """
+                SELECT v.attachmentsJSON
+                FROM chat_message_variants v
+                JOIN chat_messages m ON m.id = v.baseMessageId
+                WHERE m.conversationId = ?
+                """,
+                arguments: [id]
+            )
+            rawValues += try String.fetchAll(
+                db,
+                sql: "SELECT attachmentsJSON FROM dual_chat_messages WHERE conversationId = ?",
+                arguments: [id]
+            )
+            return rawValues.flatMap { raw -> [String] in
+                let clear: String
+                if secret, raw.hasPrefix(SecretConversationVault.prefix) {
+                    guard let opened = try? secretVault.open(raw, conversationID: id) else { return [] }
+                    clear = opened
+                } else {
+                    clear = raw
+                }
+                return decodeArray(clear)
+            }
         }
     }
 
@@ -424,13 +546,15 @@ final class ConversationRepository: @unchecked Sendable {
                 """
             )
 
-            return rows.compactMap { row in
+            return try rows.compactMap { row -> ConversationListEntry? in
                 guard let id: Int64 = row["id"] else { return nil }
                 return ConversationListEntry(
                     id: id,
                     title: row["title"] ?? "New Chat",
                     updatedAtMs: row["updatedAtMs"] ?? 0,
-                    lastMessagePreview: row["lastMessagePreview"],
+                    lastMessagePreview: try (row["isSecret"] ?? false)
+                        ? (row["lastMessagePreview"] as String?).map { try self.secretVault.open($0, conversationID: id) }
+                        : row["lastMessagePreview"],
                     isSecret: row["isSecret"] ?? false,
                     projectId: row["projectId"],
                     projectTitle: row["projectTitle"]
@@ -459,9 +583,11 @@ final class ConversationRepository: @unchecked Sendable {
                 .filter(Column("conversationId") == conversationId)
                 .order(Column("createdAtMs").asc)
                 .fetchAll(db)
+                .map { try self.revealed($0, conversationID: conversationId, db: db) }
 
             let messageIds = messages.compactMap(\.id)
             let variantsByMessageID = try self.fetchVariantsByBaseMessageIDs(db: db, messageIds: messageIds)
+                .mapValues { variants in try variants.map { try self.revealed($0, conversationID: conversationId, db: db) } }
 
             let thinkingRows: [ChatMessageThinking]
             if messageIds.isEmpty {
@@ -471,7 +597,9 @@ final class ConversationRepository: @unchecked Sendable {
                     .filter(messageIds.contains(Column("messageId")))
                     .fetchAll(db)
             }
-            let thinkingByMessageID = Dictionary(uniqueKeysWithValues: thinkingRows.map { ($0.messageId, $0.thinkingStream) })
+            let thinkingByMessageID = try Dictionary(uniqueKeysWithValues: thinkingRows.map {
+                ($0.messageId, try self.reveal($0.thinkingStream, db: db, conversationID: conversationId))
+            })
             let variantIds = variantsByMessageID.values.flatMap { $0 }.compactMap(\.id)
             let activityRows: [ChatMessageToolActivity]
             if messageIds.isEmpty {
@@ -557,35 +685,43 @@ final class ConversationRepository: @unchecked Sendable {
                 .filter(Column("conversationId") == conversationId)
                 .order(Column("createdAtMs").asc)
                 .fetchAll(db)
+                .map { try revealed($0, conversationID: conversationId, db: db) }
         }
     }
 
     func fetchMessage(id: Int64) throws -> ChatMessage? {
         try dbQueue.read { db in
-            try ChatMessage.fetchOne(db, key: id)
+            guard let message = try ChatMessage.fetchOne(db, key: id) else { return nil }
+            return try revealed(message, conversationID: message.conversationId, db: db)
         }
     }
 
     func fetchLastAssistantMessage(conversationId: Int64) throws -> ChatMessage? {
         try dbQueue.read { db in
-            try ChatMessage
+            let message = try ChatMessage
                 .filter(Column("conversationId") == conversationId)
                 .filter(Column("role") == "model")
                 .order(Column("createdAtMs").desc)
                 .fetchOne(db)
+            return try message.map { try revealed($0, conversationID: conversationId, db: db) }
         }
     }
 
     func fetchFullMessage(id: Int64) throws -> FullChatMessage? {
-        try dbQueue.read { db in
-            guard let message = try ChatMessage.fetchOne(db, key: id), let messageId = message.id else { return nil }
-            let thinking = try ChatMessageThinking
+        try dbQueue.read { db -> FullChatMessage? in
+            guard let storedMessage = try ChatMessage.fetchOne(db, key: id), let messageId = storedMessage.id else { return nil }
+            let message = try revealed(storedMessage, conversationID: storedMessage.conversationId, db: db)
+            let storedThinking: String? = try ChatMessageThinking
                 .filter(Column("messageId") == messageId)
                 .fetchOne(db)?.thinkingStream
+            let thinking = try storedThinking.map {
+                try reveal($0, db: db, conversationID: storedMessage.conversationId)
+            }
             let variants = try ChatMessageVariant
                 .filter(Column("baseMessageId") == messageId)
                 .order(Column("variantIndex").asc)
                 .fetchAll(db)
+                .map { try revealed($0, conversationID: storedMessage.conversationId, db: db) }
             let activity = try ChatMessageToolActivity
                 .filter(Column("messageId") == messageId)
                 .filter(Column("variantId") == nil)
@@ -617,7 +753,7 @@ final class ConversationRepository: @unchecked Sendable {
 
     func insertMessage(_ message: ChatMessage) throws -> Int64 {
         try dbQueue.write { db in
-            var mutable = message
+            var mutable = try protected(message, db: db)
             try mutable.insert(db)
 
             let now = Int64(Date().timeIntervalSince1970 * 1000)
@@ -637,7 +773,7 @@ final class ConversationRepository: @unchecked Sendable {
 
     func updateMessage(_ message: ChatMessage) throws {
         try dbQueue.write { db in
-            let mutable = message
+            let mutable = try protected(message, db: db)
             try mutable.update(db)
         }
     }
@@ -647,7 +783,9 @@ final class ConversationRepository: @unchecked Sendable {
         guard !normalized.isEmpty else { return }
         try dbQueue.write { db in
             guard var message = try ChatMessage.fetchOne(db, key: messageId) else { return }
+            message = try revealed(message, conversationID: message.conversationId, db: db)
             message.attachmentsJSON = mergeAttachmentJSON(message.attachmentsJSON, additions: normalized)
+            message = try protected(message, db: db)
             try message.update(db)
         }
     }
@@ -657,7 +795,10 @@ final class ConversationRepository: @unchecked Sendable {
         guard !normalized.isEmpty else { return }
         try dbQueue.write { db in
             guard var variant = try ChatMessageVariant.fetchOne(db, key: variantId) else { return }
+            let conversationID = try conversationID(db: db, variantID: variantId)
+            variant = try revealed(variant, conversationID: conversationID, db: db)
             variant.attachmentsJSON = mergeAttachmentJSON(variant.attachmentsJSON, additions: normalized)
+            variant = try protected(variant, conversationID: conversationID, db: db)
             try variant.update(db)
         }
     }
@@ -665,7 +806,7 @@ final class ConversationRepository: @unchecked Sendable {
     func updateMessageText(messageId: Int64, text: String) throws {
         try dbQueue.write { db in
             guard var mutable = try ChatMessage.fetchOne(db, key: messageId) else { return }
-            mutable.text = text
+            mutable.text = try protect(text, db: db, conversationID: mutable.conversationId)
             try mutable.update(db)
         }
     }
@@ -678,6 +819,7 @@ final class ConversationRepository: @unchecked Sendable {
     ) throws {
         precondition((messageId != nil) != (variantId != nil))
         try dbQueue.write { db in
+            let conversationID = try self.conversationID(db: db, messageID: messageId, variantID: variantId)
             try db.execute(
                 sql: """
                 INSERT INTO chat_stream_checkpoints (messageId, variantId, text, thinking, updatedAtMs)
@@ -687,7 +829,10 @@ final class ConversationRepository: @unchecked Sendable {
                     thinking = excluded.thinking,
                     updatedAtMs = excluded.updatedAtMs
                 """,
-                arguments: [messageId, variantId, text, thinking, Int64(Date().timeIntervalSince1970 * 1_000)]
+                arguments: [messageId, variantId,
+                            try protect(text, db: db, conversationID: conversationID),
+                            try protect(thinking, db: db, conversationID: conversationID),
+                            Int64(Date().timeIntervalSince1970 * 1_000)]
             )
         }
     }
@@ -700,19 +845,22 @@ final class ConversationRepository: @unchecked Sendable {
     ) throws {
         precondition((messageId != nil) != (variantId != nil))
         try dbQueue.write { db in
+            let conversationID = try self.conversationID(db: db, messageID: messageId, variantID: variantId)
+            let storedText = try protect(text, db: db, conversationID: conversationID)
+            let storedThinking = try protect(thinking, db: db, conversationID: conversationID)
             if let messageId {
-                try db.execute(sql: "UPDATE chat_messages SET text = ? WHERE id = ?", arguments: [text, messageId])
+                try db.execute(sql: "UPDATE chat_messages SET text = ? WHERE id = ?", arguments: [storedText, messageId])
                 if !thinking.isEmpty {
                     try db.execute(
                         sql: "INSERT INTO chat_message_thinking (messageId, thinkingStream) VALUES (?, ?) ON CONFLICT(messageId) DO UPDATE SET thinkingStream = excluded.thinkingStream",
-                        arguments: [messageId, thinking]
+                        arguments: [messageId, storedThinking]
                     )
                 }
                 try db.execute(sql: "DELETE FROM chat_stream_checkpoints WHERE messageId = ?", arguments: [messageId])
             } else if let variantId {
                 try db.execute(
                     sql: "UPDATE chat_message_variants SET text = ?, thinkingStream = CASE WHEN ? = '' THEN thinkingStream ELSE ? END WHERE id = ?",
-                    arguments: [text, thinking, thinking, variantId]
+                    arguments: [storedText, thinking, storedThinking, variantId]
                 )
                 try db.execute(sql: "DELETE FROM chat_stream_checkpoints WHERE variantId = ?", arguments: [variantId])
             }
@@ -730,7 +878,11 @@ final class ConversationRepository: @unchecked Sendable {
                 return nil
             }
             guard let row else { return nil }
-            return (row["text"] ?? "", row["thinking"] ?? "")
+            let conversationID = try self.conversationID(db: db, messageID: messageId, variantID: variantId)
+            return (
+                try reveal(row["text"] ?? "", db: db, conversationID: conversationID),
+                try reveal(row["thinking"] ?? "", db: db, conversationID: conversationID)
+            )
         }
     }
 
@@ -746,11 +898,13 @@ final class ConversationRepository: @unchecked Sendable {
 
     func saveThinking(messageId: Int64, stream: String) throws {
         try dbQueue.write { db in
+            let conversationID = try self.conversationID(db: db, messageID: messageId)
+            let stored = try protect(stream, db: db, conversationID: conversationID)
             if var existing = try ChatMessageThinking.filter(Column("messageId") == messageId).fetchOne(db) {
-                existing.thinkingStream = stream
+                existing.thinkingStream = stored
                 try existing.update(db)
             } else {
-                var thinking = ChatMessageThinking(messageId: messageId, thinkingStream: stream)
+                var thinking = ChatMessageThinking(messageId: messageId, thinkingStream: stored)
                 try thinking.insert(db)
             }
         }
@@ -781,6 +935,7 @@ final class ConversationRepository: @unchecked Sendable {
                 attachmentsJSON: attachmentsJSON,
                 thinkingStream: thinkingStream
             )
+            variant = try protected(variant, conversationID: baseMessage.conversationId, db: db)
             try variant.insert(db)
 
             try db.execute(
@@ -789,7 +944,7 @@ final class ConversationRepository: @unchecked Sendable {
             )
             try touchConversation(db: db, conversationId: baseMessage.conversationId)
 
-            return variant
+            return try revealed(variant, conversationID: baseMessage.conversationId, db: db)
         }
     }
 
@@ -806,7 +961,8 @@ final class ConversationRepository: @unchecked Sendable {
     func updateMessageVariantText(variantId: Int64, text: String) throws {
         try dbQueue.write { db in
             guard var variant = try ChatMessageVariant.fetchOne(db, key: variantId) else { return }
-            variant.text = text
+            let conversationID = try self.conversationID(db: db, variantID: variantId)
+            variant.text = try protect(text, db: db, conversationID: conversationID)
             try variant.update(db)
         }
     }
@@ -814,7 +970,8 @@ final class ConversationRepository: @unchecked Sendable {
     func saveMessageVariantThinking(variantId: Int64, stream: String) throws {
         try dbQueue.write { db in
             guard var variant = try ChatMessageVariant.fetchOne(db, key: variantId) else { return }
-            variant.thinkingStream = stream
+            let conversationID = try self.conversationID(db: db, variantID: variantId)
+            variant.thinkingStream = try protect(stream, db: db, conversationID: conversationID)
             try variant.update(db)
         }
     }
@@ -824,6 +981,12 @@ final class ConversationRepository: @unchecked Sendable {
         variantId: Int64?,
         payload: ToolActivityPayload
     ) throws {
+        let targetConversationID = try dbQueue.read { db in
+            try self.conversationID(db: db, messageID: messageId, variantID: variantId)
+        }
+        if try dbQueue.read({ db in try isSecret(db: db, conversationID: targetConversationID) }) {
+            return
+        }
         let stepsData = try JSONEncoder().encode(payload.steps)
         let transcriptData = try JSONEncoder().encode(payload.providerTranscript)
         let attachmentPathsData = try JSONEncoder().encode(payload.attachmentPaths)
@@ -1081,8 +1244,10 @@ final class ConversationRepository: @unchecked Sendable {
                 .filter(Column("conversationId") == conversationId)
                 .order(Column("createdAtMs").asc)
                 .fetchAll(db)
+                .map { try revealed($0, conversationID: conversationId, db: db) }
             let messageIds = messages.compactMap(\.id)
             let variantsByMessageID = try fetchVariantsByBaseMessageIDs(db: db, messageIds: messageIds)
+                .mapValues { variants in try variants.map { try revealed($0, conversationID: conversationId, db: db) } }
             let thinkingRows: [ChatMessageThinking]
             if messageIds.isEmpty {
                 thinkingRows = []
@@ -1091,7 +1256,9 @@ final class ConversationRepository: @unchecked Sendable {
                     .filter(messageIds.contains(Column("messageId")))
                     .fetchAll(db)
             }
-            let thinkingByMessageID = Dictionary(uniqueKeysWithValues: thinkingRows.map { ($0.messageId, $0.thinkingStream) })
+            let thinkingByMessageID = try Dictionary(uniqueKeysWithValues: thinkingRows.map {
+                ($0.messageId, try reveal($0.thinkingStream, db: db, conversationID: conversationId))
+            })
             let variantIds = variantsByMessageID.values.flatMap { $0 }.compactMap(\.id)
             let activityRows = messageIds.isEmpty ? [] : try ChatMessageToolActivity
                 .filter(messageIds.contains(Column("messageId")))
@@ -1142,7 +1309,7 @@ final class ConversationRepository: @unchecked Sendable {
 
     func insertDualMessage(_ message: DualChatMessage) throws -> Int64 {
         try dbQueue.write { db in
-            var mutable = message
+            var mutable = try protected(message, db: db)
             try mutable.insert(db)
             let now = Int64(Date().timeIntervalSince1970 * 1000)
             try db.execute(
@@ -1160,7 +1327,7 @@ final class ConversationRepository: @unchecked Sendable {
 
     func updateDualMessage(_ message: DualChatMessage) throws {
         try dbQueue.write { db in
-            let mutable = message
+            let mutable = try protected(message, db: db)
             try mutable.update(db)
             try touchConversation(db: db, conversationId: mutable.conversationId)
         }
@@ -1172,6 +1339,7 @@ final class ConversationRepository: @unchecked Sendable {
                 .filter(Column("conversationId") == conversationId)
                 .order(Column("createdAtMs").asc, Column("id").asc)
                 .fetchAll(db)
+                .map { try revealed($0, conversationID: conversationId, db: db) }
         }
     }
 
@@ -1181,6 +1349,7 @@ final class ConversationRepository: @unchecked Sendable {
                 .filter(Column("conversationId") == conversationId)
                 .order(Column("createdAtMs").asc, Column("id").asc)
                 .fetchAll(db)
+                .map { try self.revealed($0, conversationID: conversationId, db: db) }
         }
         .publisher(in: dbQueue)
         .replaceError(with: [])
@@ -1570,6 +1739,7 @@ final class ConversationRepository: @unchecked Sendable {
                         WHERE dual_presence.conversationId = c.id
                     )
                 )
+                AND c.isSecret = 0
                 AND (
                     c.title LIKE ?
                     OR EXISTS (
@@ -1642,8 +1812,10 @@ final class ConversationRepository: @unchecked Sendable {
             .filter(Column("conversationId") == conversationId)
             .order(Column("createdAtMs").asc)
             .fetchAll(db)
+            .map { try revealed($0, conversationID: conversationId, db: db) }
 
         let variantsByMessageID = try fetchVariantsByBaseMessageIDs(db: db, messageIds: messages.compactMap(\.id))
+            .mapValues { variants in try variants.map { try revealed($0, conversationID: conversationId, db: db) } }
         return messages.compactMap { message in
             guard let id = message.id else { return nil }
             let resolved = resolveMessageContent(message: message, variantsByMessageID: variantsByMessageID)
@@ -1708,5 +1880,112 @@ final class ConversationRepository: @unchecked Sendable {
             sql: "UPDATE conversations SET updatedAtMs = ? WHERE id = ?",
             arguments: [now, conversationId]
         )
+    }
+
+    private func isSecret(db: Database, conversationID: Int64) throws -> Bool {
+        try Bool.fetchOne(
+            db,
+            sql: "SELECT isSecret FROM conversations WHERE id = ?",
+            arguments: [conversationID]
+        ) ?? false
+    }
+
+    private func conversationID(
+        db: Database,
+        messageID: Int64? = nil,
+        variantID: Int64? = nil
+    ) throws -> Int64 {
+        if let messageID,
+           let id = try Int64.fetchOne(
+               db,
+               sql: "SELECT conversationId FROM chat_messages WHERE id = ?",
+               arguments: [messageID]
+           ) {
+            return id
+        }
+        if let variantID,
+           let id = try Int64.fetchOne(
+               db,
+               sql: """
+               SELECT m.conversationId
+               FROM chat_message_variants v
+               JOIN chat_messages m ON m.id = v.baseMessageId
+               WHERE v.id = ?
+               """,
+               arguments: [variantID]
+           ) {
+            return id
+        }
+        throw ProviderClientError.parseFailure("Message conversation not found")
+    }
+
+    private func protect(_ value: String, db: Database, conversationID: Int64) throws -> String {
+        guard try isSecret(db: db, conversationID: conversationID) else { return value }
+        return try secretVault.seal(value, conversationID: conversationID)
+    }
+
+    private func reveal(_ value: String, db: Database, conversationID: Int64) throws -> String {
+        guard try isSecret(db: db, conversationID: conversationID) else { return value }
+        return try secretVault.open(value, conversationID: conversationID)
+    }
+
+    private func protected(_ message: ChatMessage, db: Database) throws -> ChatMessage {
+        guard try isSecret(db: db, conversationID: message.conversationId) else { return message }
+        var stored = message
+        stored.text = try secretVault.seal(message.text, conversationID: message.conversationId)
+        stored.attachmentsJSON = try secretVault.seal(message.attachmentsJSON, conversationID: message.conversationId)
+        return stored
+    }
+
+    private func revealed(_ message: ChatMessage, conversationID: Int64, db: Database) throws -> ChatMessage {
+        guard try isSecret(db: db, conversationID: conversationID) else { return message }
+        var clear = message
+        clear.text = try secretVault.open(message.text, conversationID: conversationID)
+        clear.attachmentsJSON = try secretVault.open(message.attachmentsJSON, conversationID: conversationID)
+        return clear
+    }
+
+    private func protected(_ variant: ChatMessageVariant, conversationID: Int64, db: Database) throws -> ChatMessageVariant {
+        guard try isSecret(db: db, conversationID: conversationID) else { return variant }
+        var stored = variant
+        stored.text = try secretVault.seal(variant.text, conversationID: conversationID)
+        stored.attachmentsJSON = try secretVault.seal(variant.attachmentsJSON, conversationID: conversationID)
+        stored.thinkingStream = try variant.thinkingStream.map { try secretVault.seal($0, conversationID: conversationID) }
+        return stored
+    }
+
+    private func revealed(_ variant: ChatMessageVariant, conversationID: Int64, db: Database) throws -> ChatMessageVariant {
+        guard try isSecret(db: db, conversationID: conversationID) else { return variant }
+        var clear = variant
+        clear.text = try secretVault.open(variant.text, conversationID: conversationID)
+        clear.attachmentsJSON = try secretVault.open(variant.attachmentsJSON, conversationID: conversationID)
+        clear.thinkingStream = try variant.thinkingStream.map { try secretVault.open($0, conversationID: conversationID) }
+        return clear
+    }
+
+    private func protected(_ message: DualChatMessage, db: Database) throws -> DualChatMessage {
+        guard try isSecret(db: db, conversationID: message.conversationId) else { return message }
+        var stored = message
+        stored.userText = try secretVault.seal(message.userText, conversationID: message.conversationId)
+        stored.modelAText = try secretVault.seal(message.modelAText, conversationID: message.conversationId)
+        stored.modelBText = try secretVault.seal(message.modelBText, conversationID: message.conversationId)
+        stored.modelAThinking = try message.modelAThinking.map { try secretVault.seal($0, conversationID: message.conversationId) }
+        stored.modelBThinking = try message.modelBThinking.map { try secretVault.seal($0, conversationID: message.conversationId) }
+        stored.attachmentsJSON = try secretVault.seal(message.attachmentsJSON, conversationID: message.conversationId)
+        stored.modelAToolActivityJSON = nil
+        stored.modelBToolActivityJSON = nil
+        return stored
+    }
+
+    private func revealed(_ message: DualChatMessage, conversationID: Int64, db: Database) throws -> DualChatMessage {
+        guard try isSecret(db: db, conversationID: conversationID) else { return message }
+        var clear = message
+        clear.userText = try secretVault.open(message.userText, conversationID: conversationID)
+        clear.modelAText = try secretVault.open(message.modelAText, conversationID: conversationID)
+        clear.modelBText = try secretVault.open(message.modelBText, conversationID: conversationID)
+        clear.modelAThinking = try message.modelAThinking.map { try secretVault.open($0, conversationID: conversationID) }
+        clear.modelBThinking = try message.modelBThinking.map { try secretVault.open($0, conversationID: conversationID) }
+        clear.attachmentsJSON = try secretVault.open(message.attachmentsJSON, conversationID: conversationID)
+        return clear
     }
 }

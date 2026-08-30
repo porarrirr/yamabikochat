@@ -30,16 +30,29 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 class MyApplication : Application() {
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
         DiagnosticsLogger.initialize(this)
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            val secretIds = databaseRepository.getSecretConversationIds()
-            databaseRepository.purgeSecretConversations()
-            secretIds.forEach { editorWorkspaceStore.delete(it.toString()) }
+        runBlocking(Dispatchers.IO) {
+            repository.purgeSecretConversations()
             editorWorkspaceStore.deleteOrphans(databaseRepository.getAllConversationIds().map(Long::toString))
+        }
+    }
+
+    fun purgeSecretConversationsAsync(onPurged: (Set<Long>) -> Unit = {}) {
+        applicationScope.launch {
+            try {
+                val purgedConversationIds = repository.purgeSecretConversations().toSet()
+                withContext(Dispatchers.Main.immediate) { onPurged(purgedConversationIds) }
+            } catch (error: Exception) {
+                DiagnosticsLogger.log("Secret conversation purge failed", error)
+            }
         }
     }
 

@@ -22,6 +22,7 @@ import com.porarri.yamabikochat.ui.theme.ThemeColorPreset
 
 class MainActivity : ComponentActivity() {
     private val initialPromptState = mutableStateOf<String?>(null)
+    private val purgedSecretConversationIdsState = mutableStateOf<Set<Long>>(emptySet())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,7 +51,8 @@ class MainActivity : ComponentActivity() {
                     ) {
                         MainScreen(
                             initialPrompt = initialPromptState.value,
-                            onInitialPromptConsumed = { initialPromptState.value = null }
+                            onInitialPromptConsumed = { initialPromptState.value = null },
+                            purgedSecretConversationIds = purgedSecretConversationIdsState.value
                         )
                     }
                 }
@@ -61,5 +63,15 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         initialPromptState.value = intent.getStringExtra(OverlayService.EXTRA_INITIAL_PROMPT)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) {
+            val app = applicationContext as MyApplication
+            app.purgeSecretConversationsAsync { purgedConversationIds ->
+                purgedSecretConversationIdsState.value = purgedConversationIds
+            }
+        }
     }
 }

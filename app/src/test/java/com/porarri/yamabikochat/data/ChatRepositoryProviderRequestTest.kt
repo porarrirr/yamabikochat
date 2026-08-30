@@ -18,6 +18,7 @@ import io.mockk.slot
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
 
@@ -108,6 +109,33 @@ class ChatRepositoryProviderRequestTest {
         assertEquals("conversation-7-dual-a", request.metadata["promptCacheKey"])
         assertEquals("7", request.metadata["editorSessionId"])
         assertNull(request.metadata["codexSessionId"])
+    }
+
+    @Test
+    fun buildProviderRequestRejectsAttachmentsForSecretConversation() {
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                repository.buildProviderRequest(
+                    conversation = Conversation(
+                        id = 8L,
+                        title = "Secret",
+                        model = "gpt-5.6",
+                        isSecret = true
+                    ),
+                    settings = Settings(),
+                    provider = "OPENAI",
+                    model = "gpt-5.6",
+                    messages = listOf(
+                        ProviderRequestMessage(
+                            role = "user",
+                            content = "secret",
+                            attachments = listOf("/tmp/plaintext.txt")
+                        )
+                    ),
+                    systemPrompt = null
+                )
+            }
+        }
     }
 
     @Test

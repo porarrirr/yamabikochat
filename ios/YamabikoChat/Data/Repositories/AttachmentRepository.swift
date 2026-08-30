@@ -82,6 +82,30 @@ final class AttachmentRepository: @unchecked Sendable {
         return destination
     }
 
+    func deleteOwnedFiles(paths: [String]) throws {
+        for path in Set(paths) {
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            guard isOwnedFile(url) else { continue }
+            if fileManager.fileExists(atPath: url.path) {
+                try fileManager.removeItem(at: url)
+            }
+        }
+    }
+
+    func deleteConversationArtifacts(conversationID: Int64) throws {
+        try generatedFilesLock.withLock {
+            let root = try generatedFilesRoot()
+            let collection = safeGeneratedName(
+                ConversationWorkspacePath.generatedFilesCollection(for: String(conversationID)),
+                fallback: "Chat"
+            )
+            let directory = root.appendingPathComponent(collection, isDirectory: true)
+            if fileManager.fileExists(atPath: directory.path) {
+                try fileManager.removeItem(at: directory)
+            }
+        }
+    }
+
     func persistGeneratedFile(data: Data, filename: String, collection: String? = nil) throws -> URL {
         try generatedFilesLock.withLock {
             let safeName = safeGeneratedName(filename, fallback: "generated-file")
@@ -147,6 +171,19 @@ final class AttachmentRepository: @unchecked Sendable {
             create: true
         )
         return documents.appendingPathComponent("Generated Files", isDirectory: true)
+    }
+
+    private func isOwnedFile(_ url: URL) -> Bool {
+        let support = try? fileManager.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: false
+        ).appendingPathComponent("YamabikoChat/Attachments", isDirectory: true).standardizedFileURL
+        let generated = try? generatedFilesRoot().standardizedFileURL
+        return [support, generated].compactMap { $0 }.contains { root in
+            url.path == root.path || url.path.hasPrefix(root.path + "/")
+        }
     }
 
     private func safeGeneratedName(_ value: String, fallback: String) -> String {

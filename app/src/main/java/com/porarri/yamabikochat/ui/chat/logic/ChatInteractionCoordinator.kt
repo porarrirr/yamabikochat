@@ -52,6 +52,9 @@ class ChatInteractionCoordinator(
 
     suspend fun sendSingleMessage(context: SingleMessageContext): SingleMessageResult {
         val (conversation, settings, text, attachments, messageSummaries, fullMessagesState, fetchFullMessage, scope, skipModelResponse) = context
+        require(!conversation.isSecret || attachments.isEmpty()) {
+            "シークレットチャットでは添付ファイルを送信できません"
+        }
 
         val attachmentPaths = withContext(Dispatchers.IO) {
             attachments.mapNotNull { repository.saveAttachment(it) }
@@ -175,6 +178,9 @@ class ChatInteractionCoordinator(
                 Log.e(TAG, "No conversation found for id: $conversationId")
                 return
             }
+        require(!conversation.isSecret || attachments.isEmpty()) {
+            "シークレットチャットでは添付ファイルを送信できません"
+        }
 
         val isFirstMessage = dualMessages.isEmpty()
         if (isFirstMessage && conversation.title == "New Chat") {

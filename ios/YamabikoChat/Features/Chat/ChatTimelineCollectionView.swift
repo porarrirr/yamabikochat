@@ -63,7 +63,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var pendingContentAnchor: (id: String, offset: CGFloat)?
     private var pendingViewportOffsetY: CGFloat?
     private var pendingChangedRowIDs: Set<String> = []
-    private var pendingIntrinsicHeights: [String: CGFloat] = [:]
+    private var pendingMeasuredCellHeights: [String: CGFloat] = [:]
     private var pendingContentChangeUserScrollGeneration: Int?
     private var parsedRowsRemeasured: Set<String> = []
     private var pendingLocksViewport = false
@@ -125,8 +125,14 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             guard let self,
                   let row = self.store?.row(id: id)
             else { return nil }
-            let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "message", for: indexPath)
+            guard let cell = collectionView.dequeueReusableCell(
+                withReuseIdentifier: "message",
+                for: indexPath
+            ) as? ChatTimelineCollectionCell else { return nil }
             cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
+            cell.onMeasuredContentHeightChange = { [weak self] height in
+                self?.applyMeasuredCellHeight(height, rowID: id)
+            }
             cell.contentConfiguration = UIHostingConfiguration {
                 ChatTimelineRowView(
                     store: row,
@@ -222,7 +228,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             pendingContentAnchor = nil
             pendingViewportOffsetY = nil
             pendingChangedRowIDs.removeAll()
-            pendingIntrinsicHeights.removeAll()
+            pendingMeasuredCellHeights.removeAll()
             pendingContentChangeUserScrollGeneration = nil
             parsedRowsRemeasured.removeAll()
             pendingLocksViewport = false
@@ -313,14 +319,39 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         pendingChangedRowIDs.insert(rowID)
         guard !isContentUpdateScheduled else { return }
         isContentUpdateScheduled = true
-        DispatchQueue.main.async { [weak self] in
-            self?.completePendingRowMeasurement()
+        var snapshot = dataSource.snapshot()
+        let availableIDs = Set(snapshot.itemIdentifiers)
+        let changedIDs = pendingChangedRowIDs.filter(availableIDs.contains)
+        if !changedIDs.isEmpty {
+            // Rebuild only the changed hosting configuration. The diffable-data
+            // source completion runs after the configuration provider has read
+            // the latest row snapshot, so manual sizing cannot measure the
+            // previous SwiftUI streaming frame.
+            snapshot.reconfigureItems(Array(changedIDs))
+            dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
+                self?.completePendingRowMeasurement()
+            }
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.completePendingRowMeasurement()
+            }
         }
     }
 
     private func applyIntrinsicHeight(_ height: CGFloat, rowID: String) {
         guard height.isFinite, height > 0, configuredIDs.contains(rowID) else { return }
-        pendingIntrinsicHeights[rowID] = ceil(height)
+        // The SwiftUI preference is a layout-completion signal, not the
+        // authoritative collection-cell height. A delayed preference from an
+        // older streaming frame can otherwise overwrite a newer full-cell
+        // measurement with the inner Markdown height. Measure the hosting cell
+        // at consumption time so the layout always commits current content.
+        prepareForRowContentChange(rowID: rowID, kind: .normalUpdate)
+        finishRowContentChange(rowID: rowID, kind: .normalUpdate)
+    }
+
+    private func applyMeasuredCellHeight(_ height: CGFloat, rowID: String) {
+        guard height.isFinite, height > 0, configuredIDs.contains(rowID) else { return }
+        pendingMeasuredCellHeights[rowID] = ceil(height)
         prepareForRowContentChange(rowID: rowID, kind: .normalUpdate)
         finishRowContentChange(rowID: rowID, kind: .normalUpdate)
     }
@@ -342,7 +373,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         // Clearing the queue up front lets that callback enqueue a second pass;
         // clearing it at the end would silently discard the newer height.
         let changedRowIDs = pendingChangedRowIDs
-        let intrinsicHeights = pendingIntrinsicHeights
+        let measuredCellHeights = pendingMeasuredCellHeights
         let contentAnchor = pendingContentAnchor
         let viewportOffsetY = pendingViewportOffsetY
         let contentChangeUserScrollGeneration = pendingContentChangeUserScrollGeneration
@@ -351,7 +382,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         pendingContentAnchor = nil
         pendingViewportOffsetY = nil
         pendingChangedRowIDs.removeAll()
-        pendingIntrinsicHeights.removeAll()
+        pendingMeasuredCellHeights.removeAll()
         pendingContentChangeUserScrollGeneration = nil
         pendingLocksViewport = false
         isContentUpdateScheduled = false
@@ -365,8 +396,8 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             }
             for indexPath in indexPaths {
                 guard let id = dataSource.itemIdentifier(for: indexPath) else { continue }
-                if let intrinsicHeight = intrinsicHeights[id] {
-                    context.preferredHeights[indexPath] = intrinsicHeight
+                if let measuredHeight = measuredCellHeights[id] {
+                    context.preferredHeights[indexPath] = measuredHeight
                     continue
                 }
                 guard let cell = collectionView.cellForItem(at: indexPath),
@@ -649,7 +680,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         pendingContentAnchor = nil
         pendingViewportOffsetY = nil
         pendingChangedRowIDs.removeAll()
-        pendingIntrinsicHeights.removeAll()
+        pendingMeasuredCellHeights.removeAll()
         pendingContentChangeUserScrollGeneration = nil
         pendingLocksViewport = false
         clearViewportCompensation()
@@ -776,6 +807,29 @@ private final class ChatTimelineLayout: UICollectionViewLayout {
 }
 
 final class ChatTimelineCollectionCell: UICollectionViewCell {
+    var onMeasuredContentHeightChange: ((CGFloat) -> Void)?
+    private var lastReportedContentHeight: CGFloat?
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        onMeasuredContentHeightChange = nil
+        lastReportedContentHeight = nil
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let height = measuredContentHeight(for: bounds.width)
+        guard height.isFinite,
+              height > 0,
+              abs(height - bounds.height) > TailFollowPolicy.offsetTolerance,
+              lastReportedContentHeight.map({
+                  abs($0 - height) > TailFollowPolicy.offsetTolerance
+              }) ?? true
+        else { return }
+        lastReportedContentHeight = height
+        onMeasuredContentHeightChange?(height)
+    }
+
     override func preferredLayoutAttributesFitting(
         _ layoutAttributes: UICollectionViewLayoutAttributes
     ) -> UICollectionViewLayoutAttributes {
@@ -818,9 +872,7 @@ private struct ChatTimelineRowView: View {
     let onContentLayoutChange: () -> Void
 
     private var shouldReportIntrinsicHeight: Bool {
-        guard store.streamingSnapshot?.isFinal != false,
-              case let .message(message) = store.item
-        else { return false }
+        guard case let .message(message) = store.item else { return false }
         let hasAttachments = (
             try? JSONDecoder().decode(
                 [String].self,
@@ -831,8 +883,10 @@ private struct ChatTimelineRowView: View {
         // expand after their initial estimate. Plain rows stay on the existing
         // fitted-size path so unrelated late hosting layouts cannot perturb an
         // active scroll position.
+        let presentedText = store.streamingSnapshot?.text.trimmedNonEmpty
+            ?? message.displayText
         return hasAttachments
-            || (message.message.role != "user" && message.displayText.contains("\n\n"))
+            || (message.message.role != "user" && presentedText.contains("\n\n"))
     }
 
     var body: some View {

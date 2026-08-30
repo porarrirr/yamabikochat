@@ -40,6 +40,7 @@ final class ChatRepository {
     private let fusionTraceStore: FusionTraceStore
     private let fusionOrchestrator: FusionOrchestrator
     private let editorWorkspaces: EditorWorkspaceStore
+    private let attachmentRepository: AttachmentRepository
 
     init(
         conversations: ConversationRepository,
@@ -57,7 +58,8 @@ final class ChatRepository {
         fusionService: FusionService,
         fusionTraceStore: FusionTraceStore,
         fusionOrchestrator: FusionOrchestrator = FusionOrchestrator(),
-        editorWorkspaces: EditorWorkspaceStore = .shared
+        editorWorkspaces: EditorWorkspaceStore = .shared,
+        attachmentRepository: AttachmentRepository = AttachmentRepository()
     ) {
         self.conversations = conversations
         self.settings = settings
@@ -76,6 +78,7 @@ final class ChatRepository {
         self.fusionTraceStore = fusionTraceStore
         self.fusionOrchestrator = fusionOrchestrator
         self.editorWorkspaces = editorWorkspaces
+        self.attachmentRepository = attachmentRepository
     }
 
     // MARK: - Conversations
@@ -330,6 +333,11 @@ final class ChatRepository {
     }
 
     func exportConversation(id: Int64, mode: ConversationExportMode = .standard) async throws -> URL {
+        if try conversations.fetchConversation(id: id)?.isSecret == true {
+            throw ProviderClientError.parseFailure(
+                L10n.text("シークレットチャットは端末に平文アーカイブを残すため書き出せません。")
+            )
+        }
         let conversations = conversations
         return try await Task.detached(priority: .userInitiated) {
             let snapshot = try conversations.fetchDebugExport(conversationId: id)
@@ -497,12 +505,20 @@ final class ChatRepository {
     }
 
     func deleteConversation(id: Int64) throws {
+        let ownedPaths = try conversations.attachmentPathsForConversation(id: id)
+        try attachmentRepository.deleteOwnedFiles(paths: ownedPaths)
+        try attachmentRepository.deleteConversationArtifacts(conversationID: id)
         try conversations.deleteConversation(id: id)
         try editorWorkspaces.delete(sessionID: String(id))
         Task { await PythonWorker.shared.resetSession(sessionID: String(id)) }
     }
 
     func deleteConversations(ids: Set<Int64>) throws {
+        let paths = try ids.flatMap { try conversations.attachmentPathsForConversation(id: $0) }
+        try attachmentRepository.deleteOwnedFiles(paths: paths)
+        for id in ids {
+            try attachmentRepository.deleteConversationArtifacts(conversationID: id)
+        }
         try conversations.deleteConversations(ids: ids)
         for id in ids {
             try editorWorkspaces.delete(sessionID: String(id))
@@ -512,6 +528,10 @@ final class ChatRepository {
 
     @discardableResult
     func deleteSecretConversationIfNeeded(id: Int64) throws -> Bool {
+        let ownedPaths = try conversations.attachmentPathsForSecretConversation(id: id)
+        guard try conversations.fetchConversation(id: id)?.isSecret == true else { return false }
+        try attachmentRepository.deleteOwnedFiles(paths: ownedPaths)
+        try attachmentRepository.deleteConversationArtifacts(conversationID: id)
         let deleted = try conversations.deleteSecretConversationIfNeeded(id: id)
         if deleted {
             try editorWorkspaces.delete(sessionID: String(id))
@@ -522,11 +542,14 @@ final class ChatRepository {
 
     func purgeSecretConversations() throws {
         let ids = try conversations.secretConversationIDs()
-        try conversations.purgeSecretConversations()
+        let paths = try ids.flatMap { try conversations.attachmentPathsForSecretConversation(id: $0) }
+        try attachmentRepository.deleteOwnedFiles(paths: paths)
         for id in ids {
+            try attachmentRepository.deleteConversationArtifacts(conversationID: id)
             try editorWorkspaces.delete(sessionID: String(id))
             Task { await PythonWorker.shared.resetSession(sessionID: String(id)) }
         }
+        try conversations.purgeSecretConversations()
     }
 
     func deleteProject(id: Int64, mode: ProjectDeletionMode) throws {
@@ -535,6 +558,11 @@ final class ChatRepository {
             try conversations.deleteProject(id: id)
         case .withConversations:
             let conversationIDs = try conversations.conversationIDs(projectId: id)
+            let paths = try conversationIDs.flatMap { try conversations.attachmentPathsForConversation(id: $0) }
+            try attachmentRepository.deleteOwnedFiles(paths: paths)
+            for conversationID in conversationIDs {
+                try attachmentRepository.deleteConversationArtifacts(conversationID: conversationID)
+            }
             try conversations.deleteProjectWithConversations(id: id)
             for conversationID in conversationIDs {
                 try editorWorkspaces.delete(sessionID: String(conversationID))
@@ -724,6 +752,11 @@ final class ChatRepository {
         let settings = try settingsOverride ?? self.settings.load()
         guard var conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
+        }
+        guard !conversation.isSecret || attachments.isEmpty else {
+            throw ProviderClientError.parseFailure(
+                L10n.text("シークレットチャットでは添付ファイルを送信できません。")
+            )
         }
         let isFirstMessage = try conversations.isConversationEmpty(conversationId: conversationId)
 
@@ -991,6 +1024,9 @@ final class ChatRepository {
             enablesUserQuestions: true
         )
         var metadata = resolvedSettings.metadata
+        if conversation.isSecret {
+            metadata["supportsClientTools"] = "false"
+        }
         if conversation.apiProvider.uppercased() == "CODEX_AUTH" {
             let sessionId = try conversations.getOrCreateCodexSessionId(conversationId: conversationId)
             metadata["codexSessionId"] = sessionId
@@ -1004,22 +1040,24 @@ final class ChatRepository {
             model: conversation.model
         )
 
-        let skillApplication = try applySkillContext(
-            messages: resolvedMessages,
-            conversationID: String(conversationId),
-            clientToolsSupported: resolvedSettings.metadata["supportsClientTools"] == "true"
-        )
+        let skillApplication = conversation.isSecret
+            ? AgentSkillPromptApplication(messages: resolvedMessages, currentContext: nil)
+            : try applySkillContext(
+                messages: resolvedMessages,
+                conversationID: String(conversationId),
+                clientToolsSupported: resolvedSettings.metadata["supportsClientTools"] == "true"
+            )
         return ProviderRequest(
             model: conversation.model,
             messages: skillApplication.messages,
             systemPrompt: SystemPromptComposer.composeForAPI(
                 conversation.systemPrompt,
-                enablesAgenticWebSearch: resolvedSettings.tools.containsWebSearchTool,
-                enablesEditorInstructions: resolvedSettings.tools.containsEditorTool,
-                enablesUserQuestionInstructions: resolvedSettings.tools.containsAskUserQuestionTool
+                enablesAgenticWebSearch: !conversation.isSecret && resolvedSettings.tools.containsWebSearchTool,
+                enablesEditorInstructions: !conversation.isSecret && resolvedSettings.tools.containsEditorTool,
+                enablesUserQuestionInstructions: !conversation.isSecret && resolvedSettings.tools.containsAskUserQuestionTool
             ),
             stream: settings.isStreamingEnabled,
-            tools: resolvedSettings.tools,
+            tools: conversation.isSecret ? [] : resolvedSettings.tools,
             thinking: resolvedSettings.thinking,
             provider: resolvedSettings.routing,
             metadata: metadata,
@@ -1148,6 +1186,11 @@ final class ChatRepository {
         guard var conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
         }
+        guard !conversation.isSecret || attachments.isEmpty else {
+            throw ProviderClientError.parseFailure(
+                L10n.text("シークレットチャットでは添付ファイルを送信できません。")
+            )
+        }
         let isFirstMessage = try conversations.isConversationEmpty(conversationId: conversationId)
 
         let normalizedAttachments = attachments.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -1191,7 +1234,8 @@ final class ChatRepository {
             stream: false,
             messages: historyA,
             context: .dualA,
-            promptCacheKey: "conversation-\(conversationId)-dual-a"
+            promptCacheKey: "conversation-\(conversationId)-dual-a",
+            clientToolsAllowed: !conversation.isSecret
         )
 
         let requestB = try await buildSingleTurnRequest(
@@ -1203,7 +1247,8 @@ final class ChatRepository {
             stream: false,
             messages: historyB,
             context: .dualB,
-            promptCacheKey: "conversation-\(conversationId)-dual-b"
+            promptCacheKey: "conversation-\(conversationId)-dual-b",
+            clientToolsAllowed: !conversation.isSecret
         )
 
         _ = try conversations.insertDualMessage(userMessage)
@@ -1392,6 +1437,11 @@ final class ChatRepository {
         guard var conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
         }
+        guard !conversation.isSecret || attachments.isEmpty else {
+            throw ProviderClientError.parseFailure(
+                L10n.text("シークレットチャットでは添付ファイルを送信できません。")
+            )
+        }
         let isFirstMessage = try conversations.isConversationEmpty(conversationId: conversationId)
         let normalizedAttachments = attachments.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
@@ -1432,8 +1482,9 @@ final class ChatRepository {
         let context = FusionContext(
             fusionDepth: 0,
             debugMode: settings.fusionDebugModeEnabled,
-            logPrompts: settings.fusionLogPromptsEnabled,
-            conversationId: conversationId
+            logPrompts: !conversation.isSecret && settings.fusionLogPromptsEnabled,
+            conversationId: conversationId,
+            clientToolsAllowed: !conversation.isSecret
         )
 
         let judgeOutcome = try await fusionService.runThroughJudge(
@@ -1759,6 +1810,11 @@ final class ChatRepository {
         conversationId: Int64,
         initialMessage: String
     ) throws -> Int64 {
+        if try conversations.fetchConversation(id: conversationId)?.isSecret == true {
+            throw ProviderClientError.parseFailure(
+                L10n.text("シークレットチャットでは自動会話を利用できません。")
+            )
+        }
         let normalizedInitialMessage = initialMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         let currentSettings = try settings.load()
         let config = AutoConversationConfig(
@@ -2517,7 +2573,8 @@ final class ChatRepository {
         stream: Bool? = nil,
         messages: [ProviderRequestMessage]? = nil,
         context: AppSettings.ReasoningContext = .default,
-        promptCacheKey: String? = nil
+        promptCacheKey: String? = nil,
+        clientToolsAllowed: Bool = true
     ) async throws -> ProviderRequest {
         let resolvedSettings = try await requestSettingsResolver.resolve(
             settings: settings,
@@ -2536,22 +2593,30 @@ final class ChatRepository {
             }
         }
         metadata["supportsVision"] = await visionMetadataFlag(provider: provider, model: model)
+        if !clientToolsAllowed {
+            metadata["supportsClientTools"] = "false"
+        }
         let baseMessages = messages ?? [ProviderRequestMessage(role: "user", content: text)]
-        let skillApplication = try applySkillContext(
-            messages: baseMessages,
-            conversationID: promptCacheKey,
-            clientToolsSupported: resolvedSettings.metadata["supportsClientTools"] == "true"
-        )
+        let skillApplication: AgentSkillPromptApplication
+        if clientToolsAllowed {
+            skillApplication = try applySkillContext(
+                messages: baseMessages,
+                conversationID: promptCacheKey,
+                clientToolsSupported: resolvedSettings.metadata["supportsClientTools"] == "true"
+            )
+        } else {
+            skillApplication = AgentSkillPromptApplication(messages: baseMessages, currentContext: nil)
+        }
         return ProviderRequest(
             model: model,
             messages: skillApplication.messages,
             systemPrompt: SystemPromptComposer.composeForAPI(
                 systemPrompt,
-                enablesAgenticWebSearch: resolvedSettings.tools.containsWebSearchTool,
-                enablesEditorInstructions: resolvedSettings.tools.containsEditorTool
+                enablesAgenticWebSearch: clientToolsAllowed && resolvedSettings.tools.containsWebSearchTool,
+                enablesEditorInstructions: clientToolsAllowed && resolvedSettings.tools.containsEditorTool
             ),
             stream: stream ?? settings.isStreamingEnabled,
-            tools: resolvedSettings.tools,
+            tools: clientToolsAllowed ? resolvedSettings.tools : [],
             thinking: resolvedSettings.thinking,
             provider: resolvedSettings.routing,
             metadata: metadata,

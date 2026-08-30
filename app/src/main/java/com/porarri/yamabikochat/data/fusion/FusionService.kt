@@ -154,7 +154,8 @@ class FusionService(
                     },
                     userAttachments = userAttachments,
                     supportsVision = visionSupportByModel[model.modelId] ?: false,
-                    conversationId = context.conversationId?.toString()
+                    conversationId = context.conversationId?.toString(),
+                    clientToolsAllowed = context.clientToolsAllowed
                 )
             },
             invoke = { bundle, phase, onToolActivity ->
@@ -183,9 +184,10 @@ class FusionService(
         conversationHistory: List<ProviderRequestMessage>,
         userAttachments: List<String> = emptyList(),
         supportsVision: Boolean = false,
-        conversationId: String? = null
+        conversationId: String? = null,
+        clientToolsAllowed: Boolean = true
     ): ProviderRequest {
-        val toolScope: ProviderRequestToolScope = if (phase == FusionPhase.panel) {
+        val toolScope: ProviderRequestToolScope = if (clientToolsAllowed && phase == FusionPhase.panel) {
             ProviderRequestToolScope.FusionPanel(allowWebSearch = allowTools)
         } else {
             ProviderRequestToolScope.ProviderOnly
@@ -208,6 +210,9 @@ class FusionService(
         if (phase == FusionPhase.panel) {
             metadata["supportsVision"] = if (supportsVision) "true" else "false"
         }
+        if (!clientToolsAllowed) {
+            metadata["supportsClientTools"] = "false"
+        }
 
         var messages = if (phase == FusionPhase.panel) {
             panelMessages(
@@ -219,7 +224,7 @@ class FusionService(
             conversationHistory
         }
 
-        if (phase == FusionPhase.panel && skillRepository != null) {
+        if (clientToolsAllowed && phase == FusionPhase.panel && skillRepository != null) {
             val supportsTools = resolvedSettings.metadata["supportsClientTools"] == "true"
             val applied = AgentSkillPromptComposer.apply(
                 repository = skillRepository,
@@ -235,7 +240,7 @@ class FusionService(
             messages = messages,
             systemPrompt = systemPrompt.takeIf { it.isNotBlank() },
             stream = true,
-            tools = resolvedSettings.tools,
+            tools = if (clientToolsAllowed) resolvedSettings.tools else emptyList(),
             thinking = resolvedSettings.thinking,
             provider = resolvedSettings.routing,
             metadata = metadata

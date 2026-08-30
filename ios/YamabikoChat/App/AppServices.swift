@@ -39,8 +39,22 @@ final class AppServices {
 
         credentialStore = KeychainStore()
         settingsRepository = SettingsRepository(dbQueue: dbQueue)
-        conversationRepository = ConversationRepository(dbQueue: dbQueue)
-        attachmentRepository = AttachmentRepository()
+        let localConversationRepository = ConversationRepository(dbQueue: dbQueue)
+        conversationRepository = localConversationRepository
+        let localAttachmentRepository = AttachmentRepository()
+        attachmentRepository = localAttachmentRepository
+        let staleSecretIDs = try localConversationRepository.secretConversationIDs()
+        var staleSecretPaths: [String] = []
+        for id in staleSecretIDs {
+            staleSecretPaths.append(
+                contentsOf: try localConversationRepository.attachmentPathsForSecretConversation(id: id)
+            )
+        }
+        try localAttachmentRepository.deleteOwnedFiles(paths: staleSecretPaths)
+        for id in staleSecretIDs {
+            try localAttachmentRepository.deleteConversationArtifacts(conversationID: id)
+        }
+        try localConversationRepository.purgeSecretConversations()
         do {
             try EditorWorkspaceStore.shared.deleteOrphans(
                 validSessionIDs: try conversationRepository.allConversationIDs().map(String.init)
@@ -119,7 +133,8 @@ final class AppServices {
             codexAuthRepository: codexAuthRepository,
             superGrokAuthRepository: superGrokAuthRepository,
             fusionService: fusionService,
-            fusionTraceStore: fusionTraceStore
+            fusionTraceStore: fusionTraceStore,
+            attachmentRepository: attachmentRepository
         )
         sharePayloadStore = SharePayloadStore()
 

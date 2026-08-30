@@ -227,6 +227,10 @@ final class ChatViewModel: ObservableObject {
 
     func setSecretModeForEmptyConversation(_ enabled: Bool) {
         guard !hasConversationContent, !isSending else { return }
+        guard !enabled || attachments.isEmpty else {
+            errorMessage = L10n.text("添付を削除してからシークレットチャットを有効にしてください。")
+            return
+        }
         guard let repository else {
             errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             return
@@ -281,6 +285,10 @@ final class ChatViewModel: ObservableObject {
                 try? FileManager.default.removeItem(at: url)
             }
         }
+        guard !isSecretConversation else {
+            errorMessage = L10n.text("シークレットチャットでは、端末に平文ファイルを残す添付機能は利用できません。")
+            return false
+        }
         guard let attachmentRepository else {
             errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
             DiagnosticsLogger.log(
@@ -333,6 +341,9 @@ final class ChatViewModel: ObservableObject {
     }
 
     func removeAttachment(id: UUID) {
+        if let attachment = attachments.first(where: { $0.id == id }) {
+            try? attachmentRepository?.deleteOwnedFiles(paths: [attachment.url.path])
+        }
         attachments.removeAll { $0.id == id }
         errorMessage = nil
     }
@@ -342,8 +353,28 @@ final class ChatViewModel: ObservableObject {
     }
 
     func clearAttachments() {
+        try? attachmentRepository?.deleteOwnedFiles(paths: attachments.map { $0.url.path })
         attachments.removeAll()
         errorMessage = nil
+    }
+
+    func discardSecretDataFromMemory() {
+        guard isSecretConversation else { return }
+        activeSendTask?.cancel()
+        autoConversationTask?.cancel()
+        sessionController.clear()
+        inputText = ""
+        inputTextBeforeSpeech = ""
+        messageSummaries = []
+        fullMessages = []
+        dualMessages = []
+        conversationSystemPrompt = nil
+        fusionStreamingStatus = nil
+        fusionProgress = nil
+        generationStatus = nil
+        errorMessage = nil
+        attachments = []
+        timelineStore.clearAll()
     }
 
     func toggleSpeechRecognition() {
@@ -372,6 +403,10 @@ final class ChatViewModel: ObservableObject {
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return }
         guard let repository else {
             errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
+            return
+        }
+        guard !isSecretConversation || attachments.isEmpty else {
+            errorMessage = L10n.text("シークレットチャットでは添付ファイルを送信できません。")
             return
         }
 
@@ -460,7 +495,8 @@ final class ChatViewModel: ObservableObject {
                         attachments: attachmentPaths,
                         settingsOverride: runSettings
                     )
-                } else if shouldStartAutoConversation,
+                } else if !isSecretConversation,
+                          shouldStartAutoConversation,
                           !isAutoConversationRunning,
                           !isAutoConversationPaused {
                     try repository.sendUserMessageOnly(
@@ -1153,6 +1189,10 @@ final class ChatViewModel: ObservableObject {
     }
 
     func startAutoConversationManually() {
+        guard !isSecretConversation else {
+            errorMessage = L10n.text("シークレットチャットでは自動会話を利用できません。")
+            return
+        }
         guard settings.isAutoConversationEnabled else {
             errorMessage = L10n.text("先に自動会話をONにしてください。")
             return

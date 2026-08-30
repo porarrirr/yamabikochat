@@ -22,4 +22,9 @@ class FileProcessingRepository(
 
     suspend fun saveInlineData(inlineData: InlineData, displayName: String? = null): String? =
         attachmentStorage.saveInlineData(inlineData, displayName)
+
+    suspend fun deleteOwnedFiles(paths: Collection<String>) = attachmentStorage.deleteOwnedFiles(paths)
+
+    suspend fun deleteConversationArtifacts(conversationId: Long) =
+        attachmentStorage.deleteConversationArtifacts(conversationId)
 }

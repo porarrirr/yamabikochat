@@ -434,7 +434,10 @@ struct NativeMarkdownView: View {
             ) {
                 SelectableChatText(text: AttributedString(markdownText), style: .body)
             } else {
-                ForEach(NativeMarkdownRenderGroup.groups(for: renderedBlocks)) { group in
+                ForEach(NativeMarkdownRenderGroup.groups(
+                    for: renderedBlocks,
+                    isolatesSelectableBlocks: isStreaming
+                )) { group in
                     switch group {
                     case let .selectableText(_, blocks):
                         SelectableChatText(blocks: blocks)
@@ -509,7 +512,10 @@ enum NativeMarkdownRenderGroup: Identifiable, Equatable {
         }
     }
 
-    static func groups(for blocks: [NativeMarkdownBlock]) -> [NativeMarkdownRenderGroup] {
+    static func groups(
+        for blocks: [NativeMarkdownBlock],
+        isolatesSelectableBlocks: Bool = false
+    ) -> [NativeMarkdownRenderGroup] {
         var result: [NativeMarkdownRenderGroup] = []
         var selectableBlocks: [NativeMarkdownBlock] = []
 
@@ -522,6 +528,14 @@ enum NativeMarkdownRenderGroup: Identifiable, Equatable {
         for block in blocks {
             switch block {
             case .paragraph, .heading, .quote, .list:
+                if isolatesSelectableBlocks {
+                    flushSelectableBlocks()
+                    result.append(.selectableText(
+                        id: "selectable-\(block.id)",
+                        blocks: [block]
+                    ))
+                    continue
+                }
                 selectableBlocks.append(block)
             default:
                 flushSelectableBlocks()

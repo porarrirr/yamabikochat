@@ -2,6 +2,7 @@ package com.porarri.yamabikochat.ui.chat
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -33,11 +34,15 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.window.Dialog
 import com.porarri.yamabikochat.MyApplication
@@ -67,6 +72,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.view.WindowManager
 import java.io.File
 
 // 自動会話メッセージの判定とパース用ヘルパー関数
@@ -221,6 +227,40 @@ fun ChatScreen(
     val presetOptions = globalPresetsInChat + presets
     val currentConversation by viewModel.conversation.collectAsState()
     val isSecretChat = currentConversation?.isSecret == true
+    val hostActivity = LocalView.current.context as? ComponentActivity
+    DisposableEffect(hostActivity, isSecretChat) {
+        if (isSecretChat) {
+            hostActivity?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            hostActivity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+        onDispose {
+            hostActivity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+    val latestSecretState by rememberUpdatedState(isSecretChat)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP && latestSecretState) {
+                text = ""
+                viewModel.discardSecretDataFromMemory()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    DisposableEffect(hostActivity) {
+        onDispose {
+            if (latestSecretState) {
+                text = ""
+                viewModel.discardSecretDataFromMemory()
+                hostActivity?.let { activity ->
+                    (activity.applicationContext as MyApplication).purgeSecretConversationsAsync()
+                }
+            }
+        }
+    }
     val canToggleSecret = messages.isEmpty() && dualMessages.isEmpty()
     var showPresetMenu by remember { mutableStateOf(false) }
     var showOverflowMenu by remember { mutableStateOf(false) }

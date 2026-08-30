@@ -128,6 +128,13 @@ final class ChatTimelineStore: ObservableObject {
         }
     }
 
+    func clearAll() {
+        latestMessages = []
+        latestDualMessages = []
+        pendingStreamingSnapshotsByMessageID.removeAll(keepingCapacity: false)
+        rebuild()
+    }
+
     private func rebuild() {
         let snapshot = ChatTimelineSnapshot(
             messages: latestMessages,

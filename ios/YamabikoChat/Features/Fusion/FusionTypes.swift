@@ -242,17 +242,20 @@ struct FusionContext: Sendable, Equatable {
     var debugMode: Bool
     var logPrompts: Bool
     var conversationId: Int64?
+    var clientToolsAllowed: Bool
 
     init(
         fusionDepth: Int = 0,
         debugMode: Bool = false,
         logPrompts: Bool = false,
-        conversationId: Int64? = nil
+        conversationId: Int64? = nil,
+        clientToolsAllowed: Bool = true
     ) {
         self.fusionDepth = fusionDepth
         self.debugMode = debugMode
         self.logPrompts = logPrompts
         self.conversationId = conversationId
+        self.clientToolsAllowed = clientToolsAllowed
     }
 }
 

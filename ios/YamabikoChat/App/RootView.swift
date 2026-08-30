@@ -13,7 +13,7 @@ enum ConversationListSelectionResolver {
         selectedConversationExists: Bool,
         keepSidebarAfterSecretDiscard: Bool
     ) -> ConversationListSelectionResolution {
-        if let selectedConversationID {
+        if selectedConversationID != nil {
             if selectedConversationExists {
                 return .keepCurrentSelection
             }
@@ -44,6 +44,7 @@ struct RootView: View {
     @State private var themeColor = "BLUE_PURPLE"
     @State private var themeMode = "SYSTEM"
     @State private var keepSidebarAfterSecretDiscard = false
+    @State private var privacyCoverVisible = false
 
     var body: some View {
         NavigationSplitView(
@@ -90,6 +91,7 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                privacyCoverVisible = isSelectedConversationSecret && UIScreen.main.isCaptured
                 importSharePayloadIfNeeded()
                 Task {
                     do {
@@ -102,7 +104,18 @@ struct RootView: View {
                         )
                     }
                 }
+            } else {
+                if isSelectedConversationSecret {
+                    privacyCoverVisible = true
+                }
+                if phase == .background {
+                    discardSelectedSecretConversationIfNeeded()
+                    SecretConversationVault.shared.destroyAll()
+                }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { _ in
+            privacyCoverVisible = isSelectedConversationSecret && UIScreen.main.isCaptured
         }
         .onReceive(container.chatRepository.settingsPublisher()) { settings in
             applyAppearance(settings)
@@ -163,6 +176,22 @@ struct RootView: View {
         }
         .preferredColorScheme(resolvedColorScheme)
         .tint(resolvedTintColor)
+        .privacySensitive()
+        .overlay {
+            if privacyCoverVisible {
+                ZStack {
+                    Color(uiColor: .systemBackground).ignoresSafeArea()
+                    VStack(spacing: 12) {
+                        Image(systemName: "lock.shield.fill")
+                            .font(.system(size: 44))
+                        Text(L10n.text("シークレットチャットを保護中"))
+                            .font(.headline)
+                    }
+                }
+                .accessibilityHidden(true)
+                .zIndex(10_000)
+            }
+        }
     }
 
     private var resolvedColorScheme: ColorScheme? {
@@ -174,6 +203,11 @@ struct RootView: View {
         default:
             return nil
         }
+    }
+
+    private var isSelectedConversationSecret: Bool {
+        guard let id = appState.selectedConversationID else { return false }
+        return (try? container.chatRepository.conversation(id: id)?.isSecret) == true
     }
 
     private var resolvedTintColor: Color {
@@ -316,6 +350,7 @@ struct RootView: View {
 private struct ConversationDetailHost: View {
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var appState: AppState
+    @Environment(\.scenePhase) private var scenePhase
 
     let conversationID: Int64
     let onSelectConversation: (Int64) -> Void
@@ -338,6 +373,14 @@ private struct ConversationDetailHost: View {
             )
             .environmentObject(container)
             .environmentObject(appState)
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background {
+                    viewModel.discardSecretDataFromMemory()
+                }
+            }
+            .onDisappear {
+                viewModel.discardSecretDataFromMemory()
+            }
     }
 }
 

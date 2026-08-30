@@ -161,6 +161,28 @@ final class FusionServiceTests: XCTestCase {
         XCTAssertFalse(request.systemPrompt?.contains("web_search") == true)
     }
 
+    func testSecretContextRemovesResolvedClientTools() async throws {
+        let service = makeService()
+        var settings = AppSettings()
+        settings.geminiGoogleSearchEnabled = true
+        settings.geminiCodeExecutionEnabled = true
+
+        let request = try await service.buildProviderRequest(
+            model: PanelModelConfig(modelId: "gemini-2.5-flash", provider: "GEMINI"),
+            systemPrompt: "panel",
+            phase: .panel,
+            allowTools: true,
+            settings: settings,
+            fusionDepth: 0,
+            userPrompt: "Latest",
+            conversationHistory: [],
+            clientToolsAllowed: false
+        )
+
+        XCTAssertTrue(request.tools.isEmpty)
+        XCTAssertEqual(request.metadata["supportsClientTools"], "false")
+    }
+
     func testFusionCodexGlobalReasoningAppliesToAllPhases() async throws {
         let service = makeService()
         var settings = AppSettings()

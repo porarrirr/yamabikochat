@@ -142,7 +142,8 @@ final class FusionService {
                     conversationHistory: conversationHistory,
                     userAttachments: userAttachments,
                     supportsVision: resolvedVisionSupportByModel[model.modelId] ?? false,
-                    conversationID: context.conversationId.map(String.init)
+                    conversationID: context.conversationId.map(String.init),
+                    clientToolsAllowed: context.clientToolsAllowed
                 )
             },
             invoke: { [weak self] providerRequest, provider, phase, onToolActivity in
@@ -174,9 +175,10 @@ final class FusionService {
         conversationHistory: [ProviderRequestMessage],
         userAttachments: [String] = [],
         supportsVision: Bool = false,
-        conversationID: String? = nil
+        conversationID: String? = nil,
+        clientToolsAllowed: Bool = true
     ) async throws -> ProviderRequest {
-        let toolScope: ProviderRequestToolScope = phase == .panel
+        let toolScope: ProviderRequestToolScope = clientToolsAllowed && phase == .panel
             ? .fusionPanel(allowWebSearch: allowTools)
             : .providerOnly
         let resolvedSettings = try await requestSettingsResolver.resolve(
@@ -201,6 +203,9 @@ final class FusionService {
         if phase == .panel {
             metadata["supportsVision"] = supportsVision ? "true" : "false"
         }
+        if !clientToolsAllowed {
+            metadata["supportsClientTools"] = "false"
+        }
 
         var messages = conversationHistory
         if phase == .panel {
@@ -212,7 +217,7 @@ final class FusionService {
         }
 
         let skillContext: SkillRequestContext?
-        if phase == .panel, let skillRepository {
+        if clientToolsAllowed, phase == .panel, let skillRepository {
             let supportsTools = resolvedSettings.metadata["supportsClientTools"] == "true"
             let application = try AgentSkillPromptComposer.apply(
                 repository: skillRepository,
@@ -231,10 +236,10 @@ final class FusionService {
             messages: messages,
             systemPrompt: SystemPromptComposer.composeForAPI(
                 systemPrompt.trimmedNonEmpty,
-                enablesAgenticWebSearch: resolvedSettings.tools.containsWebSearchTool
+                enablesAgenticWebSearch: clientToolsAllowed && resolvedSettings.tools.containsWebSearchTool
             ),
             stream: phase == .synthesizer,
-            tools: resolvedSettings.tools,
+            tools: clientToolsAllowed ? resolvedSettings.tools : [],
             thinking: resolvedSettings.thinking,
             provider: resolvedSettings.routing,
             metadata: metadata,

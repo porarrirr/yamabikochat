@@ -12,14 +12,37 @@ enum AppDatabase {
         )
         let directoryURL = supportURL.appendingPathComponent("YamabikoChat", isDirectory: true)
         try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try fileManager.setAttributes(
+            [.protectionKey: FileProtectionType.complete],
+            ofItemAtPath: directoryURL.path
+        )
+        var directoryValues = URLResourceValues()
+        directoryValues.isExcludedFromBackup = true
+        var protectedDirectoryURL = directoryURL
+        try protectedDirectoryURL.setResourceValues(directoryValues)
         let dbURL = directoryURL.appendingPathComponent("yamabiko.sqlite")
 
         var configuration = Configuration()
         configuration.foreignKeysEnabled = true
+        configuration.prepareDatabase { db in
+            try db.execute(sql: "PRAGMA journal_mode = TRUNCATE")
+            try db.execute(sql: "PRAGMA secure_delete = ON")
+        }
 
         let queue = try DatabaseQueue(path: dbURL.path, configuration: configuration)
         try migrator.migrate(queue)
         try recoverStreamCheckpoints(in: queue)
+        for protectedURL in [
+            dbURL,
+            URL(fileURLWithPath: dbURL.path + "-journal"),
+            URL(fileURLWithPath: dbURL.path + "-wal"),
+            URL(fileURLWithPath: dbURL.path + "-shm")
+        ] where fileManager.fileExists(atPath: protectedURL.path) {
+            try fileManager.setAttributes(
+                [.protectionKey: FileProtectionType.complete],
+                ofItemAtPath: protectedURL.path
+            )
+        }
         return queue
     }
 

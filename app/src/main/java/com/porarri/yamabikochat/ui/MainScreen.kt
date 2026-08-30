@@ -35,7 +35,8 @@ import kotlin.math.abs
 @Composable
 fun MainScreen(
     initialPrompt: String? = null,
-    onInitialPromptConsumed: () -> Unit = {}
+    onInitialPromptConsumed: () -> Unit = {},
+    purgedSecretConversationIds: Set<Long> = emptySet()
 ) {
     val navController = rememberNavController()
     val adaptiveInfo = LocalWindowAdaptiveInfo.current
@@ -67,6 +68,21 @@ fun MainScreen(
 
     var sidebarVisible by rememberSaveable { mutableStateOf(isDualPane || isTableTop) }
 
+    LaunchedEffect(purgedSecretConversationIds) {
+        val visibleConversationIds = listOfNotNull(
+            navController.currentBackStackEntry,
+            navController.previousBackStackEntry
+        ).mapNotNull { entry ->
+            entry.arguments?.getString("conversationId")?.toLongOrNull()
+        }
+        if (shouldResetNavigationAfterSecretPurge(purgedSecretConversationIds, visibleConversationIds)) {
+            navController.navigate("chat/0") {
+                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
+
     LaunchedEffect(isDualPane, isTableTop) {
         when {
             isDualPane -> sidebarVisible = true
@@ -97,6 +113,11 @@ fun MainScreen(
         ) { sidebarVisible = it }
     }
 }
+
+internal fun shouldResetNavigationAfterSecretPurge(
+    purgedConversationIds: Set<Long>,
+    visibleConversationIds: List<Long>
+): Boolean = visibleConversationIds.any(purgedConversationIds::contains)
 
 @Composable
 private fun DualPaneMainScreen(

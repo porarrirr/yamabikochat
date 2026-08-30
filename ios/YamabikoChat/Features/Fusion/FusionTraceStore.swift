@@ -55,6 +55,16 @@ final class FusionTraceStore {
     }
 
     func save(trace: FusionTrace, conversationId: Int64?) throws {
+        if let conversationId,
+           try dbQueue.read({ db in
+               try Bool.fetchOne(
+                   db,
+                   sql: "SELECT isSecret FROM conversations WHERE id = ?",
+                   arguments: [conversationId]
+               ) ?? false
+           }) {
+            return
+        }
         var record = try FusionTraceRecord(
             id: trace.requestId,
             conversationId: conversationId,

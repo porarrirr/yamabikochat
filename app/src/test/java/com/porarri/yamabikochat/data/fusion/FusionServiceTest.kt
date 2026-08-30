@@ -3,6 +3,7 @@ package com.porarri.yamabikochat.data.fusion
 import com.porarri.yamabikochat.data.local.Settings
 import com.porarri.yamabikochat.data.model.ProviderRequest
 import com.porarri.yamabikochat.data.model.ProviderRequestMessage
+import com.porarri.yamabikochat.data.model.ProviderTool
 import com.porarri.yamabikochat.data.repositories.ProviderGateway
 import com.porarri.yamabikochat.data.repositories.ProviderRequestResolvedSettings
 import com.porarri.yamabikochat.data.repositories.ProviderRequestSettingsResolver
@@ -11,6 +12,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -98,6 +100,33 @@ class FusionServiceTest {
         assertEquals("false", textRequest?.metadata?.get("supportsVision"))
         assertNull(judgeRequest?.metadata?.get("supportsVision"))
         assertEquals("fusion-42", visionRequest?.metadata?.get("promptCacheKey"))
+    }
+
+    @Test
+    fun buildProviderRequestRemovesClientToolsForSecretContext() = runBlocking {
+        val resolved = ProviderRequestResolvedSettings(
+            tools = listOf(ProviderTool(type = "function", payload = mapOf("name" to "web_search"))),
+            thinking = null,
+            routing = null,
+            metadata = mapOf("supportsClientTools" to "true")
+        )
+        coEvery { requestSettingsResolver.resolve(any(), any(), any(), any()) } returns resolved
+        val service = makeService()
+
+        val request = service.buildProviderRequest(
+            model = PanelModelConfig(modelId = "m1", provider = "OPENAI"),
+            systemPrompt = "panel",
+            phase = FusionPhase.panel,
+            allowTools = true,
+            settings = Settings(),
+            fusionDepth = 0,
+            userPrompt = "Latest",
+            conversationHistory = emptyList(),
+            clientToolsAllowed = false
+        )
+
+        assertTrue(request.tools.isEmpty())
+        assertEquals("false", request.metadata["supportsClientTools"])
     }
 
     private fun makeService(

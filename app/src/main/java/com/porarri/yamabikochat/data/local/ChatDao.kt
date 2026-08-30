@@ -169,6 +169,9 @@ interface ChatDao {
     @Query("DELETE FROM token_usage_records WHERE conversationId = :conversationId")
     suspend fun deleteTokenUsageForConversation(conversationId: Long)
 
+    @Query("DELETE FROM fusion_traces WHERE conversationId = :conversationId")
+    suspend fun deleteFusionTraceForConversation(conversationId: Long)
+
     @Query("DELETE FROM chat_message_variants WHERE baseMessageId IN (SELECT id FROM chat_messages WHERE conversationId = :conversationId)")
     suspend fun deleteVariantsForConversation(conversationId: Long)
 
@@ -178,6 +181,7 @@ interface ChatDao {
         deleteMessagesForConversation(id)
         deleteDualMessagesForConversation(id)
         deleteTokenUsageForConversation(id)
+        deleteFusionTraceForConversation(id)
         deleteConversationById(id)
     }
 
@@ -213,7 +217,11 @@ interface ChatDao {
             timestamp,
             CASE WHEN attachments != '[]' AND attachments IS NOT NULL THEN 1 ELSE 0 END as hasAttachments,
             CASE WHEN thinkingSummary IS NOT NULL THEN 1 ELSE 0 END as hasThinking,
-            CASE WHEN LENGTH(resolvedText) > 100 THEN SUBSTR(resolvedText, 1, 100) || '...' ELSE resolvedText END as textPreview,
+            CASE
+                WHEN conversationId IN (SELECT id FROM conversations WHERE isSecret = 1) THEN resolvedText
+                WHEN LENGTH(resolvedText) > 100 THEN SUBSTR(resolvedText, 1, 100) || '...'
+                ELSE resolvedText
+            END as textPreview,
             selectedVariantIndex,
             1 + variantCount as variantCount
         FROM (
@@ -268,7 +276,11 @@ interface ChatDao {
             timestamp,
             CASE WHEN attachments != '[]' AND attachments IS NOT NULL THEN 1 ELSE 0 END as hasAttachments,
             CASE WHEN thinkingSummary IS NOT NULL THEN 1 ELSE 0 END as hasThinking,
-            CASE WHEN LENGTH(resolvedText) > 100 THEN SUBSTR(resolvedText, 1, 100) || '...' ELSE resolvedText END as textPreview,
+            CASE
+                WHEN conversationId IN (SELECT id FROM conversations WHERE isSecret = 1) THEN resolvedText
+                WHEN LENGTH(resolvedText) > 100 THEN SUBSTR(resolvedText, 1, 100) || '...'
+                ELSE resolvedText
+            END as textPreview,
             selectedVariantIndex,
             1 + variantCount as variantCount
         FROM (
@@ -602,6 +614,39 @@ interface ChatDao {
     @Query("DELETE FROM token_usage_records WHERE conversationId IN (SELECT id FROM conversations WHERE isSecret = 1)")
     suspend fun deleteTokenUsageForSecretConversations()
 
+    @Query("DELETE FROM fusion_traces WHERE conversationId IN (SELECT id FROM conversations WHERE isSecret = 1)")
+    suspend fun deleteFusionTracesForSecretConversations()
+
+    @Query("SELECT * FROM chat_messages WHERE conversationId IN (SELECT id FROM conversations WHERE isSecret = 1)")
+    suspend fun getSecretChatMessagesForPurge(): List<ChatMessage>
+
+    @Query(
+        """
+        SELECT v.* FROM chat_message_variants v
+        JOIN chat_messages m ON m.id = v.baseMessageId
+        WHERE m.conversationId IN (SELECT id FROM conversations WHERE isSecret = 1)
+        """
+    )
+    suspend fun getSecretVariantsForPurge(): List<ChatMessageVariant>
+
+    @Query("SELECT * FROM dual_chat_messages WHERE conversationId IN (SELECT id FROM conversations WHERE isSecret = 1)")
+    suspend fun getSecretDualMessagesForPurge(): List<DualChatMessage>
+
+    @Query("SELECT * FROM chat_messages WHERE conversationId = :conversationId")
+    suspend fun getChatMessagesForPurge(conversationId: Long): List<ChatMessage>
+
+    @Query(
+        """
+        SELECT v.* FROM chat_message_variants v
+        JOIN chat_messages m ON m.id = v.baseMessageId
+        WHERE m.conversationId = :conversationId
+        """
+    )
+    suspend fun getVariantsForPurge(conversationId: Long): List<ChatMessageVariant>
+
+    @Query("SELECT * FROM dual_chat_messages WHERE conversationId = :conversationId")
+    suspend fun getDualMessagesForPurge(conversationId: Long): List<DualChatMessage>
+
     @Query(
         """
         DELETE FROM auto_conversation_messages
@@ -621,6 +666,7 @@ interface ChatDao {
 
     @Transaction
     suspend fun purgeSecretConversations() {
+        deleteFusionTracesForSecretConversations()
         deleteVariantsForSecretConversations()
         deleteThinkingForSecretConversations()
         deleteChatMessagesForSecretConversations()

@@ -97,6 +97,26 @@ class AttachmentStorage(private val context: Context) {
         if (file.exists() && !file.delete()) throw IOException("Could not remove generated file.")
     }
 
+    suspend fun deleteOwnedFiles(paths: Collection<String>) = withContext(Dispatchers.IO) {
+        val filesRoot = runCatching { context.filesDir.canonicalFile }.getOrNull() ?: return@withContext
+        paths.distinct().forEach { path ->
+            val candidate = runCatching { File(path).canonicalFile }.getOrNull() ?: return@forEach
+            if (candidate.path.startsWith(filesRoot.path + File.separator)) {
+                if (candidate.exists() && !candidate.delete()) {
+                    throw IOException("Could not remove owned attachment: ${candidate.name}")
+                }
+            }
+        }
+    }
+
+    suspend fun deleteConversationArtifacts(conversationId: Long) = withContext(Dispatchers.IO) {
+        val collection = FileValidationUtils.sanitizeFileName("Workspace $conversationId")
+        val directory = File(context.filesDir, "GeneratedFiles/$collection")
+        if (directory.exists() && !directory.deleteRecursively()) {
+            throw IOException("Could not remove generated conversation artifacts.")
+        }
+    }
+
     private class StringBuilderOutputStream : OutputStream() {
         private val builder = StringBuilder()
 

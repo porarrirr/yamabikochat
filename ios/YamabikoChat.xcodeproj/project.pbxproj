@@ -40,6 +40,7 @@
 		1E008ECA9DD0FE0FB13EA463 /* ReasoningExtractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ECE967CBAB3BDDC5E028715 /* ReasoningExtractionTests.swift */; };
 		1ED088E445C932F7AAFD9864 /* DualAutoModelSideForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6116B1ECB916D417EE404728 /* DualAutoModelSideForm.swift */; };
 		20001ADF98A6F3994E7CA279 /* DuckDuckGoHTMLEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73FDBC095F0EFC6358C60DC3 /* DuckDuckGoHTMLEngine.swift */; };
+		2047307AD517545330CE89E6 /* SecretConversationVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA8145755EAE89BCB6B545C5 /* SecretConversationVault.swift */; };
 		23EDCEE4A45503E5C672C366 /* TokenUsageRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF98E65F9A6271C2C6396E89 /* TokenUsageRecord.swift */; };
 		254CF84CEA71BEF991539659 /* GeminiModelUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AFADAD85FDF09DED54072D8 /* GeminiModelUtils.swift */; };
 		254FF92D5B7B868325DA453D /* ChatPerformancePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87AC5E59B00D42C02D6EBAC3 /* ChatPerformancePolicyTests.swift */; };
@@ -66,6 +67,7 @@
 		3B85342C06EEE33A7A4FE9F7 /* SharePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E5EC327A302F432B8A4083 /* SharePayload.swift */; };
 		3B9C7C3D5ACAB1D2B894E255 /* FusionExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50A3B8C96FD9035F786B2328 /* FusionExtensions.swift */; };
 		3D69AE45EF119980A2FBAAFC /* HtmlPreviewSecurityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF280E0E0C47DFB29E451237 /* HtmlPreviewSecurityTests.swift */; };
+		3FCC1A2B2D90A86D66A993FB /* SecretConversationVaultTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 180C60277B256E4BDD432139 /* SecretConversationVaultTests.swift */; };
 		40123B24C266FB550D605E15 /* HTMLTextExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFA8FC2F705B5D8D61A79B26 /* HTMLTextExtractor.swift */; };
 		4024E65334BD8AD7AE3F6D5B /* PythonExecuteTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100BF8BFA49C3EFF155B493 /* PythonExecuteTool.swift */; };
 		4084340670C205782A42CE64 /* RenderedPageContentLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B72D4DBFA506CE69D37E57BB /* RenderedPageContentLoader.swift */; };
@@ -345,6 +347,7 @@
 		14AAFD2A81C0FF32A1A60FCC /* YamabikoChat-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "YamabikoChat-Bridging-Header.h"; sourceTree = "<group>"; };
 		165EBDEB744C9307E8CCF4C7 /* ConversationVariantSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationVariantSelectionTests.swift; sourceTree = "<group>"; };
 		16BB3545343C24FCACEF4EE7 /* AutoConversationTrigger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversationTrigger.swift; sourceTree = "<group>"; };
+		180C60277B256E4BDD432139 /* SecretConversationVaultTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretConversationVaultTests.swift; sourceTree = "<group>"; };
 		1886F2DB993356F8E685640F /* SystemPromptComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPromptComposer.swift; sourceTree = "<group>"; };
 		1A7BBA08D9211B299D354AEE /* PythonWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonWorker.swift; sourceTree = "<group>"; };
 		1AC5A236291207F4B1999405 /* DualChatScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualChatScreen.swift; sourceTree = "<group>"; };
@@ -572,6 +575,7 @@
 		E71CD8E4DA7E0A67881EA450 /* StringTrimming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StringTrimming.swift; sourceTree = "<group>"; };
 		E93C7AF2F5D471C3BD988B7F /* ShortcutIntentSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutIntentSupport.swift; sourceTree = "<group>"; };
 		E9EB908ED95DE4E138D7A19F /* OpenRouterModelPickerField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterModelPickerField.swift; sourceTree = "<group>"; };
+		EA8145755EAE89BCB6B545C5 /* SecretConversationVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretConversationVault.swift; sourceTree = "<group>"; };
 		EB497EA88190D3098069001F /* PiAgentGatewayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiAgentGatewayTests.swift; sourceTree = "<group>"; };
 		EB6C374B2CCFE747D360F0E5 /* CodexModelCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexModelCatalogTests.swift; sourceTree = "<group>"; };
 		EBFED0CDEA2C632554419530 /* ChatPresentationArchitectureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPresentationArchitectureTests.swift; sourceTree = "<group>"; };
@@ -794,6 +798,7 @@
 			isa = PBXGroup;
 			children = (
 				FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */,
+				EA8145755EAE89BCB6B545C5 /* SecretConversationVault.swift */,
 			);
 			path = Security;
 			sourceTree = "<group>";
@@ -1110,6 +1115,7 @@
 				73CDE4D52940A2094E3D289B /* ProviderStreamEventTests.swift */,
 				6E96ECC433DE8209831BD059 /* PythonRuntimeTests.swift */,
 				2ECE967CBAB3BDDC5E028715 /* ReasoningExtractionTests.swift */,
+				180C60277B256E4BDD432139 /* SecretConversationVaultTests.swift */,
 				0034572985CEC32177512AA8 /* SettingsViewModelTests.swift */,
 				A4A9C812D9D73FCE829CA50E /* ShareImportFlowTests.swift */,
 				00BE476866FB6887397FFD9C /* SharePayloadStorageTests.swift */,
@@ -1537,6 +1543,7 @@
 				AD4DD1B269AD5A87AE3BF578 /* ProviderStreamEventTests.swift in Sources */,
 				F8231D000F08B94E914D57DC /* PythonRuntimeTests.swift in Sources */,
 				1E008ECA9DD0FE0FB13EA463 /* ReasoningExtractionTests.swift in Sources */,
+				3FCC1A2B2D90A86D66A993FB /* SecretConversationVaultTests.swift in Sources */,
 				9A4643F98030A10AB665492D /* SettingsViewModelTests.swift in Sources */,
 				0874DFCCF9B6CAF9750364AF /* ShareImportFlowTests.swift in Sources */,
 				1A99660ADDB01688C1C504C1 /* SharePayloadStorageTests.swift in Sources */,
@@ -1706,6 +1713,7 @@
 				5B37A957B7E112C745201D6B /* RunFusionIntent.swift in Sources */,
 				553A93E0D9B67A81C73BC1CF /* RunYamabikoModelIntent.swift in Sources */,
 				A140F54AF36BA28DFD0FFC52 /* SearchEngine.swift in Sources */,
+				2047307AD517545330CE89E6 /* SecretConversationVault.swift in Sources */,
 				771BB106CD4173C99208AE4C /* SettingsFormHelpers.swift in Sources */,
 				D27E29A04A40CC534C77F870 /* SettingsRepository.swift in Sources */,
 				A6DF3315E8E4B98E25854E2D /* SettingsScreen.swift in Sources */,

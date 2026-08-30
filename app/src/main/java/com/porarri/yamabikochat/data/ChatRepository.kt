@@ -56,6 +56,7 @@ import com.porarri.yamabikochat.data.remote.LiteLlmPricingRepository
 import com.porarri.yamabikochat.data.repositories.ProviderGateway
 import com.porarri.yamabikochat.data.repositories.ProviderRequestSettingsResolver
 import com.porarri.yamabikochat.data.skills.AgentSkillPromptComposer
+import com.porarri.yamabikochat.data.skills.AgentSkillPromptApplication
 import com.porarri.yamabikochat.data.skills.AgentSkillRepository
 import com.porarri.yamabikochat.data.tools.editor.EditorWorkspaceStore
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
@@ -123,6 +124,11 @@ class ChatRepository(
 
     suspend fun deleteProject(id: Long, deleteConversations: Boolean = false) {
         val ids = if (deleteConversations) databaseRepository.getConversationIdsForProject(id) else emptyList()
+        val paths = ids.flatMap { conversationId ->
+            databaseRepository.getAttachmentPathsForConversation(conversationId)
+        }
+        fileProcessingRepository.deleteOwnedFiles(paths)
+        ids.forEach { fileProcessingRepository.deleteConversationArtifacts(it) }
         databaseRepository.deleteProject(id, deleteConversations)
         ids.forEach { editorWorkspaceStore.delete(it.toString()) }
     }
@@ -213,8 +219,23 @@ class ChatRepository(
     }
 
     suspend fun deleteConversationById(id: Long) {
+        val paths = databaseRepository.getAttachmentPathsForConversation(id)
+        fileProcessingRepository.deleteOwnedFiles(paths)
+        fileProcessingRepository.deleteConversationArtifacts(id)
         databaseRepository.deleteConversationById(id)
         editorWorkspaceStore.delete(id.toString())
+    }
+
+    suspend fun purgeSecretConversations(): List<Long> {
+        val ids = databaseRepository.getSecretConversationIds()
+        val paths = databaseRepository.getSecretAttachmentPaths()
+        fileProcessingRepository.deleteOwnedFiles(paths)
+        ids.forEach {
+            fileProcessingRepository.deleteConversationArtifacts(it)
+            editorWorkspaceStore.delete(it.toString())
+        }
+        databaseRepository.purgeSecretConversations()
+        return ids
     }
 
     suspend fun clearHistory(conversationId: Long) =
@@ -367,6 +388,9 @@ class ChatRepository(
         context: Settings.ReasoningContext = Settings.ReasoningContext.DEFAULT,
         promptCacheKey: String? = null
     ): ProviderRequest {
+        require(!conversation.isSecret || messages.none { it.attachments.isNotEmpty() }) {
+            "シークレットチャットでは添付ファイルを送信できません"
+        }
         val resolved = requestSettingsResolver.resolve(
             settings = settings,
             provider = provider,
@@ -376,19 +400,24 @@ class ChatRepository(
 
         val cacheKey = promptCacheKey?.trim()?.takeIf { it.isNotEmpty() }
             ?: "conversation-${conversation.id}"
-        val supportsTools = resolved.metadata["supportsClientTools"] == "true"
-        val skillApplied = AgentSkillPromptComposer.apply(
-            repository = agentSkillRepository,
-            messages = messages,
-            conversationId = cacheKey,
-            clientToolsSupported = supportsTools
-        )
+        val supportsTools = !conversation.isSecret && resolved.metadata["supportsClientTools"] == "true"
+        val skillApplied = if (conversation.isSecret) {
+            AgentSkillPromptApplication(messages = messages, currentContext = null)
+        } else {
+            AgentSkillPromptComposer.apply(
+                repository = agentSkillRepository,
+                messages = messages,
+                conversationId = cacheKey,
+                clientToolsSupported = supportsTools
+            )
+        }
 
         val metadata = resolved.metadata.toMutableMap()
         metadata["provider"] = provider
         metadata["promptCacheKey"] = cacheKey
         metadata["editorSessionId"] = conversation.id.toString()
         metadata["supportsVision"] = visionMetadataFlag(provider, model)
+        if (conversation.isSecret) metadata["supportsClientTools"] = "false"
         if (provider.equals("CODEX_AUTH", ignoreCase = true)) {
             metadata["codexSessionId"] = databaseRepository.getOrCreateCodexSessionId(conversation.id)
         }
@@ -398,7 +427,7 @@ class ChatRepository(
             messages = skillApplied.messages,
             systemPrompt = systemPrompt?.trim()?.takeIf { it.isNotEmpty() },
             stream = true,
-            tools = resolved.tools,
+            tools = if (conversation.isSecret) emptyList() else resolved.tools,
             thinking = resolved.thinking,
             provider = resolved.routing,
             metadata = metadata
@@ -486,6 +515,9 @@ class ChatRepository(
         val conversation = databaseRepository.getConversationById(conversationId)
             ?: throw IllegalArgumentException("Conversation $conversationId not found")
         val settings = databaseRepository.getLatestSettings() ?: Settings()
+        require(!conversation.isSecret || attachments.isEmpty()) {
+            "シークレットチャットでは添付ファイルを送信できません"
+        }
 
         val normalizedAttachments = attachments.map { uriString ->
             runCatching { Uri.parse(uriString) }.getOrNull()?.let { uri ->
@@ -524,8 +556,9 @@ class ChatRepository(
         val context = com.porarri.yamabikochat.data.fusion.FusionContext(
             fusionDepth = 0,
             debugMode = false,
-            logPrompts = true,
-            conversationId = conversationId
+            logPrompts = !conversation.isSecret,
+            conversationId = conversationId,
+            clientToolsAllowed = !conversation.isSecret
         )
 
         val initialChips = FusionProgressSnapshot.initialPanels(from = fusionRequest)
@@ -577,7 +610,8 @@ class ChatRepository(
                 fusionDepth = 0,
                 userPrompt = userText,
                 conversationHistory = history.map { ProviderRequestMessage(role = it.role, content = it.text, attachments = it.attachments) },
-                userAttachments = normalizedAttachments
+                userAttachments = normalizedAttachments,
+                clientToolsAllowed = !conversation.isSecret
             )
             val assistantMessageId = databaseRepository.insertMessage(
                 ChatMessage(

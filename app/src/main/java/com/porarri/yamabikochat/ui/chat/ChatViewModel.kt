@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.map
@@ -158,6 +159,20 @@ class ChatViewModel(
     // 現在の会話（モデル/プロバイダー表示用）
     private val _conversation = MutableStateFlow<com.porarri.yamabikochat.data.local.Conversation?>(null)
     val conversation: StateFlow<com.porarri.yamabikochat.data.local.Conversation?> = _conversation.asStateFlow()
+
+    fun discardSecretDataFromMemory() {
+        if (_conversation.value?.isSecret != true) return
+        viewModelScope.coroutineContext.cancelChildren()
+        _messages.value = emptyList()
+        _fullMessages.value = emptyMap()
+        _dualMessages.value = emptyList()
+        _editingMessage.value = null
+        _attachments.value = emptyList()
+        _fusionProgress.value = null
+        _isFusionRunning.value = false
+        _autoConversationStatus.value = null
+        _conversation.value = null
+    }
 
     private val settings: StateFlow<Settings?> = repository.getSettings()
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -329,6 +344,10 @@ class ChatViewModel(
 
     fun addAttachment(uri: Uri) {
         viewModelScope.launch {
+            if (_conversation.value?.isSecret == true) {
+                _errorMessage.value = "シークレットチャットでは、端末に平文ファイルを残す添付機能は利用できません。"
+                return@launch
+            }
             when (val result = repository.validateFile(uri)) {
                 is FileValidationUtils.FileValidationResult.Valid -> {
                     if (result.mimeType.startsWith("image/") && !_canAttachImages.value) {
@@ -409,6 +428,10 @@ class ChatViewModel(
             val conversation = withContext(Dispatchers.IO) { repository.getConversationById(conversationId) }
             _conversation.value = conversation
             val currentSettings = settings.value ?: Settings()
+            if (conversation?.isSecret == true && attachmentsToSend.isNotEmpty()) {
+                _errorMessage.value = "シークレットチャットでは添付ファイルを送信できません"
+                return@launch
+            }
 
             if (currentSettings.isFusionModeEnabled) {
                 clearAttachments()
@@ -455,7 +478,7 @@ class ChatViewModel(
                 return@launch
             }
 
-            val isAutoConvEnabled = currentSettings.isAutoConversationEnabled
+            val isAutoConvEnabled = currentSettings.isAutoConversationEnabled && !conversation.isSecret
             val isTriggerMessage = AutoConversationTrigger.matches(text)
 
             interactionCoordinator.sendSingleMessage(
@@ -512,6 +535,10 @@ class ChatViewModel(
             val hasDualMessages = repository.getDualMessagesForConversation(conversationId).first().isNotEmpty()
             if (hasChatMessages || hasDualMessages) {
                 _errorMessage.value = "送信後はシークレット切替できません"
+                return@launch
+            }
+            if (enabled && _attachments.value.isNotEmpty()) {
+                _errorMessage.value = "添付を削除してからシークレットチャットを有効にしてください"
                 return@launch
             }
             if (conversation.isSecret == enabled) return@launch

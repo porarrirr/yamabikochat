@@ -270,7 +270,8 @@ data class FusionContext(
     val fusionDepth: Int = 0,
     val debugMode: Boolean = false,
     val logPrompts: Boolean = false,
-    val conversationId: Long? = null
+    val conversationId: Long? = null,
+    val clientToolsAllowed: Boolean = true
 ) {
     companion object {
         const val MAX_FUSION_DEPTH = 1
