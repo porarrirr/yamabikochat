@@ -23,6 +23,31 @@ private final class ProjectFeatureCredentialStore: SecureCredentialStore {
 }
 
 final class ProjectFeatureTests: XCTestCase {
+    func testProjectConversationPassesProjectSourcesIntoFreshExecutionWorkspace() async throws {
+        let pi = PiStreamSpy()
+        let fixture = try makeFixture(piStream: pi.stream)
+        let projectId = try fixture.repository.createProject(title: "Sources", instructions: nil)
+        let conversationId = try fixture.repository.createConversation(projectId: projectId)
+
+        _ = try await fixture.repository.sendMessage(
+            conversationId: conversationId,
+            text: "Read the project files",
+            attachments: []
+        )
+
+        let request = try XCTUnwrap(pi.calls.first?.request)
+        XCTAssertEqual(
+            request.metadata[ConversationWorkspacePath.projectSourceMetadataKey],
+            String(projectId)
+        )
+        XCTAssertEqual(
+            request.metadata[ConversationWorkspacePath.artifactSessionMetadataKey],
+            String(conversationId)
+        )
+        XCTAssertNotEqual(request.metadata["editorSessionId"], String(conversationId))
+        XCTAssertEqual(request.metadata["editorSessionId"], request.metadata["pythonSessionId"])
+    }
+
     func testCreateConversationInProjectUsesProjectInstructions() throws {
         let fixture = try makeFixture()
         let projectId = try fixture.repository.createProject(title: "iOS移植", instructions: "プロジェクト固有の指示")
@@ -284,7 +309,9 @@ final class ProjectFeatureTests: XCTestCase {
         XCTAssertNil(try fixture.repository.pendingInitialMessage(conversationId: conversationId))
     }
 
-    private func makeFixture() throws -> (
+    private func makeFixture(
+        piStream: @escaping PiAgentStream = PiStreamSpy().stream
+    ) throws -> (
         repository: ChatRepository,
         conversations: ConversationRepository,
         dbQueue: DatabaseQueue
@@ -295,15 +322,14 @@ final class ProjectFeatureTests: XCTestCase {
         let settings = SettingsRepository(dbQueue: dbQueue)
         let conversations = ConversationRepository(dbQueue: dbQueue)
         let credentials = ProjectFeatureCredentialStore()
-        let providers = ProviderGateway(settingsRepository: settings, credentialStore: credentials)
-        let modelService = OpenRouterModelService(credentialStore: credentials)
-        let codexAuth = CodexAuthRepository(credentialStore: credentials)
+        try credentials.setCredential("test-gemini-key", for: .gemini)
 
         let repository = ChatRepositoryTestSupport.makeRepository(
             dbQueue: dbQueue,
             settings: settings,
             conversations: conversations,
-            credentials: credentials
+            credentials: credentials,
+            piStream: piStream
         )
         return (repository, conversations, dbQueue)
     }

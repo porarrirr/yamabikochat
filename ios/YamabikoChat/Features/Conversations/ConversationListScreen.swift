@@ -57,6 +57,12 @@ struct ConversationListScreen: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .background(Color(uiColor: .systemBackground))
+        .onAppear {
+            if AppStoreScreenshotRouting.launchConfiguration()?.scene == .project,
+               navigationState == .conversations {
+                navigationState = .projectList
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             if let error = viewModel.errorMessage {
                 HStack(alignment: .top) {

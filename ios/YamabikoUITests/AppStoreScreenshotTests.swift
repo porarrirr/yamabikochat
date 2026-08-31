@@ -68,6 +68,32 @@ final class AppStoreScreenshotTests: XCTestCase {
 
     }
 
+    func testProjectSourcesWorkspaceUI() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-AppStoreScreenshotDemo",
+            "-ScreenshotScene", "project"
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
+
+        let project = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "project-row-"))
+            .firstMatch
+        XCTAssertTrue(project.waitForExistence(timeout: 10))
+        project.tap()
+
+        let sourcesTab = app.buttons["project-tab-sources"]
+        XCTAssertTrue(sourcesTab.waitForExistence(timeout: 10))
+        sourcesTab.tap()
+
+        let addFiles = app.buttons["project-add-files"]
+        XCTAssertTrue(addFiles.waitForExistence(timeout: 5))
+        XCTAssertTrue(addFiles.isHittable)
+        capture("project-information-sources-empty", app: app)
+    }
+
     func testProviderSelectionChangesProvider() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-AppStoreScreenshotDemo"]

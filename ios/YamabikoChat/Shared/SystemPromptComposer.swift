@@ -28,6 +28,7 @@ enum SystemPromptComposer {
     Use only the tools that are actually provided. Follow each tool's parameter schema exactly, and do not invent tool names or parameters. If a tool returns an error, do not claim that the operation succeeded.
 
     When using str_replace_editor:
+    - The current execution gets a fresh /workspace. For a project, it initially contains copies of the files added by the user. When the request refers to project files or workspace contents, inspect /workspace and read the relevant files instead of asking the user to attach them again.
     - Inspect the relevant file before modifying it.
     - Use view_format=jsonl before whitespace-sensitive str_replace operations; copy only the JSON `text` value, without the line metadata.
     - Use create only for a path that does not already exist.

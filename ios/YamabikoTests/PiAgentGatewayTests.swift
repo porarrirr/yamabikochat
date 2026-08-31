@@ -92,6 +92,88 @@ private final class ThrowingPiStreamSpy: @unchecked Sendable {
 }
 
 final class PiAgentGatewayTests: XCTestCase {
+    func testProjectExecutionUsesFreshSeededWorkspaceAndDeletesItAfterRun() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.setCredential("test-openai-key", for: .openAI)
+
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("provider-project-workspace-\(UUID().uuidString)", isDirectory: true)
+        let sourceRoot = temporaryRoot.appendingPathComponent("sources", isDirectory: true)
+        let executionRoot = temporaryRoot.appendingPathComponent("executions", isDirectory: true)
+        let importsRoot = temporaryRoot.appendingPathComponent("imports", isDirectory: true)
+        try FileManager.default.createDirectory(at: importsRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+        let editorWorkspaces = EditorWorkspaceStore(rootOverride: executionRoot)
+        let projectWorkspaces = ProjectWorkspaceStore(
+            workspaces: editorWorkspaces,
+            sourcesRootOverride: sourceRoot
+        )
+        let source = importsRoot.appendingPathComponent("brief.txt")
+        try Data("project source".utf8).write(to: source)
+        _ = try projectWorkspaces.importFiles(from: [source], projectID: 77)
+
+        let pi = PiStreamSpy { request, _ in
+            guard let sessionID = request.metadata["editorSessionId"]?.trimmedNonEmpty else {
+                throw ProviderClientError.parseFailure("missing execution workspace")
+            }
+            try editorWorkspaces.withWorkspace(sessionID: sessionID) { workspace in
+                let seeded = try String(
+                    contentsOf: workspace.appendingPathComponent("brief.txt"),
+                    encoding: .utf8
+                )
+                guard seeded == "project source" else {
+                    throw ProviderClientError.parseFailure("project source was not seeded")
+                }
+                try Data("run mutation".utf8).write(
+                    to: workspace.appendingPathComponent("brief.txt")
+                )
+            }
+            return [.completed(ProviderResponse(text: "ok"))]
+        }
+        let gateway = ProviderGateway(
+            settingsRepository: SettingsRepository(dbQueue: database),
+            credentialStore: credentials,
+            projectWorkspaces: projectWorkspaces,
+            editorWorkspaces: editorWorkspaces,
+            resetPythonSession: { _ in },
+            piStream: pi.stream
+        )
+        let request = ProviderRequest(
+            model: "gpt-4.1-mini",
+            messages: [ProviderRequestMessage(role: "user", content: "read the project")],
+            metadata: [ConversationWorkspacePath.projectSourceMetadataKey: "77"]
+        )
+
+        _ = try await gateway.generate(request: request, provider: .openAI)
+        _ = try await gateway.generate(request: request, provider: .openAI)
+
+        let sessions = pi.calls.compactMap { $0.request.metadata["editorSessionId"] }
+        XCTAssertEqual(sessions.count, 2)
+        XCTAssertNotEqual(sessions[0], sessions[1])
+        for sessionID in sessions {
+            let workspace = try ConversationWorkspacePath.workspace(
+                sessionID: sessionID,
+                rootOverride: executionRoot
+            )
+            XCTAssertFalse(FileManager.default.fileExists(atPath: workspace.path))
+        }
+        XCTAssertEqual(
+            try String(
+                contentsOf: sourceRoot
+                    .appendingPathComponent(
+                        ConversationWorkspacePath.directoryName(for: "project-77"),
+                        isDirectory: true
+                    )
+                    .appendingPathComponent("brief.txt"),
+                encoding: .utf8
+            ),
+            "project source"
+        )
+    }
+
     func testAttachmentFileURLResolvesFilesystemPath() {
         let path = "/tmp/Yamabiko Chat/photo.png"
 

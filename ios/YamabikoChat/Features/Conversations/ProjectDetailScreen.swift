@@ -1,6 +1,21 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ProjectDetailScreen: View {
+    private enum ProjectTab: String, CaseIterable, Identifiable {
+        case chats
+        case sources
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .chats: L10n.text("チャット")
+            case .sources: L10n.text("情報源")
+            }
+        }
+    }
+
     @EnvironmentObject private var appState: AppState
     @ObservedObject var viewModel: ConversationListViewModel
     let projectId: Int64
@@ -11,6 +26,8 @@ struct ProjectDetailScreen: View {
     @State private var isInstructionsPresented: Bool = false
     @State private var isEditProjectPresented: Bool = false
     @State private var isDeleteConfirmationPresented: Bool = false
+    @State private var selectedTab: ProjectTab = .chats
+    @State private var isFileImporterPresented: Bool = false
 
     private var project: ProjectListEntry? {
         viewModel.projects.first(where: { $0.id == projectId })
@@ -20,17 +37,52 @@ struct ProjectDetailScreen: View {
         viewModel.conversations.filter { $0.projectId == projectId }
     }
 
+    private var projectFiles: [ProjectWorkspaceFile] {
+        viewModel.projectWorkspaceFiles[projectId] ?? []
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             headerBar
 
-            projectContextSection
+            projectTabBar
 
-            conversationList
+            if selectedTab == .chats {
+                projectContextSection
+                conversationList
+            } else {
+                informationSources
+            }
 
             bottomInputBar
         }
         .background(Color(uiColor: .systemBackground).ignoresSafeArea())
+        .onAppear {
+            viewModel.loadProjectWorkspaceFiles(projectId: projectId)
+        }
+        .fileImporter(
+            isPresented: $isFileImporterPresented,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case let .success(urls):
+                viewModel.importProjectWorkspaceFiles(projectId: projectId, urls: urls)
+            case let .failure(error):
+                viewModel.errorMessage = error.localizedDescription
+            }
+        }
+        .alert(
+            L10n.text("エラー"),
+            isPresented: Binding(
+                get: { viewModel.errorMessage != nil },
+                set: { if !$0 { viewModel.errorMessage = nil } }
+            )
+        ) {
+            Button(L10n.text("OK")) { viewModel.errorMessage = nil }
+        } message: {
+            Text(viewModel.errorMessage ?? "")
+        }
         .sheet(isPresented: $isInstructionsPresented) {
             if let project {
                 ProjectInstructionsSheet(
@@ -163,6 +215,36 @@ struct ProjectDetailScreen: View {
 
     // MARK: - Project Context
 
+    private var projectTabBar: some View {
+        HStack(spacing: 12) {
+            ForEach(ProjectTab.allCases) { tab in
+                Button {
+                    selectedTab = tab
+                    if tab == .sources {
+                        viewModel.loadProjectWorkspaceFiles(projectId: projectId)
+                    }
+                } label: {
+                    Text(tab.title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(selectedTab == tab ? Color.primary : Color.secondary)
+                        .padding(.horizontal, 20)
+                        .frame(height: 42)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(selectedTab == tab ? Color(uiColor: .secondarySystemFill) : .clear)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("project-tab-\(tab.rawValue)")
+                .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 16)
+    }
+
     private var projectContextSection: some View {
         Button {
             isInstructionsPresented = true
@@ -262,6 +344,135 @@ struct ProjectDetailScreen: View {
                 }
             }
             .padding(.bottom, 16)
+        }
+    }
+
+    // MARK: - Information Sources
+
+    private var informationSources: some View {
+        Group {
+            if projectFiles.isEmpty {
+                GeometryReader { geometry in
+                    addFileButton
+                        .position(
+                            x: geometry.size.width / 2,
+                            y: geometry.size.height * 0.58
+                        )
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                VStack(spacing: 0) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(L10n.text("ワークスペースのファイル"))
+                                .font(.system(size: 15, weight: .semibold))
+                            Text(L10n.text("内容はチャットへ自動添付されません"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button {
+                            isFileImporterPresented = true
+                        } label: {
+                            Label(L10n.text("追加"), systemImage: "plus")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 10)
+
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(projectFiles) { file in
+                                projectFileRow(file)
+                                Divider()
+                                    .padding(.leading, 58)
+                                    .opacity(0.25)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .overlay {
+            if viewModel.isImportingProjectFiles {
+                ZStack {
+                    Color(uiColor: .systemBackground).opacity(0.75)
+                    ProgressView(L10n.text("ファイルを追加中…"))
+                }
+            }
+        }
+    }
+
+    private var addFileButton: some View {
+        Button {
+            isFileImporterPresented = true
+        } label: {
+            Text(L10n.text("追加"))
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Color(uiColor: .systemBackground))
+                .padding(.horizontal, 26)
+                .frame(height: 46)
+                .background(Color.primary, in: Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("project-add-files")
+    }
+
+    private func projectFileRow(_ file: ProjectWorkspaceFile) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: fileIcon(for: file.name))
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 30, height: 38)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(file.name)
+                    .font(.system(size: 15, weight: .medium))
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    if file.relativePath != file.name {
+                        Text(file.relativePath)
+                            .lineLimit(1)
+                    }
+                    Text(ByteCountFormatter.string(fromByteCount: file.sizeBytes, countStyle: .file))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Menu {
+                Button(role: .destructive) {
+                    viewModel.removeProjectWorkspaceFile(
+                        projectId: projectId,
+                        relativePath: file.relativePath
+                    )
+                } label: {
+                    Label(L10n.text("削除"), systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 36, height: 36)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+
+    private func fileIcon(for filename: String) -> String {
+        switch URL(fileURLWithPath: filename).pathExtension.lowercased() {
+        case "png", "jpg", "jpeg", "gif", "heic", "webp": "photo"
+        case "pdf": "doc.richtext"
+        case "zip": "doc.zipper"
+        case "csv", "tsv", "xlsx", "xls": "tablecells"
+        case "swift", "kt", "js", "ts", "py", "json", "yaml", "yml", "html", "css": "chevron.left.forwardslash.chevron.right"
+        default: "doc"
         }
     }
 

@@ -560,6 +560,16 @@
 "%@パーセント" = "%@ por ciento";
 "OpenCode Go APIキーを入力してください" = "Introduce una clave API de OpenCode Go";
 "OpenCode Go使用状況を更新しました" = "Uso de OpenCode Go actualizado";
+"情報源" = "Fuentes";
+"追加" = "Añadir";
+"ワークスペースのファイル" = "Archivos del espacio de trabajo";
+"内容はチャットへ自動添付されません" = "El contenido no se adjunta automáticamente a los chats";
+"ファイルを追加中…" = "Añadiendo archivos…";
+"ファイルを読み込めませんでした: %@" = "No se pudo leer el archivo: %@";
+"ファイルサイズが上限を超えています: %@" = "El archivo supera el límite de tamaño: %@";
+"ワークスペースの容量またはファイル数の上限を超えています。" = "Se superó el límite de almacenamiento o de archivos del espacio de trabajo.";
+"ファイルが見つかりません。" = "No se encontró el archivo.";
+"OK" = "Aceptar";
 "GeminiのモデルとAPIキーを切り替えました" = "Se cambiaron el modelo y la clave API de Gemini";
 "Geminiのモデルを切り替えました" = "Se cambió el modelo de Gemini";
 "GeminiのAPIキーを切り替えました" = "Se cambió la clave API de Gemini";

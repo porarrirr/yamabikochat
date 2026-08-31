@@ -237,6 +237,7 @@ struct ProjectListScreen: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("project-row-\(project.id)")
         .contextMenu {
             Button {
                 editingDetailsProject = project

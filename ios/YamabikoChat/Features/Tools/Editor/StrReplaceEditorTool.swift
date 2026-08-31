@@ -79,7 +79,7 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
     let definition = ToolDefinition(
         name: Self.name,
         description: """
-        Custom editing tool for viewing, creating and editing files in the persistent conversation workspace at /workspace, shared with python_execute. If path is a file, view displays numbered lines; set view_format to jsonl when exact whitespace must be copied for str_replace. If path is a directory, view lists visible entries up to 2 levels deep. create creates missing parent directories but never overwrites an existing path. str_replace requires old_str to occur exactly once and replaces it literally. Long view output is clipped and marked with <response clipped>.
+        Custom editing tool for viewing, creating and editing files in the current execution workspace at /workspace, shared with python_execute. A project execution starts with a fresh workspace containing copies of the files added by the user; those files are not injected into the message context. Inspect /workspace when the task refers to project files. If path is a file, view displays numbered lines; set view_format to jsonl when exact whitespace must be copied for str_replace. If path is a directory, view lists visible entries up to 2 levels deep. create creates missing parent directories but never overwrites an existing path. str_replace requires old_str to occur exactly once and replaces it literally. Long view output is clipped and marked with <response clipped>.
         """,
         parametersJSON: #"{"type":"object","properties":{"command":{"type":"string","description":"The command to run.","enum":["view","create","str_replace","insert"]},"path":{"type":"string","description":"Absolute virtual path under /workspace."},"file_text":{"type":"string","description":"Required content for create."},"insert_line":{"type":"integer","description":"Required for insert; new_str is inserted after this line (0 inserts before line 1)."},"new_str":{"type":"string","description":"Replacement or insertion text. Omission deletes old_str for str_replace."},"old_str":{"type":"string","description":"Required unique literal text for str_replace."},"view_range":{"type":"array","items":{"type":"integer"},"description":"Optional inclusive 1-based [start,end] range; end -1 means EOF."},"view_format":{"type":"string","enum":["numbered","jsonl"],"default":"numbered","description":"For file views, jsonl emits each exact line as a JSON string so whitespace is unambiguous."}},"required":["command","path"],"additionalProperties":false}"#
     )
@@ -103,10 +103,18 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
             throw StrReplaceEditorError.invalid("str_replace_editor requires a valid conversation session.")
         }
         let arguments = try decodeArguments(call.argumentsJSON)
+        let artifactSessionID = call.providerMetadata?[
+            ConversationWorkspacePath.artifactSessionMetadataKey
+        ]?.trimmedNonEmpty ?? sessionID
         return try workspaces.withWorkspace(sessionID: sessionID) { workspace in
             try stageAttachments(call.providerMetadata?["editorAttachmentsJSON"], in: workspace)
             let target = try resolve(arguments.path, in: workspace)
-            let execution = try execute(arguments, target: target, workspace: workspace, sessionID: sessionID)
+            let execution = try execute(
+                arguments,
+                target: target,
+                workspace: workspace,
+                sessionID: artifactSessionID
+            )
             return ToolResult(
                 callId: call.id,
                 name: call.name,

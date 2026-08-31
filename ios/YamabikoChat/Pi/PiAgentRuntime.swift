@@ -637,6 +637,11 @@ actor PiAgentRuntime {
                                         providerMetadata?["editorSessionId"] = sessionID
                                     }
                                 }
+                                if let artifactSessionID = request.metadata[
+                                    ConversationWorkspacePath.artifactSessionMetadataKey
+                                ]?.trimmedNonEmpty {
+                                    providerMetadata?[ConversationWorkspacePath.artifactSessionMetadataKey] = artifactSessionID
+                                }
                             }
                             let call = ToolCall(
                                 id: callID,

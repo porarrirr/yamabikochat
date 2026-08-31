@@ -143,6 +143,7 @@ final class FusionService {
                     userAttachments: userAttachments,
                     supportsVision: resolvedVisionSupportByModel[model.modelId] ?? false,
                     conversationID: context.conversationId.map(String.init),
+                    projectID: context.projectId,
                     clientToolsAllowed: context.clientToolsAllowed
                 )
             },
@@ -176,6 +177,7 @@ final class FusionService {
         userAttachments: [String] = [],
         supportsVision: Bool = false,
         conversationID: String? = nil,
+        projectID: Int64? = nil,
         clientToolsAllowed: Bool = true
     ) async throws -> ProviderRequest {
         let toolScope: ProviderRequestToolScope = clientToolsAllowed && phase == .panel
@@ -195,6 +197,10 @@ final class FusionService {
         ], uniquingKeysWith: { _, fusionValue in fusionValue })
         if let conversationID = conversationID?.trimmedNonEmpty {
             metadata["promptCacheKey"] = "fusion-\(conversationID)"
+            metadata[ConversationWorkspacePath.artifactSessionMetadataKey] = conversationID
+        }
+        if phase == .panel, let projectID {
+            metadata[ConversationWorkspacePath.projectSourceMetadataKey] = String(projectID)
         }
         Self.applyGenerationMetadata(
             to: &metadata,

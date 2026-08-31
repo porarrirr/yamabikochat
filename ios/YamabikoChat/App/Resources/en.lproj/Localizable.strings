@@ -560,6 +560,16 @@
 "%@パーセント" = "%@ percent";
 "OpenCode Go APIキーを入力してください" = "Enter an OpenCode Go API key";
 "OpenCode Go使用状況を更新しました" = "OpenCode Go usage updated";
+"情報源" = "Sources";
+"追加" = "Add";
+"ワークスペースのファイル" = "Workspace Files";
+"内容はチャットへ自動添付されません" = "Contents are not automatically attached to chats";
+"ファイルを追加中…" = "Adding files…";
+"ファイルを読み込めませんでした: %@" = "Could not read the file: %@";
+"ファイルサイズが上限を超えています: %@" = "File exceeds the size limit: %@";
+"ワークスペースの容量またはファイル数の上限を超えています。" = "The workspace storage or file-count limit has been exceeded.";
+"ファイルが見つかりません。" = "The file could not be found.";
+"OK" = "OK";
 "GeminiのモデルとAPIキーを切り替えました" = "Switched the Gemini model and API key";
 "Geminiのモデルを切り替えました" = "Switched the Gemini model";
 "GeminiのAPIキーを切り替えました" = "Switched the Gemini API key";

@@ -10,6 +10,13 @@ enum ConversationWorkspaceError: LocalizedError {
 }
 
 enum ConversationWorkspacePath {
+    static let projectSourceMetadataKey = "projectWorkspaceSourceId"
+    static let artifactSessionMetadataKey = "workspaceArtifactSessionId"
+
+    static func executionSessionID(projectID: Int64) -> String {
+        "project-\(projectID)-run-\(UUID().uuidString)"
+    }
+
     static func generatedFilesCollection(for sessionID: String) -> String {
         "Workspace \(sessionID)"
     }

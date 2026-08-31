@@ -26,6 +26,9 @@ final class ProviderGateway {
     private let superGrokAuthRepository: SuperGrokAuthRepository?
     private let modelsDevCatalogRepository: ModelsDevCatalogRepository?
     private let openRouterModelService: OpenRouterModelService?
+    private let projectWorkspaces: ProjectWorkspaceStore
+    private let editorWorkspaces: EditorWorkspaceStore
+    private let resetPythonSession: @Sendable (String) async -> Void
     private let appleIntelligence = AppleIntelligenceProviderClient()
     private let geminiRotationStateLock = NSLock()
     private var lastGoodGeminiRotationCandidate: GeminiRotationCandidate?
@@ -52,6 +55,11 @@ final class ProviderGateway {
         openRouterModelService: OpenRouterModelService? = nil,
         localTools: LocalToolRegistry = LocalToolRegistry(executors: [WebSearchTool(), FetchUrlTool(), PythonExecuteTool()]),
         localToolFactory: (@Sendable () -> LocalToolRegistry)? = nil,
+        projectWorkspaces: ProjectWorkspaceStore = .shared,
+        editorWorkspaces: EditorWorkspaceStore = .shared,
+        resetPythonSession: @escaping @Sendable (String) async -> Void = { sessionID in
+            await PythonWorker.shared.resetSession(sessionID: sessionID)
+        },
         piStream: @escaping PiAgentStream = { request, configuration, tools in
             try await PiAgentRuntime.shared.stream(
                 request: request,
@@ -68,6 +76,9 @@ final class ProviderGateway {
         self.openRouterModelService = openRouterModelService
         self.localTools = localTools
         self.localToolFactory = localToolFactory
+        self.projectWorkspaces = projectWorkspaces
+        self.editorWorkspaces = editorWorkspaces
+        self.resetPythonSession = resetPythonSession
         self.piStream = piStream
     }
 
@@ -127,6 +138,36 @@ final class ProviderGateway {
     }
 
     func stream(
+        request: ProviderRequest,
+        providerID: String
+    ) async throws -> AsyncThrowingStream<ProviderStreamEvent, Error> {
+        var scopedRequest = request
+        let executionSessionID: String?
+        if let rawProjectID = request.metadata[ConversationWorkspacePath.projectSourceMetadataKey]?.trimmedNonEmpty {
+            guard let projectID = Int64(rawProjectID) else {
+                throw ProviderClientError.parseFailure("Invalid project workspace source identifier")
+            }
+            let sessionID = try projectWorkspaces.prepareExecutionWorkspace(projectID: projectID)
+            scopedRequest.metadata["pythonSessionId"] = sessionID
+            scopedRequest.metadata["editorSessionId"] = sessionID
+            executionSessionID = sessionID
+        } else {
+            executionSessionID = nil
+        }
+
+        do {
+            let stream = try await streamPrepared(request: scopedRequest, providerID: providerID)
+            guard let executionSessionID else { return stream }
+            return executionWorkspaceStream(stream, sessionID: executionSessionID)
+        } catch {
+            if let executionSessionID {
+                await cleanupExecutionWorkspace(sessionID: executionSessionID)
+            }
+            throw error
+        }
+    }
+
+    private func streamPrepared(
         request: ProviderRequest,
         providerID: String
     ) async throws -> AsyncThrowingStream<ProviderStreamEvent, Error> {
@@ -227,6 +268,44 @@ final class ProviderGateway {
                 error: error
             )
             throw error
+        }
+    }
+
+    private func executionWorkspaceStream(
+        _ stream: AsyncThrowingStream<ProviderStreamEvent, Error>,
+        sessionID: String
+    ) -> AsyncThrowingStream<ProviderStreamEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    for try await event in stream {
+                        continuation.yield(event)
+                    }
+                    await cleanupExecutionWorkspace(sessionID: sessionID)
+                    continuation.finish()
+                } catch is CancellationError {
+                    await cleanupExecutionWorkspace(sessionID: sessionID)
+                    continuation.finish(throwing: CancellationError())
+                } catch {
+                    await cleanupExecutionWorkspace(sessionID: sessionID)
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private func cleanupExecutionWorkspace(sessionID: String) async {
+        await resetPythonSession(sessionID)
+        do {
+            try editorWorkspaces.delete(sessionID: sessionID)
+        } catch {
+            DiagnosticsLogger.log(
+                "Project execution workspace cleanup failed",
+                category: .app,
+                metadata: ["sessionID": sessionID],
+                error: error
+            )
         }
     }
 

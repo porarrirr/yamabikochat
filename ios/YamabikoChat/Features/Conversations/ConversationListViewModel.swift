@@ -6,6 +6,8 @@ final class ConversationListViewModel: ObservableObject {
     @Published private(set) var conversations: [ConversationListEntry] = []
     @Published private(set) var filteredConversations: [ConversationListEntry] = []
     @Published private(set) var projects: [ProjectListEntry] = []
+    @Published private(set) var projectWorkspaceFiles: [Int64: [ProjectWorkspaceFile]] = [:]
+    @Published private(set) var isImportingProjectFiles: Bool = false
     @Published var searchQuery: String = ""
     @Published var selectedProjectId: Int64?
     @Published var errorMessage: String?
@@ -177,6 +179,46 @@ final class ConversationListViewModel: ObservableObject {
             if entry.projectId == projectId {
                 count += 1
             }
+        }
+    }
+
+    func loadProjectWorkspaceFiles(projectId: Int64) {
+        guard let repository else { return }
+        do {
+            projectWorkspaceFiles[projectId] = try repository.projectWorkspaceFiles(projectId: projectId)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func importProjectWorkspaceFiles(projectId: Int64, urls: [URL]) {
+        guard let repository, !urls.isEmpty else { return }
+        isImportingProjectFiles = true
+        Task {
+            defer { isImportingProjectFiles = false }
+            do {
+                projectWorkspaceFiles[projectId] = try await repository.importProjectWorkspaceFiles(
+                    projectId: projectId,
+                    urls: urls
+                )
+                errorMessage = nil
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func removeProjectWorkspaceFile(projectId: Int64, relativePath: String) {
+        guard let repository else { return }
+        do {
+            projectWorkspaceFiles[projectId] = try repository.removeProjectWorkspaceFile(
+                projectId: projectId,
+                relativePath: relativePath
+            )
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 

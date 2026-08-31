@@ -242,6 +242,7 @@ struct FusionContext: Sendable, Equatable {
     var debugMode: Bool
     var logPrompts: Bool
     var conversationId: Int64?
+    var projectId: Int64?
     var clientToolsAllowed: Bool
 
     init(
@@ -249,12 +250,14 @@ struct FusionContext: Sendable, Equatable {
         debugMode: Bool = false,
         logPrompts: Bool = false,
         conversationId: Int64? = nil,
+        projectId: Int64? = nil,
         clientToolsAllowed: Bool = true
     ) {
         self.fusionDepth = fusionDepth
         self.debugMode = debugMode
         self.logPrompts = logPrompts
         self.conversationId = conversationId
+        self.projectId = projectId
         self.clientToolsAllowed = clientToolsAllowed
     }
 }

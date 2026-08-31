@@ -113,11 +113,13 @@
 		68F2C57FC9094A7B7D551127 /* AuthRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25B179C43C1498EFC4B1DF4B /* AuthRepositoryTests.swift */; };
 		696478CAFDBA3D897D3DE015 /* SvgPreviewWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0668334AA8F62D1F58F6B2F6 /* SvgPreviewWebView.swift */; };
 		69A868E7A0FE2AB17FD68584 /* LiteLlmPricingRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 354A655F2DAC30AF82690AAD /* LiteLlmPricingRepositoryTests.swift */; };
+		6B3E0EE813C43DD62728CF0E /* ProjectWorkspaceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93B24D334792F81938E47527 /* ProjectWorkspaceStoreTests.swift */; };
 		6D56F5169DA7F64A5C33EF37 /* SystemPromptComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1886F2DB993356F8E685640F /* SystemPromptComposer.swift */; };
 		6F065F7EA8B6667AE3CC3BCA /* OpenSourceLicensesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E1D0EFA706A16A6042D477B /* OpenSourceLicensesView.swift */; };
 		7179A8C00CF9D83B795B0E21 /* ShareImportViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1669165723BD89D5FC791F /* ShareImportViewController.swift */; };
 		73D885AD442157FE0B505877 /* OpenCodeGoUsageRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FEA48098C6732B8E736FDAD /* OpenCodeGoUsageRepository.swift */; };
 		73E2661F0342C7184867B14D /* ChatRepositoryDualTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CE95A107E6CAC3E8A4BC48 /* ChatRepositoryDualTests.swift */; };
+		759BE17E41136B33EF80D284 /* ProjectWorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0EF2AED60A33A840C79036A /* ProjectWorkspaceStore.swift */; };
 		75A2EA0F497E1594294270B3 /* FusionTraceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECD5042A0D83A58D6DBE82D8 /* FusionTraceStore.swift */; };
 		760DDEAE99F1EE0CF4070FEF /* ProviderError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E0CA7213C1361207E3BA5F2 /* ProviderError.swift */; };
 		7644E1BF8ED11231C2A18DA0 /* AppStoreScreenshotRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A07E6645A76A58193A146DE /* AppStoreScreenshotRouting.swift */; };
@@ -486,6 +488,7 @@
 		9289A5E87008C89F9D936F2A /* SearchEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchEngine.swift; sourceTree = "<group>"; };
 		92AD8EA4D8A79FAA26B52BE9 /* FusionModelSlotForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionModelSlotForm.swift; sourceTree = "<group>"; };
 		92B9CB80FD13964B0BC82FBD /* ConversationWorkspacePath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationWorkspacePath.swift; sourceTree = "<group>"; };
+		93B24D334792F81938E47527 /* ProjectWorkspaceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspaceStoreTests.swift; sourceTree = "<group>"; };
 		9600617D4FF5ED968548327B /* AskUserQuestionToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskUserQuestionToolTests.swift; sourceTree = "<group>"; };
 		961BCEE0B9725B362F606EA0 /* MathMarkdownViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathMarkdownViewTests.swift; sourceTree = "<group>"; };
 		9640B4B2BAEBA68E8C24CC6D /* OpenRouterModelService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterModelService.swift; sourceTree = "<group>"; };
@@ -498,6 +501,7 @@
 		9F7728CEBDE28C87D739A44F /* CatalogPickerFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogPickerFields.swift; sourceTree = "<group>"; };
 		9FC8486AA5F99F999DB590DB /* RecentPhotoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentPhotoSheet.swift; sourceTree = "<group>"; };
 		A0E39A438B710CF8BB0B6199 /* LLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProvider.swift; sourceTree = "<group>"; };
+		A0EF2AED60A33A840C79036A /* ProjectWorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspaceStore.swift; sourceTree = "<group>"; };
 		A338F8BAA2B2E3E8F2D0096A /* AppStoreScreenshotDemoSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotDemoSeeder.swift; sourceTree = "<group>"; };
 		A394920B0293DB363D2D092D /* CodexModelPresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexModelPresets.swift; sourceTree = "<group>"; };
 		A3B92874748EC47367013A00 /* YamabikoShortcutsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YamabikoShortcutsProvider.swift; sourceTree = "<group>"; };
@@ -922,6 +926,7 @@
 			children = (
 				92B9CB80FD13964B0BC82FBD /* ConversationWorkspacePath.swift */,
 				A7157EAA30E777555648D356 /* LocalToolRegistry.swift */,
+				A0EF2AED60A33A840C79036A /* ProjectWorkspaceStore.swift */,
 				C093FE561B4B20D9C6ADF796 /* ToolDefinition.swift */,
 			);
 			path = Core;
@@ -1110,6 +1115,7 @@
 				EB497EA88190D3098069001F /* PiAgentGatewayTests.swift */,
 				74F623A2ACDDFF6E31177245 /* PiStreamSpy.swift */,
 				9E7DA902C4E31F43AC67F6DE /* ProjectFeatureTests.swift */,
+				93B24D334792F81938E47527 /* ProjectWorkspaceStoreTests.swift */,
 				DF7CF673D03C83995B954FE0 /* ProviderEnumTests.swift */,
 				80F31D5E7F475FAFCC7CD957 /* ProviderRequestSettingsResolverTests.swift */,
 				73CDE4D52940A2094E3D289B /* ProviderStreamEventTests.swift */,
@@ -1538,6 +1544,7 @@
 				576D8A6C2037624C4C6D4F3F /* PiAgentGatewayTests.swift in Sources */,
 				85EB708053705438A3E8BE95 /* PiStreamSpy.swift in Sources */,
 				D3F24BA15CE46220C3494CF3 /* ProjectFeatureTests.swift in Sources */,
+				6B3E0EE813C43DD62728CF0E /* ProjectWorkspaceStoreTests.swift in Sources */,
 				E00E1BEED00E37AA48679DBC /* ProviderEnumTests.swift in Sources */,
 				0A9A0767EFB4003076BD5FDC /* ProviderRequestSettingsResolverTests.swift in Sources */,
 				AD4DD1B269AD5A87AE3BF578 /* ProviderStreamEventTests.swift in Sources */,
@@ -1692,6 +1699,7 @@
 				333522FBE741F1A6684D3A53 /* ProjectDetailScreen.swift in Sources */,
 				F3D33D7954F9EF5403FE3B31 /* ProjectInstructionsSheet.swift in Sources */,
 				A1BE8E825189F03FFCE98E7C /* ProjectListScreen.swift in Sources */,
+				759BE17E41136B33EF80D284 /* ProjectWorkspaceStore.swift in Sources */,
 				674D06E4C49E2F3F7B6B3B6A /* ProviderDisplay.swift in Sources */,
 				760DDEAE99F1EE0CF4070FEF /* ProviderError.swift in Sources */,
 				BA20375105BFC8A79A60FBFF /* ProviderGateway.swift in Sources */,

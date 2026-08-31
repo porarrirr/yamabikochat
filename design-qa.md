@@ -42,6 +42,57 @@ final result: passed
 
 ---
 
+# Project information sources design QA
+
+- Source visual truth: `/var/folders/5w/7hrzp8fx3b9dh79n6jk19l980000gn/T/codex-clipboard-f2b8d2ed-065f-474e-856b-177202bcd3a5.png`
+- Implementation screenshot: `/Users/porari/.codex/visualizations/2026/08/31/01a05557-07ac-73f0-a21c-8dc768549f4b/project-workspace/implementation-final.png`
+- Combined comparison: `/Users/porari/.codex/visualizations/2026/08/31/01a05557-07ac-73f0-a21c-8dc768549f4b/project-workspace/reference-vs-implementation-final.png`
+- Viewport: iPhone 17 simulator, portrait, iOS 26.5, 402 × 874 pt
+- Source pixels: 1170 × 2532; implementation pixels: 1206 × 2622; both are native iPhone captures
+- Normalization: the source was proportionally fit and white-padded to the 1206 × 2622 implementation panel, then both panels were placed side by side without stretching
+- CSS size / deviceScaleFactor: not applicable to this native SwiftUI implementation
+- State: project detail, empty `情報源` tab selected, `追加` action enabled, bottom project composer visible
+
+## Required fidelity surfaces
+
+- Fonts and typography: native San Francisco typography with a semibold selected tab and bold capsule action.
+- Spacing and layout rhythm: project header, two-tab segmented treatment, large empty canvas, centered add action, and persistent bottom composer follow the supplied hierarchy.
+- Colors and visual tokens: semantic white background, secondary gray inactive text and selected-tab fill, and a black primary capsule match the reference while preserving YamabikoChat's existing blue project icon.
+- Image and icon fidelity: no raster placeholders or recreated artwork are present. Existing SF Symbols are used for project and navigation controls.
+- Copy and content: the visible empty state is intentionally limited to `追加`, matching the supplied reference. Added files are shown as a native list only after import.
+
+## Findings
+
+No actionable P0, P1, or P2 mismatch remains. The project name, status-bar state, bottom-composer capabilities, and existing YamabikoChat navigation chrome are product-owned differences rather than reference drift.
+
+## Comparison history
+
+1. Initial implementation added an explanatory document icon and sentence above the primary action. This was a P2 fidelity mismatch because the supplied empty state is deliberately sparse.
+2. The icon and explanatory copy were removed, leaving only the black `追加` capsule.
+3. The first corrected capture placed the action too high relative to the reference. The empty-state geometry was adjusted to 58% of its available content height.
+4. The final combined comparison confirms aligned tab hierarchy, whitespace, action placement, and persistent bottom composer.
+
+## Primary interactions verified
+
+- The `チャット` and `情報源` tabs switch project-detail content.
+- `追加` is visible, accessible, and hittable in the empty state.
+- The file importer accepts multiple files.
+- Imported files render in the project source list and can be removed.
+- The bottom project composer remains visible in the information-sources state.
+
+## Implementation checklist
+
+- [x] Native project information-sources tab
+- [x] Empty-state add action matching the reference
+- [x] Multi-file import and file list
+- [x] Deterministic UI automation capture
+- [x] Source and implementation inspected in one combined comparison
+- [x] Native iOS build and focused regression tests pass
+
+final result: passed
+
+---
+
 # Design QA: selection-aware chat composer
 
 - Source visual truth: `/var/folders/5w/7hrzp8fx3b9dh79n6jk19l980000gn/T/codex-clipboard-7890948e-581f-41e2-bcfb-c9d12a5084de.png`

@@ -40,6 +40,7 @@ final class ChatRepository {
     private let fusionTraceStore: FusionTraceStore
     private let fusionOrchestrator: FusionOrchestrator
     private let editorWorkspaces: EditorWorkspaceStore
+    private let projectWorkspaces: ProjectWorkspaceStore
     private let attachmentRepository: AttachmentRepository
 
     init(
@@ -59,6 +60,7 @@ final class ChatRepository {
         fusionTraceStore: FusionTraceStore,
         fusionOrchestrator: FusionOrchestrator = FusionOrchestrator(),
         editorWorkspaces: EditorWorkspaceStore = .shared,
+        projectWorkspaces: ProjectWorkspaceStore = .shared,
         attachmentRepository: AttachmentRepository = AttachmentRepository()
     ) {
         self.conversations = conversations
@@ -78,6 +80,7 @@ final class ChatRepository {
         self.fusionTraceStore = fusionTraceStore
         self.fusionOrchestrator = fusionOrchestrator
         self.editorWorkspaces = editorWorkspaces
+        self.projectWorkspaces = projectWorkspaces
         self.attachmentRepository = attachmentRepository
     }
 
@@ -485,6 +488,30 @@ final class ChatRepository {
         try conversations.countConversations(projectId: projectId)
     }
 
+    func projectWorkspaceFiles(projectId: Int64) throws -> [ProjectWorkspaceFile] {
+        guard try conversations.fetchProject(id: projectId) != nil else {
+            throw ProviderClientError.parseFailure("Project not found")
+        }
+        return try projectWorkspaces.files(projectID: projectId)
+    }
+
+    func importProjectWorkspaceFiles(projectId: Int64, urls: [URL]) async throws -> [ProjectWorkspaceFile] {
+        guard try conversations.fetchProject(id: projectId) != nil else {
+            throw ProviderClientError.parseFailure("Project not found")
+        }
+        let projectWorkspaces = projectWorkspaces
+        return try await Task.detached(priority: .userInitiated) {
+            try projectWorkspaces.importFiles(from: urls, projectID: projectId)
+        }.value
+    }
+
+    func removeProjectWorkspaceFile(projectId: Int64, relativePath: String) throws -> [ProjectWorkspaceFile] {
+        guard try conversations.fetchProject(id: projectId) != nil else {
+            throw ProviderClientError.parseFailure("Project not found")
+        }
+        return try projectWorkspaces.removeFile(relativePath: relativePath, projectID: projectId)
+    }
+
     func assignConversationToProject(conversationId: Int64, projectId: Int64?) throws {
         guard var conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
@@ -569,6 +596,7 @@ final class ChatRepository {
                 Task { await PythonWorker.shared.resetSession(sessionID: String(conversationID)) }
             }
         }
+        try projectWorkspaces.delete(projectID: id)
     }
 
     @discardableResult
@@ -1035,6 +1063,10 @@ final class ChatRepository {
         metadata["promptCacheKey"] = "conversation-\(conversationId)"
         metadata["pythonSessionId"] = String(conversationId)
         metadata["editorSessionId"] = String(conversationId)
+        metadata[ConversationWorkspacePath.artifactSessionMetadataKey] = String(conversationId)
+        if let projectID = conversation.projectId {
+            metadata[ConversationWorkspacePath.projectSourceMetadataKey] = String(projectID)
+        }
         metadata["supportsVision"] = await visionMetadataFlag(
             provider: conversation.apiProvider,
             model: conversation.model
@@ -1235,7 +1267,9 @@ final class ChatRepository {
             messages: historyA,
             context: .dualA,
             promptCacheKey: "conversation-\(conversationId)-dual-a",
-            clientToolsAllowed: !conversation.isSecret
+            clientToolsAllowed: !conversation.isSecret,
+            workspaceSessionID: String(conversationId),
+            projectWorkspaceSourceID: conversation.projectId
         )
 
         let requestB = try await buildSingleTurnRequest(
@@ -1248,7 +1282,9 @@ final class ChatRepository {
             messages: historyB,
             context: .dualB,
             promptCacheKey: "conversation-\(conversationId)-dual-b",
-            clientToolsAllowed: !conversation.isSecret
+            clientToolsAllowed: !conversation.isSecret,
+            workspaceSessionID: String(conversationId),
+            projectWorkspaceSourceID: conversation.projectId
         )
 
         _ = try conversations.insertDualMessage(userMessage)
@@ -1484,6 +1520,7 @@ final class ChatRepository {
             debugMode: settings.fusionDebugModeEnabled,
             logPrompts: !conversation.isSecret && settings.fusionLogPromptsEnabled,
             conversationId: conversationId,
+            projectId: conversation.projectId,
             clientToolsAllowed: !conversation.isSecret
         )
 
@@ -2240,6 +2277,10 @@ final class ChatRepository {
 
             let history = buildAutoConversationHistory(messages: messages, speaker: speaker)
             let currentSettings = try settings.load()
+            let boundConversationID = autoConversation.boundChatConversationId
+            let boundProjectID = try boundConversationID.flatMap {
+                try conversations.fetchConversation(id: $0)?.projectId
+            }
             let request = try await buildSingleTurnRequest(
                 model: turnModel,
                 text: "",
@@ -2249,7 +2290,9 @@ final class ChatRepository {
                 stream: false,
                 messages: history,
                 context: speaker.context,
-                promptCacheKey: "auto-conversation-\(autoConversationId)-\(speaker.modelCode)"
+                promptCacheKey: "auto-conversation-\(autoConversationId)-\(speaker.modelCode)",
+                workspaceSessionID: boundConversationID.map(String.init),
+                projectWorkspaceSourceID: boundProjectID
             )
 
             let response: ProviderResponse
@@ -2574,7 +2617,9 @@ final class ChatRepository {
         messages: [ProviderRequestMessage]? = nil,
         context: AppSettings.ReasoningContext = .default,
         promptCacheKey: String? = nil,
-        clientToolsAllowed: Bool = true
+        clientToolsAllowed: Bool = true,
+        workspaceSessionID: String? = nil,
+        projectWorkspaceSourceID: Int64? = nil
     ) async throws -> ProviderRequest {
         let resolvedSettings = try await requestSettingsResolver.resolve(
             settings: settings,
@@ -2586,11 +2631,18 @@ final class ChatRepository {
         metadata["provider"] = provider
         if let promptCacheKey = promptCacheKey?.trimmingCharacters(in: .whitespacesAndNewlines), !promptCacheKey.isEmpty {
             metadata["promptCacheKey"] = promptCacheKey
-            if promptCacheKey.hasPrefix("conversation-") {
+            if let workspaceSessionID = workspaceSessionID?.trimmedNonEmpty {
+                metadata["pythonSessionId"] = workspaceSessionID
+                metadata["editorSessionId"] = workspaceSessionID
+                metadata[ConversationWorkspacePath.artifactSessionMetadataKey] = workspaceSessionID
+            } else if promptCacheKey.hasPrefix("conversation-") {
                 metadata["pythonSessionId"] = String(promptCacheKey.dropFirst("conversation-".count))
                 let suffix = promptCacheKey.dropFirst("conversation-".count)
                 metadata["editorSessionId"] = String(suffix.split(separator: "-").first ?? suffix[...])
             }
+        }
+        if let projectWorkspaceSourceID {
+            metadata[ConversationWorkspacePath.projectSourceMetadataKey] = String(projectWorkspaceSourceID)
         }
         metadata["supportsVision"] = await visionMetadataFlag(provider: provider, model: model)
         if !clientToolsAllowed {
