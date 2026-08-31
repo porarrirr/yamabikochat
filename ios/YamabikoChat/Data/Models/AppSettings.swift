@@ -391,6 +391,14 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
 
     func normalizedForPersistence() -> AppSettings {
         var normalized = self
+        normalized.geminiComputerUseEnabled = false
+        normalized.geminiResponseMimeType = ""
+        normalized.geminiResponseJSONSchema = ""
+        normalized.geminiFunctionDeclarations = ""
+        normalized.dualComputerUseEnabledA = nil
+        normalized.dualComputerUseEnabledB = nil
+        normalized.autoComputerUseEnabledA = nil
+        normalized.autoComputerUseEnabledB = nil
         normalized.setVisibleChatStatsFields(normalized.visibleChatStatsFields())
         if normalized.apiProvider.caseInsensitiveCompare("GEMINI") == .orderedSame,
            normalized.hasEnabledGeminiTool {

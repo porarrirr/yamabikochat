@@ -1296,32 +1296,6 @@ struct SettingsScreen: View {
                         get: { viewModel.settings.geminiGoogleMapsEnabled },
                         set: { viewModel.setGeminiGoogleMapsEnabled($0) }
                     ))
-                    Toggle("Computer Use", isOn: Binding(
-                        get: { viewModel.settings.geminiComputerUseEnabled },
-                        set: { viewModel.setGeminiComputerUseEnabled($0) }
-                    ))
-                }
-
-                Section("Gemini Advanced (JSON)") {
-                    TextField("Response MIME Type", text: Binding(
-                        get: { viewModel.settings.geminiResponseMimeType },
-                        set: { viewModel.settings.geminiResponseMimeType = $0 }
-                    ))
-                    TextField("Response JSON Schema", text: Binding(
-                        get: { viewModel.settings.geminiResponseJSONSchema },
-                        set: { viewModel.settings.geminiResponseJSONSchema = $0 }
-                    ), axis: .vertical)
-                    .lineLimit(4 ... 10)
-
-                    TextField("Function Declarations (JSON Array)", text: Binding(
-                        get: { viewModel.settings.geminiFunctionDeclarations },
-                        set: { viewModel.settings.geminiFunctionDeclarations = $0 }
-                    ), axis: .vertical)
-                    .lineLimit(4 ... 10)
-
-                    Text("空欄は送信されません。JSONが不正な場合は無視されます。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
             }
         }

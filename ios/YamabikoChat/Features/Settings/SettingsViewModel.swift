@@ -409,10 +409,6 @@ final class SettingsViewModel: ObservableObject {
         setGeminiToolEnabled(enabled, at: \AppSettings.geminiGoogleMapsEnabled)
     }
 
-    func setGeminiComputerUseEnabled(_ enabled: Bool) {
-        setGeminiToolEnabled(enabled, at: \AppSettings.geminiComputerUseEnabled)
-    }
-
     private func setGeminiToolEnabled(
         _ enabled: Bool,
         at keyPath: WritableKeyPath<AppSettings, Bool>

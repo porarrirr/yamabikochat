@@ -159,13 +159,6 @@ final class ProviderRequestSettingsResolver {
             if overrides.googleMaps ?? settings.geminiGoogleMapsEnabled {
                 tools.append(ProviderTool(type: "google_maps", payload: [:]))
             }
-            if overrides.computerUse ?? settings.geminiComputerUseEnabled {
-                tools.append(ProviderTool(type: "computer_use", payload: [:]))
-            }
-            let declarations = settings.geminiFunctionDeclarations.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !declarations.isEmpty {
-                tools.append(ProviderTool(type: "function_declarations", payload: ["json": declarations]))
-            }
         case "OPENROUTER":
             tools = []
             if toolScope.allowsNativeWebSearch,
@@ -308,9 +301,6 @@ final class ProviderRequestSettingsResolver {
                 levelOverride: overrides.level
             ) ?? ""
             return [
-                "geminiResponseMimeType": settings.geminiResponseMimeType,
-                "geminiResponseJSONSchema": settings.geminiResponseJSONSchema,
-                "geminiFunctionDeclarations": settings.geminiFunctionDeclarations,
                 "geminiThinkingLevel": level
             ]
         default:

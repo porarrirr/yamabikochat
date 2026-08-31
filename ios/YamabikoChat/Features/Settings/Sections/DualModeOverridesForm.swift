@@ -61,7 +61,6 @@ struct DualModeOverridesForm: View {
         Toggle(L10n.format("%@: Code Execution", prefix), isOn: codeExecutionBinding)
         Toggle(L10n.format("%@: URL Context", prefix), isOn: urlContextBinding)
         Toggle(L10n.format("%@: Google Maps", prefix), isOn: googleMapsBinding)
-        Toggle(L10n.format("%@: Computer Use", prefix), isOn: computerUseBinding)
         Toggle(L10n.format("%@: Thinking enabled", prefix), isOn: thinkingEnabledBinding)
         if GeminiModelUtils.isThinkingLevelSupported(model: model) {
             TextField(L10n.format("%@: Thinking level override", prefix), text: thinkingLevelBinding)
@@ -202,21 +201,6 @@ struct DualModeOverridesForm: View {
             Binding(
                 get: { viewModel.settings.dualGoogleMapsEnabledB ?? viewModel.settings.geminiGoogleMapsEnabled },
                 set: { viewModel.settings.dualGoogleMapsEnabledB = $0 }
-            )
-        }
-    }
-
-    private var computerUseBinding: Binding<Bool> {
-        switch side {
-        case .a:
-            Binding(
-                get: { viewModel.settings.dualComputerUseEnabledA ?? viewModel.settings.geminiComputerUseEnabled },
-                set: { viewModel.settings.dualComputerUseEnabledA = $0 }
-            )
-        case .b:
-            Binding(
-                get: { viewModel.settings.dualComputerUseEnabledB ?? viewModel.settings.geminiComputerUseEnabled },
-                set: { viewModel.settings.dualComputerUseEnabledB = $0 }
             )
         }
     }

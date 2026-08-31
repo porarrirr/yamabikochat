@@ -3,6 +3,29 @@ import GRDB
 @testable import YamabikoChat
 
 final class AppSettingsTests: XCTestCase {
+    func testNormalizationClearsRemovedGeminiComputerUseAndJSONSettings() {
+        var settings = AppSettings()
+        settings.geminiComputerUseEnabled = true
+        settings.geminiResponseMimeType = "application/json"
+        settings.geminiResponseJSONSchema = #"{"type":"object"}"#
+        settings.geminiFunctionDeclarations = #"[{"name":"lookup"}]"#
+        settings.dualComputerUseEnabledA = true
+        settings.dualComputerUseEnabledB = false
+        settings.autoComputerUseEnabledA = true
+        settings.autoComputerUseEnabledB = false
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertFalse(normalized.geminiComputerUseEnabled)
+        XCTAssertTrue(normalized.geminiResponseMimeType.isEmpty)
+        XCTAssertTrue(normalized.geminiResponseJSONSchema.isEmpty)
+        XCTAssertTrue(normalized.geminiFunctionDeclarations.isEmpty)
+        XCTAssertNil(normalized.dualComputerUseEnabledA)
+        XCTAssertNil(normalized.dualComputerUseEnabledB)
+        XCTAssertNil(normalized.autoComputerUseEnabledA)
+        XCTAssertNil(normalized.autoComputerUseEnabledB)
+    }
+
     func testNormalizationMigratesOnlyZaiLegacyModelIDs() throws {
         var settings = AppSettings()
         settings.apiProvider = "ZAI"

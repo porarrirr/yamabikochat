@@ -2,6 +2,29 @@ import XCTest
 @testable import YamabikoChat
 
 final class ProviderRequestSettingsResolverTests: XCTestCase {
+    func testGeminiRemovedComputerUseAndJSONSettingsAreNotResolved() async throws {
+        let resolver = makeResolver()
+        var settings = AppSettings()
+        settings.geminiComputerUseEnabled = true
+        settings.geminiResponseMimeType = "application/json"
+        settings.geminiResponseJSONSchema = #"{"type":"object"}"#
+        settings.geminiFunctionDeclarations = #"[{"name":"lookup"}]"#
+        settings.dualComputerUseEnabledA = true
+
+        let resolved = try await resolver.resolve(
+            settings: settings,
+            provider: "GEMINI",
+            model: "gemini-2.5-flash",
+            context: .dualA
+        )
+
+        XCTAssertFalse(resolved.tools.contains { $0.type == "computer_use" })
+        XCTAssertFalse(resolved.tools.contains { $0.type == "function_declarations" })
+        XCTAssertNil(resolved.metadata["geminiResponseMimeType"])
+        XCTAssertNil(resolved.metadata["geminiResponseJSONSchema"])
+        XCTAssertNil(resolved.metadata["geminiFunctionDeclarations"])
+    }
+
     func testEditorIsPublishedOnlyForNormalAndDualPiToolContexts() async throws {
         let resolver = makeResolver()
         func containsEditor(
