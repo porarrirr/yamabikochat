@@ -10,6 +10,7 @@ struct ShareImportDraft: Equatable {
 final class AppState: ObservableObject {
     @Published var selectedConversationID: Int64?
     @Published private var shareImportDrafts: [Int64: String] = [:]
+    @Published var isConversationHistoryPresented = false
     @Published private(set) var conversationSidebarRevealGeneration = 0
 
     var shareImportDraft: ShareImportDraft? {
