@@ -9,7 +9,9 @@ struct SettingsScreen: View {
     @ObservedObject var viewModel: SettingsViewModel
     var initialTab: SettingsTab? = nil
     @State private var navigationPath: [SettingsCategory] = []
+    #if DEBUG
     @State private var showDiagnosticsSheet = false
+    #endif
     @State private var modelsDevFieldDrafts: [String: String] = [:]
     @State private var showAgentSkillImporter = false
     @State private var pendingAgentSkillDeletionName: String?
@@ -124,6 +126,9 @@ struct SettingsScreen: View {
                 viewModel.flushPendingSettingsSave()
             }
             .onAppear {
+                #if DEBUG
+                viewModel.refreshDiagnosticsLog()
+                #endif
                 if let initialTab {
                     navigationPath = [initialTab.category]
                 }
@@ -420,7 +425,9 @@ struct SettingsScreen: View {
         Group {
             agentSkillsSection
             tokenUsageSection
+            #if DEBUG
             diagnosticsSection
+            #endif
             legalSection
         }
     }
@@ -1721,8 +1728,9 @@ struct SettingsScreen: View {
         }
     }
 
+    #if DEBUG
     private var diagnosticsSection: some View {
-        Section("診断ログ") {
+        Section {
             HStack {
                 Button("更新") {
                     viewModel.refreshDiagnosticsLog()
@@ -1764,6 +1772,10 @@ struct SettingsScreen: View {
                     .font(.caption2)
                     .textSelection(.enabled)
             }
+        } header: {
+            Text("診断ログ")
+        } footer: {
+            Text("Pi Runtimeとアプリ状態は端末内へ自動保存されます。問題が起きた後もアプリを削除せず、ここから「共有」で送信してください。XcodeやMacへの接続は不要です。")
         }
         .sheet(isPresented: $showDiagnosticsSheet) {
             NavigationStack {
@@ -1789,6 +1801,7 @@ struct SettingsScreen: View {
             }
         }
     }
+    #endif
 
     private var tokenUsageSection: some View {
         let state = viewModel.tokenUsageState

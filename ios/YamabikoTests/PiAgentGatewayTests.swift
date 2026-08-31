@@ -112,6 +112,17 @@ final class PiAgentGatewayTests: XCTestCase {
         try await PiAgentRuntime.shared.verifyReady()
     }
 
+    func testBundledPiRuntimeLifecycleLogIsIncludedInAppDiagnostics() async throws {
+        try await PiAgentRuntime.shared.verifyReady()
+
+        let diagnostics = DiagnosticsLogger.read()
+
+        XCTAssertTrue(diagnostics.contains("===== PI RUNTIME LOG (CURRENT) ====="))
+        XCTAssertTrue(diagnostics.contains(#""event":"bootstrap""#))
+        XCTAssertTrue(diagnostics.contains(#""event":"serverListening""#))
+        XCTAssertFalse(diagnostics.lowercased().contains("bearer test-token"))
+    }
+
     func testBundledPiRuntimeRemainsReachableThroughForegroundSynchronization() async throws {
         try await PiAgentRuntime.shared.verifyReady()
         try await PiAgentRuntime.shared.prepareForForeground()

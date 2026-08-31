@@ -50,7 +50,9 @@ final class SettingsViewModel: ObservableObject {
 
     @Published var statusMessage: String?
     @Published var errorMessage: String?
+    #if DEBUG
     @Published var diagnosticsLogText: String = ""
+    #endif
     @Published var tokenUsageState: TokenUsageUiState = .init()
     @Published private(set) var installedAgentSkills: [InstalledAgentSkill] = []
     @Published var agentSkillInstallPreview: AgentSkillInstallPreview?
@@ -1055,13 +1057,17 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func refreshDiagnosticsLog() {
+        #if DEBUG
         diagnosticsLogText = DiagnosticsLogger.read()
+        #endif
     }
 
     func clearDiagnosticsLog() {
+        #if DEBUG
         DiagnosticsLogger.clear()
         diagnosticsLogText = ""
         statusMessage = L10n.text("診断ログをクリアしました")
+        #endif
     }
 
     func refreshOpenRouterModels(force: Bool) async {

@@ -57,6 +57,13 @@ private struct PiModelResolutionResponse: Codable {
 private struct PiHealthResponse: Decodable {
     var ok: Bool
     var contractVersion: Int
+    var node: String?
+    var runtimeId: String?
+    var startedAtMs: Int64?
+    var uptimeMs: Int64?
+    var activeRuns: Int?
+    var pendingTools: Int?
+    var rssBytes: Int64?
 }
 
 struct PiRuntimeReadinessConfiguration: Sendable {
@@ -254,10 +261,23 @@ struct PiToolResultEnvelope: Encodable {
 actor PiAgentRuntime {
     static let shared = PiAgentRuntime()
 
+    private struct HealthCheckFlight {
+        let id: String
+        let context: String
+        let requestID: String
+        let startedAt: Date
+        let task: Task<PiHealthResponse, Error>
+    }
+
     private var endpoint: URL?
     private var token: String?
     private var startupTask: Task<(URL, String), Error>?
-    private var healthTask: Task<PiHealthResponse, Error>?
+    private var healthCheckFlight: HealthCheckFlight?
+    #if DEBUG
+    private var lastHealthyAt: Date?
+    private var activeRunIDs: Set<String> = []
+    private let nativeClientID = UUID().uuidString
+    #endif
     private let readiness: PiRuntimeReadinessConfiguration
     private let healthClient: any PiRuntimeHealthClient
 
@@ -281,6 +301,64 @@ actor PiAgentRuntime {
     /// Node Mobile is a process singleton and cannot safely be started a second time, so a cached
     /// endpoint must be proven live instead of being replaced with another embedded runtime.
     func prepareForForeground() async throws {
+        #if DEBUG
+        let requestID = "foreground-\(UUID().uuidString)"
+        let startedAt = Date()
+        var metadata = await Self.runtimeEnvironmentMetadata()
+        metadata.merge(Self.nativeEngineMetadata(), uniquingKeysWith: { current, _ in current })
+        metadata["activeRuns"] = String(activeRunIDs.count)
+        metadata["cachedEndpoint"] = String(endpoint != nil && token != nil)
+        metadata["nativeClientId"] = nativeClientID
+        metadata["lastHealthyAgeMs"] = lastHealthyAt.map {
+            String(Int(max(0, Date().timeIntervalSince($0)) * 1_000))
+        } ?? "none"
+        DiagnosticsLogger.log(
+            "Pi runtime foreground synchronization requested",
+            category: .network,
+            requestID: requestID,
+            metadata: metadata
+        )
+        guard let endpoint, let token else {
+            DiagnosticsLogger.log(
+                "Pi runtime foreground synchronization skipped before first engine start",
+                category: .network,
+                requestID: requestID,
+                metadata: metadata
+            )
+            return
+        }
+        do {
+            let status = try await waitUntilHealthySingleFlight(
+                endpoint: endpoint,
+                token: token,
+                timeout: readiness.resumeTimeout,
+                context: "foreground",
+                requestID: requestID
+            )
+            DiagnosticsLogger.log(
+                "Pi runtime foreground synchronization completed",
+                category: .network,
+                requestID: requestID,
+                metadata: Self.healthMetadata(status).merging(
+                    ["elapsedMs": String(Int(Date().timeIntervalSince(startedAt) * 1_000))],
+                    uniquingKeysWith: { current, _ in current }
+                )
+            )
+        } catch {
+            var failureMetadata = await Self.runtimeEnvironmentMetadata()
+            failureMetadata.merge(Self.nativeEngineMetadata(), uniquingKeysWith: { current, _ in current })
+            failureMetadata["activeRuns"] = String(activeRunIDs.count)
+            failureMetadata["elapsedMs"] = String(Int(Date().timeIntervalSince(startedAt) * 1_000))
+            DiagnosticsLogger.log(
+                "Pi runtime foreground synchronization failed",
+                category: .network,
+                requestID: requestID,
+                metadata: failureMetadata,
+                error: error
+            )
+            throw error
+        }
+        #else
         guard let endpoint, let token else { return }
         _ = try await waitUntilHealthySingleFlight(
             endpoint: endpoint,
@@ -288,6 +366,7 @@ actor PiAgentRuntime {
             timeout: readiness.resumeTimeout,
             context: "foreground"
         )
+        #endif
     }
 
     func resolveModels(_ configurations: [PiAgentConfiguration]) async throws -> [PiModelResolution] {
@@ -420,21 +499,31 @@ actor PiAgentRuntime {
         configuration: PiAgentConfiguration,
         tools: LocalToolRegistry
     ) async throws -> AsyncThrowingStream<ProviderStreamEvent, Error> {
+        let runID = UUID().uuidString
+        let metricsContext = ProviderMetricsContext.current
+        #if DEBUG
+        var streamMetadata = [
+            "provider": configuration.provider,
+            "model": configuration.model,
+            "contractVersion": String(configuration.contractVersion),
+            "activeRuns": String(activeRunIDs.count),
+            "nativeClientId": nativeClientID
+        ]
+        if let metricsContext {
+            streamMetadata["conversationId"] = String(metricsContext.conversationId)
+            streamMetadata["turnId"] = metricsContext.turnId
+        }
         DiagnosticsLogger.log(
             "Pi runtime stream requested",
             category: .network,
-            metadata: [
-                "provider": configuration.provider,
-                "model": configuration.model,
-                "contractVersion": String(configuration.contractVersion)
-            ]
+            requestID: runID,
+            metadata: streamMetadata
         )
-        let (endpoint, token) = try await startIfNeeded()
-        let runID = UUID().uuidString
+        #endif
+        let (endpoint, token) = try await startIfNeeded(requestID: runID)
         let piRequest = try Self.makeRequest(request)
         let envelope = PiRunEnvelope(runId: runID, request: piRequest, config: configuration)
         let body = try JSONEncoder().encode(envelope)
-        let metricsContext = ProviderMetricsContext.current
         var urlRequest = URLRequest(url: endpoint.appendingPathComponent("v1/run"))
         urlRequest.httpMethod = "POST"
         urlRequest.httpBody = body
@@ -456,6 +545,12 @@ actor PiAgentRuntime {
 
         return AsyncThrowingStream { continuation in
             let task = Task {
+                #if DEBUG
+                await self.registerActiveRun(runID)
+                defer {
+                    Task { await self.unregisterActiveRun(runID) }
+                }
+                #endif
                 var metrics = PiConversationMetricsCollector(context: metricsContext)
                 var toolTasks: [Task<Void, Error>] = []
 
@@ -665,13 +760,14 @@ actor PiAgentRuntime {
         }
     }
 
-    private func startIfNeeded() async throws -> (URL, String) {
+    private func startIfNeeded(requestID: String? = nil) async throws -> (URL, String) {
         if let endpoint, let token {
             _ = try await waitUntilHealthySingleFlight(
                 endpoint: endpoint,
                 token: token,
                 timeout: readiness.resumeTimeout,
-                context: "request"
+                context: "request",
+                requestID: requestID
             )
             return (endpoint, token)
         }
@@ -693,15 +789,22 @@ actor PiAgentRuntime {
             DiagnosticsLogger.log(
                 "Pi runtime engine starting",
                 category: .network,
+                requestID: requestID,
                 metadata: ["script": script.lastPathComponent, "port": String(port)]
             )
+            #if DEBUG
+            let runtimeLogPath = DiagnosticsLogger.piRuntimeLogPath()
+            PiNodeRunner.startEngine(withArguments: ["node", script.path, String(port), token, runtimeLogPath])
+            #else
             PiNodeRunner.startEngine(withArguments: ["node", script.path, String(port), token])
+            #endif
 
             _ = try await self.waitUntilHealthySingleFlight(
                 endpoint: endpoint,
                 token: token,
                 timeout: self.readiness.startupTimeout,
-                context: "startup"
+                context: "startup",
+                requestID: requestID
             )
             return (endpoint, token)
         }
@@ -724,17 +827,33 @@ actor PiAgentRuntime {
         endpoint: URL,
         token: String,
         timeout: Duration,
-        context: String
+        context: String,
+        requestID: String? = nil
     ) async throws -> PiHealthResponse {
-        if let healthTask {
+        if let flight = healthCheckFlight {
+            #if DEBUG
             DiagnosticsLogger.log(
                 "Pi runtime health check already in progress",
                 category: .network,
-                metadata: ["context": context]
+                requestID: requestID ?? flight.requestID,
+                metadata: [
+                    "healthCheckId": flight.id,
+                    "ownerContext": flight.context,
+                    "ownerRequestId": flight.requestID,
+                    "waiterContext": context,
+                    "waitedMs": String(Int(Date().timeIntervalSince(flight.startedAt) * 1_000))
+                ]
             )
-            return try await healthTask.value
+            #endif
+            let result = try await flight.task.value
+            #if DEBUG
+            lastHealthyAt = Date()
+            #endif
+            return result
         }
 
+        let healthCheckID = UUID().uuidString
+        let resolvedRequestID = requestID ?? healthCheckID
         let readiness = readiness
         let healthClient = healthClient
         let task = Task<PiHealthResponse, Error> {
@@ -743,17 +862,32 @@ actor PiAgentRuntime {
                 token: token,
                 timeout: timeout,
                 context: context,
+                healthCheckID: healthCheckID,
+                requestID: resolvedRequestID,
                 readiness: readiness,
                 healthClient: healthClient
             )
         }
-        healthTask = task
+        healthCheckFlight = HealthCheckFlight(
+            id: healthCheckID,
+            context: context,
+            requestID: resolvedRequestID,
+            startedAt: Date(),
+            task: task
+        )
         do {
             let result = try await task.value
-            healthTask = nil
+            if healthCheckFlight?.id == healthCheckID {
+                healthCheckFlight = nil
+            }
+            #if DEBUG
+            lastHealthyAt = Date()
+            #endif
             return result
         } catch {
-            healthTask = nil
+            if healthCheckFlight?.id == healthCheckID {
+                healthCheckFlight = nil
+            }
             throw error
         }
     }
@@ -763,6 +897,8 @@ actor PiAgentRuntime {
         token: String,
         timeout: Duration,
         context: String,
+        healthCheckID: String,
+        requestID: String,
         readiness: PiRuntimeReadinessConfiguration,
         healthClient: any PiRuntimeHealthClient
     ) async throws -> PiHealthResponse {
@@ -774,34 +910,108 @@ actor PiAgentRuntime {
         health.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         var lastFailure = "no response"
         var attempt = 0
+        #if DEBUG
+        var failureCounts: [String: Int] = [:]
+        var lastFailureSignature: String?
+        var nextProgressLogMs = 5_000
+        #endif
         let clock = ContinuousClock()
+        #if DEBUG
+        let startedAt = Date()
+        #endif
         let deadline = clock.now.advanced(by: timeout)
+        #if DEBUG
+        var initialMetadata = await runtimeEnvironmentMetadata()
+        initialMetadata.merge(nativeEngineMetadata(), uniquingKeysWith: { current, _ in current })
+        initialMetadata.merge([
+            "context": context,
+            "healthCheckId": healthCheckID,
+            "port": endpoint.port.map(String.init) ?? "unknown",
+            "requestTimeoutMs": String(Int(readiness.requestTimeout * 1_000)),
+            "timeoutMs": String(durationMilliseconds(timeout))
+        ], uniquingKeysWith: { current, _ in current })
+        DiagnosticsLogger.log(
+            "Pi runtime health check started",
+            category: .network,
+            requestID: requestID,
+            metadata: initialMetadata
+        )
+        #endif
 
         repeat {
             try Task.checkCancellation()
             attempt += 1
+            #if DEBUG
+            var signature = "unknown"
+            #endif
             do {
                 let (data, response) = try await healthClient.data(for: health)
                 let statusCode = (response as? HTTPURLResponse)?.statusCode
                 if statusCode == 200,
                    let status = try? JSONDecoder().decode(PiHealthResponse.self, from: data),
                    status.ok, status.contractVersion == 2 {
+                    #if DEBUG
+                    var successMetadata = healthMetadata(status)
+                    successMetadata.merge(nativeEngineMetadata(), uniquingKeysWith: { current, _ in current })
+                    successMetadata.merge([
+                        "attempt": String(attempt),
+                        "context": context,
+                        "elapsedMs": String(Int(Date().timeIntervalSince(startedAt) * 1_000)),
+                        "healthCheckId": healthCheckID,
+                        "port": endpoint.port.map(String.init) ?? "unknown"
+                    ], uniquingKeysWith: { current, _ in current })
                     DiagnosticsLogger.log(
                         "Pi runtime health check succeeded",
                         category: .network,
-                        metadata: [
-                            "attempt": String(attempt),
-                            "context": context,
-                            "port": endpoint.port.map(String.init) ?? "unknown"
-                        ]
+                        requestID: requestID,
+                        metadata: successMetadata
                     )
+                    #endif
                     return status
                 }
                 lastFailure = statusCode.map { "HTTP \($0) or invalid health payload" }
                     ?? "non-HTTP health response"
+                #if DEBUG
+                signature = statusCode.map { "http:\($0):invalidPayload" } ?? "nonHTTPResponse"
+                #endif
             } catch {
-                lastFailure = "\(type(of: error)): \(error.localizedDescription)"
+                let nsError = error as NSError
+                #if DEBUG
+                signature = "\(nsError.domain):\(nsError.code)"
+                lastFailure = "\(signature) \(error.localizedDescription)"
+                #else
+                lastFailure = "\(nsError.domain):\(nsError.code) \(error.localizedDescription)"
+                #endif
             }
+            #if DEBUG
+            failureCounts[signature, default: 0] += 1
+            let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1_000)
+            let shouldLogProgress = attempt == 1 || signature != lastFailureSignature || elapsedMs >= nextProgressLogMs
+            if shouldLogProgress {
+                var progressMetadata = await runtimeEnvironmentMetadata()
+                progressMetadata.merge(nativeEngineMetadata(), uniquingKeysWith: { current, _ in current })
+                progressMetadata.merge([
+                    "attempt": String(attempt),
+                    "context": context,
+                    "elapsedMs": String(elapsedMs),
+                    "failure": lastFailure,
+                    "failureSignature": signature,
+                    "healthCheckId": healthCheckID,
+                    "port": endpoint.port.map(String.init) ?? "unknown"
+                ], uniquingKeysWith: { current, _ in current })
+                DiagnosticsLogger.log(
+                    "Pi runtime health check still unavailable",
+                    level: .warning,
+                    category: .network,
+                    requestID: requestID,
+                    metadata: progressMetadata
+                )
+                lastFailureSignature = signature
+                while nextProgressLogMs <= elapsedMs {
+                    nextProgressLogMs += 5_000
+                }
+            }
+            #endif
             let now = clock.now
             guard now < deadline else { break }
             let remaining = now.duration(to: deadline)
@@ -812,19 +1022,94 @@ actor PiAgentRuntime {
             ? "Pi agent runtime did not start"
             : "Pi agent runtime did not resume"
         let error = ProviderClientError.parseFailure(message)
+        #if DEBUG
+        var timeoutMetadata = await runtimeEnvironmentMetadata()
+        timeoutMetadata.merge(nativeEngineMetadata(), uniquingKeysWith: { current, _ in current })
+        timeoutMetadata.merge([
+            "attempts": String(attempt),
+            "context": context,
+            "elapsedMs": String(Int(Date().timeIntervalSince(startedAt) * 1_000)),
+            "failureCounts": failureCounts.sorted { $0.key < $1.key }
+                .map { "\($0.key)=\($0.value)" }
+                .joined(separator: ","),
+            "healthCheckId": healthCheckID,
+            "lastFailure": lastFailure,
+            "port": endpoint.port.map(String.init) ?? "unknown"
+        ], uniquingKeysWith: { current, _ in current })
         DiagnosticsLogger.log(
             "Pi runtime health check timed out",
             category: .network,
-            metadata: [
-                "attempts": String(attempt),
-                "context": context,
-                "lastFailure": lastFailure,
-                "port": endpoint.port.map(String.init) ?? "unknown"
-            ],
+            requestID: requestID,
+            metadata: timeoutMetadata,
             error: error
         )
+        #endif
         throw error
     }
+
+    #if DEBUG
+    private func registerActiveRun(_ runID: String) {
+        activeRunIDs.insert(runID)
+    }
+
+    private func unregisterActiveRun(_ runID: String) {
+        activeRunIDs.remove(runID)
+    }
+
+    private static func healthMetadata(_ status: PiHealthResponse) -> [String: String] {
+        [
+            "activeRuns": status.activeRuns.map(String.init) ?? "unknown",
+            "node": status.node ?? "unknown",
+            "pendingTools": status.pendingTools.map(String.init) ?? "unknown",
+            "rssBytes": status.rssBytes.map(String.init) ?? "unknown",
+            "runtimeId": status.runtimeId ?? "unknown",
+            "runtimeStartedAtMs": status.startedAtMs.map(String.init) ?? "unknown",
+            "runtimeUptimeMs": status.uptimeMs.map(String.init) ?? "unknown"
+        ]
+    }
+
+    private static func nativeEngineMetadata() -> [String: String] {
+        PiNodeRunner.engineDiagnostics()
+    }
+
+    private static func durationMilliseconds(_ duration: Duration) -> Int64 {
+        let components = duration.components
+        return components.seconds * 1_000 + Int64(components.attoseconds / 1_000_000_000_000_000)
+    }
+
+    private static func runtimeEnvironmentMetadata() async -> [String: String] {
+        await MainActor.run {
+            let application = UIApplication.shared
+            let process = ProcessInfo.processInfo
+            let state: String
+            switch application.applicationState {
+            case .active: state = "active"
+            case .inactive: state = "inactive"
+            case .background: state = "background"
+            @unknown default: state = "unknown"
+            }
+            let thermal: String
+            switch process.thermalState {
+            case .nominal: thermal = "nominal"
+            case .fair: thermal = "fair"
+            case .serious: thermal = "serious"
+            case .critical: thermal = "critical"
+            @unknown default: thermal = "unknown"
+            }
+            let remaining = application.backgroundTimeRemaining
+            return [
+                "applicationState": state,
+                "backgroundTimeRemaining": remaining > 31_536_000
+                    ? "unlimited"
+                    : String(format: "%.1f", remaining),
+                "lowPowerMode": String(process.isLowPowerModeEnabled),
+                "protectedDataAvailable": String(application.isProtectedDataAvailable),
+                "systemUptimeMs": String(Int(process.systemUptime * 1_000)),
+                "thermalState": thermal
+            ]
+        }
+    }
+    #endif
 
     private static func makeRequest(_ request: ProviderRequest) throws -> PiRequest {
         let attachmentNames = Array(Set(request.messages.flatMap(\.attachments).map {

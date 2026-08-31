@@ -1,4 +1,5 @@
 import http from "node:http";
+import fs from "node:fs";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { createModels, createProvider, envApiKeyAuth, InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
@@ -13,11 +14,45 @@ import { providerErrorDetails } from "./provider-error.js";
 
 const port = Number(process.argv[2]);
 const token = process.argv[3];
+const runtimeLogPath = process.argv[4];
+const runtimeId = runtimeLogPath ? crypto.randomUUID() : null;
+const runtimeStartedAtMs = runtimeLogPath ? Date.now() : null;
 const runs = new Map();
 const pendingTools = new Map();
 const authCredentials = new InMemoryCredentialStore();
 const RUNTIME_CONTRACT_VERSION = 2;
 const STREAM_HEARTBEAT_INTERVAL_MS = 15_000;
+const RUNTIME_LOG_MAX_BYTES = 1024 * 1024;
+let lastHealthRequestAtMs = null;
+
+function sanitizeRuntimeLogValue(value) {
+  return String(value ?? "")
+    .replace(/\bbearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]")
+    .replace(/\b(api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|password)\s*[:=]\s*["']?[^"'\s,&]+/gi, "$1=[REDACTED]")
+    .replace(/([?&](?:code|state|access_token|refresh_token|id_token|token|password|secret|api_key|apikey|authorization)=)[^&\s]+/gi, "$1[REDACTED]");
+}
+
+function appendRuntimeLifecycleLog(event, metadata = {}) {
+  if (!runtimeLogPath) return;
+  try {
+    if (fs.existsSync(runtimeLogPath) && fs.statSync(runtimeLogPath).size >= RUNTIME_LOG_MAX_BYTES) {
+      const previous = runtimeLogPath.replace(/\.log$/, ".previous.log");
+      fs.rmSync(previous, { force: true });
+      fs.renameSync(runtimeLogPath, previous);
+    }
+    const safeMetadata = Object.fromEntries(
+      Object.entries(metadata).map(([key, value]) => [key, sanitizeRuntimeLogValue(value)])
+    );
+    fs.appendFileSync(runtimeLogPath, `${JSON.stringify({
+      time: new Date().toISOString(),
+      event,
+      runtimeId,
+      ...safeMetadata
+    })}\n`, "utf8");
+  } catch {
+    // Diagnostics must never alter the Pi execution path.
+  }
+}
 // The iOS app ships one self-contained JS bundle. Register Pi's OAuth modules
 // statically so its intentionally opaque lazy imports do not look for sibling
 // files that are absent from the application bundle.
@@ -190,6 +225,30 @@ const AUTH_PROVIDER_IDS = {
 
 if (!Number.isInteger(port) || port < 1 || !token) {
   throw new Error("Pi runtime requires a loopback port and authentication token");
+}
+
+if (runtimeLogPath) {
+  appendRuntimeLifecycleLog("bootstrap", {
+    node: process.versions.node,
+    pid: process.pid,
+    port,
+    startedAtMs: runtimeStartedAtMs
+  });
+  process.on("uncaughtExceptionMonitor", (error, origin) => {
+    appendRuntimeLifecycleLog("uncaughtException", {
+      origin,
+      errorName: error?.name || "Error",
+      errorMessage: error?.message || String(error)
+    });
+  });
+  process.on("warning", (warning) => {
+    appendRuntimeLifecycleLog("warning", {
+      warningName: warning?.name || "Warning",
+      warningMessage: warning?.message || String(warning)
+    });
+  });
+  process.on("beforeExit", (code) => appendRuntimeLifecycleLog("beforeExit", { code }));
+  process.on("exit", (code) => appendRuntimeLifecycleLog("exit", { code }));
 }
 
 function json(res, status, value) {
@@ -1311,7 +1370,31 @@ const server = http.createServer(async (req, res) => {
   if (req.headers.authorization !== `Bearer ${token}`) return json(res, 401, { error: "unauthorized" });
   try {
     if (req.method === "GET" && req.url === "/health") {
-      return json(res, 200, { ok: true, node: process.versions.node, contractVersion: RUNTIME_CONTRACT_VERSION });
+      if (!runtimeLogPath) {
+        return json(res, 200, { ok: true, node: process.versions.node, contractVersion: RUNTIME_CONTRACT_VERSION });
+      }
+      const now = Date.now();
+      const gapMs = lastHealthRequestAtMs == null ? null : now - lastHealthRequestAtMs;
+      lastHealthRequestAtMs = now;
+      if (gapMs == null || gapMs >= 10_000) {
+        appendRuntimeLifecycleLog("healthAfterGap", {
+          gapMs: gapMs ?? "first",
+          uptimeMs: now - runtimeStartedAtMs,
+          activeRuns: runs.size,
+          pendingTools: pendingTools.size
+        });
+      }
+      return json(res, 200, {
+        ok: true,
+        node: process.versions.node,
+        contractVersion: RUNTIME_CONTRACT_VERSION,
+        runtimeId,
+        startedAtMs: runtimeStartedAtMs,
+        uptimeMs: now - runtimeStartedAtMs,
+        activeRuns: runs.size,
+        pendingTools: pendingTools.size,
+        rssBytes: process.memoryUsage().rss
+      });
     }
     if (req.method === "POST" && req.url === "/v1/models/resolve") {
       const value = await body(req);
@@ -1370,4 +1453,14 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+if (runtimeLogPath) {
+  server.on("listening", () => appendRuntimeLifecycleLog("serverListening", { port }));
+  server.on("close", () => appendRuntimeLifecycleLog("serverClosed", { port }));
+  server.on("error", (error) => appendRuntimeLifecycleLog("serverError", {
+    errorName: error?.name || "Error",
+    errorCode: error?.code || "none",
+    errorMessage: error?.message || String(error),
+    port
+  }));
+}
 server.listen(port, "127.0.0.1");
