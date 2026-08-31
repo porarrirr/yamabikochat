@@ -2669,7 +2669,7 @@ final class ChatRepository {
                         onToolActivity?(toolEvent)
                     case let .executionSnapshot(execution):
                         activityState.setExecution(execution)
-                    case .answerStart, .textDelta, .reasoningDelta, .completed:
+                    case .answerStart, .textDelta, .reasoningDelta, .rotation, .completed:
                         break
                     }
                 }

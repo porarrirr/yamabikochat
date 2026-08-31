@@ -11,6 +11,7 @@ struct ChatMessageToolActivity: Codable, FetchableRecord, MutablePersistableReco
     var providerTranscriptJSON: String?
     var attachmentPathsJSON: String?
     var piExecutionJSON: String?
+    var rotationNoticesJSON: String?
 
     init(
         id: Int64? = nil,
@@ -19,7 +20,8 @@ struct ChatMessageToolActivity: Codable, FetchableRecord, MutablePersistableReco
         stepsJSON: String,
         providerTranscriptJSON: String? = nil,
         attachmentPathsJSON: String? = nil,
-        piExecutionJSON: String? = nil
+        piExecutionJSON: String? = nil,
+        rotationNoticesJSON: String? = nil
     ) {
         self.id = id
         self.messageId = messageId
@@ -28,6 +30,7 @@ struct ChatMessageToolActivity: Codable, FetchableRecord, MutablePersistableReco
         self.providerTranscriptJSON = providerTranscriptJSON
         self.attachmentPathsJSON = attachmentPathsJSON
         self.piExecutionJSON = piExecutionJSON
+        self.rotationNoticesJSON = rotationNoticesJSON
     }
 
     mutating func didInsert(_ inserted: InsertionSuccess) {
@@ -60,12 +63,20 @@ struct ChatMessageToolActivity: Codable, FetchableRecord, MutablePersistableReco
         return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 
+    var rotationNotices: [ProviderRotationNotice] {
+        guard let rotationNoticesJSON,
+              let data = rotationNoticesJSON.data(using: .utf8)
+        else { return [] }
+        return (try? JSONDecoder().decode([ProviderRotationNotice].self, from: data)) ?? []
+    }
+
     var payload: ToolActivityPayload {
         ToolActivityPayload(
             steps: steps,
             providerTranscript: providerTranscript ?? [],
             attachmentPaths: attachmentPaths,
-            piExecution: piExecution
+            piExecution: piExecution,
+            rotationNotices: rotationNotices
         )
     }
 }
@@ -114,21 +125,24 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
     var providerTranscript: [ProviderRequestMessage] = []
     var attachmentPaths: [String] = []
     var piExecution: JSONValue? = nil
+    var rotationNotices: [ProviderRotationNotice] = []
 
     init(
         steps: [ToolActivityStep] = [],
         providerTranscript: [ProviderRequestMessage] = [],
         attachmentPaths: [String] = [],
-        piExecution: JSONValue? = nil
+        piExecution: JSONValue? = nil,
+        rotationNotices: [ProviderRotationNotice] = []
     ) {
         self.steps = steps
         self.providerTranscript = providerTranscript
         self.attachmentPaths = attachmentPaths
         self.piExecution = piExecution
+        self.rotationNotices = rotationNotices
     }
 
     private enum CodingKeys: String, CodingKey {
-        case steps, providerTranscript, attachmentPaths, piExecution
+        case steps, providerTranscript, attachmentPaths, piExecution, rotationNotices
     }
 
     init(from decoder: Decoder) throws {
@@ -137,10 +151,12 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
         providerTranscript = try container.decodeIfPresent([ProviderRequestMessage].self, forKey: .providerTranscript) ?? []
         attachmentPaths = try container.decodeIfPresent([String].self, forKey: .attachmentPaths) ?? []
         piExecution = try container.decodeIfPresent(JSONValue.self, forKey: .piExecution)
+        rotationNotices = try container.decodeIfPresent([ProviderRotationNotice].self, forKey: .rotationNotices) ?? []
     }
 
     var hasPersistableContent: Bool {
-        !steps.isEmpty || !providerTranscript.isEmpty || !attachmentPaths.isEmpty || piExecution != nil
+        !steps.isEmpty || !providerTranscript.isEmpty || !attachmentPaths.isEmpty
+            || piExecution != nil || !rotationNotices.isEmpty
     }
 
     mutating func apply(_ event: ToolActivityEvent) {

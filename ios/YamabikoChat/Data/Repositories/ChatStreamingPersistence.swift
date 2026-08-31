@@ -287,6 +287,15 @@ enum ChatStreamSession {
                 isFinal: false,
                 onStreamingSnapshot: onStreamingSnapshot
             )
+        case let .rotation(notice):
+            toolActivity.rotationNotices.append(notice)
+            publishStreamingSnapshot(
+                targetId: target.snapshotMessageId,
+                coordinator: coordinator,
+                toolActivity: toolActivity,
+                isFinal: false,
+                onStreamingSnapshot: onStreamingSnapshot
+            )
         case let .executionSnapshot(execution):
             toolActivity.piExecution = execution
             if let providerTranscript = providerTranscript(from: execution) {

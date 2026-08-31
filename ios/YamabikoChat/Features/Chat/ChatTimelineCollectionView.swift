@@ -1011,6 +1011,11 @@ private struct ChatMessageRow: View {
     private var toolSteps: [ToolActivityStep] {
         streamingSnapshot?.toolActivity?.steps ?? message.displayToolActivity?.steps ?? []
     }
+    private var rotationNotices: [ProviderRotationNotice] {
+        streamingSnapshot?.toolActivity?.rotationNotices
+            ?? message.displayToolActivity?.rotationNotices
+            ?? []
+    }
     private var artifacts: [ChatArtifactPresentationItem] {
         ChatArtifactPresentation.items(from: responseText, isStreaming: isStreaming)
     }
@@ -1042,6 +1047,9 @@ private struct ChatMessageRow: View {
                 }
             } else {
                 VStack(alignment: .leading, spacing: 10) {
+                    ForEach(rotationNotices) { notice in
+                        ProviderRotationNoticeView(notice: notice)
+                    }
                     if !toolSteps.isEmpty {
                         ChatRunSummaryButton(steps: toolSteps) {
                             onRoute(.runInspector(messageID: message.id, steps: toolSteps))
@@ -1188,6 +1196,70 @@ private struct ChatMessageRow: View {
 
     private var attachmentItems: [ChatAttachmentItem] {
         attachmentPaths.map(ChatAttachmentItem.init(rawValue:))
+    }
+}
+
+private struct ProviderRotationNoticeView: View {
+    let notice: ProviderRotationNotice
+
+    private var title: String {
+        if notice.changedModel && notice.changedKey {
+            return L10n.text("GeminiのモデルとAPIキーを切り替えました")
+        }
+        if notice.changedModel {
+            return L10n.text("Geminiのモデルを切り替えました")
+        }
+        return L10n.text("GeminiのAPIキーを切り替えました")
+    }
+
+    private var detail: String {
+        var parts: [String] = []
+        if notice.changedModel {
+            parts.append("\(notice.fromModel) → \(notice.toModel)")
+        }
+        if notice.changedKey {
+            parts.append("\(keyLabel(notice.fromKeyID)) → \(keyLabel(notice.toKeyID))")
+        }
+        parts.append(
+            notice.reason == .authenticationFailed
+                ? L10n.text("認証エラーのため")
+                : L10n.text("利用制限のため")
+        )
+        return parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.orange)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.orange.opacity(0.16), lineWidth: 0.5)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title)。\(detail)")
+    }
+
+    private func keyLabel(_ keyID: String) -> String {
+        if keyID == "default" {
+            return L10n.text("メインAPIキー")
+        }
+        let name = keyID.hasPrefix("slot:") ? String(keyID.dropFirst("slot:".count)) : keyID
+        return L10n.format("APIキー「%@」", name)
     }
 }
 

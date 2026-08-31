@@ -360,6 +360,49 @@ final class ChatStreamSessionTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode([String].self, from: attachmentData), ["/tmp/generated.png"])
     }
 
+    func testRunPublishesAndPersistsProviderRotationNotice() async throws {
+        let conversations = try makeConversations()
+        let conversationId = try conversations.createConversation(
+            title: "test",
+            model: "gemini-2.5-flash",
+            provider: "GEMINI"
+        )
+        let messageId = try conversations.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "model", text: "", createdAtMs: 1)
+        )
+        let notice = ProviderRotationNotice(
+            id: "rotation-1",
+            provider: "GEMINI",
+            fromModel: "gemini-2.5-flash",
+            toModel: "gemini-2.5-flash-lite",
+            fromKeyID: "default",
+            toKeyID: "slot:secondary",
+            reason: .rateLimited,
+            createdAtMs: 2
+        )
+        let snapshots = StreamingSnapshotCollector()
+        let stream = AsyncThrowingStream<ProviderStreamEvent, Error> { continuation in
+            continuation.yield(.rotation(notice))
+            continuation.yield(.completed(ProviderResponse(text: "done")))
+            continuation.finish()
+        }
+
+        let result = try await ChatStreamSession.run(
+            stream: stream,
+            conversations: conversations,
+            kind: .message(messageId: messageId),
+            onStreamEvent: nil,
+            onStreamingSnapshot: { snapshots.append($0) }
+        )
+
+        XCTAssertEqual(result.toolActivity?.rotationNotices, [notice])
+        XCTAssertTrue(snapshots.values.contains { $0.toolActivity?.rotationNotices == [notice] })
+        XCTAssertEqual(
+            try conversations.fetchFullMessage(id: messageId)?.toolActivity?.rotationNotices,
+            [notice]
+        )
+    }
+
     func testRunPersistsPiExecutionWithoutToolSteps() async throws {
         let conversations = try makeConversations()
         let conversationId = try conversations.createConversation(title: "test", model: "gpt", provider: "OPENAI")

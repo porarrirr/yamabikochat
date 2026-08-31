@@ -95,6 +95,7 @@ final class ProviderGateway {
             case .answerStart, .textDelta: break
             case let .reasoningDelta(delta): reasoning += delta
             case let .toolActivity(activity): toolActivity.apply(activity)
+            case let .rotation(notice): toolActivity.rotationNotices.append(notice)
             case let .executionSnapshot(execution): toolActivity.piExecution = execution
             case let .completed(response): completed = response
             }
@@ -111,6 +112,7 @@ final class ProviderGateway {
             if !toolActivity.steps.isEmpty { merged.steps = toolActivity.steps }
             if !toolActivity.providerTranscript.isEmpty { merged.providerTranscript = toolActivity.providerTranscript }
             if !toolActivity.attachmentPaths.isEmpty { merged.attachmentPaths = toolActivity.attachmentPaths }
+            if !toolActivity.rotationNotices.isEmpty { merged.rotationNotices = toolActivity.rotationNotices }
             merged.piExecution = response.piExecution ?? toolActivity.piExecution
             response.toolActivity = merged
         }
@@ -337,6 +339,7 @@ final class ProviderGateway {
     ) async throws -> AsyncThrowingStream<ProviderStreamEvent, Error> {
         var initialCandidateIndex = 0
         var initialStream: AsyncThrowingStream<ProviderStreamEvent, Error>
+        var initialRotationNotices: [ProviderRotationNotice] = []
         while true {
             let candidate = candidates[initialCandidateIndex]
             var candidateRequest = request
@@ -372,16 +375,26 @@ final class ProviderGateway {
                     requestID: requestID,
                     error: error
                 )
+                initialRotationNotices.append(
+                    Self.geminiRotationNotice(
+                        from: candidate,
+                        to: candidates[nextIndex],
+                        eligibility: eligibility
+                    )
+                )
                 initialCandidateIndex = nextIndex
             }
         }
 
         let preparedCandidateIndex = initialCandidateIndex
         let preparedInitialStream = initialStream
+        let preparedRotationNotices = initialRotationNotices
         return AsyncThrowingStream { continuation in
             let task = Task {
                 var candidateIndex = preparedCandidateIndex
                 var preparedStream: AsyncThrowingStream<ProviderStreamEvent, Error>? = preparedInitialStream
+
+                preparedRotationNotices.forEach { continuation.yield(.rotation($0)) }
 
                 while candidateIndex < candidates.count {
                     let candidate = candidates[candidateIndex]
@@ -445,6 +458,15 @@ final class ProviderGateway {
                                 eligibility: eligibility,
                                 requestID: requestID,
                                 error: error
+                            )
+                            continuation.yield(
+                                .rotation(
+                                    Self.geminiRotationNotice(
+                                        from: candidate,
+                                        to: candidates[nextIndex],
+                                        eligibility: eligibility
+                                    )
+                                )
                             )
                             candidateIndex = nextIndex
                             continue
@@ -540,13 +562,30 @@ final class ProviderGateway {
         )
     }
 
+    private static func geminiRotationNotice(
+        from candidate: GeminiRotationCandidate,
+        to nextCandidate: GeminiRotationCandidate,
+        eligibility: GeminiRotationEligibility
+    ) -> ProviderRotationNotice {
+        ProviderRotationNotice(
+            id: UUID().uuidString,
+            provider: "GEMINI",
+            fromModel: candidate.model,
+            toModel: nextCandidate.model,
+            fromKeyID: candidate.keyID,
+            toKeyID: nextCandidate.keyID,
+            reason: eligibility == .authFailure ? .authenticationFailed : .rateLimited,
+            createdAtMs: Int64(Date().timeIntervalSince1970 * 1_000)
+        )
+    }
+
     private static func commitsGeminiCandidate(_ event: ProviderStreamEvent) -> Bool {
         switch event {
         case let .textDelta(value), let .reasoningDelta(value):
             return value.trimmedNonEmpty != nil
         case .toolActivity, .completed:
             return true
-        case .answerStart, .executionSnapshot:
+        case .answerStart, .rotation, .executionSnapshot:
             return false
         }
     }

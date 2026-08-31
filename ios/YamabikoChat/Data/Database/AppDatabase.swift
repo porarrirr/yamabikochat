@@ -917,6 +917,15 @@ enum AppDatabase {
             }
         }
 
+        migrator.registerMigration("v26_provider_rotation_notices") { db in
+            let columns = Set(try db.columns(in: "chat_message_tool_activity").map(\.name))
+            if !columns.contains("rotationNoticesJSON") {
+                try db.alter(table: "chat_message_tool_activity") { table in
+                    table.add(column: "rotationNoticesJSON", .text)
+                }
+            }
+        }
+
         return migrator
     }
 
@@ -958,6 +967,7 @@ enum AppDatabase {
                 providerTranscriptJSON TEXT,
                 attachmentPathsJSON TEXT,
                 piExecutionJSON TEXT,
+                rotationNoticesJSON TEXT,
                 CHECK (
                     (messageId IS NOT NULL AND variantId IS NULL)
                     OR (messageId IS NULL AND variantId IS NOT NULL)

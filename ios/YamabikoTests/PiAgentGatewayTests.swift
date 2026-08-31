@@ -501,6 +501,15 @@ final class PiAgentGatewayTests: XCTestCase {
         XCTAssertEqual(events.filter { $0 == .answerStart }.count, 1)
         XCTAssertFalse(events.contains(.executionSnapshot(.object(["failed": .bool(true)]))))
         XCTAssertTrue(events.contains(.completed(ProviderResponse(text: "rotated"))))
+        let rotation = try XCTUnwrap(events.compactMap { event -> ProviderRotationNotice? in
+            guard case let .rotation(notice) = event else { return nil }
+            return notice
+        }.first)
+        XCTAssertTrue(rotation.changedModel)
+        XCTAssertFalse(rotation.changedKey)
+        XCTAssertEqual(rotation.fromModel, "gemini-2.5-flash")
+        XCTAssertEqual(rotation.toModel, "gemini-2.5-flash-lite")
+        XCTAssertEqual(rotation.reason, .rateLimited)
     }
 
     func testGeminiAuthFailureSkipsRemainingModelsForBadKeyAndRemembersGoodCandidate() async throws {
@@ -543,6 +552,12 @@ final class PiAgentGatewayTests: XCTestCase {
         )
 
         XCTAssertEqual(response.text, "ok")
+        let rotation = try XCTUnwrap(response.toolActivity?.rotationNotices.first)
+        XCTAssertFalse(rotation.changedModel)
+        XCTAssertTrue(rotation.changedKey)
+        XCTAssertEqual(rotation.fromKeyID, "default")
+        XCTAssertEqual(rotation.toKeyID, "slot:slot-a")
+        XCTAssertEqual(rotation.reason, .authenticationFailed)
         XCTAssertEqual(pi.calls.map(\.configuration.apiKey), ["bad-key", "good-key"])
         XCTAssertEqual(pi.calls.map(\.configuration.model), ["gemini-2.5-flash", "gemini-2.5-flash"])
 

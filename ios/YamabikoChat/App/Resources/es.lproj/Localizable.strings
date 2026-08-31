@@ -560,3 +560,10 @@
 "%@パーセント" = "%@ por ciento";
 "OpenCode Go APIキーを入力してください" = "Introduce una clave API de OpenCode Go";
 "OpenCode Go使用状況を更新しました" = "Uso de OpenCode Go actualizado";
+"GeminiのモデルとAPIキーを切り替えました" = "Se cambiaron el modelo y la clave API de Gemini";
+"Geminiのモデルを切り替えました" = "Se cambió el modelo de Gemini";
+"GeminiのAPIキーを切り替えました" = "Se cambió la clave API de Gemini";
+"認証エラーのため" = "debido a un error de autenticación";
+"利用制限のため" = "debido a un límite de uso";
+"メインAPIキー" = "Clave API principal";
+"APIキー「%@」" = "Clave API «%@»";

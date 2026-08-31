@@ -55,6 +55,26 @@ struct ProviderResponse: Codable, Sendable, Equatable {
     var piExecution: JSONValue? = nil
 }
 
+struct ProviderRotationNotice: Codable, Sendable, Equatable, Identifiable {
+    enum Reason: String, Codable, Sendable {
+        case rateLimited
+        case authenticationFailed
+    }
+
+    var id: String
+    var provider: String
+    var fromModel: String
+    var toModel: String
+    /// Stable credential slot identifiers only. API key values must never enter this payload.
+    var fromKeyID: String
+    var toKeyID: String
+    var reason: Reason
+    var createdAtMs: Int64
+
+    var changedModel: Bool { fromModel != toModel }
+    var changedKey: Bool { fromKeyID != toKeyID }
+}
+
 extension ProviderUsage {
     func adding(_ other: ProviderUsage?) -> ProviderUsage {
         guard let other else { return self }
@@ -84,6 +104,7 @@ enum ProviderStreamEvent: Sendable, Equatable {
     case textDelta(String)
     case reasoningDelta(String)
     case toolActivity(ToolActivityEvent)
+    case rotation(ProviderRotationNotice)
     case executionSnapshot(JSONValue)
     case completed(ProviderResponse)
 }
@@ -99,7 +120,7 @@ extension ProviderStreamEvent {
             return delta.trimmedNonEmpty != nil
         case let .completed(response):
             return response.text.trimmedNonEmpty != nil
-        case .reasoningDelta, .toolActivity, .executionSnapshot:
+        case .reasoningDelta, .toolActivity, .rotation, .executionSnapshot:
             return false
         }
     }

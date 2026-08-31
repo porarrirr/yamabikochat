@@ -990,6 +990,7 @@ final class ConversationRepository: @unchecked Sendable {
         let stepsData = try JSONEncoder().encode(payload.steps)
         let transcriptData = try JSONEncoder().encode(payload.providerTranscript)
         let attachmentPathsData = try JSONEncoder().encode(payload.attachmentPaths)
+        let rotationNoticesData = try JSONEncoder().encode(payload.rotationNotices)
         let piExecutionData = try payload.piExecution.map { try JSONEncoder().encode($0) }
         var activity = ChatMessageToolActivity(
             messageId: messageId,
@@ -997,7 +998,8 @@ final class ConversationRepository: @unchecked Sendable {
             stepsJSON: String(decoding: stepsData, as: UTF8.self),
             providerTranscriptJSON: String(decoding: transcriptData, as: UTF8.self),
             attachmentPathsJSON: String(decoding: attachmentPathsData, as: UTF8.self),
-            piExecutionJSON: piExecutionData.map { String(decoding: $0, as: UTF8.self) }
+            piExecutionJSON: piExecutionData.map { String(decoding: $0, as: UTF8.self) },
+            rotationNoticesJSON: String(decoding: rotationNoticesData, as: UTF8.self)
         )
         try dbQueue.write { db in
             if let messageId {
