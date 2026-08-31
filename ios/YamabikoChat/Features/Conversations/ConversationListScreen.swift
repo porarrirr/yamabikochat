@@ -15,7 +15,6 @@ struct ConversationListScreen: View {
 
     var onSelect: (Int64) -> Void
     var onOpenSettings: () -> Void
-    var onClose: (() -> Void)? = nil
 
     @State private var navigationState: NavigationState = .conversations
     @State private var isDeleteConfirmationPresented = false
@@ -227,17 +226,6 @@ struct ConversationListScreen: View {
                     createConversationButton
                 }
 
-                if let onClose {
-                    Button {
-                        onClose()
-                    } label: {
-                        Image(systemName: "line.3.horizontal")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(.primary)
-                            .frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(.plain)
-                }
             }
 
             if !viewModel.isSelectionMode {

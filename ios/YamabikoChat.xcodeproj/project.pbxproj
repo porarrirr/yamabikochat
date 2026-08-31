@@ -49,6 +49,7 @@
 		291C1A234F38D6E7306487D0 /* AppGroupShareStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 649A758B922A87BCDED9F80D /* AppGroupShareStorage.swift */; };
 		29555BD490F34189056A684A /* ChatMessageVariant.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAB5DB55D3CE8664531EC01E /* ChatMessageVariant.swift */; };
 		2A8999A902854B3C516715B5 /* LiteLlmPricingRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46EC372D26102F3D22DE62C6 /* LiteLlmPricingRepository.swift */; };
+		2AA3B135472B92C6E18F93F0 /* DiagnosticsAppVersionHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FA211EA044789C003827C27 /* DiagnosticsAppVersionHistoryTests.swift */; };
 		2AB5391EDBA3C46611B33496 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = F797EB5B4E9A1A120BD718DB /* Localizable.strings */; };
 		2EAD672EDECBCA4C9DFEFC96 /* OpenRouterModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1DCF3DC302B2389310C7088 /* OpenRouterModels.swift */; };
 		2F385FBF449F22A1560291F6 /* SvgCodeExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25418095A457767B82727AED /* SvgCodeExtractor.swift */; };
@@ -357,6 +358,7 @@
 		1B0A523D5DBB7F1F9FA14467 /* ChatPresentationTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPresentationTypes.swift; sourceTree = "<group>"; };
 		1DDFDE867E825EB89B66D36A /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
 		1DE067888B1007F0A3129E03 /* ChatViewModelSystemPromptLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModelSystemPromptLabelTests.swift; sourceTree = "<group>"; };
+		1FA211EA044789C003827C27 /* DiagnosticsAppVersionHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsAppVersionHistoryTests.swift; sourceTree = "<group>"; };
 		1FF77399450389CF5892A94D /* AppleIntelligenceProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIntelligenceProviderClient.swift; sourceTree = "<group>"; };
 		22F0C11892572A2CBD1C39E7 /* AttachmentRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentRepositoryTests.swift; sourceTree = "<group>"; };
 		250C00C07AEDED8FABE7AE06 /* WebSearchToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSearchToolTests.swift; sourceTree = "<group>"; };
@@ -1094,6 +1096,7 @@
 				47940928BCA24ACBA0867772 /* ConversationListViewModelTests.swift */,
 				9232E21606568B977401E39A /* ConversationStatsTests.swift */,
 				165EBDEB744C9307E8CCF4C7 /* ConversationVariantSelectionTests.swift */,
+				1FA211EA044789C003827C27 /* DiagnosticsAppVersionHistoryTests.swift */,
 				05C37D0D1E0B6B81B135B457 /* DiagnosticsLogSanitizerTests.swift */,
 				52D76F0593BAF0C81C185D1A /* FusionChatRepositoryTests.swift */,
 				AC16579AD802F9E4B31F7F37 /* FusionJudgeParserTests.swift */,
@@ -1523,6 +1526,7 @@
 				7E687F15AA9ED90CC7CABE7B /* ConversationListViewModelTests.swift in Sources */,
 				817E8B477207AC678046F3B4 /* ConversationStatsTests.swift in Sources */,
 				A258A4BFE2E6449D6D1EC9FE /* ConversationVariantSelectionTests.swift in Sources */,
+				2AA3B135472B92C6E18F93F0 /* DiagnosticsAppVersionHistoryTests.swift in Sources */,
 				C87C65B5CBF14396F4EEA0EF /* DiagnosticsLogSanitizerTests.swift in Sources */,
 				CB84951B547ABF8B5F8165A8 /* FusionChatRepositoryTests.swift in Sources */,
 				7A671B033CB726045419F3DC /* FusionJudgeParserTests.swift in Sources */,

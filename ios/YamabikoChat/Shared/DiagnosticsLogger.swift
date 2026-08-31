@@ -17,6 +17,44 @@ enum DiagnosticsLogCategory: String {
     case settings = "SETTINGS"
 }
 
+struct DiagnosticsAppVersion: Equatable {
+    let version: String
+    let build: String
+}
+
+enum DiagnosticsAppVersionHistory {
+    private static let lastLaunchedVersionKey = "DiagnosticsLogger.lastLaunchedAppVersion"
+    private static let versionField = "version"
+    private static let buildField = "build"
+
+    static func recordLaunch(
+        current: DiagnosticsAppVersion,
+        defaults: UserDefaults = .standard,
+        onVersionChange: (DiagnosticsAppVersion) -> Void
+    ) {
+        let storedValue = defaults.dictionary(forKey: lastLaunchedVersionKey)
+        let previous = storedValue.flatMap { value -> DiagnosticsAppVersion? in
+            guard let version = value[versionField] as? String,
+                  let build = value[buildField] as? String else {
+                return nil
+            }
+            return DiagnosticsAppVersion(version: version, build: build)
+        }
+
+        if let previous, previous != current {
+            onVersionChange(previous)
+        }
+
+        defaults.set(
+            [
+                versionField: current.version,
+                buildField: current.build
+            ],
+            forKey: lastLaunchedVersionKey
+        )
+    }
+}
+
 enum DiagnosticsLogger {
     #if DEBUG
     private static let fileName = "yamabiko_diagnostics.log"
@@ -50,6 +88,20 @@ enum DiagnosticsLogger {
         #if DEBUG
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+        let currentVersion = DiagnosticsAppVersion(version: version, build: build)
+        DiagnosticsAppVersionHistory.recordLaunch(current: currentVersion) { previousVersion in
+            log(
+                "App version changed from \(previousVersion.version)(\(previousVersion.build)) " +
+                    "to \(currentVersion.version)(\(currentVersion.build))",
+                category: .app,
+                metadata: [
+                    "previousVersion": previousVersion.version,
+                    "previousBuild": previousVersion.build,
+                    "currentVersion": currentVersion.version,
+                    "currentBuild": currentVersion.build
+                ]
+            )
+        }
         let device = UIDevice.current
         log("Diagnostics enabled. version=\(version)(\(build)) device=\(device.model) ios=\(device.systemVersion)")
         Task { @MainActor in

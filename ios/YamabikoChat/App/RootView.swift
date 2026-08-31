@@ -179,18 +179,6 @@ struct RootView: View {
             SettingsScreen(viewModel: settingsViewModel, initialTab: screenshotSettingsTab)
                 .environmentObject(container)
         }
-        .sheet(isPresented: $appState.isConversationHistoryPresented) {
-            ConversationHistorySheet(
-                viewModel: listViewModel,
-                settingsViewModel: settingsViewModel,
-                selection: $appState.selectedConversationID,
-                onSelect: { id in
-                    selectConversation(id: id, closeHistory: true)
-                }
-            )
-            .environmentObject(container)
-            .environmentObject(appState)
-        }
         .preferredColorScheme(resolvedColorScheme)
         .tint(resolvedTintColor)
         .overlay {
@@ -314,7 +302,7 @@ struct RootView: View {
         try? await Task.sleep(nanoseconds: 500_000_000)
     }
 
-    private func selectConversation(id: Int64, closeHistory: Bool = false) {
+    private func selectConversation(id: Int64) {
         if appState.selectedConversationID != id {
             discardSelectedSecretConversationIfNeeded(keepSidebar: false)
         }
@@ -322,9 +310,6 @@ struct RootView: View {
         appState.selectedConversationID = id
         keepSidebarAfterSecretDiscard = false
         setPreferredCompactColumn(.detail)
-        if closeHistory {
-            appState.isConversationHistoryPresented = false
-        }
     }
 
     private func importSharePayloadIfNeeded() {
@@ -419,39 +404,5 @@ private struct ConversationDetailHost: View {
             .onDisappear {
                 viewModel.discardSecretDataFromMemory()
             }
-    }
-}
-
-private struct ConversationHistorySheet: View {
-    @EnvironmentObject private var container: AppContainer
-    @Environment(\.dismiss) private var dismiss
-
-    @ObservedObject var viewModel: ConversationListViewModel
-    @ObservedObject var settingsViewModel: SettingsViewModel
-    @Binding var selection: Int64?
-
-    let onSelect: (Int64) -> Void
-    @State private var isSettingsPresented = false
-
-    var body: some View {
-        NavigationStack {
-            ConversationListScreen(
-                viewModel: viewModel,
-                selection: $selection,
-                onSelect: { id in
-                    onSelect(id)
-                },
-                onOpenSettings: {
-                    isSettingsPresented = true
-                },
-                onClose: {
-                    dismiss()
-                }
-            )
-        }
-        .sheet(isPresented: $isSettingsPresented) {
-            SettingsScreen(viewModel: settingsViewModel)
-                .environmentObject(container)
-        }
     }
 }
