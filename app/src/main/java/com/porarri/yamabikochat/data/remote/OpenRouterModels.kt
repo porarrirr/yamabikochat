@@ -157,6 +157,33 @@ data class SimpleModel(
     }
 }
 
+private val modelSearchSeparator = Regex("[^\\p{L}\\p{N}]+")
+
+fun SimpleModel.matchesSearchQuery(query: String): Boolean {
+    if (query.isBlank()) return true
+
+    val searchTerms = query.normalizedModelSearchText()
+        .split(' ')
+        .filter { it.isNotEmpty() }
+    if (searchTerms.isEmpty()) return false
+
+    val searchableFields = listOf(id, name, provider).map { field ->
+        val normalized = field.normalizedModelSearchText()
+        normalized to normalized.replace(" ", "")
+    }
+    return searchTerms.all { term ->
+        searchableFields.any { (normalized, compact) ->
+            term in normalized || term in compact
+        }
+    }
+}
+
+private fun String.normalizedModelSearchText(): String =
+    lowercase()
+        .split(modelSearchSeparator)
+        .filter { it.isNotEmpty() }
+        .joinToString(" ")
+
 @Serializable
 data class ModelEndpointsEnvelope(
     val data: ModelEndpointsData

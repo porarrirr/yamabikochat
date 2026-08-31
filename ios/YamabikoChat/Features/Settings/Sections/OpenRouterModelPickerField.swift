@@ -67,14 +67,7 @@ private struct OpenRouterModelListView: View {
     @State private var searchQuery = ""
 
     private var filteredModels: [SimpleModel] {
-        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        if query.isEmpty { return models }
-        let lower = query.lowercased()
-        return models.filter {
-            $0.id.lowercased().contains(lower) ||
-                $0.name.lowercased().contains(lower) ||
-                $0.provider.lowercased().contains(lower)
-        }
+        models.filter { $0.matchesSearchQuery(searchQuery) }
     }
 
     var body: some View {

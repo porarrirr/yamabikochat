@@ -367,14 +367,7 @@ final class SettingsViewModel: ObservableObject {
     }
 
     var filteredOpenRouterModels: [SimpleModel] {
-        let query = modelSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        if query.isEmpty { return openRouterModels }
-        let lower = query.lowercased()
-        return openRouterModels.filter {
-            $0.id.lowercased().contains(lower) ||
-                $0.name.lowercased().contains(lower) ||
-                $0.provider.lowercased().contains(lower)
-        }
+        openRouterModels.filter { $0.matchesSearchQuery(modelSearchQuery) }
     }
 
     func setStreamingEnabled(_ enabled: Bool) {

@@ -189,6 +189,31 @@ struct SimpleModel: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+extension SimpleModel {
+    func matchesSearchQuery(_ query: String) -> Bool {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else { return true }
+
+        let searchTerms = Self.normalizedSearchText(trimmedQuery).split(separator: " ")
+        guard !searchTerms.isEmpty else { return false }
+
+        let searchableFields = [id, name, provider].map(Self.normalizedSearchText)
+        return searchTerms.allSatisfy { term in
+            searchableFields.contains { field in
+                field.contains(term) || field.replacingOccurrences(of: " ", with: "").contains(term)
+            }
+        }
+    }
+
+    private static func normalizedSearchText(_ value: String) -> String {
+        value
+            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+            .unicodeScalars
+            .map { CharacterSet.alphanumerics.contains($0) ? String($0) : " " }
+            .joined()
+    }
+}
+
 struct ModelEndpoint: Codable, Sendable, Equatable, Identifiable {
     var id: String { tag ?? "\(name)_\(providerName ?? "")_\(quantization ?? "")" }
     var name: String

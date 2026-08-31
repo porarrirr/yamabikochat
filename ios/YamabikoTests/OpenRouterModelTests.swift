@@ -121,6 +121,25 @@ private actor SupersedingOpenRouterEndpointsHTTPClient: HTTPClientProtocol {
 }
 
 final class OpenRouterModelTests: XCTestCase {
+    func testModelSearchMatchesNonAdjacentTerms() {
+        let model = SimpleModel(
+            id: "deepseek/deepseek-v4-flash-0731",
+            name: "DeepSeek V4 Flash 0731",
+            provider: "deepseek",
+            contextLength: 131_072,
+            promptPricePerMillion: 0,
+            completionPricePerMillion: 0,
+            isFree: true,
+            availableProviders: [],
+            availableQuantizations: []
+        )
+
+        XCTAssertTrue(model.matchesSearchQuery("v4 0731"))
+        XCTAssertTrue(model.matchesSearchQuery("0731 DEEPSEEK"))
+        XCTAssertTrue(model.matchesSearchQuery("deepseek-v4"))
+        XCTAssertFalse(model.matchesSearchQuery("v4 0801"))
+    }
+
     func testSimpleModelConversionMarksFreeModel() {
         let model = OpenRouterModel(
             id: "meta-llama/llama-3.1-8b-instruct:free",

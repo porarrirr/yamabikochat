@@ -353,13 +353,7 @@ final class OpenRouterModelService {
     }
 
     func searchModels(query: String) -> [SimpleModel] {
-        let lower = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if lower.isEmpty { return modelsSubject.value }
-        return modelsSubject.value.filter {
-            $0.id.lowercased().contains(lower) ||
-                $0.name.lowercased().contains(lower) ||
-                $0.provider.lowercased().contains(lower)
-        }
+        modelsSubject.value.filter { $0.matchesSearchQuery(query) }
     }
 
     func getModelsByProvider(_ provider: String) -> [SimpleModel] {

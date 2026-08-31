@@ -44,11 +44,12 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.porarri.yamabikochat.data.remote.SimpleModel
+import com.porarri.yamabikochat.data.remote.matchesSearchQuery
 import com.porarri.yamabikochat.ui.components.YamabikoOption
 import com.porarri.yamabikochat.ui.components.YamabikoOptionBottomSheet
 import com.porarri.yamabikochat.ui.components.YamabikoSelectRow
 import com.porarri.yamabikochat.ui.components.YamabikoTextField
-import com.porarri.yamabikochat.data.remote.SimpleModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,9 +79,7 @@ fun OpenRouterModelSelector(
 
     val filteredModels = remember(searchQuery, selectedProvider, models) {      
         models.filter { model ->
-            val matchesQuery = searchQuery.isBlank() ||
-                model.name.contains(searchQuery, ignoreCase = true) ||
-                model.provider.contains(searchQuery, ignoreCase = true)
+            val matchesQuery = model.matchesSearchQuery(searchQuery)
             val matchesProvider = selectedProvider?.let { provider ->
                 model.provider.equals(provider, ignoreCase = true)
             } ?: true

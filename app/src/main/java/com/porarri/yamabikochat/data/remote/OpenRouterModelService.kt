@@ -164,14 +164,7 @@ class OpenRouterModelService(
     }
     
     fun searchModels(query: String): List<SimpleModel> {
-        if (query.isBlank()) return _models.value
-        
-        val lowerQuery = query.lowercase()
-        return _models.value.filter { model ->
-            model.name.lowercase().contains(lowerQuery) ||
-            model.id.lowercase().contains(lowerQuery) ||
-            model.provider.lowercase().contains(lowerQuery)
-        }
+        return _models.value.filter { model -> model.matchesSearchQuery(query) }
     }
     
     fun getModelsByProvider(provider: String): List<SimpleModel> {
