@@ -284,13 +284,24 @@ struct ConversationListScreen: View {
         } label: {
             if showsExpandedHeaderActions {
                 Label(L10n.text("選択"), systemImage: "checkmark.circle")
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 44)
+                    .background(
+                        Capsule()
+                            .fill(Color(uiColor: .secondarySystemFill))
+                    )
             } else {
                 Image(systemName: "checkmark.circle")
                     .frame(width: 44, height: 44)
+                    .background(
+                        Circle()
+                            .fill(Color(uiColor: .secondarySystemFill))
+                    )
             }
         }
         .font(.body.weight(.semibold))
-        .buttonStyle(.bordered)
+        .foregroundStyle(.primary)
+        .buttonStyle(.plain)
         .accessibilityLabel(Text(L10n.text("会話を選択")))
         .accessibilityIdentifier("conversation-selection-button")
     }
@@ -302,13 +313,24 @@ struct ConversationListScreen: View {
         } label: {
             if showsExpandedHeaderActions {
                 Label(L10n.text("新規"), systemImage: "square.and.pencil")
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 44)
+                    .background(
+                        Capsule()
+                            .fill(Color(uiColor: .secondarySystemFill))
+                    )
             } else {
                 Image(systemName: "square.and.pencil")
                     .frame(width: 44, height: 44)
+                    .background(
+                        Circle()
+                            .fill(Color(uiColor: .secondarySystemFill))
+                    )
             }
         }
         .font(.body.weight(.semibold))
-        .buttonStyle(.borderedProminent)
+        .foregroundStyle(.primary)
+        .buttonStyle(.plain)
         .accessibilityLabel(Text(L10n.text("新しいチャット")))
         .accessibilityIdentifier("sidebar-new-chat")
     }
