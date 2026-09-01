@@ -767,16 +767,47 @@ struct ChatScreen: View {
             }
 
             if !viewModel.skillAutocompleteSuggestions.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(viewModel.skillAutocompleteSuggestions, id: \.self) { name in
-                            Button("$\(name)") { viewModel.selectSkillAutocomplete(name) }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
+                VStack(spacing: 0) {
+                    ForEach(Array(viewModel.skillAutocompleteSuggestions.enumerated()), id: \.element.id) { index, skill in
+                        Button {
+                            viewModel.selectSkillAutocomplete(skill.name)
+                            isComposerFocused = true
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "wand.and.stars")
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundStyle(Color.chatAccent)
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(skill.name)
+                                        .font(.body.weight(.medium))
+                                        .foregroundStyle(.primary)
+                                    Text(skill.description)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .contentShape(Rectangle())
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 11)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text("@\(skill.name)"))
+                        .accessibilityIdentifier("chat-skill-suggestion-\(skill.name)")
+
+                        if index < viewModel.skillAutocompleteSuggestions.count - 1 {
+                            Divider().padding(.leading, 50)
                         }
                     }
-                    .padding(.horizontal, 10)
                 }
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(Color(uiColor: .separator).opacity(0.24), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.12), radius: 12, y: 5)
             }
 
             composerInputCard

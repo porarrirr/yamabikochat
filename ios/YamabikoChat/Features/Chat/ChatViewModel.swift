@@ -39,7 +39,7 @@ final class ChatViewModel: ObservableObject {
     }
     @Published private(set) var isSecretConversation: Bool = false
     @Published private(set) var conversationTitle: String = "New Chat"
-    @Published private(set) var enabledSkillNames: [String] = []
+    @Published private(set) var enabledSkills: [AgentSkillCatalogEntry] = []
     @Published private(set) var conversationStats: ConversationStats = .init()
 
     let speechService = SpeechRecognitionService()
@@ -117,9 +117,13 @@ final class ChatViewModel: ObservableObject {
         self.attachmentRepository = attachmentRepository
 
         skillRepository?.skillsPublisher
-            .map { $0.filter(\.isEnabled).map { $0.manifest.name }.sorted() }
+            .map { skills in
+                skills.filter(\.isEnabled)
+                    .map { AgentSkillCatalogEntry(name: $0.manifest.name, description: $0.manifest.description) }
+                    .sorted { $0.name < $1.name }
+            }
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in self?.enabledSkillNames = $0 }
+            .sink { [weak self] in self?.enabledSkills = $0 }
             .store(in: &cancellables)
 
         repository.reasoningEffortCatalogPublisher()
@@ -207,11 +211,9 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    var skillAutocompleteSuggestions: [String] {
-        guard let match = inputText.range(of: #"(?:^|\s)\$([a-z0-9-]*)$"#, options: .regularExpression),
-              let dollar = inputText[match].lastIndex(of: "$") else { return [] }
-        let prefix = String(inputText[inputText.index(after: dollar)...])
-        return enabledSkillNames.filter { prefix.isEmpty || $0.hasPrefix(prefix) }.prefix(6).map { $0 }
+    var skillAutocompleteSuggestions: [AgentSkillCatalogEntry] {
+        guard let prefix = AgentSkillInvocationSyntax.autocompletePrefix(in: inputText) else { return [] }
+        return enabledSkills.filter { prefix.isEmpty || $0.name.hasPrefix(prefix) }.prefix(6).map { $0 }
     }
 
     var visibleContextUsage: ContextUsage? {
@@ -255,9 +257,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     func selectSkillAutocomplete(_ name: String) {
-        guard let match = inputText.range(of: #"(?:^|\s)\$([a-z0-9-]*)$"#, options: .regularExpression),
-              let dollar = inputText[match].lastIndex(of: "$") else { return }
-        inputText.replaceSubrange(dollar..<inputText.endIndex, with: "$\(name) ")
+        inputText = AgentSkillInvocationSyntax.completingAutocomplete(in: inputText, with: name)
     }
 
     func applySharedText(_ text: String?) {

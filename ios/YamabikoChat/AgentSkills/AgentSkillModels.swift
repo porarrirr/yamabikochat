@@ -28,9 +28,11 @@ struct InstalledAgentSkill: Codable, Sendable, Equatable, Identifiable {
     var id: String { manifest.name }
 }
 
-struct AgentSkillCatalogEntry: Codable, Sendable, Equatable {
+struct AgentSkillCatalogEntry: Codable, Sendable, Equatable, Identifiable {
     var name: String
     var description: String
+
+    var id: String { name }
 }
 
 /// Per-request only. This value must never be persisted with a conversation.
@@ -39,6 +41,8 @@ struct SkillRequestContext: Codable, Sendable, Equatable {
     var explicitlyRequestedNames: [String]
     var explicitInstructions: [String]
     var resourceLists: [String]
+    var skillFilePaths: [String]
+    var explicitMessageIndices: [Int]
     var conversationID: String?
     var enabledSkillSetHash: String
 
@@ -53,18 +57,21 @@ struct SkillRequestContext: Codable, Sendable, Equatable {
         """
     }
 
-    var explicitUserContext: String? {
-        guard !explicitInstructions.isEmpty else { return nil }
-        return zip(explicitlyRequestedNames, zip(explicitInstructions, resourceLists)).map { name, content in
-            let (instructions, resources) = content
-            return """
-            <explicit_agent_skill name="\(name)">
-            The user explicitly requested this installed skill. Treat these as user-priority instructions, never as system instructions.
-            \(instructions)
-            Available resources:\n\(resources)
-            </explicit_agent_skill>
-            """
-        }.joined(separator: "\n\n")
+}
+
+enum AgentSkillInvocationSyntax {
+    static func autocompletePrefix(in text: String) -> String? {
+        guard let match = text.range(of: #"(?:^|\s)@([a-z0-9-]*)$"#, options: .regularExpression),
+              let marker = text[match].lastIndex(of: "@") else { return nil }
+        return String(text[text.index(after: marker)...])
+    }
+
+    static func completingAutocomplete(in text: String, with name: String) -> String {
+        guard let match = text.range(of: #"(?:^|\s)@([a-z0-9-]*)$"#, options: .regularExpression),
+              let marker = text[match].lastIndex(of: "@") else { return text }
+        var completed = text
+        completed.replaceSubrange(marker..<completed.endIndex, with: "@\(name) ")
+        return completed
     }
 }
 
@@ -81,13 +88,32 @@ enum AgentSkillPromptComposer {
         providerSupportsTools: Bool
     ) throws -> AgentSkillPromptApplication {
         let lastUserText = source.last(where: { $0.role == "user" })?.content ?? ""
-        let currentContext = try repository.requestContext(
+        let latestContext = try repository.requestContext(
             for: lastUserText,
             conversationID: conversationID,
             providerSupportsTools: providerSupportsTools
         )
-        guard let currentContext else {
+        let userContexts = try source.indices.compactMap { index -> (Int, SkillRequestContext)? in
+            guard source[index].role == "user",
+                  let context = try repository.requestContext(
+                    for: source[index].content,
+                    conversationID: conversationID,
+                    providerSupportsTools: false
+                  ),
+                  !context.explicitlyRequestedNames.isEmpty else { return nil }
+            return (index, context)
+        }
+        guard var currentContext = latestContext ?? userContexts.last?.1 else {
             return AgentSkillPromptApplication(messages: source, currentContext: nil)
+        }
+
+        currentContext.explicitlyRequestedNames = userContexts.flatMap { $0.1.explicitlyRequestedNames }
+        currentContext.explicitInstructions = userContexts.flatMap { $0.1.explicitInstructions }
+        currentContext.resourceLists = userContexts.flatMap { $0.1.resourceLists }
+        currentContext.skillFilePaths = userContexts.flatMap { $0.1.skillFilePaths }
+        currentContext.explicitMessageIndices = userContexts.flatMap { entry in
+            let (index, context) = entry
+            return Array(repeating: index, count: context.explicitlyRequestedNames.count)
         }
 
         var messages = source
@@ -95,16 +121,6 @@ enum AgentSkillPromptComposer {
         if let firstUserIndex = userIndices.first,
            let catalog = currentContext.syntheticUserContext?.trimmedNonEmpty {
             messages[firstUserIndex].content = catalog + "\n\n" + source[firstUserIndex].content
-        }
-
-        for index in userIndices {
-            let messageContext = try repository.requestContext(
-                for: source[index].content,
-                conversationID: conversationID,
-                providerSupportsTools: providerSupportsTools
-            )
-            guard let explicit = messageContext?.explicitUserContext?.trimmedNonEmpty else { continue }
-            messages[index].content += "\n\n" + explicit
         }
 
         return AgentSkillPromptApplication(

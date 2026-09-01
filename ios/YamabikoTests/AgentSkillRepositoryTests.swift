@@ -47,11 +47,14 @@ final class AgentSkillRepositoryTests: XCTestCase {
 
         _ = try repository.install(preview, trusted: true, allowReplacement: false)
         let context = try XCTUnwrap(repository.requestContext(
-            for: "$review-helper then $review-helper and $unknown",
+            for: "@review-helper then @review-helper and @unknown",
             conversationID: "42",
             providerSupportsTools: true
         ))
         XCTAssertEqual(context.explicitlyRequestedNames, ["review-helper"])
+        XCTAssertEqual(context.skillFilePaths.count, 1)
+        XCTAssertEqual(context.explicitMessageIndices, [0])
+        XCTAssertTrue(context.skillFilePaths[0].hasSuffix("review-helper/SKILL.md"))
         XCTAssertEqual(context.catalog.map(\.name), ["review-helper"])
         XCTAssertTrue(context.explicitInstructions[0].contains("Follow these instructions"))
         XCTAssertEqual(try repository.readResource(name: "review-helper", path: "references/checklist.md"), "Check every edge case.")
@@ -135,7 +138,7 @@ final class AgentSkillRepositoryTests: XCTestCase {
         let preview = try repository.inspect(sourceURL: makeSkill(name: "stable-skill"))
         _ = try repository.install(preview, trusted: true, allowReplacement: false)
         let firstSource = [
-            ProviderRequestMessage(role: "user", content: "$stable-skill review this")
+            ProviderRequestMessage(role: "user", content: "@stable-skill review this")
         ]
         let first = try AgentSkillPromptComposer.apply(
             repository: repository,
@@ -144,7 +147,7 @@ final class AgentSkillRepositoryTests: XCTestCase {
             providerSupportsTools: true
         )
         let secondSource = [
-            ProviderRequestMessage(role: "user", content: "$stable-skill review this"),
+            ProviderRequestMessage(role: "user", content: "@stable-skill review this"),
             ProviderRequestMessage(role: "assistant", content: "first answer"),
             ProviderRequestMessage(role: "user", content: "continue")
         ]
@@ -157,8 +160,27 @@ final class AgentSkillRepositoryTests: XCTestCase {
 
         XCTAssertEqual(first.messages[0].content, second.messages[0].content)
         XCTAssertTrue(first.messages[0].content.hasPrefix("<available_agent_skills>"))
-        XCTAssertTrue(first.messages[0].content.contains("<explicit_agent_skill name=\"stable-skill\">"))
+        XCTAssertTrue(first.messages[0].content.contains("@stable-skill review this"))
+        XCTAssertFalse(first.messages[0].content.contains("<explicit_agent_skill"))
         XCTAssertFalse(second.messages[2].content.contains("<available_agent_skills>"))
+        XCTAssertEqual(second.currentContext?.explicitMessageIndices, [0])
+    }
+
+    func testAtMentionAutocompleteAndLegacyDollarInvocation() throws {
+        XCTAssertEqual(AgentSkillInvocationSyntax.autocompletePrefix(in: "@"), "")
+        XCTAssertEqual(AgentSkillInvocationSyntax.autocompletePrefix(in: "Please @rev"), "rev")
+        XCTAssertNil(AgentSkillInvocationSyntax.autocompletePrefix(in: "mail@example.com"))
+        XCTAssertEqual(
+            AgentSkillInvocationSyntax.completingAutocomplete(in: "Please @rev", with: "review-helper"),
+            "Please @review-helper "
+        )
+        XCTAssertEqual(
+            AgentSkillRepository.explicitSkillNames(
+                in: "@review-helper and $legacy-skill, not mail@review-helper.com",
+                allowed: ["review-helper", "legacy-skill"]
+            ),
+            ["review-helper", "legacy-skill"]
+        )
     }
 
     private func makeSkill(

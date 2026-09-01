@@ -259424,6 +259424,23 @@ var import_yaml = __toESM(require_dist2(), 1);
 // node_modules/@earendil-works/pi-agent-core/dist/harness/skills.js
 var import_ignore = __toESM(require_ignore(), 1);
 var import_yaml2 = __toESM(require_dist2(), 1);
+function formatSkillInvocation(skill, additionalInstructions) {
+  const skillBlock = `<skill name="${skill.name}" location="${skill.filePath}">
+References are relative to ${dirnameEnvPath(skill.filePath)}.
+
+${skill.content}
+</skill>`;
+  return additionalInstructions ? `${skillBlock}
+
+${additionalInstructions}` : skillBlock;
+}
+function dirnameEnvPath(path10) {
+  const normalized = path10.replace(/[\\/]+$/, "");
+  const separatorIndex = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
+  if (separatorIndex === 2 && normalized[1] === ":")
+    return normalized.slice(0, 3);
+  return separatorIndex <= 0 ? "/" : normalized.slice(0, separatorIndex);
+}
 
 // node_modules/@earendil-works/pi-agent-core/dist/harness/telemetry.js
 var HOOK_NAMES = [
@@ -288225,6 +288242,44 @@ function providerErrorDetails(error) {
   };
 }
 
+// src/skill-context.js
+function applyExplicitSkillInvocations(request) {
+  const context = request?.skillContext;
+  const names3 = context?.explicitlyRequestedNames || [];
+  if (!names3.length) return request;
+  const instructions = context.explicitInstructions || [];
+  const filePaths = context.skillFilePaths || [];
+  const messageIndices = context.explicitMessageIndices || [];
+  if (instructions.length !== names3.length || filePaths.length !== names3.length || messageIndices.length !== names3.length) {
+    throw new Error("Pi skill invocation context is incomplete");
+  }
+  const catalog = new Map((context.catalog || []).map((entry) => [entry.name, entry]));
+  const messages = [...request.messages || []];
+  const promptsByMessage = /* @__PURE__ */ new Map();
+  names3.forEach((name, index5) => {
+    const messageIndex = messageIndices[index5];
+    const message = messages[messageIndex];
+    if (!Number.isInteger(messageIndex) || message?.role !== "user") {
+      throw new Error("Pi skill invocation references an invalid user message");
+    }
+    const prompt = formatSkillInvocation({
+      name,
+      description: catalog.get(name)?.description || "Explicitly selected skill",
+      content: instructions[index5],
+      filePath: filePaths[index5],
+      disableModelInvocation: false
+    });
+    promptsByMessage.set(messageIndex, [...promptsByMessage.get(messageIndex) || [], prompt]);
+  });
+  for (const [messageIndex, skillPrompts] of promptsByMessage) {
+    messages[messageIndex] = {
+      ...messages[messageIndex],
+      content: [...skillPrompts, messages[messageIndex].content || ""].join("\n\n")
+    };
+  }
+  return { ...request, messages };
+}
+
 // src/main.js
 var port = Number(process.argv[2]);
 var token = process.argv[3];
@@ -289344,6 +289399,7 @@ function piExecutionSnapshot({ agent, effectiveRequest, providerRequests, events
 }
 async function runAgent(envelope, res) {
   const { runId, request, config } = envelope;
+  const skillAppliedRequest = applyExplicitSkillInvocations(request);
   const startedAtMs = Date.now();
   const { model, resolution } = resolveModel(config);
   const resolvedConfig = {
@@ -289364,15 +289420,15 @@ async function runAgent(envelope, res) {
     messageCount: String(request.messages?.length || 0),
     toolTypes: (request.tools || []).map((tool) => tool.type).join(",")
   });
-  const hasImageAttachments = (request.messages || []).some((message) => (message.attachments || []).length > 0);
+  const hasImageAttachments = (skillAppliedRequest.messages || []).some((message) => (message.attachments || []).length > 0);
   if (hasImageAttachments && !(model.input || []).includes("image")) {
     throw new Error(`Model does not support image input: ${model.provider}/${model.id}`);
   }
-  const effectiveRequest = resolution.toolCall ? request : { ...request, tools: [] };
+  const effectiveRequest = resolution.toolCall ? skillAppliedRequest : { ...skillAppliedRequest, tools: [] };
   const providerRequests = [];
   const agent = new Agent({
     initialState: {
-      systemPrompt: request.systemPrompt || "",
+      systemPrompt: effectiveRequest.systemPrompt || "",
       model,
       thinkingLevel: config.thinkingLevel || "off",
       tools: makeTools(effectiveRequest, runId, res),

@@ -11,6 +11,7 @@ import * as grokOAuth from "pi-grok/oauth.ts";
 import { buildProxyHeaders, CLI_PROXY_BASE_URL, FALLBACK_MODELS } from "pi-grok/models.ts";
 import { sanitizePayload as sanitizeGrokPayload } from "pi-grok/sanitize.ts";
 import { providerErrorDetails } from "./provider-error.js";
+import { applyExplicitSkillInvocations } from "./skill-context.js";
 
 const port = Number(process.argv[2]);
 const token = process.argv[3];
@@ -1223,6 +1224,7 @@ function piExecutionSnapshot({ agent, effectiveRequest, providerRequests, events
 
 async function runAgent(envelope, res) {
   const { runId, request, config } = envelope;
+  const skillAppliedRequest = applyExplicitSkillInvocations(request);
   const startedAtMs = Date.now();
   const { model, resolution } = resolveModel(config);
   const resolvedConfig = {
@@ -1243,17 +1245,17 @@ async function runAgent(envelope, res) {
     messageCount: String(request.messages?.length || 0),
     toolTypes: (request.tools || []).map((tool) => tool.type).join(",")
   });
-  const hasImageAttachments = (request.messages || []).some((message) => (message.attachments || []).length > 0);
+  const hasImageAttachments = (skillAppliedRequest.messages || []).some((message) => (message.attachments || []).length > 0);
   if (hasImageAttachments && !(model.input || []).includes("image")) {
     throw new Error(`Model does not support image input: ${model.provider}/${model.id}`);
   }
   const effectiveRequest = resolution.toolCall
-    ? request
-    : { ...request, tools: [] };
+    ? skillAppliedRequest
+    : { ...skillAppliedRequest, tools: [] };
   const providerRequests = [];
   const agent = new Agent({
     initialState: {
-      systemPrompt: request.systemPrompt || "",
+      systemPrompt: effectiveRequest.systemPrompt || "",
       model,
       thinkingLevel: config.thinkingLevel || "off",
       tools: makeTools(effectiveRequest, runId, res),

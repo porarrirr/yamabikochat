@@ -147,15 +147,19 @@ final class AgentSkillRepository: @unchecked Sendable {
         if catalog.isEmpty, names.isEmpty { return nil }
         var instructions: [String] = []
         var resources: [String] = []
+        var skillFilePaths: [String] = []
         for name in names {
             instructions.append(try skillInstructions(name: name))
             resources.append(resourcePaths(name: name).joined(separator: "\n"))
+            skillFilePaths.append(try rootForEnabledSkill(name: name).appendingPathComponent("SKILL.md").path)
         }
         return SkillRequestContext(
             catalog: catalog,
             explicitlyRequestedNames: names,
             explicitInstructions: instructions,
             resourceLists: resources,
+            skillFilePaths: skillFilePaths,
+            explicitMessageIndices: Array(repeating: 0, count: names.count),
             conversationID: conversationID,
             enabledSkillSetHash: Self.hashStrings(enabled.map { "\($0.manifest.name):\($0.contentHash)" }.sorted())
         )
@@ -190,7 +194,7 @@ final class AgentSkillRepository: @unchecked Sendable {
     }
 
     static func explicitSkillNames(in text: String, allowed: Set<String>) -> [String] {
-        guard let regex = try? NSRegularExpression(pattern: #"(?<![A-Za-z0-9_-])\$([a-z0-9][a-z0-9-]{0,63})(?![A-Za-z0-9_-])"#) else { return [] }
+        guard let regex = try? NSRegularExpression(pattern: #"(?<![A-Za-z0-9_.$@-])[@$]([a-z0-9][a-z0-9-]{0,63})(?![A-Za-z0-9_-])"#) else { return [] }
         let range = NSRange(text.startIndex..., in: text)
         var seen = Set<String>()
         return regex.matches(in: text, range: range).compactMap { match in
