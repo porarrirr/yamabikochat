@@ -258,6 +258,7 @@ final class ProjectWorkspaceStore: @unchecked Sendable {
 
     private func listFiles(in root: URL) throws -> [ProjectWorkspaceFile] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey]
+        let canonicalRootComponents = root.resolvingSymlinksInPath().standardizedFileURL.pathComponents
         guard let enumerator = fileManager.enumerator(
             at: root,
             includingPropertiesForKeys: keys,
@@ -268,7 +269,14 @@ final class ProjectWorkspaceStore: @unchecked Sendable {
         while let url = enumerator.nextObject() as? URL {
             let values = try url.resourceValues(forKeys: Set(keys))
             guard values.isRegularFile == true, values.isSymbolicLink != true else { continue }
-            let relativePath = String(url.path.dropFirst(root.path.count + 1))
+            let canonicalFileComponents = url.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+            guard canonicalFileComponents.starts(with: canonicalRootComponents),
+                  canonicalFileComponents.count > canonicalRootComponents.count else {
+                throw ProjectWorkspaceError.fileNotFound
+            }
+            let relativePath = canonicalFileComponents
+                .dropFirst(canonicalRootComponents.count)
+                .joined(separator: "/")
             files.append(ProjectWorkspaceFile(
                 relativePath: relativePath,
                 name: url.lastPathComponent,

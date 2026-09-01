@@ -78,6 +78,24 @@ final class ProjectWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.files(projectID: 2).map(\.name), ["brief.md"])
     }
 
+    func testRemovalUsesRelativePathWhenWorkspaceRootIsCanonicalized() throws {
+        let canonicalSources = sources.appendingPathComponent("canonical-sources", isDirectory: true)
+        let aliasedSources = sources.appendingPathComponent("aliased-sources", isDirectory: true)
+        try FileManager.default.createDirectory(at: canonicalSources, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: aliasedSources, withDestinationURL: canonicalSources)
+        let aliasedStore = ProjectWorkspaceStore(
+            workspaces: workspaces,
+            sourcesRootOverride: aliasedSources
+        )
+        let source = sources.appendingPathComponent("delete-me.txt")
+        try Data("temporary".utf8).write(to: source)
+
+        let files = try aliasedStore.importFiles(from: [source], projectID: 9)
+
+        XCTAssertEqual(files.map(\.relativePath), ["delete-me.txt"])
+        XCTAssertTrue(try aliasedStore.removeFile(relativePath: files[0].relativePath, projectID: 9).isEmpty)
+    }
+
     func testHiddenUserFileIsListedAndSeededIntoExecutionWorkspace() throws {
         let source = sources.appendingPathComponent(".project-config")
         try Data("visible to tools".utf8).write(to: source)
