@@ -406,6 +406,32 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testCollectionCellDoesNotRemeasureUnchangedContentDuringRepeatedLayout() {
+        let cell = ChatTimelineCollectionCell(frame: CGRect(x: 0, y: 0, width: 354, height: 120))
+        cell.contentConfiguration = UIHostingConfiguration {
+            Text(String(repeating: "A long persisted response. ", count: 2_000))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .margins(.all, 0)
+        cell.requestContentHeightMeasurement()
+
+        cell.layoutIfNeeded()
+        let measurementCount = cell.contentHeightMeasurementCount
+        XCTAssertGreaterThan(measurementCount, 0)
+
+        for _ in 0..<20 {
+            cell.setNeedsLayout()
+            cell.layoutIfNeeded()
+        }
+
+        XCTAssertEqual(
+            cell.contentHeightMeasurementCount,
+            measurementCount,
+            "A scroll-driven layout pass must not synchronously remeasure unchanged message content"
+        )
+    }
+
+    @MainActor
     func testStreamingMarkdownPreservesConfirmedHeadingAndListBlockIDs() {
         let parser = NativeMarkdownIncrementalParser()
         let firstSource = "# Heading\n\n- first\n- second"

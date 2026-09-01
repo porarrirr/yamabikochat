@@ -158,6 +158,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                 )
             }
             .margins(.all, 0)
+            cell.requestContentHeightMeasurement()
             return cell
         }
     }
@@ -841,15 +842,40 @@ private final class ChatTimelineLayout: UICollectionViewLayout {
 final class ChatTimelineCollectionCell: UICollectionViewCell {
     var onMeasuredContentHeightChange: ((CGFloat) -> Void)?
     private var lastReportedContentHeight: CGFloat?
+    private var lastMeasuredWidth: CGFloat?
+    private var needsContentHeightMeasurement = true
+
+    #if DEBUG
+    private(set) var contentHeightMeasurementCount = 0
+    #endif
 
     override func prepareForReuse() {
         super.prepareForReuse()
         onMeasuredContentHeightChange = nil
         lastReportedContentHeight = nil
+        lastMeasuredWidth = nil
+        needsContentHeightMeasurement = true
+        #if DEBUG
+        contentHeightMeasurementCount = 0
+        #endif
+    }
+
+    func requestContentHeightMeasurement() {
+        needsContentHeightMeasurement = true
+        setNeedsLayout()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        let widthChanged = lastMeasuredWidth.map {
+            abs($0 - bounds.width) > TailFollowPolicy.offsetTolerance
+        } ?? true
+        // UICollectionView can lay out a visible cell repeatedly while its
+        // scroll position changes. Measuring an unchanged hosting tree here is
+        // proportional to the complete message length, so a very long answer
+        // would block each scroll frame on a synchronous full-cell fitting pass.
+        guard needsContentHeightMeasurement || widthChanged else { return }
+        needsContentHeightMeasurement = false
         let height = measuredContentHeight(for: bounds.width)
         guard height.isFinite,
               height > 0,
@@ -866,6 +892,7 @@ final class ChatTimelineCollectionCell: UICollectionViewCell {
         _ layoutAttributes: UICollectionViewLayoutAttributes
     ) -> UICollectionViewLayoutAttributes {
         let attributes = super.preferredLayoutAttributesFitting(layoutAttributes)
+        needsContentHeightMeasurement = false
         let height = measuredContentHeight(for: layoutAttributes.size.width)
         attributes.frame = CGRect(
             x: layoutAttributes.frame.minX,
@@ -877,6 +904,10 @@ final class ChatTimelineCollectionCell: UICollectionViewCell {
     }
 
     private func measuredContentHeight(for width: CGFloat) -> CGFloat {
+        lastMeasuredWidth = width
+        #if DEBUG
+        contentHeightMeasurementCount += 1
+        #endif
         let measuredSize = contentView.systemLayoutSizeFitting(
             CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
             withHorizontalFittingPriority: .required,
