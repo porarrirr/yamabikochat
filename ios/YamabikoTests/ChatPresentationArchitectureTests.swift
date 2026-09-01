@@ -1632,6 +1632,43 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testLoadedMarkdownStopsRemeasuringAfterFinalParseSettles() async throws {
+        let markdown = """
+        1950年代から70年代にかけて、新聞は宅配を中心に急速に部数を伸ばしました。
+
+        ### 2000年代以降
+
+        2000年代に入ると、インターネットとスマートフォンの普及で状況が変わります。
+
+        簡単にまとめると、紙からデジタルへ移ろうとしています。
+        """
+        let store = ChatTimelineStore()
+        store.update(messages: [timelineMessage(id: 1, text: markdown)])
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        await settleTimeline(controller)
+
+        var followStatePublicationCount = 0
+        controller.onFollowStateChanged = { _, _ in
+            followStatePublicationCount += 1
+        }
+        for _ in 0..<20 {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+            controller.view.layoutIfNeeded()
+        }
+
+        XCTAssertEqual(
+            followStatePublicationCount,
+            0,
+            "A completed Markdown parse must not continuously rebuild and remeasure the same row"
+        )
+    }
+
+    @MainActor
     func testGeneratedHTMLAnswerDoesNotOverlapPrecedingUserInstruction() async throws {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

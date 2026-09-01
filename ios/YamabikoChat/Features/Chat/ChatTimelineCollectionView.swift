@@ -63,6 +63,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var pendingContentAnchor: (id: String, offset: CGFloat)?
     private var pendingViewportOffsetY: CGFloat?
     private var pendingChangedRowIDs: Set<String> = []
+    private var pendingReconfiguredRowIDs: Set<String> = []
     private var pendingMeasuredCellHeights: [String: CGFloat] = [:]
     private var pendingContentChangeUserScrollGeneration: Int?
     private var parsedRowsRemeasured: Set<String> = []
@@ -228,6 +229,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             pendingContentAnchor = nil
             pendingViewportOffsetY = nil
             pendingChangedRowIDs.removeAll()
+            pendingReconfiguredRowIDs.removeAll()
             pendingMeasuredCellHeights.removeAll()
             pendingContentChangeUserScrollGeneration = nil
             parsedRowsRemeasured.removeAll()
@@ -317,17 +319,33 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
 
     private func finishRowContentChange(rowID: String, kind: ChatTimelineRowChangeKind) {
         pendingChangedRowIDs.insert(rowID)
+        pendingReconfiguredRowIDs.insert(rowID)
+        schedulePendingRowMeasurement()
+    }
+
+    private func finishExistingRowMeasurement(rowID: String) {
+        pendingChangedRowIDs.insert(rowID)
+        schedulePendingRowMeasurement()
+    }
+
+    private func schedulePendingRowMeasurement() {
         guard !isContentUpdateScheduled else { return }
         isContentUpdateScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            self?.applyPendingRowReconfigurationsIfNeeded()
+        }
+    }
+
+    private func applyPendingRowReconfigurationsIfNeeded() {
         var snapshot = dataSource.snapshot()
         let availableIDs = Set(snapshot.itemIdentifiers)
-        let changedIDs = pendingChangedRowIDs.filter(availableIDs.contains)
-        if !changedIDs.isEmpty {
+        let reconfiguredIDs = pendingReconfiguredRowIDs.filter(availableIDs.contains)
+        if !reconfiguredIDs.isEmpty {
             // Rebuild only the changed hosting configuration. The diffable-data
             // source completion runs after the configuration provider has read
             // the latest row snapshot, so manual sizing cannot measure the
             // previous SwiftUI streaming frame.
-            snapshot.reconfigureItems(Array(changedIDs))
+            snapshot.reconfigureItems(Array(reconfiguredIDs))
             dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
                 self?.completePendingRowMeasurement()
             }
@@ -346,14 +364,14 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         // measurement with the inner Markdown height. Measure the hosting cell
         // at consumption time so the layout always commits current content.
         prepareForRowContentChange(rowID: rowID, kind: .normalUpdate)
-        finishRowContentChange(rowID: rowID, kind: .normalUpdate)
+        finishExistingRowMeasurement(rowID: rowID)
     }
 
     private func applyMeasuredCellHeight(_ height: CGFloat, rowID: String) {
         guard height.isFinite, height > 0, configuredIDs.contains(rowID) else { return }
         pendingMeasuredCellHeights[rowID] = ceil(height)
         prepareForRowContentChange(rowID: rowID, kind: .normalUpdate)
-        finishRowContentChange(rowID: rowID, kind: .normalUpdate)
+        finishExistingRowMeasurement(rowID: rowID)
     }
 
     private func remeasureRow(rowID: String) {
@@ -364,7 +382,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             else { return }
         }
         prepareForRowContentChange(rowID: rowID, kind: .normalUpdate)
-        finishRowContentChange(rowID: rowID, kind: .normalUpdate)
+        finishExistingRowMeasurement(rowID: rowID)
     }
 
     private func completePendingRowMeasurement() {
@@ -382,6 +400,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         pendingContentAnchor = nil
         pendingViewportOffsetY = nil
         pendingChangedRowIDs.removeAll()
+        pendingReconfiguredRowIDs.removeAll()
         pendingMeasuredCellHeights.removeAll()
         pendingContentChangeUserScrollGeneration = nil
         pendingLocksViewport = false
@@ -680,6 +699,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         pendingContentAnchor = nil
         pendingViewportOffsetY = nil
         pendingChangedRowIDs.removeAll()
+        pendingReconfiguredRowIDs.removeAll()
         pendingMeasuredCellHeights.removeAll()
         pendingContentChangeUserScrollGeneration = nil
         pendingLocksViewport = false
