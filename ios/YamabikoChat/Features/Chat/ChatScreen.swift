@@ -74,7 +74,7 @@ enum ChatComposerSelectionPolicy {
 enum ChatComposerSynchronizationPolicy {
     enum Action: Equatable {
         case none
-        case replaceText(moveCaretToEnd: Bool)
+        case replaceText(moveCaretToEnd: Bool, endMarkedText: Bool)
         case moveCaretToEnd
     }
 
@@ -85,10 +85,14 @@ enum ChatComposerSynchronizationPolicy {
         isExternalChange: Bool,
         nativeTextMatchesBinding: Bool
     ) -> Action {
-        guard !hasMarkedText else { return .none }
+        if hasMarkedText {
+            guard isExternalChange, !nativeTextMatchesBinding else { return .none }
+            return .replaceText(moveCaretToEnd: true, endMarkedText: true)
+        }
         if !nativeTextMatchesBinding, !isFirstResponder || isExternalChange {
             return .replaceText(
-                moveCaretToEnd: isInitialConfiguration || (isExternalChange && isFirstResponder)
+                moveCaretToEnd: isInitialConfiguration || (isExternalChange && isFirstResponder),
+                endMarkedText: false
             )
         }
         return isInitialConfiguration && nativeTextMatchesBinding ? .moveCaretToEnd : .none
@@ -173,15 +177,14 @@ struct ChatComposerTextView: UIViewRepresentable {
             nativeTextMatchesBinding: container.textView.text == suffix
         )
         switch synchronizationAction {
-        case let .replaceText(moveCaretToEnd):
-            container.textView.text = suffix
-            context.coordinator.lastReportedText = text
-            if moveCaretToEnd {
-                container.textView.selectedRange = NSRange(
-                    location: (suffix as NSString).length,
-                    length: 0
-                )
-            }
+        case let .replaceText(moveCaretToEnd, endMarkedText):
+            context.coordinator.replaceNativeText(
+                in: container.textView,
+                with: suffix,
+                fullText: text,
+                moveCaretToEnd: moveCaretToEnd,
+                endMarkedText: endMarkedText
+            )
         case .moveCaretToEnd:
             let desiredRange = NSRange(location: (suffix as NSString).length, length: 0)
             if container.textView.selectedRange != desiredRange {
@@ -203,6 +206,7 @@ struct ChatComposerTextView: UIViewRepresentable {
         var parent: ChatComposerTextView
         var lastReportedText: String?
         private var focusRequest: DispatchWorkItem?
+        private var isSynchronizingExternalText = false
 
         init(parent: ChatComposerTextView) {
             self.parent = parent
@@ -236,6 +240,28 @@ struct ChatComposerTextView: UIViewRepresentable {
             focusRequest = nil
         }
 
+        func replaceNativeText(
+            in textView: UITextView,
+            with suffix: String,
+            fullText: String,
+            moveCaretToEnd: Bool,
+            endMarkedText: Bool
+        ) {
+            isSynchronizingExternalText = true
+            defer { isSynchronizingExternalText = false }
+            if endMarkedText {
+                textView.unmarkText()
+            }
+            textView.text = suffix
+            lastReportedText = fullText
+            if moveCaretToEnd {
+                textView.selectedRange = NSRange(
+                    location: (suffix as NSString).length,
+                    length: 0
+                )
+            }
+        }
+
         func deleteSelectedText() {
             guard parent.selectedText != nil else { return }
             lastReportedText = ""
@@ -245,6 +271,7 @@ struct ChatComposerTextView: UIViewRepresentable {
         }
 
         func textViewDidChange(_ textView: UITextView) {
+            guard !isSynchronizingExternalText else { return }
             let suffix = textView.text ?? ""
             let combined = ChatComposerSelectionPolicy.combinedInput(
                 selectedText: parent.selectedText,

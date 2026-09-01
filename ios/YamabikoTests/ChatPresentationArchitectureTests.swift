@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import SwiftUI
 @testable import YamabikoChat
 
 final class ChatPresentationArchitectureTests: XCTestCase {
@@ -130,7 +131,7 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         )
     }
 
-    func testComposerSynchronizationDoesNotOverwriteMarkedText() {
+    func testComposerSynchronizationAppliesExplicitExternalChangeDuringMarkedText() {
         XCTAssertEqual(
             ChatComposerSynchronizationPolicy.action(
                 isInitialConfiguration: false,
@@ -138,6 +139,19 @@ final class ChatPresentationArchitectureTests: XCTestCase {
                 isFirstResponder: true,
                 isExternalChange: true,
                 nativeTextMatchesBinding: false
+            ),
+            .replaceText(moveCaretToEnd: true, endMarkedText: true)
+        )
+    }
+
+    func testComposerSynchronizationPreservesMarkedTextWithoutExternalChange() {
+        XCTAssertEqual(
+            ChatComposerSynchronizationPolicy.action(
+                isInitialConfiguration: false,
+                hasMarkedText: true,
+                isFirstResponder: true,
+                isExternalChange: false,
+                nativeTextMatchesBinding: true
             ),
             .none
         )
@@ -152,8 +166,36 @@ final class ChatPresentationArchitectureTests: XCTestCase {
                 isExternalChange: true,
                 nativeTextMatchesBinding: false
             ),
-            .replaceText(moveCaretToEnd: true)
+            .replaceText(moveCaretToEnd: true, endMarkedText: false)
         )
+    }
+
+    @MainActor
+    func testComposerExternalReplacementUpdatesNativeTextAndCaretAtomically() {
+        var boundText = "@humanizer "
+        var selectedText: String?
+        var focused = true
+        let representable = ChatComposerTextView(
+            text: Binding(get: { boundText }, set: { boundText = $0 }),
+            selectedText: Binding(get: { selectedText }, set: { selectedText = $0 }),
+            isFocused: Binding(get: { focused }, set: { focused = $0 }),
+            placeholder: "Message"
+        )
+        let coordinator = representable.makeCoordinator()
+        let textView = ChatComposerTextView.ComposerTextView()
+        textView.text = "@"
+
+        coordinator.replaceNativeText(
+            in: textView,
+            with: "@humanizer ",
+            fullText: "@humanizer ",
+            moveCaretToEnd: true,
+            endMarkedText: true
+        )
+
+        XCTAssertEqual(textView.text, "@humanizer ")
+        XCTAssertEqual(coordinator.lastReportedText, "@humanizer ")
+        XCTAssertEqual(textView.selectedRange, NSRange(location: 11, length: 0))
     }
 
     @MainActor
