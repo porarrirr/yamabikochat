@@ -123,6 +123,13 @@ struct ChatComposerTextView: UIViewRepresentable {
 
     func updateUIView(_ container: ComposerContainerView, context: Context) {
         context.coordinator.parent = self
+        // Apply Binding changes before changing editability or first-responder state.
+        // Disabling/resigning a UITextView can finish an in-flight keyboard edit and
+        // call textViewDidChange. If the native view still contains the sent text at
+        // that point, the delegate writes that stale value back into the cleared
+        // Binding and the message reappears in the composer.
+        configure(container, context: context, placeCursorAtEnd: false)
+
         // Preserve firstResponder across isEditable toggles to avoid spurious resign.
         if container.textView.isEditable != isEnabled {
             let wasFirstResponder = container.textView.isFirstResponder
@@ -131,7 +138,6 @@ struct ChatComposerTextView: UIViewRepresentable {
                 context.coordinator.requestFocus(for: container)
             }
         }
-        configure(container, context: context, placeCursorAtEnd: false)
 
         if !isEnabled {
             context.coordinator.cancelFocusRequest()

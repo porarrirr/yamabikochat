@@ -199,6 +199,36 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testComposerExternalClearRemainsEmptyWhenEditingEnds() {
+        var boundText = "送信する文章"
+        var selectedText: String?
+        var focused = true
+        let representable = ChatComposerTextView(
+            text: Binding(get: { boundText }, set: { boundText = $0 }),
+            selectedText: Binding(get: { selectedText }, set: { selectedText = $0 }),
+            isFocused: Binding(get: { focused }, set: { focused = $0 }),
+            placeholder: "Message"
+        )
+        let coordinator = representable.makeCoordinator()
+        let textView = ChatComposerTextView.ComposerTextView()
+        textView.text = boundText
+
+        boundText = ""
+        coordinator.replaceNativeText(
+            in: textView,
+            with: "",
+            fullText: "",
+            moveCaretToEnd: true,
+            endMarkedText: false
+        )
+        coordinator.textViewDidEndEditing(textView)
+
+        XCTAssertEqual(textView.text, "")
+        XCTAssertEqual(boundText, "")
+        XCTAssertFalse(focused)
+    }
+
+    @MainActor
     func testComposerNativeTextViewFillsItsMeasuredContainer() {
         let container = ChatComposerTextView.ComposerContainerView()
         container.frame = CGRect(x: 0, y: 0, width: 320, height: 40)
