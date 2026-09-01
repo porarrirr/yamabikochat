@@ -320,15 +320,13 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private func finishRowContentChange(rowID: String, kind: ChatTimelineRowChangeKind) {
         pendingChangedRowIDs.insert(rowID)
         pendingReconfiguredRowIDs.insert(rowID)
-        schedulePendingRowMeasurement()
+        guard !isContentUpdateScheduled else { return }
+        isContentUpdateScheduled = true
+        applyPendingRowReconfigurationsIfNeeded()
     }
 
     private func finishExistingRowMeasurement(rowID: String) {
         pendingChangedRowIDs.insert(rowID)
-        schedulePendingRowMeasurement()
-    }
-
-    private func schedulePendingRowMeasurement() {
         guard !isContentUpdateScheduled else { return }
         isContentUpdateScheduled = true
         DispatchQueue.main.async { [weak self] in
@@ -364,14 +362,14 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         // measurement with the inner Markdown height. Measure the hosting cell
         // at consumption time so the layout always commits current content.
         prepareForRowContentChange(rowID: rowID, kind: .normalUpdate)
-        finishExistingRowMeasurement(rowID: rowID)
+        finishPresentationMeasurement(rowID: rowID)
     }
 
     private func applyMeasuredCellHeight(_ height: CGFloat, rowID: String) {
         guard height.isFinite, height > 0, configuredIDs.contains(rowID) else { return }
         pendingMeasuredCellHeights[rowID] = ceil(height)
         prepareForRowContentChange(rowID: rowID, kind: .normalUpdate)
-        finishExistingRowMeasurement(rowID: rowID)
+        finishPresentationMeasurement(rowID: rowID)
     }
 
     private func remeasureRow(rowID: String) {
@@ -382,7 +380,21 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
             else { return }
         }
         prepareForRowContentChange(rowID: rowID, kind: .normalUpdate)
-        finishExistingRowMeasurement(rowID: rowID)
+        finishPresentationMeasurement(rowID: rowID)
+    }
+
+    private func finishPresentationMeasurement(rowID: String) {
+        if store?.row(id: rowID)?.streamingSnapshot?.isFinal == false {
+            // Streaming frames must keep content replacement and height
+            // measurement in the same run-loop turn. Deferring only the height
+            // pass makes the rendered token frame and its cell bounds alternate.
+            finishRowContentChange(rowID: rowID, kind: .normalUpdate)
+        } else {
+            // A completed Markdown view already owns its parsed presentation.
+            // Measure that existing hosting cell without rebuilding it and
+            // restarting the final parse.
+            finishExistingRowMeasurement(rowID: rowID)
+        }
     }
 
     private func completePendingRowMeasurement() {

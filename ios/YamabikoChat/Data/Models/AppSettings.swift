@@ -482,7 +482,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
                 }
             }
             .joined(separator: ", ")
-
+z1
         if let value = normalized.dualOpenRouterThinkingBudgetA {
             normalized.dualOpenRouterThinkingBudgetA = max(0, value)
         }
