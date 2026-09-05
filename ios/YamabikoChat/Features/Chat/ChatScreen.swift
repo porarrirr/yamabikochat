@@ -28,8 +28,8 @@ private struct SpeechWaveformView: View {
 }
 
 enum ChatComposerFocusPolicy {
-    static func focusState(current: Bool, isSending: Bool) -> Bool {
-        isSending ? false : current
+    static func focusState(current: Bool, isSending _: Bool) -> Bool {
+        current
     }
 }
 
@@ -881,7 +881,7 @@ struct ChatScreen: View {
                     .padding(.horizontal, isComposerExpanded ? 14 : 0)
                     .padding(.top, isComposerExpanded ? 12 : 9)
                     .padding(.bottom, isComposerExpanded ? 6 : 9)
-                    .disabled(viewModel.isSpeechRecording || viewModel.isSending)
+                    .disabled(viewModel.isSpeechRecording)
                     .transaction { transaction in transaction.animation = nil }
                     .animation(nil, value: isComposerExpanded)
 
