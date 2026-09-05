@@ -195,13 +195,13 @@ function defaultProviderAuthContext() {
     },
     async fileExists(path10) {
       try {
-        const fs8 = await importNodeModule("node:fs/promises");
+        const fs9 = await importNodeModule("node:fs/promises");
         let resolved = path10;
         if (resolved.startsWith("~")) {
           const os3 = await importNodeModule("node:os");
           resolved = os3.homedir() + resolved.slice(1);
         }
-        await fs8.access(resolved);
+        await fs9.access(resolved);
         return true;
       } catch {
         return false;
@@ -8321,14 +8321,14 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs8 = this.flowScalar(this.type);
+              const fs9 = this.flowScalar(this.type);
               if (atNextItem || it2.value) {
-                map.items.push({ start, key: fs8, sep: [] });
+                map.items.push({ start, key: fs9, sep: [] });
                 this.onKeyLine = true;
               } else if (it2.sep) {
-                this.stack.push(fs8);
+                this.stack.push(fs9);
               } else {
-                Object.assign(it2, { key: fs8, sep: [] });
+                Object.assign(it2, { key: fs9, sep: [] });
                 this.onKeyLine = true;
               }
               return;
@@ -8456,13 +8456,13 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs8 = this.flowScalar(this.type);
+              const fs9 = this.flowScalar(this.type);
               if (!it2 || it2.value)
-                fc.items.push({ start: [], key: fs8, sep: [] });
+                fc.items.push({ start: [], key: fs9, sep: [] });
               else if (it2.sep)
-                this.stack.push(fs8);
+                this.stack.push(fs9);
               else
-                Object.assign(it2, { key: fs8, sep: [] });
+                Object.assign(it2, { key: fs9, sep: [] });
               return;
             }
             case "flow-map-end":
@@ -37838,7 +37838,7 @@ var require_node_domexception = __commonJS({
 });
 
 // node_modules/fetch-blob/from.js
-import { statSync, createReadStream, promises as fs } from "node:fs";
+import { statSync, createReadStream, promises as fs2 } from "node:fs";
 import { basename } from "node:path";
 var import_node_domexception, stat, blobFromSync, blobFrom, fileFrom, fileFromSync, fromBlob, fromFile, BlobDataItem;
 var init_from = __esm({
@@ -37846,7 +37846,7 @@ var init_from = __esm({
     import_node_domexception = __toESM(require_node_domexception(), 1);
     init_file();
     init_fetch_blob();
-    ({ stat } = fs);
+    ({ stat } = fs2);
     blobFromSync = (path10, type) => fromBlob(statSync(path10), path10, type);
     blobFrom = (path10, type) => stat(path10).then((stat5) => fromBlob(stat5, path10, type));
     fileFrom = (path10, type) => stat(path10).then((stat5) => fromFile(stat5, path10, type));
@@ -43041,7 +43041,7 @@ var require_util2 = __commonJS({
     exports.removeUndefinedValuesInObject = removeUndefinedValuesInObject;
     exports.isValidFile = isValidFile;
     exports.getWellKnownCertificateConfigFileLocation = getWellKnownCertificateConfigFileLocation;
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     var os3 = __require("os");
     var path10 = __require("path");
     var WELL_KNOWN_CERTIFICATE_CONFIG_FILE = "certificate_config.json";
@@ -43129,7 +43129,7 @@ var require_util2 = __commonJS({
     }
     async function isValidFile(filePath) {
       try {
-        const stats = await fs8.promises.lstat(filePath);
+        const stats = await fs9.promises.lstat(filePath);
         return stats.isFile();
       } catch (e3) {
         return false;
@@ -45084,10 +45084,10 @@ var require_getCredentials = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.getCredentials = getCredentials;
     var path10 = __require("path");
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     var util_1 = __require("util");
     var errorWithCode_1 = require_errorWithCode();
-    var readFile = fs8.readFile ? (0, util_1.promisify)(fs8.readFile) : async () => {
+    var readFile = fs9.readFile ? (0, util_1.promisify)(fs9.readFile) : async () => {
       throw new errorWithCode_1.ErrorWithCode("use key rather than keyFile.", "MISSING_CREDENTIALS");
     };
     var ExtensionFiles;
@@ -46764,12 +46764,12 @@ var require_filesubjecttokensupplier = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.FileSubjectTokenSupplier = void 0;
     var util_1 = __require("util");
-    var fs8 = __require("fs");
-    var readFile = (0, util_1.promisify)(fs8.readFile ?? (() => {
+    var fs9 = __require("fs");
+    var readFile = (0, util_1.promisify)(fs9.readFile ?? (() => {
     }));
-    var realpath = (0, util_1.promisify)(fs8.realpath ?? (() => {
+    var realpath = (0, util_1.promisify)(fs9.realpath ?? (() => {
     }));
-    var lstat = (0, util_1.promisify)(fs8.lstat ?? (() => {
+    var lstat = (0, util_1.promisify)(fs9.lstat ?? (() => {
     }));
     var FileSubjectTokenSupplier = class {
       filePath;
@@ -46887,7 +46887,7 @@ var require_certificatesubjecttokensupplier = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.CertificateSubjectTokenSupplier = exports.InvalidConfigurationError = exports.CertificateSourceUnavailableError = exports.CERTIFICATE_CONFIGURATION_ENV_VARIABLE = void 0;
     var util_1 = require_util2();
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     var crypto_1 = __require("crypto");
     var https3 = __require("https");
     exports.CERTIFICATE_CONFIGURATION_ENV_VARIABLE = "GOOGLE_API_CERTIFICATE_CONFIG";
@@ -46981,7 +46981,7 @@ var require_certificatesubjecttokensupplier = __commonJS({
         const configPath = this.certificateConfigPath;
         let fileContents;
         try {
-          fileContents = await fs8.promises.readFile(configPath, "utf8");
+          fileContents = await fs9.promises.readFile(configPath, "utf8");
         } catch (err3) {
           throw new CertificateSourceUnavailableError(`Failed to read certificate config file at: ${configPath}`);
         }
@@ -47006,14 +47006,14 @@ var require_certificatesubjecttokensupplier = __commonJS({
       async #getKeyAndCert(certPath, keyPath) {
         let cert, key;
         try {
-          cert = await fs8.promises.readFile(certPath);
+          cert = await fs9.promises.readFile(certPath);
           new crypto_1.X509Certificate(cert);
         } catch (err3) {
           const message = err3 instanceof Error ? err3.message : String(err3);
           throw new CertificateSourceUnavailableError(`Failed to read certificate file at ${certPath}: ${message}`);
         }
         try {
-          key = await fs8.promises.readFile(keyPath);
+          key = await fs9.promises.readFile(keyPath);
           (0, crypto_1.createPrivateKey)(key);
         } catch (err3) {
           const message = err3 instanceof Error ? err3.message : String(err3);
@@ -47032,7 +47032,7 @@ var require_certificatesubjecttokensupplier = __commonJS({
           return JSON.stringify([leafCert.raw.toString("base64")]);
         }
         try {
-          const chainPems = await fs8.promises.readFile(this.trustChainPath, "utf8");
+          const chainPems = await fs9.promises.readFile(this.trustChainPath, "utf8");
           const pemBlocks = chainPems.match(/-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----/g) ?? [];
           const chainCerts = pemBlocks.map((pem, index5) => {
             try {
@@ -47734,7 +47734,7 @@ var require_pluggable_auth_handler = __commonJS({
     exports.PluggableAuthHandler = exports.ExecutableError = void 0;
     var executable_response_1 = require_executable_response();
     var childProcess = __require("child_process");
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     var ExecutableError = class extends Error {
       /**
        * The exit code returned by the executable.
@@ -47819,14 +47819,14 @@ var require_pluggable_auth_handler = __commonJS({
         }
         let filePath;
         try {
-          filePath = await fs8.promises.realpath(this.outputFile);
+          filePath = await fs9.promises.realpath(this.outputFile);
         } catch {
           return void 0;
         }
-        if (!(await fs8.promises.lstat(filePath)).isFile()) {
+        if (!(await fs9.promises.lstat(filePath)).isFile()) {
           return void 0;
         }
-        const responseString = await fs8.promises.readFile(filePath, {
+        const responseString = await fs9.promises.readFile(filePath, {
           encoding: "utf8"
         });
         if (responseString === "") {
@@ -48237,7 +48237,7 @@ var require_gdchclient = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.GdchClient = exports.GDCH_SERVICE_ACCOUNT_TYPE = void 0;
     var crypto2 = __require("crypto");
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     var https3 = __require("https");
     var oauth2client_1 = require_oauth2client();
     var DEFAULT_LIFETIME_IN_SECONDS = 3600;
@@ -48460,7 +48460,7 @@ var require_gdchclient = __commonJS({
         const currentPath = this.caCertPath;
         this.caAgentPromise = (async () => {
           try {
-            const ca = await fs8.promises.readFile(currentPath);
+            const ca = await fs9.promises.readFile(currentPath);
             return new https3.Agent({ ca });
           } catch (err3) {
             if (this.cachedCaCertPath === currentPath) {
@@ -48520,7 +48520,7 @@ var require_googleauth = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.GoogleAuth = exports.GoogleAuthExceptionMessages = void 0;
     var child_process_1 = __require("child_process");
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     var gaxios_1 = require_src2();
     var gcpMetadata = require_src4();
     var os3 = __require("os");
@@ -48822,7 +48822,7 @@ var require_googleauth = __commonJS({
           return null;
         }
         const location = path10.join(configDir, "application_default_credentials.json");
-        if (!fs8.existsSync(location)) {
+        if (!fs9.existsSync(location)) {
           return null;
         }
         const client = await this._getApplicationCredentialsFromFilePath(location, options);
@@ -48839,8 +48839,8 @@ var require_googleauth = __commonJS({
           throw new Error("The file path is invalid.");
         }
         try {
-          filePath = fs8.realpathSync(filePath);
-          if (!fs8.lstatSync(filePath).isFile()) {
+          filePath = fs9.realpathSync(filePath);
+          if (!fs9.lstatSync(filePath).isFile()) {
             throw new Error();
           }
         } catch (err3) {
@@ -48849,7 +48849,7 @@ var require_googleauth = __commonJS({
           }
           throw err3;
         }
-        const readStream = fs8.createReadStream(filePath);
+        const readStream = fs9.createReadStream(filePath);
         return this.fromStream(readStream, options);
       }
       /**
@@ -49177,7 +49177,7 @@ var require_googleauth = __commonJS({
           return this._cacheClientFromJSON(this.jsonContent, this.clientOptions);
         } else if (this.keyFilename) {
           const filePath = path10.resolve(this.keyFilename);
-          const stream20 = fs8.createReadStream(filePath);
+          const stream20 = fs9.createReadStream(filePath);
           return await this.fromStreamAsync(stream20, this.clientOptions);
         } else if (this.apiKey) {
           const client = await this.fromAPIKey(this.apiKey, this.clientOptions);
@@ -53164,10 +53164,10 @@ var require_websocket_server = __commonJS({
             process.nextTick(emitClose, this);
           }
         } else {
-          const server2 = this._server;
+          const server = this._server;
           this._removeListeners();
           this._removeListeners = this._server = null;
-          server2.close(() => {
+          server.close(() => {
             emitClose(this);
           });
         }
@@ -53352,17 +53352,17 @@ var require_websocket_server = __commonJS({
       }
     };
     module.exports = WebSocketServer3;
-    function addListeners(server2, map) {
-      for (const event of Object.keys(map)) server2.on(event, map[event]);
+    function addListeners(server, map) {
+      for (const event of Object.keys(map)) server.on(event, map[event]);
       return function removeListeners() {
         for (const event of Object.keys(map)) {
-          server2.removeListener(event, map[event]);
+          server.removeListener(event, map[event]);
         }
       };
     }
-    function emitClose(server2) {
-      server2._state = CLOSED;
-      server2.emit("close");
+    function emitClose(server) {
+      server._state = CLOSED;
+      server.emit("close");
     }
     function socketOnError() {
       this.destroy();
@@ -53381,11 +53381,11 @@ var require_websocket_server = __commonJS({
 ` + Object.keys(headers).map((h3) => `${h3}: ${headers[h3]}`).join("\r\n") + "\r\n\r\n" + message
       );
     }
-    function abortHandshakeOrEmitwsClientError(server2, req, socket, code, message, headers) {
-      if (server2.listenerCount("wsClientError")) {
+    function abortHandshakeOrEmitwsClientError(server, req, socket, code, message, headers) {
+      if (server.listenerCount("wsClientError")) {
         const err3 = new Error(message);
         Error.captureStackTrace(err3, abortHandshakeOrEmitwsClientError);
-        server2.emit("wsClientError", err3, socket, req);
+        server.emit("wsClientError", err3, socket, req);
       } else {
         abortHandshake(socket, code, message, headers);
       }
@@ -53410,7 +53410,7 @@ var init_wrapper = __esm({
 
 // node_modules/@google/genai/dist/node/index.mjs
 import { createWriteStream } from "fs";
-import * as fs2 from "fs/promises";
+import * as fs3 from "fs/promises";
 import { writeFile } from "fs/promises";
 import { Readable } from "node:stream";
 import { finished } from "node:stream/promises";
@@ -71028,7 +71028,7 @@ ${underline}`);
       async stat(file) {
         const fileStat = { size: 0, type: void 0 };
         if (typeof file === "string") {
-          const originalStat = await fs2.stat(file);
+          const originalStat = await fs3.stat(file);
           fileStat.size = originalStat.size;
           fileStat.type = this.inferMimeType(file);
           return fileStat;
@@ -71176,7 +71176,7 @@ ${underline}`);
         let fileHandle;
         const fileName = path$1.basename(file);
         try {
-          fileHandle = await fs2.open(file, "r");
+          fileHandle = await fs3.open(file, "r");
           if (!fileHandle) {
             throw new Error(`Failed to open file`);
           }
@@ -74866,7 +74866,7 @@ var require_windows = __commonJS({
   "node_modules/@earendil-works/pi-coding-agent/node_modules/isexe/windows.js"(exports, module) {
     module.exports = isexe;
     isexe.sync = sync;
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     function checkPathExt(path10, options) {
       var pathext = options.pathExt !== void 0 ? options.pathExt : process.env.PATHEXT;
       if (!pathext) {
@@ -74891,12 +74891,12 @@ var require_windows = __commonJS({
       return checkPathExt(path10, options);
     }
     function isexe(path10, options, cb) {
-      fs8.stat(path10, function(er, stat5) {
+      fs9.stat(path10, function(er, stat5) {
         cb(er, er ? false : checkStat(stat5, path10, options));
       });
     }
     function sync(path10, options) {
-      return checkStat(fs8.statSync(path10), path10, options);
+      return checkStat(fs9.statSync(path10), path10, options);
     }
   }
 });
@@ -74906,14 +74906,14 @@ var require_mode = __commonJS({
   "node_modules/@earendil-works/pi-coding-agent/node_modules/isexe/mode.js"(exports, module) {
     module.exports = isexe;
     isexe.sync = sync;
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     function isexe(path10, options, cb) {
-      fs8.stat(path10, function(er, stat5) {
+      fs9.stat(path10, function(er, stat5) {
         cb(er, er ? false : checkStat(stat5, options));
       });
     }
     function sync(path10, options) {
-      return checkStat(fs8.statSync(path10), options);
+      return checkStat(fs9.statSync(path10), options);
     }
     function checkStat(stat5, options) {
       return stat5.isFile() && checkMode(stat5, options);
@@ -74937,7 +74937,7 @@ var require_mode = __commonJS({
 // node_modules/@earendil-works/pi-coding-agent/node_modules/isexe/index.js
 var require_isexe = __commonJS({
   "node_modules/@earendil-works/pi-coding-agent/node_modules/isexe/index.js"(exports, module) {
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     var core;
     if (process.platform === "win32" || global.TESTING_WINDOWS) {
       core = require_windows();
@@ -75201,16 +75201,16 @@ var require_shebang_command = __commonJS({
 var require_readShebang = __commonJS({
   "node_modules/@earendil-works/pi-coding-agent/node_modules/cross-spawn/lib/util/readShebang.js"(exports, module) {
     "use strict";
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     var shebangCommand = require_shebang_command();
     function readShebang(command) {
       const size = 150;
       const buffer = Buffer.alloc(size);
       let fd;
       try {
-        fd = fs8.openSync(command, "r");
-        fs8.readSync(fd, buffer, 0, size, 0);
-        fs8.closeSync(fd);
+        fd = fs9.openSync(command, "r");
+        fs9.readSync(fd, buffer, 0, size, 0);
+        fs9.closeSync(fd);
       } catch (e3) {
       }
       return shebangCommand(buffer.toString());
@@ -75515,13 +75515,13 @@ function defaultProviderAuthContext2() {
     },
     async fileExists(path10) {
       try {
-        const fs8 = await importNodeModule2("node:fs/promises");
+        const fs9 = await importNodeModule2("node:fs/promises");
         let resolved = path10;
         if (resolved.startsWith("~")) {
           const os3 = await importNodeModule2("node:os");
           resolved = os3.homedir() + resolved.slice(1);
         }
-        await fs8.access(resolved);
+        await fs9.access(resolved);
         return true;
       } catch {
         return false;
@@ -103998,7 +103998,7 @@ var require_node_domexception2 = __commonJS({
 });
 
 // node_modules/@earendil-works/pi-coding-agent/node_modules/fetch-blob/from.js
-import { statSync as statSync2, createReadStream as createReadStream2, promises as fs3 } from "node:fs";
+import { statSync as statSync2, createReadStream as createReadStream2, promises as fs4 } from "node:fs";
 import { basename as basename4 } from "node:path";
 var import_node_domexception2, stat3, blobFromSync2, blobFrom2, fileFrom2, fileFromSync2, fromBlob2, fromFile2, BlobDataItem2;
 var init_from2 = __esm({
@@ -104006,7 +104006,7 @@ var init_from2 = __esm({
     import_node_domexception2 = __toESM(require_node_domexception2(), 1);
     init_file2();
     init_fetch_blob2();
-    ({ stat: stat3 } = fs3);
+    ({ stat: stat3 } = fs4);
     blobFromSync2 = (path10, type) => fromBlob2(statSync2(path10), path10, type);
     blobFrom2 = (path10, type) => stat3(path10).then((stat5) => fromBlob2(stat5, path10, type));
     fileFrom2 = (path10, type) => stat3(path10).then((stat5) => fromFile2(stat5, path10, type));
@@ -109201,7 +109201,7 @@ var require_util4 = __commonJS({
     exports.removeUndefinedValuesInObject = removeUndefinedValuesInObject;
     exports.isValidFile = isValidFile;
     exports.getWellKnownCertificateConfigFileLocation = getWellKnownCertificateConfigFileLocation;
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     var os3 = __require("os");
     var path10 = __require("path");
     var WELL_KNOWN_CERTIFICATE_CONFIG_FILE = "certificate_config.json";
@@ -109289,7 +109289,7 @@ var require_util4 = __commonJS({
     }
     async function isValidFile(filePath) {
       try {
-        const stats = await fs8.promises.lstat(filePath);
+        const stats = await fs9.promises.lstat(filePath);
         return stats.isFile();
       } catch (e3) {
         return false;
@@ -111246,10 +111246,10 @@ var require_getCredentials2 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.getCredentials = getCredentials;
     var path10 = __require("path");
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     var util_1 = __require("util");
     var errorWithCode_1 = require_errorWithCode2();
-    var readFile = fs8.readFile ? (0, util_1.promisify)(fs8.readFile) : async () => {
+    var readFile = fs9.readFile ? (0, util_1.promisify)(fs9.readFile) : async () => {
       throw new errorWithCode_1.ErrorWithCode("use key rather than keyFile.", "MISSING_CREDENTIALS");
     };
     var ExtensionFiles;
@@ -112926,12 +112926,12 @@ var require_filesubjecttokensupplier2 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.FileSubjectTokenSupplier = void 0;
     var util_1 = __require("util");
-    var fs8 = __require("fs");
-    var readFile = (0, util_1.promisify)(fs8.readFile ?? (() => {
+    var fs9 = __require("fs");
+    var readFile = (0, util_1.promisify)(fs9.readFile ?? (() => {
     }));
-    var realpath = (0, util_1.promisify)(fs8.realpath ?? (() => {
+    var realpath = (0, util_1.promisify)(fs9.realpath ?? (() => {
     }));
-    var lstat = (0, util_1.promisify)(fs8.lstat ?? (() => {
+    var lstat = (0, util_1.promisify)(fs9.lstat ?? (() => {
     }));
     var FileSubjectTokenSupplier = class {
       filePath;
@@ -113049,7 +113049,7 @@ var require_certificatesubjecttokensupplier2 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.CertificateSubjectTokenSupplier = exports.InvalidConfigurationError = exports.CertificateSourceUnavailableError = exports.CERTIFICATE_CONFIGURATION_ENV_VARIABLE = void 0;
     var util_1 = require_util4();
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     var crypto_1 = __require("crypto");
     var https3 = __require("https");
     exports.CERTIFICATE_CONFIGURATION_ENV_VARIABLE = "GOOGLE_API_CERTIFICATE_CONFIG";
@@ -113143,7 +113143,7 @@ var require_certificatesubjecttokensupplier2 = __commonJS({
         const configPath = this.certificateConfigPath;
         let fileContents;
         try {
-          fileContents = await fs8.promises.readFile(configPath, "utf8");
+          fileContents = await fs9.promises.readFile(configPath, "utf8");
         } catch (err3) {
           throw new CertificateSourceUnavailableError(`Failed to read certificate config file at: ${configPath}`);
         }
@@ -113168,14 +113168,14 @@ var require_certificatesubjecttokensupplier2 = __commonJS({
       async #getKeyAndCert(certPath, keyPath) {
         let cert, key;
         try {
-          cert = await fs8.promises.readFile(certPath);
+          cert = await fs9.promises.readFile(certPath);
           new crypto_1.X509Certificate(cert);
         } catch (err3) {
           const message = err3 instanceof Error ? err3.message : String(err3);
           throw new CertificateSourceUnavailableError(`Failed to read certificate file at ${certPath}: ${message}`);
         }
         try {
-          key = await fs8.promises.readFile(keyPath);
+          key = await fs9.promises.readFile(keyPath);
           (0, crypto_1.createPrivateKey)(key);
         } catch (err3) {
           const message = err3 instanceof Error ? err3.message : String(err3);
@@ -113194,7 +113194,7 @@ var require_certificatesubjecttokensupplier2 = __commonJS({
           return JSON.stringify([leafCert.raw.toString("base64")]);
         }
         try {
-          const chainPems = await fs8.promises.readFile(this.trustChainPath, "utf8");
+          const chainPems = await fs9.promises.readFile(this.trustChainPath, "utf8");
           const pemBlocks = chainPems.match(/-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----/g) ?? [];
           const chainCerts = pemBlocks.map((pem, index5) => {
             try {
@@ -113896,7 +113896,7 @@ var require_pluggable_auth_handler2 = __commonJS({
     exports.PluggableAuthHandler = exports.ExecutableError = void 0;
     var executable_response_1 = require_executable_response2();
     var childProcess = __require("child_process");
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     var ExecutableError = class extends Error {
       /**
        * The exit code returned by the executable.
@@ -113981,14 +113981,14 @@ var require_pluggable_auth_handler2 = __commonJS({
         }
         let filePath;
         try {
-          filePath = await fs8.promises.realpath(this.outputFile);
+          filePath = await fs9.promises.realpath(this.outputFile);
         } catch {
           return void 0;
         }
-        if (!(await fs8.promises.lstat(filePath)).isFile()) {
+        if (!(await fs9.promises.lstat(filePath)).isFile()) {
           return void 0;
         }
-        const responseString = await fs8.promises.readFile(filePath, {
+        const responseString = await fs9.promises.readFile(filePath, {
           encoding: "utf8"
         });
         if (responseString === "") {
@@ -114399,7 +114399,7 @@ var require_googleauth2 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.GoogleAuth = exports.GoogleAuthExceptionMessages = void 0;
     var child_process_1 = __require("child_process");
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     var gaxios_1 = require_src7();
     var gcpMetadata = require_src9();
     var os3 = __require("os");
@@ -114694,7 +114694,7 @@ var require_googleauth2 = __commonJS({
         }
         if (location) {
           location = path10.join(location, "gcloud", "application_default_credentials.json");
-          if (!fs8.existsSync(location)) {
+          if (!fs9.existsSync(location)) {
             location = null;
           }
         }
@@ -114715,8 +114715,8 @@ var require_googleauth2 = __commonJS({
           throw new Error("The file path is invalid.");
         }
         try {
-          filePath = fs8.realpathSync(filePath);
-          if (!fs8.lstatSync(filePath).isFile()) {
+          filePath = fs9.realpathSync(filePath);
+          if (!fs9.lstatSync(filePath).isFile()) {
             throw new Error();
           }
         } catch (err3) {
@@ -114725,7 +114725,7 @@ var require_googleauth2 = __commonJS({
           }
           throw err3;
         }
-        const readStream = fs8.createReadStream(filePath);
+        const readStream = fs9.createReadStream(filePath);
         return this.fromStream(readStream, options);
       }
       /**
@@ -115038,7 +115038,7 @@ var require_googleauth2 = __commonJS({
           return this._cacheClientFromJSON(this.jsonContent, this.clientOptions);
         } else if (this.keyFilename) {
           const filePath = path10.resolve(this.keyFilename);
-          const stream20 = fs8.createReadStream(filePath);
+          const stream20 = fs9.createReadStream(filePath);
           return await this.fromStreamAsync(stream20, this.clientOptions);
         } else if (this.apiKey) {
           const client = await this.fromAPIKey(this.apiKey, this.clientOptions);
@@ -119027,10 +119027,10 @@ var require_websocket_server2 = __commonJS({
             process.nextTick(emitClose, this);
           }
         } else {
-          const server2 = this._server;
+          const server = this._server;
           this._removeListeners();
           this._removeListeners = this._server = null;
-          server2.close(() => {
+          server.close(() => {
             emitClose(this);
           });
         }
@@ -119215,17 +119215,17 @@ var require_websocket_server2 = __commonJS({
       }
     };
     module.exports = WebSocketServer3;
-    function addListeners(server2, map) {
-      for (const event of Object.keys(map)) server2.on(event, map[event]);
+    function addListeners(server, map) {
+      for (const event of Object.keys(map)) server.on(event, map[event]);
       return function removeListeners() {
         for (const event of Object.keys(map)) {
-          server2.removeListener(event, map[event]);
+          server.removeListener(event, map[event]);
         }
       };
     }
-    function emitClose(server2) {
-      server2._state = CLOSED;
-      server2.emit("close");
+    function emitClose(server) {
+      server._state = CLOSED;
+      server.emit("close");
     }
     function socketOnError() {
       this.destroy();
@@ -119244,11 +119244,11 @@ var require_websocket_server2 = __commonJS({
 ` + Object.keys(headers).map((h3) => `${h3}: ${headers[h3]}`).join("\r\n") + "\r\n\r\n" + message
       );
     }
-    function abortHandshakeOrEmitwsClientError(server2, req, socket, code, message, headers) {
-      if (server2.listenerCount("wsClientError")) {
+    function abortHandshakeOrEmitwsClientError(server, req, socket, code, message, headers) {
+      if (server.listenerCount("wsClientError")) {
         const err3 = new Error(message);
         Error.captureStackTrace(err3, abortHandshakeOrEmitwsClientError);
-        server2.emit("wsClientError", err3, socket, req);
+        server.emit("wsClientError", err3, socket, req);
       } else {
         abortHandshake(socket, code, message, headers);
       }
@@ -119273,7 +119273,7 @@ var init_wrapper2 = __esm({
 
 // node_modules/@earendil-works/pi-coding-agent/node_modules/@google/genai/dist/node/index.mjs
 import { createWriteStream as createWriteStream2 } from "fs";
-import * as fs4 from "fs/promises";
+import * as fs5 from "fs/promises";
 import { writeFile as writeFile2 } from "fs/promises";
 import { Readable as Readable2 } from "node:stream";
 import { finished as finished2 } from "node:stream/promises";
@@ -136891,7 +136891,7 @@ ${underline}`);
       async stat(file) {
         const fileStat = { size: 0, type: void 0 };
         if (typeof file === "string") {
-          const originalStat = await fs4.stat(file);
+          const originalStat = await fs5.stat(file);
           fileStat.size = originalStat.size;
           fileStat.type = this.inferMimeType(file);
           return fileStat;
@@ -137039,7 +137039,7 @@ ${underline}`);
         let fileHandle;
         const fileName = path$12.basename(file);
         try {
-          fileHandle = await fs4.open(file, "r");
+          fileHandle = await fs5.open(file, "r");
           if (!fileHandle) {
             throw new Error(`Failed to open file`);
           }
@@ -183967,14 +183967,14 @@ var require_parser2 = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs8 = this.flowScalar(this.type);
+              const fs9 = this.flowScalar(this.type);
               if (atNextItem || it2.value) {
-                map.items.push({ start, key: fs8, sep: [] });
+                map.items.push({ start, key: fs9, sep: [] });
                 this.onKeyLine = true;
               } else if (it2.sep) {
-                this.stack.push(fs8);
+                this.stack.push(fs9);
               } else {
-                Object.assign(it2, { key: fs8, sep: [] });
+                Object.assign(it2, { key: fs9, sep: [] });
                 this.onKeyLine = true;
               }
               return;
@@ -184102,13 +184102,13 @@ var require_parser2 = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs8 = this.flowScalar(this.type);
+              const fs9 = this.flowScalar(this.type);
               if (!it2 || it2.value)
-                fc.items.push({ start: [], key: fs8, sep: [] });
+                fc.items.push({ start: [], key: fs9, sep: [] });
               else if (it2.sep)
-                this.stack.push(fs8);
+                this.stack.push(fs9);
               else
-                Object.assign(it2, { key: fs8, sep: [] });
+                Object.assign(it2, { key: fs9, sep: [] });
               return;
             }
             case "flow-map-end":
@@ -217569,54 +217569,54 @@ var require_polyfills = __commonJS({
     }
     var chdir;
     module.exports = patch;
-    function patch(fs8) {
+    function patch(fs9) {
       if (constants2.hasOwnProperty("O_SYMLINK") && process.version.match(/^v0\.6\.[0-2]|^v0\.5\./)) {
-        patchLchmod(fs8);
+        patchLchmod(fs9);
       }
-      if (!fs8.lutimes) {
-        patchLutimes(fs8);
+      if (!fs9.lutimes) {
+        patchLutimes(fs9);
       }
-      fs8.chown = chownFix(fs8.chown);
-      fs8.fchown = chownFix(fs8.fchown);
-      fs8.lchown = chownFix(fs8.lchown);
-      fs8.chmod = chmodFix(fs8.chmod);
-      fs8.fchmod = chmodFix(fs8.fchmod);
-      fs8.lchmod = chmodFix(fs8.lchmod);
-      fs8.chownSync = chownFixSync(fs8.chownSync);
-      fs8.fchownSync = chownFixSync(fs8.fchownSync);
-      fs8.lchownSync = chownFixSync(fs8.lchownSync);
-      fs8.chmodSync = chmodFixSync(fs8.chmodSync);
-      fs8.fchmodSync = chmodFixSync(fs8.fchmodSync);
-      fs8.lchmodSync = chmodFixSync(fs8.lchmodSync);
-      fs8.stat = statFix(fs8.stat);
-      fs8.fstat = statFix(fs8.fstat);
-      fs8.lstat = statFix(fs8.lstat);
-      fs8.statSync = statFixSync(fs8.statSync);
-      fs8.fstatSync = statFixSync(fs8.fstatSync);
-      fs8.lstatSync = statFixSync(fs8.lstatSync);
-      if (fs8.chmod && !fs8.lchmod) {
-        fs8.lchmod = function(path10, mode, cb) {
+      fs9.chown = chownFix(fs9.chown);
+      fs9.fchown = chownFix(fs9.fchown);
+      fs9.lchown = chownFix(fs9.lchown);
+      fs9.chmod = chmodFix(fs9.chmod);
+      fs9.fchmod = chmodFix(fs9.fchmod);
+      fs9.lchmod = chmodFix(fs9.lchmod);
+      fs9.chownSync = chownFixSync(fs9.chownSync);
+      fs9.fchownSync = chownFixSync(fs9.fchownSync);
+      fs9.lchownSync = chownFixSync(fs9.lchownSync);
+      fs9.chmodSync = chmodFixSync(fs9.chmodSync);
+      fs9.fchmodSync = chmodFixSync(fs9.fchmodSync);
+      fs9.lchmodSync = chmodFixSync(fs9.lchmodSync);
+      fs9.stat = statFix(fs9.stat);
+      fs9.fstat = statFix(fs9.fstat);
+      fs9.lstat = statFix(fs9.lstat);
+      fs9.statSync = statFixSync(fs9.statSync);
+      fs9.fstatSync = statFixSync(fs9.fstatSync);
+      fs9.lstatSync = statFixSync(fs9.lstatSync);
+      if (fs9.chmod && !fs9.lchmod) {
+        fs9.lchmod = function(path10, mode, cb) {
           if (cb) process.nextTick(cb);
         };
-        fs8.lchmodSync = function() {
+        fs9.lchmodSync = function() {
         };
       }
-      if (fs8.chown && !fs8.lchown) {
-        fs8.lchown = function(path10, uid, gid, cb) {
+      if (fs9.chown && !fs9.lchown) {
+        fs9.lchown = function(path10, uid, gid, cb) {
           if (cb) process.nextTick(cb);
         };
-        fs8.lchownSync = function() {
+        fs9.lchownSync = function() {
         };
       }
       if (platform === "win32") {
-        fs8.rename = typeof fs8.rename !== "function" ? fs8.rename : (function(fs$rename) {
+        fs9.rename = typeof fs9.rename !== "function" ? fs9.rename : (function(fs$rename) {
           function rename(from, to, cb) {
             var start = Date.now();
             var backoff = 0;
             fs$rename(from, to, function CB(er) {
               if (er && (er.code === "EACCES" || er.code === "EPERM" || er.code === "EBUSY") && Date.now() - start < 6e4) {
                 setTimeout(function() {
-                  fs8.stat(to, function(stater, st3) {
+                  fs9.stat(to, function(stater, st3) {
                     if (stater && stater.code === "ENOENT")
                       fs$rename(from, to, CB);
                     else
@@ -217632,9 +217632,9 @@ var require_polyfills = __commonJS({
           }
           if (Object.setPrototypeOf) Object.setPrototypeOf(rename, fs$rename);
           return rename;
-        })(fs8.rename);
+        })(fs9.rename);
       }
-      fs8.read = typeof fs8.read !== "function" ? fs8.read : (function(fs$read) {
+      fs9.read = typeof fs9.read !== "function" ? fs9.read : (function(fs$read) {
         function read(fd, buffer, offset, length, position, callback_) {
           var callback;
           if (callback_ && typeof callback_ === "function") {
@@ -217642,22 +217642,22 @@ var require_polyfills = __commonJS({
             callback = function(er, _3, __) {
               if (er && er.code === "EAGAIN" && eagCounter < 10) {
                 eagCounter++;
-                return fs$read.call(fs8, fd, buffer, offset, length, position, callback);
+                return fs$read.call(fs9, fd, buffer, offset, length, position, callback);
               }
               callback_.apply(this, arguments);
             };
           }
-          return fs$read.call(fs8, fd, buffer, offset, length, position, callback);
+          return fs$read.call(fs9, fd, buffer, offset, length, position, callback);
         }
         if (Object.setPrototypeOf) Object.setPrototypeOf(read, fs$read);
         return read;
-      })(fs8.read);
-      fs8.readSync = typeof fs8.readSync !== "function" ? fs8.readSync : /* @__PURE__ */ (function(fs$readSync) {
+      })(fs9.read);
+      fs9.readSync = typeof fs9.readSync !== "function" ? fs9.readSync : /* @__PURE__ */ (function(fs$readSync) {
         return function(fd, buffer, offset, length, position) {
           var eagCounter = 0;
           while (true) {
             try {
-              return fs$readSync.call(fs8, fd, buffer, offset, length, position);
+              return fs$readSync.call(fs9, fd, buffer, offset, length, position);
             } catch (er) {
               if (er.code === "EAGAIN" && eagCounter < 10) {
                 eagCounter++;
@@ -217667,10 +217667,10 @@ var require_polyfills = __commonJS({
             }
           }
         };
-      })(fs8.readSync);
-      function patchLchmod(fs9) {
-        fs9.lchmod = function(path10, mode, callback) {
-          fs9.open(
+      })(fs9.readSync);
+      function patchLchmod(fs10) {
+        fs10.lchmod = function(path10, mode, callback) {
+          fs10.open(
             path10,
             constants2.O_WRONLY | constants2.O_SYMLINK,
             mode,
@@ -217679,80 +217679,80 @@ var require_polyfills = __commonJS({
                 if (callback) callback(err3);
                 return;
               }
-              fs9.fchmod(fd, mode, function(err4) {
-                fs9.close(fd, function(err22) {
+              fs10.fchmod(fd, mode, function(err4) {
+                fs10.close(fd, function(err22) {
                   if (callback) callback(err4 || err22);
                 });
               });
             }
           );
         };
-        fs9.lchmodSync = function(path10, mode) {
-          var fd = fs9.openSync(path10, constants2.O_WRONLY | constants2.O_SYMLINK, mode);
+        fs10.lchmodSync = function(path10, mode) {
+          var fd = fs10.openSync(path10, constants2.O_WRONLY | constants2.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
-            ret = fs9.fchmodSync(fd, mode);
+            ret = fs10.fchmodSync(fd, mode);
             threw = false;
           } finally {
             if (threw) {
               try {
-                fs9.closeSync(fd);
+                fs10.closeSync(fd);
               } catch (er) {
               }
             } else {
-              fs9.closeSync(fd);
+              fs10.closeSync(fd);
             }
           }
           return ret;
         };
       }
-      function patchLutimes(fs9) {
-        if (constants2.hasOwnProperty("O_SYMLINK") && fs9.futimes) {
-          fs9.lutimes = function(path10, at2, mt2, cb) {
-            fs9.open(path10, constants2.O_SYMLINK, function(er, fd) {
+      function patchLutimes(fs10) {
+        if (constants2.hasOwnProperty("O_SYMLINK") && fs10.futimes) {
+          fs10.lutimes = function(path10, at2, mt2, cb) {
+            fs10.open(path10, constants2.O_SYMLINK, function(er, fd) {
               if (er) {
                 if (cb) cb(er);
                 return;
               }
-              fs9.futimes(fd, at2, mt2, function(er2) {
-                fs9.close(fd, function(er22) {
+              fs10.futimes(fd, at2, mt2, function(er2) {
+                fs10.close(fd, function(er22) {
                   if (cb) cb(er2 || er22);
                 });
               });
             });
           };
-          fs9.lutimesSync = function(path10, at2, mt2) {
-            var fd = fs9.openSync(path10, constants2.O_SYMLINK);
+          fs10.lutimesSync = function(path10, at2, mt2) {
+            var fd = fs10.openSync(path10, constants2.O_SYMLINK);
             var ret;
             var threw = true;
             try {
-              ret = fs9.futimesSync(fd, at2, mt2);
+              ret = fs10.futimesSync(fd, at2, mt2);
               threw = false;
             } finally {
               if (threw) {
                 try {
-                  fs9.closeSync(fd);
+                  fs10.closeSync(fd);
                 } catch (er) {
                 }
               } else {
-                fs9.closeSync(fd);
+                fs10.closeSync(fd);
               }
             }
             return ret;
           };
-        } else if (fs9.futimes) {
-          fs9.lutimes = function(_a10, _b, _c, cb) {
+        } else if (fs10.futimes) {
+          fs10.lutimes = function(_a10, _b, _c, cb) {
             if (cb) process.nextTick(cb);
           };
-          fs9.lutimesSync = function() {
+          fs10.lutimesSync = function() {
           };
         }
       }
       function chmodFix(orig) {
         if (!orig) return orig;
         return function(target, mode, cb) {
-          return orig.call(fs8, target, mode, function(er) {
+          return orig.call(fs9, target, mode, function(er) {
             if (chownErOk(er)) er = null;
             if (cb) cb.apply(this, arguments);
           });
@@ -217762,7 +217762,7 @@ var require_polyfills = __commonJS({
         if (!orig) return orig;
         return function(target, mode) {
           try {
-            return orig.call(fs8, target, mode);
+            return orig.call(fs9, target, mode);
           } catch (er) {
             if (!chownErOk(er)) throw er;
           }
@@ -217771,7 +217771,7 @@ var require_polyfills = __commonJS({
       function chownFix(orig) {
         if (!orig) return orig;
         return function(target, uid, gid, cb) {
-          return orig.call(fs8, target, uid, gid, function(er) {
+          return orig.call(fs9, target, uid, gid, function(er) {
             if (chownErOk(er)) er = null;
             if (cb) cb.apply(this, arguments);
           });
@@ -217781,7 +217781,7 @@ var require_polyfills = __commonJS({
         if (!orig) return orig;
         return function(target, uid, gid) {
           try {
-            return orig.call(fs8, target, uid, gid);
+            return orig.call(fs9, target, uid, gid);
           } catch (er) {
             if (!chownErOk(er)) throw er;
           }
@@ -217801,13 +217801,13 @@ var require_polyfills = __commonJS({
             }
             if (cb) cb.apply(this, arguments);
           }
-          return options ? orig.call(fs8, target, options, callback) : orig.call(fs8, target, callback);
+          return options ? orig.call(fs9, target, options, callback) : orig.call(fs9, target, callback);
         };
       }
       function statFixSync(orig) {
         if (!orig) return orig;
         return function(target, options) {
-          var stats = options ? orig.call(fs8, target, options) : orig.call(fs8, target);
+          var stats = options ? orig.call(fs9, target, options) : orig.call(fs9, target);
           if (stats) {
             if (stats.uid < 0) stats.uid += 4294967296;
             if (stats.gid < 0) stats.gid += 4294967296;
@@ -217836,7 +217836,7 @@ var require_legacy_streams = __commonJS({
   "node_modules/@earendil-works/pi-coding-agent/node_modules/graceful-fs/legacy-streams.js"(exports, module) {
     var Stream11 = __require("stream").Stream;
     module.exports = legacy;
-    function legacy(fs8) {
+    function legacy(fs9) {
       return {
         ReadStream,
         WriteStream
@@ -217879,7 +217879,7 @@ var require_legacy_streams = __commonJS({
           });
           return;
         }
-        fs8.open(this.path, this.flags, this.mode, function(err3, fd) {
+        fs9.open(this.path, this.flags, this.mode, function(err3, fd) {
           if (err3) {
             self2.emit("error", err3);
             self2.readable = false;
@@ -217918,7 +217918,7 @@ var require_legacy_streams = __commonJS({
         this.busy = false;
         this._queue = [];
         if (this.fd === null) {
-          this._open = fs8.open;
+          this._open = fs9.open;
           this._queue.push([this._open, this.path, this.flags, this.mode, void 0]);
           this.flush();
         }
@@ -217953,7 +217953,7 @@ var require_clone = __commonJS({
 // node_modules/@earendil-works/pi-coding-agent/node_modules/graceful-fs/graceful-fs.js
 var require_graceful_fs = __commonJS({
   "node_modules/@earendil-works/pi-coding-agent/node_modules/graceful-fs/graceful-fs.js"(exports, module) {
-    var fs8 = __require("fs");
+    var fs9 = __require("fs");
     var polyfills = require_polyfills();
     var legacy = require_legacy_streams();
     var clone3 = require_clone();
@@ -217985,12 +217985,12 @@ var require_graceful_fs = __commonJS({
         m4 = "GFS4: " + m4.split(/\n/).join("\nGFS4: ");
         console.error(m4);
       };
-    if (!fs8[gracefulQueue]) {
+    if (!fs9[gracefulQueue]) {
       queue = global[gracefulQueue] || [];
-      publishQueue(fs8, queue);
-      fs8.close = (function(fs$close) {
+      publishQueue(fs9, queue);
+      fs9.close = (function(fs$close) {
         function close(fd, cb) {
-          return fs$close.call(fs8, fd, function(err3) {
+          return fs$close.call(fs9, fd, function(err3) {
             if (!err3) {
               resetQueue();
             }
@@ -218002,40 +218002,40 @@ var require_graceful_fs = __commonJS({
           value: fs$close
         });
         return close;
-      })(fs8.close);
-      fs8.closeSync = (function(fs$closeSync) {
+      })(fs9.close);
+      fs9.closeSync = (function(fs$closeSync) {
         function closeSync(fd) {
-          fs$closeSync.apply(fs8, arguments);
+          fs$closeSync.apply(fs9, arguments);
           resetQueue();
         }
         Object.defineProperty(closeSync, previousSymbol, {
           value: fs$closeSync
         });
         return closeSync;
-      })(fs8.closeSync);
+      })(fs9.closeSync);
       if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || "")) {
         process.on("exit", function() {
-          debug(fs8[gracefulQueue]);
-          __require("assert").equal(fs8[gracefulQueue].length, 0);
+          debug(fs9[gracefulQueue]);
+          __require("assert").equal(fs9[gracefulQueue].length, 0);
         });
       }
     }
     var queue;
     if (!global[gracefulQueue]) {
-      publishQueue(global, fs8[gracefulQueue]);
+      publishQueue(global, fs9[gracefulQueue]);
     }
-    module.exports = patch(clone3(fs8));
-    if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs8.__patched) {
-      module.exports = patch(fs8);
-      fs8.__patched = true;
+    module.exports = patch(clone3(fs9));
+    if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs9.__patched) {
+      module.exports = patch(fs9);
+      fs9.__patched = true;
     }
-    function patch(fs9) {
-      polyfills(fs9);
-      fs9.gracefulify = patch;
-      fs9.createReadStream = createReadStream3;
-      fs9.createWriteStream = createWriteStream3;
-      var fs$readFile = fs9.readFile;
-      fs9.readFile = readFile;
+    function patch(fs10) {
+      polyfills(fs10);
+      fs10.gracefulify = patch;
+      fs10.createReadStream = createReadStream3;
+      fs10.createWriteStream = createWriteStream3;
+      var fs$readFile = fs10.readFile;
+      fs10.readFile = readFile;
       function readFile(path10, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
@@ -218051,8 +218051,8 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$writeFile = fs9.writeFile;
-      fs9.writeFile = writeFile3;
+      var fs$writeFile = fs10.writeFile;
+      fs10.writeFile = writeFile3;
       function writeFile3(path10, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
@@ -218068,9 +218068,9 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$appendFile = fs9.appendFile;
+      var fs$appendFile = fs10.appendFile;
       if (fs$appendFile)
-        fs9.appendFile = appendFile;
+        fs10.appendFile = appendFile;
       function appendFile(path10, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
@@ -218086,9 +218086,9 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$copyFile = fs9.copyFile;
+      var fs$copyFile = fs10.copyFile;
       if (fs$copyFile)
-        fs9.copyFile = copyFile;
+        fs10.copyFile = copyFile;
       function copyFile(src, dest, flags, cb) {
         if (typeof flags === "function") {
           cb = flags;
@@ -218106,8 +218106,8 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$readdir = fs9.readdir;
-      fs9.readdir = readdir;
+      var fs$readdir = fs10.readdir;
+      fs10.readdir = readdir;
       var noReaddirOptionVersions = /^v[0-5]\./;
       function readdir(path10, options, cb) {
         if (typeof options === "function")
@@ -218148,21 +218148,21 @@ var require_graceful_fs = __commonJS({
         }
       }
       if (process.version.substr(0, 4) === "v0.8") {
-        var legStreams = legacy(fs9);
+        var legStreams = legacy(fs10);
         ReadStream = legStreams.ReadStream;
         WriteStream = legStreams.WriteStream;
       }
-      var fs$ReadStream = fs9.ReadStream;
+      var fs$ReadStream = fs10.ReadStream;
       if (fs$ReadStream) {
         ReadStream.prototype = Object.create(fs$ReadStream.prototype);
         ReadStream.prototype.open = ReadStream$open;
       }
-      var fs$WriteStream = fs9.WriteStream;
+      var fs$WriteStream = fs10.WriteStream;
       if (fs$WriteStream) {
         WriteStream.prototype = Object.create(fs$WriteStream.prototype);
         WriteStream.prototype.open = WriteStream$open;
       }
-      Object.defineProperty(fs9, "ReadStream", {
+      Object.defineProperty(fs10, "ReadStream", {
         get: function() {
           return ReadStream;
         },
@@ -218172,7 +218172,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      Object.defineProperty(fs9, "WriteStream", {
+      Object.defineProperty(fs10, "WriteStream", {
         get: function() {
           return WriteStream;
         },
@@ -218183,7 +218183,7 @@ var require_graceful_fs = __commonJS({
         configurable: true
       });
       var FileReadStream = ReadStream;
-      Object.defineProperty(fs9, "FileReadStream", {
+      Object.defineProperty(fs10, "FileReadStream", {
         get: function() {
           return FileReadStream;
         },
@@ -218194,7 +218194,7 @@ var require_graceful_fs = __commonJS({
         configurable: true
       });
       var FileWriteStream = WriteStream;
-      Object.defineProperty(fs9, "FileWriteStream", {
+      Object.defineProperty(fs10, "FileWriteStream", {
         get: function() {
           return FileWriteStream;
         },
@@ -218243,13 +218243,13 @@ var require_graceful_fs = __commonJS({
         });
       }
       function createReadStream3(path10, options) {
-        return new fs9.ReadStream(path10, options);
+        return new fs10.ReadStream(path10, options);
       }
       function createWriteStream3(path10, options) {
-        return new fs9.WriteStream(path10, options);
+        return new fs10.WriteStream(path10, options);
       }
-      var fs$open = fs9.open;
-      fs9.open = open3;
+      var fs$open = fs10.open;
+      fs10.open = open3;
       function open3(path10, flags, mode, cb) {
         if (typeof mode === "function")
           cb = mode, mode = null;
@@ -218265,20 +218265,20 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      return fs9;
+      return fs10;
     }
     function enqueue(elem) {
       debug("ENQUEUE", elem[0].name, elem[1]);
-      fs8[gracefulQueue].push(elem);
+      fs9[gracefulQueue].push(elem);
       retry();
     }
     var retryTimer;
     function resetQueue() {
       var now = Date.now();
-      for (var i3 = 0; i3 < fs8[gracefulQueue].length; ++i3) {
-        if (fs8[gracefulQueue][i3].length > 2) {
-          fs8[gracefulQueue][i3][3] = now;
-          fs8[gracefulQueue][i3][4] = now;
+      for (var i3 = 0; i3 < fs9[gracefulQueue].length; ++i3) {
+        if (fs9[gracefulQueue][i3].length > 2) {
+          fs9[gracefulQueue][i3][3] = now;
+          fs9[gracefulQueue][i3][4] = now;
         }
       }
       retry();
@@ -218286,9 +218286,9 @@ var require_graceful_fs = __commonJS({
     function retry() {
       clearTimeout(retryTimer);
       retryTimer = void 0;
-      if (fs8[gracefulQueue].length === 0)
+      if (fs9[gracefulQueue].length === 0)
         return;
-      var elem = fs8[gracefulQueue].shift();
+      var elem = fs9[gracefulQueue].shift();
       var fn = elem[0];
       var args = elem[1];
       var err3 = elem[2];
@@ -218310,7 +218310,7 @@ var require_graceful_fs = __commonJS({
           debug("RETRY", fn.name, args);
           fn.apply(null, args.concat([startTime]));
         } else {
-          fs8[gracefulQueue].push(elem);
+          fs9[gracefulQueue].push(elem);
         }
       }
       if (retryTimer === void 0) {
@@ -218745,10 +218745,10 @@ var require_mtime_precision = __commonJS({
   "node_modules/@earendil-works/pi-coding-agent/node_modules/proper-lockfile/lib/mtime-precision.js"(exports, module) {
     "use strict";
     var cacheSymbol = Symbol();
-    function probe(file, fs8, callback) {
-      const cachedPrecision = fs8[cacheSymbol];
+    function probe(file, fs9, callback) {
+      const cachedPrecision = fs9[cacheSymbol];
       if (cachedPrecision) {
-        return fs8.stat(file, (err3, stat5) => {
+        return fs9.stat(file, (err3, stat5) => {
           if (err3) {
             return callback(err3);
           }
@@ -218756,16 +218756,16 @@ var require_mtime_precision = __commonJS({
         });
       }
       const mtime = new Date(Math.ceil(Date.now() / 1e3) * 1e3 + 5);
-      fs8.utimes(file, mtime, mtime, (err3) => {
+      fs9.utimes(file, mtime, mtime, (err3) => {
         if (err3) {
           return callback(err3);
         }
-        fs8.stat(file, (err4, stat5) => {
+        fs9.stat(file, (err4, stat5) => {
           if (err4) {
             return callback(err4);
           }
           const precision = stat5.mtime.getTime() % 1e3 === 0 ? "s" : "ms";
-          Object.defineProperty(fs8, cacheSymbol, { value: precision });
+          Object.defineProperty(fs9, cacheSymbol, { value: precision });
           callback(null, stat5.mtime, precision);
         });
       });
@@ -218787,7 +218787,7 @@ var require_lockfile = __commonJS({
   "node_modules/@earendil-works/pi-coding-agent/node_modules/proper-lockfile/lib/lockfile.js"(exports, module) {
     "use strict";
     var path10 = __require("path");
-    var fs8 = require_graceful_fs();
+    var fs9 = require_graceful_fs();
     var retry = require_retry8();
     var onExit = require_signal_exit();
     var mtimePrecision = require_mtime_precision();
@@ -218918,7 +218918,7 @@ var require_lockfile = __commonJS({
         update: null,
         realpath: true,
         retries: 0,
-        fs: fs8,
+        fs: fs9,
         onCompromised: (err3) => {
           throw err3;
         },
@@ -218962,7 +218962,7 @@ var require_lockfile = __commonJS({
     }
     function unlock(file, options, callback) {
       options = {
-        fs: fs8,
+        fs: fs9,
         realpath: true,
         ...options
       };
@@ -218984,7 +218984,7 @@ var require_lockfile = __commonJS({
       options = {
         stale: 1e4,
         realpath: true,
-        fs: fs8,
+        fs: fs9,
         ...options
       };
       options.stale = Math.max(options.stale || 0, 2e3);
@@ -219023,16 +219023,16 @@ var require_lockfile = __commonJS({
 var require_adapter = __commonJS({
   "node_modules/@earendil-works/pi-coding-agent/node_modules/proper-lockfile/lib/adapter.js"(exports, module) {
     "use strict";
-    var fs8 = require_graceful_fs();
-    function createSyncFs(fs9) {
+    var fs9 = require_graceful_fs();
+    function createSyncFs(fs10) {
       const methods = ["mkdir", "realpath", "stat", "rmdir", "utimes"];
-      const newFs = { ...fs9 };
+      const newFs = { ...fs10 };
       methods.forEach((method) => {
         newFs[method] = (...args) => {
           const callback = args.pop();
           let ret;
           try {
-            ret = fs9[`${method}Sync`](...args);
+            ret = fs10[`${method}Sync`](...args);
           } catch (err3) {
             return callback(err3);
           }
@@ -219070,7 +219070,7 @@ var require_adapter = __commonJS({
     }
     function toSyncOptions(options) {
       options = { ...options };
-      options.fs = createSyncFs(options.fs || fs8);
+      options.fs = createSyncFs(options.fs || fs9);
       if (typeof options.retries === "number" && options.retries > 0 || options.retries && typeof options.retries.retries === "number" && options.retries.retries > 0) {
         throw Object.assign(new Error("Cannot use retries with the sync api"), { code: "ESYNC" });
       }
@@ -248815,7 +248815,97 @@ ${captureLines}` : capture.stack;
 
 // src/main.js
 import http5 from "node:http";
-import fs7 from "node:fs";
+
+// src/runtime-lifecycle.js
+import fs from "node:fs";
+import readline from "node:readline";
+import { once } from "node:events";
+function createRuntimeListener({ createServer: createServer3, port: port2, log }) {
+  let server = null;
+  let activeRequests = 0;
+  let finishPause = null;
+  const closeListener = () => {
+    if (!server) return;
+    const closing = server;
+    server = null;
+    closing.close(() => log("serverClosed", { port: port2 }));
+    log("serverListenerPaused", { port: port2 });
+  };
+  const completePause = () => {
+    finishPause?.();
+    finishPause = null;
+  };
+  return (state3) => {
+    if (state3 === "pause") {
+      if (activeRequests === 0) {
+        closeListener();
+        return;
+      }
+      if (finishPause) return;
+      return new Promise((resolve4) => {
+        finishPause = resolve4;
+      });
+    } else if (state3 === "suspend") {
+      closeListener();
+      completePause();
+    } else if (state3 === "resume") {
+      completePause();
+      if (server) return;
+      server = createServer3();
+      server.on("request", (_req, res) => {
+        activeRequests++;
+        res.once("close", () => {
+          activeRequests--;
+          if (finishPause && activeRequests === 0) {
+            closeListener();
+            completePause();
+          }
+        });
+      });
+      server.on("listening", () => log("serverListening", { port: port2 }));
+      server.on("error", (error) => {
+        log("serverError", { port: port2, errorCode: error.code, errorMessage: error.message });
+        throw error;
+      });
+      const ready = once(server, "listening");
+      server.listen(port2, "127.0.0.1");
+      return ready;
+    } else {
+      throw new Error(`Invalid runtime lifecycle state: ${state3}`);
+    }
+  };
+}
+function installRuntimeLifecycle(options) {
+  const transition = createRuntimeListener(options);
+  if (options.commandFD === void 0) {
+    transition("resume");
+    return;
+  }
+  const commandFD = Number(options.commandFD);
+  const acknowledgementFD = Number(options.acknowledgementFD);
+  if (!Number.isInteger(commandFD) || !Number.isInteger(acknowledgementFD)) {
+    throw new Error("Invalid runtime lifecycle pipe descriptors");
+  }
+  const commands = readline.createInterface({
+    input: fs.createReadStream(null, { fd: commandFD, autoClose: false }),
+    crlfDelay: Infinity
+  });
+  commands.on("line", (line) => {
+    const [state3, generation] = line.split(":");
+    if (!/^\d+$/.test(generation)) throw new Error("Invalid runtime lifecycle generation");
+    Promise.resolve(transition(state3)).then(() => {
+      options.log("nativeLifecycleApplied", { state: state3, generation });
+      fs.writeSync(acknowledgementFD, `${generation}
+`);
+    });
+  });
+  commands.on("close", () => {
+    throw new Error("Runtime lifecycle pipe closed");
+  });
+}
+
+// src/main.js
+import fs8 from "node:fs";
 
 // node_modules/typebox/build/system/memory/memory.mjs
 var memory_exports = {};
@@ -261505,7 +261595,7 @@ async function startCallbackServer(expectedState) {
         resolveWait(value2);
       };
     });
-    const server2 = createServer3((req, res) => {
+    const server = createServer3((req, res) => {
       try {
         const url = new URL(req.url || "", "http://localhost");
         if (url.pathname !== CALLBACK_PATH) {
@@ -261539,12 +261629,12 @@ async function startCallbackServer(expectedState) {
         res.end("Internal error");
       }
     });
-    server2.on("error", (err3) => {
+    server.on("error", (err3) => {
       reject(err3);
     });
-    server2.listen(CALLBACK_PORT, CALLBACK_HOST, () => {
+    server.listen(CALLBACK_PORT, CALLBACK_HOST, () => {
       resolve4({
-        server: server2,
+        server,
         redirectUri: REDIRECT_URI,
         cancelWait: () => {
           settleWait?.(null);
@@ -261599,9 +261689,9 @@ async function exchangeAuthorizationCode(code, state3, verifier, redirectUri, si
 }
 async function loginAnthropic(interaction) {
   const { verifier, challenge } = await generatePKCE();
-  const server2 = await startCallbackServer(verifier);
+  const server = await startCallbackServer(verifier);
   const manualAbort = new AbortController();
-  const onAbort = () => server2.cancelWait();
+  const onAbort = () => server.cancelWait();
   interaction.signal.addEventListener("abort", onAbort, { once: true });
   if (interaction.signal.aborted)
     onAbort();
@@ -261632,12 +261722,12 @@ async function loginAnthropic(interaction) {
       signal: manualAbort.signal
     }).then((input) => {
       manualInput = input;
-      server2.cancelWait();
+      server.cancelWait();
     }).catch((error) => {
       manualError = error instanceof Error ? error : new Error(String(error));
-      server2.cancelWait();
+      server.cancelWait();
     });
-    const result = await server2.waitForCode();
+    const result = await server.waitForCode();
     if (manualError)
       throw manualError;
     if (result?.code) {
@@ -261671,7 +261761,7 @@ async function loginAnthropic(interaction) {
   } finally {
     interaction.signal.removeEventListener("abort", onAbort);
     manualAbort.abort();
-    server2.server.close();
+    server.server.close();
   }
 }
 async function refreshAnthropicToken(refreshToken2, signal) {
@@ -262533,7 +262623,7 @@ function startLocalOAuthServer(state3) {
       resolve4(value2);
     };
   });
-  const server2 = _http.createServer((req, res) => {
+  const server = _http.createServer((req, res) => {
     try {
       const url = new URL(req.url || "", "http://localhost");
       if (url.pathname !== "/auth/callback") {
@@ -262566,9 +262656,9 @@ function startLocalOAuthServer(state3) {
     }
   });
   return new Promise((resolve4) => {
-    server2.listen(1455, getCallbackHost(), () => {
+    server.listen(1455, getCallbackHost(), () => {
       resolve4({
-        close: () => server2.close(),
+        close: () => server.close(),
         cancelWait: () => {
           settleWait?.(null);
         },
@@ -262579,7 +262669,7 @@ function startLocalOAuthServer(state3) {
       resolve4({
         close: () => {
           try {
-            server2.close();
+            server.close();
           } catch {
           }
         },
@@ -262626,9 +262716,9 @@ async function loginOpenAICodexDeviceCode(interaction) {
 }
 async function loginOpenAICodex(interaction) {
   const { verifier, state: state3, url } = await createAuthorizationFlow();
-  const server2 = await startLocalOAuthServer(state3);
+  const server = await startLocalOAuthServer(state3);
   const manualAbort = new AbortController();
-  const onAbort = () => server2.cancelWait();
+  const onAbort = () => server.cancelWait();
   interaction.signal.addEventListener("abort", onAbort, { once: true });
   if (interaction.signal.aborted)
     onAbort();
@@ -262648,12 +262738,12 @@ async function loginOpenAICodex(interaction) {
       signal: manualAbort.signal
     }).then((input) => {
       manualCode = input;
-      server2.cancelWait();
+      server.cancelWait();
     }).catch((error) => {
       manualError = error instanceof Error ? error : new Error(String(error));
-      server2.cancelWait();
+      server.cancelWait();
     });
-    const result = await server2.waitForCode();
+    const result = await server.waitForCode();
     if (manualError)
       throw manualError;
     if (result?.code) {
@@ -262681,7 +262771,7 @@ async function loginOpenAICodex(interaction) {
   } finally {
     interaction.signal.removeEventListener("abort", onAbort);
     manualAbort.abort();
-    server2.close();
+    server.close();
   }
 }
 async function refreshOpenAICodexToken(refreshToken2, signal) {
@@ -262816,7 +262906,7 @@ async function startCallbackServer2(callbackPath, verifier, signal) {
     resolveCredential = resolve4;
     rejectCredential = reject;
   });
-  let server2;
+  let server;
   let claimed = false;
   let settled = false;
   let timeout;
@@ -262826,7 +262916,7 @@ async function startCallbackServer2(callbackPath, verifier, signal) {
       clearTimeout(timeout);
     if (onAbort)
       signal.removeEventListener("abort", onAbort);
-    server2.close();
+    server.close();
   };
   const finish = (result) => {
     if (settled)
@@ -262838,7 +262928,7 @@ async function startCallbackServer2(callbackPath, verifier, signal) {
     else
       rejectCredential(result.error);
   };
-  server2 = createServer((request, response) => {
+  server = createServer((request, response) => {
     void (async () => {
       const requestUrl = new URL(request.url ?? "/", `http://${callbackHost}`);
       if (request.method !== "GET" || requestUrl.pathname !== callbackPath) {
@@ -262874,13 +262964,13 @@ async function startCallbackServer2(callbackPath, verifier, signal) {
     })();
   });
   await new Promise((resolve4, reject) => {
-    server2.once("error", reject);
-    server2.listen(0, callbackHost, () => {
-      server2.removeListener("error", reject);
+    server.once("error", reject);
+    server.listen(0, callbackHost, () => {
+      server.removeListener("error", reject);
       resolve4();
     });
   });
-  server2.on("error", (error) => finish({ error }));
+  server.on("error", (error) => finish({ error }));
   onAbort = () => finish({ error: new Error("Login cancelled") });
   signal.addEventListener("abort", onAbort, { once: true });
   if (signal.aborted) {
@@ -262888,7 +262978,7 @@ async function startCallbackServer2(callbackPath, verifier, signal) {
     throw new Error("Login cancelled");
   }
   timeout = setTimeout(() => finish({ error: new Error("OpenRouter OAuth login timed out") }), LOGIN_TIMEOUT_MS);
-  const address = server2.address();
+  const address = server.address();
   if (!address || typeof address === "string") {
     close();
     throw new Error("Could not determine the OpenRouter OAuth callback port");
@@ -263077,7 +263167,7 @@ function startOAuthCallbackServer(expectedState, signal) {
     response.setHeader("content-type", "text/html; charset=utf-8");
     response.end(html);
   };
-  const server2 = _http2.createServer((request, response) => {
+  const server = _http2.createServer((request, response) => {
     const url = new URL(request.url ?? "/", REDIRECT_URI3);
     if (url.pathname !== CALLBACK_PATH2) {
       sendPage(response, 404, oauthErrorHtml("Callback route not found."));
@@ -263102,12 +263192,12 @@ function startOAuthCallbackServer(expectedState, signal) {
     finish(code);
   });
   return new Promise((resolve4) => {
-    server2.listen(CALLBACK_PORT2, CALLBACK_HOST2, () => {
+    server.listen(CALLBACK_PORT2, CALLBACK_HOST2, () => {
       resolve4({
         waitForCode: () => wait,
         close: () => {
           finish(null);
-          server2.close();
+          server.close();
         }
       });
     }).once("error", () => {
@@ -263807,7 +263897,7 @@ function startCallbackServer3() {
   const callbackPromise = new Promise((resolve4) => {
     settle = resolve4;
   });
-  const server2 = createServer2((req, res) => {
+  const server = createServer2((req, res) => {
     try {
       const origin = req.headers.origin;
       if (origin === "https://accounts.x.ai" || origin === "https://auth.x.ai") {
@@ -263853,10 +263943,10 @@ function startCallbackServer3() {
   });
   const listen = (port2) => new Promise((resolve4, reject) => {
     const onError = (err3) => reject(err3);
-    server2.once("error", onError);
-    server2.listen(port2, CALLBACK_HOST3, () => {
-      server2.removeListener("error", onError);
-      const addr = server2.address();
+    server.once("error", onError);
+    server.listen(port2, CALLBACK_HOST3, () => {
+      server.removeListener("error", onError);
+      const addr = server.address();
       resolve4(typeof addr === "object" && addr ? addr.port : port2);
     });
   });
@@ -263867,18 +263957,18 @@ function startCallbackServer3() {
     } catch {
       actualPort = await listen(0);
     }
-    server2.on("error", (err3) => {
+    server.on("error", (err3) => {
       settle?.({
         error: "server_error",
         errorDescription: err3 instanceof Error ? err3.message : String(err3)
       });
     });
-    server2.unref();
-    server2.requestTimeout = 1e4;
-    server2.headersTimeout = 12e3;
+    server.unref();
+    server.requestTimeout = 1e4;
+    server.headersTimeout = 12e3;
     const redirectUri = `http://${CALLBACK_HOST3}:${actualPort}${CALLBACK_PATH3}`;
     return {
-      server: server2,
+      server,
       redirectUri,
       waitForCallback: (timeoutMs2, signal) => raceCallback(callbackPromise, timeoutMs2, signal)
     };
@@ -281817,7 +281907,7 @@ var import_yaml3 = __toESM(require_dist8(), 1);
 // node_modules/@earendil-works/pi-coding-agent/dist/utils/photon.js
 import { createRequire as createRequire3 } from "module";
 var require2 = createRequire3(import.meta.url);
-var fs5 = require2("fs");
+var fs6 = require2("fs");
 
 // node_modules/@earendil-works/pi-coding-agent/dist/utils/image-resize-core.js
 var DEFAULT_MAX_BYTES2 = 4.5 * 1024 * 1024;
@@ -284604,14 +284694,14 @@ var hs = new RegExp(pe2, "g");
 var as = /\\\\/g;
 var ls = /\\{/g;
 var cs = /\\}/g;
-var fs6 = /\\,/g;
+var fs7 = /\\,/g;
 var us = /\\./g;
 var ds = 1e5;
 function Ht(n7) {
   return isNaN(n7) ? n7.charCodeAt(0) : parseInt(n7, 10);
 }
 function ps(n7) {
-  return n7.replace(as, fe2).replace(ls, ue2).replace(cs, qt).replace(fs6, de2).replace(us, pe2);
+  return n7.replace(as, fe2).replace(ls, ue2).replace(cs, qt).replace(fs7, de2).replace(us, pe2);
 }
 function ms(n7) {
   return n7.replace(is, "\\").replace(rs, "{").replace(ns, "}").replace(os2, ",").replace(hs, ".");
@@ -288299,15 +288389,15 @@ function sanitizeRuntimeLogValue(value2) {
 function appendRuntimeLifecycleLog(event, metadata = {}) {
   if (!runtimeLogPath) return;
   try {
-    if (fs7.existsSync(runtimeLogPath) && fs7.statSync(runtimeLogPath).size >= RUNTIME_LOG_MAX_BYTES) {
+    if (fs8.existsSync(runtimeLogPath) && fs8.statSync(runtimeLogPath).size >= RUNTIME_LOG_MAX_BYTES) {
       const previous = runtimeLogPath.replace(/\.log$/, ".previous.log");
-      fs7.rmSync(previous, { force: true });
-      fs7.renameSync(runtimeLogPath, previous);
+      fs8.rmSync(previous, { force: true });
+      fs8.renameSync(runtimeLogPath, previous);
     }
     const safeMetadata = Object.fromEntries(
       Object.entries(metadata).map(([key, value2]) => [key, sanitizeRuntimeLogValue(value2)])
     );
-    fs7.appendFileSync(runtimeLogPath, `${JSON.stringify({
+    fs8.appendFileSync(runtimeLogPath, `${JSON.stringify({
       time: (/* @__PURE__ */ new Date()).toISOString(),
       event,
       runtimeId,
@@ -289160,9 +289250,9 @@ function mutatePayload(payload, request, config) {
     const mcp = nativeTools.find((tool) => tool.type === "mcp_toolset");
     if (mcp) {
       const serverName = mcp.payload?.server_name || "yamabiko-mcp";
-      const server2 = { type: "url", url: mcp.payload?.server_url, name: serverName };
-      if (config.mcpAuthorizationToken) server2.authorization_token = config.mcpAuthorizationToken;
-      value2.mcp_servers = [server2];
+      const server = { type: "url", url: mcp.payload?.server_url, name: serverName };
+      if (config.mcpAuthorizationToken) server.authorization_token = config.mcpAuthorizationToken;
+      value2.mcp_servers = [server];
       const allowed = (mcp.payload?.allowed_tools || "").split(",").map((item) => item.trim()).filter(Boolean);
       const toolset = { type: "mcp_toolset", mcp_server_name: serverName };
       if (allowed.length) {
@@ -289536,7 +289626,7 @@ async function runAgent(envelope, res) {
     runs.delete(runId);
   }
 }
-var server = http5.createServer(async (req, res) => {
+var handleRequest = async (req, res) => {
   if (req.headers.authorization !== `Bearer ${token}`) return json(res, 401, { error: "unauthorized" });
   try {
     if (req.method === "GET" && req.url === "/health") {
@@ -289635,18 +289725,14 @@ var server = http5.createServer(async (req, res) => {
       res.end();
     }
   }
+};
+installRuntimeLifecycle({
+  createServer: () => http5.createServer(handleRequest),
+  port,
+  commandFD: process.argv[5],
+  acknowledgementFD: process.argv[6],
+  log: appendRuntimeLifecycleLog
 });
-if (runtimeLogPath) {
-  server.on("listening", () => appendRuntimeLifecycleLog("serverListening", { port }));
-  server.on("close", () => appendRuntimeLifecycleLog("serverClosed", { port }));
-  server.on("error", (error) => appendRuntimeLifecycleLog("serverError", {
-    errorName: error?.name || "Error",
-    errorCode: error?.code || "none",
-    errorMessage: error?.message || String(error),
-    port
-  }));
-}
-server.listen(port, "127.0.0.1");
 /*! Bundled license information:
 
 web-streams-polyfill/dist/ponyfill.es2018.js:

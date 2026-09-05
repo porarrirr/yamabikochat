@@ -51,6 +51,8 @@ final class AgentSkillRepository: @unchecked Sendable {
             }
             if isDirectory.boolValue {
                 try copyValidatedFolder(from: sourceURL, to: extracted)
+            } else if sourceURL.pathExtension.lowercased() == "md" {
+                try copyStandaloneMarkdown(from: sourceURL, to: extracted)
             } else {
                 try extractValidatedArchive(from: sourceURL, to: extracted)
             }
@@ -241,7 +243,7 @@ final class AgentSkillRepository: @unchecked Sendable {
     private func extractValidatedArchive(from source: URL, to destination: URL) throws {
         let size = (try source.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
         guard size <= AgentSkillLimits.archiveBytes else { throw AgentSkillError.limitExceeded("ZIPは50 MB以下にしてください。") }
-        guard source.pathExtension.lowercased() == "zip" else { throw AgentSkillError.invalidArchive("ZIPまたはフォルダを選択してください。") }
+        guard source.pathExtension.lowercased() == "zip" else { throw AgentSkillError.invalidArchive("Markdown、ZIP、またはフォルダを選択してください。") }
         let archive: Archive
         do { archive = try Archive(url: source, accessMode: .read) }
         catch { throw AgentSkillError.invalidArchive("ZIPを開けません: \(error.localizedDescription)") }
@@ -269,6 +271,21 @@ final class AgentSkillRepository: @unchecked Sendable {
                 catch { throw AgentSkillError.invalidArchive("ZIPの展開に失敗しました: \(path)") }
             }
         }
+    }
+
+    private func copyStandaloneMarkdown(from source: URL, to destination: URL) throws {
+        let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+        guard values.isSymbolicLink != true else {
+            throw AgentSkillError.symbolicLink("シンボリックリンクは使用できません: \(source.lastPathComponent)")
+        }
+        guard values.isRegularFile == true else {
+            throw AgentSkillError.invalidSkillFile("通常のMarkdownファイルを選択してください。")
+        }
+        let bytes = Int64(values.fileSize ?? 0)
+        guard bytes <= AgentSkillLimits.skillFileBytes else {
+            throw AgentSkillError.limitExceeded("ファイルが読込上限を超えています: \(source.lastPathComponent)")
+        }
+        try fileManager.copyItem(at: source, to: destination.appendingPathComponent("SKILL.md"))
     }
 
     private func copyValidatedFolder(from source: URL, to destination: URL) throws {

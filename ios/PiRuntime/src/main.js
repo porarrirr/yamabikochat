@@ -1,4 +1,5 @@
 import http from "node:http";
+import { installRuntimeLifecycle } from "./runtime-lifecycle.js";
 import fs from "node:fs";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { createModels, createProvider, envApiKeyAuth, InMemoryCredentialStore } from "@earendil-works/pi-ai";
@@ -1368,7 +1369,7 @@ async function runAgent(envelope, res) {
   }
 }
 
-const server = http.createServer(async (req, res) => {
+const handleRequest = async (req, res) => {
   if (req.headers.authorization !== `Bearer ${token}`) return json(res, 401, { error: "unauthorized" });
   try {
     if (req.method === "GET" && req.url === "/health") {
@@ -1453,16 +1454,12 @@ const server = http.createServer(async (req, res) => {
     if (!res.headersSent) json(res, 500, { error: error?.message || String(error) });
     else { send(res, errorEvent(error)); res.end(); }
   }
-});
+};
 
-if (runtimeLogPath) {
-  server.on("listening", () => appendRuntimeLifecycleLog("serverListening", { port }));
-  server.on("close", () => appendRuntimeLifecycleLog("serverClosed", { port }));
-  server.on("error", (error) => appendRuntimeLifecycleLog("serverError", {
-    errorName: error?.name || "Error",
-    errorCode: error?.code || "none",
-    errorMessage: error?.message || String(error),
-    port
-  }));
-}
-server.listen(port, "127.0.0.1");
+installRuntimeLifecycle({
+  createServer: () => http.createServer(handleRequest),
+  port,
+  commandFD: process.argv[5],
+  acknowledgementFD: process.argv[6],
+  log: appendRuntimeLifecycleLog
+});

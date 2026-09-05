@@ -174,7 +174,7 @@ struct SettingsScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(
             isPresented: $showAgentSkillImporter,
-            allowedContentTypes: [.zip, .folder],
+            allowedContentTypes: [UTType(filenameExtension: "md")!, .zip, .folder],
             allowsMultipleSelection: false
         ) { result in
             switch result {

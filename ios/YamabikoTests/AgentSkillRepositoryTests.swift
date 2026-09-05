@@ -61,6 +61,24 @@ final class AgentSkillRepositoryTests: XCTestCase {
         XCTAssertThrowsError(try repository.readResource(name: "review-helper", path: "../outside.txt"))
     }
 
+    func testImportsStandaloneMarkdownAsSkillFile() throws {
+        let markdownURL = temporaryRoot.appendingPathComponent("standalone.md")
+        try Data("""
+        ---
+        name: standalone-skill
+        description: Imported from one Markdown file
+        ---
+        Follow the standalone instructions.
+        """.utf8).write(to: markdownURL)
+
+        let preview = try repository.inspect(sourceURL: markdownURL)
+
+        XCTAssertEqual(preview.manifest.name, "standalone-skill")
+        XCTAssertEqual(preview.files.map(\.path), ["SKILL.md"])
+        _ = try repository.install(preview, trusted: true, allowReplacement: false)
+        XCTAssertTrue(try repository.skillInstructions(name: "standalone-skill").contains("Follow the standalone instructions."))
+    }
+
     func testEnabledStatePersistsAndReplacementPreservesIt() throws {
         let first = try repository.inspect(sourceURL: makeSkill(name: "stable-skill"))
         _ = try repository.install(first, trusted: true, allowReplacement: false)
