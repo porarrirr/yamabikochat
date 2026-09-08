@@ -84,13 +84,7 @@ struct HtmlPreviewWebView: UIViewRepresentable {
 
         static func sandbox(_ html: String) -> String {
             let policy = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'\">"
-            if let head = html.range(of: "<head", options: [.caseInsensitive])?.lowerBound,
-               let end = html[head...].firstIndex(of: ">") {
-                var result = html
-                result.insert(contentsOf: policy, at: result.index(after: end))
-                return result
-            }
-            return policy + html
+            return "<!doctype html><html><head>" + policy + "</head><body>" + html + "</body></html>"
         }
 
         func webView(

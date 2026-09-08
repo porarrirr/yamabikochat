@@ -141,6 +141,57 @@ private final class PythonRuntimeBridgeStore: @unchecked Sendable {
     }
 }
 
+// Every worker shares the one native interpreter, including session resets.
+actor PythonJobQueue {
+    static let shared = PythonJobQueue()
+    private var active: UUID?
+    private var unavailable = false
+    private var waiting: [(UUID, CheckedContinuation<Void, Error>)] = []
+
+    func acquire(_ id: UUID) async throws {
+        guard !unavailable else { throw PythonToolError.poisoned }
+        try Task.checkCancellation()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                if active == nil {
+                    active = id
+                    continuation.resume()
+                } else {
+                    waiting.append((id, continuation))
+                }
+            }
+        } onCancel: {
+            Task { await self.cancel(id) }
+        }
+        if Task.isCancelled {
+            release(id)
+            throw CancellationError()
+        }
+    }
+
+    func poison() {
+        unavailable = true
+        let pending = waiting
+        waiting = []
+        pending.forEach { $0.1.resume(throwing: PythonToolError.poisoned) }
+    }
+
+    private func cancel(_ id: UUID) {
+        guard let index = waiting.firstIndex(where: { $0.0 == id }) else { return }
+        waiting.remove(at: index).1.resume(throwing: CancellationError())
+    }
+
+    func release(_ id: UUID) {
+        guard active == id else { return }
+        active = nil
+        if !waiting.isEmpty {
+            let next = waiting.removeFirst()
+            active = next.0
+            next.1.resume()
+        }
+    }
+}
+
 actor PythonWorker {
     static let shared = PythonWorker()
 
@@ -178,6 +229,19 @@ actor PythonWorker {
         reset: Bool,
         attachmentPaths: [String]
     ) async throws -> PythonExecutionResponse {
+        let jobID = UUID()
+        try await PythonJobQueue.shared.acquire(jobID)
+        do {
+            let result = try await executeAcquired(sessionID: sessionID, code: code, reset: reset, attachmentPaths: attachmentPaths)
+            await PythonJobQueue.shared.release(jobID)
+            return result
+        } catch {
+            await PythonJobQueue.shared.release(jobID)
+            throw error
+        }
+    }
+
+    private func executeAcquired(sessionID: String, code: String, reset: Bool, attachmentPaths: [String]) async throws -> PythonExecutionResponse {
         guard !poisoned else { throw PythonToolError.poisoned }
         let bridge = try runtimeBridge()
         let paths = try sessions.prepare(sessionID: sessionID)
@@ -207,12 +271,12 @@ actor PythonWorker {
         do {
             try Task.checkCancellation()
         } catch {
-            await resetSession(sessionID: sessionID)
+            await resetAcquired(sessionID: sessionID)
             throw error
         }
         if let violation = workspaceLimitViolation(in: paths) {
             let response = Self.resourceLimitResponse(violation)
-            await resetSession(sessionID: sessionID)
+            await resetAcquired(sessionID: sessionID)
             return response
         }
         guard let resultData = resultJSON.data(using: .utf8),
@@ -224,7 +288,14 @@ actor PythonWorker {
     }
 
     func resetSession(sessionID: String) async {
-        guard let bridge else { return }
+        let jobID = UUID()
+        do { try await PythonJobQueue.shared.acquire(jobID) } catch { return }
+        await resetAcquired(sessionID: sessionID)
+        await PythonJobQueue.shared.release(jobID)
+    }
+
+    private func resetAcquired(sessionID: String) async {
+        guard !poisoned, let bridge else { return }
         let error = await withCheckedContinuation { continuation in
             bridge.resetSession(sessionID) { errorMessage in
                 continuation.resume(returning: errorMessage)
@@ -269,10 +340,11 @@ actor PythonWorker {
         let configuredMemoryLimit = memoryLimitBytes
         let configuredTimeout = timeoutSeconds
         let cancellation = PythonCancellationFlag()
+        let executionID = UUID().uuidString
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 let gate = PythonExecutionGate(continuation: continuation)
-                bridge.executeSession(sessionID, code: code, optionsJSON: optionsJSON) { result in
+                bridge.executeSession(sessionID, executionID: executionID, code: code, optionsJSON: optionsJSON) { result in
                     gate.finish(result)
                 }
                 Task { [weak self] in
@@ -285,6 +357,7 @@ actor PythonWorker {
                             await self.interrupt(
                                 bridge: bridge,
                                 gate: gate,
+                                executionID: executionID,
                                 exceptionName: "KeyboardInterrupt",
                                 errorType: "CancellationError",
                                 message: "Python execution was cancelled."
@@ -296,6 +369,7 @@ actor PythonWorker {
                             await self.interrupt(
                                 bridge: bridge,
                                 gate: gate,
+                                executionID: executionID,
                                 exceptionName: "MemoryError",
                                 errorType: "MemoryLimitExceeded",
                                 message: "Python exceeded the 1.2 GB process memory soft limit."
@@ -306,6 +380,7 @@ actor PythonWorker {
                             await self.interrupt(
                                 bridge: bridge,
                                 gate: gate,
+                                executionID: executionID,
                                 exceptionName: "OSError",
                                 errorType: "ResourceLimitExceeded",
                                 message: violation
@@ -316,6 +391,7 @@ actor PythonWorker {
                             await self.interrupt(
                                 bridge: bridge,
                                 gate: gate,
+                                executionID: executionID,
                                 exceptionName: "TimeoutError",
                                 errorType: "TimeoutError",
                                 message: "Python execution exceeded the 120 second limit."
@@ -368,15 +444,17 @@ actor PythonWorker {
     private func interrupt(
         bridge: PythonRuntimeBridge,
         gate: PythonExecutionGate,
+        executionID: String,
         exceptionName: String,
         errorType: String,
         message: String
     ) async {
         guard gate.beginInterrupt() else { return }
-        bridge.requestInterrupt(withExceptionName: exceptionName)
+        bridge.requestInterrupt(withExceptionName: exceptionName, executionID: executionID)
         try? await Task.sleep(for: .seconds(5))
         guard !gate.isFinished else { return }
         poisoned = true
+        await PythonJobQueue.shared.poison()
         gate.finish(Self.errorJSON(type: errorType, message: message + " The interpreter is now unavailable until app restart."))
     }
 

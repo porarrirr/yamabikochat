@@ -300,8 +300,12 @@ final class ChatViewModel: ObservableObject {
         }
         switch attachmentRepository.validate(url: url) {
         case .valid:
+            if settings.isFusionModeEnabled, !attachmentRepository.requiresVision(url: url) {
+                errorMessage = L10n.text("Fusionで添付できるのは画像のみです。PDF・テキスト添付には対応していません。")
+                return false
+            }
             if attachmentRepository.requiresVision(url: url), !canAttachImages {
-                errorMessage = L10n.text("このモデルは画像入力に対応していません。")
+                errorMessage = visionSupportError ?? L10n.text("このモデルは画像入力に対応していません。")
                 return false
             }
             do {
@@ -410,6 +414,11 @@ final class ChatViewModel: ObservableObject {
             return
         }
 
+        if settings.isFusionModeEnabled,
+           attachments.contains(where: { attachmentRepository?.requiresVision(url: $0.url) != true }) {
+            errorMessage = L10n.text("Fusionで添付できるのは画像のみです。PDF・テキスト添付には対応していません。")
+            return
+        }
         let text = trimmedText
         inputText = ""
 
@@ -1415,24 +1424,35 @@ final class ChatViewModel: ObservableObject {
         refreshReasoningEffortConfiguration()
     }
 
+    private var visionSupportGeneration = 0
+    private var visionSupportError: String?
+
     private func refreshVisionSupport() async {
+        visionSupportGeneration += 1
+        let generation = visionSupportGeneration
+        let requestedSettings = settings
+        let requestedProvider = activeConversationProvider
+        let requestedModel = activeConversationModel
         guard let repository else {
             canAttachImages = false
             return
         }
-        let supportsVision = await repository.resolveCanAttachImages(
-            settings: settings,
-            conversationProvider: activeConversationProvider,
-            conversationModel: activeConversationModel
-        )
-        canAttachImages = supportsVision
-        if !supportsVision {
-            let unsupportedImages = attachments.filter { attachmentRepository?.requiresVision(url: $0.url) == true }
-            if !unsupportedImages.isEmpty {
-                let unsupportedIDs = Set(unsupportedImages.map(\.id))
-                attachments.removeAll { unsupportedIDs.contains($0.id) }
-                errorMessage = L10n.text("画像入力に対応していないモデルのため、画像添付を外しました。")
-            }
+        do {
+            let supportsVision = try await repository.resolveCanAttachImages(
+                settings: settings,
+                conversationProvider: activeConversationProvider,
+                conversationModel: activeConversationModel
+            )
+            guard generation == visionSupportGeneration, requestedSettings == settings,
+                  requestedProvider == activeConversationProvider, requestedModel == activeConversationModel else { return }
+            visionSupportError = nil
+            canAttachImages = supportsVision
+        } catch {
+            guard generation == visionSupportGeneration, requestedSettings == settings,
+              requestedProvider == activeConversationProvider, requestedModel == activeConversationModel else { return }
+            canAttachImages = false
+            visionSupportError = error.localizedDescription
+            DiagnosticsLogger.log("Model capability resolution failed", category: .chat, error: error)
         }
     }
 

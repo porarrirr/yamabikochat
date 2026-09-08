@@ -97,6 +97,65 @@ struct ConversationDebugExport: Codable, Equatable {
     }
 }
 
+/// A separate allowlisted wire document for ordinary sharing. New database or
+/// diagnostic fields do not become public export fields automatically.
+struct StandardConversationExport: Encodable {
+    private var document: JSONValue
+
+    init(_ snapshot: ConversationDebugExport) throws {
+        func fields<T: Encodable>(_ value: T, _ keys: String) throws -> JSONValue {
+            let encoded = try JSONEncoder().encode(value)
+            guard case let .object(object) = try JSONDecoder().decode(JSONValue.self, from: encoded) else {
+                throw ConversationExportError.invalidStoredRecord("standard export object")
+            }
+            let allowed = Set(keys.split(separator: " ").map(String.init))
+            return .object(object.filter { allowed.contains($0.key) })
+        }
+        let messages = try snapshot.messages.map { value in
+            JSONValue.object([
+                "message": try fields(value.message, "id conversationId role text attachmentsJSON selectedVariantIndex createdAtMs"),
+                "attachments": .array(value.attachments.map(JSONValue.string)),
+                "variants": .array(try value.variants.map { variant in
+                    .object([
+                        "variant": try fields(variant.variant, "id baseMessageId variantIndex text attachmentsJSON createdAtMs"),
+                        "attachments": .array(variant.attachments.map(JSONValue.string))
+                    ])
+                })
+            ])
+        }
+        let dualMessages = try snapshot.dualMessages.map { value in
+            JSONValue.object([
+                "message": try fields(value.message, "id conversationId role userText modelAText modelBText modelAName modelBName providerA providerB attachmentsJSON modelAStatus modelBStatus modelAError modelBError createdAtMs"),
+                "attachments": .array(value.attachments.map(JSONValue.string))
+            ])
+        }
+        let autoConversations = try snapshot.autoConversations.map { value in
+            JSONValue.object([
+                "conversation": try fields(value.conversation, "id title modelA modelB providerA providerB systemPromptA systemPromptB status maxTurns currentTurn createdAtMs updatedAtMs lastActiveAtMs endReason endSignal boundChatConversationId"),
+                "messages": .array(try value.messages.map { message in
+                    .object(["message": try fields(message.message, "id autoConversationId speaker content turnIndex createdAtMs isEndSignal")])
+                })
+            ])
+        }
+        document = .object([
+            "format": .string("yamabiko-chat-export"),
+            "schemaVersion": .number(Double(snapshot.schemaVersion)),
+            "exportedAtMs": .number(Double(snapshot.exportedAtMs)),
+            "application": try fields(snapshot.application, "name version build platform"),
+            "securityNotice": .string(snapshot.securityNotice),
+            "conversation": try fields(snapshot.conversation, "id title systemPrompt model apiProvider createdAtMs updatedAtMs isSecret projectId pendingInitialMessage"),
+            "messages": .array(messages),
+            "dualMessages": .array(dualMessages),
+            "autoConversations": .array(autoConversations),
+            "fusionTraces": .array([]), "tokenUsageRecords": .array([]),
+            "executionMetrics": .array([]), "piExecutions": .array([]),
+            "files": .array(try snapshot.files.map { try fields($0, "originalPath archivePath status size error") })
+        ])
+    }
+
+    func encode(to encoder: Encoder) throws { try document.encode(to: encoder) }
+}
+
 enum ConversationExportError: LocalizedError {
     case conversationNotFound
     case archiveCreationFailed
@@ -150,7 +209,9 @@ enum ConversationExportService {
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        let exportData = try encoder.encode(export)
+        let exportData = try mode == .standard
+            ? encoder.encode(StandardConversationExport(export))
+            : encoder.encode(export)
         try exportData.write(to: stagingURL.appendingPathComponent("conversation.json"), options: .atomic)
         if mode == .fullDiagnostics {
             try writePiSessions(piExecutions, at: stagingURL, encoder: encoder, fileManager: fileManager)
@@ -205,7 +266,7 @@ enum ConversationExportService {
         }
     }
 
-    private static func preparedExport(
+    static func preparedExport(
         _ snapshot: ConversationDebugExport,
         mode: ConversationExportMode
     ) -> ConversationDebugExport {
@@ -237,6 +298,7 @@ enum ConversationExportService {
             value.toolActivity = nil
             value.variants = value.variants.map { variant in
                 var variantValue = variant
+                variantValue.variant.thinkingStream = nil
                 variantValue.toolActivity = nil
                 return variantValue
             }
@@ -244,9 +306,19 @@ enum ConversationExportService {
         }
         export.dualMessages = export.dualMessages.map { message in
             var value = message
+            value.message.modelAThinking = nil
+            value.message.modelBThinking = nil
+            value.message.modelAToolActivityJSON = nil
+            value.message.modelBToolActivityJSON = nil
             value.modelAToolActivity = nil
             value.modelBToolActivity = nil
             return value
+        }
+        for conversationIndex in export.autoConversations.indices {
+            for messageIndex in export.autoConversations[conversationIndex].messages.indices {
+                export.autoConversations[conversationIndex].messages[messageIndex].message.reasoning = nil
+                export.autoConversations[conversationIndex].messages[messageIndex].message.piExecutionJSON = nil
+            }
         }
         export.fusionTraces = []
         export.tokenUsageRecords = []

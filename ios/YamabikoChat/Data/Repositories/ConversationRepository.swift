@@ -42,6 +42,24 @@ final class ConversationRepository: @unchecked Sendable {
         }
     }
 
+    func importShare(payloadID: String, text: String, model: String, provider: String, systemPrompt: String?) throws -> Int64? {
+        try dbQueue.write { db in
+            if let row = try Row.fetchOne(db, sql: "SELECT conversationId FROM share_imports WHERE payloadId = ?", arguments: [payloadID]) {
+                return row["conversationId"]
+            }
+            var conversation = Conversation(title: "Shared Chat", systemPrompt: systemPrompt, model: model, apiProvider: provider)
+            try conversation.insert(db)
+            try db.execute(sql: "INSERT INTO share_imports (payloadId, conversationId, draft) VALUES (?, ?, ?)", arguments: [payloadID, conversation.id, text])
+            return conversation.id
+        }
+    }
+
+    func shareImportText(conversationID: Int64) throws -> String? {
+        try dbQueue.read { db in
+            try String.fetchOne(db, sql: "SELECT draft FROM share_imports WHERE conversationId = ?", arguments: [conversationID])
+        }
+    }
+
     func createProject(
         title: String,
         instructions: String?,
@@ -403,6 +421,19 @@ final class ConversationRepository: @unchecked Sendable {
         }
     }
 
+    func referencedAttachmentPaths(excluding ids: Set<Int64>) throws -> Set<String> {
+        let conversations = try dbQueue.read { try Conversation.fetchAll($0) }
+        var paths = Set<String>()
+        for conversation in conversations {
+            guard let id = conversation.id, !ids.contains(id) else { continue }
+            paths.formUnion(try attachmentPathsForConversation(id: id))
+            if !conversation.isSecret {
+                paths.formUnion(try fetchDebugExport(conversationId: id).referencedFilePaths)
+            }
+        }
+        return Set(paths.map { PiAgentRuntime.attachmentFileURL(from: $0).path })
+    }
+
     func attachmentPathsForSecretConversation(id: Int64) throws -> [String] {
         let secret = try dbQueue.read { db in
             try isSecret(db: db, conversationID: id)
@@ -469,7 +500,7 @@ final class ConversationRepository: @unchecked Sendable {
                 .order(Column("updatedAtMs").desc)
                 .fetchAll(db)
                 .first { conversation in
-                    guard conversation.projectId == projectId else { return false }
+                    guard conversation.projectId == projectId, conversation.pendingInitialMessage == nil else { return false }
                     let chatCount = try? Int.fetchOne(
                         db,
                         sql: "SELECT COUNT(*) FROM chat_messages WHERE conversationId = ?",

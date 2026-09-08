@@ -14,6 +14,7 @@ struct SharePayload: Codable, Equatable {
 
 final class SharePayloadStore {
     struct PendingPayload: Equatable {
+        var id: String { queued.id.uuidString }
         let payload: SharePayload
         fileprivate let queued: AppGroupShareStorage.QueuedPayload
     }

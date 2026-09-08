@@ -1,5 +1,7 @@
 import Foundation
 
+typealias PiModelResolver = @Sendable ([PiAgentConfiguration]) async throws -> [PiModelResolution]
+
 typealias PiAgentStream = @Sendable (
     ProviderRequest,
     PiAgentConfiguration,
@@ -18,6 +20,7 @@ final class ProviderGateway {
     private let settingsRepository: SettingsRepository
     private let credentialStore: SecureCredentialStore
     private let piStream: PiAgentStream
+    private let piModelResolver: PiModelResolver
     /// Snapshot fallback for tests / legacy callers.
     private let localTools: LocalToolRegistry
     /// Factory evaluated per request so Skill states are reflected without recreating the gateway.
@@ -60,6 +63,7 @@ final class ProviderGateway {
         resetPythonSession: @escaping @Sendable (String) async -> Void = { sessionID in
             await PythonWorker.shared.resetSession(sessionID: sessionID)
         },
+        piModelResolver: @escaping PiModelResolver = { try await PiAgentRuntime.shared.resolveModels($0) },
         piStream: @escaping PiAgentStream = { request, configuration, tools in
             try await PiAgentRuntime.shared.stream(
                 request: request,
@@ -80,6 +84,7 @@ final class ProviderGateway {
         self.editorWorkspaces = editorWorkspaces
         self.resetPythonSession = resetPythonSession
         self.piStream = piStream
+        self.piModelResolver = piModelResolver
     }
 
     // Factory has priority; fallback to snapshot for backwards compatibility / tests.
@@ -716,19 +721,35 @@ final class ProviderGateway {
         return nextIndex < candidates.count ? nextIndex : nil
     }
 
+    func modelSupportsVision(provider: String, model: String) async throws -> Bool {
+        if knownProvider(provider) == .appleIntelligence { return false }
+        let config = try await configuration(providerID: provider, request: ProviderRequest(model: model, messages: []), settings: settingsRepository.load(), forModelResolution: true)
+        guard let resolution = try await piModelResolver([config]).first else {
+            throw ProviderClientError.parseFailure("Pi returned no model capability contract")
+        }
+        guard resolution.supported, let input = resolution.input else {
+            throw ProviderClientError.parseFailure(resolution.message ?? resolution.reason ?? "Pi model input capability is unknown")
+        }
+        return input.contains("image")
+    }
+
     private func configuration(
         providerID: String,
         request: ProviderRequest,
         settings: AppSettings,
-        geminiAPIKeyOverride: String? = nil
+        geminiAPIKeyOverride: String? = nil,
+        forModelResolution: Bool = false
     ) async throws -> PiAgentConfiguration {
         if let dynamicID = ProviderReference(persistedID: providerID).modelsDevID {
-            return try modelsDevConfiguration(providerID: dynamicID, request: request)
+            return try modelsDevConfiguration(providerID: dynamicID, request: request, forModelResolution: forModelResolution)
         }
         guard let provider = knownProvider(providerID) else {
             throw ProviderClientError.parseFailure("Unknown provider: \(providerID)")
         }
 
+        func credential(_ provider: CredentialProvider) throws -> String {
+            forModelResolution ? "" : try self.credential(provider)
+        }
         var piProvider = provider.rawValue.lowercased()
         var apiKey: String
         var headers: [String: String] = [:]
@@ -768,6 +789,7 @@ final class ProviderGateway {
             piProvider = "opencode-go"
             apiKey = try credential(.openCodeGo)
         case .codexAuth:
+            if forModelResolution { piProvider = "openai-codex"; apiKey = ""; break }
             guard let auth = await codexAuthRepository?.getBearerToken() else {
                 throw ProviderClientError.missingCredential(LLMProvider.codexAuth.rawValue)
             }
@@ -778,6 +800,7 @@ final class ProviderGateway {
                 headers["ChatGPT-Account-ID"] = accountID
             }
         case .superGrok:
+            if forModelResolution { piProvider = "xai-oauth"; apiKey = ""; break }
             guard let auth = await superGrokAuthRepository?.getBearerToken() else {
                 throw ProviderClientError.missingCredential(LLMProvider.superGrok.rawValue)
             }
@@ -826,19 +849,20 @@ final class ProviderGateway {
 
     private func modelsDevConfiguration(
         providerID: String,
-        request: ProviderRequest
+        request: ProviderRequest,
+        forModelResolution: Bool = false
     ) throws -> PiAgentConfiguration {
         guard let catalog = modelsDevCatalogRepository?.provider(for: .modelsDev(providerID)),
               let model = catalog.models.first(where: { $0.id == request.model }) else {
             throw ProviderClientError.parseFailure("models.dev provider or model is unavailable: \(providerID)/\(request.model)")
         }
         var env: [String: String] = [:]
-        for field in catalog.env {
+        for field in catalog.env where !forModelResolution {
             let key = modelsDevFieldKey(providerID: providerID, fieldName: field)
             try migrateLegacyCredentialIfNeeded(providerID: providerID, destinationKey: key)
             if let value = try credentialStore.readSecret(key: key)?.trimmedNonEmpty { env[field] = value }
         }
-        guard !env.isEmpty else {
+        guard forModelResolution || !env.isEmpty else {
             throw ProviderClientError.missingCredential(providerID)
         }
         let normalizedModel = providerID.caseInsensitiveCompare("opencode-go") == .orderedSame

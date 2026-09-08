@@ -248813,6 +248813,37 @@ ${captureLines}` : capture.stack;
   }
 });
 
+// src/event-recording.js
+function exportableAgentEvent(event, sanitize) {
+  const { message, messages, assistantMessageEvent, ...metadata } = event;
+  if (assistantMessageEvent) {
+    const { partial, ...delta } = assistantMessageEvent;
+    metadata.assistantMessageEvent = delta;
+  }
+  return sanitize(metadata);
+}
+function createEventRecorder(sanitize, onLimit, maxBytes = 2 * 1024 * 1024) {
+  const events = [];
+  let bytes = 0;
+  let dropped = 0;
+  return {
+    events,
+    get dropped() {
+      return dropped;
+    },
+    record(event) {
+      const value2 = { seq: events.length + dropped, time: Date.now(), event: exportableAgentEvent(event, sanitize) };
+      const size = Buffer.byteLength(JSON.stringify(value2));
+      if (bytes + size <= maxBytes) {
+        events.push(value2);
+        bytes += size;
+      } else {
+        if (++dropped === 1) onLimit();
+      }
+    }
+  };
+}
+
 // src/main.js
 import http5 from "node:http";
 
@@ -289128,6 +289159,7 @@ function providerUsage(value2) {
 function messagesFrom(request, model) {
   return request.messages.map((message) => {
     if (message.role === "assistant" || message.role === "model") {
+      if (message.piMessage) return message.piMessage;
       const content = [];
       if (message.reasoningContent) content.push({ type: "thinking", thinking: message.reasoningContent });
       if (message.content) content.push({ type: "text", text: message.content });
@@ -289142,9 +289174,9 @@ function messagesFrom(request, model) {
       return {
         role: "assistant",
         content,
-        api: model.api,
-        provider: model.provider,
-        model: model.id,
+        api: "unknown",
+        provider: "unknown",
+        model: "unknown",
         usage: usage(message.usage),
         stopReason: message.toolCalls?.length ? "toolUse" : "stop",
         timestamp: Date.now()
@@ -289284,13 +289316,6 @@ function exportableProviderPayload(value2) {
     return nested;
   }));
 }
-function exportableAgentEvent(event) {
-  const value2 = exportableProviderPayload(event);
-  if (event.type === "message_update") {
-    delete value2.message;
-  }
-  return value2;
-}
 function standardStreamFunction(request, config, report, captureProviderRequest) {
   const env = normalizedProviderEnvironment(config.catalogProvider || config.provider, config.env);
   return (model, context, options = {}) => runtimeModels.streamSimple(model, context, {
@@ -289348,6 +289373,10 @@ function makeTools(request, runId, res) {
             pendingTools.delete(requestId);
             reject(new Error("Tool execution aborted"));
           };
+          if (signal?.aborted) {
+            abort();
+            return;
+          }
           signal?.addEventListener("abort", abort, { once: true });
           pendingTools.set(requestId, (result) => {
             signal?.removeEventListener("abort", abort);
@@ -289385,9 +289414,8 @@ function replayableProviderTranscript(messages) {
         argumentsJSON: JSON.stringify(part.arguments || {}),
         providerMetadata: null
       }));
-      if (!toolCalls.length) return [];
       const content = (message.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
-      return [{ role: "assistant", content, attachments: [], toolCalls }];
+      return [{ role: "assistant", content, attachments: [], toolCalls, piMessage: message }];
     }
     if (message.role === "toolResult") {
       const content = (message.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
@@ -289406,7 +289434,7 @@ function replayableProviderTranscript(messages) {
 function finalResponse(assistants, contextUsage, generatedMessages = []) {
   const last = assistants.at(-1);
   if (!last) throw new Error("Pi provider returned no assistant message");
-  if (last.stopReason === "error" || last.errorMessage) {
+  if (last.stopReason === "error" || last.stopReason === "aborted" || last.errorMessage) {
     const detail = last.errorMessage || last.rawStopReason || "unknown provider error";
     throw new Error(`Pi provider failed: ${detail}`);
   }
@@ -289536,6 +289564,11 @@ async function runAgent(envelope, res) {
   });
   const initialMessageCount = agent.state.messages.length;
   runs.set(runId, agent);
+  const abortDisconnectedRun = () => {
+    if (!res.writableEnded) agent.abort();
+  };
+  res.on("close", abortDisconnectedRun);
+  res.on("error", abortDisconnectedRun);
   const heartbeat = setInterval(() => {
     if (!res.writableEnded && !res.destroyed) {
       send(res, { type: "heartbeat", runId, timeMs: Date.now() });
@@ -289545,13 +289578,10 @@ async function runAgent(envelope, res) {
   let step = 0;
   let activeStep = null;
   const runAssistants = [];
-  const events = [];
+  const recorder = createEventRecorder(exportableProviderPayload, () => report("event_recording_limit", "Diagnostic event recording reached the 2 MiB limit"));
+  const events = recorder.events;
   agent.subscribe((event) => {
-    events.push({
-      seq: events.length,
-      time: Date.now(),
-      event: exportableAgentEvent(event)
-    });
+    recorder.record(event);
     if (event.type === "turn_start") {
       activeStep = ++step;
       send(res, { type: "answer_start", stepId: activeStep, timeMs: Date.now() });
@@ -289598,6 +289628,7 @@ async function runAgent(envelope, res) {
       resolution,
       startedAtMs
     });
+    response.piExecution.droppedDiagnosticEvents = recorder.dropped;
     report("agent_complete", "Pi agent execution completed");
     send(res, { type: "completed", response });
   } catch (error) {
@@ -289622,6 +289653,8 @@ async function runAgent(envelope, res) {
     });
     throw error;
   } finally {
+    res.off("close", abortDisconnectedRun);
+    res.off("error", abortDisconnectedRun);
     clearInterval(heartbeat);
     runs.delete(runId);
   }

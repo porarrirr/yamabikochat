@@ -70,7 +70,7 @@ struct ChatWorkspaceScreen: View {
     }
 
     private func applyShareImportDraftIfNeeded() {
-        guard let text = appState.shareImportText(for: conversationID) else { return }
+        guard let text = try? container.chatRepository.shareImportText(conversationID: conversationID) else { return }
         viewModel.applySharedText(text)
         appState.clearShareImportDraft(for: conversationID)
     }

@@ -79,12 +79,26 @@ protocol PiRuntimeHealthClient: Sendable {
 
 extension URLSession: PiRuntimeHealthClient {}
 
+struct PiStreamCompletionState {
+    private(set) var receivedCompletion = false
+
+    mutating func complete(hasResponse: Bool) throws {
+        guard !receivedCompletion else { throw ProviderClientError.parseFailure("Pi emitted duplicate completion") }
+        guard hasResponse else { throw ProviderClientError.parseFailure("Pi completed without a response") }
+        receivedCompletion = true
+    }
+
+    func finish() throws {
+        guard receivedCompletion else { throw ProviderClientError.parseFailure("Pi stream ended before completion") }
+    }
+}
+
 struct PiAttachment: Codable, Sendable {
     var data: String
     var mimeType: String
 }
 
-private struct PiMessage: Codable, Sendable {
+struct PiMessage: Codable, Sendable {
     var role: String
     var content: String
     var attachments: [PiAttachment]
@@ -93,9 +107,11 @@ private struct PiMessage: Codable, Sendable {
     var toolCallId: String?
     var toolName: String?
     var toolResultIsError: Bool?
+    var piMessage: JSONValue?
 }
 
-private struct PiRequest: Codable, Sendable {
+struct PiRequest: Codable, Sendable {
+    var skillContext: SkillRequestContext?
     var messages: [PiMessage]
     var systemPrompt: String?
     var tools: [ProviderTool]
@@ -553,6 +569,7 @@ actor PiAgentRuntime {
                 #endif
                 var metrics = PiConversationMetricsCollector(context: metricsContext)
                 var toolTasks: [Task<Void, Error>] = []
+                var completionState = PiStreamCompletionState()
 
                 func nowMs() -> Int64 {
                     Int64(Date().timeIntervalSince1970 * 1_000)
@@ -682,6 +699,7 @@ actor PiAgentRuntime {
                                 }
                             })
                         case "completed":
+                            try completionState.complete(hasResponse: event.response != nil)
                             for toolTask in toolTasks {
                                 try await toolTask.value
                             }
@@ -732,6 +750,7 @@ actor PiAgentRuntime {
                             continue
                         }
                     }
+                    try completionState.finish()
                     metrics.closeInterruptedLLMSteps(at: nowMs())
                     continuation.finish()
                 } catch is CancellationError {
@@ -756,6 +775,7 @@ actor PiAgentRuntime {
                         metadata: ["provider": configuration.provider, "model": configuration.model],
                         error: error
                     )
+                    await Self.abort(runID: runID, endpoint: endpoint, token: token)
                     continuation.finish(throwing: error)
                 }
             }
@@ -1116,7 +1136,7 @@ actor PiAgentRuntime {
     }
     #endif
 
-    private static func makeRequest(_ request: ProviderRequest) throws -> PiRequest {
+    static func makeRequest(_ request: ProviderRequest) throws -> PiRequest {
         let attachmentNames = Array(Set(request.messages.flatMap(\.attachments).map {
             attachmentFileURL(from: $0).lastPathComponent
         })).sorted()
@@ -1130,6 +1150,7 @@ actor PiAgentRuntime {
                 + "."
         }
         return PiRequest(
+            skillContext: request.skillContext,
             messages: try request.messages.map { message in
                 PiMessage(
                     role: message.role,
@@ -1139,7 +1160,8 @@ actor PiAgentRuntime {
                     toolCalls: message.toolCalls,
                     toolCallId: message.toolCallId,
                     toolName: message.toolName,
-                    toolResultIsError: message.toolResultIsError
+                    toolResultIsError: message.toolResultIsError,
+                    piMessage: message.piMessage
                 )
             },
             systemPrompt: request.systemPrompt,
@@ -1221,7 +1243,11 @@ actor PiAgentRuntime {
         request.httpBody = try? JSONSerialization.data(withJSONObject: ["runId": runID])
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        _ = try? await URLSession.shared.data(for: request)
+        request.timeoutInterval = 5
+        let cleanupRequest = request
+        await Task.detached {
+            _ = try? await URLSession.shared.data(for: cleanupRequest)
+        }.value
     }
 
     private static func jsonString(_ value: JSONValue) -> String {

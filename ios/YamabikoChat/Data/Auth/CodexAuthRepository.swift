@@ -27,6 +27,53 @@ final class CodexAuthRepository {
         static let originator = "codex_cli_rs"
     }
 
+    private let authLock = NSRecursiveLock()
+    private var authGeneration = 0
+    private var pendingResolution: (id: UUID, generation: Int, credential: String, task: Task<PiOAuthResolution, Error>)?
+
+    private func resolveCredential(_ credential: String, force: Bool, generation: Int) async throws -> PiOAuthResolution {
+        let pending = try authLock.withLock {
+            guard generation == authGeneration, try credentialStore.readSecret(key: Constants.credentialKey) == credential else { throw CancellationError() }
+            if let pendingResolution, pendingResolution.generation == generation, pendingResolution.credential == credential {
+                return pendingResolution
+            }
+            let id = UUID()
+            let task = Task {
+                let resolution = try await resolveHandler(.codex, credential, force)
+                try commit(resolution, generation: generation)
+                return resolution
+            }
+            let pending = (id: id, generation: generation, credential: credential, task: task)
+            pendingResolution = pending
+            return pending
+        }
+        defer {
+            authLock.withLock {
+                if pendingResolution?.id == pending.id { pendingResolution = nil }
+            }
+        }
+        let result = try await pending.task.value
+        return try authLock.withLock {
+            guard generation == authGeneration else { throw CancellationError() }
+            return result
+        }
+    }
+
+    private func beginAuthOperation() -> Int {
+        authLock.withLock {
+            authGeneration += 1
+            return authGeneration
+        }
+    }
+
+    private func commit(_ resolution: PiOAuthResolution, generation: Int) throws {
+        try authLock.withLock {
+            guard generation == authGeneration else { throw CancellationError() }
+            try persist(resolution)
+            subject.send(Self.readState(credentialStore: credentialStore))
+        }
+    }
+
     private let credentialStore: SecureCredentialStore
     private let httpClient: HTTPClientProtocol
     private let loginHandler: PiOAuthLoginHandler
@@ -65,10 +112,10 @@ final class CodexAuthRepository {
     func loginWithBrowser() async -> Result<CodexAuthState, Error> {
         do {
             DiagnosticsLogger.log("Codex auth delegated to Pi", category: .auth)
+            let generation = beginAuthOperation()
             let resolution = try await loginHandler(.codex, .browser, nil)
-            try persist(resolution)
-            let updated = Self.readState(credentialStore: credentialStore)
-            subject.send(updated)
+            try commit(resolution, generation: generation)
+            let updated = currentState()
             return .success(updated)
         } catch {
             DiagnosticsLogger.log("Pi Codex auth login failed", category: .auth, error: error)
@@ -78,37 +125,39 @@ final class CodexAuthRepository {
 
     func logout() async -> Result<CodexAuthState, Error> {
         do {
-            for key in [
-                Constants.credentialKey,
-                "codex_email",
-                "codex_plan_type",
-                "codex_account_id",
-                "codex_last_refresh",
-                "codex_auth_json_v2",
-                "codex_access_token"
-            ] {
-                try credentialStore.deleteSecret(key: key)
+            return try authLock.withLock {
+                authGeneration += 1
+                for key in [
+                    Constants.credentialKey,
+                    "codex_email",
+                    "codex_plan_type",
+                    "codex_account_id",
+                    "codex_last_refresh",
+                    "codex_auth_json_v2",
+                    "codex_access_token"
+                ] {
+                    try credentialStore.deleteSecret(key: key)
+                }
+                try credentialStore.setCredential(nil, for: .codexAuth)
+                let updated = Self.readState(credentialStore: credentialStore)
+                subject.send(updated)
+                return .success(updated)
             }
-            try credentialStore.setCredential(nil, for: .codexAuth)
-            let updated = Self.readState(credentialStore: credentialStore)
-            subject.send(updated)
-            return .success(updated)
         } catch {
             return .failure(error)
         }
     }
 
     func refreshIfNeeded(force: Bool = false) async -> Result<CodexAuthState, Error> {
+        let generation = authLock.withLock { authGeneration }
         do {
             guard let credential = try credentialStore.readSecret(key: Constants.credentialKey) else {
                 let updated = Self.readState(credentialStore: credentialStore)
                 subject.send(updated)
                 return .success(updated)
             }
-            let resolution = try await resolveHandler(.codex, credential, force)
-            try persist(resolution)
-            let updated = Self.readState(credentialStore: credentialStore)
-            subject.send(updated)
+            _ = try await resolveCredential(credential, force: force, generation: generation)
+            let updated = currentState()
             return .success(updated)
         } catch {
             DiagnosticsLogger.log("Pi Codex auth refresh failed", category: .auth, error: error)
@@ -123,12 +172,11 @@ final class CodexAuthRepository {
     func getApiKey() async -> String? { nil }
 
     func getBearerToken() async -> BearerToken? {
+        let generation = authLock.withLock { authGeneration }
         guard let credential = try? credentialStore.readSecret(key: Constants.credentialKey),
               !credential.isEmpty else { return nil }
         do {
-            let resolution = try await resolveHandler(.codex, credential, false)
-            try persist(resolution)
-            subject.send(Self.readState(credentialStore: credentialStore))
+            let resolution = try await resolveCredential(credential, force: false, generation: generation)
             return BearerToken(token: resolution.accessToken, isAPIKey: false, accountId: resolution.accountId)
         } catch {
             DiagnosticsLogger.log("Pi Codex credential resolution failed", category: .auth, error: error)

@@ -10,6 +10,53 @@ final class SuperGrokAuthRepository {
         static let credentialKey = "pi_oauth_supergrok_v1"
     }
 
+    private let authLock = NSRecursiveLock()
+    private var authGeneration = 0
+    private var pendingResolution: (id: UUID, generation: Int, credential: String, task: Task<PiOAuthResolution, Error>)?
+
+    private func resolveCredential(_ credential: String, force: Bool, generation: Int) async throws -> PiOAuthResolution {
+        let pending = try authLock.withLock {
+            guard generation == authGeneration, try credentialStore.readSecret(key: Constants.credentialKey) == credential else { throw CancellationError() }
+            if let pendingResolution, pendingResolution.generation == generation, pendingResolution.credential == credential {
+                return pendingResolution
+            }
+            let id = UUID()
+            let task = Task {
+                let resolution = try await resolveHandler(.supergrok, credential, force)
+                try commit(resolution, generation: generation)
+                return resolution
+            }
+            let pending = (id: id, generation: generation, credential: credential, task: task)
+            pendingResolution = pending
+            return pending
+        }
+        defer {
+            authLock.withLock {
+                if pendingResolution?.id == pending.id { pendingResolution = nil }
+            }
+        }
+        let result = try await pending.task.value
+        return try authLock.withLock {
+            guard generation == authGeneration else { throw CancellationError() }
+            return result
+        }
+    }
+
+    private func beginAuthOperation() -> Int {
+        authLock.withLock {
+            authGeneration += 1
+            return authGeneration
+        }
+    }
+
+    private func commit(_ resolution: PiOAuthResolution, generation: Int) throws {
+        try authLock.withLock {
+            guard generation == authGeneration else { throw CancellationError() }
+            try persist(resolution)
+            subject.send(Self.readState(credentialStore: credentialStore))
+        }
+    }
+
     private let credentialStore: SecureCredentialStore
     private let loginHandler: PiOAuthLoginHandler
     private let resolveHandler: PiOAuthResolveHandler
@@ -52,34 +99,36 @@ final class SuperGrokAuthRepository {
 
     func logout() async -> Result<SuperGrokAuthState, Error> {
         do {
-            for key in [
-                Constants.credentialKey,
-                "supergrok_email",
-                "supergrok_last_refresh",
-                "supergrok_auth_json_v1",
-                "supergrok_access_token"
-            ] {
-                try credentialStore.deleteSecret(key: key)
+            return try authLock.withLock {
+                authGeneration += 1
+                for key in [
+                    Constants.credentialKey,
+                    "supergrok_email",
+                    "supergrok_last_refresh",
+                    "supergrok_auth_json_v1",
+                    "supergrok_access_token"
+                ] {
+                    try credentialStore.deleteSecret(key: key)
+                }
+                let updated = Self.readState(credentialStore: credentialStore)
+                subject.send(updated)
+                return .success(updated)
             }
-            let updated = Self.readState(credentialStore: credentialStore)
-            subject.send(updated)
-            return .success(updated)
         } catch {
             return .failure(error)
         }
     }
 
     func refreshIfNeeded(force: Bool = false) async -> Result<SuperGrokAuthState, Error> {
+        let generation = authLock.withLock { authGeneration }
         do {
             guard let credential = try credentialStore.readSecret(key: Constants.credentialKey) else {
                 let updated = Self.readState(credentialStore: credentialStore)
                 subject.send(updated)
                 return .success(updated)
             }
-            let resolution = try await resolveHandler(.supergrok, credential, force)
-            try persist(resolution)
-            let updated = Self.readState(credentialStore: credentialStore)
-            subject.send(updated)
+            _ = try await resolveCredential(credential, force: force, generation: generation)
+            let updated = currentState()
             return .success(updated)
         } catch {
             DiagnosticsLogger.log("pi-grok token refresh failed", category: .auth, error: error)
@@ -92,12 +141,11 @@ final class SuperGrokAuthRepository {
     }
 
     func getBearerToken() async -> BearerToken? {
+        let generation = authLock.withLock { authGeneration }
         guard let credential = try? credentialStore.readSecret(key: Constants.credentialKey),
               !credential.isEmpty else { return nil }
         do {
-            let resolution = try await resolveHandler(.supergrok, credential, false)
-            try persist(resolution)
-            subject.send(Self.readState(credentialStore: credentialStore))
+            let resolution = try await resolveCredential(credential, force: false, generation: generation)
             return BearerToken(token: resolution.accessToken)
         } catch {
             DiagnosticsLogger.log("pi-grok credential resolution failed", category: .auth, error: error)
@@ -108,20 +156,20 @@ final class SuperGrokAuthRepository {
     private func login(method: PiOAuthLoginMethod) async -> Result<SuperGrokAuthState, Error> {
         do {
             DiagnosticsLogger.log("SuperGrok auth delegated to pi-grok", category: .auth)
+            let generation = beginAuthOperation()
             let resolution = try await loginHandler(.supergrok, method) { [weak self] challenge in
                 guard let self else { return }
-                var pending = self.subject.value
-                pending.pendingDeviceCode = challenge
-                self.subject.send(pending)
+                self.authLock.withLock {
+                    guard generation == self.authGeneration else { return }
+                    var pending = self.subject.value
+                    pending.pendingDeviceCode = challenge
+                    self.subject.send(pending)
+                }
             }
-            try persist(resolution)
-            let updated = Self.readState(credentialStore: credentialStore)
-            subject.send(updated)
+            try commit(resolution, generation: generation)
+            let updated = currentState()
             return .success(updated)
         } catch {
-            var updated = Self.readState(credentialStore: credentialStore)
-            updated.pendingDeviceCode = nil
-            subject.send(updated)
             DiagnosticsLogger.log("pi-grok login failed", category: .auth, error: error)
             return .failure(error)
         }

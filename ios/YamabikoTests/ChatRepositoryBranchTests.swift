@@ -141,6 +141,43 @@ final class ChatRepositoryBranchTests: XCTestCase {
         XCTAssertEqual(branchedMessages.last?.text, "branchable variant")
     }
 
+    func testBranchAttachmentsSurviveDeletingEitherBranchAndProjects() throws {
+        for mode in 0..<4 {
+            let fixture = try makeFixture()
+            let original = try fixture.repository.createConversation(title: "original")
+            let attachments = AttachmentRepository()
+            let file = try attachments.persistGeneratedFile(data: Data("branch attachment".utf8), filename: "branch.txt", collection: ConversationWorkspacePath.generatedFilesCollection(for: String(original)))
+            defer { try? FileManager.default.removeItem(at: file) }
+            let raw = String(decoding: try JSONEncoder().encode([file.path]), as: UTF8.self)
+            let message = try fixture.conversations.insertMessage(ChatMessage(conversationId: original, role: "user", text: "question", attachmentsJSON: raw))
+            let branch = try fixture.repository.branchConversation(from: original, messageId: message)
+            let survivor: Int64
+            switch mode {
+            case 0:
+                try fixture.repository.deleteConversation(id: original)
+                survivor = branch
+            case 1:
+                try fixture.repository.deleteConversation(id: branch)
+                survivor = original
+            case 2:
+                try fixture.repository.deleteConversations(ids: [original])
+                survivor = branch
+            default:
+                let project = try fixture.conversations.createProject(title: "project", instructions: nil)
+                try fixture.conversations.assignConversationToProject(conversationId: original, projectId: project)
+                try fixture.repository.deleteProject(id: project, mode: .withConversations)
+                survivor = branch
+            }
+            XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "branch attachment")
+            let history = try fixture.conversations.fetchMessages(conversationId: survivor)
+            XCTAssertEqual(history.first?.attachmentsJSON, raw)
+            let archive = try ConversationExportService.createArchive(snapshot: fixture.conversations.fetchDebugExport(conversationId: survivor))
+            try FileManager.default.removeItem(at: archive)
+            try fixture.repository.deleteConversation(id: survivor)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        }
+    }
+
     private func makeFixture() throws -> (
         repository: ChatRepository,
         conversations: ConversationRepository

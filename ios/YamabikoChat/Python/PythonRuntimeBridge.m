@@ -7,6 +7,7 @@
 @interface YBPythonWorkItem : NSObject
 @property(nonatomic, copy) NSString *sessionID;
 @property(nonatomic, copy) NSString *code;
+@property(nonatomic, copy) NSString *executionID;
 @property(nonatomic, copy) NSString *optionsJSON;
 @property(nonatomic, copy) void (^completion)(NSString *);
 @end
@@ -32,6 +33,7 @@
 @property(nonatomic) BOOL startupFinished;
 @property(nonatomic) unsigned long pythonThreadID;
 @property(nonatomic) PyThreadState *savedThreadState;
+@property(atomic, copy, nullable) NSString *activeExecutionID;
 @end
 
 @implementation PythonRuntimeBridge
@@ -152,6 +154,7 @@
 }
 
 - (void)executeSession:(NSString *)sessionID
+            executionID:(NSString *)executionID
                    code:(NSString *)code
             optionsJSON:(NSString *)optionsJSON
              completion:(void (^)(NSString *))completion {
@@ -161,6 +164,7 @@
     }
     YBPythonWorkItem *item = [[YBPythonWorkItem alloc] init];
     item.sessionID = sessionID;
+    item.executionID = executionID;
     item.code = code;
     item.optionsJSON = optionsJSON;
     item.completion = completion;
@@ -170,6 +174,7 @@
 - (void)executeWorkItem:(YBPythonWorkItem *)item {
     PyEval_RestoreThread(self.savedThreadState);
     self.savedThreadState = NULL;
+    self.activeExecutionID = item.executionID;
     NSString *result = nil;
     PyObject *module = PyImport_ImportModule("yamabiko_runtime");
     PyObject *function = module == NULL ? NULL : PyObject_GetAttrString(module, "run_cell");
@@ -190,6 +195,7 @@
     }
     Py_XDECREF(function);
     Py_XDECREF(module);
+    self.activeExecutionID = nil;
     self.savedThreadState = PyEval_SaveThread();
     item.completion(result);
 }
@@ -230,7 +236,7 @@
     item.completion(error);
 }
 
-- (void)requestInterruptWithExceptionName:(NSString *)exceptionName {
+- (void)requestInterruptWithExceptionName:(NSString *)exceptionName executionID:(NSString *)executionID {
     if (self.pythonThreadID == 0) {
         return;
     }
@@ -241,7 +247,15 @@
         // If a native extension never releases the GIL this block may wait, but
         // the Swift watchdog remains independent and poisons the interpreter.
         PyGILState_STATE gilState = PyGILState_Ensure();
-        PyObject *exception = useMemoryError ? PyExc_MemoryError : PyExc_TimeoutError;
+        // Validate after acquiring the GIL: an old request may have waited while
+        // its job finished and a different job started.
+        if (![self.activeExecutionID isEqualToString:executionID]) {
+            PyGILState_Release(gilState);
+            return;
+        }
+        PyObject *exception = useMemoryError ? PyExc_MemoryError
+            : [exceptionName isEqualToString:@"KeyboardInterrupt"] ? PyExc_KeyboardInterrupt
+            : [exceptionName isEqualToString:@"OSError"] ? PyExc_OSError : PyExc_TimeoutError;
         int affected = PyThreadState_SetAsyncExc(targetThreadID, exception);
         if (affected > 1) {
             PyThreadState_SetAsyncExc(targetThreadID, NULL);

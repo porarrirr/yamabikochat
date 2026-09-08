@@ -13,6 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
                    sitePackagesPath:(nullable NSString *)sitePackagesPath;
 
 - (void)executeSession:(NSString *)sessionID
+            executionID:(NSString *)executionID
                    code:(NSString *)code
             optionsJSON:(NSString *)optionsJSON
              completion:(void (^)(NSString *resultJSON))completion;
@@ -20,7 +21,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)resetSession:(NSString *)sessionID
            completion:(void (^)(NSString * _Nullable errorMessage))completion;
 
-- (void)requestInterruptWithExceptionName:(NSString *)exceptionName;
+- (void)requestInterruptWithExceptionName:(NSString *)exceptionName executionID:(NSString *)executionID;
 - (uint64_t)physicalFootprintBytes;
 
 @end

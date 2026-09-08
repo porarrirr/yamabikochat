@@ -926,6 +926,23 @@ enum AppDatabase {
             }
         }
 
+        migrator.registerMigration("v_review_share_inbox") { db in
+            try db.create(table: "share_imports") { t in
+                t.column("payloadId", .text).primaryKey()
+                t.column("conversationId", .integer).references("conversations", onDelete: .setNull)
+                t.column("draft", .text)
+            }
+            try db.execute(sql: """
+                CREATE TRIGGER consume_share_draft_after_message AFTER INSERT ON chat_messages
+                WHEN NEW.role = 'user' BEGIN
+                    UPDATE share_imports SET draft = NULL WHERE conversationId = NEW.conversationId;
+                END;
+                CREATE TRIGGER consume_share_draft_after_dual AFTER INSERT ON dual_chat_messages
+                WHEN NEW.role = 'user' BEGIN
+                    UPDATE share_imports SET draft = NULL WHERE conversationId = NEW.conversationId;
+                END;
+                """)
+        }
         return migrator
     }
 

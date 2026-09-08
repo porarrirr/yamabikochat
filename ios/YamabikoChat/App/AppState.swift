@@ -27,7 +27,9 @@ final class AppState: ObservableObject {
     func importSharePayload(from store: SharePayloadStore, repository: ChatRepository) -> Bool {
         guard let pending = store.loadLatest() else { return false }
         do {
-            let conversationID = try repository.createConversation(projectId: nil)
+            guard let conversationID = try repository.importShare(payloadID: pending.id, text: pending.payload.text) else {
+                return store.discard(pending)
+            }
             shareImportDrafts[conversationID] = pending.payload.text
             selectedConversationID = conversationID
             if !store.discard(pending) {
@@ -37,6 +39,7 @@ final class AppState: ObservableObject {
                     category: .app,
                     metadata: ["conversationId": "\(conversationID)"]
                 )
+                return false
             }
             DiagnosticsLogger.log(
                 "Imported share into new conversation",

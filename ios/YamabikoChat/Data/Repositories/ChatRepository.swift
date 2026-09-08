@@ -20,6 +20,7 @@ enum ProjectDeletionMode {
 }
 
 final class ChatRepository {
+    private static let attachmentOwnershipLock = NSRecursiveLock()
     private static let defaultConversationTitles: Set<String> = ["New Chat", "Secret Chat"]
     private static let conversationTitleMaxLength = 50
     private static let branchSnippetMaxLength = 32
@@ -406,6 +407,15 @@ final class ChatRepository {
         )
     }
 
+    func importShare(payloadID: String, text: String) throws -> Int64? {
+        let current = try settingsForNewConversation()
+        return try conversations.importShare(payloadID: payloadID, text: text, model: current.currentModel(), provider: current.apiProvider, systemPrompt: current.effectiveSystemPrompt())
+    }
+
+    func shareImportText(conversationID: Int64) throws -> String? {
+        try conversations.shareImportText(conversationID: conversationID)
+    }
+
     func pendingInitialMessage(conversationId: Int64) throws -> String? {
         try conversations.pendingInitialMessage(conversationId: conversationId)
     }
@@ -532,22 +542,22 @@ final class ChatRepository {
     }
 
     func deleteConversation(id: Int64) throws {
-        let ownedPaths = try conversations.attachmentPathsForConversation(id: id)
-        try attachmentRepository.deleteOwnedFiles(paths: ownedPaths)
-        try attachmentRepository.deleteConversationArtifacts(conversationID: id)
-        try conversations.deleteConversation(id: id)
-        try editorWorkspaces.delete(sessionID: String(id))
-        Task { await PythonWorker.shared.resetSession(sessionID: String(id)) }
+        try deleteConversations(ids: [id])
     }
 
     func deleteConversations(ids: Set<Int64>) throws {
+        Self.attachmentOwnershipLock.lock()
+        defer { Self.attachmentOwnershipLock.unlock() }
+        let protected = try conversations.referencedAttachmentPaths(excluding: ids)
         let paths = try ids.flatMap { try conversations.attachmentPathsForConversation(id: $0) }
-        try attachmentRepository.deleteOwnedFiles(paths: paths)
-        for id in ids {
-            try attachmentRepository.deleteConversationArtifacts(conversationID: id)
-        }
+        // Commit the removal of references before reclaiming files. A cleanup
+        // failure can leave unused files, but cannot destroy surviving messages.
         try conversations.deleteConversations(ids: ids)
+        try attachmentRepository.deleteOwnedFiles(paths: paths.filter {
+            !protected.contains(PiAgentRuntime.attachmentFileURL(from: $0).path)
+        })
         for id in ids {
+            try attachmentRepository.deleteConversationArtifacts(conversationID: id, protecting: protected)
             try editorWorkspaces.delete(sessionID: String(id))
             Task { await PythonWorker.shared.resetSession(sessionID: String(id)) }
         }
@@ -555,28 +565,13 @@ final class ChatRepository {
 
     @discardableResult
     func deleteSecretConversationIfNeeded(id: Int64) throws -> Bool {
-        let ownedPaths = try conversations.attachmentPathsForSecretConversation(id: id)
         guard try conversations.fetchConversation(id: id)?.isSecret == true else { return false }
-        try attachmentRepository.deleteOwnedFiles(paths: ownedPaths)
-        try attachmentRepository.deleteConversationArtifacts(conversationID: id)
-        let deleted = try conversations.deleteSecretConversationIfNeeded(id: id)
-        if deleted {
-            try editorWorkspaces.delete(sessionID: String(id))
-            Task { await PythonWorker.shared.resetSession(sessionID: String(id)) }
-        }
-        return deleted
+        try deleteConversations(ids: [id])
+        return true
     }
 
     func purgeSecretConversations() throws {
-        let ids = try conversations.secretConversationIDs()
-        let paths = try ids.flatMap { try conversations.attachmentPathsForSecretConversation(id: $0) }
-        try attachmentRepository.deleteOwnedFiles(paths: paths)
-        for id in ids {
-            try attachmentRepository.deleteConversationArtifacts(conversationID: id)
-            try editorWorkspaces.delete(sessionID: String(id))
-            Task { await PythonWorker.shared.resetSession(sessionID: String(id)) }
-        }
-        try conversations.purgeSecretConversations()
+        try deleteConversations(ids: Set(conversations.secretConversationIDs()))
     }
 
     func deleteProject(id: Int64, mode: ProjectDeletionMode) throws {
@@ -585,16 +580,8 @@ final class ChatRepository {
             try conversations.deleteProject(id: id)
         case .withConversations:
             let conversationIDs = try conversations.conversationIDs(projectId: id)
-            let paths = try conversationIDs.flatMap { try conversations.attachmentPathsForConversation(id: $0) }
-            try attachmentRepository.deleteOwnedFiles(paths: paths)
-            for conversationID in conversationIDs {
-                try attachmentRepository.deleteConversationArtifacts(conversationID: conversationID)
-            }
-            try conversations.deleteProjectWithConversations(id: id)
-            for conversationID in conversationIDs {
-                try editorWorkspaces.delete(sessionID: String(conversationID))
-                Task { await PythonWorker.shared.resetSession(sessionID: String(conversationID)) }
-            }
+            try deleteConversations(ids: Set(conversationIDs))
+            try conversations.deleteProject(id: id)
         }
         try projectWorkspaces.delete(projectID: id)
     }
@@ -626,6 +613,8 @@ final class ChatRepository {
     }
 
     func branchConversation(from conversationId: Int64, messageId: Int64) throws -> Int64 {
+        Self.attachmentOwnershipLock.lock()
+        defer { Self.attachmentOwnershipLock.unlock() }
         guard let baseConversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
         }
@@ -2099,36 +2088,36 @@ final class ChatRepository {
     }
 
     func resolveModelSupportsVision(provider: String, model: String) async -> Bool {
-        await pricingRepository.modelSupportsVision(provider: provider, model: model)
+        (try? await providers.modelSupportsVision(provider: provider, model: model)) == true
     }
 
     func resolveCanAttachImages(
         settings: AppSettings,
         conversationProvider: String,
         conversationModel: String
-    ) async -> Bool {
+    ) async throws -> Bool {
         if settings.isDualModeEnabled {
-            async let modelA = pricingRepository.modelSupportsVision(
+            async let modelA = try providers.modelSupportsVision(
                 provider: settings.dualProviderA,
                 model: settings.dualModelA
             )
-            async let modelB = pricingRepository.modelSupportsVision(
+            async let modelB = try providers.modelSupportsVision(
                 provider: settings.dualProviderB,
                 model: settings.dualModelB
             )
-            let (supportsA, supportsB) = await (modelA, modelB)
+            let (supportsA, supportsB) = try await (modelA, modelB)
             return supportsA && supportsB
         }
         if settings.isAutoConversationEnabled {
-            async let modelA = pricingRepository.modelSupportsVision(
+            async let modelA = try providers.modelSupportsVision(
                 provider: settings.autoProviderA,
                 model: settings.autoModelA
             )
-            async let modelB = pricingRepository.modelSupportsVision(
+            async let modelB = try providers.modelSupportsVision(
                 provider: settings.autoProviderB,
                 model: settings.autoModelB
             )
-            let (supportsA, supportsB) = await (modelA, modelB)
+            let (supportsA, supportsB) = try await (modelA, modelB)
             return supportsA && supportsB
         }
         if settings.isFusionModeEnabled {
@@ -2137,7 +2126,7 @@ final class ChatRepository {
             ) {
                 var allSupport = true
                 for panel in preset.panelModels {
-                    let supports = await pricingRepository.modelSupportsVision(
+                    let supports = try await providers.modelSupportsVision(
                         provider: panel.provider,
                         model: panel.modelId
                     )
@@ -2149,7 +2138,7 @@ final class ChatRepository {
                 return allSupport
             }
         }
-        return await pricingRepository.modelSupportsVision(
+        return try await providers.modelSupportsVision(
             provider: conversationProvider,
             model: conversationModel
         )
@@ -2162,7 +2151,7 @@ final class ChatRepository {
     // MARK: - Helpers
 
     private func visionMetadataFlag(provider: String, model: String) async -> String {
-        let supports = await pricingRepository.modelSupportsVision(provider: provider, model: model)
+        guard let supports = try? await providers.modelSupportsVision(provider: provider, model: model) else { return "unknown" }
         return supports ? "true" : "false"
     }
 
@@ -2814,7 +2803,8 @@ final class ChatRepository {
                 let activity = modelSide == .a ? dual.modelAToolActivity : dual.modelBToolActivity
                 messages.append(contentsOf: activity?.providerTranscript ?? [])
                 let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty {
+                if !trimmed.isEmpty,
+                   !(activity?.providerTranscript.last?.piMessage != nil && activity?.providerTranscript.last?.content == content) {
                     messages.append(
                         ProviderRequestMessage(
                             role: "assistant",

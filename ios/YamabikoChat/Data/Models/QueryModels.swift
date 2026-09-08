@@ -52,6 +52,10 @@ struct ProviderHistoryMessage: Equatable {
             message.reasoningContent = nil
             return message
         }
+        if let last = replayableTranscript.last,
+           last.role == "assistant", last.piMessage != nil, last.content == text {
+            return replayableTranscript
+        }
         return replayableTranscript + [finalMessage]
     }
 }

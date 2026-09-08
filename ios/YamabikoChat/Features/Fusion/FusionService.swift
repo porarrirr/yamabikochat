@@ -115,12 +115,14 @@ final class FusionService {
     ) async throws -> FusionJudgeOutcome {
         let settings = try settingsRepository.load()
         var visionSupportByModel: [String: Bool] = [:]
-        for panel in request.panelModels {
-            let supports = await pricingRepository.modelSupportsVision(
+        let attachments = userAttachments + conversationHistory.flatMap(\.attachments)
+        try Self.validateAttachments(attachments)
+        for panel in request.panelModels where !attachments.isEmpty {
+            let supports = try await providerGateway.modelSupportsVision(
                 provider: panel.provider,
                 model: panel.modelId
             )
-            visionSupportByModel[panel.modelId] = supports
+            visionSupportByModel["\(panel.provider)/\(panel.modelId)"] = supports
         }
         let resolvedVisionSupportByModel = visionSupportByModel
 
@@ -141,7 +143,7 @@ final class FusionService {
                     userPrompt: request.userPrompt,
                     conversationHistory: conversationHistory,
                     userAttachments: userAttachments,
-                    supportsVision: resolvedVisionSupportByModel[model.modelId] ?? false,
+                    supportsVision: resolvedVisionSupportByModel["\(model.provider)/\(model.modelId)"] ?? false,
                     conversationID: context.conversationId.map(String.init),
                     projectID: context.projectId,
                     clientToolsAllowed: context.clientToolsAllowed
@@ -165,6 +167,15 @@ final class FusionService {
         )
     }
 
+    static func validateAttachments(_ paths: [String]) throws {
+        for path in paths {
+            let url = PiAgentRuntime.attachmentFileURL(from: path)
+            guard AttachmentRepository().requiresVision(url: url) else {
+                throw ProviderClientError.parseFailure(L10n.text("Fusionで添付できるのは画像のみです。PDF・テキスト添付には対応していません。"))
+            }
+        }
+    }
+
     func buildProviderRequest(
         model: PanelModelConfig,
         systemPrompt: String,
@@ -180,6 +191,7 @@ final class FusionService {
         projectID: Int64? = nil,
         clientToolsAllowed: Bool = true
     ) async throws -> ProviderRequest {
+        try Self.validateAttachments(userAttachments + conversationHistory.flatMap(\.attachments))
         let toolScope: ProviderRequestToolScope = clientToolsAllowed && phase == .panel
             ? .fusionPanel(allowWebSearch: allowTools)
             : .providerOnly

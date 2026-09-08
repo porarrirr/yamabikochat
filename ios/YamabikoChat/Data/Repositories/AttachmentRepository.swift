@@ -84,7 +84,7 @@ final class AttachmentRepository: @unchecked Sendable {
 
     func deleteOwnedFiles(paths: [String]) throws {
         for path in Set(paths) {
-            let url = URL(fileURLWithPath: path).standardizedFileURL
+            let url = PiAgentRuntime.attachmentFileURL(from: path)
             guard isOwnedFile(url) else { continue }
             if fileManager.fileExists(atPath: url.path) {
                 try fileManager.removeItem(at: url)
@@ -92,7 +92,7 @@ final class AttachmentRepository: @unchecked Sendable {
         }
     }
 
-    func deleteConversationArtifacts(conversationID: Int64) throws {
+    func deleteConversationArtifacts(conversationID: Int64, protecting paths: Set<String> = []) throws {
         try generatedFilesLock.withLock {
             let root = try generatedFilesRoot()
             let collection = safeGeneratedName(
@@ -101,7 +101,17 @@ final class AttachmentRepository: @unchecked Sendable {
             )
             let directory = root.appendingPathComponent(collection, isDirectory: true)
             if fileManager.fileExists(atPath: directory.path) {
-                try fileManager.removeItem(at: directory)
+                let protected = paths.filter { $0.hasPrefix(directory.path + "/") }
+                if protected.isEmpty {
+                    try fileManager.removeItem(at: directory)
+                } else if let files = fileManager.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey]) {
+                    for case let file as URL in files {
+                        if try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true,
+                           !paths.contains(file.standardizedFileURL.path) {
+                            try fileManager.removeItem(at: file)
+                        }
+                    }
+                }
             }
         }
     }

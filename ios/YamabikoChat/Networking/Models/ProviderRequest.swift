@@ -55,6 +55,7 @@ struct ProviderRequestMessage: Codable, Sendable, Equatable, Identifiable {
     var toolCallId: String?
     var toolName: String?
     var toolResultIsError: Bool?
+    var piMessage: JSONValue?
 
     private enum CodingKeys: String, CodingKey {
         case role
@@ -65,6 +66,7 @@ struct ProviderRequestMessage: Codable, Sendable, Equatable, Identifiable {
         case toolCallId
         case toolName
         case toolResultIsError
+        case piMessage
     }
 
     init(
@@ -75,7 +77,8 @@ struct ProviderRequestMessage: Codable, Sendable, Equatable, Identifiable {
         toolCalls: [ToolCall]? = nil,
         toolCallId: String? = nil,
         toolName: String? = nil,
-        toolResultIsError: Bool? = nil
+        toolResultIsError: Bool? = nil,
+        piMessage: JSONValue? = nil
     ) {
         self.role = role
         self.content = content
@@ -85,6 +88,7 @@ struct ProviderRequestMessage: Codable, Sendable, Equatable, Identifiable {
         self.toolCallId = toolCallId
         self.toolName = toolName
         self.toolResultIsError = toolResultIsError
+        self.piMessage = piMessage
     }
 }
 
