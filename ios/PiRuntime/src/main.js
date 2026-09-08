@@ -446,7 +446,16 @@ function diagnostic(res, runId, stage, message, metadata = {}) {
   send(res, { type: "diagnostic", runId, stage, message, metadata });
 }
 
-function effectiveHeaders(config) {
+function effectiveHeaders(config, sessionId) {
+  if (config.provider === "opencode-go") {
+    // https://opencode.ai/docs/go/#where-can-i-use-it
+    // Use the conversation identity across turns and Pi tool-loop requests.
+    return {
+      ...(config.headers || {}),
+      "User-Agent": "YamabikoChat/1.0",
+      ...(sessionId ? { "x-opencode-session": sessionId } : {})
+    };
+  }
   return config.provider === "xai-oauth"
     ? { ...buildProxyHeaders(config.model), ...(config.headers || {}) }
     : config.headers;
@@ -1009,19 +1018,20 @@ function exportableProviderPayload(value) {
 
 function standardStreamFunction(request, config, report, captureProviderRequest) {
   const env = normalizedProviderEnvironment(config.catalogProvider || config.provider, config.env);
+  const sessionId = request.metadata?.promptCacheKey || request.metadata?.codexSessionId;
   return (model, context, options = {}) => runtimeModels.streamSimple(model, context, {
     ...options,
     apiKey: config.apiKey,
     env: Object.keys(env).length ? env : undefined,
     headers: config.provider === "xai-oauth" && (request.metadata?.promptCacheKey || request.metadata?.codexSessionId)
       ? {
-          ...effectiveHeaders(config),
+          ...effectiveHeaders(config, sessionId),
           "x-grok-conv-id": request.metadata?.promptCacheKey || request.metadata?.codexSessionId
         }
-      : effectiveHeaders(config),
+      : effectiveHeaders(config, sessionId),
     timeoutMs: timeoutMs(request),
     reasoning: config.thinkingLevel,
-    sessionId: request.metadata?.promptCacheKey || request.metadata?.codexSessionId,
+    sessionId,
     onPayload: (payload) => {
       const mutated = mutatePayload(payload, request, config);
       captureProviderRequest(exportableProviderPayload(mutated));
