@@ -34,10 +34,21 @@ TEST_APP_SDK=26.5 TEST_FRAMEWORK_SDK=26.4 \
   XCRUN_COMMAND="$test_directory/bin/xcrun" \
   "$script_directory/validate-app-sdk-versions.sh" "$app" 26.5
 
-if TEST_APP_SDK=26.5 TEST_FRAMEWORK_SDK=27.0 \
+TEST_APP_SDK=27.0 TEST_FRAMEWORK_SDK=27.0 \
   XCRUN_COMMAND="$test_directory/bin/xcrun" \
-  "$script_directory/validate-app-sdk-versions.sh" "$app" 26.5; then
-  echo "Expected SDK 27.0 validation to fail" >&2
+  "$script_directory/validate-app-sdk-versions.sh" "$app" 27.0
+
+if TEST_APP_SDK=27.0 TEST_FRAMEWORK_SDK=27.1 \
+  XCRUN_COMMAND="$test_directory/bin/xcrun" \
+  "$script_directory/validate-app-sdk-versions.sh" "$app" 27.0; then
+  echo "Expected framework SDK 27.1 validation to fail" >&2
+  exit 1
+fi
+
+if TEST_APP_SDK=27.1 TEST_FRAMEWORK_SDK=27.0 \
+  XCRUN_COMMAND="$test_directory/bin/xcrun" \
+  "$script_directory/validate-app-sdk-versions.sh" "$app" 27.0; then
+  echo "Expected app SDK 27.1 validation to fail" >&2
   exit 1
 fi
 

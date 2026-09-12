@@ -24,17 +24,19 @@ printf '%s\n' "${TEST_ACTIVE_SDK:?}"
 SCRIPT
 chmod +x "$test_directory/xcrun"
 
-for supported_version in 26.4 26.5 26.5.0; do
+for supported_version in 26.4 26.5 26.5.0 27.0 27.0.0; do
   TEST_ACTIVE_SDK="$supported_version" \
     XCRUN_COMMAND="$test_directory/xcrun" \
     "$script_directory/validate-active-app-store-sdk.sh"
 done
 
-if TEST_ACTIVE_SDK=27.0 \
-  XCRUN_COMMAND="$test_directory/xcrun" \
-  "$script_directory/validate-active-app-store-sdk.sh"; then
-  echo "Expected SDK 27.0 validation to fail" >&2
-  exit 1
-fi
+for unsupported_version in 27.0.1 27.1 28.0; do
+  if TEST_ACTIVE_SDK="$unsupported_version" \
+    XCRUN_COMMAND="$test_directory/xcrun" \
+    "$script_directory/validate-active-app-store-sdk.sh"; then
+    echo "Expected SDK $unsupported_version validation to fail" >&2
+    exit 1
+  fi
+done
 
 echo "Active App Store SDK validation tests passed"
