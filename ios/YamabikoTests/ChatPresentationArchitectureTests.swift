@@ -27,18 +27,22 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         XCTAssertEqual(widths.second, 34.6, accuracy: 0.01)
     }
 
-    func testComposerFocusRemainsAvailableWhileGeneratingNextPrompt() {
+    func testSendingDismissesComposerAndCompletionDoesNotReopenKeyboard() {
         var isFocused = true
 
         isFocused = ChatComposerFocusPolicy.focusState(current: isFocused, isSending: true)
-        XCTAssertTrue(isFocused)
+        XCTAssertFalse(isFocused)
 
         isFocused = ChatComposerFocusPolicy.focusState(current: isFocused, isSending: false)
-        XCTAssertTrue(isFocused)
+        XCTAssertFalse(isFocused)
 
         isFocused = false
         isFocused = ChatComposerFocusPolicy.focusState(current: isFocused, isSending: true)
         XCTAssertFalse(isFocused)
+    }
+
+    func testCompletionPreservesManuallyRefocusedComposer() {
+        XCTAssertTrue(ChatComposerFocusPolicy.focusState(current: true, isSending: false))
     }
 
     func testReasoningEffortMeterRequiresFocusedComposerAndSoftwareKeyboard() {

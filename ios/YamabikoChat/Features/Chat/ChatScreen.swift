@@ -28,8 +28,8 @@ private struct SpeechWaveformView: View {
 }
 
 enum ChatComposerFocusPolicy {
-    static func focusState(current: Bool, isSending _: Bool) -> Bool {
-        current
+    static func focusState(current: Bool, isSending: Bool) -> Bool {
+        isSending ? false : current
     }
 }
 
