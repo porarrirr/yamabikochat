@@ -30,7 +30,7 @@
 - Current history mixes imperative summaries, Conventional Commit prefixes (`feat(...)`, `fix:`), and occasional emoji/Japanese titles. Keep messages short, specific, and consistent within a PR.
 - One logical change per commit when possible.
 - PRs should include: purpose, impacted areas, validation steps (commands run), linked issue, and UI screenshots for visible changes.
-- Canonical sync target for this workspace is `porarrirr/yamabikochat` on branch `ios`; keep local and that branch aligned.
+- Canonical sync target for this workspace is `porarrirr/yamabikochat` on branch `ios`. Use this target when synchronization is requested.
 
 ## Security & Configuration Tips
 - Never commit secrets or keystores. Use `local.properties.example` as the template for local config.
@@ -40,7 +40,7 @@
 - Treat the standard Pi Agents execution path as the single source of truth for AI execution, API communication, token usage, and context management.
 - Do not create, extend, or use custom paths that bypass, replace, or reimplement Pi Agents.
 - Pi Runtime exclusively owns provider/model resolution. Native iOS and Android code must pass model identity and explicit user configuration, not select a wire API or synthesize a Pi model.
-- Execute only an exact Pi built-in model or a separately verified official contract registered on an existing Pi provider. Otherwise return a typed unsupported reason and stop.
+- Execute only an exact Pi built-in model or a separately verified official contract registered on an existing Pi provider. Otherwise return a typed unsupported reason and stop that model execution. During development, investigation, diagnostics, and tests may continue; implementing an alternative execution path still requires explicit user approval.
 - Do not retry through another protocol, endpoint, provider, or model after resolution or stream failure.
 - If the standard path cannot satisfy a requirement, stop before implementing an alternative and report the reason and required change to the user.
 - Technical necessity does not grant permission for a custom implementation; proceed only after explicit user approval.
@@ -54,7 +54,7 @@
 - Keep unsupported catalog models visible but disabled with the exact resolver reason. Never replace a saved unsupported model automatically.
 - A user-defined compatibility provider is allowed only through Pi's compatibility/provider APIs and only when the user explicitly supplies both protocol and base URL; catalog metadata is not user authorization to infer either value.
 - When models.dev cannot express a provider's documented per-model routing, use a separately maintained authoritative provider contract only for the missing fields. Add an automated drift check against the upstream contract and keep iOS and Android mappings identical.
-- Test every provider identity that can reach execution, including built-in IDs and `MODELS_DEV:*` IDs. For heterogeneous providers, add routing tests for every supported protocol kind so UI/catalog changes cannot leave a second execution path on a generic adapter.
+- For provider, catalog, or resolver changes, add or update and run tests for every affected executable provider identity, including built-in IDs and `MODELS_DEV:*` IDs, and every affected protocol kind. Validate all providers when shared resolution changes. For other changes, select validation according to the affected behavior.
 
 ## iOS Development Best Practices
 - Keep iOS implementation under `ios/YamabikoChat/` and treat `ios/project.yml` as the source of truth; regenerate the Xcode project with `xcodegen` after structural file changes.
