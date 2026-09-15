@@ -144,21 +144,7 @@ enum DiagnosticsLogger {
         }
 
         if let error {
-            let nsError = error as NSError
-            lines.append("type=\(String(reflecting: type(of: error)))")
-            lines.append(
-                "\(nsError.domain) (\(nsError.code)): \(DiagnosticsLogSanitizer.sanitize(nsError.localizedDescription))"
-            )
-            if let reason = nsError.localizedFailureReason, !reason.isEmpty {
-                lines.append("reason=\(DiagnosticsLogSanitizer.sanitize(reason))")
-            }
-            if let suggestion = nsError.localizedRecoverySuggestion, !suggestion.isEmpty {
-                lines.append("suggestion=\(DiagnosticsLogSanitizer.sanitize(suggestion))")
-            }
-            let debugDescription = DiagnosticsLogSanitizer.sanitize(String(reflecting: error))
-            if !debugDescription.isEmpty {
-                lines.append("debug=\(debugDescription)")
-            }
+            lines.append(contentsOf: renderedErrorLines(error))
         }
         let entry = lines.joined(separator: "\n")
         switch resolvedLevel {
@@ -204,6 +190,57 @@ enum DiagnosticsLogger {
             try? manager.removeItem(at: url)
         }
         #endif
+    }
+
+    /// Renders the complete NSError cause chain. Foundation Models can surface a
+    /// public error whose NSUnderlyingErrorKey contains the provider's lower-level
+    /// error; logging only the outer bridge discards the domain and code needed for
+    /// actionable diagnostics.
+    static func renderedErrorLines(_ error: Error) -> [String] {
+        var lines: [String] = []
+        var pending: [(error: Error, depth: Int)] = [(error, 0)]
+        var visited = Set<ObjectIdentifier>()
+
+        while let current = pending.first {
+            pending.removeFirst()
+            let nsError = current.error as NSError
+            let identity = ObjectIdentifier(nsError)
+            guard visited.insert(identity).inserted else { continue }
+
+            let prefix = current.depth == 0 ? "" : "underlying[\(current.depth)]."
+            lines.append("\(prefix)type=\(String(reflecting: type(of: current.error)))")
+            lines.append(
+                "\(prefix)error=\(DiagnosticsLogSanitizer.sanitize(nsError.domain)) " +
+                    "(\(nsError.code)): \(DiagnosticsLogSanitizer.sanitize(nsError.localizedDescription))"
+            )
+            if let reason = nsError.localizedFailureReason, !reason.isEmpty {
+                lines.append("\(prefix)reason=\(DiagnosticsLogSanitizer.sanitize(reason))")
+            }
+            if let suggestion = nsError.localizedRecoverySuggestion, !suggestion.isEmpty {
+                lines.append("\(prefix)suggestion=\(DiagnosticsLogSanitizer.sanitize(suggestion))")
+            }
+            let debugDescription = DiagnosticsLogSanitizer.sanitize(String(reflecting: current.error))
+            if !debugDescription.isEmpty {
+                lines.append("\(prefix)debug=\(debugDescription)")
+            }
+
+            guard current.depth < 8 else { continue }
+            let underlying = underlyingErrors(of: nsError)
+            pending.insert(contentsOf: underlying.map { ($0, current.depth + 1) }, at: 0)
+        }
+        return lines
+    }
+
+    private static func underlyingErrors(of error: NSError) -> [Error] {
+        var result: [Error] = []
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? Error {
+            result.append(underlying)
+        }
+        if #available(iOS 14.5, *),
+           let multiple = error.userInfo[NSMultipleUnderlyingErrorsKey] as? [Error] {
+            result.append(contentsOf: multiple)
+        }
+        return result
     }
 
     #if DEBUG
