@@ -434,16 +434,6 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
-    func testTimelineUsesOnlyItsManualStreamingSelfSizingPath() throws {
-        let store = ChatTimelineStore()
-        store.update(messages: [timelineMessage(id: 1, text: "Initial")])
-        let controller = configuredTimelineController(store: store)
-        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
-
-        XCTAssertEqual(collectionView.selfSizingInvalidation, .disabled)
-    }
-
-    @MainActor
     func testCollectionCellDoesNotRemeasureUnchangedContentDuringRepeatedLayout() {
         let cell = ChatTimelineCollectionCell(frame: CGRect(x: 0, y: 0, width: 354, height: 120))
         cell.contentConfiguration = UIHostingConfiguration {

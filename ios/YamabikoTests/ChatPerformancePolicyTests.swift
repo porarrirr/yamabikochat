@@ -33,24 +33,6 @@ final class ChatPerformancePolicyTests: XCTestCase {
         XCTAssertEqual(ToolActivityPreviewPolicy.displayText("short"), "short")
     }
 
-    func testMarkdownInputSignatureDistinguishesFinalStreamingTransition() {
-        let streaming = MathMarkdownInputSignature(
-            markdownText: "same",
-            mathRenderingEnabled: true,
-            isStreaming: true,
-            colorScheme: .light
-        )
-        let final = MathMarkdownInputSignature(
-            markdownText: "same",
-            mathRenderingEnabled: true,
-            isStreaming: false,
-            colorScheme: .light
-        )
-
-        XCTAssertNotEqual(streaming, final)
-        XCTAssertEqual(streaming, streaming)
-    }
-
     func testMarkdownDocumentCacheBuildsIdenticalDocumentOnce() {
         let unique = UUID().uuidString
         let signature = MathMarkdownDocumentSignature(

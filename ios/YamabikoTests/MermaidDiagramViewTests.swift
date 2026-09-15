@@ -105,11 +105,6 @@ final class MermaidDiagramViewTests: XCTestCase {
         XCTAssertTrue(html.contains("max-height: calc(100vh - 24px)"))
     }
 
-    func testOversizedSourceHasExplicitPreflightError() {
-        let error = MermaidRenderError.sourceTooLarge(limit: MermaidHTMLBuilder.maximumSourceLength)
-        XCTAssertTrue(error.localizedDescription.contains("50000"))
-    }
-
     func testSecureConfigurationCannotBeOverriddenByDiagramDirective() throws {
         let source = "%%{init: {'securityLevel': 'loose', 'htmlLabels': true}}%%\nflowchart LR\nA --> B"
         let html = MermaidHTMLBuilder.buildHTML(

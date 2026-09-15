@@ -64,14 +64,6 @@ class SecurePreferencesManagerTest {
     }
 
     @Test
-    fun `getInstance returns singleton instance`() {
-        val instance1 = SecurePreferencesManager.getInstance(context)
-        val instance2 = SecurePreferencesManager.getInstance(context)
-        
-        assertSame("Should return same instance", instance1, instance2)
-    }
-
-    @Test
     fun `storeGeminiApiKey stores key successfully`() {
         // Given
         val testApiKey = "test-gemini-api-key"

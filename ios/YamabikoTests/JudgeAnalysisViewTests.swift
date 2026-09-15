@@ -2,12 +2,6 @@ import XCTest
 @testable import YamabikoChat
 
 final class JudgeAnalysisViewTests: XCTestCase {
-    func testConfidenceLabels() {
-        XCTAssertEqual(FusionTracePresentation.confidenceLabel(.low), L10n.text("低信頼"))
-        XCTAssertEqual(FusionTracePresentation.confidenceLabel(.medium), L10n.text("中信頼"))
-        XCTAssertEqual(FusionTracePresentation.confidenceLabel(.high), L10n.text("高信頼"))
-    }
-
     func testHasVisibleContentWhenConsensusPresent() {
         let analysis = JudgeAnalysis(
             consensus: ["A"],

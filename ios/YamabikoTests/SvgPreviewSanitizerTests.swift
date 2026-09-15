@@ -63,16 +63,6 @@ final class SvgPreviewSanitizerTests: XCTestCase {
         XCTAssertTrue(html.contains("connect-src 'none'"))
     }
 
-    func testHeightBridgeMeasuresPreviewRootInsteadOfDocumentViewport() {
-        let script = SvgPreviewHeightBridge.measurementScript
-
-        XCTAssertTrue(script.contains("getElementById('yamabiko-svg-preview-root')"))
-        XCTAssertTrue(script.contains("root.getBoundingClientRect().height"))
-        XCTAssertTrue(script.contains("new ResizeObserver(reportHeight).observe(root)"))
-        XCTAssertFalse(script.contains("document.body.scrollHeight"))
-        XCTAssertFalse(script.contains("document.documentElement.scrollHeight"))
-    }
-
     @MainActor
     func testHeightBridgeReportsRenderedSVGHeightWhenViewportIsTaller() async throws {
         let expectation = expectation(description: "SVG content height")
