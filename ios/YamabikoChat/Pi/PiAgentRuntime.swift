@@ -656,7 +656,9 @@ actor PiAgentRuntime {
                             }
                             pccTasks[requestID] = Task {
                                 do {
-                                    try await PCCProviderClient.execute(nativeRequest, runID: runID, requestID: requestID, executeTool: { nativeCall in
+                                    var scopedRequest = nativeRequest
+                                    scopedRequest.sessionID = request.metadata["promptCacheKey"]?.trimmedNonEmpty
+                                    try await PCCProviderClient.execute(scopedRequest, runID: runID, requestID: requestID, executeTool: { nativeCall in
                                         guard request.tools.contains(where: { $0.type == "function" && $0.payload["name"] == nativeCall.name }) else {
                                             throw PCCFailure(code: "pcc_tool_not_authorized")
                                         }

@@ -40,6 +40,31 @@ final class PCCProviderTests: XCTestCase {
         XCTAssertNotNil(second.piExecution)
     }
 
+    func testLivePCCCacheHitAcrossUserTurns() async throws {
+        guard ProcessInfo.processInfo.environment["YAMABIKO_PCC_LIVE_TEST"] == "1" else {
+            throw XCTSkip("Opt-in cache test consumes two PCC requests on an entitled physical device")
+        }
+        let sessionID = "pcc-cache-test-" + UUID().uuidString
+        let configuration = PiAgentConfiguration(provider: "apple-pcc", model: AppleIntelligenceModelCatalog.pccModel, thinkingLevel: "low")
+        let user = ProviderRequestMessage(role: "user", content: String(repeating: "This is stable reference material for the conversation. ", count: 100) + "Reply with OK.")
+        func run(_ messages: [ProviderRequestMessage]) async throws -> ProviderResponse {
+            var request = ProviderRequest(model: AppleIntelligenceModelCatalog.pccModel, messages: messages)
+            request.metadata["promptCacheKey"] = sessionID
+            let stream = try await PiAgentRuntime.shared.stream(request: request, configuration: configuration, tools: LocalToolRegistry(executors: []))
+            var completed: ProviderResponse?
+            for try await event in stream {
+                if case .completed(let response) = event { completed = response }
+            }
+            return try XCTUnwrap(completed)
+        }
+        let first = try await run([user])
+        let second = try await run([user] + (try XCTUnwrap(first.providerTranscript)) + [.init(role: "user", content: "Reply with OK again.")])
+        let message = try XCTUnwrap(second.providerTranscript?.last?.piMessage)
+        guard case .object(let fields) = message else { return XCTFail("Missing native execution metadata") }
+        XCTAssertEqual(fields["pccSessionReused"], .bool(true))
+        XCTAssertGreaterThan(try XCTUnwrap(second.usage?.cachedInputTokens), 0, "SDK session was retained but the provider did not report a cache hit; inspect Foundation Models Instruments")
+    }
+
     func testLivePCCCancellationThroughPi() async throws {
         guard ProcessInfo.processInfo.environment["YAMABIKO_PCC_LIVE_TEST"] == "1" else {
             throw XCTSkip("Opt-in cancellation test consumes one PCC request")

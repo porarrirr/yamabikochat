@@ -140,6 +140,7 @@ function streamPCC(model, context, options = {}) {
             if (delta) stream.push({ type: 'text_delta', contentIndex: 0, delta, partial: output });
             if (event.type === 'completed') {
               if ([...nativeCalls.values()].some(entry => !entry.completed)) throw new Error('pcc_tool_result_missing');
+              if (typeof event.sessionReused === 'boolean') output.pccSessionReused = event.sessionReused;
               if (event.transcript != null) {
                 if (typeof event.transcript !== 'string') throw new Error('pcc_invalid_transcript');
                 JSON.parse(event.transcript);

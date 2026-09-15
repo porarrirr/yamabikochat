@@ -553,6 +553,9 @@ final class ChatRepository {
         // Commit the removal of references before reclaiming files. A cleanup
         // failure can leave unused files, but cannot destroy surviving messages.
         try conversations.deleteConversations(ids: ids)
+        Task { @MainActor in
+            if #available(iOS 27.0, *) { PCCSessionStore.shared.removeConversations(ids) }
+        }
         try attachmentRepository.deleteOwnedFiles(paths: paths.filter {
             !protected.contains(PiAgentRuntime.attachmentFileURL(from: $0).path)
         })

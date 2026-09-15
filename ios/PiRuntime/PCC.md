@@ -53,6 +53,38 @@ Simulator tests use Apple's actual session/tool machinery with a deterministic
 `LanguageModelExecutor` test double. Live PCC checks remain opt-in and require
 an entitled physical device.
 
+## Session and prefix cache reuse
+
+Normal chat requests use their existing `promptCacheKey` as the native session
+identity (dual A/B already have distinct keys). An in-memory store retains up to
+four idle SDK sessions. The next user turn reuses the same `LanguageModelSession`
+only when the model configuration, instructions, tool definitions, generation
+settings and the entire preceding history match. Tool definitions are sorted by
+name; parameter properties already have stable ordering. On a match, only the new
+user prompt is appended: the old SDK transcript is never rewritten.
+
+Regeneration, edited/branched history and changed settings create a fresh session.
+Different chat keys never share sessions. Overlapping requests for the same key
+fail with `pcc_session_busy`; errors/cancellation discard the leased session.
+Deletion clears the affected idle sessions and invalidates in-flight retention;
+memory pressure clears the store. Entries idle for 15 minutes expire on access.
+Requests without a chat key remain ephemeral. Process restarts cannot preserve KV
+state; restoring saved history necessarily starts cold.
+
+Retained tools use a request-scoped router, so callbacks never retain old
+executors or response streams. Per-turn usage subtracts the SDK session's prior
+cumulative counters. Diagnostics report `sessionReused`, `inputTokens` and
+`cachedInputTokens`, and `pccSessionReused` is included in the Pi assistant record.
+Session retention makes prefix reuse possible; only provider-reported cached
+input counts establish an actual hit. No app-side hit count is synthesized.
+
+`PCCSessionStoreTests` verify session/prefix continuity with a deterministic test
+executor, invalidation, callback rebinding and per-turn accounting. The opt-in
+`testLivePCCCacheHitAcrossUserTurns` checks both reuse and positive cached input
+counts on an entitled physical device.
+
+Reference: https://developer.apple.com/documentation/foundationmodels/optimizing-key-value-caching-in-language-model-sessions
+
 ## Audited Pi 0.84.2 extension
 
 `npm ci` applies `scripts/patch-pi-contract.mjs`, with version and exact-source
