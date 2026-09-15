@@ -3,7 +3,7 @@ import FoundationModels
 import ImageIO
 
 struct PCCCapability: Codable, Sendable, Equatable {
-    var version = 1
+    var version = 2
     var available: Bool
     var reason: String? = nil
     var contextSize: Int? = nil
@@ -13,10 +13,17 @@ struct PCCNativeRequest: Decodable, Sendable {
     struct Context: Decodable, Sendable {
         var systemPrompt: String?
         var messages: [Message]
+        var tools: [ToolDefinition]? = nil
     }
     struct Message: Decodable, Sendable {
         var role: String
         var content: JSONValue
+        var pccTranscript: String? = nil
+    }
+    struct ToolDefinition: Decodable, Sendable {
+        var name: String
+        var description: String
+        var parameters: JSONValue
     }
     var context: Context
     var reasoningLevel: String
@@ -32,6 +39,9 @@ struct PCCNativeEvent: Encodable, Sendable {
     var usage: ProviderUsage? = nil
     var message: String? = nil
     var errorCode: String? = nil
+    var transcript: String? = nil
+    var toolCall: ToolCall? = nil
+    var toolResult: ToolResult? = nil
 }
 
 struct PCCFailure: Error, LocalizedError, Sendable {
@@ -75,6 +85,7 @@ enum PCCProviderClient {
     }
 
     static func execute(_ request: PCCNativeRequest, runID: String, requestID: String,
+                        executeTool: @escaping @Sendable (ToolCall) async throws -> ToolResult = { _ in throw PCCFailure(code: "pcc_tool_executor_unavailable") },
                         send: @escaping @Sendable (PCCNativeEvent) async throws -> Void) async throws {
         DiagnosticsLogger.log("PCC native request started", category: .network, requestID: requestID)
         defer { DiagnosticsLogger.log("PCC native request finished", category: .network, requestID: requestID) }
@@ -82,11 +93,12 @@ enum PCCProviderClient {
             guard #available(iOS 27.0, *) else { throw PCCFailure(code: "pcc_os_unsupported") }
             let capability = await capability()
             guard capability.available else { throw PCCFailure(code: capability.reason ?? "pcc_unavailable") }
-            try await PCCSDK.execute(request, runID: runID, requestID: requestID, send: send)
+            try await PCCSDK.execute(request, runID: runID, requestID: requestID, executeTool: executeTool, send: send)
         } catch is CancellationError {
             DiagnosticsLogger.log("PCC native request cancelled", category: .network, requestID: requestID)
             throw CancellationError()
         } catch {
+            if Task.isCancelled { throw CancellationError() }
             let code: String
             if let failure = error as? PCCFailure { code = failure.code }
             else if #available(iOS 27.0, *), let failure = error as? PrivateCloudComputeLanguageModel.Error {
@@ -137,6 +149,17 @@ enum PCCSDK {
             entries.append(.instructions(.init(segments: [.text(.init(content: system))], toolDefinitions: [])))
         }
         for message in context.messages {
+            if message.role == "assistant", let encoded = message.pccTranscript {
+                let native = try JSONDecoder().decode(Transcript.self, from: Data(encoded.utf8))
+                guard native.allSatisfy({ entry in
+                    switch entry {
+                    case .response, .reasoning, .toolCalls, .toolOutput: return true
+                    default: return false
+                    }
+                }) else { throw PCCFailure(code: "pcc_history_unsupported") }
+                entries.append(contentsOf: native)
+                continue
+            }
             switch message.role {
             case "user": entries.append(.prompt(.init(segments: try segments(message.content, allowImages: true))))
             case "assistant": entries.append(.response(.init(assetIDs: [], segments: try segments(message.content, allowImages: false))))
@@ -148,6 +171,14 @@ enum PCCSDK {
     }
 
     static func execute(_ request: PCCNativeRequest, runID: String, requestID: String,
+                        executeTool: @escaping @Sendable (ToolCall) async throws -> ToolResult = { _ in throw PCCFailure(code: "pcc_tool_executor_unavailable") },
+                        send: @escaping @Sendable (PCCNativeEvent) async throws -> Void) async throws {
+        try await execute(request, runID: runID, requestID: requestID, using: model, executeTool: executeTool, send: send)
+    }
+
+    static func execute(_ request: PCCNativeRequest, runID: String, requestID: String,
+                        using model: some LanguageModel,
+                        executeTool: @escaping @Sendable (ToolCall) async throws -> ToolResult,
                         send: @escaping @Sendable (PCCNativeEvent) async throws -> Void) async throws {
         let reasoning: ContextOptions.ReasoningLevel
         switch request.reasoningLevel {
@@ -163,8 +194,51 @@ enum PCCSDK {
         guard case .prompt(var prompt) = entries.removeLast() else { throw PCCFailure(code: "pcc_history_unsupported") }
         prompt.contextOptions = ContextOptions(reasoningLevel: reasoning)
         prompt.options = GenerationOptions(temperature: request.temperature, maximumResponseTokens: request.maximumResponseTokens)
-        let session = LanguageModelSession(model: model, transcript: Transcript(entries: entries))
-        let prompts: [Prompt] = try prompt.segments.map { segment in
+        let nativeTools = try (request.context.tools ?? []).map { definition in
+            try PCCNativeTool(definition: definition) { call in
+                try await send(PCCNativeEvent(type: "tool_start", runId: runID, requestId: requestID, toolCall: call))
+                let result = try await executeTool(call)
+                try Task.checkCancellation()
+                try await send(PCCNativeEvent(type: "tool_end", runId: runID, requestId: requestID, toolCall: call, toolResult: result))
+                return result
+            }
+        }
+        // Register the same definitions in the instructions and session.
+        let toolDefinitions = nativeTools.map { Transcript.ToolDefinition(tool: $0) }
+        if let index = entries.firstIndex(where: { if case .instructions = $0 { return true }; return false }),
+           case .instructions(var instructions) = entries[index] {
+            instructions.toolDefinitions = toolDefinitions
+            entries[index] = .instructions(instructions)
+        } else if !toolDefinitions.isEmpty {
+            entries.insert(.instructions(.init(segments: [], toolDefinitions: toolDefinitions)), at: 0)
+        }
+        let session = LanguageModelSession(model: model, tools: nativeTools, transcript: Transcript(entries: entries))
+        let prompts = try prompts(prompt.segments)
+        let responseStream = session.streamResponse(to: Prompt(prompts), options: prompt.options,
+                                                     contextOptions: prompt.contextOptions)
+        var finalText = ""
+        var finalUsage: ProviderUsage?
+        for try await snapshot in responseStream {
+            try Task.checkCancellation()
+            finalText = responseText(snapshot.transcriptEntries)
+            finalUsage = usage(snapshot.usage)
+            try await send(PCCNativeEvent(type: "snapshot", runId: runID, requestId: requestID,
+                                         text: finalText, usage: finalUsage))
+        }
+        try Task.checkCancellation()
+        guard finalUsage != nil else { throw PCCFailure(code: "pcc_empty_stream") }
+        // Only this turn's model/tool entries are stored with its Pi message.
+        // Apple preserves native tool IDs, reasoning and results for follow-ups.
+        let generated = Transcript(entries: session.transcript.dropFirst(entries.count + 1))
+        let encoded = String(decoding: try JSONEncoder().encode(generated), as: UTF8.self)
+        finalText = responseText(generated)
+        finalUsage = usage(session.usage)
+        try await send(PCCNativeEvent(type: "completed", runId: runID, requestId: requestID,
+                                     text: finalText, usage: finalUsage, transcript: encoded))
+    }
+
+    static func prompts(_ segments: [Transcript.Segment]) throws -> [Prompt] {
+        try segments.map { segment in
             switch segment {
             case .text(let text): return Prompt(text.content)
             case .attachment(let attachment):
@@ -175,21 +249,13 @@ enum PCCSDK {
             default: throw PCCFailure(code: "pcc_history_unsupported")
             }
         }
-        let responseStream = session.streamResponse(to: Prompt(prompts), options: prompt.options,
-                                                     contextOptions: prompt.contextOptions)
-        var finalText = ""
-        var finalUsage: ProviderUsage?
-        for try await snapshot in responseStream {
-            try Task.checkCancellation()
-            finalText = snapshot.content
-            finalUsage = usage(snapshot.usage)
-            try await send(PCCNativeEvent(type: "snapshot", runId: runID, requestId: requestID,
-                                         text: finalText, usage: finalUsage))
-        }
-        try Task.checkCancellation()
-        guard finalUsage != nil else { throw PCCFailure(code: "pcc_empty_stream") }
-        try await send(PCCNativeEvent(type: "completed", runId: runID, requestId: requestID,
-                                     text: finalText, usage: finalUsage))
+    }
+
+    static func responseText(_ entries: some Sequence<Transcript.Entry>) -> String {
+        entries.compactMap { entry -> String? in
+            guard case .response(let response) = entry else { return nil }
+            return response.segments.compactMap { if case .text(let text) = $0 { return text.content }; return nil }.joined()
+        }.joined()
     }
 
     static func usage(_ value: LanguageModelSession.Usage) -> ProviderUsage {

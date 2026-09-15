@@ -28,9 +28,10 @@ test('authenticated PCC bridge resolves and streams through the bundled Pi agent
   assert.equal(result.models[1].supported, false);
   assert.equal(result.models[2].reason, 'pcc_quota_limit_reached');
 
-  async function run(runId, nativeError) {
-    const response = await post('/v1/run', { runId, config,
-      request: { messages: [{ role: 'user', content: 'Hello', attachments: [] }], tools: [], metadata: {} } });
+  async function run(runId, nativeError, useTools = false, previous = null) {
+    const response = await post('/v1/run', { runId, config: { ...config, nativePCC: { ...config.nativePCC, version: 2 } },
+      request: { messages: [...(previous ? [previous] : []), { role: 'user', content: 'Hello', attachments: [] }],
+        tools: useTools ? [{ type: 'function', payload: { name: 'web_search', description: 'Search', parameters: '{"type":"object","properties":{}}' } }] : [], metadata: {} } });
     const events = [];
     let text = '';
     for await (const bytes of response.body) {
@@ -40,11 +41,20 @@ test('authenticated PCC bridge resolves and streams through the bundled Pi agent
         const line = text.slice(0, index); text = text.slice(index + 1);
         if (!line) continue;
         const event = JSON.parse(line); events.push(event);
+        assert.notEqual(event.type, 'tool_request', 'Pi must not execute an Apple-managed call');
         if (event.type === 'pcc_request') {
           assert.equal(event.pcc.reasoningLevel, 'deep');
+          if (previous) assert.equal(event.pcc.context.messages[0].pccTranscript, previous.piMessage.pccTranscript);
+          if (useTools) {
+            assert.equal(event.pcc.context.tools[0].name, 'web_search');
+            const toolCall = { id: 'native-call', name: 'web_search', argumentsJSON: '{}' };
+            assert.equal((await post('/v1/pcc-event', { type: 'tool_start', runId, requestId: event.requestId, toolCall })).status, 200);
+            assert.equal((await post('/v1/pcc-event', { type: 'tool_end', runId, requestId: event.requestId, toolCall,
+              toolResult: { callId: toolCall.id, name: toolCall.name, content: 'found', isError: false } })).status, 200);
+          }
           const body = nativeError
             ? { type: 'error', message: 'Daily limit reached', errorCode: 'pcc_quota_limit_reached' }
-            : { type: 'completed', text: 'Hello from PCC', usage: { inputTokens: 4, cachedInputTokens: 0, outputTokens: 5, reasoningTokens: 1 } };
+            : { type: 'completed', text: 'Hello from PCC', ...(useTools ? { transcript: '{"entries":[]}' } : {}), usage: { inputTokens: 4, cachedInputTokens: 0, outputTokens: 5, reasoningTokens: 1 } };
           assert.equal((await post('/v1/pcc-event', { ...body, runId: 'wrong', requestId: event.requestId })).status, 404);
           assert.equal((await post('/v1/pcc-event', { ...body, runId, requestId: event.requestId })).status, 200);
         }
@@ -58,6 +68,18 @@ test('authenticated PCC bridge resolves and streams through the bundled Pi agent
   assert.equal(completion.response.text, 'Hello from PCC');
   assert.equal(completion.response.usage.cacheCreationInputTokens, null);
   assert.equal(completion.response.piExecution.state.messages.at(-1).stopReason, 'unknown');
+  const nativeEvents = await run('native-tools', false, true);
+  const nativeResponse = nativeEvents.find(event => event.type === 'completed')?.response;
+  assert.ok(nativeResponse, JSON.stringify(nativeEvents));
+  assert.equal(nativeResponse.toolCalls[0].name, 'web_search');
+  assert.equal(nativeResponse.usage.contextTokens, null);
+  assert.equal(nativeResponse.usage.contextWindow, 32768);
+  assert.equal(nativeResponse.usage.totalTokens, 9);
+  assert.equal(nativeEvents.filter(event => event.type === 'tool_start').length, 1);
+  assert.equal(nativeEvents.filter(event => event.type === 'tool_end').length, 1);
+  assert.equal(nativeResponse.providerTranscript[0].piMessage.pccTranscript, '{"entries":[]}');
+  const followup = await run('native-followup', false, false, nativeResponse.providerTranscript[0]);
+  assert.ok(followup.some(event => event.type === 'completed'));
   const errors = await run('quota', true);
   assert.equal(errors.filter(e => e.type === 'pcc_request').length, 1);
   assert.equal(errors.at(-1).errorCode, 'PCC_QUOTA_LIMIT_REACHED');

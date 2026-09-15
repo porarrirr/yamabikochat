@@ -1173,7 +1173,7 @@ function finalResponse(assistants, contextUsage, generatedMessages = []) {
     reasoningSummary: reasoning || null,
     usage: aggregateUsage,
     usageSamples,
-    toolCalls,
+    toolCalls: [...toolCalls, ...assistants.flatMap(message => message.pccToolCalls || [])],
     providerTranscript: replayableProviderTranscript(generatedMessages)
   };
 }
@@ -1310,7 +1310,12 @@ async function runAgent(envelope, res) {
   });
   try {
     report("agent_start", "Pi agent execution starting");
-    await withPCCBridge({ runId, send: event => send(res, event) }, () => agent.continue());
+    await withPCCBridge({ runId, send: event => {
+      if (event.type === "tool_start" || event.type === "tool_end") {
+        recorder.record({ ...event, type: `pcc_${event.type}` });
+      }
+      send(res, event);
+    } }, () => agent.continue());
     const last = runAssistants.at(-1);
     report("provider_result", "Pi provider stream finished", {
       stopReason: last?.stopReason || "missing",
@@ -1320,7 +1325,9 @@ async function runAgent(envelope, res) {
     });
     const contextWindow = model.contextWindow || null;
     const contextEstimate = contextWindow && last?.usage
-      ? { tokens: last.usage.totalTokens, contextWindow }
+      // Apple reports aggregate usage for its internal tool loop, not the last
+      // inference's context occupancy. Do not present that sum as context size.
+      ? { tokens: last.pccToolCalls?.length ? null : last.usage.totalTokens, contextWindow }
       : null;
     const generatedMessages = agent.state.messages.slice(initialMessageCount);
     const response = finalResponse(runAssistants, contextEstimate, generatedMessages);

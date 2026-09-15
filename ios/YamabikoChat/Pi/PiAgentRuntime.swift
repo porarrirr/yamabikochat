@@ -583,6 +583,7 @@ actor PiAgentRuntime {
                 var metrics = PiConversationMetricsCollector(context: metricsContext)
                 var toolTasks: [Task<Void, Error>] = []
                 var pccTasks: [String: Task<Void, Never>] = [:]
+                let pccToolRunner = PCCLocalToolRunner()
                 defer { pccTasks.values.forEach { $0.cancel() } }
                 var completionState = PiStreamCompletionState()
 
@@ -655,7 +656,22 @@ actor PiAgentRuntime {
                             }
                             pccTasks[requestID] = Task {
                                 do {
-                                    try await PCCProviderClient.execute(nativeRequest, runID: runID, requestID: requestID) { nativeEvent in
+                                    try await PCCProviderClient.execute(nativeRequest, runID: runID, requestID: requestID, executeTool: { nativeCall in
+                                        guard request.tools.contains(where: { $0.type == "function" && $0.payload["name"] == nativeCall.name }) else {
+                                            throw PCCFailure(code: "pcc_tool_not_authorized")
+                                        }
+                                        let call = try Self.localToolCall(id: nativeCall.id, name: nativeCall.name,
+                                                                        arguments: nativeCall.argumentsJSON, request: request)
+                                        return try await pccToolRunner.run {
+                                            try Task.checkCancellation()
+                                            let createdAtMs = Int64(Date().timeIntervalSince1970 * 1_000)
+                                            continuation.yield(.toolActivity(ToolActivityEvent(phase: .started, call: call, result: nil, createdAtMs: createdAtMs)))
+                                            let result = await tools.execute(call: call)
+                                            try Task.checkCancellation()
+                                            continuation.yield(.toolActivity(ToolActivityEvent(phase: .finished, call: call, result: result, createdAtMs: createdAtMs)))
+                                            return result
+                                        }
+                                    }) { nativeEvent in
                                         try await Self.submitPCCEvent(nativeEvent, endpoint: endpoint, token: token)
                                     }
                                 } catch is CancellationError {
@@ -677,33 +693,7 @@ actor PiAgentRuntime {
                                 throw ProviderClientError.parseFailure("Pi emitted an invalid tool request")
                             }
                             let arguments = Self.jsonString(event.arguments ?? .object([:]))
-                            var providerMetadata: [String: String]?
-                            if name == PythonExecuteTool.name || name == StrReplaceEditorTool.name {
-                                let attachmentPaths = request.messages.flatMap(\.attachments)
-                                let attachmentsData = try JSONEncoder().encode(attachmentPaths)
-                                if name == PythonExecuteTool.name {
-                                    providerMetadata = ["pythonAttachmentsJSON": String(decoding: attachmentsData, as: UTF8.self)]
-                                    if let sessionID = request.metadata["pythonSessionId"]?.trimmedNonEmpty {
-                                        providerMetadata?["pythonSessionId"] = sessionID
-                                    }
-                                } else {
-                                    providerMetadata = ["editorAttachmentsJSON": String(decoding: attachmentsData, as: UTF8.self)]
-                                    if let sessionID = request.metadata["editorSessionId"]?.trimmedNonEmpty {
-                                        providerMetadata?["editorSessionId"] = sessionID
-                                    }
-                                }
-                                if let artifactSessionID = request.metadata[
-                                    ConversationWorkspacePath.artifactSessionMetadataKey
-                                ]?.trimmedNonEmpty {
-                                    providerMetadata?[ConversationWorkspacePath.artifactSessionMetadataKey] = artifactSessionID
-                                }
-                            }
-                            let call = ToolCall(
-                                id: callID,
-                                name: name,
-                                argumentsJSON: arguments,
-                                providerMetadata: providerMetadata
-                            )
+                            let call = try Self.localToolCall(id: callID, name: name, arguments: arguments, request: request)
                             let createdAtMs = event.timeMs ?? nowMs()
                             let reportsActivity = name == WebSearchTool.name || name == FetchUrlTool.name || name == PythonExecuteTool.name || name == StrReplaceEditorTool.name
                             if reportsActivity {
@@ -821,6 +811,31 @@ actor PiAgentRuntime {
                 task.cancel()
             }
         }
+    }
+
+    static func localToolCall(id: String, name: String, arguments: String, request: ProviderRequest) throws -> ToolCall {
+        var providerMetadata: [String: String]?
+        if name == PythonExecuteTool.name || name == StrReplaceEditorTool.name {
+            let attachmentPaths = request.messages.flatMap(\.attachments)
+            let attachmentsData = try JSONEncoder().encode(attachmentPaths)
+            if name == PythonExecuteTool.name {
+                providerMetadata = ["pythonAttachmentsJSON": String(decoding: attachmentsData, as: UTF8.self)]
+                if let sessionID = request.metadata["pythonSessionId"]?.trimmedNonEmpty {
+                    providerMetadata?["pythonSessionId"] = sessionID
+                }
+            } else {
+                providerMetadata = ["editorAttachmentsJSON": String(decoding: attachmentsData, as: UTF8.self)]
+                if let sessionID = request.metadata["editorSessionId"]?.trimmedNonEmpty {
+                    providerMetadata?["editorSessionId"] = sessionID
+                }
+            }
+            if let artifactSessionID = request.metadata[
+                ConversationWorkspacePath.artifactSessionMetadataKey
+            ]?.trimmedNonEmpty {
+                providerMetadata?[ConversationWorkspacePath.artifactSessionMetadataKey] = artifactSessionID
+            }
+        }
+        return ToolCall(id: id, name: name, argumentsJSON: arguments, providerMetadata: providerMetadata)
     }
 
     private static func submitPCCEvent(_ event: PCCNativeEvent, endpoint: URL, token: String) async throws {
@@ -1281,7 +1296,7 @@ actor PiAgentRuntime {
         )
     }
 
-    private static func toolResultImages(from artifacts: [ToolArtifact]) throws -> [PiAttachment] {
+    static func toolResultImages(from artifacts: [ToolArtifact]) throws -> [PiAttachment] {
         try artifacts.compactMap { artifact in
             guard artifact.mime.lowercased().hasPrefix("image/") else { return nil }
             guard artifact.size <= Int64(AppConstants.maxAttachmentSizeBytes) else {

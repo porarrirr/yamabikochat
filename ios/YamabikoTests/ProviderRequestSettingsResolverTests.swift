@@ -255,6 +255,26 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         ])
     }
 
+    func testPCCResolvesEnabledClientToolsAndRespectsToggles() async throws {
+        let resolver = makeResolver()
+        var settings = AppSettings()
+        settings.clientWebSearchToolEnabled = true
+        settings.pythonToolEnabled = true
+        let enabled = try await resolver.resolve(settings: settings, provider: "APPLE_INTELLIGENCE", model: AppleIntelligenceModelCatalog.pccModel)
+        XCTAssertEqual(enabled.metadata["supportsClientTools"], "true")
+        XCTAssertTrue(enabled.tools.containsWebSearchTool)
+        XCTAssertTrue(enabled.tools.contains { $0.payload["name"] == FetchUrlTool.name })
+        XCTAssertTrue(enabled.tools.contains { $0.payload["name"] == PythonExecuteTool.name })
+        settings.clientWebSearchToolEnabled = false
+        settings.pythonToolEnabled = false
+        let disabled = try await resolver.resolve(settings: settings, provider: "APPLE_INTELLIGENCE", model: AppleIntelligenceModelCatalog.pccModel)
+        XCTAssertFalse(disabled.tools.containsWebSearchTool)
+        XCTAssertFalse(disabled.tools.contains { $0.payload["name"] == PythonExecuteTool.name })
+        XCTAssertFalse(LLMProvider.appleIntelligence.supportsClientTools(model: AppleIntelligenceModelCatalog.displayModel))
+        XCTAssertFalse(LLMProvider.appleIntelligence.supportsClientTools(model: "unknown-model"))
+        XCTAssertTrue(LLMProvider.appleIntelligence.supportsClientTools(model: AppleIntelligenceModelCatalog.pccModel))
+    }
+
     func testAppleIntelligenceOmitsClientToolsBecauseItDoesNotUsePiAgent() async throws {
         let resolver = makeResolver()
         var settings = AppSettings()

@@ -264,7 +264,7 @@ struct SettingsScreen: View {
                     )
                 )
 
-                if !LLMProvider(rawOrDefault: viewModel.settings.apiProvider).supportsClientWebSearchTool {
+                if !LLMProvider(rawOrDefault: viewModel.settings.apiProvider).supportsClientTools(model: viewModel.settings.defaultModel) {
                     Text(L10n.text("現在のプロバイダーではこのツールは使用されません。"))
                         .font(.caption2)
                         .foregroundStyle(.orange)

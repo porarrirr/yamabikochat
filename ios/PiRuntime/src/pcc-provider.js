@@ -19,7 +19,7 @@ export function pccResolution(config, models) {
   if (config.catalogContract != null) return unavailable('pcc_catalog_contract_unsupported');
   if (config.model !== PCC_MODEL) return unavailable('pcc_model_unsupported');
   const capability = config.nativePCC;
-  if (capability?.version !== 1) return unavailable('pcc_native_bridge_unavailable');
+  if (![1, 2].includes(capability?.version)) return unavailable('pcc_native_bridge_unavailable');
   if (!capability.available) return unavailable(capability.reason || 'pcc_unavailable');
   if (!Number.isSafeInteger(capability.contextSize) || capability.contextSize <= 0) return unavailable('pcc_context_unavailable');
   const model = {
@@ -37,8 +37,8 @@ export function pccResolution(config, models) {
     models: [model], api: { stream: streamPCC, streamSimple: streamPCC }
   }));
   return { supported: true, provider: PCC_PROVIDER, model: PCC_MODEL, api: model.api,
-    source: 'apple_sdk_native_contract_v1', reasoning: true, input: model.input,
-    contextWindow: model.contextWindow, maxTokens: model.maxTokens, toolCall: false };
+    source: `apple_sdk_native_contract_v${capability.version}`, reasoning: true, input: model.input,
+    contextWindow: model.contextWindow, maxTokens: model.maxTokens, toolCall: capability.version === 2 };
 }
 
 export function unknownUsage() {
@@ -64,6 +64,7 @@ function streamPCC(model, context, options = {}) {
   const requestId = crypto.randomUUID();
   let finished = false;
   let timer;
+  const nativeCalls = new Map();
   function finish(error) {
     if (finished) return;
     finished = true;
@@ -93,7 +94,8 @@ function streamPCC(model, context, options = {}) {
       if (options.signal?.aborted) { abort(); return; }
       const reasoningLevel = { low: 'light', medium: 'moderate', high: 'deep' }[options.reasoning ?? 'medium'];
       if (!reasoningLevel) throw new Error('pcc_reasoning_unsupported');
-      if (context.tools?.length) throw new Error('pcc_tools_unsupported');
+      // PCC's user-authorized SDK loop executes tools natively. Never place
+      // these completed calls in Pi content (the Agent would execute them again).
       if (options.maxTokens != null && (!Number.isSafeInteger(options.maxTokens) || options.maxTokens <= 0)) throw new Error('pcc_invalid_output_limit');
       const payload = { context, reasoningLevel };
       if (options.maxTokens != null) payload.maximumResponseTokens = options.maxTokens;
@@ -103,7 +105,28 @@ function streamPCC(model, context, options = {}) {
         try {
           if (event.type === 'error') {
             finish(Object.assign(new Error(event.message || 'PCC failed'), { code: event.errorCode }));
-          } else if (event.type === 'snapshot' || event.type === 'completed') {
+          } else if (event.type === 'tool_start') {
+            const call = event.toolCall;
+            if (!call || typeof call.id !== 'string' || !call.id || typeof call.argumentsJSON !== 'string' ||
+                nativeCalls.has(call.id) || !(context.tools || []).some(tool => tool.name === call.name)) {
+              throw new Error('pcc_invalid_tool_call');
+            }
+            const args = JSON.parse(call.argumentsJSON);
+            if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('pcc_invalid_tool_arguments');
+            nativeCalls.set(call.id, { call, completed: false });
+            output.pccToolCalls = [...nativeCalls.values()].map(entry => entry.call);
+            bridge.send({ type: 'tool_start', runId: bridge.runId, toolCallId: call.id, name: call.name, timeMs: Date.now() });
+          } else if (event.type === 'tool_end') {
+            const entry = nativeCalls.get(event.toolCall?.id);
+            if (!entry || entry.completed || entry.call.name !== event.toolCall.name ||
+                event.toolResult?.callId !== entry.call.id || event.toolResult?.name !== entry.call.name) {
+              throw new Error('pcc_invalid_tool_result');
+            }
+            entry.completed = true;
+            output.pccToolResults = [...(output.pccToolResults || []), event.toolResult];
+            bridge.send({ type: 'tool_end', runId: bridge.runId, toolCallId: entry.call.id, name: entry.call.name,
+              succeeded: !event.toolResult.isError, timeMs: Date.now() });
+          } else if (event.type === 'snapshot'  || event.type === 'completed') {
             if (typeof event.text !== 'string') throw new Error('pcc_invalid_snapshot');
             const previous = output.content[0]?.text || '';
             if (!event.text.startsWith(previous)) throw new Error('pcc_non_append_snapshot');
@@ -115,7 +138,16 @@ function streamPCC(model, context, options = {}) {
             const delta = event.text.slice(previous.length);
             output.content[0].text = event.text;
             if (delta) stream.push({ type: 'text_delta', contentIndex: 0, delta, partial: output });
-            if (event.type === 'completed') finish();
+            if (event.type === 'completed') {
+              if ([...nativeCalls.values()].some(entry => !entry.completed)) throw new Error('pcc_tool_result_missing');
+              if (event.transcript != null) {
+                if (typeof event.transcript !== 'string') throw new Error('pcc_invalid_transcript');
+                JSON.parse(event.transcript);
+                output.pccTranscript = event.transcript;
+              }
+              if (nativeCalls.size && !output.pccTranscript) throw new Error('pcc_tool_history_missing');
+              finish();
+            }
           } else throw new Error('pcc_invalid_event');
         } catch (error) {
           bridge.send({ type: 'pcc_cancel', runId: bridge.runId, requestId });

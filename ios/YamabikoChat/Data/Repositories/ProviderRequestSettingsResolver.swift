@@ -234,7 +234,7 @@ final class ProviderRequestSettingsResolver {
             return modelsDevCatalogRepository?.provider(for: reference)?
                 .models.first(where: { $0.id == model })?.toolCall == true
         }
-        return LLMProvider(rawOrDefault: provider).supportsClientWebSearchTool
+        return LLMProvider(rawOrDefault: provider).supportsClientTools(model: model)
     }
 
     /// Provider APIs reject duplicate function tool names. The resolver composes

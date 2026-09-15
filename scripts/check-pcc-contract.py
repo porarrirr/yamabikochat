@@ -14,6 +14,11 @@ CONTRACT = {
     'languagemodelsession/usage-swift.struct/output-swift.struct.md': ['totalTokenCount', 'reasoningTokenCount'],
     'generationoptions/maximumresponsetokens.md': ['without throwing an error', 'longest answer', 'context size'],
     'adding-server-side-intelligence-with-private-cloud-compute.md': ['.light', '.moderate', '.deep', 'quotaLimitReached'],
+    'tool.md': ['call(arguments:)', 'GenerationSchema', 'PromptRepresentable', 'concurrently'],
+    'dynamicgenerationschema.md': ['DynamicGenerationSchema', 'Property'],
+    'dynamicgenerationschema/property.md': ['schema: DynamicGenerationSchema', 'isOptional: Bool'],
+    'generatedcontent.md': ['isComplete', 'jsonString'],
+    'transcript.md': ['ToolCall', 'ToolOutput', 'Encodable', 'Decodable'],
     'analyzing-images-with-multimodal-prompting.md': ['PrivateCloudComputeLanguageModel', 'Attachment'],
 }
 

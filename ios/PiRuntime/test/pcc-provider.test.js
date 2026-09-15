@@ -99,3 +99,91 @@ test('invalid snapshots cancel native generation instead of duplicating text', a
   assert.equal(result.stopReason, 'error');
   assert.equal(events.at(-1).type, 'pcc_cancel');
 });
+
+test('PCC v2 exposes tools only for the verified native identity', () => {
+  const { models } = setup();
+  const native = { ...config, nativePCC: { ...config.nativePCC, version: 2 } };
+  assert.equal(pccResolution(native, models).toolCall, true);
+  assert.equal(pccResolution(config, models).toolCall, false);
+  assert.equal(pccResolution({ ...native, model: 'SystemLanguageModel' }, models).supported, false);
+  assert.equal(pccResolution({ ...native, catalogContract: {} }, models).supported, false);
+});
+
+test('Apple-managed tool loop preserves native history and never re-executes tools in Pi', async () => {
+  const { models, model } = setup();
+  let piExecutions = 0;
+  const nativeEvents = [];
+  const tools = ['web_search', 'python_execute'].map(name => ({
+    name, label: name, description: name, parameters: { type: 'object', properties: {} },
+    execute: async () => { piExecutions++; return { content: [] }; }
+  }));
+  const agent = new Agent({ initialState: { model, messages: [{ role: 'user', content: 'Search then calculate', timestamp: 1 }], tools }, streamFn: models.streamSimple.bind(models) });
+  let requests = 0;
+  await withPCCBridge({ runId: 'native-tools', send(event) {
+    nativeEvents.push(event);
+    if (event.type !== 'pcc_request') return;
+    requests++;
+    assert.deepEqual(event.pcc.context.tools.map(tool => tool.name), tools.map(tool => tool.name));
+    for (const [index, tool] of tools.entries()) {
+      const call = { id: `call-${index}`, name: tool.name, argumentsJSON: '{}' };
+      assert.equal(receivePCCEvent({ ...event, type: 'tool_start', toolCall: call }), true);
+      assert.equal(receivePCCEvent({ ...event, type: 'tool_end', toolCall: call,
+        toolResult: { callId: call.id, name: call.name, content: '42', isError: false } }), true);
+    }
+    receivePCCEvent({ ...event, type: 'completed', text: 'The result is 42', usage, transcript: '{"entries":[]}' });
+  } }, () => agent.continue());
+  const output = JSON.parse(JSON.stringify(agent.state.messages.at(-1)));
+  assert.equal(requests, 1);
+  assert.equal(piExecutions, 0);
+  assert.equal(output.stopReason, 'unknown');
+  assert.equal(output.pccToolCalls.length, 2);
+  assert.equal(output.pccToolResults.length, 2);
+  assert.equal(output.pccTranscript, '{"entries":[]}');
+  assert.equal(output.content.some(block => block.type === 'toolCall'), false);
+  assert.equal(output.usage.totalTokens, 28);
+  assert.equal(nativeEvents.filter(event => event.type === 'tool_start').length, 2);
+  assert.equal(nativeEvents.filter(event => event.type === 'tool_end').length, 2);
+  await withPCCBridge({ runId: 'follow-up', send(event) {
+    assert.equal(event.pcc.context.messages[0].pccTranscript, output.pccTranscript);
+    receivePCCEvent({ ...event, type: 'completed', text: 'Still 42', usage });
+  } }, () => models.streamSimple(model, { messages: [output, { role: 'user', content: 'Repeat' }] }, { reasoning: 'medium' }).result());
+});
+
+test('PCC rejects unauthorized, duplicate, incomplete and unpaired native tool events', async () => {
+  const { models, model } = setup();
+  const call = { id: 'call', name: 'web_search', argumentsJSON: '{}' };
+  for (const mode of ['unauthorized', 'duplicate', 'unpaired', 'pending', 'missing-history']) {
+    const emitted = [];
+    const output = await withPCCBridge({ runId: mode, send(event) {
+      emitted.push(event);
+      if (event.type !== 'pcc_request') return;
+      if (mode === 'unpaired') {
+        receivePCCEvent({ ...event, type: 'tool_end', toolCall: call });
+        return;
+      }
+      receivePCCEvent({ ...event, type: 'tool_start', toolCall: { ...call, name: mode === 'unauthorized' ? 'unknown' : call.name } });
+      if (mode === 'duplicate') receivePCCEvent({ ...event, type: 'tool_start', toolCall: call });
+      if (mode === 'missing-history') receivePCCEvent({ ...event, type: 'tool_end', toolCall: call,
+        toolResult: { callId: call.id, name: call.name, content: 'done', isError: false } });
+      receivePCCEvent({ ...event, type: 'completed', text: 'done', usage });
+    } }, () => models.streamSimple(model, { messages: [], tools: [{ name: 'web_search' }] }, { reasoning: 'medium' }).result());
+    assert.equal(output.stopReason, 'error', mode);
+    assert.equal(emitted.filter(event => event.type === 'pcc_request').length, 1, mode);
+    assert.equal(emitted.at(-1).type, 'pcc_cancel', mode);
+  }
+});
+
+test('cancellation during native tool execution rejects late tool results', async () => {
+  const { models, model } = setup();
+  const controller = new AbortController();
+  let request;
+  const call = { id: 'call', name: 'web_search', argumentsJSON: '{}' };
+  const output = await withPCCBridge({ runId: 'cancel-tool', send(event) {
+    if (event.type !== 'pcc_request') return;
+    request = event;
+    receivePCCEvent({ ...event, type: 'tool_start', toolCall: call });
+    controller.abort();
+  } }, () => models.streamSimple(model, { messages: [], tools: [{ name: 'web_search' }] }, { reasoning: 'medium', signal: controller.signal }).result());
+  assert.equal(output.stopReason, 'aborted');
+  assert.equal(receivePCCEvent({ ...request, type: 'tool_end', toolCall: call }), false);
+});

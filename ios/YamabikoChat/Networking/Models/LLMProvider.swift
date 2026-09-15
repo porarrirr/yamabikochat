@@ -28,4 +28,8 @@ enum LLMProvider: String, Codable, CaseIterable, Sendable {
     var supportsClientWebSearchTool: Bool {
         self != .appleIntelligence
     }
+
+    func supportsClientTools(model: String) -> Bool {
+        supportsClientWebSearchTool || (self == .appleIntelligence && model == AppleIntelligenceModelCatalog.pccModel)
+    }
 }

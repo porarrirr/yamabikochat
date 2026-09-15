@@ -21,6 +21,7 @@
 		0FBA8B52EBD213B2EDEF1A99 /* NodeMobile.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B3D8A5EF7A77209D4FC05951 /* NodeMobile.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		108090779CD14C0F53061E79 /* AppServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9668A67F5C25A97F7F0AC48 /* AppServices.swift */; };
 		10D322B8F73405F360B85BBE /* OpenCodeGoModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60224F6EBCC6491A82E063D /* OpenCodeGoModelCatalog.swift */; };
+		10DB7722EC82D053870E8C67 /* PCCNativeTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFF6083CE0102E07C7EAE1BD /* PCCNativeTools.swift */; };
 		10FF1A71E46475590469FFC7 /* PiNodeRunner.mm in Sources */ = {isa = PBXBuildFile; fileRef = 3A3FD189F82D3DC30D73982B /* PiNodeRunner.mm */; };
 		113F01309D6490BEFE0ADE7A /* FusionProgressSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8494A33B16A90BA7458BE85E /* FusionProgressSnapshotTests.swift */; };
 		11CB82C9C5F5296D07D80B98 /* HtmlCodeExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA5E442E2E06EA7B9CB8557C /* HtmlCodeExtractor.swift */; };
@@ -33,6 +34,7 @@
 		152D93AF92EF0D77EDF9C98E /* ConversationExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 034AE03104FDC60C5D61A61C /* ConversationExportService.swift */; };
 		162459CC3F5A69C2E4423019 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B660E8DACB6DDA3ECAC45423 /* ChatMessage.swift */; };
 		179EE6035B35FBC617EED27F /* LocalToolRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7157EAA30E777555648D356 /* LocalToolRegistry.swift */; };
+		17E72988ACBC00A45337E8EA /* PCCNativeToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 521D280D42F6D32342EE68E1 /* PCCNativeToolsTests.swift */; };
 		18230CF566643B98B8E3B2AF /* AgentSkillModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A3E4BA231653ECF0450331B /* AgentSkillModels.swift */; };
 		1A99660ADDB01688C1C504C1 /* SharePayloadStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00BE476866FB6887397FFD9C /* SharePayloadStorageTests.swift */; };
 		1B328A998EDC00F0006847E0 /* DualModeSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4896B18C01C7F5988DF13828 /* DualModeSettingsSection.swift */; };
@@ -424,6 +426,7 @@
 		4E473F8E97A52BD5E31D96D0 /* PiAgentRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiAgentRuntime.swift; sourceTree = "<group>"; };
 		50A3B8C96FD9035F786B2328 /* FusionExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionExtensions.swift; sourceTree = "<group>"; };
 		51CC989E2C978463E973E22C /* SvgPreviewSanitizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgPreviewSanitizerTests.swift; sourceTree = "<group>"; };
+		521D280D42F6D32342EE68E1 /* PCCNativeToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCCNativeToolsTests.swift; sourceTree = "<group>"; };
 		52D76F0593BAF0C81C185D1A /* FusionChatRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionChatRepositoryTests.swift; sourceTree = "<group>"; };
 		53CFA1C86257D12702D6BAFB /* ProjectListScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectListScreen.swift; sourceTree = "<group>"; };
 		544B698E62EDD214009B7D7A /* ChatViewModelAttachmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModelAttachmentTests.swift; sourceTree = "<group>"; };
@@ -607,6 +610,7 @@
 		FD8C62E150759B38B2CA27A9 /* LegalMarkdownParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMarkdownParserTests.swift; sourceTree = "<group>"; };
 		FDFB9E3E80818460DA5CDA5A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		FF047B35C735D75B50DB5BAD /* ProviderRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderRequest.swift; sourceTree = "<group>"; };
+		FFF6083CE0102E07C7EAE1BD /* PCCNativeTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCCNativeTools.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -660,6 +664,7 @@
 			isa = PBXGroup;
 			children = (
 				1FF77399450389CF5892A94D /* AppleIntelligenceProviderClient.swift */,
+				FFF6083CE0102E07C7EAE1BD /* PCCNativeTools.swift */,
 				6B3CD2AE24065D6F71E892AA /* PCCProviderClient.swift */,
 			);
 			path = Providers;
@@ -1125,6 +1130,7 @@
 				E410C90B964CD3918072A9B0 /* OpenCodeGoUsageRepositoryTests.swift */,
 				4C3E31EC64A965F4851AE80A /* OpenRouterModelTests.swift */,
 				8090A935C0BB2117BC04547F /* OpenRouterRoutingTests.swift */,
+				521D280D42F6D32342EE68E1 /* PCCNativeToolsTests.swift */,
 				99C461CA8F55D11313C79E35 /* PCCProviderTests.swift */,
 				EB497EA88190D3098069001F /* PiAgentGatewayTests.swift */,
 				74F623A2ACDDFF6E31177245 /* PiStreamSpy.swift */,
@@ -1557,6 +1563,7 @@
 				CBD5F3D882B9F04590F7A555 /* OpenCodeGoUsageRepositoryTests.swift in Sources */,
 				615791B4B229DB6A6AD8D4C5 /* OpenRouterModelTests.swift in Sources */,
 				92F3FF4AEE8C134A7DC83453 /* OpenRouterRoutingTests.swift in Sources */,
+				17E72988ACBC00A45337E8EA /* PCCNativeToolsTests.swift in Sources */,
 				C307BED0FA7D787C15B3C283 /* PCCProviderTests.swift in Sources */,
 				576D8A6C2037624C4C6D4F3F /* PiAgentGatewayTests.swift in Sources */,
 				85EB708053705438A3E8BE95 /* PiStreamSpy.swift in Sources */,
@@ -1712,6 +1719,7 @@
 				B9CBE41E5D9DEFC79C81DE9C /* OpenRouterModelService.swift in Sources */,
 				2EAD672EDECBCA4C9DFEFC96 /* OpenRouterModels.swift in Sources */,
 				6F065F7EA8B6667AE3CC3BCA /* OpenSourceLicensesView.swift in Sources */,
+				10DB7722EC82D053870E8C67 /* PCCNativeTools.swift in Sources */,
 				6CDF45A3A0335109BD6A883A /* PCCProviderClient.swift in Sources */,
 				AFC8574367F3592A757FFDD0 /* PCCStatusView.swift in Sources */,
 				AA8DCC77B7AF53AE101C5313 /* PiAgentRuntime.swift in Sources */,
