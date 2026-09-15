@@ -1494,7 +1494,7 @@ final class ConversationRepository: @unchecked Sendable {
                     COALESCE(SUM(CASE WHEN kind = 'llm' AND succeeded = 1 THEN inputTokens ELSE 0 END), 0) AS inputTokens,
                     COALESCE(SUM(CASE WHEN kind = 'llm' AND succeeded = 1 THEN outputTokens ELSE 0 END), 0) AS outputTokens,
                     COALESCE(SUM(CASE WHEN kind = 'llm' AND succeeded = 1 THEN cachedInputTokens ELSE 0 END), 0) AS cachedInputTokens,
-                    COALESCE(SUM(CASE WHEN kind = 'llm' AND succeeded = 1 THEN cacheCreationInputTokens ELSE 0 END), 0) AS cacheCreationInputTokens
+                    CASE WHEN SUM(CASE WHEN kind = 'llm' AND succeeded = 1 AND cacheCreationInputTokens IS NULL THEN 1 ELSE 0 END) > 0 THEN NULL ELSE COALESCE(SUM(CASE WHEN kind = 'llm' AND succeeded = 1 THEN cacheCreationInputTokens ELSE 0 END), 0) END AS cacheCreationInputTokens
                 FROM conversation_execution_metrics
                 WHERE conversationId = ?
                 """,
@@ -1512,7 +1512,7 @@ final class ConversationRepository: @unchecked Sendable {
                 inputTokens: row?["inputTokens"] ?? 0,
                 outputTokens: row?["outputTokens"] ?? 0,
                 cachedInputTokens: row?["cachedInputTokens"] ?? 0,
-                cacheCreationInputTokens: row?["cacheCreationInputTokens"] ?? 0
+                cacheCreationInputTokens: row?["cacheCreationInputTokens"]
             )
         }
         .publisher(in: dbQueue)
@@ -1530,7 +1530,7 @@ final class ConversationRepository: @unchecked Sendable {
                     COALESCE(SUM(inputTokens), 0) as inputTokens,
                     COALESCE(SUM(outputTokens), 0) as outputTokens,
                     COALESCE(SUM(cachedInputTokens), 0) as cachedInputTokens,
-                    COALESCE(SUM(cacheCreationInputTokens), 0) as cacheCreationInputTokens,
+                    CASE WHEN COUNT(*) > COUNT(cacheCreationInputTokens) THEN NULL ELSE COALESCE(SUM(cacheCreationInputTokens), 0) END as cacheCreationInputTokens,
                     COALESCE(SUM(reasoningTokens), 0) as reasoningTokens,
                     COALESCE(SUM(totalTokens), 0) as totalTokens,
                     COALESCE(SUM(costUsd), 0.0) as totalCostUsd
@@ -1544,7 +1544,7 @@ final class ConversationRepository: @unchecked Sendable {
                 inputTokens: row?["inputTokens"] ?? 0,
                 outputTokens: row?["outputTokens"] ?? 0,
                 cachedInputTokens: row?["cachedInputTokens"] ?? 0,
-                cacheCreationInputTokens: row?["cacheCreationInputTokens"] ?? 0,
+                cacheCreationInputTokens: row?["cacheCreationInputTokens"],
                 reasoningTokens: row?["reasoningTokens"] ?? 0,
                 totalTokens: row?["totalTokens"] ?? 0,
                 totalCostUsd: row?["totalCostUsd"] ?? 0
@@ -1577,7 +1577,7 @@ final class ConversationRepository: @unchecked Sendable {
                     COALESCE(SUM(inputTokens), 0) as inputTokens,
                     COALESCE(SUM(outputTokens), 0) as outputTokens,
                     COALESCE(SUM(cachedInputTokens), 0) as cachedInputTokens,
-                    COALESCE(SUM(cacheCreationInputTokens), 0) as cacheCreationInputTokens,
+                    CASE WHEN COUNT(*) > COUNT(cacheCreationInputTokens) THEN NULL ELSE COALESCE(SUM(cacheCreationInputTokens), 0) END as cacheCreationInputTokens,
                     COALESCE(SUM(reasoningTokens), 0) as reasoningTokens,
                     COALESCE(SUM(totalTokens), 0) as totalTokens,
                     COALESCE(SUM(costUsd), 0.0) as totalCostUsd
@@ -1591,7 +1591,7 @@ final class ConversationRepository: @unchecked Sendable {
                 inputTokens: row?["inputTokens"] ?? 0,
                 outputTokens: row?["outputTokens"] ?? 0,
                 cachedInputTokens: row?["cachedInputTokens"] ?? 0,
-                cacheCreationInputTokens: row?["cacheCreationInputTokens"] ?? 0,
+                cacheCreationInputTokens: row?["cacheCreationInputTokens"],
                 reasoningTokens: row?["reasoningTokens"] ?? 0,
                 totalTokens: row?["totalTokens"] ?? 0,
                 totalCostUsd: row?["totalCostUsd"] ?? 0
@@ -1613,7 +1613,7 @@ final class ConversationRepository: @unchecked Sendable {
                     COALESCE(SUM(inputTokens), 0) as inputTokens,
                     COALESCE(SUM(outputTokens), 0) as outputTokens,
                     COALESCE(SUM(cachedInputTokens), 0) as cachedInputTokens,
-                    COALESCE(SUM(cacheCreationInputTokens), 0) as cacheCreationInputTokens,
+                    CASE WHEN COUNT(*) > COUNT(cacheCreationInputTokens) THEN NULL ELSE COALESCE(SUM(cacheCreationInputTokens), 0) END as cacheCreationInputTokens,
                     COALESCE(SUM(reasoningTokens), 0) as reasoningTokens,
                     COALESCE(SUM(totalTokens), 0) as totalTokens,
                     COALESCE(SUM(costUsd), 0.0) as totalCostUsd
@@ -1632,7 +1632,7 @@ final class ConversationRepository: @unchecked Sendable {
                     inputTokens: row["inputTokens"] ?? 0,
                     outputTokens: row["outputTokens"] ?? 0,
                     cachedInputTokens: row["cachedInputTokens"] ?? 0,
-                    cacheCreationInputTokens: row["cacheCreationInputTokens"] ?? 0,
+                    cacheCreationInputTokens: row["cacheCreationInputTokens"],
                     reasoningTokens: row["reasoningTokens"] ?? 0,
                     totalTokens: row["totalTokens"] ?? 0,
                     totalCostUsd: row["totalCostUsd"] ?? 0

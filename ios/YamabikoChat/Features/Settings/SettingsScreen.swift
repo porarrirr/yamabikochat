@@ -1718,7 +1718,20 @@ struct SettingsScreen: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             } else if isAppleIntelligenceProvider {
-                Text(AppleIntelligenceModelCatalog.displayModel)
+                AppleIntelligenceModelPicker(model: Binding(
+                    get: { viewModel.settings.defaultModel },
+                    set: { viewModel.setDefaultModel($0) }
+                ))
+                if viewModel.settings.defaultModel == AppleIntelligenceModelCatalog.pccModel {
+                    Picker("PCC reasoning", selection: Binding(
+                        get: { viewModel.settings.pccReasoningLevel ?? "moderate" },
+                        set: { viewModel.settings.pccReasoningLevel = $0 }
+                    )) {
+                        Text("Light").tag("light")
+                        Text("Moderate").tag("moderate")
+                        Text("Deep").tag("deep")
+                    }
+                }
             } else {
                 TextField("Default model", text: Binding(
                     get: { viewModel.settings.defaultModel },
@@ -2170,6 +2183,10 @@ struct SettingsScreen: View {
 
     private func formatUsd(_ value: Double) -> String {
         String(format: "$%.5f", value)
+    }
+
+    private func formatCompactCount(_ value: Int64?) -> String {
+        value.map { formatCompactCount($0) } ?? L10n.text("Unknown")
     }
 
     private func formatCompactCount(_ value: Int64) -> String {

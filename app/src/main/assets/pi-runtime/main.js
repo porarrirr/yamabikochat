@@ -39,6 +39,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js
+function createAssistantMessageEventStream() {
+  return new AssistantMessageEventStream();
+}
 var EventStream, AssistantMessageEventStream;
 var init_event_stream = __esm({
   "node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js"() {
@@ -596,6 +599,11 @@ function createProvider(input) {
   return provider;
 }
 function calculateCost(model, usage2) {
+  if ([usage2.input, usage2.output, usage2.cacheRead, usage2.cacheWrite].some((v3) => v3 === null)) {
+    const knownFree = !model.cost.tiers?.length && [model.cost.input, model.cost.output, model.cost.cacheRead, model.cost.cacheWrite].every((v3) => v3 === 0);
+    usage2.cost = Object.fromEntries(["input", "output", "cacheRead", "cacheWrite", "total"].map((k2) => [k2, knownFree ? 0 : null]));
+    return usage2.cost;
+  }
   const inputTokens = usage2.input + usage2.cacheRead + usage2.cacheWrite;
   let rates = model.cost;
   let matchedThreshold = -1;
@@ -20752,7 +20760,9 @@ var init_openai_prompt_cache = __esm({
 
 // node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
 function calculateContextTokens2(usage2) {
-  return usage2.totalTokens || usage2.input + usage2.output + usage2.cacheRead + usage2.cacheWrite;
+  if (usage2.totalTokens != null) return usage2.totalTokens;
+  const counts = [usage2.input, usage2.output, usage2.cacheRead, usage2.cacheWrite];
+  return counts.every((v3) => v3 != null) ? counts.reduce((a, b2) => a + b2, 0) : NaN;
 }
 function safeJsonStringify2(value2) {
   try {
@@ -73983,15 +73993,15 @@ async function decodeWebSocketData(data) {
 }
 async function* parseWebSocket(socket, signal, idleTimeoutMs) {
   const queue = [];
-  let pending = null;
+  let pending2 = null;
   let done = false;
   let failed = null;
   let sawCompletion = false;
   const wake = () => {
-    if (!pending)
+    if (!pending2)
       return;
-    const resolve4 = pending;
-    pending = null;
+    const resolve4 = pending2;
+    pending2 = null;
     resolve4();
   };
   const onMessage = (event) => {
@@ -74060,13 +74070,13 @@ async function* parseWebSocket(socket, signal, idleTimeoutMs) {
         break;
       let timeout;
       await new Promise((resolve4, reject) => {
-        pending = resolve4;
+        pending2 = resolve4;
         if (idleTimeoutMs !== void 0 && idleTimeoutMs > 0) {
           timeout = setTimeout(() => {
             const error = new Error(`WebSocket idle timeout after ${idleTimeoutMs}ms`);
             failed = error;
             done = true;
-            pending = null;
+            pending2 = null;
             closeWebSocketSilently(socket, 1e3, "idle_timeout");
             reject(error);
           }, idleTimeoutMs);
@@ -139846,15 +139856,15 @@ async function decodeWebSocketData2(data) {
 }
 async function* parseWebSocket2(socket, signal, idleTimeoutMs) {
   const queue = [];
-  let pending = null;
+  let pending2 = null;
   let done = false;
   let failed = null;
   let sawCompletion = false;
   const wake = () => {
-    if (!pending)
+    if (!pending2)
       return;
-    const resolve4 = pending;
-    pending = null;
+    const resolve4 = pending2;
+    pending2 = null;
     resolve4();
   };
   const onMessage = (event) => {
@@ -139923,13 +139933,13 @@ async function* parseWebSocket2(socket, signal, idleTimeoutMs) {
         break;
       let timeout;
       await new Promise((resolve4, reject) => {
-        pending = resolve4;
+        pending2 = resolve4;
         if (idleTimeoutMs !== void 0 && idleTimeoutMs > 0) {
           timeout = setTimeout(() => {
             const error = new Error(`WebSocket idle timeout after ${idleTimeoutMs}ms`);
             failed = error;
             done = true;
-            pending = null;
+            pending2 = null;
             closeWebSocketSilently2(socket, 1e3, "idle_timeout");
             reject(error);
           }, idleTimeoutMs);
@@ -231806,8 +231816,8 @@ var require_pool_base = __commonJS({
       }
       get [kPending]() {
         let ret = this[kQueued];
-        for (const { [kPending]: pending } of this[kClients]) {
-          ret += pending;
+        for (const { [kPending]: pending2 } of this[kClients]) {
+          ret += pending2;
         }
         return ret;
       }
@@ -236575,19 +236585,19 @@ var require_mock_agent = __commonJS({
       }
       pendingInterceptors() {
         const mockAgentClients = this[kClients];
-        return Array.from(mockAgentClients.entries()).flatMap(([origin, dispatcher]) => dispatcher[kDispatches].map((dispatch) => ({ ...dispatch, origin }))).filter(({ pending }) => pending);
+        return Array.from(mockAgentClients.entries()).flatMap(([origin, dispatcher]) => dispatcher[kDispatches].map((dispatch) => ({ ...dispatch, origin }))).filter(({ pending: pending2 }) => pending2);
       }
       assertNoPendingInterceptors({ pendingInterceptorsFormatter = new PendingInterceptorsFormatter() } = {}) {
-        const pending = this.pendingInterceptors();
-        if (pending.length === 0) {
+        const pending2 = this.pendingInterceptors();
+        if (pending2.length === 0) {
           return;
         }
         throw new UndiciError(
-          pending.length === 1 ? `1 interceptor is pending:
+          pending2.length === 1 ? `1 interceptor is pending:
 
-${pendingInterceptorsFormatter.format(pending)}`.trim() : `${pending.length} interceptors are pending:
+${pendingInterceptorsFormatter.format(pending2)}`.trim() : `${pending2.length} interceptors are pending:
 
-${pendingInterceptorsFormatter.format(pending)}`.trim()
+${pendingInterceptorsFormatter.format(pending2)}`.trim()
         );
       }
     };
@@ -248813,130 +248823,8 @@ ${captureLines}` : capture.stack;
   }
 });
 
-// src/event-recording.js
-function exportableAgentEvent(event, sanitize) {
-  const { message, messages, assistantMessageEvent, ...metadata } = event;
-  if (assistantMessageEvent) {
-    const { partial, ...delta } = assistantMessageEvent;
-    metadata.assistantMessageEvent = delta;
-  }
-  return sanitize(metadata);
-}
-function createEventRecorder(sanitize, onLimit, maxBytes = 2 * 1024 * 1024) {
-  const events = [];
-  let bytes = 0;
-  let dropped = 0;
-  return {
-    events,
-    get dropped() {
-      return dropped;
-    },
-    record(event) {
-      const value2 = { seq: events.length + dropped, time: Date.now(), event: exportableAgentEvent(event, sanitize) };
-      const size = Buffer.byteLength(JSON.stringify(value2));
-      if (bytes + size <= maxBytes) {
-        events.push(value2);
-        bytes += size;
-      } else {
-        if (++dropped === 1) onLimit();
-      }
-    }
-  };
-}
-
-// src/main.js
-import http5 from "node:http";
-
-// src/runtime-lifecycle.js
-import fs from "node:fs";
-import readline from "node:readline";
-import { once } from "node:events";
-function createRuntimeListener({ createServer: createServer3, port: port2, log }) {
-  let server = null;
-  let activeRequests = 0;
-  let finishPause = null;
-  const closeListener = () => {
-    if (!server) return;
-    const closing = server;
-    server = null;
-    closing.close(() => log("serverClosed", { port: port2 }));
-    log("serverListenerPaused", { port: port2 });
-  };
-  const completePause = () => {
-    finishPause?.();
-    finishPause = null;
-  };
-  return (state3) => {
-    if (state3 === "pause") {
-      if (activeRequests === 0) {
-        closeListener();
-        return;
-      }
-      if (finishPause) return;
-      return new Promise((resolve4) => {
-        finishPause = resolve4;
-      });
-    } else if (state3 === "suspend") {
-      closeListener();
-      completePause();
-    } else if (state3 === "resume") {
-      completePause();
-      if (server) return;
-      server = createServer3();
-      server.on("request", (_req, res) => {
-        activeRequests++;
-        res.once("close", () => {
-          activeRequests--;
-          if (finishPause && activeRequests === 0) {
-            closeListener();
-            completePause();
-          }
-        });
-      });
-      server.on("listening", () => log("serverListening", { port: port2 }));
-      server.on("error", (error) => {
-        log("serverError", { port: port2, errorCode: error.code, errorMessage: error.message });
-        throw error;
-      });
-      const ready = once(server, "listening");
-      server.listen(port2, "127.0.0.1");
-      return ready;
-    } else {
-      throw new Error(`Invalid runtime lifecycle state: ${state3}`);
-    }
-  };
-}
-function installRuntimeLifecycle(options) {
-  const transition = createRuntimeListener(options);
-  if (options.commandFD === void 0) {
-    transition("resume");
-    return;
-  }
-  const commandFD = Number(options.commandFD);
-  const acknowledgementFD = Number(options.acknowledgementFD);
-  if (!Number.isInteger(commandFD) || !Number.isInteger(acknowledgementFD)) {
-    throw new Error("Invalid runtime lifecycle pipe descriptors");
-  }
-  const commands = readline.createInterface({
-    input: fs.createReadStream(null, { fd: commandFD, autoClose: false }),
-    crlfDelay: Infinity
-  });
-  commands.on("line", (line) => {
-    const [state3, generation] = line.split(":");
-    if (!/^\d+$/.test(generation)) throw new Error("Invalid runtime lifecycle generation");
-    Promise.resolve(transition(state3)).then(() => {
-      options.log("nativeLifecycleApplied", { state: state3, generation });
-      fs.writeSync(acknowledgementFD, `${generation}
-`);
-    });
-  });
-  commands.on("close", () => {
-    throw new Error("Runtime lifecycle pipe closed");
-  });
-}
-
-// src/main.js
-import fs8 from "node:fs";
+// src/pcc-provider.js
+import { AsyncLocalStorage } from "node:async_hooks";
 
 // node_modules/typebox/build/system/memory/memory.mjs
 var memory_exports = {};
@@ -258586,6 +258474,331 @@ ${JSON.stringify(toolCall.arguments, null, 2)}`;
   throw new Error(errorMessage);
 }
 
+// src/pcc-provider.js
+var PCC_PROVIDER = "apple-pcc";
+var PCC_MODEL = "PrivateCloudComputeLanguageModel";
+var nativeScope = new AsyncLocalStorage();
+var pending = /* @__PURE__ */ new Map();
+var withPCCBridge = (bridge, action) => nativeScope.run(bridge, action);
+function receivePCCEvent(event) {
+  const entry = pending.get(event.requestId);
+  if (!entry || entry.runId !== event.runId) return false;
+  entry.deliver(event);
+  return true;
+}
+function pccResolution(config, models) {
+  const unavailable = (reason) => ({ supported: false, reason, provider: PCC_PROVIDER, model: config.model });
+  if (config.catalogContract != null) return unavailable("pcc_catalog_contract_unsupported");
+  if (config.model !== PCC_MODEL) return unavailable("pcc_model_unsupported");
+  const capability = config.nativePCC;
+  if (capability?.version !== 1) return unavailable("pcc_native_bridge_unavailable");
+  if (!capability.available) return unavailable(capability.reason || "pcc_unavailable");
+  if (!Number.isSafeInteger(capability.contextSize) || capability.contextSize <= 0) return unavailable("pcc_context_unavailable");
+  const model = {
+    id: PCC_MODEL,
+    name: "Apple Intelligence \u2014 Private Cloud Compute",
+    provider: PCC_PROVIDER,
+    api: "apple-foundation-models-pcc",
+    baseUrl: null,
+    reasoning: true,
+    input: ["text", "image"],
+    // Apple allows an uncapped response to occupy the remaining context window.
+    contextWindow: capability.contextSize,
+    maxTokens: capability.contextSize,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    thinkingLevelMap: { low: "light", medium: "moderate", high: "deep", off: null, minimal: null, xhigh: null, max: null }
+  };
+  models.setProvider(createProvider({
+    id: PCC_PROVIDER,
+    name: model.name,
+    auth: { apiKey: { name: "Apple Intelligence", resolve: async () => ({ auth: {} }) } },
+    models: [model],
+    api: { stream: streamPCC, streamSimple: streamPCC }
+  }));
+  return {
+    supported: true,
+    provider: PCC_PROVIDER,
+    model: PCC_MODEL,
+    api: model.api,
+    source: "apple_sdk_native_contract_v1",
+    reasoning: true,
+    input: model.input,
+    contextWindow: model.contextWindow,
+    maxTokens: model.maxTokens,
+    toolCall: false
+  };
+}
+function unknownUsage() {
+  return {
+    input: null,
+    output: null,
+    cacheRead: null,
+    cacheWrite: null,
+    reasoning: null,
+    totalTokens: null,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+  };
+}
+function appleUsage(value2) {
+  for (const field of ["inputTokens", "cachedInputTokens", "outputTokens", "reasoningTokens"]) {
+    if (!Number.isSafeInteger(value2?.[field]) || value2[field] < 0) throw new Error("pcc_invalid_usage");
+  }
+  if (value2.cachedInputTokens > value2.inputTokens || value2.reasoningTokens > value2.outputTokens) throw new Error("pcc_invalid_usage");
+  return {
+    ...unknownUsage(),
+    input: value2.inputTokens - value2.cachedInputTokens,
+    cacheRead: value2.cachedInputTokens,
+    output: value2.outputTokens,
+    reasoning: value2.reasoningTokens,
+    totalTokens: value2.inputTokens + value2.outputTokens
+  };
+}
+function streamPCC(model, context, options = {}) {
+  const stream20 = createAssistantMessageEventStream();
+  const bridge = nativeScope.getStore();
+  const output = {
+    role: "assistant",
+    api: model.api,
+    provider: model.provider,
+    model: model.id,
+    content: [],
+    usage: unknownUsage(),
+    stopReason: "pending",
+    timestamp: Date.now()
+  };
+  const requestId = crypto.randomUUID();
+  let finished3 = false;
+  let timer;
+  function finish(error) {
+    if (finished3) return;
+    finished3 = true;
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abort);
+    pending.delete(requestId);
+    if (error) {
+      output.stopReason = options.signal?.aborted ? "aborted" : "error";
+      output.errorMessage = error.message;
+      output.errorCode = error.code || "pcc_native_failure";
+      stream20.push({ type: "error", reason: output.stopReason, error: output });
+    } else {
+      if (output.content.length) stream20.push({ type: "text_end", contentIndex: 0, content: output.content[0].text, partial: output });
+      output.stopReason = "unknown";
+      stream20.push({ type: "done", reason: "unknown", message: output });
+    }
+    stream20.end();
+  }
+  function abort() {
+    bridge?.send({ type: "pcc_cancel", runId: bridge.runId, requestId });
+    finish(Object.assign(new Error("PCC request cancelled"), { code: "pcc_cancelled" }));
+  }
+  stream20.push({ type: "start", partial: output });
+  queueMicrotask(async () => {
+    try {
+      if (!bridge) throw new Error("pcc_native_bridge_unavailable");
+      if (options.signal?.aborted) {
+        abort();
+        return;
+      }
+      const reasoningLevel = { low: "light", medium: "moderate", high: "deep" }[options.reasoning ?? "medium"];
+      if (!reasoningLevel) throw new Error("pcc_reasoning_unsupported");
+      if (context.tools?.length) throw new Error("pcc_tools_unsupported");
+      if (options.maxTokens != null && (!Number.isSafeInteger(options.maxTokens) || options.maxTokens <= 0)) throw new Error("pcc_invalid_output_limit");
+      const payload = { context, reasoningLevel };
+      if (options.maxTokens != null) payload.maximumResponseTokens = options.maxTokens;
+      const prepared = await options.onPayload?.(payload, model) ?? payload;
+      if (options.signal?.aborted) {
+        abort();
+        return;
+      }
+      pending.set(requestId, { runId: bridge.runId, deliver(event) {
+        try {
+          if (event.type === "error") {
+            finish(Object.assign(new Error(event.message || "PCC failed"), { code: event.errorCode }));
+          } else if (event.type === "snapshot" || event.type === "completed") {
+            if (typeof event.text !== "string") throw new Error("pcc_invalid_snapshot");
+            const previous = output.content[0]?.text || "";
+            if (!event.text.startsWith(previous)) throw new Error("pcc_non_append_snapshot");
+            output.usage = appleUsage(event.usage);
+            if (!output.content.length) {
+              output.content.push({ type: "text", text: "" });
+              stream20.push({ type: "text_start", contentIndex: 0, partial: output });
+            }
+            const delta = event.text.slice(previous.length);
+            output.content[0].text = event.text;
+            if (delta) stream20.push({ type: "text_delta", contentIndex: 0, delta, partial: output });
+            if (event.type === "completed") finish();
+          } else throw new Error("pcc_invalid_event");
+        } catch (error) {
+          bridge.send({ type: "pcc_cancel", runId: bridge.runId, requestId });
+          finish(error);
+        }
+      } });
+      options.signal?.addEventListener("abort", abort, { once: true });
+      timer = setTimeout(() => {
+        bridge.send({ type: "pcc_cancel", runId: bridge.runId, requestId });
+        finish(Object.assign(new Error("PCC request timed out"), { code: "pcc_timeout" }));
+      }, options.timeoutMs > 0 ? options.timeoutMs : 3e5);
+      timer.unref?.();
+      bridge.send({ type: "pcc_request", runId: bridge.runId, requestId, pcc: prepared });
+    } catch (error) {
+      finish(error);
+    }
+  });
+  return stream20;
+}
+
+// src/usage-contract.js
+function providerUsage(value2) {
+  if (!value2) return null;
+  return {
+    inputTokens: value2.input === null ? null : value2.input || 0,
+    outputTokens: value2.output === null ? null : value2.output || 0,
+    totalTokens: value2.totalTokens === null ? null : value2.totalTokens || 0,
+    reasoningTokens: value2.reasoning,
+    cachedInputTokens: value2.cacheRead === null ? null : value2.cacheRead || 0,
+    cacheCreationInputTokens: value2.cacheWrite === null ? null : value2.cacheWrite || 0
+  };
+}
+function aggregateUsage(messages) {
+  const fields = {
+    inputTokens: "input",
+    outputTokens: "output",
+    totalTokens: "totalTokens",
+    reasoningTokens: "reasoning",
+    cachedInputTokens: "cacheRead",
+    cacheCreationInputTokens: "cacheWrite"
+  };
+  return Object.fromEntries(Object.entries(fields).map(([target, source]) => [
+    target,
+    messages.some((m4) => m4.usage?.[source] === null) ? null : messages.reduce((s3, m4) => s3 + (m4.usage?.[source] || 0), 0)
+  ]));
+}
+
+// src/event-recording.js
+function exportableAgentEvent(event, sanitize) {
+  const { message, messages, assistantMessageEvent, ...metadata } = event;
+  if (assistantMessageEvent) {
+    const { partial, ...delta } = assistantMessageEvent;
+    metadata.assistantMessageEvent = delta;
+  }
+  return sanitize(metadata);
+}
+function createEventRecorder(sanitize, onLimit, maxBytes = 2 * 1024 * 1024) {
+  const events = [];
+  let bytes = 0;
+  let dropped = 0;
+  return {
+    events,
+    get dropped() {
+      return dropped;
+    },
+    record(event) {
+      const value2 = { seq: events.length + dropped, time: Date.now(), event: exportableAgentEvent(event, sanitize) };
+      const size = Buffer.byteLength(JSON.stringify(value2));
+      if (bytes + size <= maxBytes) {
+        events.push(value2);
+        bytes += size;
+      } else {
+        if (++dropped === 1) onLimit();
+      }
+    }
+  };
+}
+
+// src/main.js
+import http5 from "node:http";
+
+// src/runtime-lifecycle.js
+import fs from "node:fs";
+import readline from "node:readline";
+import { once } from "node:events";
+function createRuntimeListener({ createServer: createServer3, port: port2, log }) {
+  let server = null;
+  let activeRequests = 0;
+  let finishPause = null;
+  const closeListener = () => {
+    if (!server) return;
+    const closing = server;
+    server = null;
+    closing.close(() => log("serverClosed", { port: port2 }));
+    log("serverListenerPaused", { port: port2 });
+  };
+  const completePause = () => {
+    finishPause?.();
+    finishPause = null;
+  };
+  return (state3) => {
+    if (state3 === "pause") {
+      if (activeRequests === 0) {
+        closeListener();
+        return;
+      }
+      if (finishPause) return;
+      return new Promise((resolve4) => {
+        finishPause = resolve4;
+      });
+    } else if (state3 === "suspend") {
+      closeListener();
+      completePause();
+    } else if (state3 === "resume") {
+      completePause();
+      if (server) return;
+      server = createServer3();
+      server.on("request", (_req, res) => {
+        activeRequests++;
+        res.once("close", () => {
+          activeRequests--;
+          if (finishPause && activeRequests === 0) {
+            closeListener();
+            completePause();
+          }
+        });
+      });
+      server.on("listening", () => log("serverListening", { port: port2 }));
+      server.on("error", (error) => {
+        log("serverError", { port: port2, errorCode: error.code, errorMessage: error.message });
+        throw error;
+      });
+      const ready = once(server, "listening");
+      server.listen(port2, "127.0.0.1");
+      return ready;
+    } else {
+      throw new Error(`Invalid runtime lifecycle state: ${state3}`);
+    }
+  };
+}
+function installRuntimeLifecycle(options) {
+  const transition = createRuntimeListener(options);
+  if (options.commandFD === void 0) {
+    transition("resume");
+    return;
+  }
+  const commandFD = Number(options.commandFD);
+  const acknowledgementFD = Number(options.acknowledgementFD);
+  if (!Number.isInteger(commandFD) || !Number.isInteger(acknowledgementFD)) {
+    throw new Error("Invalid runtime lifecycle pipe descriptors");
+  }
+  const commands = readline.createInterface({
+    input: fs.createReadStream(null, { fd: commandFD, autoClose: false }),
+    crlfDelay: Infinity
+  });
+  commands.on("line", (line) => {
+    const [state3, generation] = line.split(":");
+    if (!/^\d+$/.test(generation)) throw new Error("Invalid runtime lifecycle generation");
+    Promise.resolve(transition(state3)).then(() => {
+      options.log("nativeLifecycleApplied", { state: state3, generation });
+      fs.writeSync(acknowledgementFD, `${generation}
+`);
+    });
+  });
+  commands.on("close", () => {
+    throw new Error("Runtime lifecycle pipe closed");
+  });
+}
+
+// src/main.js
+import fs8 from "node:fs";
+
 // node_modules/@earendil-works/pi-telemetry/dist/noop.js
 function startNoopSpan(_options, callback) {
   try {
@@ -258677,7 +258890,7 @@ async function runLoop(initialContext, newMessages, initialConfig, signal, emit,
       const toolResults = [];
       hasMoreToolCalls = false;
       if (toolCalls.length > 0) {
-        const executedToolBatch = message.stopReason === "length" ? await failToolCallsFromTruncatedMessage(toolCalls, emit) : await executeToolCalls(currentContext, message, config, signal, emit);
+        const executedToolBatch = message.stopReason === "length" || message.stopReason === "unknown" ? await failToolCallsFromTruncatedMessage(toolCalls, emit, message.stopReason) : await executeToolCalls(currentContext, message, config, signal, emit);
         toolResults.push(...executedToolBatch.messages);
         hasMoreToolCalls = !executedToolBatch.terminate;
         for (const result of toolResults) {
@@ -258793,7 +259006,7 @@ async function streamAssistantResponse(context, config, signal, emit, streamFunc
   await emit({ type: "message_end", message: finalMessage });
   return finalMessage;
 }
-async function failToolCallsFromTruncatedMessage(toolCalls, emit) {
+async function failToolCallsFromTruncatedMessage(toolCalls, emit, reason) {
   const messages = [];
   for (const toolCall of toolCalls) {
     await emit({
@@ -258804,7 +259017,7 @@ async function failToolCallsFromTruncatedMessage(toolCalls, emit) {
     });
     const finalized = {
       toolCall,
-      result: createErrorToolResult(`Tool call "${toolCall.name}" was not executed: the response hit the output token limit, so its arguments may be truncated. Re-issue the tool call with complete arguments.`),
+      result: createErrorToolResult(reason === "unknown" ? `Tool call "${toolCall.name}" was not executed: the provider did not report a termination reason, so argument completeness is unknown.` : `Tool call "${toolCall.name}" was not executed: the response hit the output token limit, so its arguments may be truncated. Re-issue the tool call with complete arguments.`),
       isError: true
     };
     await emitToolExecutionEnd(finalized, emit);
@@ -258812,7 +259025,7 @@ async function failToolCallsFromTruncatedMessage(toolCalls, emit) {
     await emitToolResultMessage(toolResultMessage, emit);
     messages.push(toolResultMessage);
   }
-  return { messages, terminate: false };
+  return { messages, terminate: reason === "unknown" };
 }
 async function executeToolCalls(currentContext, assistantMessage, config, signal, emit) {
   const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
@@ -288979,6 +289192,7 @@ function installCatalogModel(config, provider, providerId, expectedApi, verified
   return model;
 }
 function resolutionFor(config) {
+  if (config?.contractVersion === RUNTIME_CONTRACT_VERSION && config.provider === PCC_PROVIDER) return pccResolution(config, runtimeModels);
   if (config.contractVersion !== RUNTIME_CONTRACT_VERSION) {
     throw new Error(`Pi runtime contract mismatch: expected ${RUNTIME_CONTRACT_VERSION}, received ${config.contractVersion ?? "missing"}`);
   }
@@ -289127,7 +289341,7 @@ function resolutionFor(config) {
 function resolveModel(config) {
   const resolution = resolutionFor(config);
   if (!resolution.supported) {
-    throw new Error(`Unsupported model contract (${resolution.reason}): ${config.provider}/${config.model}`);
+    throw Object.assign(new Error(`Unsupported model contract (${resolution.reason}): ${config.provider}/${config.model}`), { code: resolution.reason });
   }
   return { model: runtimeModels.getModel(resolution.provider, resolution.model), resolution };
 }
@@ -289150,17 +289364,6 @@ function usage(value2) {
     reasoning: value2?.reasoningTokens,
     totalTokens: value2?.totalTokens || 0,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
-  };
-}
-function providerUsage(value2) {
-  if (!value2) return null;
-  return {
-    inputTokens: value2.input || 0,
-    outputTokens: value2.output || 0,
-    totalTokens: value2.totalTokens || 0,
-    reasoningTokens: value2.reasoning,
-    cachedInputTokens: value2.cacheRead || 0,
-    cacheCreationInputTokens: value2.cacheWrite || 0
   };
 }
 function messagesFrom(request, model) {
@@ -289336,6 +289539,7 @@ function standardStreamFunction(request, config, report, captureProviderRequest)
     } : effectiveHeaders(config, sessionId),
     timeoutMs: timeoutMs(request),
     reasoning: config.thinkingLevel,
+    ...config.provider === PCC_PROVIDER && request.metadata?.max_output_tokens ? { maxTokens: Number(request.metadata.max_output_tokens) } : {},
     sessionId,
     onPayload: (payload) => {
       const mutated = mutatePayload(payload, request, config);
@@ -289444,19 +289648,11 @@ function finalResponse(assistants, contextUsage, generatedMessages = []) {
   if (!last) throw new Error("Pi provider returned no assistant message");
   if (last.stopReason === "error" || last.stopReason === "aborted" || last.errorMessage) {
     const detail = last.errorMessage || last.rawStopReason || "unknown provider error";
-    throw new Error(`Pi provider failed: ${detail}`);
+    throw Object.assign(new Error(`Pi provider failed: ${detail}`), { code: last.errorCode });
   }
   const text = (last?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
   const reasoning = assistants.flatMap((message) => (message.content || []).filter((part) => part.type === "thinking").map((part) => part.thinking)).join("");
-  const totals = assistants.reduce((sum, message) => {
-    sum.inputTokens += message.usage?.input || 0;
-    sum.outputTokens += message.usage?.output || 0;
-    sum.totalTokens += message.usage?.totalTokens || 0;
-    sum.reasoningTokens += message.usage?.reasoning || 0;
-    sum.cachedInputTokens += message.usage?.cacheRead || 0;
-    sum.cacheCreationInputTokens += message.usage?.cacheWrite || 0;
-    return sum;
-  }, { inputTokens: 0, outputTokens: 0, totalTokens: 0, reasoningTokens: 0, cachedInputTokens: 0, cacheCreationInputTokens: 0 });
+  const totals = aggregateUsage(assistants);
   const toolCalls = assistants.flatMap((message) => (message.content || []).filter((part) => part.type === "toolCall").map((part) => ({
     id: part.id,
     name: part.name,
@@ -289466,12 +289662,12 @@ function finalResponse(assistants, contextUsage, generatedMessages = []) {
   if (!text && !reasoning && !toolCalls.length) {
     throw new Error(`Pi provider completed without content (stopReason=${last.stopReason || "unknown"})`);
   }
-  const aggregateUsage = assistants.length ? totals : null;
+  const aggregateUsage2 = assistants.length ? totals : null;
   const usageSamples = assistants.map((message) => providerUsage(message.usage)).filter(Boolean);
   if (contextUsage) {
-    if (aggregateUsage) {
-      aggregateUsage.contextTokens = contextUsage.tokens;
-      aggregateUsage.contextWindow = contextUsage.contextWindow;
+    if (aggregateUsage2) {
+      aggregateUsage2.contextTokens = contextUsage.tokens;
+      aggregateUsage2.contextWindow = contextUsage.contextWindow;
     }
     const lastSample = usageSamples.at(-1);
     if (lastSample) {
@@ -289482,7 +289678,7 @@ function finalResponse(assistants, contextUsage, generatedMessages = []) {
   return {
     text,
     reasoningSummary: reasoning || null,
-    usage: aggregateUsage,
+    usage: aggregateUsage2,
     usageSamples,
     toolCalls,
     providerTranscript: replayableProviderTranscript(generatedMessages)
@@ -289616,7 +289812,7 @@ async function runAgent(envelope, res) {
   });
   try {
     report("agent_start", "Pi agent execution starting");
-    await agent.continue();
+    await withPCCBridge({ runId, send: (event) => send(res, event) }, () => agent.continue());
     const last = runAssistants.at(-1);
     report("provider_result", "Pi provider stream finished", {
       stopReason: last?.stopReason || "missing",
@@ -289732,6 +289928,10 @@ var handleRequest = async (req, res) => {
     if (req.method === "POST" && req.url === "/v1/auth/resolve") {
       const value2 = await body(req);
       return json(res, 200, await resolveOAuth(value2.provider, value2.credential, Boolean(value2.force)));
+    }
+    if (req.method === "POST" && req.url === "/v1/pcc-event") {
+      const event = await body(req);
+      return json(res, receivePCCEvent(event) ? 200 : 404, { ok: true });
     }
     if (req.method === "POST" && req.url === "/v1/tool-result") {
       const result = await body(req);

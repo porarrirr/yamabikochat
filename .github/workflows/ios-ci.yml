@@ -8,6 +8,7 @@ on:
       - "app/src/main/assets/pi-runtime/**"
       - "scripts/bootstrap-pi-runtime-android.sh"
       - "scripts/check-opencode-go-contract.py"
+      - "scripts/check-pcc-contract.py"
       - ".github/workflows/ios-ci.yml"
   push:
     branches: [ main, master, ios ]
@@ -17,6 +18,7 @@ on:
       - "app/src/main/assets/pi-runtime/**"
       - "scripts/bootstrap-pi-runtime-android.sh"
       - "scripts/check-opencode-go-contract.py"
+      - "scripts/check-pcc-contract.py"
       - ".github/workflows/ios-ci.yml"
   workflow_dispatch:
 
@@ -28,7 +30,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     env:
-      XCODE_VERSION: "26.5"
+      XCODE_VERSION: "27.0"
       APP_STORE_MAX_SDK_VERSION: "27.0"
 
     steps:
@@ -67,6 +69,7 @@ jobs:
       - name: Verify OpenCode Go API contract and Pi bundle
         run: |
           python3 scripts/check-opencode-go-contract.py
+          python3 scripts/check-pcc-contract.py
           git diff --exit-code -- ios/PiRuntime/bundle/main.js app/src/main/assets/pi-runtime/main.js
           (cd ios/PiRuntime && npm test)
           python3 -m unittest ios/PythonTests/test_yamabiko_runtime.py

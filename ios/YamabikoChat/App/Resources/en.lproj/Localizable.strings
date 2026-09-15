@@ -577,3 +577,28 @@
 "利用制限のため" = "due to a usage limit";
 "メインAPIキー" = "Primary API key";
 "APIキー「%@」" = "API key “%@”";
+
+/* Private Cloud Compute */
+"Private Cloud Compute requires iOS 27 or later." = "Private Cloud Compute requires iOS 27 or later.";
+"This device is not eligible for Private Cloud Compute." = "This device is not eligible for Private Cloud Compute.";
+"Private Cloud Compute is not ready. Check Apple Intelligence settings." = "Private Cloud Compute is not ready. Check Apple Intelligence settings.";
+"Private Cloud Compute daily usage limit reached." = "Private Cloud Compute daily usage limit reached.";
+"Private Cloud Compute could not connect to the network." = "Private Cloud Compute could not connect to the network.";
+"Private Cloud Compute service is unavailable." = "Private Cloud Compute service is unavailable.";
+"Private Cloud Compute accepts text and supported images only." = "Private Cloud Compute accepts text and supported images only.";
+"This conversation contains content that Private Cloud Compute cannot accept." = "This conversation contains content that Private Cloud Compute cannot accept.";
+"Unsupported Private Cloud Compute reasoning level." = "Unsupported Private Cloud Compute reasoning level.";
+"Unsupported Apple Intelligence model." = "Unsupported Apple Intelligence model.";
+"Private Cloud Compute context size could not be read." = "Private Cloud Compute context size could not be read.";
+"Private Cloud Compute is unavailable (%@)." = "Private Cloud Compute is unavailable (%@).";
+"Checking Private Cloud Compute…" = "Checking Private Cloud Compute…";
+"Private Cloud Compute: nearing daily usage limit" = "Private Cloud Compute: nearing daily usage limit";
+"Private Cloud Compute is available" = "Private Cloud Compute is available";
+"Usage limit resets: %@" = "Usage limit resets: %@";
+"Show usage limit options" = "Show usage limit options";
+"Apple Intelligence (On-device)" = "Apple Intelligence (On-device)";
+"PCC reasoning" = "PCC reasoning";
+"Light" = "Light";
+"Moderate" = "Moderate";
+"Deep" = "Deep";
+"Unknown" = "Unknown";

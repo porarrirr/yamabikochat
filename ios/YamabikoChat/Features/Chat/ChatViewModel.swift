@@ -1493,7 +1493,7 @@ final class ChatViewModel: ObservableObject {
         if visible.contains(.cacheHit), let percent = stats.cacheHitPercent {
             groups.append(L10n.format("キャッシュヒット %d%%", percent))
         }
-        if visible.contains(.tokens), stats.billedInputTokens > 0 || stats.outputTokens > 0 {
+        if visible.contains(.tokens), (stats.billedInputTokens ?? 0) > 0 || stats.outputTokens > 0 {
             groups.append(L10n.format(
                 "入力 %@ tok · 出力 %@ tok",
                 ChatStatsFormatter.tokens(stats.billedInputTokens),

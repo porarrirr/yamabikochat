@@ -756,6 +756,10 @@ struct ChatScreen: View {
 
     private var composerBar: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if viewModel.settings.apiProvider == "APPLE_INTELLIGENCE",
+               viewModel.settings.defaultModel == AppleIntelligenceModelCatalog.pccModel {
+                PCCStatusView(refreshKey: viewModel.isSending)
+            }
             if viewModel.isSecretConversation {
                 HStack(spacing: 5) {
                     Image(systemName: "lock.fill")

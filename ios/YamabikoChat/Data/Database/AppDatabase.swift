@@ -257,6 +257,7 @@ enum AppDatabase {
                 t.column("autoThinkingLevelB", .text)
                 t.column("autoCodexReasoningEffortB", .text)
 
+                t.column("pccReasoningLevel", .text)
                 t.column("providerDefaultModelsJSON", .text).notNull().defaults(to: "{}")
                 t.column("preferredProvidersJSON", .text).notNull().defaults(to: "[]")
                 t.column("selectedQuantizationsJSON", .text).notNull().defaults(to: "[]")
@@ -942,6 +943,14 @@ enum AppDatabase {
                     UPDATE share_imports SET draft = NULL WHERE conversationId = NEW.conversationId;
                 END;
                 """)
+        }
+        migrator.registerMigration("v27_pcc_reasoning") { db in
+            let columns = Set(try db.columns(in: "settings").map(\.name))
+            if !columns.contains("pccReasoningLevel") {
+                try db.alter(table: "settings") { table in
+                    table.add(column: "pccReasoningLevel", .text)
+                }
+            }
         }
         return migrator
     }

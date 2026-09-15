@@ -5,6 +5,7 @@ import UIKit
 private final class PiRuntimeBundleToken: NSObject {}
 
 struct PiAgentConfiguration: Codable, Sendable {
+    var nativePCC: PCCCapability? = nil
     var contractVersion: Int = 2
     var provider: String
     var model: String
@@ -128,6 +129,7 @@ private struct PiRunEnvelope: Codable, Sendable {
 }
 
 private struct PiRuntimeEvent: Decodable {
+    var pcc: PCCNativeRequest?
     var type: String
     var runId: String?
     var stage: String?
@@ -386,6 +388,13 @@ actor PiAgentRuntime {
     }
 
     func resolveModels(_ configurations: [PiAgentConfiguration]) async throws -> [PiModelResolution] {
+        var configurations = configurations
+        if configurations.contains(where: { $0.provider == "apple-pcc" && $0.catalogContract == nil }) {
+            let capability = await PCCProviderClient.capability()
+            for index in configurations.indices where configurations[index].provider == "apple-pcc" && configurations[index].catalogContract == nil {
+                configurations[index].nativePCC = capability
+            }
+        }
         let (endpoint, token) = try await startIfNeeded()
         var request = URLRequest(url: endpoint.appendingPathComponent("v1/models/resolve"))
         request.httpMethod = "POST"
@@ -537,7 +546,11 @@ actor PiAgentRuntime {
         )
         #endif
         let (endpoint, token) = try await startIfNeeded(requestID: runID)
-        let piRequest = try Self.makeRequest(request)
+        var configuration = configuration
+        if configuration.provider == "apple-pcc", configuration.catalogContract == nil {
+            configuration.nativePCC = await PCCProviderClient.capability()
+        }
+        let piRequest = try Self.makeRequest(request, strictImageAttachments: configuration.provider == "apple-pcc")
         let envelope = PiRunEnvelope(runId: runID, request: piRequest, config: configuration)
         let body = try JSONEncoder().encode(envelope)
         var urlRequest = URLRequest(url: endpoint.appendingPathComponent("v1/run"))
@@ -569,6 +582,8 @@ actor PiAgentRuntime {
                 #endif
                 var metrics = PiConversationMetricsCollector(context: metricsContext)
                 var toolTasks: [Task<Void, Error>] = []
+                var pccTasks: [String: Task<Void, Never>] = [:]
+                defer { pccTasks.values.forEach { $0.cancel() } }
                 var completionState = PiStreamCompletionState()
 
                 func nowMs() -> Int64 {
@@ -632,6 +647,29 @@ actor PiAgentRuntime {
                                 at: event.timeMs ?? nowMs(),
                                 succeeded: event.succeeded ?? false
                             )
+                        case "pcc_request":
+                            guard configuration.provider == "apple-pcc", event.runId == runID,
+                                  let requestID = event.requestId, let nativeRequest = event.pcc,
+                                  pccTasks[requestID] == nil else {
+                                throw ProviderClientError.parseFailure("Invalid PCC bridge request")
+                            }
+                            pccTasks[requestID] = Task {
+                                do {
+                                    try await PCCProviderClient.execute(nativeRequest, runID: runID, requestID: requestID) { nativeEvent in
+                                        try await Self.submitPCCEvent(nativeEvent, endpoint: endpoint, token: token)
+                                    }
+                                } catch is CancellationError {
+                                    // Cancellation is acknowledged by the Pi abort/timeout event.
+                                } catch {
+                                    DiagnosticsLogger.log("PCC bridge failed", category: .network, requestID: requestID, error: error)
+                                    await Self.abort(runID: runID, endpoint: endpoint, token: token)
+                                }
+                            }
+                        case "pcc_cancel":
+                            guard event.runId == runID, let requestID = event.requestId else {
+                                throw ProviderClientError.parseFailure("Invalid PCC cancellation")
+                            }
+                            pccTasks[requestID]?.cancel()
                         case "tool_request":
                             guard let requestID = event.requestId,
                                   let callID = event.toolCallId,
@@ -782,6 +820,20 @@ actor PiAgentRuntime {
             continuation.onTermination = { _ in
                 task.cancel()
             }
+        }
+    }
+
+    private static func submitPCCEvent(_ event: PCCNativeEvent, endpoint: URL, token: String) async throws {
+        var request = URLRequest(url: endpoint.appendingPathComponent("v1/pcc-event"))
+        request.httpMethod = "POST"
+        request.httpBody = try JSONEncoder().encode(event)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ProviderClientError.invalidResponse }
+        if http.statusCode == 404 { throw CancellationError() }
+        guard http.statusCode == 200 else {
+            throw ProviderClientError.parseFailure("PCC bridge rejected event: \(String(decoding: data, as: UTF8.self))")
         }
     }
 
@@ -1136,7 +1188,7 @@ actor PiAgentRuntime {
     }
     #endif
 
-    static func makeRequest(_ request: ProviderRequest) throws -> PiRequest {
+    static func makeRequest(_ request: ProviderRequest, strictImageAttachments: Bool = false) throws -> PiRequest {
         let attachmentNames = Array(Set(request.messages.flatMap(\.attachments).map {
             attachmentFileURL(from: $0).lastPathComponent
         })).sorted()
@@ -1155,7 +1207,11 @@ actor PiAgentRuntime {
                 PiMessage(
                     role: message.role,
                     content: message.content,
-                    attachments: try message.attachments.compactMap(loadImageAttachment),
+                    attachments: try message.attachments.compactMap { path in
+                        let image = try loadImageAttachment(path)
+                        if strictImageAttachments && image == nil { throw PCCFailure(code: "pcc_attachment_unsupported") }
+                        return image
+                    },
                     reasoningContent: message.reasoningContent,
                     toolCalls: message.toolCalls,
                     toolCallId: message.toolCallId,

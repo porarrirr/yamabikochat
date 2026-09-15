@@ -173,6 +173,29 @@ final class ConversationStatsTests: XCTestCase {
         XCTAssertEqual(settings.visibleChatStatsFields(), [.turns, .averageTTFT])
     }
 
+    func testUnknownCacheWritesRemainUnknownInConversationStats() throws {
+        let dbQueue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(dbQueue)
+        let repository = ConversationRepository(dbQueue: dbQueue)
+        let id = try repository.createConversation(title: "PCC", model: AppleIntelligenceModelCatalog.pccModel, provider: "APPLE_INTELLIGENCE")
+        try repository.insertExecutionMetric(metric(conversationId: id, turnId: "pcc", kind: .llm,
+                                                    start: 0, first: 100, end: 200, succeeded: true,
+                                                    input: 15, output: 8, cached: 5, created: nil))
+        let observed = expectation(description: "unknown usage")
+        var result: ConversationStats?
+        let cancellable = repository.observeConversationStats(conversationId: id).sink { stats in
+            guard stats.steps == 1 else { return }
+            result = stats
+            observed.fulfill()
+        }
+        wait(for: [observed], timeout: 2)
+        withExtendedLifetime(cancellable) {}
+        XCTAssertNil(result?.cacheCreationInputTokens)
+        XCTAssertNil(result?.billedInputTokens)
+        XCTAssertNil(result?.cacheHitPercent)
+        XCTAssertEqual(ChatStatsFormatter.tokens(result?.billedInputTokens), L10n.text("Unknown"))
+    }
+
     func testRepositoryAggregatesTurnsStepsTimingToolsAndUsage() throws {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)

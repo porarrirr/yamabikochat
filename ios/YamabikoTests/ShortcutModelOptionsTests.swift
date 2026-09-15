@@ -62,7 +62,7 @@ final class ShortcutModelOptionsTests: XCTestCase {
         XCTAssertTrue(options.contains("meta-llama/llama-3.1-8b-instruct:free"))
     }
 
-    func testAppleIntelligenceOptionsOnlyIncludeDisplayModel() {
+    func testAppleIntelligenceOptionsIncludeOnDeviceAndPCC() {
         let settings = AppSettings()
         let options = ShortcutModelOptionsBuilder.modelOptions(
             provider: "APPLE_INTELLIGENCE",
@@ -70,7 +70,7 @@ final class ShortcutModelOptionsTests: XCTestCase {
             openRouterModels: []
         )
 
-        XCTAssertEqual(options, [AppleIntelligenceModelCatalog.displayModel])
+        XCTAssertEqual(options, AppleIntelligenceModelCatalog.supportedModels)
     }
 
     func testProviderOptionsIncludeAppleIntelligence() {

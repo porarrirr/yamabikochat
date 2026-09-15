@@ -18,10 +18,14 @@ struct ProviderUsage: Codable, Sendable, Equatable {
     }
 
     func normalized() -> ProviderUsage {
-        let input = max(0, inputTokens ?? 0)
-        let output = max(0, outputTokens ?? 0)
-        let totalBase = totalTokens ?? (input + output)
-        let total = max(max(0, totalBase), input + output)
+        let input = inputTokens.map { max(0, $0) }
+        let output = outputTokens.map { max(0, $0) }
+        let total: Int?
+        if let input, let output {
+            total = max(max(0, totalTokens ?? (input + output)), input + output)
+        } else {
+            total = totalTokens.map { max(0, $0) }
+        }
         return ProviderUsage(
             inputTokens: input,
             outputTokens: output,
@@ -80,8 +84,8 @@ extension ProviderUsage {
         guard let other else { return self }
 
         func sum(_ lhs: Int?, _ rhs: Int?) -> Int? {
-            guard lhs != nil || rhs != nil else { return nil }
-            return max(0, lhs ?? 0) + max(0, rhs ?? 0)
+            guard let lhs, let rhs else { return nil }
+            return max(0, lhs) + max(0, rhs)
         }
 
         return ProviderUsage(

@@ -45,7 +45,7 @@ enum ShortcutModelOptionsBuilder {
         case "CODEX_AUTH":
             CodexModelCatalog.visiblePresets().map(\.model).forEach { appendUnique($0) }
         case "APPLE_INTELLIGENCE":
-            appendUnique(AppleIntelligenceModelCatalog.displayModel)
+            AppleIntelligenceModelCatalog.supportedModels.forEach { appendUnique($0) }
         case "OPENROUTER":
             if openRouterModels.isEmpty {
                 openRouterFallbackModelIDs.forEach { appendUnique($0) }

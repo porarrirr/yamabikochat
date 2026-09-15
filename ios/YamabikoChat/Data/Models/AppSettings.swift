@@ -170,6 +170,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var autoThinkingLevelB: String?
     var autoCodexReasoningEffortB: String?
 
+    var pccReasoningLevel: String? = nil
     var providerDefaultModelsJSON: String
     var preferredProvidersJSON: String
     var selectedQuantizationsJSON: String
@@ -733,7 +734,8 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     func modelForProvider(_ provider: String) -> String {
         let normalizedProvider = provider.uppercased()
         if normalizedProvider == "APPLE_INTELLIGENCE" {
-            return AppleIntelligenceModelCatalog.displayModel
+            if apiProvider.uppercased() == normalizedProvider { return defaultModel }
+            return providerModelMap()[normalizedProvider] ?? AppleIntelligenceModelCatalog.displayModel
         }
         let map = providerModelMap()
         let resolved = (map[normalizedProvider] ?? defaultModel)
@@ -745,16 +747,13 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     }
 
     mutating func applyAppleIntelligenceModelNormalization() {
-        let modelName = AppleIntelligenceModelCatalog.displayModel
-        if apiProvider.uppercased() == "APPLE_INTELLIGENCE" {
-            defaultModel = modelName
+        // Preserve explicit identities, including saved models unavailable on this device.
+        if apiProvider.uppercased() == "APPLE_INTELLIGENCE", defaultModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            defaultModel = AppleIntelligenceModelCatalog.displayModel
         }
-
         var models = providerModelMap()
-        guard models.keys.contains(where: { $0.uppercased() == "APPLE_INTELLIGENCE" }) else { return }
-        models["APPLE_INTELLIGENCE"] = modelName
-        if let data = try? JSONEncoder().encode(models),
-           let json = String(data: data, encoding: .utf8) {
+        if apiProvider.uppercased() == "APPLE_INTELLIGENCE" { models["APPLE_INTELLIGENCE"] = defaultModel }
+        if let data = try? JSONEncoder().encode(models), let json = String(data: data, encoding: .utf8) {
             providerDefaultModelsJSON = json
         }
     }

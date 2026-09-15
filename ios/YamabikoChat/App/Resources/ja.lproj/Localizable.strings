@@ -577,3 +577,28 @@
 "利用制限のため" = "利用制限のため";
 "メインAPIキー" = "メインAPIキー";
 "APIキー「%@」" = "APIキー「%@」";
+
+/* Private Cloud Compute */
+"Private Cloud Compute requires iOS 27 or later." = "Private Cloud ComputeにはiOS 27以降が必要です。";
+"This device is not eligible for Private Cloud Compute." = "この端末はPrivate Cloud Computeに対応していません。";
+"Private Cloud Compute is not ready. Check Apple Intelligence settings." = "Private Cloud Computeの準備ができていません。Apple Intelligenceの設定を確認してください。";
+"Private Cloud Compute daily usage limit reached." = "Private Cloud Computeの1日の利用上限に達しました。";
+"Private Cloud Compute could not connect to the network." = "Private Cloud Computeのネットワーク接続に失敗しました。";
+"Private Cloud Compute service is unavailable." = "Private Cloud Computeのサービスを利用できません。";
+"Private Cloud Compute accepts text and supported images only." = "Private Cloud Computeで利用できる添付は対応画像のみです。";
+"This conversation contains content that Private Cloud Compute cannot accept." = "この会話にはPrivate Cloud Computeに未対応の内容が含まれています。";
+"Unsupported Private Cloud Compute reasoning level." = "未対応のPCC推論強度です。";
+"Unsupported Apple Intelligence model." = "未対応のApple Intelligenceモデルです。";
+"Private Cloud Compute context size could not be read." = "PCCのコンテキストサイズを取得できませんでした。";
+"Private Cloud Compute is unavailable (%@)." = "Private Cloud Computeを利用できません（%@）。";
+"Checking Private Cloud Compute…" = "Private Cloud Computeを確認中…";
+"Private Cloud Compute: nearing daily usage limit" = "Private Cloud Computeの1日の利用上限が近づいています";
+"Private Cloud Compute is available" = "Private Cloud Computeを利用できます";
+"Usage limit resets: %@" = "利用上限のリセット: %@";
+"Show usage limit options" = "利用上限の拡張オプションを表示";
+"Apple Intelligence (On-device)" = "Apple Intelligence（端末内）";
+"PCC reasoning" = "PCCの推論強度";
+"Light" = "軽量";
+"Moderate" = "標準";
+"Deep" = "深い";
+"Unknown" = "不明";

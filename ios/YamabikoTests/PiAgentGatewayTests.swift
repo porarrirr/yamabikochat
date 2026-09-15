@@ -92,6 +92,24 @@ private final class ThrowingPiStreamSpy: @unchecked Sendable {
 }
 
 final class PiAgentGatewayTests: XCTestCase {
+    func testPCCUsesPiAndMapsAllReasoningLevelsWithoutCredentials() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let settingsRepository = SettingsRepository(dbQueue: database)
+        let pi = PiStreamSpy()
+        let gateway = ProviderGateway(settingsRepository: settingsRepository, credentialStore: PiGatewayCredentialStore(), piStream: pi.stream)
+        for (apple, expected) in [("light", "low"), ("moderate", "medium"), ("deep", "high")] {
+            var settings = try settingsRepository.load()
+            settings.pccReasoningLevel = apple
+            try settingsRepository.save(settings)
+            _ = try await gateway.generate(request: ProviderRequest(model: AppleIntelligenceModelCatalog.pccModel, messages: []), provider: .appleIntelligence)
+            XCTAssertEqual(pi.calls.last?.configuration.provider, "apple-pcc")
+            XCTAssertEqual(pi.calls.last?.configuration.thinkingLevel, expected)
+            XCTAssertNil(pi.calls.last?.configuration.apiKey)
+        }
+        XCTAssertEqual(pi.calls.count, 3)
+    }
+
     func testProjectExecutionUsesFreshSeededWorkspaceAndDeletesItAfterRun() async throws {
         let database = try DatabaseQueue()
         try AppDatabase.migrator.migrate(database)

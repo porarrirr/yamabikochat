@@ -145,13 +145,13 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.effectiveSystemPrompt(), "draft prompt")
     }
 
-    func testModelForProviderReturnsAppleIntelligenceDisplayModel() {
+    func testModelForProviderPreservesUnknownAppleIntelligenceIdentity() {
         var settings = AppSettings()
         settings.providerDefaultModelsJSON = #"{"APPLE_INTELLIGENCE":"legacy-model-id"}"#
 
         XCTAssertEqual(
             settings.modelForProvider("APPLE_INTELLIGENCE"),
-            AppleIntelligenceModelCatalog.displayModel
+            "legacy-model-id"
         )
     }
 
@@ -190,7 +190,7 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(normalized.superGrokReasoningEffort, "medium")
     }
 
-    func testNormalizedForPersistenceAppliesAppleIntelligenceDisplayModel() {
+    func testNormalizedForPersistencePreservesExplicitAppleIntelligenceIdentity() {
         var settings = AppSettings()
         settings.apiProvider = "APPLE_INTELLIGENCE"
         settings.defaultModel = "gemini-2.5-flash"
@@ -198,10 +198,10 @@ final class AppSettingsTests: XCTestCase {
 
         let normalized = settings.normalizedForPersistence()
 
-        XCTAssertEqual(normalized.defaultModel, AppleIntelligenceModelCatalog.displayModel)
+        XCTAssertEqual(normalized.defaultModel, "gemini-2.5-flash")
         XCTAssertEqual(
             normalized.modelForProvider("APPLE_INTELLIGENCE"),
-            AppleIntelligenceModelCatalog.displayModel
+            "gemini-2.5-flash"
         )
     }
 

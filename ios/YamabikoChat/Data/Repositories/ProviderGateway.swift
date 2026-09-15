@@ -203,7 +203,8 @@ final class ProviderGateway {
             )
             throw error
         }
-        if knownProvider(providerID) == .appleIntelligence {
+        if knownProvider(providerID) == .appleIntelligence, request.model != AppleIntelligenceModelCatalog.pccModel {
+            guard request.model == AppleIntelligenceModelCatalog.displayModel else { throw PCCFailure(code: "pcc_model_unsupported") }
             return appleIntelligence.stream(request: request)
         }
         if knownProvider(providerID) == .gemini {
@@ -722,7 +723,7 @@ final class ProviderGateway {
     }
 
     func modelSupportsVision(provider: String, model: String) async throws -> Bool {
-        if knownProvider(provider) == .appleIntelligence { return false }
+        if knownProvider(provider) == .appleIntelligence, model != AppleIntelligenceModelCatalog.pccModel { return false }
         let config = try await configuration(providerID: provider, request: ProviderRequest(model: model, messages: []), settings: settingsRepository.load(), forModelResolution: true)
         guard let resolution = try await piModelResolver([config]).first else {
             throw ProviderClientError.parseFailure("Pi returned no model capability contract")
@@ -807,7 +808,12 @@ final class ProviderGateway {
             piProvider = "xai-oauth"
             apiKey = auth.token
         case .appleIntelligence:
-            preconditionFailure("Apple Intelligence is handled before Pi configuration")
+            guard request.model == AppleIntelligenceModelCatalog.pccModel else { throw PCCFailure(code: "pcc_model_unsupported") }
+            let level = settings.pccReasoningLevel ?? "moderate"
+            guard let piLevel = ["light": "low", "moderate": "medium", "deep": "high"][level] else {
+                throw PCCFailure(code: "pcc_reasoning_unsupported")
+            }
+            return PiAgentConfiguration(provider: "apple-pcc", model: request.model, thinkingLevel: piLevel)
         }
 
         let catalogContract: PiCatalogModelContract?

@@ -1,3 +1,5 @@
+import { PCC_PROVIDER, pccResolution, withPCCBridge, receivePCCEvent } from "./pcc-provider.js";
+import { providerUsage, aggregateUsage as sumUsage } from "./usage-contract.js";
 import { createEventRecorder } from "./event-recording.js";
 import http from "node:http";
 import { installRuntimeLifecycle } from "./runtime-lifecycle.js";
@@ -662,6 +664,7 @@ function installCatalogModel(config, provider, providerId, expectedApi, verified
 }
 
 function resolutionFor(config) {
+  if (config?.contractVersion === RUNTIME_CONTRACT_VERSION && config.provider === PCC_PROVIDER) return pccResolution(config, runtimeModels);
   if (config.contractVersion !== RUNTIME_CONTRACT_VERSION) {
     throw new Error(`Pi runtime contract mismatch: expected ${RUNTIME_CONTRACT_VERSION}, received ${config.contractVersion ?? "missing"}`);
   }
@@ -819,7 +822,7 @@ function resolutionFor(config) {
 function resolveModel(config) {
   const resolution = resolutionFor(config);
   if (!resolution.supported) {
-    throw new Error(`Unsupported model contract (${resolution.reason}): ${config.provider}/${config.model}`);
+    throw Object.assign(new Error(`Unsupported model contract (${resolution.reason}): ${config.provider}/${config.model}`), { code: resolution.reason });
   }
   return { model: runtimeModels.getModel(resolution.provider, resolution.model), resolution };
 }
@@ -847,17 +850,6 @@ function usage(value) {
   };
 }
 
-function providerUsage(value) {
-  if (!value) return null;
-  return {
-    inputTokens: value.input || 0,
-    outputTokens: value.output || 0,
-    totalTokens: value.totalTokens || 0,
-    reasoningTokens: value.reasoning,
-    cachedInputTokens: value.cacheRead || 0,
-    cacheCreationInputTokens: value.cacheWrite || 0
-  };
-}
 
 function messagesFrom(request, model) {
   return request.messages.map((message) => {
@@ -1031,6 +1023,8 @@ function standardStreamFunction(request, config, report, captureProviderRequest)
       : effectiveHeaders(config, sessionId),
     timeoutMs: timeoutMs(request),
     reasoning: config.thinkingLevel,
+    ...(config.provider === PCC_PROVIDER && request.metadata?.max_output_tokens
+      ? { maxTokens: Number(request.metadata.max_output_tokens) } : {}),
     sessionId,
     onPayload: (payload) => {
       const mutated = mutatePayload(payload, request, config);
@@ -1143,21 +1137,13 @@ function finalResponse(assistants, contextUsage, generatedMessages = []) {
   if (!last) throw new Error("Pi provider returned no assistant message");
   if (last.stopReason === "error" || last.stopReason === "aborted" || last.errorMessage) {
     const detail = last.errorMessage || last.rawStopReason || "unknown provider error";
-    throw new Error(`Pi provider failed: ${detail}`);
+    throw Object.assign(new Error(`Pi provider failed: ${detail}`), { code: last.errorCode });
   }
   const text = (last?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
   const reasoning = assistants.flatMap((message) => (message.content || [])
     .filter((part) => part.type === "thinking")
     .map((part) => part.thinking)).join("");
-  const totals = assistants.reduce((sum, message) => {
-    sum.inputTokens += message.usage?.input || 0;
-    sum.outputTokens += message.usage?.output || 0;
-    sum.totalTokens += message.usage?.totalTokens || 0;
-    sum.reasoningTokens += message.usage?.reasoning || 0;
-    sum.cachedInputTokens += message.usage?.cacheRead || 0;
-    sum.cacheCreationInputTokens += message.usage?.cacheWrite || 0;
-    return sum;
-  }, { inputTokens: 0, outputTokens: 0, totalTokens: 0, reasoningTokens: 0, cachedInputTokens: 0, cacheCreationInputTokens: 0 });
+  const totals = sumUsage(assistants);
   const toolCalls = assistants.flatMap((message) => (message.content || [])
     .filter((part) => part.type === "toolCall")
     .map((part) => ({
@@ -1324,7 +1310,7 @@ async function runAgent(envelope, res) {
   });
   try {
     report("agent_start", "Pi agent execution starting");
-    await agent.continue();
+    await withPCCBridge({ runId, send: event => send(res, event) }, () => agent.continue());
     const last = runAssistants.at(-1);
     report("provider_result", "Pi provider stream finished", {
       stopReason: last?.stopReason || "missing",
@@ -1437,6 +1423,10 @@ const handleRequest = async (req, res) => {
     if (req.method === "POST" && req.url === "/v1/auth/resolve") {
       const value = await body(req);
       return json(res, 200, await resolveOAuth(value.provider, value.credential, Boolean(value.force)));
+    }
+    if (req.method === "POST" && req.url === "/v1/pcc-event") {
+      const event = await body(req);
+      return json(res, receivePCCEvent(event) ? 200 : 404, { ok: true });
     }
     if (req.method === "POST" && req.url === "/v1/tool-result") {
       const result = await body(req);

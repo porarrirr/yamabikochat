@@ -546,9 +546,7 @@ final class SettingsViewModel: ObservableObject {
         if nextProvider == "GEMINI", settings.hasEnabledGeminiTool {
             settings.disableClientTools()
         }
-        let nextModel = nextProvider == "APPLE_INTELLIGENCE"
-            ? AppleIntelligenceModelCatalog.displayModel
-            : (providerMap[nextProvider] ?? (ProviderReference(persistedID: nextProvider).isModelsDev ? "" : defaultModelForProvider(nextProvider)))
+        let nextModel = providerMap[nextProvider] ?? (ProviderReference(persistedID: nextProvider).isModelsDev ? "" : defaultModelForProvider(nextProvider))
         settings.defaultModel = nextModel
         providerMap[nextProvider] = nextModel
 

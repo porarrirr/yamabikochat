@@ -39,7 +39,7 @@ struct ConversationStats: Equatable, Sendable {
     var inputTokens: Int64 = 0
     var outputTokens: Int64 = 0
     var cachedInputTokens: Int64 = 0
-    var cacheCreationInputTokens: Int64 = 0
+    var cacheCreationInputTokens: Int64? = 0
 
     var averageTTFTMs: Double? {
         guard ttftSampleCount > 0 else { return nil }
@@ -51,12 +51,13 @@ struct ConversationStats: Equatable, Sendable {
         return Double(decodeOutputTokens) / (Double(decodeDurationMs) / 1_000)
     }
 
-    var billedInputTokens: Int64 {
-        inputTokens + cachedInputTokens + cacheCreationInputTokens
+    var billedInputTokens: Int64? {
+        guard let cacheCreationInputTokens else { return nil }
+        return inputTokens + cachedInputTokens + cacheCreationInputTokens
     }
 
     var cacheHitPercent: Int? {
-        guard billedInputTokens > 0 else { return nil }
+        guard let billedInputTokens, billedInputTokens > 0 else { return nil }
         return Int((Double(cachedInputTokens) / Double(billedInputTokens) * 100).rounded())
     }
 }
@@ -105,6 +106,10 @@ enum ChatStatsField: String, Codable, CaseIterable, Identifiable {
 }
 
 enum ChatStatsFormatter {
+    static func tokens(_ value: Int64?) -> String {
+        value.map { tokens($0) } ?? L10n.text("Unknown")
+    }
+
     static func tokens(_ value: Int64) -> String {
         if value < 1_000 { return String(value) }
         if value < 1_000_000 { return scaled(Double(value) / 1_000) + "K" }
