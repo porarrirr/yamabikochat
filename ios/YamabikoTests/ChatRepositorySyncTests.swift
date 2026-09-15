@@ -121,7 +121,7 @@ final class ChatRepositorySyncTests: XCTestCase {
         XCTAssertEqual(Self.decodeAttachments(full.variants.first?.attachmentsJSON ?? "[]"), ["/tmp/v.txt"])
     }
 
-    func testSendMessageRenamesDefaultConversationToFirstPrompt() async throws {
+    func testFailedFirstResponseDoesNotRenameDefaultConversation() async throws {
         let fixture = try makeFixture()
         let conversationID = try fixture.repository.createConversation(title: "New Chat")
 
@@ -135,17 +135,11 @@ final class ChatRepositorySyncTests: XCTestCase {
             XCTFail("Expected sendMessage to fail without credentials in test fixture.")
         } catch {}
 
-        let normalized = firstPrompt
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        let expected = String(normalized.prefix(50))
-
         let updated = try fixture.repository.conversation(id: conversationID)
-        XCTAssertEqual(updated?.title, expected)
+        XCTAssertEqual(updated?.title, "New Chat")
     }
 
-    func testSendMessageDoesNotOverwriteConversationTitleAfterFirstPrompt() async throws {
+    func testFailedResponsesDoNotRenameSecretConversation() async throws {
         let fixture = try makeFixture()
         let conversationID = try fixture.repository.createConversation(title: "Secret Chat")
 
@@ -168,7 +162,43 @@ final class ChatRepositorySyncTests: XCTestCase {
         } catch {}
 
         let updated = try fixture.repository.conversation(id: conversationID)
-        XCTAssertEqual(updated?.title, "first prompt")
+        XCTAssertEqual(updated?.title, "Secret Chat")
+    }
+
+    func testSuccessfulFirstResponseGeneratesTitleOnlyOnce() async throws {
+        let runtime = PiStreamSpy { request, _ in
+            let answer = request.messages.last?.content == "first prompt" ? "first answer" : "second answer"
+            return [.completed(ProviderResponse(text: answer))]
+        }
+        let titleGenerator = ConversationTitleGeneratorSpy(generatedTitle: "Generated title")
+        let fixture = try makeFixture(
+            runtime: runtime,
+            conversationTitleGenerator: titleGenerator
+        ) { settings in
+            settings.apiProvider = "OPENROUTER"
+            settings.defaultModel = "openai/gpt-4o-mini"
+            settings.providerDefaultModelsJSON = #"{"OPENROUTER":"openai/gpt-4o-mini"}"#
+            settings.isStreamingEnabled = false
+        }
+        try fixture.credentials.setCredential("openrouter-key", for: .openRouter)
+
+        let conversationID = try fixture.repository.createConversation(title: "New Chat")
+        _ = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "first prompt",
+            attachments: []
+        )
+        _ = try await fixture.repository.sendMessage(
+            conversationId: conversationID,
+            text: "second prompt",
+            attachments: []
+        )
+
+        XCTAssertEqual(try fixture.repository.conversation(id: conversationID)?.title, "Generated title")
+        XCTAssertEqual(
+            titleGenerator.requests,
+            [.init(firstPrompt: "first prompt", firstResponse: "first answer")]
+        )
     }
 
     func testUpdateConversationModelAndProviderUpdatesConversation() throws {
@@ -411,6 +441,7 @@ final class ChatRepositorySyncTests: XCTestCase {
     private func makeFixture(
         runtime: PiStreamSpy = PiStreamSpy(),
         pricingRepository: any LiteLlmPricingEstimating = NoopPricingRepository(),
+        conversationTitleGenerator: any ConversationTitleGenerating = ConversationTitleGeneratorSpy(),
         configureSettings: ((inout AppSettings) -> Void)? = nil
     ) throws -> (repository: ChatRepository, conversations: ConversationRepository, credentials: TestCredentialStore) {
         let dbQueue = try DatabaseQueue()
@@ -433,7 +464,8 @@ final class ChatRepositorySyncTests: XCTestCase {
             conversations: conversations,
             credentials: credentials,
             piStream: runtime.stream,
-            pricingRepository: pricingRepository
+            pricingRepository: pricingRepository,
+            conversationTitleGenerator: conversationTitleGenerator
         )
         return (repository, conversations, credentials)
     }

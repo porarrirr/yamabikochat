@@ -22,7 +22,6 @@ enum ProjectDeletionMode {
 final class ChatRepository {
     private static let attachmentOwnershipLock = NSRecursiveLock()
     private static let defaultConversationTitles: Set<String> = ["New Chat", "Secret Chat"]
-    private static let conversationTitleMaxLength = 50
     private static let branchSnippetMaxLength = 32
 
     private let conversations: ConversationRepository
@@ -43,6 +42,7 @@ final class ChatRepository {
     private let editorWorkspaces: EditorWorkspaceStore
     private let projectWorkspaces: ProjectWorkspaceStore
     private let attachmentRepository: AttachmentRepository
+    private let conversationTitleGenerator: any ConversationTitleGenerating
 
     init(
         conversations: ConversationRepository,
@@ -62,7 +62,8 @@ final class ChatRepository {
         fusionOrchestrator: FusionOrchestrator = FusionOrchestrator(),
         editorWorkspaces: EditorWorkspaceStore = .shared,
         projectWorkspaces: ProjectWorkspaceStore = .shared,
-        attachmentRepository: AttachmentRepository = AttachmentRepository()
+        attachmentRepository: AttachmentRepository = AttachmentRepository(),
+        conversationTitleGenerator: any ConversationTitleGenerating = AppleIntelligenceConversationTitleGenerator()
     ) {
         self.conversations = conversations
         self.settings = settings
@@ -83,6 +84,7 @@ final class ChatRepository {
         self.editorWorkspaces = editorWorkspaces
         self.projectWorkspaces = projectWorkspaces
         self.attachmentRepository = attachmentRepository
+        self.conversationTitleGenerator = conversationTitleGenerator
     }
 
     // MARK: - Conversations
@@ -595,7 +597,7 @@ final class ChatRepository {
     }
 
     func updateConversationSystemPrompt(conversationId: Int64, systemPrompt: String?) throws {
-        guard var conversation = try conversations.fetchConversation(id: conversationId) else {
+        guard let conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
         }
         conversation.systemPrompt = systemPrompt
@@ -801,14 +803,9 @@ final class ChatRepository {
                 attachmentsJSON: encodeArray(attachments)
             )
         )
-        try updateConversationTitleIfNeeded(
-            conversation: &conversation,
-            firstPrompt: text,
-            isFirstMessage: isFirstMessage
-        )
-
+        let result: SendMessageResult
         if settings.isStreamingEnabled {
-            return try await streamMessage(
+            result = try await streamMessage(
                 conversationId: conversationId,
                 userMessageId: userMessageId,
                 request: request,
@@ -816,38 +813,46 @@ final class ChatRepository {
                 onStreamEvent: onStreamEvent,
                 onStreamingSnapshot: onStreamingSnapshot
             )
+        } else {
+            let assistantMessageId = try conversations.insertMessage(
+                ChatMessage(
+                    conversationId: conversationId,
+                    role: "model",
+                    text: ""
+                )
+            )
+            let response = try await runToolCallingTurn(
+                request: request,
+                provider: provider,
+                conversationId: conversationId,
+                persistenceKind: .message(messageId: assistantMessageId),
+                streamEnabled: false,
+                onStreamEvent: onStreamEvent,
+                onStreamingSnapshot: onStreamingSnapshot
+            )
+            await recordTokenUsageIfAvailable(
+                provider: conversation.apiProvider,
+                model: conversation.model,
+                usage: response.usage,
+                usageSamples: response.usageSamples,
+                conversationId: conversationId,
+                requestType: "chat_non_stream"
+            )
+
+            result = SendMessageResult(
+                userMessageId: userMessageId,
+                assistantMessageId: assistantMessageId,
+                response: response
+            )
         }
 
-        let assistantMessageId = try conversations.insertMessage(
-            ChatMessage(
-                conversationId: conversationId,
-                role: "model",
-                text: ""
-            )
-        )
-        let response = try await runToolCallingTurn(
-            request: request,
-            provider: provider,
+        await updateConversationTitleIfNeeded(
             conversationId: conversationId,
-            persistenceKind: .message(messageId: assistantMessageId),
-            streamEnabled: false,
-            onStreamEvent: onStreamEvent,
-            onStreamingSnapshot: onStreamingSnapshot
+            firstPrompt: text,
+            firstResponse: result.response.text,
+            isFirstMessage: isFirstMessage
         )
-        await recordTokenUsageIfAvailable(
-            provider: conversation.apiProvider,
-            model: conversation.model,
-            usage: response.usage,
-            usageSamples: response.usageSamples,
-            conversationId: conversationId,
-            requestType: "chat_non_stream"
-        )
-
-        return SendMessageResult(
-            userMessageId: userMessageId,
-            assistantMessageId: assistantMessageId,
-            response: response
-        )
+        return result
     }
 
     func regenerateLastAssistantVariant(
@@ -1414,9 +1419,11 @@ final class ChatRepository {
             )
         }
 
-        try updateConversationTitleIfNeeded(
-            conversation: &conversation,
+        let titleResponse = resultA.text.trimmedNonEmpty ?? resultB.text
+        await updateConversationTitleIfNeeded(
+            conversationId: conversationId,
             firstPrompt: text,
+            firstResponse: titleResponse,
             isFirstMessage: isFirstMessage
         )
 
@@ -1462,7 +1469,7 @@ final class ChatRepository {
         guard settings.isFusionModeEnabled else {
             throw ProviderClientError.parseFailure(L10n.text("Fusion モードが有効ではありません。"))
         }
-        guard var conversation = try conversations.fetchConversation(id: conversationId) else {
+        guard let conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
         }
         guard !conversation.isSecret || attachments.isEmpty else {
@@ -1501,12 +1508,6 @@ final class ChatRepository {
                 attachmentsJSON: encodeArray(normalizedAttachments)
             )
         )
-        try updateConversationTitleIfNeeded(
-            conversation: &conversation,
-            firstPrompt: text,
-            isFirstMessage: isFirstMessage
-        )
-
         let context = FusionContext(
             fusionDepth: 0,
             debugMode: settings.fusionDebugModeEnabled,
@@ -1621,6 +1622,13 @@ final class ChatRepository {
         )
         try fusionTraceStore.save(trace: finalTrace, conversationId: conversationId)
 
+        await updateConversationTitleIfNeeded(
+            conversationId: conversationId,
+            firstPrompt: text,
+            firstResponse: finalText,
+            isFirstMessage: isFirstMessage
+        )
+
         return SendMessageResult(
             userMessageId: userMessageId,
             assistantMessageId: assistantMessageId,
@@ -1648,10 +1656,9 @@ final class ChatRepository {
             !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
         guard !normalized.isEmpty || !normalizedAttachments.isEmpty else { return }
-        guard var conversation = try conversations.fetchConversation(id: conversationId) else {
+        guard try conversations.fetchConversation(id: conversationId) != nil else {
             throw ProviderClientError.parseFailure("Conversation not found")
         }
-        let isFirstMessage = try conversations.isConversationEmpty(conversationId: conversationId)
         _ = try conversations.insertMessage(
             ChatMessage(
                 conversationId: conversationId,
@@ -1659,11 +1666,6 @@ final class ChatRepository {
                 text: normalized,
                 attachmentsJSON: encodeArray(normalizedAttachments)
             )
-        )
-        try updateConversationTitleIfNeeded(
-            conversation: &conversation,
-            firstPrompt: normalized.isEmpty ? normalizedAttachments.first ?? "" : normalized,
-            isFirstMessage: isFirstMessage
         )
     }
 
@@ -1724,10 +1726,6 @@ final class ChatRepository {
                 provider: normalizedProvider,
                 systemPrompt: resolvedSystemPrompt
             )
-            guard var conversation = try conversations.fetchConversation(id: conversationId) else {
-                throw ProviderClientError.parseFailure("Conversation not found")
-            }
-
             let userMessageId = try conversations.insertMessage(
                 ChatMessage(
                     conversationId: conversationId,
@@ -1735,12 +1733,6 @@ final class ChatRepository {
                     text: normalizedPrompt
                 )
             )
-            try updateConversationTitleIfNeeded(
-                conversation: &conversation,
-                firstPrompt: normalizedPrompt,
-                isFirstMessage: true
-            )
-
             let assistantMessageId = try conversations.insertMessage(
                 ChatMessage(
                     conversationId: conversationId,
@@ -1769,6 +1761,12 @@ final class ChatRepository {
                     usageSamples: response.usageSamples,
                     conversationId: conversationId,
                     requestType: "shortcut"
+                )
+                await updateConversationTitleIfNeeded(
+                    conversationId: conversationId,
+                    firstPrompt: normalizedPrompt,
+                    firstResponse: response.text,
+                    isFirstMessage: true
                 )
                 return ShortcutRunResult(
                     text: response.text,
@@ -2369,6 +2367,15 @@ final class ChatRepository {
                         text: "**[\(speaker.modelLabel)]**\n\n\(display)"
                     )
                 )
+                if nextTurn == 1,
+                   let firstPrompt = messages.first(where: { $0.speakerModel == .user })?.content {
+                    await updateConversationTitleIfNeeded(
+                        conversationId: chatConversationId,
+                        firstPrompt: firstPrompt,
+                        firstResponse: responseText,
+                        isFirstMessage: true
+                    )
+                }
             }
             progress(nextTurn, speaker.modelLabel, display)
 
@@ -2856,23 +2863,43 @@ final class ChatRepository {
     }
 
     private func updateConversationTitleIfNeeded(
-        conversation: inout Conversation,
+        conversationId: Int64,
         firstPrompt: String,
+        firstResponse: String,
         isFirstMessage: Bool
-    ) throws {
+    ) async {
         guard isFirstMessage else { return }
 
-        let normalizedCurrentTitle = conversation.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard Self.defaultConversationTitles.contains(normalizedCurrentTitle) else { return }
+        do {
+            guard let initialConversation = try conversations.fetchConversation(id: conversationId) else { return }
+            let initialTitle = initialConversation.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard Self.defaultConversationTitles.contains(initialTitle) else { return }
 
-        guard let nextTitle = firstPrompt.normalizedConversationTitle(maxLength: Self.conversationTitleMaxLength),
-              nextTitle != normalizedCurrentTitle
-        else {
+            guard let nextTitle = try await conversationTitleGenerator.generateTitle(
+                firstPrompt: firstPrompt,
+                firstResponse: firstResponse
+            ) else {
+                return
+            }
+
+            // Re-read after generation so a title changed by the user while the model
+            // was running is never overwritten.
+            guard var currentConversation = try conversations.fetchConversation(id: conversationId) else { return }
+            let currentTitle = currentConversation.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard Self.defaultConversationTitles.contains(currentTitle), nextTitle != currentTitle else { return }
+
+            currentConversation.title = nextTitle
+            _ = try conversations.upsertConversation(currentConversation)
+        } catch is CancellationError {
             return
+        } catch {
+            DiagnosticsLogger.log(
+                "On-device conversation title generation failed",
+                category: .chat,
+                metadata: ["conversationId": String(conversationId)],
+                error: error
+            )
         }
-
-        conversation.title = nextTitle
-        _ = try conversations.upsertConversation(conversation)
     }
 
     private func buildBranchTitle(baseTitle: String, messageText: String?) -> String {
@@ -2971,15 +2998,5 @@ private extension String {
     func ifBlank(_ fallback: String) -> String {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? fallback : trimmed
-    }
-
-    func normalizedConversationTitle(maxLength: Int) -> String? {
-        let normalized = components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-
-        guard !normalized.isEmpty else { return nil }
-        guard maxLength > 0, normalized.count > maxLength else { return normalized }
-        return String(normalized.prefix(maxLength))
     }
 }

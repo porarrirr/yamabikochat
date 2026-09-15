@@ -1,6 +1,25 @@
 import GRDB
 @testable import YamabikoChat
 
+final class ConversationTitleGeneratorSpy: ConversationTitleGenerating {
+    struct Request: Equatable {
+        var firstPrompt: String
+        var firstResponse: String
+    }
+
+    private(set) var requests: [Request] = []
+    var generatedTitle: String?
+
+    init(generatedTitle: String? = nil) {
+        self.generatedTitle = generatedTitle
+    }
+
+    func generateTitle(firstPrompt: String, firstResponse: String) async throws -> String? {
+        requests.append(Request(firstPrompt: firstPrompt, firstResponse: firstResponse))
+        return generatedTitle
+    }
+}
+
 struct FusionNoopPricingRepository: LiteLlmPricingEstimating {
     func estimateCostUsd(
         provider: String,
@@ -29,7 +48,8 @@ enum ChatRepositoryTestSupport {
         modelService: OpenRouterModelService? = nil,
         modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
         openCodeGoUsageRepository: OpenCodeGoUsageRepository? = nil,
-        pricingRepository: (any LiteLlmPricingEstimating)? = nil
+        pricingRepository: (any LiteLlmPricingEstimating)? = nil,
+        conversationTitleGenerator: any ConversationTitleGenerating = ConversationTitleGeneratorSpy()
     ) -> ChatRepository {
         let resolvedModelService = modelService ?? OpenRouterModelService(credentialStore: credentials)
         let requestSettingsResolver = ProviderRequestSettingsResolver(
@@ -65,7 +85,8 @@ enum ChatRepositoryTestSupport {
             openCodeGoUsageRepository: openCodeGoUsageRepository,
             pricingRepository: pricingRepository ?? LiteLlmPricingRepository(),
             fusionService: fusionService,
-            fusionTraceStore: fusionTraceStore
+            fusionTraceStore: fusionTraceStore,
+            conversationTitleGenerator: conversationTitleGenerator
         )
     }
 }

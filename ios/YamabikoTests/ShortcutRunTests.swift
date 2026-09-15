@@ -79,7 +79,11 @@ final class ShortcutRunTests: XCTestCase {
     }
 
     func testRunShortcutSaveCreatesConversationMessagesThinkingAndTokenUsage() async throws {
-        let fixture = try makeFixture(runtime: successRuntime()) { settings in
+        let titleGenerator = ConversationTitleGeneratorSpy(generatedTitle: "Saved shortcut title")
+        let fixture = try makeFixture(
+            runtime: successRuntime(),
+            conversationTitleGenerator: titleGenerator
+        ) { settings in
             settings.apiProvider = "OPENROUTER"
             settings.defaultModel = "openai/gpt-4o-mini"
             settings.isStreamingEnabled = false
@@ -102,7 +106,11 @@ final class ShortcutRunTests: XCTestCase {
         XCTAssertEqual(conversation?.apiProvider, "OPENROUTER")
         XCTAssertEqual(conversation?.model, "openai/gpt-4o-mini")
         XCTAssertEqual(conversation?.systemPrompt, "saved system prompt")
-        XCTAssertEqual(conversation?.title, "save this")
+        XCTAssertEqual(conversation?.title, "Saved shortcut title")
+        XCTAssertEqual(
+            titleGenerator.requests,
+            [.init(firstPrompt: "save this", firstResponse: "shortcut answer")]
+        )
 
         let messages = try fixture.conversations.fetchMessages(conversationId: conversationID)
         XCTAssertEqual(messages.count, 2)
@@ -226,6 +234,7 @@ final class ShortcutRunTests: XCTestCase {
 
     private func makeFixture(
         runtime: PiStreamSpy = PiStreamSpy(),
+        conversationTitleGenerator: any ConversationTitleGenerating = ConversationTitleGeneratorSpy(),
         configureSettings: ((inout AppSettings) -> Void)? = nil
     ) throws -> (
         repository: ChatRepository,
@@ -251,7 +260,8 @@ final class ShortcutRunTests: XCTestCase {
             conversations: conversations,
             credentials: credentials,
             piStream: runtime.stream,
-            pricingRepository: NoopPricingRepository()
+            pricingRepository: NoopPricingRepository(),
+            conversationTitleGenerator: conversationTitleGenerator
         )
         return (repository, conversations, credentials, dbQueue)
     }
