@@ -310,7 +310,13 @@ def _patch_matplotlib_show() -> None:
         original_savefig = figure_class.savefig
 
         def savefig_and_mark(figure: Any, *args: Any, **kwargs: Any) -> Any:
-            result = original_savefig(figure, *args, **kwargs)
+            resolved_args = list(args)
+            resolved_kwargs = dict(kwargs)
+            if resolved_args and isinstance(resolved_args[0], str):
+                resolved_args[0] = _virtual_workspace_path(resolved_args[0])
+            elif isinstance(resolved_kwargs.get("fname"), str):
+                resolved_kwargs["fname"] = _virtual_workspace_path(resolved_kwargs["fname"])
+            result = original_savefig(figure, *resolved_args, **resolved_kwargs)
             setattr(figure, _FIGURE_SAVED_ATTRIBUTE, True)
             return result
 

@@ -37,7 +37,7 @@ plt.title("東京・大阪・名古屋の今日の気温")
 plt.xlabel("तापमान / درجة الحرارة / তাপমাত্রা")
 plt.figtext(0.02, 0.02, "北京、上海、广州今日气温", fontfamily="Noto Sans SC")
 plt.figtext(0.98, 0.02, "لاہور، کراچی کا درجہ حرارت", ha="right", fontfamily="Noto Nastaliq Urdu")
-plt.savefig("matplotlib.png")
+plt.savefig("/workspace/matplotlib.png")
 (float(np.sum(values)), matplotlib.get_backend(), sorted(required_fonts))
 """#,
             reset: true,
