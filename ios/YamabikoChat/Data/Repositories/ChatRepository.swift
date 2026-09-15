@@ -177,6 +177,16 @@ final class ChatRepository {
         }
 
         switch normalizedProvider {
+        case "APPLE_INTELLIGENCE":
+            guard normalizedModel == AppleIntelligenceModelCatalog.pccModel else { return nil }
+            return makeReasoningEffortConfiguration(
+                providerID: normalizedProvider,
+                modelID: normalizedModel,
+                modelLabel: AppleIntelligenceModelCatalog.displayName(normalizedModel),
+                options: AppleIntelligenceModelCatalog.pccReasoningLevels,
+                selectedValue: settings.pccReasoningLevel
+                    ?? AppleIntelligenceModelCatalog.defaultPCCReasoningLevel
+            )
         case "CODEX_AUTH":
             guard settings.codexReasoningEnabled,
                   let preset = CodexModelCatalog.findPreset(normalizedModel)
@@ -274,6 +284,8 @@ final class ChatRepository {
         } else {
             var updated = currentSettings
             switch configuration.providerID {
+            case "APPLE_INTELLIGENCE":
+                updated.pccReasoningLevel = selectedValue
             case "CODEX_AUTH":
                 updated.codexReasoningEnabled = true
                 updated.codexReasoningEffort = selectedValue
@@ -597,7 +609,7 @@ final class ChatRepository {
     }
 
     func updateConversationSystemPrompt(conversationId: Int64, systemPrompt: String?) throws {
-        guard let conversation = try conversations.fetchConversation(id: conversationId) else {
+        guard var conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure("Conversation not found")
         }
         conversation.systemPrompt = systemPrompt

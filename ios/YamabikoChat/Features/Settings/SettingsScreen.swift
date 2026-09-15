@@ -1724,12 +1724,15 @@ struct SettingsScreen: View {
                 ))
                 if viewModel.settings.defaultModel == AppleIntelligenceModelCatalog.pccModel {
                     Picker("PCC reasoning", selection: Binding(
-                        get: { viewModel.settings.pccReasoningLevel ?? "moderate" },
+                        get: {
+                            viewModel.settings.pccReasoningLevel
+                                ?? AppleIntelligenceModelCatalog.defaultPCCReasoningLevel
+                        },
                         set: { viewModel.settings.pccReasoningLevel = $0 }
                     )) {
-                        Text("Light").tag("light")
-                        Text("Moderate").tag("moderate")
-                        Text("Deep").tag("deep")
+                        ForEach(AppleIntelligenceModelCatalog.pccReasoningLevels, id: \.self) { level in
+                            Text(level.capitalized).tag(level)
+                        }
                     }
                 }
             } else {

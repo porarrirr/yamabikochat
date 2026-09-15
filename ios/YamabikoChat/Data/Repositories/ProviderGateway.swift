@@ -809,8 +809,8 @@ final class ProviderGateway {
             apiKey = auth.token
         case .appleIntelligence:
             guard request.model == AppleIntelligenceModelCatalog.pccModel else { throw PCCFailure(code: "pcc_model_unsupported") }
-            let level = settings.pccReasoningLevel ?? "moderate"
-            guard let piLevel = ["light": "low", "moderate": "medium", "deep": "high"][level] else {
+            let level = settings.pccReasoningLevel ?? AppleIntelligenceModelCatalog.defaultPCCReasoningLevel
+            guard let piLevel = AppleIntelligenceModelCatalog.piThinkingLevel(forPCCReasoningLevel: level) else {
                 throw PCCFailure(code: "pcc_reasoning_unsupported")
             }
             return PiAgentConfiguration(provider: "apple-pcc", model: request.model, thinkingLevel: piLevel)

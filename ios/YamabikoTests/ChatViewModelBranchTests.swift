@@ -131,6 +131,45 @@ final class ChatViewModelBranchTests: XCTestCase {
         XCTAssertEqual(try fixture.repository.loadSettings().codexReasoningEffort, "xhigh")
     }
 
+    func testPCCReasoningEffortConfigurationUsesPCCContractAndPersistsSelection() throws {
+        let fixture = try makeFixture()
+        var settings = try fixture.repository.loadSettings()
+        settings.apiProvider = "APPLE_INTELLIGENCE"
+        settings.defaultModel = AppleIntelligenceModelCatalog.pccModel
+        settings.pccReasoningLevel = "moderate"
+        try fixture.repository.saveSettings(settings)
+
+        let configuration = fixture.repository.reasoningEffortConfiguration(
+            settings: settings,
+            provider: "APPLE_INTELLIGENCE",
+            model: AppleIntelligenceModelCatalog.pccModel
+        )
+
+        XCTAssertEqual(
+            configuration?.modelLabel,
+            AppleIntelligenceModelCatalog.displayName(AppleIntelligenceModelCatalog.pccModel)
+        )
+        XCTAssertEqual(configuration?.options, ["light", "moderate", "deep"])
+        XCTAssertEqual(configuration?.selectedValue, "moderate")
+
+        try fixture.repository.setReasoningEffort(
+            "deep",
+            provider: "APPLE_INTELLIGENCE",
+            model: AppleIntelligenceModelCatalog.pccModel
+        )
+        XCTAssertEqual(try fixture.repository.loadSettings().pccReasoningLevel, "deep")
+    }
+
+    func testOnDeviceAppleIntelligenceDoesNotExposePCCReasoningEffort() throws {
+        let fixture = try makeFixture()
+
+        XCTAssertNil(fixture.repository.reasoningEffortConfiguration(
+            settings: try fixture.repository.loadSettings(),
+            provider: "APPLE_INTELLIGENCE",
+            model: AppleIntelligenceModelCatalog.displayModel
+        ))
+    }
+
     func testDisabledReasoningDoesNotExposeAnInactiveEffortAsCurrent() throws {
         let fixture = try makeFixture()
         var settings = try fixture.repository.loadSettings()
