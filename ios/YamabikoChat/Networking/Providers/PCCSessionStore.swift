@@ -21,13 +21,17 @@ final class PCCSessionStore {
 
     final class Entry {
         let session: LanguageModelSession
+        let compactionRecorder: PCCContextCompactionRecorder
         let router: PCCToolRouter
         let signature: Signature
         var expectedHistory: [PCCNativeRequest.Message] = []
         var lastUse = Date()
 
-        init(session: LanguageModelSession, router: PCCToolRouter, signature: Signature) {
+        init(session: LanguageModelSession,
+             compactionRecorder: PCCContextCompactionRecorder = PCCContextCompactionRecorder(),
+             router: PCCToolRouter, signature: Signature) {
             self.session = session
+            self.compactionRecorder = compactionRecorder
             self.router = router
             self.signature = signature
         }

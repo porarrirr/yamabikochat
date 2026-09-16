@@ -244,6 +244,7 @@
 		E50A3C8D0DA4BB587ABCCA41 /* ChatWorkspacePanels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DAFCE5397D856602A531B38 /* ChatWorkspacePanels.swift */; };
 		E63C987D58BF59A7019846BD /* AutoConversationSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A6A04A867BFEAAC41E0248 /* AutoConversationSettingsSection.swift */; };
 		E69C3514EFEFF1F73D6CA91F /* AgentSkillInstallReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32B877B5A57F5D09C71601E2 /* AgentSkillInstallReview.swift */; };
+		E764497DECB6BE60380DA1BC /* PCCContextCompaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4BBCDFA79DEC43B91D9F628 /* PCCContextCompaction.swift */; };
 		E8974A4399A27CF3C732BCF4 /* ChatMessageThinking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 481CA1A12D0312351DABD396 /* ChatMessageThinking.swift */; };
 		E8DA2924C68103B34BDA3BBF /* ConversationListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6012B61691A11858B0918E5 /* ConversationListViewModel.swift */; };
 		E92E653594F51DA8DB04B311 /* markdown-renderer.js in Resources */ = {isa = PBXBuildFile; fileRef = 103A4F6B6DC37D5F26D3B66A /* markdown-renderer.js */; };
@@ -614,6 +615,7 @@
 		EE1F31BD54AADF6461CBC67C /* ModelPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPreset.swift; sourceTree = "<group>"; };
 		EEE60932C8C8B154A6CECA4D /* HtmlCodeExtractorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HtmlCodeExtractorTests.swift; sourceTree = "<group>"; };
 		EFA8FC2F705B5D8D61A79B26 /* HTMLTextExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLTextExtractor.swift; sourceTree = "<group>"; };
+		F4BBCDFA79DEC43B91D9F628 /* PCCContextCompaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCCContextCompaction.swift; sourceTree = "<group>"; };
 		F4EE394A98A62C0607185BA1 /* Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Hex.swift"; sourceTree = "<group>"; };
 		F5E76571802BD1DCDB737AD8 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
@@ -674,6 +676,7 @@
 			isa = PBXGroup;
 			children = (
 				1FF77399450389CF5892A94D /* AppleIntelligenceProviderClient.swift */,
+				F4BBCDFA79DEC43B91D9F628 /* PCCContextCompaction.swift */,
 				FFF6083CE0102E07C7EAE1BD /* PCCNativeTools.swift */,
 				6B3CD2AE24065D6F71E892AA /* PCCProviderClient.swift */,
 				8BF212F4A155CDF94EDAB086 /* PCCSessionStore.swift */,
@@ -1738,6 +1741,7 @@
 				B9CBE41E5D9DEFC79C81DE9C /* OpenRouterModelService.swift in Sources */,
 				2EAD672EDECBCA4C9DFEFC96 /* OpenRouterModels.swift in Sources */,
 				6F065F7EA8B6667AE3CC3BCA /* OpenSourceLicensesView.swift in Sources */,
+				E764497DECB6BE60380DA1BC /* PCCContextCompaction.swift in Sources */,
 				10DB7722EC82D053870E8C67 /* PCCNativeTools.swift in Sources */,
 				6CDF45A3A0335109BD6A883A /* PCCProviderClient.swift in Sources */,
 				7DF43CD233244C7D28C310C2 /* PCCSessionStore.swift in Sources */,

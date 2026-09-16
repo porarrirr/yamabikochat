@@ -29,7 +29,7 @@ final class PCCNativeToolsTests: XCTestCase {
             "required": .array([.string("query")]), "additionalProperties": .bool(false)
         ]))
         let context = PCCNativeRequest.Context(systemPrompt: "Help", messages: [.init(role: "user", content: .string("Lookup"))], tools: [definition])
-        try await PCCSDK.execute(.init(context: context, reasoningLevel: "light"), runID: "run", requestID: "request", using: PCCScriptedModel(), executeTool: { call in
+        try await PCCSDK.execute(.init(context: context, reasoningLevel: "light", contextSize: 32_768), runID: "run", requestID: "request", using: PCCScriptedModel(), executeTool: { call in
             await calls.append(call)
             return ToolResult(callId: call.id, name: call.name, content: "answer-42")
         }, send: { await events.append($0) })
@@ -51,7 +51,7 @@ final class PCCNativeToolsTests: XCTestCase {
         followUp.tools = [] // Disabling tools must not discard their historical results.
         followUp.messages.append(.init(role: "assistant", content: .string("answer-42"), pccTranscript: encoded))
         followUp.messages.append(.init(role: "user", content: .string("Repeat")))
-        try await PCCSDK.execute(.init(context: followUp, reasoningLevel: "light"), runID: "follow", requestID: "next", using: PCCScriptedModel(), executeTool: { _ in
+        try await PCCSDK.execute(.init(context: followUp, reasoningLevel: "light", contextSize: 32_768), runID: "follow", requestID: "next", using: PCCScriptedModel(), executeTool: { _ in
             XCTFail("Previously executed tools must not run again")
             throw PCCFailure(code: "unexpected_tool")
         }, send: { await events.append($0) })
@@ -68,7 +68,7 @@ final class PCCNativeToolsTests: XCTestCase {
     func testTextOnlySessionWithoutSystemInstructionsKeepsItsResponse() async throws {
         guard #available(iOS 27.0, *) else { throw XCTSkip("Requires iOS 27") }
         let events = PCCEventCollector()
-        try await PCCSDK.execute(.init(context: .init(messages: [.init(role: "user", content: .string("Hello"))]), reasoningLevel: "light"),
+        try await PCCSDK.execute(.init(context: .init(messages: [.init(role: "user", content: .string("Hello"))]), reasoningLevel: "light", contextSize: 32_768),
                                 runID: "text", requestID: "request", using: PCCScriptedModel(toolCount: 0), executeTool: { _ in
             throw PCCFailure(code: "unexpected_tool")
         }, send: { await events.append($0) })
@@ -89,7 +89,7 @@ final class PCCNativeToolsTests: XCTestCase {
                 "type": .string("object"), "properties": .object(["query": .object(["type": .string("string")])])
             ]))
         }
-        try await PCCSDK.execute(.init(context: .init(messages: [.init(role: "user", content: .string("Search and calculate"))], tools: definitions), reasoningLevel: "deep"),
+        try await PCCSDK.execute(.init(context: .init(messages: [.init(role: "user", content: .string("Search and calculate"))], tools: definitions), reasoningLevel: "deep", contextSize: 32_768),
                                 runID: "chain", requestID: "request", using: PCCScriptedModel(toolCount: 2), executeTool: { call in
             await calls.append(call)
             return ToolResult(callId: call.id, name: call.name, content: call.name == "lookup" ? "found" : "42")
@@ -116,7 +116,7 @@ final class PCCNativeToolsTests: XCTestCase {
         let definition = PCCNativeRequest.ToolDefinition(name: "lookup", description: "Lookup", parameters: .object([
             "type": .string("object"), "properties": .object(["query": .object(["type": .string("string")])])
         ]))
-        try await PCCSDK.execute(.init(context: .init(messages: [.init(role: "user", content: .string("Plot"))], tools: [definition]), reasoningLevel: "light"),
+        try await PCCSDK.execute(.init(context: .init(messages: [.init(role: "user", content: .string("Plot"))], tools: [definition]), reasoningLevel: "light", contextSize: 32_768),
                                 runID: "image", requestID: "request", using: PCCScriptedModel(), executeTool: { call in
             ToolResult(callId: call.id, name: call.name, content: "plot", artifacts: [.init(path: url.path, name: "plot.png", mime: "image/png", size: Int64(image.count))])
         }, send: { await events.append($0) })
@@ -147,7 +147,7 @@ final class PCCNativeToolsTests: XCTestCase {
         let definition = PCCNativeRequest.ToolDefinition(name: "lookup", description: "Lookup", parameters: .object([
             "type": .string("object"), "properties": .object(["query": .object(["type": .string("string")])])
         ]))
-        try await PCCSDK.execute(.init(context: .init(messages: [.init(role: "user", content: .string("Lookup"))], tools: [definition]), reasoningLevel: "light"),
+        try await PCCSDK.execute(.init(context: .init(messages: [.init(role: "user", content: .string("Lookup"))], tools: [definition]), reasoningLevel: "light", contextSize: 32_768),
                                 runID: "failure", requestID: "request", using: PCCScriptedModel(), executeTool: { call in
             ToolResult(callId: call.id, name: call.name, content: "search unavailable", isError: true)
         }, send: { await events.append($0) })
@@ -162,6 +162,56 @@ final class PCCNativeToolsTests: XCTestCase {
         let encoded = String(decoding: try JSONEncoder().encode(bad), as: UTF8.self)
         let context = PCCNativeRequest.Context(messages: [.init(role: "assistant", content: .string(""), pccTranscript: encoded), .init(role: "user", content: .string("Next"))])
         XCTAssertThrowsError(try PCCSDK.transcript(context))
+    }
+
+    func testCompactionRunsInsideTheNativeToolLoopAndKeepsOnlyTheFinalAnswerVisible() async throws {
+        guard #available(iOS 27.0, *) else { throw XCTSkip("Requires iOS 27") }
+        let events = PCCEventCollector()
+        let definition = PCCNativeRequest.ToolDefinition(name: "lookup", description: "Lookup", parameters: .object([
+            "type": .string("object"), "properties": .object(["query": .object(["type": .string("string")])])
+        ]))
+        let request = PCCNativeRequest(
+            context: .init(messages: [.init(role: "user", content: .string(String(repeating: "important detail ", count: 20)))], tools: [definition]),
+            reasoningLevel: "light",
+            contextSize: 128
+        )
+        try await PCCSDK.execute(request, runID: "compact", requestID: "request", using: PCCScriptedModel(), executeTool: { call in
+            ToolResult(callId: call.id, name: call.name, content: "answer-42")
+        }, send: { await events.append($0) })
+
+        let captured = await events.events
+        let completion = try XCTUnwrap(captured.last)
+        XCTAssertEqual(completion.text, "answer-42")
+        XCTAssertEqual(completion.contextCompacted, true)
+        XCTAssertEqual(completion.usage?.inputTokens, 19)
+        XCTAssertEqual(completion.usage?.outputTokens, 8)
+        let encoded = try XCTUnwrap(completion.transcript)
+        let transcript = try JSONDecoder().decode(Transcript.self, from: Data(encoded.utf8))
+        XCTAssertTrue(transcript.contains { entry in
+            guard case .response(let response) = entry else { return false }
+            return response.segments.contains { segment in
+                guard case .text(let text) = segment else { return false }
+                return text.content.hasPrefix("Conversation memory:")
+            }
+        })
+        XCTAssertTrue(transcript.contains { if case .toolOutput = $0 { return true }; return false })
+    }
+
+    func testCompactedTranscriptReplacesOlderHistoryWhenRestored() throws {
+        guard #available(iOS 27.0, *) else { throw XCTSkip("Requires iOS 27") }
+        let compacted = Transcript(entries: [.response(.init(assetIDs: [], segments: [.text(.init(content: "Conversation memory:\nKept state"))]))])
+        let encoded = String(decoding: try JSONEncoder().encode(compacted), as: UTF8.self)
+        let context = PCCNativeRequest.Context(messages: [
+            .init(role: "user", content: .string("obsolete history")),
+            .init(role: "assistant", content: .string("answer"), pccTranscript: encoded, pccContextCompacted: true),
+            .init(role: "user", content: .string("continue"))
+        ])
+
+        let restored = try PCCSDK.transcript(context)
+        XCTAssertEqual(restored.count, 2)
+        guard case .response = restored[0], case .prompt = restored[1] else {
+            return XCTFail("Only compacted memory and the new prompt should remain")
+        }
     }
 
     func testNativeToolRunnerCancellationReachesRunningOperation() async throws {
@@ -207,6 +257,15 @@ private struct PCCScriptedModel: LanguageModel {
         init(configuration: Int) {}
         func respond(to request: LanguageModelExecutorGenerationRequest, model: PCCScriptedModel,
                      streamingInto channel: LanguageModelExecutorGenerationChannel) async throws {
+            let latestPrompt = request.transcript.reversed().compactMap { entry -> String? in
+                guard case .prompt(let prompt) = entry else { return nil }
+                return prompt.segments.compactMap { if case .text(let text) = $0 { return text.content }; return nil }.joined()
+            }.first ?? ""
+            if latestPrompt.hasPrefix("Summarize this conversation for continuation:") {
+                await channel.send(.response(action: .appendText("Kept state", tokenCount: 1)))
+                await channel.send(.response(action: .updateUsage(input: .init(totalTokenCount: 2, cachedTokenCount: 0), output: .init(totalTokenCount: 1, reasoningTokenCount: 0))))
+                return
+            }
             if model.toolCount == 0 {
                 await channel.send(.response(action: .appendText("Hello", tokenCount: 1)))
                 return

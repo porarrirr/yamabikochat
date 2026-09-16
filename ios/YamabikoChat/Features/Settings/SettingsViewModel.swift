@@ -553,6 +553,9 @@ final class SettingsViewModel: ObservableObject {
         if let data = try? JSONEncoder().encode(providerMap), let json = String(data: data, encoding: .utf8) {
             settings.providerDefaultModelsJSON = json
         }
+        if nextProvider == "APPLE_INTELLIGENCE", nextModel == AppleIntelligenceModelCatalog.pccModel, settings.pccReasoningLevel == nil {
+            settings.pccReasoningLevel = AppleIntelligenceModelCatalog.defaultPCCReasoningLevel
+        }
         if nextProvider == "OPENROUTER" {
             resetOpenRouterEndpointState(forModelId: nextModel)
             reconcileOpenRouterReasoning(forModelId: nextModel)
@@ -726,6 +729,15 @@ final class SettingsViewModel: ObservableObject {
         map[settings.apiProvider.uppercased()] = modelId
         if let data = try? JSONEncoder().encode(map), let json = String(data: data, encoding: .utf8) {
             settings.providerDefaultModelsJSON = json
+        }
+        if settings.apiProvider.uppercased() == "APPLE_INTELLIGENCE" {
+            if modelId == AppleIntelligenceModelCatalog.pccModel {
+                if settings.pccReasoningLevel == nil {
+                    settings.pccReasoningLevel = AppleIntelligenceModelCatalog.defaultPCCReasoningLevel
+                }
+            } else if modelId == AppleIntelligenceModelCatalog.displayModel {
+                settings.pccReasoningLevel = nil
+            }
         }
         guard settings.apiProvider.uppercased() == "OPENROUTER" else { return }
         resetOpenRouterEndpointState(forModelId: modelId)

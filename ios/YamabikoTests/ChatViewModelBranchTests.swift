@@ -160,6 +160,25 @@ final class ChatViewModelBranchTests: XCTestCase {
         XCTAssertEqual(try fixture.repository.loadSettings().pccReasoningLevel, "deep")
     }
 
+    func testPCCReasoningEffortDefaultsToModerateWhenNotExplicitlyConfigured() throws {
+        let fixture = try makeFixture()
+        var settings = try fixture.repository.loadSettings()
+        settings.apiProvider = "APPLE_INTELLIGENCE"
+        settings.defaultModel = AppleIntelligenceModelCatalog.pccModel
+        settings.pccReasoningLevel = nil
+        try fixture.repository.saveSettings(settings)
+
+        let saved = try fixture.repository.loadSettings()
+        XCTAssertEqual(saved.pccReasoningLevel, "moderate")
+
+        let configuration = fixture.repository.reasoningEffortConfiguration(
+            settings: saved,
+            provider: "APPLE_INTELLIGENCE",
+            model: AppleIntelligenceModelCatalog.pccModel
+        )
+        XCTAssertEqual(configuration?.selectedValue, "moderate")
+    }
+
     func testOnDeviceAppleIntelligenceDoesNotExposePCCReasoningEffort() throws {
         let fixture = try makeFixture()
 

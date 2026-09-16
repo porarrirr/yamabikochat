@@ -130,6 +130,15 @@ final class PCCProviderTests: XCTestCase {
         XCTAssertNil(saved.pccReasoningLevel)
     }
 
+    func testPCCModelDefaultsReasoningEffortToModerate() throws {
+        var settings = AppSettings()
+        settings.apiProvider = "APPLE_INTELLIGENCE"
+        settings.defaultModel = AppleIntelligenceModelCatalog.pccModel
+        let saved = settings.normalizedForPersistence()
+        XCTAssertEqual(saved.defaultModel, AppleIntelligenceModelCatalog.pccModel)
+        XCTAssertEqual(saved.pccReasoningLevel, "moderate")
+    }
+
     func testNativeUsageAndUnknownCacheCountSurviveBridgeEncoding() throws {
         let value = ProviderUsage(inputTokens: 20, outputTokens: 8, totalTokens: 28, reasoningTokens: 3, cachedInputTokens: 5)
         let decoded = try JSONDecoder().decode(ProviderUsage.self, from: JSONEncoder().encode(value))

@@ -45,6 +45,16 @@ not authorize alternative execution paths for other providers or models.
   snapshots are not summed, and unknown cache-write counts remain unknown.
   Context occupancy is unknown after a native tool loop: its aggregate token
   usage must not be displayed as the last inference's context size.
+- A dynamic session profile inspects history after each complete tool-output
+  group, before Apple starts the next inference. Once history exceeds 12 entries
+  or a conservative 60% of the SDK-reported context size, it summarizes the
+  older prefix in a separate session and retains the latest tool calls and all
+  matching outputs verbatim. This keeps compaction inside Apple's native loop;
+  Pi neither replays tools nor implements a parallel model execution path.
+- Summary usage is included in the completed usage. The generated transcript is
+  marked with `pccContextCompacted`; cold reconstruction then replaces older Pi
+  history at that explicit boundary. The internal memory response is persisted
+  for continuation but excluded from the user-visible final answer.
 - On-device Apple Intelligence remains unchanged. Android cannot activate the
   native provider. The shared JS bundle accepts tools only after native v2
   resolution enables them.
@@ -52,6 +62,10 @@ not authorize alternative execution paths for other providers or models.
 Simulator tests use Apple's actual session/tool machinery with a deterministic
 `LanguageModelExecutor` test double. Live PCC checks remain opt-in and require
 an entitled physical device.
+
+References:
+- https://developer.apple.com/documentation/foundationmodels/composing-dynamic-sessions-with-instructions-and-profiles
+- https://developer.apple.com/documentation/foundationmodels/managing-the-context-window
 
 ## Session and prefix cache reuse
 

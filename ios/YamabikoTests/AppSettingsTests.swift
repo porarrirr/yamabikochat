@@ -205,6 +205,42 @@ final class AppSettingsTests: XCTestCase {
         )
     }
 
+    func testNormalizedForPersistenceDefaultsPCCReasoningLevelToModerateForPCCModel() {
+        var settings = AppSettings()
+        settings.apiProvider = "APPLE_INTELLIGENCE"
+        settings.defaultModel = AppleIntelligenceModelCatalog.pccModel
+        settings.pccReasoningLevel = nil
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertEqual(normalized.defaultModel, AppleIntelligenceModelCatalog.pccModel)
+        XCTAssertEqual(normalized.pccReasoningLevel, "moderate")
+    }
+
+    func testNormalizedForPersistenceSanitizesInvalidPCCReasoningLevel() {
+        var settings = AppSettings()
+        settings.apiProvider = "APPLE_INTELLIGENCE"
+        settings.defaultModel = AppleIntelligenceModelCatalog.pccModel
+        settings.pccReasoningLevel = "ultra"
+
+        let normalized = settings.normalizedForPersistence()
+
+        XCTAssertEqual(normalized.pccReasoningLevel, "moderate")
+    }
+
+    func testNormalizedForPersistencePreservesExplicitPCCReasoningLevels() {
+        for level in ["light", "deep"] {
+            var settings = AppSettings()
+            settings.apiProvider = "APPLE_INTELLIGENCE"
+            settings.defaultModel = AppleIntelligenceModelCatalog.pccModel
+            settings.pccReasoningLevel = level
+
+            let normalized = settings.normalizedForPersistence()
+
+            XCTAssertEqual(normalized.pccReasoningLevel, level)
+        }
+    }
+
     func testCurrentModelUsesProviderMapFallback() {
         var settings = AppSettings()
         settings.apiProvider = "OPENAI"

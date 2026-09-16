@@ -100,7 +100,7 @@ final class PCCSessionStoreTests: XCTestCase {
     }
 
     private func makeRequest(key: String) -> PCCNativeRequest {
-        .init(context: .init(systemPrompt: "Stable instructions", messages: [.init(role: "user", content: .string("Hello"))]), reasoningLevel: "light", sessionID: key)
+        .init(context: .init(systemPrompt: "Stable instructions", messages: [.init(role: "user", content: .string("Hello"))]), reasoningLevel: "light", sessionID: key, contextSize: 32_768)
     }
 
     private func definition(_ name: String) -> PCCNativeRequest.ToolDefinition {

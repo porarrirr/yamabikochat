@@ -258600,10 +258600,17 @@ function streamPCC(model, context, options = {}) {
         abort();
         return;
       }
-      const reasoningLevel = { low: "light", medium: "moderate", high: "deep" }[options.reasoning ?? "medium"];
+      const reasoningLevel = {
+        low: "light",
+        medium: "moderate",
+        high: "deep",
+        light: "light",
+        moderate: "moderate",
+        deep: "deep"
+      }[options.reasoning ?? "medium"];
       if (!reasoningLevel) throw new Error("pcc_reasoning_unsupported");
       if (options.maxTokens != null && (!Number.isSafeInteger(options.maxTokens) || options.maxTokens <= 0)) throw new Error("pcc_invalid_output_limit");
-      const payload = { context, reasoningLevel };
+      const payload = { context, reasoningLevel, contextSize: model.contextWindow };
       if (options.maxTokens != null) payload.maximumResponseTokens = options.maxTokens;
       const prepared = await options.onPayload?.(payload, model) ?? payload;
       if (options.signal?.aborted) {
@@ -258653,6 +258660,8 @@ function streamPCC(model, context, options = {}) {
             if (delta) stream20.push({ type: "text_delta", contentIndex: 0, delta, partial: output });
             if (event.type === "completed") {
               if ([...nativeCalls.values()].some((entry) => !entry.completed)) throw new Error("pcc_tool_result_missing");
+              if (typeof event.sessionReused === "boolean") output.pccSessionReused = event.sessionReused;
+              if (typeof event.contextCompacted === "boolean") output.pccContextCompacted = event.contextCompacted;
               if (event.transcript != null) {
                 if (typeof event.transcript !== "string") throw new Error("pcc_invalid_transcript");
                 JSON.parse(event.transcript);

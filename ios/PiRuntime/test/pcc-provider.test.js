@@ -123,6 +123,7 @@ test('Apple-managed tool loop preserves native history and never re-executes too
     nativeEvents.push(event);
     if (event.type !== 'pcc_request') return;
     requests++;
+    assert.equal(event.pcc.contextSize, 32768);
     assert.deepEqual(event.pcc.context.tools.map(tool => tool.name), tools.map(tool => tool.name));
     for (const [index, tool] of tools.entries()) {
       const call = { id: `call-${index}`, name: tool.name, argumentsJSON: '{}' };
@@ -130,7 +131,8 @@ test('Apple-managed tool loop preserves native history and never re-executes too
       assert.equal(receivePCCEvent({ ...event, type: 'tool_end', toolCall: call,
         toolResult: { callId: call.id, name: call.name, content: '42', isError: false } }), true);
     }
-    receivePCCEvent({ ...event, type: 'completed', text: 'The result is 42', usage, transcript: '{"entries":[]}' });
+    receivePCCEvent({ ...event, type: 'completed', text: 'The result is 42', usage,
+      transcript: '{"entries":[]}', contextCompacted: true });
   } }, () => agent.continue());
   const output = JSON.parse(JSON.stringify(agent.state.messages.at(-1)));
   assert.equal(requests, 1);
@@ -139,6 +141,7 @@ test('Apple-managed tool loop preserves native history and never re-executes too
   assert.equal(output.pccToolCalls.length, 2);
   assert.equal(output.pccToolResults.length, 2);
   assert.equal(output.pccTranscript, '{"entries":[]}');
+  assert.equal(output.pccContextCompacted, true);
   assert.equal(output.content.some(block => block.type === 'toolCall'), false);
   assert.equal(output.usage.totalTokens, 28);
   assert.equal(nativeEvents.filter(event => event.type === 'tool_start').length, 2);

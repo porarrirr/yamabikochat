@@ -19,6 +19,7 @@ struct PCCNativeRequest: Decodable, Sendable {
         var role: String
         var content: JSONValue
         var pccTranscript: String? = nil
+        var pccContextCompacted: Bool? = nil
 
         var canonical: Message {
             var copy = self
@@ -38,6 +39,7 @@ struct PCCNativeRequest: Decodable, Sendable {
     var temperature: Double?
     var maximumResponseTokens: Int?
     var sessionID: String? = nil
+    var contextSize: Int? = nil
 }
 
 struct PCCNativeEvent: Encodable, Sendable {
@@ -52,6 +54,7 @@ struct PCCNativeEvent: Encodable, Sendable {
     var toolCall: ToolCall? = nil
     var toolResult: ToolResult? = nil
     var sessionReused: Bool? = nil
+    var contextCompacted: Bool? = nil
 }
 
 struct PCCFailure: Error, LocalizedError, Sendable {
@@ -103,7 +106,10 @@ enum PCCProviderClient {
             guard #available(iOS 27.0, *) else { throw PCCFailure(code: "pcc_os_unsupported") }
             let capability = await capability()
             guard capability.available else { throw PCCFailure(code: capability.reason ?? "pcc_unavailable") }
-            try await PCCSDK.execute(request, runID: runID, requestID: requestID, executeTool: executeTool, send: send)
+            guard let contextSize = capability.contextSize else { throw PCCFailure(code: "pcc_context_unavailable") }
+            var resolvedRequest = request
+            resolvedRequest.contextSize = contextSize
+            try await PCCSDK.execute(resolvedRequest, runID: runID, requestID: requestID, executeTool: executeTool, send: send)
         } catch is CancellationError {
             DiagnosticsLogger.log("PCC native request cancelled", category: .network, requestID: requestID)
             throw CancellationError()
@@ -167,6 +173,12 @@ enum PCCSDK {
                     default: return false
                     }
                 }) else { throw PCCFailure(code: "pcc_history_unsupported") }
+                if message.pccContextCompacted == true {
+                    entries.removeAll { entry in
+                        if case .instructions = entry { return false }
+                        return true
+                    }
+                }
                 entries.append(contentsOf: native)
                 continue
             }
@@ -203,6 +215,9 @@ enum PCCSDK {
         if let max = request.maximumResponseTokens, max <= 0 { throw PCCFailure(code: "pcc_invalid_output_limit") }
         guard let last = request.context.messages.last, last.role == "user" else { throw PCCFailure(code: "pcc_history_unsupported") }
         let definitions = (request.context.tools ?? []).sorted { $0.name < $1.name }
+        guard let contextSize = request.contextSize, contextSize > 0 else {
+            throw PCCFailure(code: "pcc_context_unavailable")
+        }
         let signature = PCCSessionStore.Signature(modelType: String(reflecting: type(of: model)),
             modelConfiguration: AnyHashable(model.executorConfiguration), instructions: request.context.systemPrompt ?? "",
             tools: definitions, reasoning: request.reasoningLevel, temperature: request.temperature,
@@ -211,20 +226,28 @@ enum PCCSDK {
                                       history: Array(request.context.messages.dropLast())) {
             // Only a cold/reset session reconstructs history. A warm session is
             // left untouched, retaining the SDK's native prefix and KV cache.
-            var entries = Array(try transcript(request.context).dropLast())
+            let entries = try transcript(request.context).dropLast().filter { entry in
+                if case .instructions = entry { return false }
+                return true
+            }
             let router = PCCToolRouter()
             let nativeTools = try definitions.map { definition in
                 try PCCNativeTool(definition: definition) { call in try await router.call(call) }
             }
-            let toolDefinitions = nativeTools.map { Transcript.ToolDefinition(tool: $0) }
-            if let index = entries.firstIndex(where: { if case .instructions = $0 { return true }; return false }),
-               case .instructions(var instructions) = entries[index] {
-                instructions.toolDefinitions = toolDefinitions
-                entries[index] = .instructions(instructions)
-            } else if !toolDefinitions.isEmpty {
-                entries.insert(.instructions(.init(segments: [], toolDefinitions: toolDefinitions)), at: 0)
+            let recorder = PCCContextCompactionRecorder()
+            let profile = LanguageModelSession.Profile {
+                if let instructions = request.context.systemPrompt, !instructions.isEmpty {
+                    Instructions(instructions)
+                }
+                nativeTools
             }
-            return PCCSessionStore.Entry(session: LanguageModelSession(model: model, tools: nativeTools, transcript: Transcript(entries: entries)),
+            .model(model)
+            .temperature(request.temperature)
+            .maximumResponseTokens(request.maximumResponseTokens)
+            .reasoningLevel(reasoning)
+            .modifier(PCCContextCompactionModifier(model: model, contextSize: contextSize, recorder: recorder))
+            return PCCSessionStore.Entry(session: LanguageModelSession(profile: profile, history: entries),
+                                         compactionRecorder: recorder,
                                          router: router, signature: signature)
         }
         var completedHistory: [PCCNativeRequest.Message]?
@@ -251,16 +274,31 @@ enum PCCSDK {
         }
         try Task.checkCancellation()
         guard receivedSnapshot else { throw PCCFailure(code: "pcc_empty_stream") }
-        let generated = Transcript(entries: session.transcript.dropFirst(startCount + 1))
+        let compactionCount = await lease.entry.compactionRecorder.count
+        let generatedEntries: [Transcript.Entry]
+        if compactionCount > 0 {
+            generatedEntries = session.transcript.filter { entry in
+                if case .instructions = entry { return false }
+                if case .prompt = entry { return false }
+                return true
+            }
+        } else {
+            generatedEntries = Array(session.transcript.dropFirst(startCount + 1))
+        }
+        let generated = Transcript(entries: generatedEntries)
         let encoded = String(decoding: try JSONEncoder().encode(generated), as: UTF8.self)
-        let finalText = responseText(generated)
-        let finalUsage = try usageDelta(session.usage, since: initialUsage)
-        completedHistory = request.context.messages + [.init(role: "assistant", content: .string(finalText), pccTranscript: encoded)]
+        let finalText = visibleResponseText(generatedEntries)
+        let finalUsage = addUsage(try usageDelta(session.usage, since: initialUsage),
+                                  await lease.entry.compactionRecorder.usage)
+        completedHistory = request.context.messages + [.init(role: "assistant", content: .string(finalText),
+                                                               pccTranscript: encoded,
+                                                               pccContextCompacted: compactionCount > 0)]
         DiagnosticsLogger.log("PCC session cache usage", category: .network, requestID: requestID,
             metadata: ["sessionReused": String(lease.reused), "inputTokens": String(finalUsage.inputTokens ?? 0),
                        "cachedInputTokens": String(finalUsage.cachedInputTokens ?? 0)])
         try await send(PCCNativeEvent(type: "completed", runId: runID, requestId: requestID,
-            text: finalText, usage: finalUsage, transcript: encoded, sessionReused: lease.reused))
+            text: finalText, usage: finalUsage, transcript: encoded, sessionReused: lease.reused,
+            contextCompacted: compactionCount > 0))
     }
 
     static func usageDelta(_ value: LanguageModelSession.Usage, since baseline: LanguageModelSession.Usage) throws -> ProviderUsage {
@@ -296,9 +334,32 @@ enum PCCSDK {
         }.joined()
     }
 
+    /// A compacted transcript contains an internal memory response before the
+    /// retained tool exchange. Only responses after the last tool output are
+    /// user-visible output for the current turn.
+    static func visibleResponseText(_ entries: [Transcript.Entry]) -> String {
+        guard let boundary = entries.lastIndex(where: { if case .toolOutput = $0 { return true }; return false }) else {
+            return responseText(entries)
+        }
+        return responseText(entries[entries.index(after: boundary)...])
+    }
+
     static func usage(_ value: LanguageModelSession.Usage) -> ProviderUsage {
         ProviderUsage(inputTokens: value.input.totalTokenCount, outputTokens: value.output.totalTokenCount,
                       totalTokens: value.totalTokenCount, reasoningTokens: value.output.reasoningTokenCount,
                       cachedInputTokens: value.input.cachedTokenCount)
+    }
+
+    static func addUsage(_ lhs: ProviderUsage, _ rhs: ProviderUsage) -> ProviderUsage {
+        func add(_ first: Int?, _ second: Int?) -> Int? {
+            guard let first, let second else { return nil }
+            return first + second
+        }
+        return ProviderUsage(inputTokens: add(lhs.inputTokens, rhs.inputTokens),
+                             outputTokens: add(lhs.outputTokens, rhs.outputTokens),
+                             totalTokens: add(lhs.totalTokens, rhs.totalTokens),
+                             reasoningTokens: add(lhs.reasoningTokens, rhs.reasoningTokens),
+                             cachedInputTokens: add(lhs.cachedInputTokens, rhs.cachedInputTokens),
+                             cacheCreationInputTokens: add(lhs.cacheCreationInputTokens, rhs.cacheCreationInputTokens))
     }
 }

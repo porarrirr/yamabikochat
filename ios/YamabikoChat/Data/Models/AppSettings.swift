@@ -756,6 +756,21 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         if let data = try? JSONEncoder().encode(models), let json = String(data: data, encoding: .utf8) {
             providerDefaultModelsJSON = json
         }
+
+        let isPCCActive = (apiProvider.uppercased() == "APPLE_INTELLIGENCE" && defaultModel == AppleIntelligenceModelCatalog.pccModel) ||
+            models["APPLE_INTELLIGENCE"] == AppleIntelligenceModelCatalog.pccModel
+        let isOnDeviceActive = apiProvider.uppercased() == "APPLE_INTELLIGENCE" && defaultModel == AppleIntelligenceModelCatalog.displayModel
+
+        if isPCCActive {
+            let current = pccReasoningLevel?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if let current, AppleIntelligenceModelCatalog.pccReasoningLevels.contains(current) {
+                pccReasoningLevel = current
+            } else {
+                pccReasoningLevel = AppleIntelligenceModelCatalog.defaultPCCReasoningLevel
+            }
+        } else if isOnDeviceActive {
+            pccReasoningLevel = nil
+        }
     }
 
     func providerModelMap() -> [String: String] {
