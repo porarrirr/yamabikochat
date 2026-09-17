@@ -465,6 +465,7 @@ struct ChatScreen: View {
     @State private var isComposerFocused = false
     @State private var isSoftwareKeyboardVisible = false
     @State private var isReasoningEffortPanelPresented = false
+    @State private var userMessageSelection: UserMessageSelection?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -499,6 +500,16 @@ struct ChatScreen: View {
                     DispatchQueue.main.async {
                         isComposerFocused = true
                     }
+                },
+                onEditUserMessage: { text in
+                    composerSelection = nil
+                    viewModel.inputText = text
+                    DispatchQueue.main.async {
+                        isComposerFocused = true
+                    }
+                },
+                onSelectUserMessageText: { text in
+                    userMessageSelection = UserMessageSelection(text: text)
                 }
             )
             .overlay {
@@ -670,6 +681,9 @@ struct ChatScreen: View {
         }
         .sheet(item: $workspaceRoute) { route in
             ChatWorkspaceRouteSheet(route: route)
+        }
+        .sheet(item: $userMessageSelection) { selection in
+            UserMessageTextSelectionSheet(text: selection.text)
         }
         .sheet(isPresented: Binding(
             get: { questionCoordinator.pending != nil },
@@ -1376,6 +1390,38 @@ struct ChatScreen: View {
         showFileImporter = true
     }
 
+}
+
+private struct UserMessageSelection: Identifiable {
+    let id = UUID()
+    let text: String
+}
+
+private struct UserMessageTextSelectionSheet: View {
+    let text: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(text)
+                    .font(.body)
+                    .lineSpacing(2)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+            }
+            .navigationTitle(L10n.text("テキストを選択"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.text("完了")) { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
 }
 
 private struct ChatReasoningEffortPanel: View {

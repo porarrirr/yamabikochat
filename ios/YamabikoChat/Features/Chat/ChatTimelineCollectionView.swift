@@ -19,6 +19,8 @@ struct ChatTimelineCollectionView: UIViewControllerRepresentable {
     let onBranch: (Int64) -> Void
     let onRegenerate: () -> Void
     let onAskChatWithSelection: (String) -> Void
+    let onEditUserMessage: (String) -> Void
+    let onSelectUserMessageText: (String) -> Void
 
     func makeUIViewController(context: Context) -> ChatTimelineViewController {
         let controller = ChatTimelineViewController()
@@ -46,7 +48,9 @@ struct ChatTimelineCollectionView: UIViewControllerRepresentable {
             onNextVariant: onNextVariant,
             onBranch: onBranch,
             onRegenerate: onRegenerate,
-            onAskChatWithSelection: onAskChatWithSelection
+            onAskChatWithSelection: onAskChatWithSelection,
+            onEditUserMessage: onEditUserMessage,
+            onSelectUserMessageText: onSelectUserMessageText
         )
     }
 }
@@ -94,6 +98,8 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     var onBranch: (Int64) -> Void = { _ in }
     var onRegenerate: () -> Void = {}
     var onAskChatWithSelection: (String) -> Void = { _ in }
+    var onEditUserMessage: (String) -> Void = { _ in }
+    var onSelectUserMessageText: (String) -> Void = { _ in }
     var onFollowStateChanged: (Bool, Int) -> Void = { _, _ in }
 
     override func viewDidLoad() {
@@ -149,6 +155,8 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                     onBranch: self.onBranch,
                     onRegenerate: self.onRegenerate,
                     onAskChatWithSelection: self.onAskChatWithSelection,
+                    onEditUserMessage: self.onEditUserMessage,
+                    onSelectUserMessageText: self.onSelectUserMessageText,
                     onIntrinsicHeightChange: { [weak self] height in
                         self?.applyIntrinsicHeight(height, rowID: id)
                     },
@@ -219,7 +227,9 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         onNextVariant: @escaping (Int64) -> Void,
         onBranch: @escaping (Int64) -> Void,
         onRegenerate: @escaping () -> Void,
-        onAskChatWithSelection: @escaping (String) -> Void
+        onAskChatWithSelection: @escaping (String) -> Void,
+        onEditUserMessage: @escaping (String) -> Void,
+        onSelectUserMessageText: @escaping (String) -> Void
     ) {
         let storeChanged = self.store !== store
         if storeChanged {
@@ -272,6 +282,8 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         self.onBranch = onBranch
         self.onRegenerate = onRegenerate
         self.onAskChatWithSelection = onAskChatWithSelection
+        self.onEditUserMessage = onEditUserMessage
+        self.onSelectUserMessageText = onSelectUserMessageText
 
         let scrollToLatest = storeChanged || scrollToLatestRequest != lastScrollRequest
         if scrollToLatest {
@@ -931,6 +943,8 @@ private struct ChatTimelineRowView: View {
     let onBranch: (Int64) -> Void
     let onRegenerate: () -> Void
     let onAskChatWithSelection: (String) -> Void
+    let onEditUserMessage: (String) -> Void
+    let onSelectUserMessageText: (String) -> Void
     let onIntrinsicHeightChange: (CGFloat) -> Void
     let onContentLayoutChange: () -> Void
 
@@ -970,6 +984,8 @@ private struct ChatTimelineRowView: View {
                         onNextVariant: onNextVariant,
                         onBranch: onBranch,
                         onRegenerate: onRegenerate,
+                        onEditUserMessage: onEditUserMessage,
+                        onSelectUserMessageText: onSelectUserMessageText,
                         onMarkdownLayoutChange: shouldReportIntrinsicHeight
                             ? onContentLayoutChange
                             : {}
@@ -980,7 +996,9 @@ private struct ChatTimelineRowView: View {
                         mathRenderingEnabled: mathRenderingEnabled,
                         splitLayout: dualSplitLayout,
                         splitRatio: dualSplitRatio,
-                        onRoute: onRoute
+                        onRoute: onRoute,
+                        onEditUserMessage: onEditUserMessage,
+                        onSelectUserMessageText: onSelectUserMessageText
                     )
                 }
             }
@@ -1059,6 +1077,8 @@ private struct ChatMessageRow: View {
     let onNextVariant: (Int64) -> Void
     let onBranch: (Int64) -> Void
     let onRegenerate: () -> Void
+    let onEditUserMessage: (String) -> Void
+    let onSelectUserMessageText: (String) -> Void
     let onMarkdownLayoutChange: () -> Void
 
     private var isUser: Bool { message.message.role == "user" }
@@ -1104,6 +1124,23 @@ private struct ChatMessageRow: View {
                                 .padding(.vertical, 11)
                                 .background(Color(uiColor: .secondarySystemBackground))
                                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                                .contextMenu {
+                                    Button {
+                                        UIPasteboard.general.string = responseText
+                                    } label: {
+                                        Label(L10n.text("コピーする"), systemImage: "doc.on.doc")
+                                    }
+                                    Button {
+                                        onEditUserMessage(responseText)
+                                    } label: {
+                                        Label(L10n.text("編集する"), systemImage: "pencil")
+                                    }
+                                    Button {
+                                        onSelectUserMessageText(responseText)
+                                    } label: {
+                                        Label(L10n.text("テキストを選択する"), systemImage: "selection.pin.in.out")
+                                    }
+                                }
                         }
                     }
                     .frame(maxWidth: 520, alignment: .trailing)
@@ -1405,6 +1442,8 @@ private struct DualChatMessageRow: View {
     let splitLayout: String
     let splitRatio: Double
     let onRoute: (ChatWorkspaceRoute) -> Void
+    let onEditUserMessage: (String) -> Void
+    let onSelectUserMessageText: (String) -> Void
 
     var body: some View {
         switch message.parsedRole {
@@ -1425,6 +1464,23 @@ private struct DualChatMessageRow: View {
                             .padding(.vertical, 11)
                             .background(Color(uiColor: .secondarySystemBackground))
                             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .contextMenu {
+                                Button {
+                                    UIPasteboard.general.string = message.userText
+                                } label: {
+                                    Label(L10n.text("コピーする"), systemImage: "doc.on.doc")
+                                }
+                                Button {
+                                    onEditUserMessage(message.userText)
+                                } label: {
+                                    Label(L10n.text("編集する"), systemImage: "pencil")
+                                }
+                                Button {
+                                    onSelectUserMessageText(message.userText)
+                                } label: {
+                                    Label(L10n.text("テキストを選択する"), systemImage: "selection.pin.in.out")
+                                }
+                            }
                     }
                 }
                 .frame(maxWidth: 520, alignment: .trailing)
