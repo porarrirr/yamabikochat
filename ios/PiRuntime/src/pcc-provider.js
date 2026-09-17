@@ -65,6 +65,7 @@ function streamPCC(model, context, options = {}) {
   let finished = false;
   let timer;
   const nativeCalls = new Map();
+  const partialSnapshot = () => structuredClone(output);
   function finish(error) {
     if (finished) return;
     finished = true;
@@ -77,7 +78,7 @@ function streamPCC(model, context, options = {}) {
       output.errorCode = error.code || 'pcc_native_failure';
       stream.push({ type: 'error', reason: output.stopReason, error: output });
     } else {
-      if (output.content.length) stream.push({ type: 'text_end', contentIndex: 0, content: output.content[0].text, partial: output });
+      if (output.content.length) stream.push({ type: 'text_end', contentIndex: 0, content: output.content[0].text, partial: partialSnapshot() });
       output.stopReason = 'unknown';
       stream.push({ type: 'done', reason: 'unknown', message: output });
     }
@@ -87,7 +88,7 @@ function streamPCC(model, context, options = {}) {
     bridge?.send({ type: 'pcc_cancel', runId: bridge.runId, requestId });
     finish(Object.assign(new Error('PCC request cancelled'), { code: 'pcc_cancelled' }));
   }
-  stream.push({ type: 'start', partial: output });
+  stream.push({ type: 'start', partial: partialSnapshot() });
   queueMicrotask(async () => {
     try {
       if (!bridge) throw new Error('pcc_native_bridge_unavailable');
@@ -132,15 +133,18 @@ function streamPCC(model, context, options = {}) {
           } else if (event.type === 'snapshot'  || event.type === 'completed') {
             if (typeof event.text !== 'string') throw new Error('pcc_invalid_snapshot');
             const previous = output.content[0]?.text || '';
-            if (!event.text.startsWith(previous)) throw new Error('pcc_non_append_snapshot');
             output.usage = appleUsage(event.usage);
             if (!output.content.length) {
               output.content.push({ type: 'text', text: '' });
-              stream.push({ type: 'text_start', contentIndex: 0, partial: output });
+              stream.push({ type: 'text_start', contentIndex: 0, partial: partialSnapshot() });
             }
-            const delta = event.text.slice(previous.length);
+            // Foundation Models streams cumulative snapshots, not immutable token
+            // deltas. A later snapshot may revise an earlier span. Keep Pi's
+            // partial message authoritative and let the native bridge forward the
+            // complete replacement snapshot to consumers.
+            const delta = event.text.startsWith(previous) ? event.text.slice(previous.length) : '';
             output.content[0].text = event.text;
-            if (delta) stream.push({ type: 'text_delta', contentIndex: 0, delta, partial: output });
+            if (event.text !== previous) stream.push({ type: 'text_delta', contentIndex: 0, delta, partial: partialSnapshot() });
             if (event.type === 'completed') {
               if ([...nativeCalls.values()].some(entry => !entry.completed)) throw new Error('pcc_tool_result_missing');
               if (typeof event.sessionReused === 'boolean') output.pccSessionReused = event.sessionReused;

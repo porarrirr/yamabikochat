@@ -4,6 +4,22 @@ import FoundationModels
 
 @MainActor
 final class PCCSessionStoreTests: XCTestCase {
+    func testCanonicalHistoryTreatsExplicitFalseCompactionAsOmitted() {
+        let omitted = PCCNativeRequest.Message(
+            role: "assistant",
+            content: .string("Answer"),
+            pccTranscript: "{\"entries\":[]}"
+        )
+        let explicitFalse = PCCNativeRequest.Message(
+            role: "assistant",
+            content: .array([.object(["type": .string("text"), "text": .string("Answer")])]),
+            pccTranscript: "{\"entries\":[]}",
+            pccContextCompacted: false
+        )
+
+        XCTAssertEqual(omitted.canonical, explicitFalse.canonical)
+    }
+
     func testSameChatPreservesSDKSessionAndPrefixWithPerTurnUsage() async throws {
         guard #available(iOS 27.0, *) else { throw XCTSkip("Requires iOS 27") }
         let store = PCCSessionStore()

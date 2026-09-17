@@ -264,6 +264,17 @@ enum ChatStreamSession {
                 force: false,
                 onStreamingSnapshot: onStreamingSnapshot
             )
+        case let .textSnapshot(text):
+            fullText = text
+            try publishBufferedState(
+                target: target,
+                coordinator: &coordinator,
+                fullText: fullText,
+                reasoningText: reasoningText,
+                toolActivity: toolActivity,
+                force: false,
+                onStreamingSnapshot: onStreamingSnapshot
+            )
         case let .reasoningDelta(delta):
             reasoningText += delta
             try publishBufferedState(

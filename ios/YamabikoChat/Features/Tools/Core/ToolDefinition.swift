@@ -155,6 +155,12 @@ extension Collection where Element == ProviderTool {
         }
     }
 
+    var containsPythonTool: Bool {
+        contains {
+            $0.type == "function" && $0.payload["name"] == PythonExecuteTool.name
+        }
+    }
+
     var containsAskUserQuestionTool: Bool {
         contains {
             $0.type == "function" && $0.payload["name"] == AskUserQuestionTool.name

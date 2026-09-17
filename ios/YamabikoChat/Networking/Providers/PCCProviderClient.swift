@@ -26,6 +26,11 @@ struct PCCNativeRequest: Decodable, Sendable {
             if case .string(let text) = content {
                 copy.content = .array([.object(["type": .string("text"), "text": .string(text)])])
             }
+            // Only `true` changes transcript reconstruction. Treat an omitted
+            // flag and an explicit false identically when matching warm history.
+            if copy.pccContextCompacted == false {
+                copy.pccContextCompacted = nil
+            }
             return copy
         }
     }

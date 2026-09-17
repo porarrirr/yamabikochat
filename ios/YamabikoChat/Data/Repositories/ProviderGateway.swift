@@ -108,7 +108,7 @@ final class ProviderGateway {
         for try await event in stream {
             onStreamEvent?(event)
             switch event {
-            case .answerStart, .textDelta: break
+            case .answerStart, .textDelta, .textSnapshot: break
             case let .reasoningDelta(delta): reasoning += delta
             case let .toolActivity(activity): toolActivity.apply(activity)
             case let .rotation(notice): toolActivity.rotationNotices.append(notice)
@@ -666,7 +666,7 @@ final class ProviderGateway {
 
     private static func commitsGeminiCandidate(_ event: ProviderStreamEvent) -> Bool {
         switch event {
-        case let .textDelta(value), let .reasoningDelta(value):
+        case let .textDelta(value), let .textSnapshot(value), let .reasoningDelta(value):
             return value.trimmedNonEmpty != nil
         case .toolActivity, .completed:
             return true

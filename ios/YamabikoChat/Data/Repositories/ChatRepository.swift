@@ -1095,6 +1095,7 @@ final class ChatRepository {
                 conversation.systemPrompt,
                 enablesAgenticWebSearch: !conversation.isSecret && resolvedSettings.tools.containsWebSearchTool,
                 enablesEditorInstructions: !conversation.isSecret && resolvedSettings.tools.containsEditorTool,
+                enablesPythonInstructions: !conversation.isSecret && resolvedSettings.tools.containsPythonTool,
                 enablesUserQuestionInstructions: !conversation.isSecret && resolvedSettings.tools.containsAskUserQuestionTool
             ),
             stream: settings.isStreamingEnabled,
@@ -2676,7 +2677,8 @@ final class ChatRepository {
             systemPrompt: SystemPromptComposer.composeForAPI(
                 systemPrompt,
                 enablesAgenticWebSearch: clientToolsAllowed && resolvedSettings.tools.containsWebSearchTool,
-                enablesEditorInstructions: clientToolsAllowed && resolvedSettings.tools.containsEditorTool
+                enablesEditorInstructions: clientToolsAllowed && resolvedSettings.tools.containsEditorTool,
+                enablesPythonInstructions: clientToolsAllowed && resolvedSettings.tools.containsPythonTool
             ),
             stream: stream ?? settings.isStreamingEnabled,
             tools: clientToolsAllowed ? resolvedSettings.tools : [],
@@ -2732,7 +2734,7 @@ final class ChatRepository {
                         onToolActivity?(toolEvent)
                     case let .executionSnapshot(execution):
                         activityState.setExecution(execution)
-                    case .answerStart, .textDelta, .reasoningDelta, .rotation, .completed:
+                    case .answerStart, .textDelta, .textSnapshot, .reasoningDelta, .rotation, .completed:
                         break
                     }
                 }

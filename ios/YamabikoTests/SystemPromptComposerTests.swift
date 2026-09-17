@@ -115,6 +115,18 @@ final class SystemPromptComposerTests: XCTestCase {
         XCTAssertEqual(composed, "Be helpful.\n\nToday's date: 2026/06/27")
     }
 
+    func testComposeForAPI_requiresRealPythonExecutionWhenEnabled() {
+        let composed = SystemPromptComposer.composeForAPI(
+            "Be helpful.",
+            enablesPythonInstructions: true,
+            now: makeDate(year: 2026, month: 6, day: 27)
+        )
+
+        XCTAssertTrue(composed?.contains("use python_execute") == true)
+        XCTAssertTrue(composed?.contains("does not execute it") == true)
+        XCTAssertTrue(composed?.contains("Do not infer or fabricate execution results") == true)
+    }
+
     func testComposeForAPI_appendsUserQuestionInstructionsWhenEnabled() {
         let composed = SystemPromptComposer.composeForAPI(
             "Be helpful.",

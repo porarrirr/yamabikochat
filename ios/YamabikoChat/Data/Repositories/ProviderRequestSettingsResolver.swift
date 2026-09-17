@@ -1,5 +1,16 @@
 import Foundation
 
+enum ProviderRequestSettingsResolverError: LocalizedError, Equatable {
+    case pythonToolUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .pythonToolUnavailable:
+            return "python_execute is enabled but its local executor is unavailable."
+        }
+    }
+}
+
 enum ProviderRequestToolScope: Sendable, Equatable {
     case all
     case providerOnly
@@ -108,7 +119,7 @@ final class ProviderRequestSettingsResolver {
             metadata["contextWindow"] = String(contextWindow)
         }
         return ProviderRequestResolvedSettings(
-            tools: toolsForProvider(
+            tools: try toolsForProvider(
                 settings: settings,
                 provider: provider,
                 model: model,
@@ -138,7 +149,7 @@ final class ProviderRequestSettingsResolver {
         context: AppSettings.ReasoningContext,
         toolScope: ProviderRequestToolScope,
         enablesUserQuestions: Bool
-    ) -> [ProviderTool] {
+    ) throws -> [ProviderTool] {
         guard toolScope.allowsProviderTools else { return [] }
 
         let overrides = settings.toolOverride(for: context)
@@ -206,8 +217,16 @@ final class ProviderRequestSettingsResolver {
         if toolScope.allowsClientPython,
            settings.pythonToolEnabled,
            supportsClientWebSearch,
-           !hasGeminiProviderTool,
-           let definition = localToolRegistry.definitions.first(where: { $0.name == PythonExecuteTool.name }) {
+           !hasGeminiProviderTool {
+            guard let definition = localToolRegistry.definitions.first(where: { $0.name == PythonExecuteTool.name }) else {
+                DiagnosticsLogger.log(
+                    "Enabled Python tool has no registered executor",
+                    level: .error,
+                    category: .settings,
+                    metadata: ["provider": provider, "model": model]
+                )
+                throw ProviderRequestSettingsResolverError.pythonToolUnavailable
+            }
             tools.append(definition.providerTool)
         }
         if toolScope == .all,

@@ -217,7 +217,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         isStreamingEnabled = true
         mathRenderingEnabled = true
         clientWebSearchToolEnabled = false
-        pythonToolEnabled = false
+        pythonToolEnabled = true
 
         dynamicColorEnabled = true
         themeColor = "BLUE_PURPLE"

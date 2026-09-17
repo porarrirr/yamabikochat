@@ -1290,7 +1290,14 @@ async function runAgent(envelope, res) {
       send(res, { type: "llm_start", stepId: activeStep, timeMs: Date.now() });
     } else if (event.type === "message_update") {
       const update = event.assistantMessageEvent;
-      if (update.type === "text_delta") send(res, { type: "text_delta", delta: update.delta });
+      if (update.type === "text_delta") {
+        if (event.message?.provider === PCC_PROVIDER) {
+          const text = event.message.content?.find(part => part.type === "text")?.text;
+          if (typeof text === "string") send(res, { type: "text_snapshot", text });
+        } else {
+          send(res, { type: "text_delta", delta: update.delta });
+        }
+      }
       if (update.type === "thinking_delta") send(res, { type: "reasoning_delta", delta: update.delta });
     } else if (event.type === "message_end" && event.message?.role === "assistant") {
       runAssistants.push(event.message);

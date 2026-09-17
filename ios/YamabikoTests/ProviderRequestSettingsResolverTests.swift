@@ -162,6 +162,28 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         XCTAssertFalse(resolved.tools.containsWebSearchTool)
     }
 
+    func testEnabledPythonFailsBeforeExecutionWhenExecutorIsMissing() async {
+        let resolver = ProviderRequestSettingsResolver(
+            modelService: OpenRouterModelService(credentialStore: ResolverCredentialStore()),
+            localToolRegistry: LocalToolRegistry(executors: [StrReplaceEditorTool()])
+        )
+        var settings = AppSettings()
+        settings.pythonToolEnabled = true
+
+        do {
+            _ = try await resolver.resolve(
+                settings: settings,
+                provider: "OPENAI",
+                model: "gpt-5.6"
+            )
+            XCTFail("Expected missing Python executor to stop request creation")
+        } catch let error as ProviderRequestSettingsResolverError {
+            XCTAssertEqual(error, .pythonToolUnavailable)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testGeminiProviderToolExcludesClientPython() async throws {
         let resolver = makeResolver()
         var settings = AppSettings()
@@ -279,6 +301,7 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         let resolver = makeResolver()
         var settings = AppSettings()
         settings.clientWebSearchToolEnabled = true
+        settings.pythonToolEnabled = false
 
         let resolved = try await resolver.resolve(
             settings: settings,
@@ -443,6 +466,7 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         )
         var settings = AppSettings()
         settings.clientWebSearchToolEnabled = true
+        settings.pythonToolEnabled = false
 
         let resolved = try await resolver.resolve(
             settings: settings,
@@ -467,7 +491,8 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
                 executors: [AskUserQuestionTool(coordinator: coordinator)]
             )
         )
-        let settings = AppSettings()
+        var settings = AppSettings()
+        settings.pythonToolEnabled = false
 
         let interactive = try await resolver.resolve(
             settings: settings,

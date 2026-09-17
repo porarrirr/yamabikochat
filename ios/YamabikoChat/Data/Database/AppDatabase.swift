@@ -147,7 +147,7 @@ enum AppDatabase {
                 t.column("isStreamingEnabled", .boolean).notNull().defaults(to: true)
                 t.column("mathRenderingEnabled", .boolean).notNull().defaults(to: true)
                 t.column("clientWebSearchToolEnabled", .boolean).notNull().defaults(to: false)
-                t.column("pythonToolEnabled", .boolean).notNull().defaults(to: false)
+                t.column("pythonToolEnabled", .boolean).notNull().defaults(to: true)
 
                 t.column("dynamicColorEnabled", .boolean).notNull().defaults(to: true)
                 t.column("themeColor", .text).notNull().defaults(to: "BLUE_PURPLE")
@@ -823,7 +823,7 @@ enum AppDatabase {
             let columns = Set(rows.compactMap { ($0["name"] as String?)?.lowercased() })
             if !columns.contains("pythontoolenabled") {
                 try db.alter(table: "settings") { t in
-                    t.add(column: "pythonToolEnabled", .boolean).notNull().defaults(to: false)
+                    t.add(column: "pythonToolEnabled", .boolean).notNull().defaults(to: true)
                 }
             }
         }
@@ -951,6 +951,14 @@ enum AppDatabase {
                     table.add(column: "pccReasoningLevel", .text)
                 }
             }
+        }
+        migrator.registerMigration("v28_enable_python_for_pcc") { db in
+            try db.execute(sql: """
+                UPDATE settings
+                SET pythonToolEnabled = 1
+                WHERE UPPER(apiProvider) = 'APPLE_INTELLIGENCE'
+                  AND defaultModel = ?
+                """, arguments: [AppleIntelligenceModelCatalog.pccModel])
         }
         return migrator
     }

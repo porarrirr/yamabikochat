@@ -329,7 +329,7 @@ final class FusionService {
                         onToolActivity?(activityAccumulator.apply(toolEvent))
                     case let .executionSnapshot(execution):
                         onToolActivity?(activityAccumulator.setExecution(execution))
-                    case .answerStart, .textDelta, .reasoningDelta, .rotation, .completed:
+                    case .answerStart, .textDelta, .textSnapshot, .reasoningDelta, .rotation, .completed:
                         break
                     }
                 }

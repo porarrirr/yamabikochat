@@ -36,6 +36,10 @@ enum SystemPromptComposer {
     - Preserve unrelated content.
     """
 
+    static let pythonToolInstructions = """
+    When the task requires Python execution, use python_execute and inspect its actual result before reporting numerical results, generated files, charts, model metrics, or successful completion. Writing a Python file with str_replace_editor does not execute it. Do not infer or fabricate execution results. If python_execute returns an error or an expected artifact is absent, report that state accurately and continue fixing the underlying code when possible.
+    """
+
     static let userQuestionToolInstructions = """
     Use ask_user_question only when you need the user's confirmation, a user-owned choice, or information that cannot be discovered from the available context or tools. Keep each question concise and give it a stable id. You may ask multiple questions in one call. Put a recommended option first and append "(Recommended)" to its label. Set multi_select to true only when more than one option may be selected. If the user cancels, do not invent an answer or claim that the question was answered.
     """
@@ -44,6 +48,7 @@ enum SystemPromptComposer {
         _ systemPrompt: String?,
         enablesAgenticWebSearch: Bool = false,
         enablesEditorInstructions: Bool = false,
+        enablesPythonInstructions: Bool = false,
         enablesUserQuestionInstructions: Bool = false,
         now: Date = Date()
     ) -> String? {
@@ -52,6 +57,7 @@ enum SystemPromptComposer {
             systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
             enablesAgenticWebSearch ? agenticWebSearchInstructions : nil,
             enablesEditorInstructions ? editorToolInstructions : nil,
+            enablesPythonInstructions ? pythonToolInstructions : nil,
             enablesUserQuestionInstructions ? userQuestionToolInstructions : nil,
             dateSuffix
         ]

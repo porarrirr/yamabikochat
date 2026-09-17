@@ -87,17 +87,28 @@ test('abort cancels the native request and rejects late completion', async () =>
   assert.equal(receivePCCEvent({ ...request, type: 'completed', text: 'late', usage }), false);
 });
 
-test('invalid snapshots cancel native generation instead of duplicating text', async () => {
+test('revised snapshots replace the Pi partial message without failing', async () => {
   const { models, model } = setup();
   const events = [];
-  const result = await withPCCBridge({ runId: 'invalid', send(event) {
+  const updates = [];
+  const agent = new Agent({ initialState: { model, messages: [{ role: 'user', content: 'Answer', timestamp: 1 }], tools: [], thinkingLevel: 'medium' }, streamFn: models.streamSimple.bind(models) });
+  agent.subscribe(event => {
     events.push(event);
+    if (event.type === 'message_update' && event.assistantMessageEvent.type === 'text_delta') {
+      updates.push(event.message.content[0]?.text);
+    }
+  });
+  await withPCCBridge({ runId: 'invalid', send(event) {
     if (event.type !== 'pcc_request') return;
     receivePCCEvent({ ...event, type: 'snapshot', text: 'old', usage });
     receivePCCEvent({ ...event, type: 'snapshot', text: 'new', usage });
-  } }, () => models.streamSimple(model, { messages: [] }, { reasoning: 'medium' }).result());
-  assert.equal(result.stopReason, 'error');
-  assert.equal(events.at(-1).type, 'pcc_cancel');
+    receivePCCEvent({ ...event, type: 'completed', text: 'new answer', usage });
+  } }, () => agent.continue());
+  const result = agent.state.messages.at(-1);
+  assert.equal(result.stopReason, 'unknown');
+  assert.equal(result.content[0].text, 'new answer');
+  assert.deepEqual(updates, ['old', 'new', 'new answer']);
+  assert.equal(events.some(event => event.type === 'agent_end'), true);
 });
 
 test('PCC v2 exposes tools only for the verified native identity', () => {

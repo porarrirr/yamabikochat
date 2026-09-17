@@ -3,6 +3,40 @@ import GRDB
 @testable import YamabikoChat
 
 final class AppSettingsTests: XCTestCase {
+    func testPythonToolIsEnabledByDefault() {
+        XCTAssertTrue(AppSettings().pythonToolEnabled)
+    }
+
+    func testPCCPythonMigrationEnablesExistingPCCSettingOnly() throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database, upTo: "v27_pcc_reasoning")
+        var settings = AppSettings()
+        settings.apiProvider = "APPLE_INTELLIGENCE"
+        settings.defaultModel = AppleIntelligenceModelCatalog.pccModel
+        settings.pythonToolEnabled = false
+        try database.write { db in try settings.save(db) }
+
+        try AppDatabase.migrator.migrate(database)
+
+        let migrated = try database.read { db in try AppSettings.fetchOne(db)! }
+        XCTAssertTrue(migrated.pythonToolEnabled)
+    }
+
+    func testPCCPythonMigrationPreservesExplicitlyDisabledNonPCCSetting() throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database, upTo: "v27_pcc_reasoning")
+        var settings = AppSettings()
+        settings.apiProvider = "OPENAI"
+        settings.defaultModel = "gpt-5.6"
+        settings.pythonToolEnabled = false
+        try database.write { db in try settings.save(db) }
+
+        try AppDatabase.migrator.migrate(database)
+
+        let migrated = try database.read { db in try AppSettings.fetchOne(db)! }
+        XCTAssertFalse(migrated.pythonToolEnabled)
+    }
+
     func testNormalizationClearsRemovedGeminiComputerUseAndJSONSettings() {
         var settings = AppSettings()
         settings.geminiComputerUseEnabled = true

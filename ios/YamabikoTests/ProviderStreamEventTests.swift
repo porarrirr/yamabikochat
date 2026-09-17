@@ -23,6 +23,11 @@ final class ProviderStreamEventTests: XCTestCase {
         XCTAssertTrue(ProviderStreamEvent.textDelta("hello").includesNonEmptyAnswerText)
     }
 
+    func testIncludesNonEmptyAnswerTextUsesLatestTextSnapshot() {
+        XCTAssertFalse(ProviderStreamEvent.textSnapshot("  ").includesNonEmptyAnswerText)
+        XCTAssertTrue(ProviderStreamEvent.textSnapshot("revised").includesNonEmptyAnswerText)
+    }
+
     func testIncludesNonEmptyAnswerTextIgnoresReasoningDelta() {
         XCTAssertFalse(ProviderStreamEvent.reasoningDelta("thinking").includesNonEmptyAnswerText)
     }

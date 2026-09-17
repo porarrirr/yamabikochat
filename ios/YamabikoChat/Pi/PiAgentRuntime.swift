@@ -134,6 +134,7 @@ private struct PiRuntimeEvent: Decodable {
     var runId: String?
     var stage: String?
     var delta: String?
+    var text: String?
     var message: String?
     var statusCode: Int?
     var errorCode: String?
@@ -616,6 +617,12 @@ actor PiAgentRuntime {
                         case "text_delta":
                             if event.delta?.trimmedNonEmpty != nil { metrics.observeToken(at: event.timeMs ?? nowMs()) }
                             continuation.yield(.textDelta(event.delta ?? ""))
+                        case "text_snapshot":
+                            guard let text = event.text else {
+                                throw ProviderClientError.parseFailure("Pi emitted an invalid text snapshot")
+                            }
+                            if text.trimmedNonEmpty != nil { metrics.observeToken(at: event.timeMs ?? nowMs()) }
+                            continuation.yield(.textSnapshot(text))
                         case "reasoning_delta":
                             if event.delta?.trimmedNonEmpty != nil { metrics.observeToken(at: event.timeMs ?? nowMs()) }
                             continuation.yield(.reasoningDelta(event.delta ?? ""))

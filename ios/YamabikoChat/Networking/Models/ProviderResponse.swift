@@ -106,6 +106,9 @@ enum ProviderStreamEvent: Sendable, Equatable {
     /// have accompanied a tool call and must not be carried into the final answer.
     case answerStart
     case textDelta(String)
+    /// The complete current answer text. Snapshot-based providers may revise
+    /// previously streamed spans, so consumers must replace rather than append.
+    case textSnapshot(String)
     case reasoningDelta(String)
     case toolActivity(ToolActivityEvent)
     case rotation(ProviderRotationNotice)
@@ -122,6 +125,8 @@ extension ProviderStreamEvent {
             return false
         case let .textDelta(delta):
             return delta.trimmedNonEmpty != nil
+        case let .textSnapshot(text):
+            return text.trimmedNonEmpty != nil
         case let .completed(response):
             return response.text.trimmedNonEmpty != nil
         case .reasoningDelta, .toolActivity, .rotation, .executionSnapshot:

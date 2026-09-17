@@ -33,6 +33,38 @@ final class ChatStreamSessionTests: XCTestCase {
         XCTAssertEqual(messages.last?.text, "Hello")
     }
 
+    func testRunReplacesEarlierTextWithLatestProviderSnapshot() async throws {
+        let conversations = try makeConversations()
+        let conversationId = try conversations.createConversation(
+            title: "snapshot",
+            model: AppleIntelligenceModelCatalog.pccModel,
+            provider: "APPLE_INTELLIGENCE"
+        )
+        let messageId = try conversations.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "model", text: "", createdAtMs: 1)
+        )
+        let snapshots = StreamingSnapshotCollector()
+        let stream = AsyncThrowingStream<ProviderStreamEvent, Error> { continuation in
+            continuation.yield(.textSnapshot("ABC"))
+            continuation.yield(.textSnapshot("ABD"))
+            continuation.yield(.textSnapshot("ABD final"))
+            continuation.finish()
+        }
+
+        let session = try await ChatStreamSession.run(
+            stream: stream,
+            conversations: conversations,
+            kind: .message(messageId: messageId),
+            onStreamEvent: nil,
+            onStreamingSnapshot: { snapshots.append($0) }
+        )
+
+        XCTAssertEqual(session.text, "ABD final")
+        XCTAssertEqual(snapshots.values.last?.text, "ABD final")
+        let messages = try conversations.fetchMessages(conversationId: conversationId)
+        XCTAssertEqual(messages.last?.text, "ABD final")
+    }
+
     func testRunReplacesIntermediateToolTurnTextWithFinalAnswer() async throws {
         let conversations = try makeConversations()
         let conversationId = try conversations.createConversation(

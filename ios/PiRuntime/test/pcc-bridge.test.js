@@ -56,6 +56,11 @@ test('authenticated PCC bridge resolves and streams through the bundled Pi agent
             ? { type: 'error', message: 'Daily limit reached', errorCode: 'pcc_quota_limit_reached' }
             : { type: 'completed', text: 'Hello from PCC', ...(useTools ? { transcript: '{"entries":[]}' } : {}), usage: { inputTokens: 4, cachedInputTokens: 0, outputTokens: 5, reasoningTokens: 1 } };
           assert.equal((await post('/v1/pcc-event', { ...body, runId: 'wrong', requestId: event.requestId })).status, 404);
+          if (!nativeError) {
+            assert.equal((await post('/v1/pcc-event', {
+              type: 'snapshot', text: 'Draft A', usage: body.usage, runId, requestId: event.requestId
+            })).status, 200);
+          }
           assert.equal((await post('/v1/pcc-event', { ...body, runId, requestId: event.requestId })).status, 200);
         }
       }
@@ -65,6 +70,7 @@ test('authenticated PCC bridge resolves and streams through the bundled Pi agent
   const events = await run('success', false);
   const completion = events.find(e => e.type === 'completed');
   assert.ok(completion, JSON.stringify(events));
+  assert.deepEqual(events.filter(e => e.type === 'text_snapshot').map(e => e.text), ['Draft A', 'Hello from PCC']);
   assert.equal(completion.response.text, 'Hello from PCC');
   assert.equal(completion.response.usage.cacheCreationInputTokens, null);
   assert.equal(completion.response.piExecution.state.messages.at(-1).stopReason, 'unknown');

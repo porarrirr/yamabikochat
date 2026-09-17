@@ -258570,6 +258570,7 @@ function streamPCC(model, context, options = {}) {
   let finished3 = false;
   let timer;
   const nativeCalls = /* @__PURE__ */ new Map();
+  const partialSnapshot = () => structuredClone(output);
   function finish(error) {
     if (finished3) return;
     finished3 = true;
@@ -258582,7 +258583,7 @@ function streamPCC(model, context, options = {}) {
       output.errorCode = error.code || "pcc_native_failure";
       stream20.push({ type: "error", reason: output.stopReason, error: output });
     } else {
-      if (output.content.length) stream20.push({ type: "text_end", contentIndex: 0, content: output.content[0].text, partial: output });
+      if (output.content.length) stream20.push({ type: "text_end", contentIndex: 0, content: output.content[0].text, partial: partialSnapshot() });
       output.stopReason = "unknown";
       stream20.push({ type: "done", reason: "unknown", message: output });
     }
@@ -258592,7 +258593,7 @@ function streamPCC(model, context, options = {}) {
     bridge?.send({ type: "pcc_cancel", runId: bridge.runId, requestId });
     finish(Object.assign(new Error("PCC request cancelled"), { code: "pcc_cancelled" }));
   }
-  stream20.push({ type: "start", partial: output });
+  stream20.push({ type: "start", partial: partialSnapshot() });
   queueMicrotask(async () => {
     try {
       if (!bridge) throw new Error("pcc_native_bridge_unavailable");
@@ -258649,15 +258650,14 @@ function streamPCC(model, context, options = {}) {
           } else if (event.type === "snapshot" || event.type === "completed") {
             if (typeof event.text !== "string") throw new Error("pcc_invalid_snapshot");
             const previous = output.content[0]?.text || "";
-            if (!event.text.startsWith(previous)) throw new Error("pcc_non_append_snapshot");
             output.usage = appleUsage(event.usage);
             if (!output.content.length) {
               output.content.push({ type: "text", text: "" });
-              stream20.push({ type: "text_start", contentIndex: 0, partial: output });
+              stream20.push({ type: "text_start", contentIndex: 0, partial: partialSnapshot() });
             }
-            const delta = event.text.slice(previous.length);
+            const delta = event.text.startsWith(previous) ? event.text.slice(previous.length) : "";
             output.content[0].text = event.text;
-            if (delta) stream20.push({ type: "text_delta", contentIndex: 0, delta, partial: output });
+            if (event.text !== previous) stream20.push({ type: "text_delta", contentIndex: 0, delta, partial: partialSnapshot() });
             if (event.type === "completed") {
               if ([...nativeCalls.values()].some((entry) => !entry.completed)) throw new Error("pcc_tool_result_missing");
               if (typeof event.sessionReused === "boolean") output.pccSessionReused = event.sessionReused;
@@ -289835,7 +289835,14 @@ async function runAgent(envelope, res) {
       send(res, { type: "llm_start", stepId: activeStep, timeMs: Date.now() });
     } else if (event.type === "message_update") {
       const update = event.assistantMessageEvent;
-      if (update.type === "text_delta") send(res, { type: "text_delta", delta: update.delta });
+      if (update.type === "text_delta") {
+        if (event.message?.provider === PCC_PROVIDER) {
+          const text = event.message.content?.find((part) => part.type === "text")?.text;
+          if (typeof text === "string") send(res, { type: "text_snapshot", text });
+        } else {
+          send(res, { type: "text_delta", delta: update.delta });
+        }
+      }
       if (update.type === "thinking_delta") send(res, { type: "reasoning_delta", delta: update.delta });
     } else if (event.type === "message_end" && event.message?.role === "assistant") {
       runAssistants.push(event.message);
