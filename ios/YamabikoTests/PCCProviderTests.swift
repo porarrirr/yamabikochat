@@ -5,6 +5,29 @@ import GRDB
 @testable import YamabikoChat
 
 final class PCCProviderTests: XCTestCase {
+    func testLimitIncreaseOptionOnlyAppearsWhenQuotaNeedsAttention() {
+        XCTAssertFalse(PCCStatusModel.shouldOfferLimitIncrease(
+            isApproachingLimit: false,
+            isLimitReached: false,
+            hasSuggestion: true
+        ))
+        XCTAssertFalse(PCCStatusModel.shouldOfferLimitIncrease(
+            isApproachingLimit: true,
+            isLimitReached: false,
+            hasSuggestion: false
+        ))
+        XCTAssertTrue(PCCStatusModel.shouldOfferLimitIncrease(
+            isApproachingLimit: true,
+            isLimitReached: false,
+            hasSuggestion: true
+        ))
+        XCTAssertTrue(PCCStatusModel.shouldOfferLimitIncrease(
+            isApproachingLimit: false,
+            isLimitReached: true,
+            hasSuggestion: true
+        ))
+    }
+
     func testLivePCCThroughPiWithImageAndFollowUp() async throws {
         guard ProcessInfo.processInfo.environment["YAMABIKO_PCC_LIVE_TEST"] == "1" else {
             throw XCTSkip("Opt-in test consumes two PCC requests on an entitled physical device")

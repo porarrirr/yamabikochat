@@ -5,6 +5,7 @@ import FoundationModels
 final class PCCStatusModel: ObservableObject {
     @Published var capability = PCCCapability(available: false, reason: "pcc_checking")
     @Published var approachingLimit = false
+    @Published var limitReached = false
     @Published var resetDate: Date?
     @Published var canIncreaseLimit = false
     private var showLimitIncreaseSuggestion: (() -> Void)?
@@ -13,10 +14,22 @@ final class PCCStatusModel: ObservableObject {
         capability = await PCCProviderClient.capability()
         if #available(iOS 27.0, *) {
             let usage = PCCSDK.model.quotaUsage
-            if case .belowLimit(let info) = usage.status { approachingLimit = info.isApproachingLimit }
-            else { approachingLimit = false }
+            switch usage.status {
+            case .belowLimit(let info):
+                approachingLimit = info.isApproachingLimit
+                limitReached = false
+            case .limitReached:
+                approachingLimit = false
+                limitReached = true
+            }
             resetDate = usage.resetDate
-            if let suggestion = usage.limitIncreaseSuggestion {
+            let suggestion = usage.limitIncreaseSuggestion
+            let shouldOfferLimitIncrease = Self.shouldOfferLimitIncrease(
+                isApproachingLimit: approachingLimit,
+                isLimitReached: limitReached,
+                hasSuggestion: suggestion != nil
+            )
+            if shouldOfferLimitIncrease, let suggestion {
                 // Keep the exact suggestion that made the button visible. The
                 // system flow is tied to this offer; fetching quotaUsage again
                 // on tap can produce a different (or already invalid) offer.
@@ -27,6 +40,14 @@ final class PCCStatusModel: ObservableObject {
                 canIncreaseLimit = false
             }
         }
+    }
+
+    nonisolated static func shouldOfferLimitIncrease(
+        isApproachingLimit: Bool,
+        isLimitReached: Bool,
+        hasSuggestion: Bool
+    ) -> Bool {
+        hasSuggestion && (isApproachingLimit || isLimitReached)
     }
 
     func showOptions() {
@@ -44,6 +65,8 @@ struct PCCStatusView: View {
             if !status.capability.available {
                 Text(status.capability.reason == "pcc_checking" ? L10n.text("Checking Private Cloud Compute…") : PCCProviderClient.message(for: status.capability.reason ?? "pcc_unavailable"))
                     .foregroundStyle(.secondary)
+            } else if status.limitReached {
+                Text("Private Cloud Compute: daily usage limit reached").foregroundStyle(.red)
             } else if status.approachingLimit {
                 Text("Private Cloud Compute: nearing daily usage limit").foregroundStyle(.orange)
             } else {
