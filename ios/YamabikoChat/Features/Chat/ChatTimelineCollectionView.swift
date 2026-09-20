@@ -1390,6 +1390,7 @@ private struct ChatRunSummaryButton: View {
             }
             .foregroundStyle(hasFailure ? Color.red : Color.secondary)
             .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
