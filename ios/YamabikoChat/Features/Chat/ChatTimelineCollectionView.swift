@@ -1368,7 +1368,9 @@ private struct ChatRunSummaryButton: View {
     let action: () -> Void
 
     private var isRunning: Bool { steps.contains { $0.status == .running } }
-    private var hasFailure: Bool { steps.contains { $0.status == .failed } }
+    private var hasFailure: Bool {
+        ToolActivityFailurePresentationPolicy.shouldHighlightAggregateFailure(in: steps)
+    }
     private var webCount: Int { steps.filter(\.isWebActivity).count }
 
     var body: some View {

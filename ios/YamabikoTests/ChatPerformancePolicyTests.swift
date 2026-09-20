@@ -33,6 +33,58 @@ final class ChatPerformancePolicyTests: XCTestCase {
         XCTAssertEqual(ToolActivityPreviewPolicy.displayText("short"), "short")
     }
 
+    func testReleaseToolFailurePresentationDoesNotHighlightRecoveredFailure() {
+        let steps = [
+            toolStep(id: "success-1", status: .completed),
+            toolStep(id: "failure", status: .failed),
+            toolStep(id: "success-2", status: .completed)
+        ]
+
+        XCTAssertFalse(ToolActivityFailurePresentationPolicy.shouldHighlightAggregateFailure(
+            in: steps,
+            includesRecoveredFailures: false
+        ))
+        XCTAssertTrue(ToolActivityFailurePresentationPolicy.shouldHighlightAggregateFailure(
+            in: steps,
+            includesRecoveredFailures: true
+        ))
+    }
+
+    #if DEBUG
+    func testDebugToolFailurePresentationHighlightsRecoveredFailureByDefault() {
+        let steps = [
+            toolStep(id: "failure", status: .failed),
+            toolStep(id: "success", status: .completed)
+        ]
+
+        XCTAssertTrue(ToolActivityFailurePresentationPolicy.shouldHighlightAggregateFailure(in: steps))
+    }
+    #endif
+
+    func testReleaseToolFailurePresentationHighlightsTerminalFailure() {
+        let steps = [
+            toolStep(id: "success", status: .completed),
+            toolStep(id: "failure", status: .failed)
+        ]
+
+        XCTAssertTrue(ToolActivityFailurePresentationPolicy.shouldHighlightAggregateFailure(
+            in: steps,
+            includesRecoveredFailures: false
+        ))
+    }
+
+    func testReleaseToolFailurePresentationWaitsForRunningStep() {
+        let steps = [
+            toolStep(id: "failure", status: .failed),
+            toolStep(id: "running", status: .running)
+        ]
+
+        XCTAssertFalse(ToolActivityFailurePresentationPolicy.shouldHighlightAggregateFailure(
+            in: steps,
+            includesRecoveredFailures: false
+        ))
+    }
+
     func testMarkdownDocumentCacheBuildsIdenticalDocumentOnce() {
         let unique = UUID().uuidString
         let signature = MathMarkdownDocumentSignature(
@@ -85,5 +137,20 @@ final class ChatPerformancePolicyTests: XCTestCase {
             XCTAssertEqual(snapshot.items.first?.createdAtMs, 0)
             XCTAssertEqual(snapshot.items.last?.createdAtMs, 99)
         }
+    }
+
+    private func toolStep(id: String, status: ToolActivityStep.Status) -> ToolActivityStep {
+        ToolActivityStep(
+            id: id,
+            round: 1,
+            toolName: "test_tool",
+            title: id,
+            detail: "",
+            status: status,
+            resultCount: nil,
+            sources: [],
+            errorMessage: status == .failed ? "failed" : nil,
+            createdAtMs: 1
+        )
     }
 }

@@ -152,7 +152,9 @@ private struct ToolActivitySectionDisclosure: View, Equatable {
     }
 
     private var isRunning: Bool { steps.contains { $0.status == .running } }
-    private var hasFailure: Bool { steps.contains { $0.status == .failed } }
+    private var hasFailure: Bool {
+        ToolActivityFailurePresentationPolicy.shouldHighlightAggregateFailure(in: steps)
+    }
     private var currentStep: ToolActivityStep? { steps.last { $0.status == .running } }
 
     var body: some View {
@@ -377,6 +379,26 @@ enum ToolActivityPreviewPolicy {
             limitedBy: value.endIndex
         ), end != value.endIndex else { return value }
         return String(value[..<end]) + "\n…"
+    }
+}
+
+enum ToolActivityFailurePresentationPolicy {
+    #if DEBUG
+    static let includesRecoveredFailures = true
+    #else
+    static let includesRecoveredFailures = false
+    #endif
+
+    static func shouldHighlightAggregateFailure(
+        in steps: [ToolActivityStep],
+        includesRecoveredFailures: Bool = includesRecoveredFailures
+    ) -> Bool {
+        if includesRecoveredFailures {
+            return steps.contains { $0.status == .failed }
+        }
+
+        guard !steps.contains(where: { $0.status == .running }) else { return false }
+        return steps.last { $0.status != .running }?.status == .failed
     }
 }
 
