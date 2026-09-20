@@ -7,6 +7,7 @@ final class PCCStatusModel: ObservableObject {
     @Published var approachingLimit = false
     @Published var resetDate: Date?
     @Published var canIncreaseLimit = false
+    private var showLimitIncreaseSuggestion: (() -> Void)?
 
     func refresh() async {
         capability = await PCCProviderClient.capability()
@@ -15,12 +16,21 @@ final class PCCStatusModel: ObservableObject {
             if case .belowLimit(let info) = usage.status { approachingLimit = info.isApproachingLimit }
             else { approachingLimit = false }
             resetDate = usage.resetDate
-            canIncreaseLimit = usage.limitIncreaseSuggestion != nil
+            if let suggestion = usage.limitIncreaseSuggestion {
+                // Keep the exact suggestion that made the button visible. The
+                // system flow is tied to this offer; fetching quotaUsage again
+                // on tap can produce a different (or already invalid) offer.
+                showLimitIncreaseSuggestion = { suggestion.show() }
+                canIncreaseLimit = true
+            } else {
+                showLimitIncreaseSuggestion = nil
+                canIncreaseLimit = false
+            }
         }
     }
 
     func showOptions() {
-        if #available(iOS 27.0, *) { PCCSDK.model.quotaUsage.limitIncreaseSuggestion?.show() }
+        showLimitIncreaseSuggestion?()
     }
 }
 
