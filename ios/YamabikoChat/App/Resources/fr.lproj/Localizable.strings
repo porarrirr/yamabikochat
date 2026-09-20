@@ -224,6 +224,10 @@
 "写真" = "Photos";
 "写真を追加" = "Ajouter une photo";
 "カメラ" = "Appareil photo";
+"カメラへのアクセスを許可" = "Autoriser l'accès à l'appareil photo";
+"写真を撮影してチャットに添付するには、カメラへのアクセスを許可してください。" = "Autorisez l'accès à l'appareil photo pour prendre et joindre des photos au chat.";
+"カメラへのアクセスが許可されていません" = "Accès à l'appareil photo non autorisé";
+"「設定」アプリからYamabikoChatのカメラアクセスを許可してください。" = "Autorisez l'accès à l'appareil photo pour YamabikoChat dans Réglages.";
 "ファイル" = "Fichiers";
 "すべての写真" = "Toutes les photos";
 "%d点の写真を追加する" = "Ajouter %d photos";

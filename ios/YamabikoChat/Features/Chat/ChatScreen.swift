@@ -1374,7 +1374,11 @@ struct ChatScreen: View {
 
     private func openCamera() {
         isComposerFocused = false
-        showCameraPicker = true
+        // Finish dismissing the Menu before presenting the full-screen camera flow.
+        // UIKit can otherwise attach the capture preview during the wrong transaction.
+        DispatchQueue.main.async {
+            showCameraPicker = true
+        }
     }
 
     private func openPhotoPicker() {
