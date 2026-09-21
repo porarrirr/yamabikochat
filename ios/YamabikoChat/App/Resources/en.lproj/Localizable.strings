@@ -606,3 +606,9 @@
 "Moderate" = "Moderate";
 "Deep" = "Deep";
 "Unknown" = "Unknown";
+
+"使用するプリセット" = "Preset to use";
+"プリセット「%@」を削除" = "Delete preset “%@”";
+"プリセット「%@」を削除しますか？" = "Delete preset “%@”?";
+"プリセットを削除" = "Delete preset";
+"削除後は新規作成の状態になり、システムプロンプトは空になります。" = "After deletion, a new preset will be selected and the system prompt will be empty.";

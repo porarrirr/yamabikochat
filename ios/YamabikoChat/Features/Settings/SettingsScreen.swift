@@ -15,6 +15,7 @@ struct SettingsScreen: View {
     @State private var modelsDevFieldDrafts: [String: String] = [:]
     @State private var showAgentSkillImporter = false
     @State private var pendingAgentSkillDeletionName: String?
+    @State private var pendingSystemPromptPresetDeletionName: String?
 
     enum SettingsTab: String, Identifiable {
         case api
@@ -1477,7 +1478,7 @@ struct SettingsScreen: View {
 
     private var systemPromptPresetSection: some View {
         Section("システムプロンプトプリセット") {
-            Picker("選択中のプリセット", selection: Binding(
+            Picker("使用するプリセット", selection: Binding(
                 get: { viewModel.systemPromptPickerSelection },
                 set: viewModel.selectSystemPromptOption
             )) {
@@ -1491,17 +1492,17 @@ struct SettingsScreen: View {
             if viewModel.settings.isSystemPromptEnabled {
                 TextField("プリセット名", text: $viewModel.systemPromptPresetNameInput)
 
-                HStack {
-                    Button(viewModel.settings.selectedSystemPromptPreset == nil ? "プリセットを作成" : "変更を保存") {
-                        viewModel.addOrUpdateSystemPromptPreset()
-                    }
-                    .buttonStyle(.borderedProminent)
+                Button(viewModel.settings.selectedSystemPromptPreset == nil ? "プリセットを作成" : "変更を保存") {
+                    viewModel.addOrUpdateSystemPromptPreset()
+                }
+                .buttonStyle(.borderedProminent)
 
-                    Button("選択中を削除", role: .destructive) {
-                        viewModel.removeSelectedSystemPromptPreset()
+                if let selectedName = viewModel.settings.selectedSystemPromptPreset {
+                    Button(role: .destructive) {
+                        pendingSystemPromptPresetDeletionName = selectedName
+                    } label: {
+                        Label(L10n.format("プリセット「%@」を削除", selectedName), systemImage: "trash")
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(viewModel.settings.selectedSystemPromptPreset == nil)
                 }
             } else {
                 Text("新しい会話にシステムプロンプトを設定しません。")
@@ -1514,6 +1515,29 @@ struct SettingsScreen: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+        .alert(
+            L10n.format("プリセット「%@」を削除しますか？", pendingSystemPromptPresetDeletionName ?? ""),
+            isPresented: Binding(
+                get: { pendingSystemPromptPresetDeletionName != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingSystemPromptPresetDeletionName = nil
+                    }
+                }
+            )
+        ) {
+            Button(L10n.text("プリセットを削除"), role: .destructive) {
+                if viewModel.settings.selectedSystemPromptPreset == pendingSystemPromptPresetDeletionName {
+                    viewModel.removeSelectedSystemPromptPreset()
+                }
+                pendingSystemPromptPresetDeletionName = nil
+            }
+            Button(L10n.text("キャンセル"), role: .cancel) {
+                pendingSystemPromptPresetDeletionName = nil
+            }
+        } message: {
+            Text(L10n.text("削除後は新規作成の状態になり、システムプロンプトは空になります。"))
         }
     }
 

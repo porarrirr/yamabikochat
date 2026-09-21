@@ -581,3 +581,9 @@
 "利用制限のため" = "debido a un límite de uso";
 "メインAPIキー" = "Clave API principal";
 "APIキー「%@」" = "Clave API «%@»";
+
+"使用するプリセット" = "Preset que se usará";
+"プリセット「%@」を削除" = "Eliminar el preset «%@»";
+"プリセット「%@」を削除しますか？" = "¿Eliminar el preset «%@»?";
+"プリセットを削除" = "Eliminar preset";
+"削除後は新規作成の状態になり、システムプロンプトは空になります。" = "Después de eliminarlo, se seleccionará un preset nuevo y el prompt del sistema quedará vacío.";
