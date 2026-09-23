@@ -32,6 +32,14 @@ enum AppDatabase {
         let queue = try DatabaseQueue(path: dbURL.path, configuration: configuration)
         try migrator.migrate(queue)
         try recoverStreamCheckpoints(in: queue)
+        // Old diagnostic snapshots copied complete input histories and image
+        // payloads into SQLite on every run. Reclaim the pages their migration
+        // released; VACUUM runs outside a transaction and keeps chat data intact.
+        do {
+            try reclaimUnusedSpace(in: queue)
+        } catch {
+            DiagnosticsLogger.log("Database space reclamation failed", category: .app, error: error)
+        }
         for protectedURL in [
             dbURL,
             URL(fileURLWithPath: dbURL.path + "-journal"),
@@ -960,7 +968,107 @@ enum AppDatabase {
                   AND defaultModel = ?
                 """, arguments: [AppleIntelligenceModelCatalog.pccModel])
         }
+        migrator.registerMigration("v29_compact_pi_diagnostics") { db in
+            // The replayable transcript, message text, and attachments have
+            // their own canonical storage. Remove only redundant diagnostic
+            // copies from snapshots created by the previous Pi contract.
+            let paths = [
+                "$.request", "$.state.messages", "$.state.streamingMessage",
+                "$.providerRequests", "$.providerTranscript", "$.events"
+            ]
+            let removePaths = paths.map { "'\($0)'" }.joined(separator: ", ")
+            let compact = "json_set(json_remove(%@, \(removePaths)), '$.version', 3, '$.legacyCompacted', 1, '$.redactions', json('[\"Credentials, message bodies, image bytes, and provider payload bodies\"]'))"
+            for (table, column) in [
+                ("chat_message_tool_activity", "piExecutionJSON"),
+                ("auto_conversation_messages", "piExecutionJSON")
+            ] {
+                let expression = String(format: compact, column)
+                try db.execute(sql: """
+                    UPDATE \(table) SET \(column) = \(expression)
+                    WHERE \(column) IS NOT NULL AND json_valid(\(column))
+                      AND json_extract(\(column), '$.format') = 'yamabiko.pi-agent-execution'
+                      AND COALESCE(json_extract(\(column), '$.version'), 0) < 3
+                    """)
+            }
+            for column in ["modelAToolActivityJSON", "modelBToolActivityJSON"] {
+                let activity = "json_set(\(column), '$.piExecution', json(\(String(format: compact, "json_extract(\(column), '$.piExecution')"))))"
+                try db.execute(sql: """
+                    UPDATE dual_chat_messages SET \(column) = \(activity)
+                    WHERE \(column) IS NOT NULL AND json_valid(\(column))
+                      AND json_extract(\(column), '$.piExecution.format') = 'yamabiko.pi-agent-execution'
+                      AND COALESCE(json_extract(\(column), '$.piExecution.version'), 0) < 3
+                    """)
+            }
+            let traceIDs = try String.fetchAll(
+                db,
+                sql: "SELECT id FROM fusion_traces WHERE instr(traceJSON, 'yamabiko.pi-agent-execution') > 0"
+            )
+            for id in traceIDs {
+                guard let traceJSON = try String.fetchOne(
+                    db, sql: "SELECT traceJSON FROM fusion_traces WHERE id = ?", arguments: [id]
+                ), let object = try? JSONSerialization.jsonObject(with: Data(traceJSON.utf8)) else {
+                    continue
+                }
+                let (compacted, changed) = compactNestedPiDiagnostics(object)
+                guard changed else { continue }
+                let data = try JSONSerialization.data(withJSONObject: compacted, options: [.sortedKeys])
+                try db.execute(
+                    sql: "UPDATE fusion_traces SET traceJSON = ? WHERE id = ?",
+                    arguments: [String(decoding: data, as: UTF8.self), id]
+                )
+            }
+        }
         return migrator
+    }
+
+    private static func compactNestedPiDiagnostics(_ value: Any) -> (Any, Bool) {
+        if var object = value as? [String: Any] {
+            var changed = false
+            if object["format"] as? String == "yamabiko.pi-agent-execution",
+               (object["version"] as? Int ?? 0) < 3 {
+                for key in ["request", "providerRequests", "providerTranscript", "events"] {
+                    object.removeValue(forKey: key)
+                }
+                if var state = object["state"] as? [String: Any] {
+                    state.removeValue(forKey: "messages")
+                    state.removeValue(forKey: "streamingMessage")
+                    object["state"] = state
+                }
+                object["version"] = 3
+                object["legacyCompacted"] = true
+                object["redactions"] = ["Credentials, message bodies, image bytes, and provider payload bodies"]
+                changed = true
+            }
+            for (key, nested) in object {
+                let (result, nestedChanged) = compactNestedPiDiagnostics(nested)
+                if nestedChanged {
+                    object[key] = result
+                    changed = true
+                }
+            }
+            return (object, changed)
+        }
+        if let array = value as? [Any] {
+            var changed = false
+            let compacted = array.map { nested -> Any in
+                let (result, nestedChanged) = compactNestedPiDiagnostics(nested)
+                changed = changed || nestedChanged
+                return result
+            }
+            return (compacted, changed)
+        }
+        return (value, false)
+    }
+
+    private static func reclaimUnusedSpace(in queue: DatabaseQueue) throws {
+        try queue.writeWithoutTransaction { db in
+            let freePages = try Int.fetchOne(db, sql: "PRAGMA freelist_count") ?? 0
+            let pageCount = try Int.fetchOne(db, sql: "PRAGMA page_count") ?? 0
+            let pageSize = try Int.fetchOne(db, sql: "PRAGMA page_size") ?? 4096
+            guard Int64(freePages) * Int64(pageSize) >= 32 * 1_024 * 1_024,
+                  freePages * 5 >= pageCount else { return }
+            try db.execute(sql: "VACUUM")
+        }
     }
 
     /// A checkpoint is written to a table that is intentionally outside all

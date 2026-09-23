@@ -232,4 +232,69 @@ final class ConversationExportTests: XCTestCase {
             XCTAssertTrue(autoColumns.contains("piExecutionJSON"))
         }
     }
+
+    func testPiDiagnosticMigrationRemovesRepeatedPayloadsButKeepsTranscript() throws {
+        let dbQueue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(dbQueue, upTo: "v28_enable_python_for_pcc")
+        let repository = ConversationRepository(dbQueue: dbQueue)
+        let conversationID = try repository.createConversation(
+            title: "Storage migration", model: "test-model", provider: "TEST", systemPrompt: ""
+        )
+        let messageID = try repository.insertMessage(
+            ChatMessage(conversationId: conversationID, role: "model", text: "saved answer")
+        )
+        let repeatedImage = String(repeating: "a", count: 16_000)
+        let execution: JSONValue = .object([
+            "format": .string("yamabiko.pi-agent-execution"),
+            "version": .number(2),
+            "request": .object(["image": .string(repeatedImage)]),
+            "state": .object([
+                "messages": .array([.object(["image": .string(repeatedImage)])]),
+                "model": .object(["id": .string("test-model")])
+            ]),
+            "providerRequests": .array([.object(["payload": .string(repeatedImage)])]),
+            "events": .array([]),
+            "resolution": .object(["api": .string("test-api")])
+        ])
+        try repository.saveToolActivity(
+            messageId: messageID, variantId: nil,
+            payload: ToolActivityPayload(
+                providerTranscript: [ProviderRequestMessage(role: "assistant", content: "tool replay")],
+                piExecution: execution
+            )
+        )
+        let trace = "{\"panelResults\":[{\"piExecution\":\(String(decoding: try JSONEncoder().encode(execution), as: UTF8.self))}]}"
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "INSERT INTO fusion_traces (id, preset, startedAtMs, failedModelsJSON, traceJSON, status) VALUES (?, ?, ?, ?, ?, ?)",
+                arguments: ["size-audit", "test", 1, "[]", trace, "completed"]
+            )
+        }
+
+        try AppDatabase.migrator.migrate(dbQueue)
+        let saved = try repository.fetchFullMessage(id: messageID)
+        XCTAssertEqual(saved?.message.text, "saved answer")
+        XCTAssertEqual(saved?.toolActivity?.providerTranscript?.first?.content, "tool replay")
+        let compacted = try XCTUnwrap(saved?.toolActivity?.piExecution)
+        guard case let .object(snapshot) = compacted,
+              case let .object(state)? = snapshot["state"] else {
+            return XCTFail("Missing compacted Pi snapshot")
+        }
+        XCTAssertNil(snapshot["request"])
+        XCTAssertNil(snapshot["providerRequests"])
+        XCTAssertNil(snapshot["events"])
+        XCTAssertNil(state["messages"])
+        XCTAssertEqual(state["model"], .object(["id": .string("test-model")]))
+        XCTAssertEqual(snapshot["legacyCompacted"], .number(1))
+        let compactedTrace = try dbQueue.read { db in
+            try String.fetchOne(db, sql: "SELECT traceJSON FROM fusion_traces WHERE id = 'size-audit'")
+        }
+        let traceObject = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: Data(try XCTUnwrap(compactedTrace).utf8)
+        ) as? [String: Any])
+        let panels = try XCTUnwrap(traceObject["panelResults"] as? [[String: Any]])
+        let panelSnapshot = try XCTUnwrap(panels.first?["piExecution"] as? [String: Any])
+        XCTAssertNil(panelSnapshot["request"])
+        XCTAssertNil(panelSnapshot["providerRequests"])
+    }
 }

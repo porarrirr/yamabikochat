@@ -1179,18 +1179,22 @@ function finalResponse(assistants, contextUsage, generatedMessages = []) {
 }
 
 function piExecutionSnapshot({ agent, effectiveRequest, providerRequests, events, resolution, startedAtMs, failure = null }) {
-  const generatedMessages = agent.state.messages.slice((effectiveRequest.messages || []).length);
+  const messages = agent.state.messages;
   return {
     format: "yamabiko.pi-agent-execution",
-    version: 2,
+    version: 3,
     runtimeContractVersion: RUNTIME_CONTRACT_VERSION,
     startedAtMs,
     completedAtMs: Date.now(),
     resolution,
-    providerTranscript: replayableProviderTranscript(generatedMessages),
-    request: exportableProviderPayload(effectiveRequest),
+    // The replayable transcript is persisted separately. A diagnostic snapshot
+    // must not retain the full input history, provider bodies, or image bytes.
+    request: {
+      messageCount: effectiveRequest.messages?.length || 0,
+      toolTypes: (effectiveRequest.tools || []).map((tool) => tool.type),
+      hasSystemPrompt: Boolean(effectiveRequest.systemPrompt)
+    },
     state: exportableProviderPayload({
-      systemPrompt: agent.state.systemPrompt,
       model: {
         id: agent.state.model.id,
         name: agent.state.model.name,
@@ -1203,14 +1207,14 @@ function piExecutionSnapshot({ agent, effectiveRequest, providerRequests, events
         maxTokens: agent.state.model.maxTokens
       },
       thinkingLevel: agent.state.thinkingLevel,
-      messages: agent.state.messages,
-      streamingMessage: agent.state.streamingMessage,
+      messageCount: messages.length,
+      lastStopReason: messages.at(-1)?.stopReason || null,
       errorMessage: agent.state.errorMessage
     }),
     providerRequests,
     events,
     failure,
-    redactions: ["API keys, authorization values, credentials, access tokens, and abort signals"]
+    redactions: ["Credentials, message bodies, image bytes, and provider payload bodies"]
   };
 }
 
@@ -1257,7 +1261,14 @@ async function runAgent(envelope, res) {
       providerRequests.push({
         step: providerRequests.length + 1,
         capturedAtMs: Date.now(),
-        payload
+        // The wire payload can contain the full conversation and base64 images.
+        // Keep protocol shape and size for diagnostics without storing another
+        // copy of every message on each turn.
+        payload: {
+          keys: Object.keys(payload),
+          bytes: Buffer.byteLength(JSON.stringify(payload)),
+          messageCount: Array.isArray(payload.messages) ? payload.messages.length : null
+        }
       });
     }),
     toolExecution: "parallel",
@@ -1280,7 +1291,7 @@ async function runAgent(envelope, res) {
   let activeStep = null;
   const runAssistants = [];
   const recorder = createEventRecorder(exportableProviderPayload, () =>
-    report("event_recording_limit", "Diagnostic event recording reached the 2 MiB limit"));
+    report("event_recording_limit", "Diagnostic event recording reached the 64 KiB limit"), 64 * 1024);
   const events = recorder.events;
   agent.subscribe((event) => {
     recorder.record(event);

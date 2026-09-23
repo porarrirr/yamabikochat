@@ -2139,7 +2139,9 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             onNextVariant: { _ in },
             onBranch: { _ in },
             onRegenerate: {},
-            onAskChatWithSelection: { _ in }
+            onAskChatWithSelection: { _ in },
+            onEditUserMessage: { _ in },
+            onSelectUserMessageText: { _ in }
         )
     }
 

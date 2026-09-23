@@ -73,7 +73,12 @@ test('authenticated PCC bridge resolves and streams through the bundled Pi agent
   assert.deepEqual(events.filter(e => e.type === 'text_snapshot').map(e => e.text), ['Draft A', 'Hello from PCC']);
   assert.equal(completion.response.text, 'Hello from PCC');
   assert.equal(completion.response.usage.cacheCreationInputTokens, null);
-  assert.equal(completion.response.piExecution.state.messages.at(-1).stopReason, 'unknown');
+  assert.equal(completion.response.piExecution.state.lastStopReason, 'unknown');
+  assert.equal(completion.response.piExecution.version, 3);
+  assert.equal(completion.response.piExecution.state.messages, undefined);
+  assert.equal(completion.response.piExecution.providerTranscript, undefined);
+  assert.ok(completion.response.piExecution.providerRequests.every((entry) =>
+    entry.payload.bytes >= 0 && entry.payload.messages === undefined));
   const nativeEvents = await run('native-tools', false, true);
   const nativeResponse = nativeEvents.find(event => event.type === 'completed')?.response;
   assert.ok(nativeResponse, JSON.stringify(nativeEvents));
