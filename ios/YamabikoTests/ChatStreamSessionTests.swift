@@ -261,7 +261,7 @@ final class ChatStreamSessionTests: XCTestCase {
         }
     }
 
-    func testRunDoesNotOverwritePartialStreamOnFailure() async throws {
+    func testRunAppendsErrorAfterPartialStreamOnFailure() async throws {
         let conversations = try makeConversations()
         let conversationId = try conversations.createConversation(
             title: "test",
@@ -273,9 +273,11 @@ final class ChatStreamSessionTests: XCTestCase {
         )
 
         struct TestStreamError: Error {}
+        let streamError = TestStreamError()
         let stream = AsyncThrowingStream<ProviderStreamEvent, Error> { continuation in
+            continuation.yield(.reasoningDelta("thinking"))
             continuation.yield(.textDelta("partial"))
-            continuation.finish(throwing: TestStreamError())
+            continuation.finish(throwing: streamError)
         }
 
         do {
@@ -289,7 +291,11 @@ final class ChatStreamSessionTests: XCTestCase {
             XCTFail("Expected stream error")
         } catch is TestStreamError {
             let messages = try conversations.fetchMessages(conversationId: conversationId)
-            XCTAssertEqual(messages.last?.text, "partial")
+            XCTAssertEqual(
+                messages.last?.text,
+                "partial\n\n" + UserFacingErrorFormatter.placeholder(for: streamError)
+            )
+            XCTAssertEqual(try conversations.fetchFullMessage(id: messageId)?.thinkingStream, "thinking")
         } catch {
             XCTFail("Unexpected error: \(error)")
         }

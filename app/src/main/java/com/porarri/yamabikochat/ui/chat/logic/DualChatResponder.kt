@@ -123,7 +123,8 @@ class DualChatResponder(
                 } catch (e: Exception) {
                     DiagnosticsLogger.log("Dual stream side A failed", e)
                     toolActivityA.set(toolActivityA.get().failRunning("ツールの実行が中断されました"))
-                    textA.set(textA.get().ifBlank { UserFacingErrorFormatter.placeholder(e) })
+                    val errorText = UserFacingErrorFormatter.placeholder(e)
+                    textA.set(textA.get().takeIf { it.isNotBlank() }?.let { "$it\n\n$errorText" } ?: errorText)
                     emitPartial(true)
                 }
             }
@@ -163,7 +164,8 @@ class DualChatResponder(
                 } catch (e: Exception) {
                     DiagnosticsLogger.log("Dual stream side B failed", e)
                     toolActivityB.set(toolActivityB.get().failRunning("ツールの実行が中断されました"))
-                    textB.set(textB.get().ifBlank { UserFacingErrorFormatter.placeholder(e) })
+                    val errorText = UserFacingErrorFormatter.placeholder(e)
+                    textB.set(textB.get().takeIf { it.isNotBlank() }?.let { "$it\n\n$errorText" } ?: errorText)
                     emitPartial(true)
                 }
             }

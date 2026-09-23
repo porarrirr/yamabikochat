@@ -189,12 +189,15 @@ enum ChatStreamSession {
             if toolActivity.hasPersistableContent {
                 try? target.persistToolActivity(toolActivity)
             }
+            let errorText = UserFacingErrorFormatter.placeholder(for: error)
+            let visibleText = fullText.isEmpty ? errorText : fullText + "\n\n" + errorText
             if fullText.isEmpty, reasoningText.isEmpty {
                 try? target.writeErrorPlaceholder(error)
                 try? target.discardCheckpoint()
             } else {
-                try? target.commitCheckpoint(text: fullText, thinking: reasoningText)
+                try? target.commitCheckpoint(text: visibleText, thinking: reasoningText)
             }
+            coordinator.apply(text: visibleText, thinking: nil, force: false) { _, _ in }
             publishStreamingSnapshot(
                 targetId: target.snapshotMessageId,
                 coordinator: coordinator,

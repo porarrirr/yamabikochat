@@ -1700,6 +1700,18 @@ private struct DualResponseColumn: View {
                     .foregroundStyle(.secondary)
             }
         case .failed:
+            if !presentation.text.isEmpty {
+                NativeMarkdownView(
+                    markdownText: presentation.text,
+                    mathRenderingEnabled: mathRenderingEnabled,
+                    onOpenMermaid: { blockID, source in
+                        onRoute(.mermaidViewer(
+                            id: "\(messageID)-\(title)-\(blockID)",
+                            source: source
+                        ))
+                    }
+                )
+            }
             ChatErrorCard(text: presentation.error?.trimmedNonEmpty ?? L10n.text("応答の生成に失敗しました。"))
         case .canceled:
             Text(L10n.text("キャンセルしました"))

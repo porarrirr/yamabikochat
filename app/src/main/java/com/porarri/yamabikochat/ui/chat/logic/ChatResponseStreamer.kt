@@ -199,7 +199,9 @@ class ChatResponseStreamer(
                 }
             } catch (e: Exception) {
                 DiagnosticsLogger.log("Streaming failed messageId=$messageId", e)
-                val errText = textAccumulator.ifBlank { UserFacingErrorFormatter.placeholder(e) }
+                val errorText = UserFacingErrorFormatter.placeholder(e)
+                val errText = textAccumulator.takeIf { it.isNotBlank() }
+                    ?.let { "$it\n\n$errorText" } ?: errorText
                 if (activeVariant != null) {
                     repository.updateMessageVariant(activeVariant!!.copy(text = errText))
                 } else {

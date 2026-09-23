@@ -1132,7 +1132,7 @@ final class ChatRepository {
             }
             return response
         } catch {
-            if persistResults {
+            if persistResults && !streamEnabled {
                 let target = ChatStreamSessionTarget(conversations: conversations, kind: persistenceKind)
                 try? target.writeErrorPlaceholder(error)
             }
@@ -1150,7 +1150,16 @@ final class ChatRepository {
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
     ) async throws -> ProviderResponse {
         if streamEnabled {
-            let stream = try await providers.stream(request: request, providerID: provider)
+            let stream: AsyncThrowingStream<ProviderStreamEvent, Error>
+            do {
+                stream = try await providers.stream(request: request, providerID: provider)
+            } catch {
+                if persistResults {
+                    let target = ChatStreamSessionTarget(conversations: conversations, kind: persistenceKind)
+                    try? target.writeErrorPlaceholder(error)
+                }
+                throw error
+            }
             let session = try await ChatStreamSession.run(
                 stream: stream,
                 conversations: conversations,
