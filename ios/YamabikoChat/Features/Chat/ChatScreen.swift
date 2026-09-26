@@ -721,7 +721,7 @@ struct ChatScreen: View {
     }
 
     private var isComposerExpanded: Bool {
-        isComposerFocused || !viewModel.inputText.isEmpty || !viewModel.attachments.isEmpty
+        viewModel.isSending || isComposerFocused || !viewModel.inputText.isEmpty || !viewModel.attachments.isEmpty
     }
 
     private var isSpeechRecordingBarPresented: Bool {
