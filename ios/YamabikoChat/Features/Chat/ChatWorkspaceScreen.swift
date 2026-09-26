@@ -18,6 +18,7 @@ struct ChatWorkspaceScreen: View {
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var appState: AppState
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let conversationID: Int64
     @ObservedObject var viewModel: ChatViewModel
@@ -37,7 +38,13 @@ struct ChatWorkspaceScreen: View {
                     if let onSelectConversation {
                         onSelectConversation(newConversationId)
                     } else {
-                        appState.selectedConversationID = newConversationId
+                        if reduceMotion {
+                            appState.selectedConversationID = newConversationId
+                        } else {
+                            withAnimation(.easeOut(duration: 0.25)) {
+                                appState.selectedConversationID = newConversationId
+                            }
+                        }
                     }
                 }
             )

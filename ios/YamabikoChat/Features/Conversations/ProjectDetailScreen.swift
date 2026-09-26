@@ -17,6 +17,7 @@ struct ProjectDetailScreen: View {
     }
 
     @EnvironmentObject private var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var viewModel: ConversationListViewModel
     let projectId: Int64
     var onBack: () -> Void
@@ -47,12 +48,19 @@ struct ProjectDetailScreen: View {
 
             projectTabBar
 
-            if selectedTab == .chats {
-                projectContextSection
-                conversationList
-            } else {
-                informationSources
+            ZStack(alignment: .top) {
+                if selectedTab == .chats {
+                    VStack(spacing: 0) {
+                        projectContextSection
+                        conversationList
+                    }
+                    .transition(.opacity)
+                } else {
+                    informationSources
+                        .transition(.opacity)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
             bottomInputBar
         }
@@ -219,7 +227,13 @@ struct ProjectDetailScreen: View {
         HStack(spacing: 12) {
             ForEach(ProjectTab.allCases) { tab in
                 Button {
-                    selectedTab = tab
+                    if reduceMotion {
+                        selectedTab = tab
+                    } else {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedTab = tab
+                        }
+                    }
                     if tab == .sources {
                         viewModel.loadProjectWorkspaceFiles(projectId: projectId)
                     }

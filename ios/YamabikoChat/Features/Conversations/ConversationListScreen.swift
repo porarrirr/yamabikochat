@@ -12,6 +12,7 @@ struct ConversationListScreen: View {
     @Binding var selection: Int64?
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var onSelect: (Int64) -> Void
     var onOpenSettings: () -> Void
@@ -22,39 +23,37 @@ struct ConversationListScreen: View {
     @State private var conversationPendingDeletion: Int64?
 
     var body: some View {
-        Group {
+        ZStack {
             switch navigationState {
             case .conversations:
                 conversationsMainView
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
             case .projectList:
                 ProjectListScreen(
                     viewModel: viewModel,
                     onBack: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            navigationState = .conversations
-                        }
+                        navigate(to: .conversations)
                     },
                     onSelectProject: { projectId in
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            navigationState = .projectDetail(projectId)
-                        }
+                        navigate(to: .projectDetail(projectId))
                     }
                 )
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
             case .projectDetail(let projectId):
                 ProjectDetailScreen(
                     viewModel: viewModel,
                     projectId: projectId,
                     onBack: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            navigationState = .projectList
-                        }
+                        navigate(to: .projectList)
                     },
                     onSelectConversation: { conversationId in
                         openConversation(id: conversationId)
                     }
                 )
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .toolbar(.hidden, for: .navigationBar)
         .background(Color(uiColor: .systemBackground))
         .onAppear {
@@ -132,9 +131,7 @@ struct ConversationListScreen: View {
                             systemImage: "folder.fill",
                             badgeCount: viewModel.projects.count
                         ) {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                navigationState = .projectList
-                            }
+                            navigate(to: .projectList)
                         }
 
                     }
@@ -606,8 +603,17 @@ struct ConversationListScreen: View {
     }
 
     private func openConversation(id: Int64) {
-        selection = id
         onSelect(id)
+    }
+
+    private func navigate(to destination: NavigationState) {
+        if reduceMotion {
+            navigationState = destination
+        } else {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                navigationState = destination
+            }
+        }
     }
 }
 

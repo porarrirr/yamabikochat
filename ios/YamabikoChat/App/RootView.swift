@@ -40,6 +40,7 @@ struct RootView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @StateObject private var listViewModel = ConversationListViewModel()
     @StateObject private var settingsViewModel = SettingsViewModel()
@@ -70,30 +71,37 @@ struct RootView: View {
             )
             .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 360)
         } detail: {
-            if let conversationID = appState.selectedConversationID {
-                ConversationDetailHost(
-                    conversationID: conversationID,
-                    onSelectConversation: { id in
-                        selectConversation(id: id)
+            ZStack {
+                if let conversationID = appState.selectedConversationID {
+                    ConversationDetailHost(
+                        conversationID: conversationID,
+                        onSelectConversation: { id in
+                            selectConversation(id: id)
+                        }
+                    )
+                    .id(conversationID)
+                    .transition(.asymmetric(
+                        insertion: .offset(x: 28).combined(with: .opacity),
+                        removal: .opacity
+                    ))
+                } else {
+                    ContentUnavailableView {
+                        Label(L10n.text("会話を始めましょう"), systemImage: "bubble.left.and.bubble.right")
+                    } description: {
+                        Text(L10n.text("既存の会話を選ぶか、新しいチャットを作成してください。"))
+                    } actions: {
+                        Button {
+                            createConversationFromEmptyDetail()
+                        } label: {
+                            Label(L10n.text("新しいチャット"), systemImage: "square.and.pencil")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .accessibilityIdentifier("empty-detail-new-chat")
                     }
-                )
-                .id(conversationID)
-            } else {
-                ContentUnavailableView {
-                    Label(L10n.text("会話を始めましょう"), systemImage: "bubble.left.and.bubble.right")
-                } description: {
-                    Text(L10n.text("既存の会話を選ぶか、新しいチャットを作成してください。"))
-                } actions: {
-                    Button {
-                        createConversationFromEmptyDetail()
-                    } label: {
-                        Label(L10n.text("新しいチャット"), systemImage: "square.and.pencil")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .accessibilityIdentifier("empty-detail-new-chat")
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task {
             listViewModel.bind(repository: container.chatRepository)
@@ -138,8 +146,15 @@ struct RootView: View {
             applyAppearance(settings)
         }
         .onChange(of: appState.conversationSidebarRevealGeneration) { _, _ in
-            columnVisibility = .all
-            setPreferredCompactColumn(.sidebar)
+            let revealSidebar = {
+                columnVisibility = .all
+                setPreferredCompactColumn(.sidebar)
+            }
+            if reduceMotion {
+                revealSidebar()
+            } else {
+                withAnimation(.easeOut(duration: 0.25), revealSidebar)
+            }
         }
         .onChange(of: listViewModel.filteredConversations.map(\.id)) { _, ids in
             guard !AppStoreScreenshotRouting.isEnabled else { return }
@@ -315,13 +330,21 @@ struct RootView: View {
     }
 
     private func selectConversation(id: Int64, closeHistory: Bool = false) {
+        let shouldAnimate = !reduceMotion && !isSelectedConversationSecret
         if appState.selectedConversationID != id {
             discardSelectedSecretConversationIfNeeded(keepSidebar: false)
         }
         listViewModel.resetProjectFilterForNonProjectConversation(conversationId: id)
-        appState.selectedConversationID = id
-        keepSidebarAfterSecretDiscard = false
-        setPreferredCompactColumn(.detail)
+        let showConversation = {
+            appState.selectedConversationID = id
+            keepSidebarAfterSecretDiscard = false
+            setPreferredCompactColumn(.detail)
+        }
+        if shouldAnimate {
+            withAnimation(.easeOut(duration: 0.25), showConversation)
+        } else {
+            showConversation()
+        }
         if closeHistory {
             appState.isConversationHistoryPresented = false
         }
