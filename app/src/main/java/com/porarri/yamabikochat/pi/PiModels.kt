@@ -64,6 +64,12 @@ data class PiModelResolutionEnvelope(val models: List<PiAgentConfiguration>)
 data class PiModelResolutionResponse(val contractVersion: Int, val models: List<PiModelResolution>)
 
 @Serializable
+data class PiCodexModel(val id: String, val name: String)
+
+@Serializable
+data class PiCodexModelResponse(val contractVersion: Int, val models: List<PiCodexModel>)
+
+@Serializable
 data class PiHealthResponse(val ok: Boolean, val contractVersion: Int)
 
 @Serializable

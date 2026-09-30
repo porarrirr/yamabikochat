@@ -1971,8 +1971,8 @@ final class ChatRepository {
         codexAuthRepository.state
     }
 
-    func loginCodexAuthWithBrowser() async -> Result<CodexAuthState, Error> {
-        await codexAuthRepository.loginWithBrowser()
+    func loginCodexAuthWithBrowser(clientID: String? = nil, newAccount: Bool = false) async -> Result<CodexAuthState, Error> {
+        await codexAuthRepository.loginWithBrowser(clientID: clientID, newAccount: newAccount)
     }
 
     func logoutCodexAuth() async -> Result<CodexAuthState, Error> {
@@ -1983,8 +1983,8 @@ final class ChatRepository {
         await codexAuthRepository.refreshIfNeeded(force: force)
     }
 
-    func retrieveCodexAuthUsage() async -> Result<CodexUsageStatus, Error> {
-        await codexAuthRepository.retrieveUsageStatus()
+    func chatGPTModels() async throws -> [PiCodexModel] {
+        try await codexAuthRepository.models()
     }
 
     func retrieveOpenCodeGoUsage(apiKey: String) async -> Result<OpenCodeGoUsageStatus, Error> {

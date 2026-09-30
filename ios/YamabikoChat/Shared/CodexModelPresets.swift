@@ -15,6 +15,8 @@ struct CodexModelPreset: Identifiable, Equatable, Sendable {
     let supportedReasoningEfforts: [CodexReasoningEffortPreset]
     let isDefault: Bool
     let showInPicker: Bool
+    var isSupported: Bool = true
+    var unsupportedReason: String? = nil
 }
 
 enum CodexModelCatalog {
@@ -27,24 +29,14 @@ enum CodexModelCatalog {
     private static let maximumEfforts = modernEfforts + [
         CodexReasoningEffortPreset(effort: "max", description: "Maximum reasoning depth for the hardest problems")
     ]
-    private static let delegatedEfforts = maximumEfforts + [
-        CodexReasoningEffortPreset(effort: "ultra", description: "Maximum reasoning with automatic task delegation")
-    ]
-    private static let legacyEfforts = [
-        CodexReasoningEffortPreset(effort: "low", description: "Balances speed with some reasoning; useful for straightforward queries and short explanations"),
-        CodexReasoningEffortPreset(effort: "medium", description: "Provides a solid balance of reasoning depth and latency for general-purpose tasks"),
-        CodexReasoningEffortPreset(effort: "high", description: "Maximizes reasoning depth for complex or ambiguous problems"),
-        CodexReasoningEffortPreset(effort: "xhigh", description: "Extra high reasoning for complex problems")
-    ]
-
     static let presets: [CodexModelPreset] = [
-        preset("gpt-5.6-sol", "GPT-5.6-Sol", "Latest frontier agentic coding model.", "low", delegatedEfforts, isDefault: true),
-        preset("gpt-5.6-terra", "GPT-5.6-Terra", "Balanced agentic coding model for everyday work.", "medium", delegatedEfforts),
+        preset("gpt-6-sol", "GPT-6 Sol", "Complex coding and agentic workflows.", "medium", maximumEfforts, isDefault: true),
+        preset("gpt-6-astra", "GPT-6 Astra", "Most capable model for complex work.", "low", maximumEfforts),
+        preset("gpt-6-luna", "GPT-6 Luna", "Efficient model for focused work.", "high", maximumEfforts),
+        preset("gpt-5.6-sol", "GPT-5.6 Sol", "Frontier agentic coding model.", "low", maximumEfforts),
+        preset("gpt-5.6-terra", "GPT-5.6-Terra", "Balanced agentic coding model for everyday work.", "medium", maximumEfforts),
         preset("gpt-5.6-luna", "GPT-5.6-Luna", "Fast and affordable agentic coding model.", "medium", maximumEfforts),
-        preset("gpt-5.5", "GPT-5.5", "Frontier model for complex coding, research, and real-world work.", "medium", modernEfforts),
-        preset("gpt-5.4", "GPT-5.4", "Strong model for everyday coding.", "medium", modernEfforts),
-        preset("gpt-5.4-mini", "GPT-5.4-Mini", "Small, fast, and cost-efficient model for simpler coding tasks.", "medium", modernEfforts),
-        preset("gpt-5.2", "GPT-5.2", "Optimized for professional work and long-running agents.", "medium", legacyEfforts)
+        preset("gpt-5.5", "GPT-5.5", "Previous-generation flagship model.", "medium", modernEfforts)
     ]
 
     private static func preset(
@@ -68,13 +60,39 @@ enum CodexModelCatalog {
 
     static func visiblePresets() -> [CodexModelPreset] { presets.filter(\.showInPicker) }
 
+    static func visiblePresets(from models: [PiCodexModel]) -> [CodexModelPreset] {
+        models.map { model in
+            let known = findPreset(model.id)
+            let levels = model.supportedThinkingLevels ?? []
+            return CodexModelPreset(
+                model: model.id, displayName: model.name,
+                description: model.reason ?? "ChatGPT account model",
+                defaultReasoningEffort: levels.contains(known?.defaultReasoningEffort ?? "medium") ? known?.defaultReasoningEffort ?? "medium" : levels.first ?? "off",
+                supportedReasoningEfforts: levels.map { CodexReasoningEffortPreset(effort: $0, description: "") },
+                isDefault: known?.isDefault ?? false, showInPicker: true,
+                isSupported: model.supported == true, unsupportedReason: model.reason
+            )
+        }
+    }
+
     static func findPreset(_ model: String) -> CodexModelPreset? {
         let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return nil }
         return presets.first { $0.model.lowercased() == normalized }
     }
 
-    static func defaultModel() -> String { presets.first(where: \.isDefault)?.model ?? "gpt-5.6-sol" }
+    static func findPreset(_ model: String, in models: [PiCodexModel]) -> CodexModelPreset? {
+        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return visiblePresets(from: models).first { $0.model.lowercased() == normalized }
+    }
+
+    static func defaultModel() -> String { presets.first(where: \.isDefault)?.model ?? "gpt-6-sol" }
+
+    static func resolvedReasoningEffort(_ requested: String, model: String) -> String {
+        let normalized = requested.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let supported = (findPreset(model)?.supportedReasoningEfforts ?? modernEfforts).map(\.effort)
+        return supported.contains(normalized) ? normalized : "medium"
+    }
 
     static func supportsReasoningSummary(_ model: String) -> Bool {
         model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().hasPrefix("gpt-5")

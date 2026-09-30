@@ -61,7 +61,7 @@ test("OpenCode Go sends stable session headers through all Pi adapters", { timeo
         const requests = fs.readFileSync(capture, "utf8").trim().split("\n").map(JSON.parse);
         assert.equal(requests.length, ++expectedCount, output);
         const request = requests.at(-1);
-        assert.ok(request.url.endsWith(endpoint), request.url);
+        assert.ok(new URL(request.url).pathname.endsWith(endpoint), request.url);
         assert.equal(request.headers["x-opencode-session"], session);
         assert.equal(request.headers["user-agent"], "YamabikoChat/1.0");
       }

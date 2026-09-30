@@ -18,6 +18,13 @@ final class DiagnosticsLogSanitizerTests: XCTestCase {
         XCTAssertFalse(sanitized.contains("secret-code"))
     }
 
+    func testRetainedChatGPTIdentityHintIsRedacted() {
+        let input = "https://auth.openai.com/api/accounts/authorize?id_token_hint=retained-identity&client_id=oaiapp_test"
+        let sanitized = DiagnosticsLogSanitizer.sanitize(input)
+        XCTAssertFalse(sanitized.contains("retained-identity"))
+        XCTAssertTrue(sanitized.contains("id_token_hint=[REDACTED]"))
+    }
+
     func testSanitizeCallbackPathRedactsQuery() {
         let sanitized = DiagnosticsLogSanitizer.sanitizeCallbackPath("/auth/callback?code=abc&state=xyz")
         XCTAssertEqual(sanitized, "/auth/callback?[REDACTED]")

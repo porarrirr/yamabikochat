@@ -266,7 +266,7 @@ class ProviderRequestSettingsResolver(
                 ProviderThinkingConfig(
                     enabled = null,
                     budget = null,
-                    effort = if (enabled) (overrideEffort ?: baseEffort) else "none",
+                    effort = if (enabled) CodexModelPresets.resolvedReasoningEffort(overrideEffort ?: baseEffort, model) else "none",
                     includeThoughts = true,
                     exclude = null
                 )

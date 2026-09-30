@@ -1,5 +1,7 @@
 package com.porarri.yamabikochat.utils
 
+import com.porarri.yamabikochat.pi.PiCodexModel
+
 data class CodexReasoningEffortPreset(
     val effort: String,
     val description: String
@@ -25,23 +27,14 @@ object CodexModelPresets {
     )
     private val maximumEfforts = modernEfforts +
         CodexReasoningEffortPreset("max", "Maximum reasoning depth for the hardest problems")
-    private val delegatedEfforts = maximumEfforts +
-        CodexReasoningEffortPreset("ultra", "Maximum reasoning with automatic task delegation")
-    private val legacyEfforts = listOf(
-        CodexReasoningEffortPreset("low", "Balances speed with some reasoning; useful for straightforward queries and short explanations"),
-        CodexReasoningEffortPreset("medium", "Provides a solid balance of reasoning depth and latency for general-purpose tasks"),
-        CodexReasoningEffortPreset("high", "Maximizes reasoning depth for complex or ambiguous problems"),
-        CodexReasoningEffortPreset("xhigh", "Extra high reasoning for complex problems")
-    )
-
     private val presets: List<CodexModelPreset> = listOf(
-        preset("gpt-5.6-sol", "GPT-5.6-Sol", "Latest frontier agentic coding model.", "low", delegatedEfforts, true),
-        preset("gpt-5.6-terra", "GPT-5.6-Terra", "Balanced agentic coding model for everyday work.", "medium", delegatedEfforts),
+        preset("gpt-6-sol", "GPT-6 Sol", "Complex coding and agentic workflows.", "medium", maximumEfforts, true),
+        preset("gpt-6-astra", "GPT-6 Astra", "Most capable model for complex work.", "low", maximumEfforts),
+        preset("gpt-6-luna", "GPT-6 Luna", "Efficient model for focused work.", "high", maximumEfforts),
+        preset("gpt-5.6-sol", "GPT-5.6 Sol", "Frontier agentic coding model.", "low", maximumEfforts),
+        preset("gpt-5.6-terra", "GPT-5.6-Terra", "Balanced agentic coding model for everyday work.", "medium", maximumEfforts),
         preset("gpt-5.6-luna", "GPT-5.6-Luna", "Fast and affordable agentic coding model.", "medium", maximumEfforts),
-        preset("gpt-5.5", "GPT-5.5", "Frontier model for complex coding, research, and real-world work.", "medium", modernEfforts),
-        preset("gpt-5.4", "GPT-5.4", "Strong model for everyday coding.", "medium", modernEfforts),
-        preset("gpt-5.4-mini", "GPT-5.4-Mini", "Small, fast, and cost-efficient model for simpler coding tasks.", "medium", modernEfforts),
-        preset("gpt-5.2", "GPT-5.2", "Optimized for professional work and long-running agents.", "medium", legacyEfforts)
+        preset("gpt-5.5", "GPT-5.5", "Previous-generation flagship model.", "medium", modernEfforts)
     )
 
     private fun preset(
@@ -55,6 +48,13 @@ object CodexModelPresets {
 
     fun visiblePresets(): List<CodexModelPreset> = presets.filter { it.showInPicker }
 
+    fun visiblePresets(models: List<PiCodexModel>): List<CodexModelPreset> =
+        if (models.isEmpty()) visiblePresets() else models.sortedWith(compareBy<PiCodexModel> {
+            presets.indexOfFirst { preset -> preset.model == it.id }.takeIf { index -> index >= 0 } ?: Int.MAX_VALUE
+        }.thenBy { it.id }).map { model ->
+            findPreset(model.id) ?: preset(model.id, model.name, "Pi Codex model", "medium", modernEfforts)
+        }
+
     fun findPreset(model: String): CodexModelPreset? {
         val normalized = model.trim()
         return presets.firstOrNull {
@@ -62,7 +62,16 @@ object CodexModelPresets {
         }
     }
 
-    fun defaultModel(): String = presets.firstOrNull { it.isDefault }?.model ?: "gpt-5.6-sol"
+    fun findPreset(model: String, models: List<PiCodexModel>): CodexModelPreset? =
+        visiblePresets(models).firstOrNull { it.model.equals(model.trim(), ignoreCase = true) }
+
+    fun defaultModel(): String = presets.firstOrNull { it.isDefault }?.model ?: "gpt-6-sol"
+
+    fun resolvedReasoningEffort(requested: String, model: String): String {
+        val normalized = requested.trim().lowercase()
+        val supported = (findPreset(model)?.supportedReasoningEfforts ?: modernEfforts).map { it.effort }
+        return normalized.takeIf { it in supported } ?: "medium"
+    }
 
     fun supportsReasoningSummary(model: String): Boolean = model.trim().lowercase().startsWith("gpt-5")
 

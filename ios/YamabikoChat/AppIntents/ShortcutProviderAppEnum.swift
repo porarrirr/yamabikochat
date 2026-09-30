@@ -27,7 +27,7 @@ enum ShortcutProviderAppEnum: String, AppEnum {
         .zai: DisplayRepresentation(title: "Z.ai Coding Plan"),
         .miniMax: DisplayRepresentation(title: "MiniMax"),
         .openAI: DisplayRepresentation(title: "OpenAI"),
-        .codexAuth: DisplayRepresentation(title: "Codex Auth"),
+        .codexAuth: DisplayRepresentation(title: "ChatGPT plan"),
         .appleIntelligence: DisplayRepresentation(title: "Apple Intelligence"),
         .openAICompat: DisplayRepresentation(title: "OpenAI (Custom)")
     ]

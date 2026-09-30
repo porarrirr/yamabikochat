@@ -1,19 +1,18 @@
 import Combine
 import Foundation
-import UIKit
 
 typealias PiOAuthLoginHandler = @Sendable (
-    PiOAuthProvider,
-    PiOAuthLoginMethod,
+    PiOAuthProvider, PiOAuthLoginMethod,
     (@Sendable (SuperGrokDeviceCodeChallenge) async -> Void)?
 ) async throws -> PiOAuthResolution
 
-typealias PiOAuthResolveHandler = @Sendable (
-    PiOAuthProvider,
-    String,
-    Bool
+typealias PiOAuthResolveHandler = @Sendable (PiOAuthProvider, String, Bool) async throws -> PiOAuthResolution
+typealias PiChatGPTLoginHandler = @Sendable (
+    String, String?, @escaping @Sendable (JSONValue) async throws -> Void
 ) async throws -> PiOAuthResolution
+typealias PiChatGPTCatalogHandler = @Sendable (String) async throws -> [PiCodexModel]
 
+/// CODEX_AUTH now uses the official ChatGPT plan provider. OAuth belongs to Pi.
 final class CodexAuthRepository {
     struct BearerToken: Sendable, Equatable {
         var token: String
@@ -21,25 +20,107 @@ final class CodexAuthRepository {
         var accountId: String?
     }
 
+    private struct Accounts: Codable {
+        var selectedClientID: String?
+        var registrations: [String: JSONValue] = [:]
+    }
+
     private enum Constants {
-        static let credentialKey = "pi_oauth_openai_codex_v1"
-        static let usageURL = "https://chatgpt.com/backend-api/wham/usage"
-        static let originator = "codex_cli_rs"
+        static let accountsKey = "pi_chatgpt_accounts_v1"
+        static let hostKey = "pi_chatgpt_host_v1"
+        static let legacyCredentialKey = "pi_oauth_openai_codex_v1"
     }
 
     private let authLock = NSRecursiveLock()
     private var authGeneration = 0
+    private var signingOut = false
     private var pendingResolution: (id: UUID, generation: Int, credential: String, task: Task<PiOAuthResolution, Error>)?
+    private let credentialStore: SecureCredentialStore
+    private let loginHandler: PiChatGPTLoginHandler
+    private let resolveHandler: PiOAuthResolveHandler
+    private let catalogHandler: PiChatGPTCatalogHandler
+    private let revokeHandler: @Sendable (String) async throws -> Void
+    private let subject: CurrentValueSubject<CodexAuthState, Never>
+
+    init(
+        credentialStore: SecureCredentialStore,
+        loginHandler: @escaping PiChatGPTLoginHandler = { hostID, registration, onRegistration in
+            try await PiAgentRuntime.shared.loginChatGPT(hostID: hostID, registrationJSON: registration, onRegistration: onRegistration)
+        },
+        resolveHandler: @escaping PiOAuthResolveHandler = { provider, credential, force in
+            try await PiAgentRuntime.shared.resolveOAuth(provider: provider, credentialJSON: credential, force: force)
+        },
+        catalogHandler: @escaping PiChatGPTCatalogHandler = { credential in
+            try await PiAgentRuntime.shared.chatGPTModels(credentialJSON: credential)
+        },
+        revokeHandler: @escaping @Sendable (String) async throws -> Void = { credential in
+            try await PiAgentRuntime.shared.revokeChatGPT(credentialJSON: credential)
+        }
+    ) {
+        self.credentialStore = credentialStore
+        self.loginHandler = loginHandler
+        self.resolveHandler = resolveHandler
+        self.catalogHandler = catalogHandler
+        self.revokeHandler = revokeHandler
+        subject = CurrentValueSubject(Self.readState(credentialStore: credentialStore))
+        if subject.value.requiresReauthentication {
+            DiagnosticsLogger.log("Legacy Codex credential requires official ChatGPT authorization", category: .auth)
+        }
+    }
+
+    var state: AnyPublisher<CodexAuthState, Never> { subject.eraseToAnyPublisher() }
+    func currentState() -> CodexAuthState { subject.value }
+
+    private func readAccounts() throws -> Accounts {
+        guard let stored = try credentialStore.readSecret(key: Constants.accountsKey) else { return Accounts() }
+        return try JSONDecoder().decode(Accounts.self, from: Data(stored.utf8))
+    }
+
+    private func saveAccounts(_ accounts: Accounts) throws {
+        try credentialStore.saveSecret(String(decoding: JSONEncoder().encode(accounts), as: UTF8.self), key: Constants.accountsKey)
+    }
+
+    private func credentialJSON() throws -> String? {
+        let accounts = try readAccounts()
+        guard let id = accounts.selectedClientID, let registration = accounts.registrations[id],
+              registration.objectValue?["access"]?.stringValue != nil else { return nil }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        return String(decoding: try encoder.encode(registration), as: UTF8.self)
+    }
+
+    private func hostID() throws -> String {
+        if let existing = try credentialStore.readSecret(key: Constants.hostKey) { return existing }
+        let created = "urn:uuid:\(UUID().uuidString.lowercased())"
+        try credentialStore.saveSecret(created, key: Constants.hostKey)
+        return created
+    }
+
+    private func commit(_ resolution: PiOAuthResolution, generation: Int) throws {
+        try authLock.withLock {
+            guard generation == authGeneration else { throw CancellationError() }
+            guard let object = resolution.credential.objectValue,
+                  object["contract"]?.stringValue == "siwc-v1",
+                  let id = object["clientId"]?.stringValue, id != "dynamic_agent_client",
+                  object["subject"]?.stringValue != nil else {
+                throw ProviderClientError.parseFailure("Pi returned an invalid official ChatGPT credential")
+            }
+            var accounts = try readAccounts()
+            accounts.registrations[id] = resolution.credential
+            accounts.selectedClientID = id
+            try saveAccounts(accounts)
+            try credentialStore.saveSecret(Self.nowISO8601(), key: "codex_last_refresh")
+            subject.send(Self.readState(credentialStore: credentialStore))
+        }
+    }
 
     private func resolveCredential(_ credential: String, force: Bool, generation: Int) async throws -> PiOAuthResolution {
         let pending = try authLock.withLock {
-            guard generation == authGeneration, try credentialStore.readSecret(key: Constants.credentialKey) == credential else { throw CancellationError() }
-            if let pendingResolution, pendingResolution.generation == generation, pendingResolution.credential == credential {
-                return pendingResolution
-            }
+            guard generation == authGeneration, !signingOut, let credential = try credentialJSON() else { throw CancellationError() }
+            if let pendingResolution, pendingResolution.generation == generation, pendingResolution.credential == credential { return pendingResolution }
             let id = UUID()
             let task = Task {
-                let resolution = try await resolveHandler(.codex, credential, force)
+                let resolution = try await resolveHandler(.chatgpt, credential, force)
                 try commit(resolution, generation: generation)
                 return resolution
             }
@@ -47,11 +128,7 @@ final class CodexAuthRepository {
             pendingResolution = pending
             return pending
         }
-        defer {
-            authLock.withLock {
-                if pendingResolution?.id == pending.id { pendingResolution = nil }
-            }
-        }
+        defer { authLock.withLock { if pendingResolution?.id == pending.id { pendingResolution = nil } } }
         let result = try await pending.task.value
         return try authLock.withLock {
             guard generation == authGeneration else { throw CancellationError() }
@@ -59,236 +136,138 @@ final class CodexAuthRepository {
         }
     }
 
-    private func beginAuthOperation() -> Int {
-        authLock.withLock {
-            authGeneration += 1
-            return authGeneration
-        }
-    }
-
-    private func commit(_ resolution: PiOAuthResolution, generation: Int) throws {
-        try authLock.withLock {
-            guard generation == authGeneration else { throw CancellationError() }
-            try persist(resolution)
-            subject.send(Self.readState(credentialStore: credentialStore))
-        }
-    }
-
-    private let credentialStore: SecureCredentialStore
-    private let httpClient: HTTPClientProtocol
-    private let loginHandler: PiOAuthLoginHandler
-    private let resolveHandler: PiOAuthResolveHandler
-    private let subject: CurrentValueSubject<CodexAuthState, Never>
-
-    init(
-        credentialStore: SecureCredentialStore,
-        httpClient: HTTPClientProtocol = URLSessionHTTPClient(),
-        loginHandler: @escaping PiOAuthLoginHandler = { provider, method, onDeviceCode in
-            try await PiAgentRuntime.shared.loginOAuth(
-                provider: provider,
-                method: method,
-                onDeviceCode: onDeviceCode
-            )
-        },
-        resolveHandler: @escaping PiOAuthResolveHandler = { provider, credential, force in
-            try await PiAgentRuntime.shared.resolveOAuth(
-                provider: provider,
-                credentialJSON: credential,
-                force: force
-            )
-        }
-    ) {
-        self.credentialStore = credentialStore
-        self.httpClient = httpClient
-        self.loginHandler = loginHandler
-        self.resolveHandler = resolveHandler
-        subject = CurrentValueSubject(Self.readState(credentialStore: credentialStore))
-    }
-
-    var state: AnyPublisher<CodexAuthState, Never> { subject.eraseToAnyPublisher() }
-
-    func currentState() -> CodexAuthState { subject.value }
-
-    func loginWithBrowser() async -> Result<CodexAuthState, Error> {
+    func loginWithBrowser(clientID: String? = nil, newAccount: Bool = false) async -> Result<CodexAuthState, Error> {
         do {
-            DiagnosticsLogger.log("Codex auth delegated to Pi", category: .auth)
-            let generation = beginAuthOperation()
-            let resolution = try await loginHandler(.codex, .browser, nil)
+            let (generation, host, registration) = try authLock.withLock {
+                guard !signingOut else { throw CancellationError() }
+                authGeneration += 1
+                let accounts = try readAccounts()
+                if let clientID, accounts.registrations[clientID] == nil {
+                    throw ProviderClientError.parseFailure("Selected ChatGPT registration is missing")
+                }
+                let selectedID = newAccount ? nil : (clientID ?? accounts.selectedClientID)
+                let selected = selectedID.flatMap { accounts.registrations[$0] }
+                let json = try selected.map { try PiAgentRuntime.credentialJSONString($0) }
+                return (authGeneration, try hostID(), json)
+            }
+            DiagnosticsLogger.log("Official ChatGPT authorization delegated to Pi plugin", category: .auth)
+            let resolution = try await loginHandler(host, registration) { registration in
+                try self.authLock.withLock {
+                    guard generation == self.authGeneration else { throw CancellationError() }
+                    guard let id = registration.objectValue?["clientId"]?.stringValue, id != "dynamic_agent_client" else {
+                        throw ProviderClientError.parseFailure("ChatGPT registration is incomplete")
+                    }
+                    var accounts = try self.readAccounts()
+                    if accounts.registrations[id]?.objectValue?["access"] == nil { accounts.registrations[id] = registration }
+                    if accounts.selectedClientID == nil { accounts.selectedClientID = id }
+                    try self.saveAccounts(accounts)
+                }
+            }
             try commit(resolution, generation: generation)
-            let updated = currentState()
-            return .success(updated)
+            return .success(currentState())
         } catch {
-            DiagnosticsLogger.log("Pi Codex auth login failed", category: .auth, error: error)
+            DiagnosticsLogger.log("Pi ChatGPT authorization failed", category: .auth, error: error)
             return .failure(error)
         }
     }
 
     func logout() async -> Result<CodexAuthState, Error> {
         do {
-            return try authLock.withLock {
+            let (generation, credential) = try authLock.withLock {
+                let credential = try credentialJSON()
                 authGeneration += 1
-                for key in [
-                    Constants.credentialKey,
-                    "codex_email",
-                    "codex_plan_type",
-                    "codex_account_id",
-                    "codex_last_refresh",
-                    "codex_auth_json_v2",
-                    "codex_access_token"
-                ] {
+                signingOut = true
+                return (authGeneration, credential)
+            }
+            defer { authLock.withLock { signingOut = false } }
+            var revocationUnconfirmed = false
+            if let credential {
+                do { try await revokeHandler(credential) }
+                catch {
+                    // Official SIWC allows local sign-out when remote revocation is unconfirmed.
+                    revocationUnconfirmed = true
+                    DiagnosticsLogger.log("ChatGPT remote session revocation unconfirmed", category: .auth, error: error)
+                }
+            }
+            return try authLock.withLock {
+                guard generation == authGeneration else { throw CancellationError() }
+                var accounts = try readAccounts()
+                if let id = accounts.selectedClientID, let object = accounts.registrations[id]?.objectValue {
+                    let retained = ["contract", "clientId", "hostId", "issuer", "subject", "email"]
+                    accounts.registrations[id] = .object(object.filter { retained.contains($0.key) })
+                }
+                try saveAccounts(accounts)
+                for key in [Constants.legacyCredentialKey, "codex_email", "codex_plan_type", "codex_account_id", "codex_last_refresh", "codex_auth_json_v2", "codex_access_token"] {
                     try credentialStore.deleteSecret(key: key)
                 }
                 try credentialStore.setCredential(nil, for: .codexAuth)
-                let updated = Self.readState(credentialStore: credentialStore)
+                var updated = Self.readState(credentialStore: credentialStore)
+                updated.revocationUnconfirmed = revocationUnconfirmed
                 subject.send(updated)
                 return .success(updated)
             }
-        } catch {
-            return .failure(error)
-        }
+        } catch { return .failure(error) }
     }
 
     func refreshIfNeeded(force: Bool = false) async -> Result<CodexAuthState, Error> {
-        let generation = authLock.withLock { authGeneration }
         do {
-            guard let credential = try credentialStore.readSecret(key: Constants.credentialKey) else {
-                let updated = Self.readState(credentialStore: credentialStore)
-                subject.send(updated)
-                return .success(updated)
-            }
+            let (generation, credential) = try authLock.withLock { (authGeneration, try credentialJSON()) }
+            guard let credential else { return .success(currentState()) }
             _ = try await resolveCredential(credential, force: force, generation: generation)
-            let updated = currentState()
-            return .success(updated)
+            return .success(currentState())
         } catch {
-            DiagnosticsLogger.log("Pi Codex auth refresh failed", category: .auth, error: error)
+            DiagnosticsLogger.log("Pi ChatGPT refresh failed", category: .auth, error: error)
             return .failure(error)
         }
     }
 
-    func hasAuthToken() -> Bool {
-        (try? credentialStore.readSecret(key: Constants.credentialKey))?.isEmpty == false
-    }
-
+    func hasAuthToken() -> Bool { authLock.withLock { !signingOut && currentState().isLoggedIn && currentState().planUsageEnabled } }
     func getApiKey() async -> String? { nil }
 
     func getBearerToken() async -> BearerToken? {
-        let generation = authLock.withLock { authGeneration }
-        guard let credential = try? credentialStore.readSecret(key: Constants.credentialKey),
-              !credential.isEmpty else { return nil }
+        guard hasAuthToken() else { return nil }
         do {
+            let (generation, credential) = try authLock.withLock { (authGeneration, try credentialJSON()) }
+            guard let credential else { return nil }
             let resolution = try await resolveCredential(credential, force: false, generation: generation)
             return BearerToken(token: resolution.accessToken, isAPIKey: false, accountId: resolution.accountId)
         } catch {
-            DiagnosticsLogger.log("Pi Codex credential resolution failed", category: .auth, error: error)
+            DiagnosticsLogger.log("Pi ChatGPT credential resolution failed", category: .auth, error: error)
             return nil
         }
     }
 
-    func retrieveUsageStatus() async -> Result<CodexUsageStatus, Error> {
-        do {
-            guard let auth = await getBearerToken() else {
-                return .failure(ProviderClientError.missingCredential("CODEX_AUTH access token"))
-            }
-            guard let accountId = auth.accountId?.trimmedNonEmpty else {
-                return .failure(ProviderClientError.parseFailure("Codex account ID is required for usage API"))
-            }
-            let request = HTTPRequest(
-                url: URL(string: Constants.usageURL)!,
-                method: "GET",
-                headers: [
-                    "Authorization": "Bearer \(auth.token)",
-                    "ChatGPT-Account-ID": accountId,
-                    "originator": Constants.originator,
-                    "User-Agent": buildDefaultUserAgent()
-                ]
-            )
-            let (data, response) = try await httpClient.send(request)
-            guard (200 ... 299).contains(response.statusCode) else {
-                throw ProviderClientError.httpStatus(response.statusCode, String(data: data, encoding: .utf8) ?? "")
-            }
-            return .success(try Self.parseUsage(data: data))
-        } catch {
-            return .failure(error)
+    func models() async throws -> [PiCodexModel] {
+        guard hasAuthToken() else { return [] }
+        let (generation, credential) = try authLock.withLock { (authGeneration, try credentialJSON()) }
+        guard let credential else { return [] }
+        let resolution = try await resolveCredential(credential, force: false, generation: generation)
+        let models = try await catalogHandler(PiAgentRuntime.credentialJSONString(resolution.credential))
+        return try authLock.withLock {
+            guard generation == authGeneration else { throw CancellationError() }
+            return models
         }
-    }
-
-    private func persist(_ resolution: PiOAuthResolution) throws {
-        try credentialStore.saveSecret(
-            try PiAgentRuntime.credentialJSONString(resolution.credential),
-            key: Constants.credentialKey
-        )
-        try credentialStore.saveSecret(resolution.profile.email, key: "codex_email")
-        try credentialStore.saveSecret(resolution.profile.planType, key: "codex_plan_type")
-        try credentialStore.saveSecret(resolution.accountId ?? resolution.profile.accountId, key: "codex_account_id")
-        try credentialStore.saveSecret(Self.nowISO8601(), key: "codex_last_refresh")
-        try credentialStore.deleteSecret(key: "codex_auth_json_v2")
-        try credentialStore.deleteSecret(key: "codex_access_token")
-        try credentialStore.setCredential(nil, for: .codexAuth)
     }
 
     private static func readState(credentialStore: SecureCredentialStore) -> CodexAuthState {
-        let credential = try? credentialStore.readSecret(key: Constants.credentialKey)
-        return CodexAuthState(
-            isLoggedIn: credential?.isEmpty == false,
-            email: try? credentialStore.readSecret(key: "codex_email"),
-            planType: try? credentialStore.readSecret(key: "codex_plan_type"),
-            accountId: try? credentialStore.readSecret(key: "codex_account_id"),
-            hasApiKey: false,
-            lastRefreshISO8601: try? credentialStore.readSecret(key: "codex_last_refresh")
-        )
-    }
-
-    private static func parseUsage(data: Data) throws -> CodexUsageStatus {
-        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw ProviderClientError.parseFailure("Invalid usage response")
+        guard let stored = try? credentialStore.readSecret(key: Constants.accountsKey),
+              let accounts = try? JSONDecoder().decode(Accounts.self, from: Data(stored.utf8)) else {
+            return CodexAuthState(requiresReauthentication: (try? credentialStore.readSecret(key: Constants.legacyCredentialKey)) != nil)
         }
-        let rateLimit = root["rate_limit"] as? [String: Any]
-        return CodexUsageStatus(
-            planType: root["plan_type"] as? String,
-            primaryWindow: parseWindow(rateLimit?["primary_window"] as? [String: Any]),
-            secondaryWindow: parseWindow(rateLimit?["secondary_window"] as? [String: Any]),
-            credits: parseCredits(root["credits"] as? [String: Any])
-        )
-    }
-
-    private static func parseWindow(_ object: [String: Any]?) -> CodexRateLimitWindow? {
-        guard let object else { return nil }
-        let used = (object["used_percent"] as? NSNumber)?.doubleValue
-        let seconds = (object["limit_window_seconds"] as? NSNumber)?.intValue
-        let reset = (object["reset_at"] as? NSNumber)?.int64Value
-        if used == nil && seconds == nil && reset == nil { return nil }
-        return CodexRateLimitWindow(usedPercent: used, limitWindowSeconds: seconds, resetAtEpochSeconds: reset)
-    }
-
-    private static func parseCredits(_ object: [String: Any]?) -> CodexCreditsStatus? {
-        guard let object else { return nil }
-        let rawBalance = object["balance"]
-        return CodexCreditsStatus(
-            hasCredits: object["has_credits"] as? Bool ?? false,
-            unlimited: object["unlimited"] as? Bool ?? false,
-            balance: (rawBalance as? String) ?? (rawBalance as? NSNumber)?.stringValue
+        let object = accounts.selectedClientID.flatMap { accounts.registrations[$0]?.objectValue }
+        let scopes = object?["scopes"]?.arrayValue?.compactMap(\.stringValue) ?? []
+        return CodexAuthState(
+            isLoggedIn: object?["contract"]?.stringValue == "siwc-v1" && object?["access"]?.stringValue != nil,
+            email: object?["email"]?.stringValue,
+            accountId: accounts.selectedClientID,
+            lastRefreshISO8601: try? credentialStore.readSecret(key: "codex_last_refresh"),
+            planUsageEnabled: scopes.contains("chatgpt.tokens.use.direct"),
+            savedAccounts: accounts.registrations.keys.sorted().compactMap { id in
+                guard let value = accounts.registrations[id]?.objectValue, value["subject"]?.stringValue != nil else { return nil }
+                return CodexSavedAccount(clientID: id, email: value["email"]?.stringValue)
+            }
         )
     }
 
     private static func nowISO8601() -> String { ISO8601DateFormatter().string(from: Date()) }
-
-    private func buildDefaultUserAgent() -> String {
-        let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        let version = appVersion?.trimmingCharacters(in: .whitespacesAndNewlines).trimmedNonEmpty ?? "unknown"
-        let appID = Bundle.main.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines).trimmedNonEmpty
-            ?? "com.porarri.yamabikochat"
-        return "YamabikoChat/\(version) (iOS \(UIDevice.current.systemVersion); \(Self.currentArchitecture())) \(appID)"
-    }
-
-    private static func currentArchitecture() -> String {
-        #if arch(arm64)
-        return "arm64"
-        #elseif arch(x86_64)
-        return "x86_64"
-        #elseif arch(arm)
-        return "arm"
-        #else
-        return "unknown"
-        #endif
-    }
 }

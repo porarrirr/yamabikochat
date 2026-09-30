@@ -348,7 +348,7 @@ final class ProviderRequestSettingsResolver {
             return ProviderThinkingConfig(
                 enabled: nil,
                 budget: nil,
-                effort: enabled ? (overrideEffort ?? baseEffort) : "none",
+                effort: enabled ? CodexModelCatalog.resolvedReasoningEffort(overrideEffort ?? baseEffort, model: model) : "none",
                 includeThoughts: true,
                 exclude: nil
             )

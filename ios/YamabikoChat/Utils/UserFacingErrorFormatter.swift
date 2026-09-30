@@ -5,6 +5,12 @@ struct UserFacingError: Equatable {
     var summary: String
     var detail: String
 
+    var chatGPTUsageURL: URL? {
+        let value = detail.lowercased()
+        guard value.contains("subscription_sharing_usage_limit_exceeded") || value.contains("subscription_sharing_usage_unavailable") else { return nil }
+        return URL(string: "https://chatgpt.com/settings/usage")
+    }
+
     var hasDetail: Bool {
         let trimmed = detail.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmed.isEmpty && trimmed != summary && trimmed != title
@@ -73,6 +79,12 @@ enum UserFacingErrorFormatter {
         }
 
         let stripped = stripWrappers(stripChatErrorPrefix(original))
+        if original.lowercased().contains("subscription_sharing_usage_limit_exceeded") {
+            return UserFacingError(title: "ChatGPTの利用上限に達しました", summary: "ChatGPTの設定で、このアプリの利用上限と利用状況を確認してください。", detail: original)
+        }
+        if original.lowercased().contains("subscription_sharing_usage_unavailable") {
+            return UserFacingError(title: "ChatGPTプランを利用できません", summary: "ChatGPTの設定で、このアプリのアクセス権とプランの利用状況を確認してください。", detail: original)
+        }
         if stripped == "Pi agent runtime did not start"
             || stripped == "Pi agent runtime did not resume" {
             return UserFacingError(

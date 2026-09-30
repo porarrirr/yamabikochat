@@ -36,7 +36,7 @@ enum ProviderCatalog {
     static let options: [ProviderDisplay] = [
         ProviderDisplay(key: "GEMINI", title: "Google Gemini"),
         ProviderDisplay(key: "OPENROUTER", title: "OpenRouter"),
-        ProviderDisplay(key: "CODEX_AUTH", title: "Codex Auth"),
+        ProviderDisplay(key: "CODEX_AUTH", title: "ChatGPT plan"),
         ProviderDisplay(key: "SUPERGROK", title: "SuperGrok"),
         ProviderDisplay(key: "APPLE_INTELLIGENCE", title: "Apple Intelligence")
     ]

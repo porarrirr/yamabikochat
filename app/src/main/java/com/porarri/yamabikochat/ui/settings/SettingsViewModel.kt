@@ -1,6 +1,7 @@
 package com.porarri.yamabikochat.ui.settings
 
 import androidx.lifecycle.ViewModel
+import android.content.Context
 import androidx.lifecycle.viewModelScope
 import com.porarri.yamabikochat.data.ChatRepository
 import com.porarri.yamabikochat.data.auth.CodexAuthState
@@ -14,6 +15,9 @@ import com.porarri.yamabikochat.data.local.TokenUsageTotals
 import com.porarri.yamabikochat.data.remote.SimpleModel
 import com.porarri.yamabikochat.data.modelsdev.CatalogLoadState
 import com.porarri.yamabikochat.data.modelsdev.ModelsDevReasoningPreference
+import com.porarri.yamabikochat.pi.PiAgentRuntime
+import com.porarri.yamabikochat.pi.PiCodexModel
+import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -75,6 +79,9 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
 
     val codexAuthState: StateFlow<CodexAuthState> = repository.codexAuthState
 
+    private val _codexModels = MutableStateFlow<List<PiCodexModel>>(emptyList())
+    val codexModels: StateFlow<List<PiCodexModel>> = _codexModels.asStateFlow()
+
     private val _codexAuthError = MutableStateFlow<String?>(null)
     val codexAuthError: StateFlow<String?> = _codexAuthError.asStateFlow()
 
@@ -99,6 +106,14 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
     fun prefetchLatestModelCatalogs() {
         viewModelScope.launch { repository.refreshModelsDevCatalog(forceRefresh = true) }
         viewModelScope.launch { repository.getOpenRouterModels(forceRefresh = true) }
+    }
+
+    fun refreshCodexModels(context: Context) {
+        viewModelScope.launch {
+            runCatching { PiAgentRuntime.getInstance(context).codexModels() }
+                .onSuccess { _codexModels.value = it }
+                .onFailure { DiagnosticsLogger.log("Pi Codex model catalog unavailable", it) }
+        }
     }
 
     fun refreshModelsDevCatalog() {

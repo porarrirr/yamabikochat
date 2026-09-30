@@ -52,6 +52,16 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
   const baseURL = `http://127.0.0.1:${port}`;
   await waitUntilReady(baseURL, token);
 
+  const codexCatalogResponse = await fetch(`${baseURL}/v1/models/codex`, {
+    headers: { authorization: `Bearer ${token}` }
+  });
+  assert.equal(codexCatalogResponse.status, 200);
+  const codexCatalog = await codexCatalogResponse.json();
+  assert.equal(codexCatalog.contractVersion, 2);
+  assert.ok(codexCatalog.models.some((model) => model.id === "gpt-6-sol"));
+  assert.ok(codexCatalog.models.some((model) => model.id === "gpt-6-luna"));
+  assert.ok(codexCatalog.models.every((model) => model.id && model.name));
+
   const providerIdentityCases = [
     ["alibaba-token-plan", "qwen3.7-max", "qwen-token-plan", "openai-completions", { api: "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1", npm: "@ai-sdk/openai-compatible" }],
     ["alibaba-token-plan-cn", "qwen3.7-max", "qwen-token-plan-cn", "openai-completions", { api: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1", npm: "@ai-sdk/openai-compatible" }],
@@ -374,7 +384,7 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
   assert.deepEqual(result.models[14].input, ["text", "image"]);
   assert.equal(result.models[14].maxTokens, 384000);
   assert.equal(result.models[15].api, "openai-completions");
-  assert.deepEqual(result.models[15].input, ["text", "image", "video", "pdf"]);
+  assert.deepEqual(result.models[15].input, ["text", "image"]);
   assert.equal(result.models[15].maxTokens, 131072);
   assert.equal(result.models[16].reason, "runtime_contract_mismatch");
   assert.deepEqual(result.models[17], {
@@ -391,7 +401,7 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
   });
   assert.equal(result.models[18].supported, true);
   assert.equal(result.models[18].api, "openai-responses");
-  assert.equal(result.models[18].source, "model");
+  assert.equal(result.models[18].source, "pi_builtin");
   assert.equal(result.models[19].supported, true);
   assert.equal(result.models[19].api, "openai-completions");
   assert.equal(result.models[19].source, "official_provider_catalog");

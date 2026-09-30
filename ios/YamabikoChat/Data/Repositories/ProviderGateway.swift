@@ -790,16 +790,12 @@ final class ProviderGateway {
             piProvider = "opencode-go"
             apiKey = try credential(.openCodeGo)
         case .codexAuth:
-            if forModelResolution { piProvider = "openai-codex"; apiKey = ""; break }
+            if forModelResolution { piProvider = "openai-chatgpt"; apiKey = ""; break }
             guard let auth = await codexAuthRepository?.getBearerToken() else {
                 throw ProviderClientError.missingCredential(LLMProvider.codexAuth.rawValue)
             }
-            piProvider = "openai-codex"
+            piProvider = "openai-chatgpt"
             apiKey = auth.token
-            headers["originator"] = "codex_cli_rs"
-            if let accountID = auth.accountId?.trimmedNonEmpty {
-                headers["ChatGPT-Account-ID"] = accountID
-            }
         case .superGrok:
             if forModelResolution { piProvider = "xai-oauth"; apiKey = ""; break }
             guard let auth = await superGrokAuthRepository?.getBearerToken() else {

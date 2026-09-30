@@ -2,6 +2,13 @@ import XCTest
 @testable import YamabikoChat
 
 final class UserFacingErrorFormatterTests: XCTestCase {
+    func testChatGPTPlanLimitOffersOfficialUsageAction() {
+        let error = UserFacingErrorFormatter.format("Pi provider failed: subscription_sharing_usage_limit_exceeded: limit reached")
+        XCTAssertEqual(error.title, "ChatGPTの利用上限に達しました")
+        XCTAssertEqual(error.chatGPTUsageURL?.absoluteString, "https://chatgpt.com/settings/usage")
+        XCTAssertNil(UserFacingErrorFormatter.format("RESOURCE_EXHAUSTED").chatGPTUsageURL)
+    }
+
     private let quotaJSON = """
     {"error":{"code":429,"message":"Resource has been exhausted (e.g. check quota).","status":"RESOURCE_EXHAUSTED"}}
     """

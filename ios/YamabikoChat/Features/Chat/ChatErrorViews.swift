@@ -36,6 +36,11 @@ struct ChatErrorToast: View {
                 .accessibilityLabel(Text(L10n.text("閉じる")))
             }
 
+            if let usageURL = formatted.chatGPTUsageURL {
+                Link("Manage usage", destination: usageURL)
+                    .buttonStyle(.borderedProminent)
+            }
+
             if formatted.hasDetail {
                 Button {
                     showDetail.toggle()
@@ -63,7 +68,7 @@ struct ChatErrorToast: View {
                 .stroke(Color.orange.opacity(0.45), lineWidth: 1)
         }
         .task(id: "\(formatted.summary)-\(showDetail)") {
-            guard !showDetail, !formatted.hasDetail else { return }
+            guard !showDetail, !formatted.hasDetail, formatted.chatGPTUsageURL == nil else { return }
             try? await Task.sleep(for: .seconds(4))
             guard !Task.isCancelled, !showDetail else { return }
             onDismiss()
@@ -98,6 +103,11 @@ struct ChatErrorCard: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+
+            if let usageURL = formatted.chatGPTUsageURL {
+                Link("Manage usage", destination: usageURL)
+                    .buttonStyle(.borderedProminent)
             }
 
             if formatted.hasDetail {

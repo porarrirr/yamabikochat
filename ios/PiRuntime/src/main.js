@@ -16,6 +16,7 @@ import { buildProxyHeaders, CLI_PROXY_BASE_URL, FALLBACK_MODELS } from "pi-grok/
 import { sanitizePayload as sanitizeGrokPayload } from "pi-grok/sanitize.ts";
 import { providerErrorDetails } from "./provider-error.js";
 import { applyExplicitSkillInvocations } from "./skill-context.js";
+import { createChatGPTPlanPlugin, CHATGPT_PLAN_PROVIDER, chatGPTPlanPayload, chatGPTPlanCompleted } from "./chatgpt-plan-plugin.js";
 
 const port = Number(process.argv[2]);
 const token = process.argv[3];
@@ -34,7 +35,7 @@ function sanitizeRuntimeLogValue(value) {
   return String(value ?? "")
     .replace(/\bbearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]")
     .replace(/\b(api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|password)\s*[:=]\s*["']?[^"'\s,&]+/gi, "$1=[REDACTED]")
-    .replace(/([?&](?:code|state|access_token|refresh_token|id_token|token|password|secret|api_key|apikey|authorization)=)[^&\s]+/gi, "$1[REDACTED]");
+    .replace(/([?&](?:code|state|access_token|refresh_token|id_token|id_token_hint|token|password|secret|api_key|apikey|authorization)=)[^&\s]+/gi, "$1[REDACTED]");
 }
 
 function appendRuntimeLifecycleLog(event, metadata = {}) {
@@ -65,6 +66,10 @@ registerBunOAuthFlows();
 const authModels = createModels({ credentials: authCredentials });
 authModels.setProvider(openaiCodexProvider());
 const runtimeModels = builtinModels({ credentials: authCredentials });
+const chatGPTPlan = createChatGPTPlanPlugin();
+authModels.setProvider(chatGPTPlan.provider);
+runtimeModels.setProvider(chatGPTPlan.provider);
+const pendingAuthRegistrations = new Map();
 let activeAuthLogin = null;
 
 const VERIFIED_MODEL_SOURCES = new Map();
@@ -225,6 +230,7 @@ installSuperGrokProvider();
 
 const AUTH_PROVIDER_IDS = {
   codex: "openai-codex",
+  chatgpt: CHATGPT_PLAN_PROVIDER,
   supergrok: "xai-oauth"
 };
 
@@ -302,6 +308,7 @@ function decodeJwtPayload(token) {
 }
 
 function authProfile(provider, credential) {
+  if (provider === "chatgpt") return chatGPTPlan.profile(credential);
   const payload = decodeJwtPayload(provider === "supergrok" ? credential.idToken : credential.access) || {};
   const openAIAuth = payload["https://api.openai.com/auth"] || {};
   return {
@@ -388,13 +395,36 @@ async function withGrokBrowserLogin(operation) {
   }
 }
 
-async function loginOAuth(provider, method, res) {
+async function loginOAuth(provider, method, res, context = {}) {
   if (activeAuthLogin) throw new Error("Another Pi OAuth login is already running");
   const controller = new AbortController();
   activeAuthLogin = controller;
+  const abortDisconnectedLogin = () => { if (!res.writableEnded) controller.abort(new Error("ChatGPT login disconnected")); };
+  res.on("close", abortDisconnectedLogin);
+  const heartbeat = setInterval(() => { if (!res.destroyed) send(res, { type: "auth_progress", message: "Waiting for authorization" }); }, 15_000);
   try {
     let credential;
-    if (provider === "codex") {
+    if (provider === "chatgpt") {
+      if (method !== "browser") throw new Error("ChatGPT plan requires browser authorization");
+      credential = await chatGPTPlan.withLoginContext({
+        ...context,
+        onRegistration: (registration) => new Promise((resolve, reject) => {
+          const requestId = crypto.randomUUID();
+          const timeout = setTimeout(() => finish(new Error("ChatGPT registration persistence timed out")), 15_000);
+          const abort = () => finish(controller.signal.reason);
+          const finish = (error) => {
+            clearTimeout(timeout);
+            controller.signal.removeEventListener("abort", abort);
+            pendingAuthRegistrations.delete(requestId);
+            error ? reject(error) : resolve();
+          };
+          controller.signal.addEventListener("abort", abort, { once: true });
+          pendingAuthRegistrations.set(requestId, finish);
+          send(res, { type: "auth_registration", requestId, registration });
+        })
+      }, () => authModels.login(CHATGPT_PLAN_PROVIDER, "oauth", codexInteraction(method, res, controller.signal)));
+      chatGPTPlan.clearCatalog();
+    } else if (provider === "codex") {
       credential = await authModels.login(
         authProviderId(provider),
         "oauth",
@@ -413,6 +443,8 @@ async function loginOAuth(provider, method, res) {
     const normalized = oauthCredential(credential);
     send(res, { type: "auth_completed", credential: normalized, profile: authProfile(provider, normalized) });
   } finally {
+    clearInterval(heartbeat);
+    res.off("close", abortDisconnectedLogin);
     activeAuthLogin = null;
   }
 }
@@ -420,10 +452,21 @@ async function loginOAuth(provider, method, res) {
 async function resolveOAuth(provider, rawCredential, force) {
   const providerId = authProviderId(provider);
   let credential = oauthCredential(rawCredential);
-  if (force) credential = { ...credential, expires: 0 };
-  await authCredentials.modify(providerId, async () => credential);
+  if (provider === "chatgpt") {
+    const current = await authCredentials.read(providerId);
+    if (current && current.clientId !== credential.clientId) chatGPTPlan.clearCatalog();
+  }
+  await authCredentials.modify(providerId, async current => {
+    if (provider === "chatgpt") {
+      chatGPTPlan.profile(credential);
+      // A native request may still hold the previous rotated token set. Keep
+      // Pi's newer set for this exact registration instead of restoring it.
+      if (current?.clientId === credential.clientId && current.subject === credential.subject && current.expires > credential.expires) credential = current;
+    }
+    return force ? { ...credential, expires: 0 } : credential;
+  });
 
-  if (provider === "codex") {
+  if (provider === "codex" || provider === "chatgpt") {
     const resolved = await authModels.getAuth(providerId);
     if (!resolved?.auth?.apiKey) throw new Error("Pi did not resolve Codex OAuth credentials");
   } else {
@@ -439,7 +482,7 @@ async function resolveOAuth(provider, rawCredential, force) {
   return {
     credential: updated,
     accessToken: updated.access,
-    accountId: provider === "codex" ? (updated.accountId || profile.accountId) : null,
+    accountId: provider === "codex" || provider === "chatgpt" ? (updated.accountId || profile.accountId) : null,
     profile
   };
 }
@@ -668,6 +711,10 @@ function resolutionFor(config) {
   if (config.contractVersion !== RUNTIME_CONTRACT_VERSION) {
     throw new Error(`Pi runtime contract mismatch: expected ${RUNTIME_CONTRACT_VERSION}, received ${config.contractVersion ?? "missing"}`);
   }
+  if (config.provider === CHATGPT_PLAN_PROVIDER) {
+    const reason = chatGPTPlan.modelStatus(config.model);
+    if (reason) return { supported: false, reason, provider: config.provider, model: config.model };
+  }
   const contract = config.catalogContract;
   const isAuthoritativeContract = trustedCatalogContract(contract);
   // A model-level override is authoritative for wire routing. A provider-level
@@ -810,7 +857,7 @@ function resolutionFor(config) {
     provider: model.provider,
     model: model.id,
     api: model.api,
-    source: VERIFIED_MODEL_SOURCES.get(`${model.provider}/${model.id}`) || "pi_builtin",
+    source: model.provider === CHATGPT_PLAN_PROVIDER ? "verified_official_contract" : VERIFIED_MODEL_SOURCES.get(`${model.provider}/${model.id}`) || "pi_builtin",
     reasoning: model.reasoning,
     input: model.input,
     contextWindow: model.contextWindow,
@@ -1027,7 +1074,8 @@ function standardStreamFunction(request, config, report, captureProviderRequest)
       ? { maxTokens: Number(request.metadata.max_output_tokens) } : {}),
     sessionId,
     onPayload: (payload) => {
-      const mutated = mutatePayload(payload, request, config);
+      const mutatedPayload = mutatePayload(payload, request, config);
+      const mutated = config.provider === CHATGPT_PLAN_PROVIDER ? chatGPTPlanPayload(mutatedPayload) : mutatedPayload;
       captureProviderRequest(exportableProviderPayload(mutated));
       report("provider_request", "Pi provider request payload prepared", {
         api: config.api,
@@ -1132,12 +1180,17 @@ function replayableProviderTranscript(messages) {
   });
 }
 
-function finalResponse(assistants, contextUsage, generatedMessages = []) {
+function finalResponse(assistants, contextUsage, generatedMessages = [], provider) {
   const last = assistants.at(-1);
   if (!last) throw new Error("Pi provider returned no assistant message");
   if (last.stopReason === "error" || last.stopReason === "aborted" || last.errorMessage) {
     const detail = last.errorMessage || last.rawStopReason || "unknown provider error";
     throw Object.assign(new Error(`Pi provider failed: ${detail}`), { code: last.errorCode });
+  }
+  if (provider === CHATGPT_PLAN_PROVIDER && assistants.some(message => !chatGPTPlanCompleted(message))) {
+    const incomplete = assistants.find(message => !chatGPTPlanCompleted(message));
+    throw Object.assign(new Error(`ChatGPT plan response did not complete: ${incomplete.errorMessage || incomplete.rawStopReason || incomplete.stopReason || "unknown"}`),
+      { code: "chatgpt_response_incomplete" });
   }
   const text = (last?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
   const reasoning = assistants.flatMap((message) => (message.content || [])
@@ -1220,6 +1273,11 @@ function piExecutionSnapshot({ agent, effectiveRequest, providerRequests, events
 
 async function runAgent(envelope, res) {
   const { runId, request, config } = envelope;
+  if (config.provider === CHATGPT_PLAN_PROVIDER) {
+    const credential = await authCredentials.read(CHATGPT_PLAN_PROVIDER);
+    if (!credential || credential.access !== config.apiKey) throw Object.assign(new Error("ChatGPT account credentials must be resolved before execution"), { code: "chatgpt_reconnect_required" });
+    await chatGPTPlan.catalog(credential, AbortSignal.timeout(30_000));
+  }
   const skillAppliedRequest = applyExplicitSkillInvocations(request);
   const startedAtMs = Date.now();
   const { model, resolution } = resolveModel(config);
@@ -1271,6 +1329,10 @@ async function runAgent(envelope, res) {
         }
       });
     }),
+    // End through Pi's lifecycle hook so truncated tools cannot trigger another inference.
+    ...(config.provider === CHATGPT_PLAN_PROVIDER ? {
+      finishTurn: ({ message }) => chatGPTPlanCompleted(message) ? undefined : { action: "end" }
+    } : {}),
     toolExecution: "parallel",
     maxRetryDelayMs: 60000
   });
@@ -1316,7 +1378,8 @@ async function runAgent(envelope, res) {
         type: "llm_end",
         stepId: activeStep,
         timeMs: Date.now(),
-        succeeded: event.message.stopReason !== "error" && event.message.stopReason !== "aborted" && !event.message.errorMessage,
+        succeeded: config.provider === CHATGPT_PLAN_PROVIDER ? chatGPTPlanCompleted(event.message)
+          : event.message.stopReason !== "error" && event.message.stopReason !== "aborted" && !event.message.errorMessage,
         usage: providerUsage(event.message.usage)
       });
       activeStep = null;
@@ -1348,7 +1411,7 @@ async function runAgent(envelope, res) {
       ? { tokens: last.pccToolCalls?.length ? null : last.usage.totalTokens, contextWindow }
       : null;
     const generatedMessages = agent.state.messages.slice(initialMessageCount);
-    const response = finalResponse(runAssistants, contextEstimate, generatedMessages);
+    const response = finalResponse(runAssistants, contextEstimate, generatedMessages, config.provider);
     response.piExecution = piExecutionSnapshot({
       agent,
       effectiveRequest,
@@ -1438,10 +1501,47 @@ const handleRequest = async (req, res) => {
         })
       });
     }
+    if (req.method === "GET" && req.url === "/v1/models/codex") {
+      // The picker follows the same Pi provider catalog used for execution.
+      const models = runtimeModels.getModels("openai-codex")
+        .filter((model) => resolutionFor({ contractVersion: RUNTIME_CONTRACT_VERSION, provider: "openai-codex", model: model.id }).supported)
+        .map((model) => ({ id: model.id, name: model.name }));
+      return json(res, 200, { contractVersion: RUNTIME_CONTRACT_VERSION, models });
+    }
+    if (req.method === "POST" && req.url === "/v1/models/chatgpt") {
+      const value = await body(req);
+      const credential = await authCredentials.read(CHATGPT_PLAN_PROVIDER);
+      if (!credential || credential.clientId !== value.credential?.clientId) throw new Error("ChatGPT account credentials must be resolved before discovery");
+      const models = await chatGPTPlan.catalog(credential, AbortSignal.timeout(30_000));
+      return json(res, 200, { contractVersion: RUNTIME_CONTRACT_VERSION, models });
+    }
+    if (req.method === "POST" && req.url === "/v1/auth/registration") {
+      const value = await body(req);
+      const finish = pendingAuthRegistrations.get(value.requestId);
+      if (!finish) return json(res, 404, { error: "unknown registration" });
+      finish(value.error ? new Error("ChatGPT registration could not be saved") : undefined);
+      return json(res, 200, { ok: true });
+    }
+    if (req.method === "POST" && req.url === "/v1/auth/revoke") {
+      const value = await body(req);
+      if (value.provider !== "chatgpt") throw new Error("Unsupported revocation provider");
+      for (const agent of runs.values()) if (agent.state.model.provider === CHATGPT_PLAN_PROVIDER) agent.abort();
+      try {
+        await authCredentials.modify(CHATGPT_PLAN_PROVIDER, async current => {
+          const credential = current?.clientId === value.credential?.clientId ? current : value.credential;
+          await chatGPTPlan.revoke(credential, AbortSignal.timeout(30_000));
+          return current;
+        });
+      } finally {
+        await authCredentials.delete(CHATGPT_PLAN_PROVIDER);
+        chatGPTPlan.clearCatalog();
+      }
+      return json(res, 200, { ok: true });
+    }
     if (req.method === "POST" && req.url === "/v1/auth/login") {
       const value = await body(req);
       res.writeHead(200, { "content-type": "application/x-ndjson", "cache-control": "no-store" });
-      try { await loginOAuth(value.provider, value.method || "browser", res); res.end(); }
+      try { await loginOAuth(value.provider, value.method || "browser", res, value.context); res.end(); }
       catch (error) { send(res, errorEvent(error)); res.end(); }
       return;
     }

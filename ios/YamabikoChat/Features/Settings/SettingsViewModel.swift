@@ -32,6 +32,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var alibabaMCPAuthorizationTokenInput: String = ""
 
     @Published var codexAuthState: CodexAuthState = .init()
+    @Published var codexModels: [PiCodexModel] = []
     @Published var codexUsageStatus: CodexUsageStatus?
     @Published var isCodexAuthActionRunning: Bool = false
 
@@ -196,6 +197,7 @@ final class SettingsViewModel: ObservableObject {
 
         Task {
             await refreshCodexAuth(force: false)
+            await refreshCodexModels()
             refreshDiagnosticsLog()
         }
     }
@@ -204,7 +206,19 @@ final class SettingsViewModel: ObservableObject {
         Task {
             async let modelsDevRefresh: CatalogLoadState? = modelsDevCatalogRepository?.load(forceRefresh: true)
             async let openRouterRefresh: Void = refreshOpenRouterModels(force: true)
-            _ = await (modelsDevRefresh, openRouterRefresh)
+            async let codexRefresh: Void = refreshCodexModels()
+            _ = await (modelsDevRefresh, openRouterRefresh, codexRefresh)
+        }
+    }
+
+    private func refreshCodexModels() async {
+        guard let repository else { return }
+        do {
+            codexModels = try await repository.chatGPTModels()
+        } catch {
+            codexModels = []
+            errorMessage = error.localizedDescription
+            DiagnosticsLogger.log("ChatGPT account model catalog unavailable", category: .network, error: error)
         }
     }
 
@@ -1215,10 +1229,10 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
-    func loginCodexAuth() async {
+    func loginCodexAuth(clientID: String? = nil, newAccount: Bool = false) async {
         guard let repository = requireRepository(action: "codex_login") else { return }
         isCodexAuthActionRunning = true
-        statusMessage = L10n.text("Codexログインを開始しました")
+        statusMessage = "ChatGPTへの接続を開始しました"
         errorMessage = nil
         DiagnosticsLogger.log("Codex auth login tapped", category: .auth)
         refreshDiagnosticsLog()
@@ -1226,14 +1240,15 @@ final class SettingsViewModel: ObservableObject {
             isCodexAuthActionRunning = false
             refreshDiagnosticsLog()
         }
-        let result = await repository.loginCodexAuthWithBrowser()
+        let result = await repository.loginCodexAuthWithBrowser(clientID: clientID, newAccount: newAccount)
         switch result {
         case let .success(state):
             codexAuthState = state
             codexAccountIdInput = state.accountId ?? ""
             codexEmailInput = state.email ?? ""
             codexPlanTypeInput = state.planType ?? ""
-            statusMessage = L10n.text("Codexにログインしました")
+            statusMessage = state.planUsageEnabled ? "ChatGPTプランを利用できます" : "ChatGPTに接続しました。プラン利用の許可が必要です。"
+            await refreshCodexModels()
             DiagnosticsLogger.log("Codex auth login succeeded accountId=\(state.accountId ?? "-")")
         case let .failure(error):
             errorMessage = error.localizedDescription
@@ -1254,7 +1269,10 @@ final class SettingsViewModel: ObservableObject {
         case let .success(state):
             codexAuthState = state
             codexUsageStatus = nil
-            statusMessage = L10n.text("Codexからログアウトしました")
+            codexModels = []
+            statusMessage = state.revocationUnconfirmed
+                ? "この端末からログアウトしました。接続解除を確認できなかったため、ChatGPTの設定でアプリを解除してください。"
+                : "ChatGPTからログアウトしました"
             DiagnosticsLogger.log("Codex auth logout succeeded")
         case let .failure(error):
             errorMessage = error.localizedDescription
@@ -1276,25 +1294,6 @@ final class SettingsViewModel: ObservableObject {
         case let .failure(error):
             errorMessage = error.localizedDescription
             DiagnosticsLogger.log("Codex auth refresh failed", error: error)
-        }
-    }
-
-    func retrieveCodexUsage() async {
-        guard let repository = requireRepository(action: "codex_usage") else { return }
-        isCodexAuthActionRunning = true
-        defer {
-            isCodexAuthActionRunning = false
-            refreshDiagnosticsLog()
-        }
-        let result = await repository.retrieveCodexAuthUsage()
-        switch result {
-        case let .success(status):
-            codexUsageStatus = status
-            statusMessage = L10n.text("Codex使用量を更新しました")
-            DiagnosticsLogger.log("Codex usage refresh succeeded")
-        case let .failure(error):
-            errorMessage = error.localizedDescription
-            DiagnosticsLogger.log("Codex usage refresh failed", error: error)
         }
     }
 

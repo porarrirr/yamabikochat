@@ -331,7 +331,7 @@ final class PiAgentGatewayTests: XCTestCase {
 
         XCTAssertEqual(resolutions.map(\.supported), [true, true, true])
         XCTAssertEqual(resolutions.map(\.api), ["openai-completions", "openai-responses", "openai-completions"])
-        XCTAssertEqual(resolutions.map(\.source), ["pi_builtin", "model", "official_provider_catalog"])
+        XCTAssertEqual(resolutions.map(\.source), ["pi_builtin", "pi_builtin", "official_provider_catalog"])
     }
 
     func testBundledPiResolvesFreshCodexCredential() async throws {
@@ -826,6 +826,37 @@ final class PiAgentGatewayTests: XCTestCase {
 
         let configuration = try XCTUnwrap(pi.calls.first?.configuration)
         XCTAssertEqual(configuration.provider, "xai-oauth")
+    }
+
+    func testChatGPTPlanUsesPiPluginWithoutLegacyCodexHeaders() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        let auth = CodexAuthRepository(
+            credentialStore: credentials,
+            loginHandler: { host, _, _ in chatGPTResolution(hostID: host) },
+            resolveHandler: { provider, _, _ in
+                XCTAssertEqual(provider, .chatgpt)
+                return chatGPTResolution()
+            }
+        )
+        _ = await auth.loginWithBrowser()
+        let pi = PiStreamSpy()
+        let gateway = ProviderGateway(
+            settingsRepository: SettingsRepository(dbQueue: database),
+            credentialStore: credentials,
+            codexAuthRepository: auth,
+            piStream: pi.stream
+        )
+        _ = try await gateway.stream(
+            request: ProviderRequest(model: "gpt-6-sol", messages: [ProviderRequestMessage(role: "user", content: "hello")]),
+            provider: .codexAuth
+        )
+        let configuration = try XCTUnwrap(pi.calls.first?.configuration)
+        XCTAssertEqual(configuration.provider, "openai-chatgpt")
+        XCTAssertEqual(configuration.apiKey, "access-token")
+        XCTAssertNil(configuration.headers["originator"])
+        XCTAssertNil(configuration.headers["ChatGPT-Account-ID"])
     }
 
     func testOpenCodeGoMuseSparkUsesResponsesAPI() async throws {

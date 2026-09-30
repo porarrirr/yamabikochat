@@ -14,7 +14,7 @@
 - `./gradlew lint`: run Android lint checks.
 - `./gradlew assembleRelease`: build release APK (requires `YAMABIKO_*` signing values).
 - `cd ios && xcodegen generate`: generate Xcode project.
-- `cd ios && xcodebuild -project YamabikoChat.xcodeproj -scheme YamabikoChat -destination 'platform=iOS Simulator,name=iPhone 16' build`: validate iOS build from CLI.
+- `cd ios && xcodebuild -project YamabikoChat.xcodeproj -scheme YamabikoChat -destination 'platform=iOS Simulator,name=iPhone 18 Pro,OS=27.0' build`: validate iOS build from CLI.
 
 ## Coding Style & Naming Conventions
 - Kotlin/Swift: 4-space indentation, keep files focused, and prefer small view models/repositories.

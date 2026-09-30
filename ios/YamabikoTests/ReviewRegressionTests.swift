@@ -147,7 +147,7 @@ final class ReviewRegressionTests: XCTestCase {
 
     func testDelayedCodexLoginCannotRestoreLoggedOutCredentials() async throws {
         let started = expectation(description: "login started")
-        let delayed = ReviewResolutionLatch()
+        let delayed = ReviewResolutionLatch(resolution: chatGPTResolution())
         let store = PiAuthTestCredentialStore()
         let repository = CodexAuthRepository(credentialStore: store, loginHandler: { _, _, _ in
             started.fulfill()
@@ -183,15 +183,19 @@ final class ReviewRegressionTests: XCTestCase {
 }
 
 private actor ReviewResolutionLatch {
+    private let resolution: PiOAuthResolution
     private var continuation: CheckedContinuation<PiOAuthResolution, Never>?
     private var finished = false
+    init(resolution: PiOAuthResolution = oauthResolution()) {
+        self.resolution = resolution
+    }
     func wait() async -> PiOAuthResolution {
-        if finished { return oauthResolution() }
+        if finished { return resolution }
         return await withCheckedContinuation { continuation = $0 }
     }
     func finish() {
         finished = true
-        continuation?.resume(returning: oauthResolution())
+        continuation?.resume(returning: resolution)
         continuation = nil
     }
 }

@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.porarri.yamabikochat.pi.PiCodexModel
 
 class CodexModelPresetsTest {
     @Test
@@ -13,13 +14,26 @@ class CodexModelPresetsTest {
 
         assertNotNull(preset)
         preset!!
-        assertEquals("GPT-5.6-Sol", preset.displayName)
+        assertEquals("GPT-5.6 Sol", preset.displayName)
         assertEquals("low", preset.defaultReasoningEffort)
-        assertEquals(listOf("low", "medium", "high", "xhigh", "max", "ultra"), preset.supportedReasoningEfforts.map { it.effort })
-        assertEquals("gpt-5.6-sol", CodexModelPresets.defaultModel())
-        assertEquals(listOf("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.2"), CodexModelPresets.visiblePresets().map { it.model })
+        assertEquals(listOf("low", "medium", "high", "xhigh", "max"), preset.supportedReasoningEfforts.map { it.effort })
+        assertEquals("gpt-6-sol", CodexModelPresets.defaultModel())
+        assertEquals(listOf("gpt-6-sol", "gpt-6-astra", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"), CodexModelPresets.visiblePresets().map { it.model })
         assertTrue(CodexModelPresets.supportsReasoningSummary(preset.model))
         assertTrue(CodexModelPresets.supportsTextVerbosity(preset.model))
+    }
+
+    @Test
+    fun runtimeCatalogCanAddNewPiModelWithoutEditingPresets() {
+        val presets = CodexModelPresets.visiblePresets(listOf(PiCodexModel("future-codex-model", "Future Codex Model")))
+        assertEquals("future-codex-model", presets.single().model)
+        assertEquals("Future Codex Model", presets.single().displayName)
+    }
+
+    @Test
+    fun savedUltraEffortFallsBackToPiSupportedLevel() {
+        assertEquals("medium", CodexModelPresets.resolvedReasoningEffort("ultra", "gpt-6-sol"))
+        assertEquals("max", CodexModelPresets.resolvedReasoningEffort("MAX", "gpt-6-sol"))
     }
 
     @Test

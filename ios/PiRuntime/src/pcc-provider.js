@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createProvider, createAssistantMessageEventStream } from '@earendil-works/pi-ai';
+import { getCurrentTools } from '@earendil-works/pi-ai/utils/transcript';
 
 export const PCC_PROVIDER = 'apple-pcc';
 export const PCC_MODEL = 'PrivateCloudComputeLanguageModel';
@@ -65,6 +66,16 @@ function streamPCC(model, context, options = {}) {
   let finished = false;
   let timer;
   const nativeCalls = new Map();
+  const nativeTools = context.tools ?? getCurrentTools(context.messages ?? []);
+  const nativeContext = {
+    ...context,
+    tools: nativeTools,
+    systemPrompt: context.systemPrompt ?? (context.messages ?? [])
+      .filter(message => message.role === 'system')
+      .map(message => typeof message.content === 'string' ? message.content : '')
+      .filter(Boolean).join('\n'),
+    messages: (context.messages ?? []).filter(message => message.role !== 'system')
+  };
   const partialSnapshot = () => structuredClone(output);
   function finish(error) {
     if (finished) return;
@@ -101,7 +112,7 @@ function streamPCC(model, context, options = {}) {
       // PCC's user-authorized SDK loop executes tools natively. Never place
       // these completed calls in Pi content (the Agent would execute them again).
       if (options.maxTokens != null && (!Number.isSafeInteger(options.maxTokens) || options.maxTokens <= 0)) throw new Error('pcc_invalid_output_limit');
-      const payload = { context, reasoningLevel, contextSize: model.contextWindow };
+      const payload = { context: nativeContext, reasoningLevel, contextSize: model.contextWindow };
       if (options.maxTokens != null) payload.maximumResponseTokens = options.maxTokens;
       const prepared = await options.onPayload?.(payload, model) ?? payload;
       if (options.signal?.aborted) { abort(); return; }
@@ -112,7 +123,7 @@ function streamPCC(model, context, options = {}) {
           } else if (event.type === 'tool_start') {
             const call = event.toolCall;
             if (!call || typeof call.id !== 'string' || !call.id || typeof call.argumentsJSON !== 'string' ||
-                nativeCalls.has(call.id) || !(context.tools || []).some(tool => tool.name === call.name)) {
+                nativeCalls.has(call.id) || !nativeTools.some(tool => tool.name === call.name)) {
               throw new Error('pcc_invalid_tool_call');
             }
             const args = JSON.parse(call.argumentsJSON);

@@ -162,6 +162,22 @@ class PiAgentRuntime private constructor(private val context: Context) {
             }
         }
 
+    suspend fun codexModels(): List<PiCodexModel> = withContext(Dispatchers.IO) {
+        val (endpoint, token) = startIfNeeded()
+        val request = Request.Builder()
+            .url("${endpoint}v1/models/codex")
+            .header("Authorization", "Bearer $token")
+            .build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw ProviderClientError.InvalidResponse
+            val catalog = json.decodeFromString<PiCodexModelResponse>(response.body?.string().orEmpty())
+            if (catalog.contractVersion != 2) {
+                throw ProviderClientError.ParseFailure("Pi runtime contract mismatch")
+            }
+            catalog.models
+        }
+    }
+
     private fun extractBundledScript(): File {
         val runtimeDir = File(context.filesDir, "pi-runtime")
         if (!runtimeDir.exists()) runtimeDir.mkdirs()

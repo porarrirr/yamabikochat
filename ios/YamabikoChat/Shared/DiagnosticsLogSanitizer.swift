@@ -7,6 +7,7 @@ enum DiagnosticsLogSanitizer {
         "access_token",
         "refresh_token",
         "id_token",
+        "id_token_hint",
         "token",
         "password",
         "secret",

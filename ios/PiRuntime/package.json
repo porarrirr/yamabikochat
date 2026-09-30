@@ -6,13 +6,14 @@
   "scripts": {
     "build": "esbuild src/main.js --bundle --platform=node --format=esm --target=node24 --banner:js=\"import{createRequire as __yamabikoCreateRequire}from'node:module';const require=__yamabikoCreateRequire(import.meta.url);\" --outfile=bundle/main.js && cp bundle/main.js ../../app/src/main/assets/pi-runtime/main.js",
     "check": "node --check src/main.js",
-    "check:contracts": "python3 ../../scripts/check-opencode-go-contract.py && python3 ../../scripts/check-models-dev-pi-identities.py && python3 ../../scripts/check-pcc-contract.py",
+    "check:contracts": "python3 ../../scripts/check-opencode-go-contract.py && python3 ../../scripts/check-models-dev-pi-identities.py && python3 ../../scripts/check-pcc-contract.py && python3 ../../scripts/check-chatgpt-plan-contract.py",
     "test": "node --test test/*.test.js",
     "postinstall": "node scripts/patch-pi-contract.mjs"
   },
   "dependencies": {
-    "@earendil-works/pi-agent-core": "0.84.2",
-    "@earendil-works/pi-ai": "0.84.2",
+    "@earendil-works/pi-agent-core": "0.87.1",
+    "@earendil-works/pi-ai": "0.87.1",
+    "jose": "6.2.12",
     "pi-grok": "https://github.com/stnly/pi-grok/archive/8b304e65c088f84ccb932959d97739245fe47d97.tar.gz",
     "typebox": "1.3.7"
   },

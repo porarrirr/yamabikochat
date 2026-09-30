@@ -7,6 +7,17 @@ struct CodexAuthState: Equatable, Sendable {
     var accountId: String? = nil
     var hasApiKey: Bool = false
     var lastRefreshISO8601: String? = nil
+    var planUsageEnabled: Bool = false
+    var requiresReauthentication: Bool = false
+    var revocationUnconfirmed: Bool = false
+    var savedAccounts: [CodexSavedAccount] = []
+}
+
+struct CodexSavedAccount: Equatable, Sendable, Identifiable {
+    var clientID: String
+    var email: String?
+    var id: String { clientID }
+    var label: String { "\(email ?? "ChatGPT") · \(clientID.suffix(8))" }
 }
 
 struct CodexRateLimitWindow: Equatable, Sendable {

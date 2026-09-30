@@ -142,6 +142,7 @@ fun SettingsScreen(
     val modelsDevCatalogState by viewModel.modelsDevCatalogState.collectAsState()
     val secureStorageError by viewModel.secureStorageError.collectAsState()
     val codexAuthState by viewModel.codexAuthState.collectAsState()
+    val codexModels by viewModel.codexModels.collectAsState()
     val codexAuthError by viewModel.codexAuthError.collectAsState()
     val superGrokAuthState by viewModel.superGrokAuthState.collectAsState()
     val superGrokAuthError by viewModel.superGrokAuthError.collectAsState()
@@ -161,6 +162,7 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         viewModel.prefetchLatestModelCatalogs()
+        viewModel.refreshCodexModels(context)
     }
 
     agentSkillPreview?.let { preview ->
@@ -501,7 +503,7 @@ fun SettingsScreen(
                 }
 
                 SettingsSheet.CodexModel -> {
-                    val presets = CodexModelPresets.visiblePresets()
+                    val presets = CodexModelPresets.visiblePresets(codexModels)
                     val options = presets.map { preset ->
                         YamabikoOption(
                             key = preset.model,
@@ -515,7 +517,7 @@ fun SettingsScreen(
                         selectedKey = model,
                         onOptionSelected = { option ->
                             model = option.key
-                            val selectedPreset = CodexModelPresets.findPreset(option.key)
+                            val selectedPreset = CodexModelPresets.findPreset(option.key, codexModels)
                             val supported = selectedPreset?.supportedReasoningEfforts?.map { it.effort }.orEmpty()
                             val defaultEffort = selectedPreset?.defaultReasoningEffort ?: "medium"
                             if (supported.isNotEmpty() && !supported.contains(codexReasoningEffort)) {
@@ -529,7 +531,7 @@ fun SettingsScreen(
                 }
 
                 SettingsSheet.CodexReasoningEffort -> {
-                    val preset = CodexModelPresets.findPreset(model)
+                    val preset = CodexModelPresets.findPreset(model, codexModels)
                     val options = preset?.supportedReasoningEfforts?.map {
                         YamabikoOption(key = it.effort, title = it.effort, subtitle = it.description)
                     } ?: listOf(

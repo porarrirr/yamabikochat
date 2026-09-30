@@ -1401,66 +1401,129 @@ struct SettingsScreen: View {
     }
 
     private var codexAuthSection: some View {
-        Section("Codex Auth") {
-            Text(codexSummary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        Section {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.title3.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
+                        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
 
-            Text("Codex OAuth は Pi 標準の openai-codex 認証を使用します。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("ChatGPT プラン")
+                            .font(.headline)
+                        Label(codexSummary, systemImage: viewModel.codexAuthState.planUsageEnabled ? "checkmark.circle.fill" : "circle")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(viewModel.codexAuthState.planUsageEnabled ? Color.green : Color.secondary)
 
-            HStack {
-                Button("Sign in") {
+                        if !viewModel.codexEmailInput.isEmpty {
+                            Text(viewModel.codexEmailInput)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                if viewModel.codexAuthState.requiresReauthentication {
+                    Label {
+                        Text("ChatGPT連携が更新されました。再接続してプランの利用を許可してください。")
+                    } icon: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                } else if !viewModel.codexAuthState.planUsageEnabled {
+                    Text("ChatGPTアカウントを接続して、このアプリでプランを利用できます。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button {
                     Task { await viewModel.loginCodexAuth() }
+                } label: {
+                    HStack(spacing: 10) {
+                        if viewModel.isCodexAuthActionRunning {
+                            ProgressView()
+                                .tint(Color(uiColor: .systemBackground))
+                        }
+                        Text(viewModel.isCodexAuthActionRunning ? "接続中…" :
+                            viewModel.codexAuthState.isLoggedIn ? "ChatGPTに再接続" : "ChatGPTに接続")
+                            .font(.subheadline.weight(.semibold))
+                        if !viewModel.isCodexAuthActionRunning {
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption.weight(.semibold))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .foregroundStyle(Color(uiColor: .systemBackground))
+                    .background(Color.primary, in: RoundedRectangle(cornerRadius: 14))
+                    .contentShape(RoundedRectangle(cornerRadius: 14))
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
+                .disabled(viewModel.isCodexAuthActionRunning)
 
-                Button("Refresh") {
-                    Task { await viewModel.refreshCodexAuth(force: true) }
+                VStack(spacing: 0) {
+                    Menu {
+                        ForEach(viewModel.codexAuthState.savedAccounts) { account in
+                            Button(account.label) {
+                                Task { await viewModel.loginCodexAuth(clientID: account.clientID) }
+                            }
+                        }
+                        Button("別のアカウント・ワークスペースを追加") {
+                            Task { await viewModel.loginCodexAuth(newAccount: true) }
+                        }
+                    } label: {
+                        codexAccountActionLabel("アカウントを選択", systemImage: "person.crop.circle", trailingImage: "chevron.up.chevron.down")
+                    }
+                    .disabled(viewModel.isCodexAuthActionRunning)
+
+                    Divider()
+
+                    Link(destination: URL(string: "https://chatgpt.com/settings/usage")!) {
+                        codexAccountActionLabel("使用状況を確認", systemImage: "chart.bar", trailingImage: "arrow.up.right")
+                    }
+
+                    if viewModel.codexAuthState.isLoggedIn || viewModel.codexAuthState.requiresReauthentication {
+                        Divider()
+
+                        Button(role: .destructive) {
+                            Task { await viewModel.logoutCodexAuth() }
+                        } label: {
+                            codexAccountActionLabel("サインアウト", systemImage: "rectangle.portrait.and.arrow.right")
+                                .foregroundStyle(.red)
+                        }
+                        .disabled(viewModel.isCodexAuthActionRunning)
+                    }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
+                .foregroundStyle(.primary)
+            }
+            .padding(.top, 6)
+            .listRowSeparator(.hidden)
+        }
+    }
 
-                Button("Sign out") {
-                    Task { await viewModel.logoutCodexAuth() }
-                }
-                .buttonStyle(.bordered)
-            }
-            .disabled(viewModel.isCodexAuthActionRunning)
-
-            if viewModel.isCodexAuthActionRunning {
-                ProgressView("Codex認証処理中...")
-                    .font(.caption2)
-            }
-
-            if !viewModel.codexEmailInput.isEmpty {
-                Text("Email: \(viewModel.codexEmailInput)")
-                    .font(.caption2)
-            }
-            if !viewModel.codexPlanTypeInput.isEmpty {
-                Text("Plan: \(viewModel.codexPlanTypeInput)")
-                    .font(.caption2)
-            }
-            if !viewModel.codexAccountIdInput.isEmpty {
-                Text("Account ID: \(viewModel.codexAccountIdInput)")
-                    .font(.caption2)
-                    .textSelection(.enabled)
-            }
-            Button("使用量を取得") {
-                Task { await viewModel.retrieveCodexUsage() }
-            }
-            .buttonStyle(.bordered)
-            .disabled(viewModel.isCodexAuthActionRunning)
-
-            if let usage = viewModel.codexUsageStatus {
-                Text("plan: \(usage.planType ?? "-")")
-                    .font(.caption2)
-                if let primary = usage.primaryWindow {
-                    Text("primary: \(primary.usedPercent ?? 0, specifier: "%.1f")%")
-                        .font(.caption2)
-                }
+    private func codexAccountActionLabel(_ title: String, systemImage: String, trailingImage: String? = nil) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.body)
+                .frame(width: 22)
+            Text(title)
+                .font(.subheadline)
+            Spacer(minLength: 8)
+            if let trailingImage {
+                Image(systemName: trailingImage)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.tertiary)
             }
         }
+        .frame(minHeight: 48)
+        .contentShape(Rectangle())
     }
 
     private var currentProviderAPIKeyLabel: String {
@@ -1469,7 +1532,8 @@ struct SettingsScreen: View {
     }
 
     private var codexSummary: String {
-        "loggedIn=\(viewModel.codexAuthState.isLoggedIn ? "yes" : "no"), hasApiKey=\(viewModel.codexAuthState.hasApiKey ? "yes" : "no")"
+        viewModel.codexAuthState.planUsageEnabled ? "プラン利用中" :
+            viewModel.codexAuthState.isLoggedIn ? "接続済み・プラン利用は未許可" : "未接続"
     }
 
     private var superGrokSummary: String {
@@ -1609,11 +1673,11 @@ struct SettingsScreen: View {
                 }
                 Button("モデル一覧を更新") { viewModel.refreshModelsDevCatalog() }
             } else if isCodexProvider {
-                Picker("Codex Model", selection: Binding(
+                Picker("ChatGPT Model", selection: Binding(
                     get: { viewModel.settings.defaultModel },
                     set: { value in
                         viewModel.setDefaultModel(value)
-                        if let preset = CodexModelCatalog.findPreset(value) {
+                        if let preset = CodexModelCatalog.findPreset(value, in: viewModel.codexModels) {
                             let supported = preset.supportedReasoningEfforts.map(\.effort)
                             if !supported.contains(viewModel.settings.codexReasoningEffort) {
                                 viewModel.settings.codexReasoningEffort = preset.defaultReasoningEffort
@@ -1623,12 +1687,22 @@ struct SettingsScreen: View {
                         }
                     }
                 )) {
-                    ForEach(CodexModelCatalog.visiblePresets()) { preset in
-                        Text(preset.displayName).tag(preset.model)
+                    ForEach(CodexModelCatalog.visiblePresets(from: viewModel.codexModels)) { preset in
+                        Text(preset.isSupported ? preset.displayName : "\(preset.displayName) · \(preset.unsupportedReason ?? "unsupported")")
+                            .tag(preset.model)
+                            .disabled(!preset.isSupported)
                     }
                 }
 
-                if let preset = CodexModelCatalog.findPreset(viewModel.settings.defaultModel) {
+                if !viewModel.codexModels.contains(where: { $0.id == viewModel.settings.defaultModel }) {
+                    Text(viewModel.codexAuthState.planUsageEnabled
+                         ? "この保存済みモデルは現在のアカウントの一覧にありません。モデルを選択してください。"
+                         : "ChatGPTに接続し、プラン利用を許可するとモデル一覧を取得できます。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let preset = CodexModelCatalog.findPreset(viewModel.settings.defaultModel, in: viewModel.codexModels) {
                     Text(preset.description)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -2091,15 +2165,10 @@ struct SettingsScreen: View {
     }
 
     private var codexReasoningEffortOptions: [CodexReasoningEffortPreset] {
-        if let preset = CodexModelCatalog.findPreset(viewModel.settings.defaultModel) {
+        if let preset = CodexModelCatalog.findPreset(viewModel.settings.defaultModel, in: viewModel.codexModels) {
             return preset.supportedReasoningEfforts
         }
-        return [
-            CodexReasoningEffortPreset(effort: "low", description: ""),
-            CodexReasoningEffortPreset(effort: "medium", description: ""),
-            CodexReasoningEffortPreset(effort: "high", description: ""),
-            CodexReasoningEffortPreset(effort: "xhigh", description: "")
-        ]
+        return []
     }
 
     private var superGrokReasoningEffortOptions: [String] {

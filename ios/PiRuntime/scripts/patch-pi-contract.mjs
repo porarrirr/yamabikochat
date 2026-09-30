@@ -1,10 +1,10 @@
-// Audited local contract extension for Pi 0.84.2. Fails closed on upstream drift.
+// Audited local contract extension for Pi 0.87.1. Fails closed on upstream drift.
 // This is applied by npm ci (postinstall), never by editing an installed bundle.
 import fs from 'node:fs';
 const root = new URL('../node_modules/@earendil-works/', import.meta.url);
 for (const name of ['pi-ai', 'pi-agent-core']) {
   const pkg = JSON.parse(fs.readFileSync(new URL(`${name}/package.json`, root)));
-  if (pkg.version !== '0.84.2') throw new Error(`Review PCC contract patch for ${name} ${pkg.version}`);
+  if (pkg.version !== '0.87.1') throw new Error(`Review PCC contract patch for ${name} ${pkg.version}`);
 }
 function patch(path, before, after) {
   const file = new URL(path, root);
