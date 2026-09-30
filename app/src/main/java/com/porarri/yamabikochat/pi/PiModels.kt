@@ -64,7 +64,10 @@ data class PiModelResolutionEnvelope(val models: List<PiAgentConfiguration>)
 data class PiModelResolutionResponse(val contractVersion: Int, val models: List<PiModelResolution>)
 
 @Serializable
-data class PiCodexModel(val id: String, val name: String)
+data class PiCodexModel(
+    val id: String, val name: String, val supported: Boolean? = null,
+    val reason: String? = null, val supportedThinkingLevels: List<String>? = null
+)
 
 @Serializable
 data class PiCodexModelResponse(val contractVersion: Int, val models: List<PiCodexModel>)
@@ -129,11 +132,14 @@ data class PiRuntimeEvent(
     val userCode: String? = null,
     val verificationUri: String? = null,
     val credential: JsonElement? = null,
+    val registration: JsonElement? = null,
     val profile: PiOAuthProfile? = null
 )
 
 @Serializable
 enum class PiOAuthProvider {
+    @SerialName("chatgpt")
+    CHATGPT,
     @SerialName("codex")
     CODEX,
     @SerialName("supergrok")
@@ -166,8 +172,12 @@ data class PiOAuthResolution(
 @Serializable
 data class PiOAuthLoginRequest(
     val provider: PiOAuthProvider,
-    val method: PiOAuthLoginMethod
+    val method: PiOAuthLoginMethod,
+    val context: PiChatGPTLoginContext? = null
 )
+
+@Serializable
+data class PiChatGPTLoginContext(val hostId: String, val registration: JsonElement? = null)
 
 @Serializable
 data class PiOAuthResolveRequest(

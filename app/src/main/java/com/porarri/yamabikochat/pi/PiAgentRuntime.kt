@@ -162,19 +162,31 @@ class PiAgentRuntime private constructor(private val context: Context) {
             }
         }
 
-    suspend fun codexModels(): List<PiCodexModel> = withContext(Dispatchers.IO) {
+    suspend fun chatGPTModels(credentialJSON: String): List<PiCodexModel> = withContext(Dispatchers.IO) {
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("credential", json.parseToJsonElement(credentialJSON))
+        }
+        val catalog = json.decodeFromString<PiCodexModelResponse>(postAuth("v1/models/chatgpt", body))
+        if (catalog.contractVersion != 2) throw ProviderClientError.ParseFailure("Pi ChatGPT catalog contract mismatch")
+        catalog.models
+    }
+
+    suspend fun revokeChatGPT(credentialJSON: String) {
+        postAuth("v1/auth/revoke", kotlinx.serialization.json.buildJsonObject {
+            put("provider", kotlinx.serialization.json.JsonPrimitive("chatgpt"))
+            put("credential", json.parseToJsonElement(credentialJSON))
+        })
+    }
+
+    private suspend fun postAuth(path: String, body: kotlinx.serialization.json.JsonElement): String = withContext(Dispatchers.IO) {
         val (endpoint, token) = startIfNeeded()
-        val request = Request.Builder()
-            .url("${endpoint}v1/models/codex")
+        val request = Request.Builder().url("$endpoint$path")
             .header("Authorization", "Bearer $token")
-            .build()
+            .post(json.encodeToString(body).toRequestBody("application/json".toMediaType())).build()
         httpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw ProviderClientError.InvalidResponse
-            val catalog = json.decodeFromString<PiCodexModelResponse>(response.body?.string().orEmpty())
-            if (catalog.contractVersion != 2) {
-                throw ProviderClientError.ParseFailure("Pi runtime contract mismatch")
-            }
-            catalog.models
+            val value = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw ProviderClientError.ParseFailure("Pi request failed: $value")
+            value
         }
     }
 
@@ -369,10 +381,12 @@ class PiAgentRuntime private constructor(private val context: Context) {
     suspend fun loginOAuth(
         provider: PiOAuthProvider,
         method: PiOAuthLoginMethod,
-        onDeviceCode: (suspend (SuperGrokDeviceCodeChallenge) -> Unit)? = null
+        onDeviceCode: (suspend (SuperGrokDeviceCodeChallenge) -> Unit)? = null,
+        loginContext: PiChatGPTLoginContext? = null,
+        onRegistration: (suspend (kotlinx.serialization.json.JsonElement) -> Unit)? = null
     ): PiOAuthResolution = withContext(Dispatchers.IO) {
         val (endpoint, token) = startIfNeeded()
-        val envelope = PiOAuthLoginRequest(provider = provider, method = method)
+        val envelope = PiOAuthLoginRequest(provider = provider, method = method, context = loginContext)
         val request = Request.Builder()
             .url("${endpoint}v1/auth/login")
             .header("Authorization", "Bearer $token")
@@ -380,7 +394,7 @@ class PiAgentRuntime private constructor(private val context: Context) {
             .post(json.encodeToString(envelope).toRequestBody("application/json".toMediaType()))
             .build()
 
-        val response = httpClient.newCall(request).execute()
+        httpClient.newCall(request).execute().use { response ->
         if (!response.isSuccessful) {
             throw ProviderClientError.InvalidResponse
         }
@@ -395,6 +409,18 @@ class PiAgentRuntime private constructor(private val context: Context) {
 
             val event = json.decodeFromString<PiRuntimeEvent>(currentLine)
             when (event.type) {
+                "auth_registration" -> {
+                    val registration = event.registration
+                        ?: throw ProviderClientError.ParseFailure("Pi registration missing")
+                    val requestId = event.requestId
+                        ?: throw ProviderClientError.ParseFailure("Pi registration request ID missing")
+                    val persist = onRegistration
+                        ?: throw ProviderClientError.ParseFailure("Unexpected Pi registration")
+                    persist(registration)
+                    postAuth("v1/auth/registration", kotlinx.serialization.json.buildJsonObject {
+                        put("requestId", kotlinx.serialization.json.JsonPrimitive(requestId))
+                    })
+                }
                 "auth_url" -> {
                     val urlStr = event.url ?: throw ProviderClientError.ParseFailure("Pi OAuth returned invalid URL")
                     openBrowser(urlStr)
@@ -433,6 +459,7 @@ class PiAgentRuntime private constructor(private val context: Context) {
             }
         }
         throw ProviderClientError.ParseFailure("Pi OAuth login ended without credentials")
+        }
     }
 
     suspend fun resolveOAuth(
@@ -467,7 +494,8 @@ class PiAgentRuntime private constructor(private val context: Context) {
             }
             context.startActivity(intent)
         } catch (e: Exception) {
-            DiagnosticsLogger.log("Failed to launch browser for URL: $url", e)
+            DiagnosticsLogger.log("Failed to launch OAuth browser", e)
+            throw e
         }
     }
 

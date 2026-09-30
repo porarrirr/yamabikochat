@@ -329,6 +329,14 @@ class SecurePreferencesManager private constructor(private val context: Context)
     private fun modelsDevFieldKey(providerId: String, fieldName: String): String =
         ModelsDevReasoningPreference.fieldKey(providerId, fieldName)
 
+    fun readEncryptedSecret(key: String): String? = readEncryptedOnly(key, key)
+
+    fun saveEncryptedSecret(key: String, value: String): Boolean {
+        val encrypted = encryptedPrefs ?: return false
+        return try { encrypted.edit().putString(key, value).commit() }
+        catch (error: Exception) { DiagnosticsLogger.log("$key encrypted save failed", error); false }
+    }
+
     fun readSecret(key: String): String? = readString(key, key)
 
     fun saveSecret(key: String, value: String?): Boolean = storeString(key, value, key)

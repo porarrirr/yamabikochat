@@ -841,7 +841,10 @@ class ChatRepository(
     // region Codex Auth
     val codexAuthState: StateFlow<CodexAuthState> = codexAuthRepository.state
 
-    suspend fun loginCodexAuth(): Result<CodexAuthState> = codexAuthRepository.loginWithBrowser()
+    suspend fun loginCodexAuth(clientID: String? = null, newAccount: Boolean = false): Result<CodexAuthState> =
+        codexAuthRepository.loginWithBrowser(clientID, newAccount)
+
+    suspend fun codexModels() = codexAuthRepository.models()
 
     suspend fun logoutCodexAuth(): Result<CodexAuthState> = codexAuthRepository.logout()
 
@@ -850,8 +853,7 @@ class ChatRepository(
 
     fun hasCodexAuth(): Boolean = codexAuthRepository.hasAuthToken()
 
-    suspend fun retrieveCodexAuthUsage(): Result<CodexUsageStatus> =
-        codexAuthRepository.retrieveUsageStatus()
+
     // endregion
 
     // region SuperGrok Auth

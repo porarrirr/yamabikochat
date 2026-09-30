@@ -6,7 +6,11 @@ data class CodexAuthState(
     val planType: String? = null,
     val accountId: String? = null,
     val hasApiKey: Boolean = false,
-    val lastRefreshISO8601: String? = null
+    val lastRefreshISO8601: String? = null,
+    val planUsageEnabled: Boolean = false,
+    val requiresReauthentication: Boolean = false,
+    val revocationUnconfirmed: Boolean = false,
+    val savedAccounts: List<CodexSavedAccount> = emptyList()
 )
 
 data class CodexBearerToken(
@@ -33,3 +37,7 @@ data class CodexUsageStatus(
     val secondaryWindow: CodexRateLimitWindow? = null,
     val credits: CodexCreditsStatus? = null
 )
+
+data class CodexSavedAccount(val clientID: String, val email: String?) {
+    val label: String get() = "${email ?: "ChatGPT"} · ${clientID.takeLast(8)}"
+}

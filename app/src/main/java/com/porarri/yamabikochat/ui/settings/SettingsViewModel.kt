@@ -109,11 +109,7 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
     }
 
     fun refreshCodexModels(context: Context) {
-        viewModelScope.launch {
-            runCatching { PiAgentRuntime.getInstance(context).codexModels() }
-                .onSuccess { _codexModels.value = it }
-                .onFailure { DiagnosticsLogger.log("Pi Codex model catalog unavailable", it) }
-        }
+        viewModelScope.launch { loadChatGPTModels() }
     }
 
     fun refreshModelsDevCatalog() {
@@ -209,18 +205,30 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
         viewModelScope.launch { updateApiKeyStatus() }
     }
 
-    fun loginCodexAuth() {
+    fun loginCodexAuth(clientID: String? = null, newAccount: Boolean = false) {
         viewModelScope.launch {
-            val result = repository.loginCodexAuth()
+            val result = repository.loginCodexAuth(clientID, newAccount)
             _codexAuthError.value = result.exceptionOrNull()?.message
+            loadChatGPTModels()
             updateApiKeyStatus()
         }
+    }
+
+    private suspend fun loadChatGPTModels() {
+        _codexModels.value = emptyList()
+        runCatching { repository.codexModels() }
+            .onSuccess { _codexModels.value = it }
+            .onFailure { DiagnosticsLogger.log("ChatGPT account model catalog unavailable", it) }
     }
 
     fun logoutCodexAuth() {
         viewModelScope.launch {
             val result = repository.logoutCodexAuth()
             _codexAuthError.value = result.exceptionOrNull()?.message
+            _codexModels.value = emptyList()
+            if (result.getOrNull()?.revocationUnconfirmed == true) {
+                _codexAuthError.value = "この端末からログアウトしました。ChatGPTの設定で接続解除を確認してください。"
+            }
             clearCodexUsage()
             updateApiKeyStatus()
         }
@@ -229,6 +237,7 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
     fun refreshCodexAuth(force: Boolean = false) {
         viewModelScope.launch {
             val result = repository.refreshCodexAuth(force)
+            loadChatGPTModels()
             _codexAuthError.value = result.exceptionOrNull()?.message
             updateApiKeyStatus()
         }
@@ -271,29 +280,6 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
         }
     }
 
-    fun refreshCodexUsage() {
-        viewModelScope.launch {
-            val current = _codexUsageState.value
-            _codexUsageState.value = current.copy(isLoading = true, error = null)
-            val result = repository.retrieveCodexAuthUsage()
-            _codexUsageState.value = result.fold(
-                onSuccess = { usage ->
-                    CodexUsageUiState(
-                        isLoading = false,
-                        error = null,
-                        usage = usage,
-                        lastUpdated = Instant.now().toString()
-                    )
-                },
-                onFailure = { err ->
-                    current.copy(
-                        isLoading = false,
-                        error = err.message ?: "Failed to load rate limits"
-                    )
-                }
-            )
-        }
-    }
 
     private fun clearCodexUsage() {
         _codexUsageState.value = CodexUsageUiState()

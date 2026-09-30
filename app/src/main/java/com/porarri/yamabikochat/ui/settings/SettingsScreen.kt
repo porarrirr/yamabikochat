@@ -147,7 +147,6 @@ fun SettingsScreen(
     val superGrokAuthState by viewModel.superGrokAuthState.collectAsState()
     val superGrokAuthError by viewModel.superGrokAuthError.collectAsState()
     val superGrokAuthActionRunning by viewModel.superGrokAuthActionRunning.collectAsState()
-    val codexUsageState by viewModel.codexUsageState.collectAsState()
     val tokenUsageState by viewModel.tokenUsageState.collectAsState()
     val installedAgentSkills by viewModel.installedAgentSkills.collectAsState()
     val agentSkillPreview by viewModel.agentSkillPreview.collectAsState()
@@ -508,7 +507,8 @@ fun SettingsScreen(
                         YamabikoOption(
                             key = preset.model,
                             title = preset.displayName,
-                            subtitle = preset.description
+                            subtitle = preset.description,
+                            enabled = preset.isSupported
                         )
                     }
                     YamabikoOptionBottomSheet(
@@ -840,7 +840,7 @@ fun SettingsScreen(
                                         verticalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
                                         Text(
-                                            text = "Codex Auth",
+                                            text = "ChatGPT プラン",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.SemiBold
                                         )
@@ -861,117 +861,25 @@ fun SettingsScreen(
                                             LabeledValueBlock(label = "Workspace", value = it)
                                         }
                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            FilledTonalButton(onClick = { viewModel.loginCodexAuth() }) { Text("Sign in") }
+                                            FilledTonalButton(onClick = { viewModel.loginCodexAuth() }) { Text(if (codexAuthState.isLoggedIn) "ChatGPTに再接続" else "ChatGPTに接続") }
                                             TextButton(onClick = { viewModel.refreshCodexAuth(force = true) }) { Text("Refresh") }
                                             TextButton(onClick = { viewModel.logoutCodexAuth() }) { Text("Sign out") }
                                         }
                                         Text(
-                                            text = if (codexAuthState.hasApiKey) "API key ready" else "API key not available yet",
+                                            text = if (codexAuthState.planUsageEnabled) "ChatGPTプランを利用できます" else "ChatGPTでプランの利用を許可してください",
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.Medium,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
-                                        val uaLabel = when (codexUserAgentPreset.uppercase()) {
-                                            CodexUserAgentUtils.PRESET_UBUNTU -> "Ubuntu"
-                                            CodexUserAgentUtils.PRESET_WINDOWS_POWERSHELL -> "Windows PowerShell"
-                                            CodexUserAgentUtils.PRESET_WINDOWS_CMD -> "Windows Command Prompt"
-                                            else -> "Android (default)"
+                                        if (codexAuthState.requiresReauthentication) {
+                                            Text("ChatGPT連携が更新されました。再接続してプランの利用を許可してください。")
                                         }
-                                        YamabikoSelectRow(
-                                            title = "User-Agent",
-                                            value = uaLabel,
-                                            onClick = { activeSheet = SettingsSheet.CodexUserAgent },
-                                            leadingContent = { Icon(Icons.Default.Computer, contentDescription = null) }
-                                        )
-
-                                        Spacer(modifier = Modifier.height(4.dp))
-
-                                        Text(
-                                            text = "Rate limits",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        val canCheckUsage = codexAuthState.isLoggedIn &&
-                                            !codexAuthState.accountId.isNullOrBlank()
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            TextButton(
-                                                onClick = { viewModel.refreshCodexUsage() },
-                                                enabled = canCheckUsage && !codexUsageState.isLoading
-                                            ) { Text("Check /status") }
-                                            if (codexUsageState.isLoading) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(18.dp),
-                                                    strokeWidth = 2.dp
-                                                )
-                                            }
+                                        codexAuthState.savedAccounts.forEach { account ->
+                                            TextButton(onClick = { viewModel.loginCodexAuth(account.clientID) }) { Text(account.label) }
                                         }
-                                        if (!codexAuthState.isLoggedIn) {
-                                            Text(
-                                                text = "Sign in to check rate limits.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        } else if (codexAuthState.accountId.isNullOrBlank()) {
-                                            Text(
-                                                text = "Workspace/account ID is required to check rate limits.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        codexUsageState.error?.let { err ->
-                                            Text(
-                                                text = err,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.error
-                                            )
-                                        }
-                                        codexUsageState.lastUpdated?.let { timestamp ->
-                                            Text(
-                                                text = "Updated: $timestamp",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        codexUsageState.usage?.let { usage ->
-                                            codexUsagePlanLabel(usage)?.let {
-                                                LabeledValueBlock(label = "Plan (/status)", value = it)
-                                            }
-                                            usage.primaryWindow?.let { window ->
-                                                LabeledValueBlock(
-                                                    label = "Primary limit",
-                                                    value = formatCodexRateLimitWindow(window)
-                                                )
-                                            }
-                                            usage.secondaryWindow?.let { window ->
-                                                LabeledValueBlock(
-                                                    label = "Secondary limit",
-                                                    value = formatCodexRateLimitWindow(window)
-                                                )
-                                            }
-                                            codexUsageCreditsLabel(usage)?.let {
-                                                LabeledValueBlock(label = "Credits", value = it)
-                                            }
-                                        }
-                                        val hasCodexUsageData = codexUsageState.usage?.let { usage ->
-                                            usage.primaryWindow != null ||
-                                                usage.secondaryWindow != null ||
-                                                usage.credits != null ||
-                                                !usage.planType.isNullOrBlank()
-                                        } == true
-                                        if (!codexUsageState.isLoading &&
-                                            codexUsageState.error == null &&
-                                            canCheckUsage &&
-                                            codexUsageState.lastUpdated != null &&
-                                            !hasCodexUsageData
-                                        ) {
-                                            Text(
-                                                text = "No rate limit data returned.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                        TextButton(onClick = { viewModel.loginCodexAuth(newAccount = true) }) { Text("別のアカウントを追加") }
+                                        TextButton(onClick = { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://chatgpt.com/settings/usage"))) }) {
+                                            Text("ChatGPTの利用状況と接続設定")
                                         }
                                     }
                                 }
@@ -3866,7 +3774,7 @@ private fun SettingsScreenPreviewContent(initialTab: Int) {
                                         "MINIMAX" -> "MiniMax"
                                         "ZAI" -> "Z.ai Coding Plan"
                                         "OPENAI" -> "OpenAI"
-                                        "CODEX_AUTH" -> "Codex Auth"
+                                        "CODEX_AUTH" -> "ChatGPT plan"
                                         "SUPERGROK" -> "SuperGrok"
                                         "OPENAI_COMPAT" -> "OpenAI (Custom)"
                                         else -> apiProvider

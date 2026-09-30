@@ -190,12 +190,8 @@ class ProviderGateway(
             LLMProvider.CODEX_AUTH -> {
                 val auth = codexAuthRepository?.getBearerToken()
                     ?: throw ProviderClientError.MissingCredential(LLMProvider.CODEX_AUTH.rawValue)
-                piProvider = "openai-codex"
+                piProvider = "openai-chatgpt"
                 apiKey = auth.token
-                headers["originator"] = "codex_cli_rs"
-                if (!auth.accountId.isNullOrBlank()) {
-                    headers["ChatGPT-Account-ID"] = auth.accountId
-                }
             }
             LLMProvider.SUPERGROK -> {
                 val auth = superGrokAuthRepository?.getBearerToken()

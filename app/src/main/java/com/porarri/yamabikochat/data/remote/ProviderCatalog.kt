@@ -38,7 +38,7 @@ object ProviderCatalog {
         ProviderDisplay(ZAI, "Z.ai Coding Plan"),
         ProviderDisplay(MINIMAX, "MiniMax"),
         ProviderDisplay(OPENAI, "OpenAI"),
-        ProviderDisplay(CODEX_AUTH, "Codex Auth"),
+        ProviderDisplay(CODEX_AUTH, "ChatGPT plan"),
         ProviderDisplay(OPENAI_COMPAT, "OpenAI (Custom)")
     )
 

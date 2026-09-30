@@ -15,7 +15,8 @@ data class CodexModelPreset(
     val defaultReasoningEffort: String,
     val supportedReasoningEfforts: List<CodexReasoningEffortPreset>,
     val isDefault: Boolean,
-    val showInPicker: Boolean
+    val showInPicker: Boolean,
+    val isSupported: Boolean = true
 )
 
 object CodexModelPresets {
@@ -49,10 +50,15 @@ object CodexModelPresets {
     fun visiblePresets(): List<CodexModelPreset> = presets.filter { it.showInPicker }
 
     fun visiblePresets(models: List<PiCodexModel>): List<CodexModelPreset> =
-        if (models.isEmpty()) visiblePresets() else models.sortedWith(compareBy<PiCodexModel> {
-            presets.indexOfFirst { preset -> preset.model == it.id }.takeIf { index -> index >= 0 } ?: Int.MAX_VALUE
-        }.thenBy { it.id }).map { model ->
-            findPreset(model.id) ?: preset(model.id, model.name, "Pi Codex model", "medium", modernEfforts)
+        models.map { model ->
+            val known = findPreset(model.id)
+            val levels = model.supportedThinkingLevels.orEmpty()
+            CodexModelPreset(
+                model.id, model.id, model.name, model.reason ?: "ChatGPT account model",
+                known?.defaultReasoningEffort?.takeIf { it in levels } ?: levels.firstOrNull() ?: "off",
+                levels.map { CodexReasoningEffortPreset(it, "") },
+                known?.isDefault ?: false, true, model.supported == true
+            )
         }
 
     fun findPreset(model: String): CodexModelPreset? {
