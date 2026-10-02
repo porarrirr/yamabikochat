@@ -10,7 +10,7 @@ typealias PiOAuthResolveHandler = @Sendable (PiOAuthProvider, String, Bool) asyn
 typealias PiChatGPTLoginHandler = @Sendable (
     String, String?, @escaping @Sendable (JSONValue) async throws -> Void
 ) async throws -> PiOAuthResolution
-typealias PiChatGPTCatalogHandler = @Sendable (String) async throws -> [PiCodexModel]
+typealias PiChatGPTCatalogHandler = @Sendable (String, [String: PiCatalogModelContract]) async throws -> [PiCodexModel]
 
 /// CODEX_AUTH now uses the official ChatGPT plan provider. OAuth belongs to Pi.
 final class CodexAuthRepository {
@@ -33,6 +33,8 @@ final class CodexAuthRepository {
 
     private let authLock = NSRecursiveLock()
     private var authGeneration = 0
+    private var catalogCache: [PiCodexModel]?
+    private var catalogRequestID = UUID()
     private var signingOut = false
     private var pendingResolution: (id: UUID, generation: Int, credential: String, task: Task<PiOAuthResolution, Error>)?
     private let credentialStore: SecureCredentialStore
@@ -50,8 +52,8 @@ final class CodexAuthRepository {
         resolveHandler: @escaping PiOAuthResolveHandler = { provider, credential, force in
             try await PiAgentRuntime.shared.resolveOAuth(provider: provider, credentialJSON: credential, force: force)
         },
-        catalogHandler: @escaping PiChatGPTCatalogHandler = { credential in
-            try await PiAgentRuntime.shared.chatGPTModels(credentialJSON: credential)
+        catalogHandler: @escaping PiChatGPTCatalogHandler = { credential, contracts in
+            try await PiAgentRuntime.shared.chatGPTModels(credentialJSON: credential, contracts: contracts)
         },
         revokeHandler: @escaping @Sendable (String) async throws -> Void = { credential in
             try await PiAgentRuntime.shared.revokeChatGPT(credentialJSON: credential)
@@ -141,6 +143,7 @@ final class CodexAuthRepository {
             let (generation, host, registration) = try authLock.withLock {
                 guard !signingOut else { throw CancellationError() }
                 authGeneration += 1
+                catalogCache = nil
                 let accounts = try readAccounts()
                 if let clientID, accounts.registrations[clientID] == nil {
                     throw ProviderClientError.parseFailure("Selected ChatGPT registration is missing")
@@ -176,6 +179,7 @@ final class CodexAuthRepository {
             let (generation, credential) = try authLock.withLock {
                 let credential = try credentialJSON()
                 authGeneration += 1
+                catalogCache = nil
                 signingOut = true
                 return (authGeneration, credential)
             }
@@ -237,14 +241,25 @@ final class CodexAuthRepository {
         }
     }
 
-    func models() async throws -> [PiCodexModel] {
+    /// Last account catalog successfully fetched for the current auth generation.
+    /// Used for reasoning-effort options and shortcut model lists without a network call.
+    func cachedModels() -> [PiCodexModel] {
+        authLock.withLock { catalogCache ?? [] }
+    }
+
+    func models(contracts: [String: PiCatalogModelContract]) async throws -> [PiCodexModel] {
         guard hasAuthToken() else { return [] }
-        let (generation, credential) = try authLock.withLock { (authGeneration, try credentialJSON()) }
+        let (generation, requestID, credential) = try authLock.withLock {
+            let requestID = UUID()
+            catalogRequestID = requestID
+            return (authGeneration, requestID, try credentialJSON())
+        }
         guard let credential else { return [] }
         let resolution = try await resolveCredential(credential, force: false, generation: generation)
-        let models = try await catalogHandler(PiAgentRuntime.credentialJSONString(resolution.credential))
+        let models = try await catalogHandler(PiAgentRuntime.credentialJSONString(resolution.credential), contracts)
         return try authLock.withLock {
-            guard generation == authGeneration else { throw CancellationError() }
+            guard generation == authGeneration, requestID == catalogRequestID else { throw CancellationError() }
+            catalogCache = models
             return models
         }
     }

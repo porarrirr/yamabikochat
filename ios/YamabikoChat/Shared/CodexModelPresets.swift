@@ -19,66 +19,47 @@ struct CodexModelPreset: Identifiable, Equatable, Sendable {
     var unsupportedReason: String? = nil
 }
 
+/// ChatGPT plan model options are driven by the live account catalog (`PiCodexModel`)
+/// returned by the Pi runtime. models.dev supplies the execution contract for account
+/// slugs the bundled Pi release does not ship as built-ins.
 enum CodexModelCatalog {
-    private static let modernEfforts = [
-        CodexReasoningEffortPreset(effort: "low", description: "Fast responses with lighter reasoning"),
-        CodexReasoningEffortPreset(effort: "medium", description: "Balances speed and reasoning depth for everyday tasks"),
-        CodexReasoningEffortPreset(effort: "high", description: "Greater reasoning depth for complex problems"),
-        CodexReasoningEffortPreset(effort: "xhigh", description: "Extra high reasoning depth for complex problems")
-    ]
-    private static let maximumEfforts = modernEfforts + [
-        CodexReasoningEffortPreset(effort: "max", description: "Maximum reasoning depth for the hardest problems")
-    ]
-    static let presets: [CodexModelPreset] = [
-        preset("gpt-6-sol", "GPT-6 Sol", "Complex coding and agentic workflows.", "medium", maximumEfforts, isDefault: true),
-        preset("gpt-6-astra", "GPT-6 Astra", "Most capable model for complex work.", "low", maximumEfforts),
-        preset("gpt-6-luna", "GPT-6 Luna", "Efficient model for focused work.", "high", maximumEfforts),
-        preset("gpt-5.6-sol", "GPT-5.6 Sol", "Frontier agentic coding model.", "low", maximumEfforts),
-        preset("gpt-5.6-terra", "GPT-5.6-Terra", "Balanced agentic coding model for everyday work.", "medium", maximumEfforts),
-        preset("gpt-5.6-luna", "GPT-5.6-Luna", "Fast and affordable agentic coding model.", "medium", maximumEfforts),
-        preset("gpt-5.5", "GPT-5.5", "Previous-generation flagship model.", "medium", modernEfforts)
-    ]
-
-    private static func preset(
-        _ model: String,
-        _ displayName: String,
-        _ description: String,
-        _ defaultEffort: String,
-        _ efforts: [CodexReasoningEffortPreset],
-        isDefault: Bool = false
-    ) -> CodexModelPreset {
-        CodexModelPreset(
-            model: model,
-            displayName: displayName,
-            description: description,
-            defaultReasoningEffort: defaultEffort,
-            supportedReasoningEfforts: efforts,
-            isDefault: isDefault,
-            showInPicker: true
-        )
+    /// Builds the models.dev contracts the Pi runtime uses to supplement account slugs
+    /// that are not Pi built-ins. Keys are the catalog model IDs.
+    static func modelsDevContracts(from provider: CatalogProvider?) -> [String: PiCatalogModelContract] {
+        guard let provider else { return [:] }
+        var contracts: [String: PiCatalogModelContract] = [:]
+        for model in provider.models {
+            contracts[model.id] = PiCatalogModelContract(
+                providerName: provider.name,
+                npm: model.providerContract?.npm,
+                api: model.providerContract?.api,
+                shape: model.providerContract?.shape,
+                toolCall: model.toolCall,
+                provenance: model.providerContract?.provenance,
+                name: model.name,
+                reasoning: model.reasoning,
+                input: model.inputModalities,
+                contextWindow: model.limits.context,
+                maxTokens: model.limits.output,
+                reasoningEfforts: model.supportedReasoningEfforts
+            )
+        }
+        return contracts
     }
 
-    static func visiblePresets() -> [CodexModelPreset] { presets.filter(\.showInPicker) }
-
     static func visiblePresets(from models: [PiCodexModel]) -> [CodexModelPreset] {
-        models.map { model in
-            let known = findPreset(model.id)
+        let defaultID = defaultModel()
+        return models.map { model in
             let levels = model.supportedThinkingLevels ?? []
             return CodexModelPreset(
                 model: model.id, displayName: model.name,
                 description: model.reason ?? "ChatGPT account model",
-                defaultReasoningEffort: levels.contains(known?.defaultReasoningEffort ?? "medium") ? known?.defaultReasoningEffort ?? "medium" : levels.first ?? "off",
+                defaultReasoningEffort: levels.contains("medium") ? "medium" : levels.first ?? "off",
                 supportedReasoningEfforts: levels.map { CodexReasoningEffortPreset(effort: $0, description: "") },
-                isDefault: known?.isDefault ?? false, showInPicker: true,
+                isDefault: model.id == defaultID, showInPicker: true,
                 isSupported: model.supported == true, unsupportedReason: model.reason
             )
         }
-    }
-
-    static func findPreset(_ model: String) -> CodexModelPreset? {
-        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalized.isEmpty else { return nil }
-        return presets.first { $0.model.lowercased() == normalized }
     }
 
     static func findPreset(_ model: String, in models: [PiCodexModel]) -> CodexModelPreset? {
@@ -86,12 +67,27 @@ enum CodexModelCatalog {
         return visiblePresets(from: models).first { $0.model.lowercased() == normalized }
     }
 
-    static func defaultModel() -> String { presets.first(where: \.isDefault)?.model ?? "gpt-6-sol" }
+    /// Only the initial default for new settings; a saved model is never auto-replaced.
+    static func defaultModel() -> String { "gpt-6.1-sol" }
 
-    static func resolvedReasoningEffort(_ requested: String, model: String) -> String {
+    static func resolvedReasoningEffort(_ requested: String, model: String, models: [PiCodexModel]) -> String {
         let normalized = requested.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let supported = (findPreset(model)?.supportedReasoningEfforts ?? modernEfforts).map(\.effort)
-        return supported.contains(normalized) ? normalized : "medium"
+        // Pi clamps the requested level against the exact model metadata when the
+        // account catalog has not been fetched yet.
+        guard let preset = findPreset(model, in: models) else { return normalized }
+        if preset.supportedReasoningEfforts.contains(where: { $0.effort == normalized }) {
+            return normalized
+        }
+        DiagnosticsLogger.log(
+            "ChatGPT reasoning effort adjusted to the account model's supported levels",
+            category: .settings,
+            metadata: [
+                "model": model,
+                "requested": normalized,
+                "resolved": preset.defaultReasoningEffort
+            ]
+        )
+        return preset.defaultReasoningEffort
     }
 
     static func supportsReasoningSummary(_ model: String) -> Bool {

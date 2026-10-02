@@ -857,7 +857,7 @@ function resolutionFor(config) {
     provider: model.provider,
     model: model.id,
     api: model.api,
-    source: model.provider === CHATGPT_PLAN_PROVIDER ? "verified_official_contract" : VERIFIED_MODEL_SOURCES.get(`${model.provider}/${model.id}`) || "pi_builtin",
+    source: model.provider === CHATGPT_PLAN_PROVIDER ? chatGPTPlan.modelSource(model.id) : VERIFIED_MODEL_SOURCES.get(`${model.provider}/${model.id}`) || "pi_builtin",
     reasoning: model.reasoning,
     input: model.input,
     contextWindow: model.contextWindow,
@@ -1276,7 +1276,7 @@ async function runAgent(envelope, res) {
   if (config.provider === CHATGPT_PLAN_PROVIDER) {
     const credential = await authCredentials.read(CHATGPT_PLAN_PROVIDER);
     if (!credential || credential.access !== config.apiKey) throw Object.assign(new Error("ChatGPT account credentials must be resolved before execution"), { code: "chatgpt_reconnect_required" });
-    await chatGPTPlan.catalog(credential, AbortSignal.timeout(30_000));
+    await chatGPTPlan.catalog(credential, AbortSignal.timeout(30_000), config.catalogContract ? { [config.model]: config.catalogContract } : {});
   }
   const skillAppliedRequest = applyExplicitSkillInvocations(request);
   const startedAtMs = Date.now();
@@ -1512,7 +1512,7 @@ const handleRequest = async (req, res) => {
       const value = await body(req);
       const credential = await authCredentials.read(CHATGPT_PLAN_PROVIDER);
       if (!credential || credential.clientId !== value.credential?.clientId) throw new Error("ChatGPT account credentials must be resolved before discovery");
-      const models = await chatGPTPlan.catalog(credential, AbortSignal.timeout(30_000));
+      const models = await chatGPTPlan.catalog(credential, AbortSignal.timeout(30_000), value.contracts || {});
       return json(res, 200, { contractVersion: RUNTIME_CONTRACT_VERSION, models });
     }
     if (req.method === "POST" && req.url === "/v1/auth/registration") {

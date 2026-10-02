@@ -79,6 +79,34 @@ final class ShortcutModelOptionsTests: XCTestCase {
         XCTAssertEqual(options.count, ProviderCatalog.options.count)
     }
 
+    func testCodexOptionsIncludeOnlySupportedAccountCatalogModels() {
+        let settings = AppSettings()
+        let options = ShortcutModelOptionsBuilder.modelOptions(
+            provider: "CODEX_AUTH",
+            settings: settings,
+            openRouterModels: [],
+            codexModels: [
+                PiCodexModel(id: "gpt-6.1-sol", name: "Sol", supported: true),
+                PiCodexModel(id: "gpt-6-sol", name: "Old Sol", supported: true),
+                PiCodexModel(id: "future-model", name: "Future", supported: false, reason: "pi_model_missing")
+            ]
+        )
+
+        XCTAssertTrue(options.contains("gpt-6.1-sol"))
+        XCTAssertTrue(options.contains("gpt-6-sol"))
+        XCTAssertFalse(options.contains("future-model"))
+    }
+
+    func testCodexOptionsAreEmptyWithoutAnAccountCatalog() {
+        let options = ShortcutModelOptionsBuilder.modelOptions(
+            provider: "CODEX_AUTH",
+            settings: AppSettings(),
+            openRouterModels: []
+        )
+
+        XCTAssertFalse(options.contains("gpt-6.1-sol"))
+    }
+
     func testOpenCodeGoOptionsIncludeCatalogModels() {
         let settings = AppSettings()
         let options = ShortcutModelOptionsBuilder.modelOptions(

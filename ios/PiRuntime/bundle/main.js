@@ -312446,6 +312446,8 @@ var DYNAMIC_CLIENT = "dynamic_agent_client";
 var PLAN_SCOPE = "chatgpt.tokens.use.direct";
 var SCOPES2 = `openid profile email offline_access resource.invoke ${PLAN_SCOPE}`;
 var UUID_URI = /^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+var CONTRACT_EFFORT_VALUES = /* @__PURE__ */ new Set(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
+var CONTRACT_LEVEL_KEYS = ["minimal", "low", "medium", "high", "xhigh", "max"];
 function failure(code, message2) {
   return Object.assign(new Error(message2), { code });
 }
@@ -312566,6 +312568,50 @@ function chatGPTRegistration(credential) {
     email: credential.email ?? null
   };
 }
+function catalogContractModel(id, name, contract) {
+  if (!contract || typeof contract !== "object" || !["provider", "model"].includes(contract.provenance)) {
+    return { reason: "catalog_contract_incomplete" };
+  }
+  if (contract.shape !== void 0 && contract.shape !== null) {
+    if (contract.shape !== "responses") return { reason: "protocol_conflict" };
+    if (contract.npm !== void 0 && contract.npm !== null && contract.npm !== "@ai-sdk/openai") {
+      return { reason: "protocol_conflict" };
+    }
+  } else if (contract.npm !== "@ai-sdk/openai") {
+    return { reason: "protocol_conflict" };
+  }
+  if (contract.api !== void 0 && contract.api !== null) {
+    const api = typeof contract.api === "string" ? contract.api.trim().replace(/\/+$/, "") : null;
+    if (api !== RESOURCE) return { reason: "endpoint_conflict" };
+  }
+  const input = Array.isArray(contract.input) ? contract.input.filter((value3) => typeof value3 === "string") : [];
+  const contextWindow = Number(contract.contextWindow);
+  const maxTokens = Number(contract.maxTokens);
+  if (!input.includes("text") || !Number.isInteger(contextWindow) || contextWindow <= 0 || !Number.isInteger(maxTokens) || maxTokens <= 0 || typeof contract.reasoning !== "boolean") {
+    return { reason: "catalog_contract_incomplete" };
+  }
+  const efforts = !contract.reasoning ? [] : (Array.isArray(contract.reasoningEfforts) ? contract.reasoningEfforts : []).map((value3) => typeof value3 === "string" ? value3.trim().toLowerCase() : "");
+  if (contract.reasoning && (!efforts.length || efforts.some((value3) => !CONTRACT_EFFORT_VALUES.has(value3)))) {
+    return { reason: "catalog_contract_incomplete" };
+  }
+  const model = {
+    id,
+    name,
+    api: "openai-responses",
+    provider: CHATGPT_PLAN_PROVIDER,
+    baseUrl: RESOURCE,
+    reasoning: contract.reasoning,
+    input: input.filter((value3) => ["text", "image"].includes(value3)),
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow,
+    maxTokens
+  };
+  if (contract.reasoning) {
+    model.thinkingLevelMap = { off: efforts.includes("none") ? "none" : null };
+    for (const level of CONTRACT_LEVEL_KEYS) model.thinkingLevelMap[level] = efforts.includes(level) ? level : null;
+  }
+  return { model };
+}
 function createChatGPTPlanPlugin({
   fetch: fetcher = globalThis.fetch,
   callbackListener = startChatGPTCallback,
@@ -312577,6 +312623,7 @@ function createChatGPTPlanPlugin({
   let catalogGeneration = 0;
   let catalogRequestClient = null;
   const builtin = new Map(openaiProvider().getModels().map((model) => [model.id, model]));
+  const contractCache = /* @__PURE__ */ new Map();
   let discoveryCache = null;
   let keysCache = null;
   async function readJSON(url, signal, options = {}) {
@@ -312757,14 +312804,23 @@ function createChatGPTPlanPlugin({
       catalogRequestClient = null;
       accountCatalog = [];
       catalogClientId = null;
+      contractCache.clear();
     },
     modelStatus(id) {
       const entry = accountCatalog.find((entry2) => entry2.id === id);
       return entry ? entry.reason : catalogClientId ? "chatgpt_model_unavailable" : "chatgpt_catalog_required";
     },
-    async catalog(credential, signal) {
+    modelSource(id) {
+      return accountCatalog.find((entry) => entry.id === id)?.source ?? null;
+    },
+    async catalog(credential, signal, contracts = {}) {
       const registration = chatGPTRegistration(credential);
       await oauth.toAuth(credential);
+      if (contracts && typeof contracts === "object") {
+        for (const [slug, contract] of Object.entries(contracts)) {
+          if (slug) contractCache.set(slug, contract);
+        }
+      }
       const generation = catalogRequestClient === registration.clientId ? catalogGeneration : ++catalogGeneration;
       catalogRequestClient = registration.clientId;
       accountCatalog = [];
@@ -312777,17 +312833,24 @@ function createChatGPTPlanPlugin({
         if (seen.has(id)) throw failure("chatgpt_catalog_invalid", "ChatGPT catalog contains duplicate models");
         seen.add(id);
         const original = builtin.get(id);
-        const model = original && original.api === "openai-responses" ? { ...original, name, provider: CHATGPT_PLAN_PROVIDER, baseUrl: RESOURCE } : null;
-        return { id, name, model, reason: model ? null : "pi_model_missing" };
+        if (original && original.api === "openai-responses") {
+          return { id, name, model: { ...original, name, provider: CHATGPT_PLAN_PROVIDER, baseUrl: RESOURCE }, reason: null, source: "pi_builtin" };
+        }
+        if (contractCache.has(id)) {
+          const resolved = catalogContractModel(id, name, contractCache.get(id));
+          return { id, name, model: resolved.model ?? null, reason: resolved.reason ?? null, source: resolved.model ? "models_dev_contract" : null };
+        }
+        return { id, name, model: null, reason: "pi_model_missing", source: null };
       });
       if (generation !== catalogGeneration) throw failure("chatgpt_catalog_superseded", "ChatGPT account catalog changed during discovery");
       accountCatalog = catalog;
       catalogClientId = registration.clientId;
-      return accountCatalog.map(({ id, name, model, reason }) => ({
+      return accountCatalog.map(({ id, name, model, reason, source }) => ({
         id,
         name,
         supported: !!model,
         reason,
+        source,
         supportedThinkingLevels: model?.reasoning ? getSupportedThinkingLevels(model).filter((level) => level !== "off") : []
       }));
     },
@@ -313603,7 +313666,7 @@ function resolutionFor(config) {
     provider: model.provider,
     model: model.id,
     api: model.api,
-    source: model.provider === CHATGPT_PLAN_PROVIDER ? "verified_official_contract" : VERIFIED_MODEL_SOURCES.get(`${model.provider}/${model.id}`) || "pi_builtin",
+    source: model.provider === CHATGPT_PLAN_PROVIDER ? chatGPTPlan.modelSource(model.id) : VERIFIED_MODEL_SOURCES.get(`${model.provider}/${model.id}`) || "pi_builtin",
     reasoning: model.reasoning,
     input: model.input,
     contextWindow: model.contextWindow,
@@ -314009,7 +314072,7 @@ async function runAgent(envelope, res) {
   if (config.provider === CHATGPT_PLAN_PROVIDER) {
     const credential = await authCredentials.read(CHATGPT_PLAN_PROVIDER);
     if (!credential || credential.access !== config.apiKey) throw Object.assign(new Error("ChatGPT account credentials must be resolved before execution"), { code: "chatgpt_reconnect_required" });
-    await chatGPTPlan.catalog(credential, AbortSignal.timeout(3e4));
+    await chatGPTPlan.catalog(credential, AbortSignal.timeout(3e4), config.catalogContract ? { [config.model]: config.catalogContract } : {});
   }
   const skillAppliedRequest = applyExplicitSkillInvocations(request);
   const startedAtMs = Date.now();
@@ -314234,7 +314297,7 @@ var handleRequest = async (req, res) => {
       const value3 = await body(req);
       const credential = await authCredentials.read(CHATGPT_PLAN_PROVIDER);
       if (!credential || credential.clientId !== value3.credential?.clientId) throw new Error("ChatGPT account credentials must be resolved before discovery");
-      const models = await chatGPTPlan.catalog(credential, AbortSignal.timeout(3e4));
+      const models = await chatGPTPlan.catalog(credential, AbortSignal.timeout(3e4), value3.contracts || {});
       return json2(res, 200, { contractVersion: RUNTIME_CONTRACT_VERSION, models });
     }
     if (req.method === "POST" && req.url === "/v1/auth/registration") {

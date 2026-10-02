@@ -8,7 +8,8 @@ enum ShortcutModelOptionsBuilder {
     static func modelOptions(
         provider: String,
         settings: AppSettings,
-        openRouterModels: [SimpleModel]
+        openRouterModels: [SimpleModel],
+        codexModels: [PiCodexModel] = []
     ) -> [String] {
         let normalizedProvider = provider.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
         var options: [String] = []
@@ -43,7 +44,7 @@ enum ShortcutModelOptionsBuilder {
         case "ALIBABA_CODING_PLAN":
             AlibabaCodingPlanModelCatalog.supportedModels.forEach { appendUnique($0) }
         case "CODEX_AUTH":
-            CodexModelCatalog.visiblePresets().map(\.model).forEach { appendUnique($0) }
+            codexModels.filter { $0.supported == true }.map(\.id).forEach { appendUnique($0) }
         case "APPLE_INTELLIGENCE":
             AppleIntelligenceModelCatalog.supportedModels.forEach { appendUnique($0) }
         case "OPENROUTER":

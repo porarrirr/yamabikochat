@@ -37,11 +37,25 @@ are retained and must be selected manually if unavailable for the new account.
 ## Models and inference
 
 `GET https://api.openai.com/v1/models` supplies account-specific `slug`,
-`display_name`, `visibility` and ordering. Execution is allowed only when that
-exact slug also has a verified Pi built-in OpenAI Responses model contract.
-Unknown slugs remain visible and disabled with `pi_model_missing`; no limits,
-modalities or capabilities are invented. The reasoning choices come from Pi's
-`getSupportedThinkingLevels`.
+`display_name`, `visibility` and ordering. A slug that exactly matches a Pi
+built-in OpenAI Responses model executes as `pi_builtin` and takes precedence.
+For a slug Pi does not ship, the app passes the models.dev `openai` provider's
+model contract (`contracts` on `/v1/models/chatgpt` and `catalogContract` on a
+run); the plugin validates that it resolves unambiguously to Pi's Responses
+adapter on `https://api.openai.com/v1` — provenance `provider`/`model`, shape
+`responses` or npm `@ai-sdk/openai`, matching `api`, `text` input, positive
+limits, a `reasoning` flag, and declared effort values — then registers it on the
+same provider as `models_dev_contract`. A contract that fails validation keeps
+the model listed but disabled with `protocol_conflict`, `endpoint_conflict` or
+`catalog_contract_incomplete`; a slug with neither match stays disabled with
+`pi_model_missing`. No limits, modalities or capabilities are invented. The
+reasoning choices come from Pi's `getSupportedThinkingLevels`.
+
+iOS refreshes the models.dev contracts before discovering account models when
+settings open. The ChatGPT model picker also offers a manual refresh that updates
+both sources, with loading and failure states. New discovery results replace the
+displayed list and reasoning cache without changing the saved model selection;
+superseded requests and results from a signed-out account are discarded.
 
 Pi's `onPayload` hook applies the official preview contract: `store=false`,
 `stream=true`, developer instructions and namespaced local function/custom tools.

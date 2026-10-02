@@ -82,6 +82,7 @@ final class ProviderRequestSettingsResolver {
     private let skillRepository: AgentSkillRepository
     private let modelsDevCatalogRepository: ModelsDevCatalogRepository?
     private let modelsDevReasoningEffort: (String, String) -> String?
+    private let codexModelsProvider: () -> [PiCodexModel]
 
     init(
         modelService: OpenRouterModelService,
@@ -90,13 +91,15 @@ final class ProviderRequestSettingsResolver {
         localToolRegistry: LocalToolRegistry = LocalToolRegistry(
             executors: [WebSearchTool(), FetchUrlTool(), PythonExecuteTool(), StrReplaceEditorTool()]
         ),
-        modelsDevReasoningEffort: @escaping (String, String) -> String? = { _, _ in nil }
+        modelsDevReasoningEffort: @escaping (String, String) -> String? = { _, _ in nil },
+        codexModelsProvider: @escaping () -> [PiCodexModel] = { [] }
     ) {
         self.modelService = modelService
         self.skillRepository = skillRepository
         self.modelsDevCatalogRepository = modelsDevCatalogRepository
         self.localToolRegistry = localToolRegistry
         self.modelsDevReasoningEffort = modelsDevReasoningEffort
+        self.codexModelsProvider = codexModelsProvider
     }
 
     func resolve(
@@ -348,7 +351,7 @@ final class ProviderRequestSettingsResolver {
             return ProviderThinkingConfig(
                 enabled: nil,
                 budget: nil,
-                effort: enabled ? CodexModelCatalog.resolvedReasoningEffort(overrideEffort ?? baseEffort, model: model) : "none",
+                effort: enabled ? CodexModelCatalog.resolvedReasoningEffort(overrideEffort ?? baseEffort, model: model, models: codexModelsProvider()) : "none",
                 includeThoughts: true,
                 exclude: nil
             )

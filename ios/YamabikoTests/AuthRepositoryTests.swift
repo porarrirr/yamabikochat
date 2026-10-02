@@ -191,6 +191,148 @@ final class AuthRepositoryTests: XCTestCase {
         XCTAssertEqual(count, 1)
         XCTAssertTrue(tokens.allSatisfy { $0?.token == "rotated-access" })
     }
+
+    func testModelsPassesCatalogContractsThroughToPi() async throws {
+        let calls = CatalogCallRecorder()
+        let repo = CodexAuthRepository(
+            credentialStore: PiAuthTestCredentialStore(),
+            loginHandler: { host, _, _ in chatGPTResolution(hostID: host) },
+            resolveHandler: { _, _, _ in chatGPTResolution() },
+            catalogHandler: { _, contracts in
+                await calls.record(contracts)
+                return [PiCodexModel(id: "gpt-6.1-sol", name: "GPT 6.1 Sol", supported: true)]
+            }
+        )
+        _ = await repo.loginWithBrowser()
+        let contract = PiCatalogModelContract(
+            npm: "@ai-sdk/openai",
+            api: "https://api.openai.com/v1",
+            provenance: "provider",
+            reasoning: true,
+            input: ["text", "image"],
+            contextWindow: 1_050_000,
+            maxTokens: 128_000,
+            reasoningEfforts: ["low", "medium", "high", "xhigh", "max"]
+        )
+
+        let models = try await repo.models(contracts: ["gpt-6.1-sol": contract])
+
+        XCTAssertEqual(models.map(\.id), ["gpt-6.1-sol"])
+        XCTAssertEqual(repo.cachedModels().map(\.id), ["gpt-6.1-sol"])
+        let sentContracts = await calls.contracts
+        XCTAssertEqual(sentContracts.count, 1)
+        XCTAssertEqual(sentContracts.first?["gpt-6.1-sol"]?.reasoningEfforts, ["low", "medium", "high", "xhigh", "max"])
+    }
+
+    func testFailedCatalogRequestKeepsTheLastSuccessfulCache() async throws {
+        let mode = CatalogFailureMode()
+        let repo = CodexAuthRepository(
+            credentialStore: PiAuthTestCredentialStore(),
+            loginHandler: { host, _, _ in chatGPTResolution(hostID: host) },
+            resolveHandler: { _, _, _ in chatGPTResolution() },
+            catalogHandler: { _, _ in
+                if await mode.isFailing { throw URLError(.notConnectedToInternet) }
+                return [PiCodexModel(id: "gpt-6.1-sol", name: "GPT 6.1 Sol", supported: true)]
+            }
+        )
+        _ = await repo.loginWithBrowser()
+        _ = try await repo.models(contracts: [:])
+        await mode.setFailing(true)
+
+        do {
+            _ = try await repo.models(contracts: [:])
+            XCTFail("Expected catalog failure")
+        } catch {
+            XCTAssertTrue(repo.cachedModels().contains(where: { $0.id == "gpt-6.1-sol" }))
+        }
+    }
+
+    func testLogoutClearsTheCatalogCache() async throws {
+        let store = PiAuthTestCredentialStore()
+        let repo = CodexAuthRepository(
+            credentialStore: store,
+            loginHandler: { host, _, _ in chatGPTResolution(hostID: host) },
+            resolveHandler: { _, _, _ in chatGPTResolution() },
+            catalogHandler: { _, _ in [PiCodexModel(id: "gpt-6.1-sol", name: "Sol", supported: true)] },
+            revokeHandler: { _ in }
+        )
+        _ = await repo.loginWithBrowser()
+        _ = try await repo.models(contracts: [:])
+        XCTAssertFalse(repo.cachedModels().isEmpty)
+
+        _ = await repo.logout()
+
+        XCTAssertTrue(repo.cachedModels().isEmpty)
+    }
+
+    func testStaleGenerationCatalogResultDoesNotPopulateCache() async throws {
+        let gate = CatalogGate()
+        let repo = CodexAuthRepository(
+            credentialStore: PiAuthTestCredentialStore(),
+            loginHandler: { host, _, _ in chatGPTResolution(hostID: host) },
+            resolveHandler: { _, _, _ in chatGPTResolution() },
+            catalogHandler: { _, _ in
+                await gate.wait()
+                return [PiCodexModel(id: "stale-model", name: "Stale", supported: true)]
+            },
+            revokeHandler: { _ in }
+        )
+        _ = await repo.loginWithBrowser()
+
+        let fetch = Task { try await repo.models(contracts: [:]) }
+        await gate.waitUntilStarted()
+        _ = await repo.logout()
+        await gate.resume()
+
+        do {
+            _ = try await fetch.value
+            XCTFail("Expected stale catalog result to be discarded")
+        } catch {
+            XCTAssertTrue(repo.cachedModels().isEmpty)
+        }
+    }
+}
+
+private actor CatalogCallRecorder {
+    private(set) var contracts: [[String: PiCatalogModelContract]] = []
+    func record(_ value: [String: PiCatalogModelContract]) {
+        contracts.append(value)
+    }
+}
+
+private actor CatalogFailureMode {
+    private(set) var isFailing = false
+    func setFailing(_ value: Bool) { isFailing = value }
+}
+
+private actor CatalogGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var startedContinuations: [CheckedContinuation<Void, Never>] = []
+    private var started = false
+    private var open = false
+
+    func waitUntilStarted() async {
+        if started { return }
+        await withCheckedContinuation { continuation in
+            if started { continuation.resume() } else { startedContinuations.append(continuation) }
+        }
+    }
+
+    func wait() async {
+        started = true
+        for continuation in startedContinuations { continuation.resume() }
+        startedContinuations.removeAll()
+        if open { return }
+        await withCheckedContinuation { continuation in
+            if open { continuation.resume() } else { self.continuation = continuation }
+        }
+    }
+
+    func resume() {
+        open = true
+        continuation?.resume()
+        continuation = nil
+    }
 }
 
 private actor ChatGPTRefreshCounter {

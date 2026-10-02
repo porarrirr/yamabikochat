@@ -267,6 +267,115 @@ test("invalid earliest refresh time rejects credentials", async () => {
   await assert.rejects(h.login(), { code: "chatgpt_contract_invalid" });
 });
 
+const solCatalog = [{ slug: "gpt-6.1-sol", display_name: "GPT 6.1 Sol", visibility: "list" }];
+const solContract = (overrides = {}) => ({
+  provenance: "provider", npm: "@ai-sdk/openai", name: "GPT 6.1 Sol",
+  reasoning: true, input: ["text", "image", "pdf"],
+  contextWindow: 1_050_000, maxTokens: 128_000,
+  reasoningEfforts: ["low", "medium", "high", "xhigh", "max"], toolCall: true,
+  ...overrides
+});
+
+test("built-in slugs keep exact Pi metadata and ignore models.dev contracts", async () => {
+  const h = await harness();
+  const credential = await h.login();
+  const catalog = await h.plugin.catalog(credential, new AbortController().signal, {
+    "gpt-6-sol": { provenance: "model", npm: "@ai-sdk/anthropic", api: "https://evil.example/v1", shape: "messages", reasoning: false, input: ["text"], contextWindow: 1, maxTokens: 1 }
+  });
+  const entry = catalog.find(model => model.id === "gpt-6-sol");
+  assert.equal(entry.supported, true);
+  assert.equal(entry.source, "pi_builtin");
+  assert.equal(h.plugin.modelSource("gpt-6-sol"), "pi_builtin");
+  const model = h.models.getModel(CHATGPT_PLAN_PROVIDER, "gpt-6-sol");
+  assert.equal(model.api, "openai-responses");
+  assert.equal(model.baseUrl, "https://api.openai.com/v1");
+});
+
+test("account slug missing from Pi is enabled by a valid models.dev contract", async () => {
+  const h = await harness({ catalog: solCatalog });
+  const credential = await h.login();
+  const catalog = await h.plugin.catalog(credential, new AbortController().signal, { "gpt-6.1-sol": solContract() });
+  const entry = catalog.find(model => model.id === "gpt-6.1-sol");
+  assert.equal(entry.supported, true);
+  assert.equal(entry.reason, null);
+  assert.equal(entry.source, "models_dev_contract");
+  assert.deepEqual(entry.supportedThinkingLevels, ["low", "medium", "high", "xhigh", "max"]);
+  assert.equal(h.plugin.modelSource("gpt-6.1-sol"), "models_dev_contract");
+  const model = h.models.getModel(CHATGPT_PLAN_PROVIDER, "gpt-6.1-sol");
+  assert.equal(model.name, "GPT 6.1 Sol");
+  assert.equal(model.api, "openai-responses");
+  assert.equal(model.provider, CHATGPT_PLAN_PROVIDER);
+  assert.equal(model.baseUrl, "https://api.openai.com/v1");
+  assert.equal(model.reasoning, true);
+  assert.deepEqual(model.input, ["text", "image"]);
+  assert.deepEqual(model.cost, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+  assert.equal(model.contextWindow, 1_050_000);
+  assert.equal(model.maxTokens, 128_000);
+  assert.equal(model.thinkingLevelMap.off, null);
+  assert.equal(model.thinkingLevelMap.max, "max");
+});
+
+test("a contract effort of none maps the off thinking level", async () => {
+  const h = await harness({ catalog: solCatalog });
+  const credential = await h.login();
+  const catalog = await h.plugin.catalog(credential, new AbortController().signal, {
+    "gpt-6.1-sol": solContract({ reasoningEfforts: ["none", "low", "medium"] })
+  });
+  const entry = catalog.find(model => model.id === "gpt-6.1-sol");
+  assert.equal(entry.supported, true);
+  assert.deepEqual(entry.supportedThinkingLevels, ["low", "medium"]);
+  const model = h.models.getModel(CHATGPT_PLAN_PROVIDER, "gpt-6.1-sol");
+  assert.equal(model.thinkingLevelMap.off, "none");
+  assert.equal(model.thinkingLevelMap.high, null);
+});
+
+test("account slug without a contract stays disabled", async () => {
+  const h = await harness({ catalog: solCatalog });
+  const credential = await h.login();
+  const catalog = await h.plugin.catalog(credential, new AbortController().signal);
+  const entry = catalog.find(model => model.id === "gpt-6.1-sol");
+  assert.equal(entry.supported, false);
+  assert.equal(entry.reason, "pi_model_missing");
+  assert.equal(entry.source, null);
+  assert.equal(h.plugin.modelSource("gpt-6.1-sol"), null);
+});
+
+for (const [name, contract, reason] of [
+  ["completions shape", solContract({ shape: "completions" }), "protocol_conflict"],
+  ["a non-OpenAI npm package", solContract({ npm: "@ai-sdk/anthropic" }), "protocol_conflict"],
+  ["shape and npm disagree", solContract({ shape: "responses", npm: "@ai-sdk/anthropic" }), "protocol_conflict"],
+  ["a foreign api endpoint", solContract({ api: "https://example.invalid/v1" }), "endpoint_conflict"],
+  ["reasoning without efforts", solContract({ reasoningEfforts: [] }), "catalog_contract_incomplete"],
+  ["an unknown effort", solContract({ reasoningEfforts: ["low", "ultra"] }), "catalog_contract_incomplete"],
+  ["missing token limits", solContract({ contextWindow: undefined, maxTokens: undefined }), "catalog_contract_incomplete"],
+  ["an untrusted provenance", solContract({ provenance: "official_provider_catalog" }), "catalog_contract_incomplete"],
+  ["a missing reasoning flag", solContract({ reasoning: undefined }), "catalog_contract_incomplete"],
+  ["input without text", solContract({ input: ["image"] }), "catalog_contract_incomplete"]
+]) test(`contract validation fails closed for ${name}`, async () => {
+  const h = await harness({ catalog: solCatalog });
+  const credential = await h.login();
+  const catalog = await h.plugin.catalog(credential, new AbortController().signal, { "gpt-6.1-sol": contract });
+  const entry = catalog.find(model => model.id === "gpt-6.1-sol");
+  assert.equal(entry.supported, false);
+  assert.equal(entry.reason, reason);
+  assert.equal(entry.source, null);
+  assert.equal(h.models.getModel(CHATGPT_PLAN_PROVIDER, "gpt-6.1-sol"), undefined);
+  assert.equal(h.plugin.modelSource("gpt-6.1-sol"), null);
+});
+
+test("merged contracts persist across catalog calls until cleared", async () => {
+  const h = await harness({ catalog: solCatalog });
+  const credential = await h.login();
+  await h.plugin.catalog(credential, new AbortController().signal, { "gpt-6.1-sol": solContract() });
+  const second = await h.plugin.catalog(credential, new AbortController().signal);
+  assert.equal(second.find(model => model.id === "gpt-6.1-sol").source, "models_dev_contract");
+  h.plugin.clearCatalog();
+  const third = await h.plugin.catalog(credential, new AbortController().signal);
+  const entry = third.find(model => model.id === "gpt-6.1-sol");
+  assert.equal(entry.supported, false);
+  assert.equal(entry.reason, "pi_model_missing");
+});
+
 test("ChatGPT success requires Pi's completed provider status", () => {
   for (const stopReason of ["stop", "toolUse"]) assert.equal(chatGPTPlanCompleted({ rawStopReason: "completed", stopReason }), true);
   for (const rawStopReason of ["incomplete.max_output_tokens", "incomplete.content_filter", "in_progress", undefined]) {

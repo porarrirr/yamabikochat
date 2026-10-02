@@ -29,6 +29,7 @@ struct PiCatalogModelContract: Codable, Sendable {
     var input: [String]? = nil
     var contextWindow: Int? = nil
     var maxTokens: Int? = nil
+    var reasoningEfforts: [String]? = nil
 }
 
 struct PiModelResolution: Codable, Equatable, Sendable {
@@ -289,6 +290,11 @@ private struct PiOAuthResolveRequest: Encodable {
     var force: Bool
 }
 
+private struct PiChatGPTCatalogRequest: Encodable {
+    var credential: JSONValue
+    var contracts: [String: PiCatalogModelContract]
+}
+
 struct PiToolResultEnvelope: Encodable {
     var requestId: String
     var content: String
@@ -459,12 +465,12 @@ actor PiAgentRuntime {
         return catalog.models
     }
 
-    func chatGPTModels(credentialJSON: String) async throws -> [PiCodexModel] {
+    func chatGPTModels(credentialJSON: String, contracts: [String: PiCatalogModelContract]) async throws -> [PiCodexModel] {
         let (endpoint, token) = try await startIfNeeded()
         let credential = try JSONDecoder().decode(JSONValue.self, from: Data(credentialJSON.utf8))
         var request = URLRequest(url: endpoint.appendingPathComponent("v1/models/chatgpt"))
         request.httpMethod = "POST"
-        request.httpBody = try JSONEncoder().encode(["credential": credential])
+        request.httpBody = try JSONEncoder().encode(PiChatGPTCatalogRequest(credential: credential, contracts: contracts))
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)

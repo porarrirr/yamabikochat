@@ -9,7 +9,8 @@ private enum ShortcutModelOptionsSupport {
         return ShortcutModelOptionsBuilder.modelOptions(
             provider: providerID,
             settings: settings,
-            openRouterModels: openRouterModels
+            openRouterModels: openRouterModels,
+            codexModels: services.codexAuthRepository.cachedModels()
         )
     }
 

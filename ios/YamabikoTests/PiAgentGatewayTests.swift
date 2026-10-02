@@ -18,6 +18,23 @@ private final class PiGatewayCredentialStore: SecureCredentialStore {
     }
 }
 
+private final class LockedConfigurationBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [PiAgentConfiguration] = []
+
+    var all: [PiAgentConfiguration] {
+        lock.lock()
+        defer { lock.unlock() }
+        return values
+    }
+
+    func append(_ configurations: [PiAgentConfiguration]) {
+        lock.lock()
+        values.append(contentsOf: configurations)
+        lock.unlock()
+    }
+}
+
 private struct PiGatewayHTTPClient: HTTPClientProtocol {
     let data: Data
 
@@ -857,6 +874,140 @@ final class PiAgentGatewayTests: XCTestCase {
         XCTAssertEqual(configuration.apiKey, "access-token")
         XCTAssertNil(configuration.headers["originator"])
         XCTAssertNil(configuration.headers["ChatGPT-Account-ID"])
+    }
+
+    func testChatGPTPlanCarriesModelsDevContractForNewAccountModels() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        let auth = CodexAuthRepository(
+            credentialStore: credentials,
+            loginHandler: { host, _, _ in chatGPTResolution(hostID: host) },
+            resolveHandler: { _, _, _ in chatGPTResolution() }
+        )
+        _ = await auth.loginWithBrowser()
+        let cacheURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("models-dev-openai-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: cacheURL) }
+        let catalogProvider = CatalogProvider(
+            id: "openai",
+            name: "OpenAI",
+            npm: "@ai-sdk/openai",
+            api: "https://api.openai.com/v1",
+            env: ["OPENAI_API_KEY"],
+            models: [
+                CatalogModel(
+                    id: "gpt-6.1-sol",
+                    name: "GPT 6.1 Sol",
+                    reasoning: true,
+                    reasoningOptions: [
+                        CatalogReasoningOption(type: "effort", values: ["low", "medium", "high", "xhigh", "max"])
+                    ],
+                    toolCall: true,
+                    inputModalities: ["text", "image"],
+                    outputModalities: ["text"],
+                    limits: CatalogLimits(context: 1_050_000, input: nil, output: 128_000),
+                    cost: CatalogCost(
+                        inputPerMillion: nil, outputPerMillion: nil, reasoningPerMillion: nil,
+                        cacheReadPerMillion: nil, cacheWritePerMillion: nil
+                    ),
+                    providerContract: CatalogModelProviderContract(
+                        npm: "@ai-sdk/openai",
+                        api: "https://api.openai.com/v1",
+                        provenance: "provider"
+                    )
+                )
+            ]
+        )
+        try JSONEncoder().encode([catalogProvider]).write(to: cacheURL)
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "PiAgentGatewayTests.\(UUID().uuidString)"))
+        let catalog = ModelsDevCatalogRepository(defaults: defaults, cacheURL: cacheURL)
+        let pi = PiStreamSpy()
+        let gateway = ProviderGateway(
+            settingsRepository: SettingsRepository(dbQueue: database),
+            credentialStore: credentials,
+            codexAuthRepository: auth,
+            modelsDevCatalogRepository: catalog,
+            piStream: pi.stream
+        )
+
+        _ = try await gateway.stream(
+            request: ProviderRequest(model: "gpt-6.1-sol", messages: [ProviderRequestMessage(role: "user", content: "hello")]),
+            provider: .codexAuth
+        )
+
+        let configuration = try XCTUnwrap(pi.calls.first?.configuration)
+        XCTAssertEqual(configuration.provider, "openai-chatgpt")
+        XCTAssertEqual(configuration.model, "gpt-6.1-sol")
+        let contract = try XCTUnwrap(configuration.catalogContract)
+        XCTAssertEqual(contract.providerName, "OpenAI")
+        XCTAssertEqual(contract.npm, "@ai-sdk/openai")
+        XCTAssertEqual(contract.api, "https://api.openai.com/v1")
+        XCTAssertEqual(contract.provenance, "provider")
+        XCTAssertEqual(contract.reasoning, true)
+        XCTAssertEqual(contract.toolCall, true)
+        XCTAssertEqual(contract.input, ["text", "image"])
+        XCTAssertEqual(contract.contextWindow, 1_050_000)
+        XCTAssertEqual(contract.maxTokens, 128_000)
+        XCTAssertEqual(contract.reasoningEfforts, ["low", "medium", "high", "xhigh", "max"])
+    }
+
+    func testChatGPTPlanModelResolutionCarriesModelsDevContract() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let cacheURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("models-dev-openai-resolution-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: cacheURL) }
+        let catalogProvider = CatalogProvider(
+            id: "openai",
+            name: "OpenAI",
+            npm: "@ai-sdk/openai",
+            api: "https://api.openai.com/v1",
+            env: ["OPENAI_API_KEY"],
+            models: [
+                CatalogModel(
+                    id: "gpt-6.1-sol",
+                    name: "GPT 6.1 Sol",
+                    reasoning: true,
+                    reasoningOptions: [
+                        CatalogReasoningOption(type: "effort", values: ["low", "medium", "high", "xhigh", "max"])
+                    ],
+                    toolCall: true,
+                    inputModalities: ["text", "image"],
+                    outputModalities: ["text"],
+                    limits: CatalogLimits(context: 1_050_000, input: nil, output: 128_000),
+                    cost: CatalogCost(
+                        inputPerMillion: nil, outputPerMillion: nil, reasoningPerMillion: nil,
+                        cacheReadPerMillion: nil, cacheWritePerMillion: nil
+                    ),
+                    providerContract: CatalogModelProviderContract(
+                        npm: "@ai-sdk/openai",
+                        api: "https://api.openai.com/v1",
+                        provenance: "provider"
+                    )
+                )
+            ]
+        )
+        try JSONEncoder().encode([catalogProvider]).write(to: cacheURL)
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "PiAgentGatewayTests.\(UUID().uuidString)"))
+        let catalog = ModelsDevCatalogRepository(defaults: defaults, cacheURL: cacheURL)
+        let capturedConfigurations = LockedConfigurationBox()
+        let gateway = ProviderGateway(
+            settingsRepository: SettingsRepository(dbQueue: database),
+            credentialStore: PiGatewayCredentialStore(),
+            modelsDevCatalogRepository: catalog,
+            piModelResolver: { configurations in
+                capturedConfigurations.append(configurations)
+                return configurations.map { _ in PiModelResolution(supported: true, input: ["text", "image"]) }
+            }
+        )
+
+        _ = try await gateway.modelSupportsVision(provider: "CODEX_AUTH", model: "gpt-6.1-sol")
+
+        let configuration = try XCTUnwrap(capturedConfigurations.all.first)
+        XCTAssertEqual(configuration.provider, "openai-chatgpt")
+        XCTAssertEqual(configuration.catalogContract?.provenance, "provider")
+        XCTAssertEqual(configuration.catalogContract?.reasoningEfforts, ["low", "medium", "high", "xhigh", "max"])
     }
 
     func testOpenCodeGoMuseSparkUsesResponsesAPI() async throws {

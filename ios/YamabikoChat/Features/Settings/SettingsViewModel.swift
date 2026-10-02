@@ -33,6 +33,8 @@ final class SettingsViewModel: ObservableObject {
 
     @Published var codexAuthState: CodexAuthState = .init()
     @Published var codexModels: [PiCodexModel] = []
+    @Published private(set) var codexModelsLoading = false
+    @Published private(set) var codexModelsError: String?
     @Published var codexUsageStatus: CodexUsageStatus?
     @Published var isCodexAuthActionRunning: Bool = false
 
@@ -68,6 +70,7 @@ final class SettingsViewModel: ObservableObject {
     private var isPersistingSettings = false
     private var activeOpenRouterModelsFetchID = UUID()
     private var activeOpenRouterEndpointsFetchID = UUID()
+    private var activeCodexModelsFetchID = UUID()
     private var apiKeyDraftsByProvider: [String: String] = [:]
 
     private static let autoSaveDebounceInterval: TimeInterval = 0.5
@@ -197,7 +200,6 @@ final class SettingsViewModel: ObservableObject {
 
         Task {
             await refreshCodexAuth(force: false)
-            await refreshCodexModels()
             refreshDiagnosticsLog()
         }
     }
@@ -206,17 +208,33 @@ final class SettingsViewModel: ObservableObject {
         Task {
             async let modelsDevRefresh: CatalogLoadState? = modelsDevCatalogRepository?.load(forceRefresh: true)
             async let openRouterRefresh: Void = refreshOpenRouterModels(force: true)
-            async let codexRefresh: Void = refreshCodexModels()
-            _ = await (modelsDevRefresh, openRouterRefresh, codexRefresh)
+            // Resolve account models against the newly refreshed contracts, rather
+            // than racing discovery against the previous models.dev cache.
+            _ = await modelsDevRefresh
+            await refreshCodexModels()
+            _ = await openRouterRefresh
         }
     }
 
-    private func refreshCodexModels() async {
+    func refreshCodexModels(forceRefresh: Bool = false) async {
         guard let repository else { return }
+        let fetchID = UUID()
+        activeCodexModelsFetchID = fetchID
+        codexModelsLoading = true
+        codexModelsError = nil
+        defer {
+            if activeCodexModelsFetchID == fetchID { codexModelsLoading = false }
+        }
         do {
-            codexModels = try await repository.chatGPTModels()
+            let models = try await repository.chatGPTModels(forceRefresh: forceRefresh)
+            guard activeCodexModelsFetchID == fetchID else { return }
+            codexModels = models
+        } catch is CancellationError {
+            // Account changes invalidate an in-flight catalog result.
         } catch {
+            guard activeCodexModelsFetchID == fetchID else { return }
             codexModels = []
+            codexModelsError = error.localizedDescription
             errorMessage = error.localizedDescription
             DiagnosticsLogger.log("ChatGPT account model catalog unavailable", category: .network, error: error)
         }
@@ -1234,6 +1252,10 @@ final class SettingsViewModel: ObservableObject {
         isCodexAuthActionRunning = true
         statusMessage = "ChatGPTへの接続を開始しました"
         errorMessage = nil
+        activeCodexModelsFetchID = UUID()
+        codexModels = []
+        codexModelsLoading = false
+        codexModelsError = nil
         DiagnosticsLogger.log("Codex auth login tapped", category: .auth)
         refreshDiagnosticsLog()
         defer {
@@ -1260,6 +1282,9 @@ final class SettingsViewModel: ObservableObject {
         guard let repository = requireRepository(action: "codex_logout") else { return }
         isCodexAuthActionRunning = true
         errorMessage = nil
+        activeCodexModelsFetchID = UUID()
+        codexModelsLoading = false
+        codexModelsError = nil
         defer {
             isCodexAuthActionRunning = false
             refreshDiagnosticsLog()

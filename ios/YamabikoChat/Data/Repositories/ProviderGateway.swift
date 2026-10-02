@@ -819,7 +819,11 @@ final class ProviderGateway {
         } else {
             openRouterModels = []
         }
-        if let model = openRouterModels.first(where: { $0.id == request.model }) {
+        if provider == .codexAuth {
+            catalogContract = CodexModelCatalog.modelsDevContracts(
+                from: modelsDevCatalogRepository?.provider(for: .modelsDev("openai"))
+            )[normalizedModel(request.model, provider: provider)]
+        } else if let model = openRouterModels.first(where: { $0.id == request.model }) {
             catalogContract = PiCatalogModelContract(
                 npm: "@openrouter/ai-sdk-provider",
                 api: "https://openrouter.ai/api/v1",

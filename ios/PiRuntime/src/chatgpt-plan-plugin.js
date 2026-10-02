@@ -16,6 +16,8 @@ const DYNAMIC_CLIENT = "dynamic_agent_client";
 const PLAN_SCOPE = "chatgpt.tokens.use.direct";
 const SCOPES = `openid profile email offline_access resource.invoke ${PLAN_SCOPE}`;
 const UUID_URI = /^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CONTRACT_EFFORT_VALUES = new Set(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
+const CONTRACT_LEVEL_KEYS = ["minimal", "low", "medium", "high", "xhigh", "max"];
 
 function failure(code, message) { return Object.assign(new Error(message), { code }); }
 function required(value, name) {
@@ -114,6 +116,52 @@ export function chatGPTRegistration(credential) {
   };
 }
 
+// models.dev is the authoritative supplement for account slugs that the bundled
+// Pi release does not ship as built-ins. The contract must resolve
+// unambiguously to Pi's Responses adapter on the public OpenAI endpoint;
+// anything else fails closed with a typed reason and stays listed but disabled.
+function catalogContractModel(id, name, contract) {
+  if (!contract || typeof contract !== "object" || !["provider", "model"].includes(contract.provenance)) {
+    return { reason: "catalog_contract_incomplete" };
+  }
+  if (contract.shape !== undefined && contract.shape !== null) {
+    if (contract.shape !== "responses") return { reason: "protocol_conflict" };
+    if (contract.npm !== undefined && contract.npm !== null && contract.npm !== "@ai-sdk/openai") {
+      return { reason: "protocol_conflict" };
+    }
+  } else if (contract.npm !== "@ai-sdk/openai") {
+    return { reason: "protocol_conflict" };
+  }
+  if (contract.api !== undefined && contract.api !== null) {
+    const api = typeof contract.api === "string" ? contract.api.trim().replace(/\/+$/, "") : null;
+    if (api !== RESOURCE) return { reason: "endpoint_conflict" };
+  }
+  const input = Array.isArray(contract.input) ? contract.input.filter(value => typeof value === "string") : [];
+  const contextWindow = Number(contract.contextWindow);
+  const maxTokens = Number(contract.maxTokens);
+  if (!input.includes("text") || !Number.isInteger(contextWindow) || contextWindow <= 0 ||
+      !Number.isInteger(maxTokens) || maxTokens <= 0 || typeof contract.reasoning !== "boolean") {
+    return { reason: "catalog_contract_incomplete" };
+  }
+  const efforts = !contract.reasoning ? [] : (Array.isArray(contract.reasoningEfforts) ? contract.reasoningEfforts : [])
+    .map(value => typeof value === "string" ? value.trim().toLowerCase() : "");
+  if (contract.reasoning && (!efforts.length || efforts.some(value => !CONTRACT_EFFORT_VALUES.has(value)))) {
+    return { reason: "catalog_contract_incomplete" };
+  }
+  const model = {
+    id, name, api: "openai-responses", provider: CHATGPT_PLAN_PROVIDER, baseUrl: RESOURCE,
+    reasoning: contract.reasoning,
+    input: input.filter(value => ["text", "image"].includes(value)),
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow, maxTokens
+  };
+  if (contract.reasoning) {
+    model.thinkingLevelMap = { off: efforts.includes("none") ? "none" : null };
+    for (const level of CONTRACT_LEVEL_KEYS) model.thinkingLevelMap[level] = efforts.includes(level) ? level : null;
+  }
+  return { model };
+}
+
 export function createChatGPTPlanPlugin({
   fetch: fetcher = globalThis.fetch,
   callbackListener = startChatGPTCallback,
@@ -124,8 +172,10 @@ export function createChatGPTPlanPlugin({
   let catalogClientId = null;
   let catalogGeneration = 0;
   let catalogRequestClient = null;
-  // Metadata is taken from exact Pi built-ins. Unknown account models stay disabled.
+  // Metadata comes from exact Pi built-ins first; models.dev contracts supplement
+  // account slugs that Pi does not ship. Unknown account models stay disabled.
   const builtin = new Map(openaiProvider().getModels().map(model => [model.id, model]));
+  const contractCache = new Map();
   let discoveryCache = null;
   let keysCache = null;
   async function readJSON(url, signal, options = {}) {
@@ -256,7 +306,8 @@ export function createChatGPTPlanPlugin({
     id: CHATGPT_PLAN_PROVIDER, name: "ChatGPT plan", baseUrl: RESOURCE,
     auth: { oauth }, models: [], api: openAIResponsesApi()
   });
-  // getModels exposes only the account's authorized catalog, using exact Pi metadata.
+  // getModels exposes only the account's authorized catalog, using exact Pi
+  // metadata or a verified models.dev contract for slugs Pi does not ship.
   const registeredProvider = { ...provider, getModels: () => accountCatalog.filter(entry => entry.model).map(entry => entry.model) };
   return {
     provider: registeredProvider,
@@ -269,14 +320,22 @@ export function createChatGPTPlanPlugin({
       const registration = chatGPTRegistration(credential);
       return { email: credential.email ?? null, planType: null, accountId: registration.clientId, planUsageEnabled: credential.scopes?.includes(PLAN_SCOPE) === true };
     },
-    clearCatalog() { catalogGeneration++; catalogRequestClient = null; accountCatalog = []; catalogClientId = null; },
+    clearCatalog() { catalogGeneration++; catalogRequestClient = null; accountCatalog = []; catalogClientId = null; contractCache.clear(); },
     modelStatus(id) {
       const entry = accountCatalog.find(entry => entry.id === id);
       return entry ? entry.reason : catalogClientId ? "chatgpt_model_unavailable" : "chatgpt_catalog_required";
     },
-    async catalog(credential, signal) {
+    modelSource(id) {
+      return accountCatalog.find(entry => entry.id === id)?.source ?? null;
+    },
+    async catalog(credential, signal, contracts = {}) {
       const registration = chatGPTRegistration(credential);
       await oauth.toAuth(credential);
+      if (contracts && typeof contracts === "object") {
+        for (const [slug, contract] of Object.entries(contracts)) {
+          if (slug) contractCache.set(slug, contract);
+        }
+      }
       // Clear first: a failed fetch must never expose another account's catalog.
       const generation = catalogRequestClient === registration.clientId ? catalogGeneration : ++catalogGeneration;
       catalogRequestClient = registration.clientId;
@@ -289,14 +348,20 @@ export function createChatGPTPlanPlugin({
         if (seen.has(id)) throw failure("chatgpt_catalog_invalid", "ChatGPT catalog contains duplicate models");
         seen.add(id);
         const original = builtin.get(id);
-        const model = original && original.api === "openai-responses" ? { ...original, name, provider: CHATGPT_PLAN_PROVIDER, baseUrl: RESOURCE } : null;
-        return { id, name, model, reason: model ? null : "pi_model_missing" };
+        if (original && original.api === "openai-responses") {
+          return { id, name, model: { ...original, name, provider: CHATGPT_PLAN_PROVIDER, baseUrl: RESOURCE }, reason: null, source: "pi_builtin" };
+        }
+        if (contractCache.has(id)) {
+          const resolved = catalogContractModel(id, name, contractCache.get(id));
+          return { id, name, model: resolved.model ?? null, reason: resolved.reason ?? null, source: resolved.model ? "models_dev_contract" : null };
+        }
+        return { id, name, model: null, reason: "pi_model_missing", source: null };
       });
       if (generation !== catalogGeneration) throw failure("chatgpt_catalog_superseded", "ChatGPT account catalog changed during discovery");
       accountCatalog = catalog;
       catalogClientId = registration.clientId;
-      return accountCatalog.map(({ id, name, model, reason }) => ({
-        id, name, supported: !!model, reason,
+      return accountCatalog.map(({ id, name, model, reason, source }) => ({
+        id, name, supported: !!model, reason, source,
         supportedThinkingLevels: model?.reasoning ? getSupportedThinkingLevels(model).filter(level => level !== "off") : []
       }));
     },

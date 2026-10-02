@@ -47,6 +47,128 @@ private final class SettingsOpenCodeGoUsageHTTPClient: HTTPClientProtocol {
 
 final class SettingsViewModelTests: XCTestCase {
     @MainActor
+    func testChatGPTManualRefreshLoadsFreshContractsBeforeAccountDiscovery() async throws {
+        let cacheURL = FileManager.default.temporaryDirectory.appendingPathComponent("chatgpt-refresh-\(UUID().uuidString).json")
+        let suiteName = "SettingsViewModelTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SettingsChatGPTCatalogURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer {
+            session.invalidateAndCancel()
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: cacheURL)
+        }
+        let cachedProviders = try ModelsDevCatalogRepository.parseCatalog(Data(SettingsChatGPTCatalogURLProtocol.fixture.utf8))
+        var staleProviders = cachedProviders
+        staleProviders[0].models = []
+        try JSONEncoder().encode(staleProviders).write(to: cacheURL)
+        defaults.set(Date(), forKey: "models_dev_catalog_fetched_at")
+        let catalog = ModelsDevCatalogRepository(session: session, defaults: defaults, cacheURL: cacheURL)
+        let fixture = try await makeChatGPTFixture(modelsDevCatalogRepository: catalog) { _, contracts in
+            XCTAssertEqual(contracts["gpt-6.1-sol"]?.reasoningEfforts, ["low", "medium", "high", "max"])
+            XCTAssertEqual(contracts["gpt-6.1-sol"]?.contextWindow, 1_050_000)
+            return [PiCodexModel(id: "gpt-6.1-sol", name: "GPT-6.1 Sol", supported: true)]
+        }
+
+        await fixture.viewModel.refreshCodexModels(forceRefresh: true)
+
+        XCTAssertEqual(fixture.viewModel.codexModels.map(\.id), ["gpt-6.1-sol"])
+        XCTAssertNil(fixture.viewModel.codexModelsError)
+    }
+
+    @MainActor
+    func testChatGPTCatalogRefreshShowsNewModelsWithoutReplacingSavedSelection() async throws {
+        let models = [
+            PiCodexModel(id: "gpt-6.1-sol", name: "GPT-6.1 Sol", supported: true),
+            PiCodexModel(id: "future-model", name: "Future", supported: false, reason: "pi_model_missing")
+        ]
+        let fixture = try await makeChatGPTFixture { _, _ in models }
+        fixture.viewModel.settings.defaultModel = "gpt-5.6-sol"
+
+        await fixture.viewModel.refreshCodexModels(forceRefresh: true)
+
+        XCTAssertEqual(fixture.viewModel.codexModels.map(\.id), models.map(\.id))
+        XCTAssertEqual(fixture.viewModel.codexModels.last?.reason, "pi_model_missing")
+        XCTAssertEqual(fixture.viewModel.settings.defaultModel, "gpt-5.6-sol")
+        XCTAssertFalse(fixture.viewModel.codexModelsLoading)
+        XCTAssertNil(fixture.viewModel.codexModelsError)
+    }
+
+    @MainActor
+    func testChatGPTCatalogRefreshFailureIsVisibleAndKeepsSavedModel() async throws {
+        let fixture = try await makeChatGPTFixture { _, _ in throw URLError(.notConnectedToInternet) }
+        fixture.viewModel.settings.defaultModel = "saved-model"
+        fixture.viewModel.codexModels = [PiCodexModel(id: "stale-model", name: "Stale", supported: true)]
+
+        await fixture.viewModel.refreshCodexModels()
+
+        XCTAssertTrue(fixture.viewModel.codexModels.isEmpty)
+        XCTAssertNotNil(fixture.viewModel.codexModelsError)
+        XCTAssertFalse(fixture.viewModel.codexModelsLoading)
+        XCTAssertEqual(fixture.viewModel.settings.defaultModel, "saved-model")
+    }
+
+    @MainActor
+    func testChatGPTCatalogDiscardsOlderRefreshAfterNewerRefreshCompletes() async throws {
+        let gate = SettingsChatGPTCatalogGate()
+        let fixture = try await makeChatGPTFixture { _, _ in try await gate.fetch() }
+        let first = Task { await fixture.viewModel.refreshCodexModels() }
+        await gate.waitUntilStarted()
+        XCTAssertTrue(fixture.viewModel.codexModelsLoading)
+
+        await fixture.viewModel.refreshCodexModels()
+        await gate.resume()
+        await first.value
+
+        XCTAssertEqual(fixture.viewModel.codexModels.map(\.id), ["new-model"])
+        XCTAssertEqual(fixture.auth.cachedModels().map(\.id), ["new-model"])
+        XCTAssertFalse(fixture.viewModel.codexModelsLoading)
+    }
+
+    @MainActor
+    func testChatGPTSignOutDiscardsInFlightModelRefresh() async throws {
+        let gate = SettingsChatGPTCatalogGate()
+        let fixture = try await makeChatGPTFixture { _, _ in try await gate.fetch() }
+        let refresh = Task { await fixture.viewModel.refreshCodexModels() }
+        await gate.waitUntilStarted()
+
+        await fixture.viewModel.logoutCodexAuth()
+        await gate.resume()
+        await refresh.value
+
+        XCTAssertTrue(fixture.viewModel.codexModels.isEmpty)
+        XCTAssertFalse(fixture.viewModel.codexModelsLoading)
+        XCTAssertNil(fixture.viewModel.codexModelsError)
+    }
+
+    @MainActor
+    private func makeChatGPTFixture(
+        modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
+        catalogHandler: @escaping PiChatGPTCatalogHandler
+    ) async throws -> (viewModel: SettingsViewModel, auth: CodexAuthRepository) {
+        let credentials = SettingsViewModelCredentialStore()
+        let auth = CodexAuthRepository(
+            credentialStore: credentials,
+            loginHandler: { host, _, _ in chatGPTResolution(hostID: host) },
+            resolveHandler: { _, _, _ in chatGPTResolution() },
+            catalogHandler: catalogHandler,
+            revokeHandler: { _ in }
+        )
+        guard case .success = await auth.loginWithBrowser() else {
+            throw ProviderClientError.parseFailure("Test sign-in failed")
+        }
+        let fixture = try makeFixture(
+            credentials: credentials,
+            codexAuthRepository: auth,
+            modelsDevCatalogRepository: modelsDevCatalogRepository
+        )
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: credentials)
+        return (viewModel, auth)
+    }
+
+    @MainActor
     func testSelectingNewSystemPromptClearsPreviousPresetDraft() throws {
         let viewModel = SettingsViewModel()
         viewModel.settings.systemPromptPresetsJSON = String(
@@ -475,14 +597,16 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     private func makeFixture(
-        openCodeGoUsageHTTPClient: HTTPClientProtocol? = nil
+        openCodeGoUsageHTTPClient: HTTPClientProtocol? = nil,
+        credentials: SettingsViewModelCredentialStore = SettingsViewModelCredentialStore(),
+        codexAuthRepository: CodexAuthRepository? = nil,
+        modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil
     ) throws -> (repository: ChatRepository, credentials: SettingsViewModelCredentialStore) {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)
 
         let settings = SettingsRepository(dbQueue: dbQueue)
         let conversations = ConversationRepository(dbQueue: dbQueue)
-        let credentials = SettingsViewModelCredentialStore()
         let usageRepository = openCodeGoUsageHTTPClient.map {
             OpenCodeGoUsageRepository(httpClient: $0)
         }
@@ -491,6 +615,8 @@ final class SettingsViewModelTests: XCTestCase {
             settings: settings,
             conversations: conversations,
             credentials: credentials,
+            modelsDevCatalogRepository: modelsDevCatalogRepository,
+            codexAuthRepository: codexAuthRepository,
             openCodeGoUsageRepository: usageRepository
         )
 
@@ -507,4 +633,53 @@ final class SettingsViewModelTests: XCTestCase {
       }}
     }}
     """#
+}
+
+private actor SettingsChatGPTCatalogGate {
+    private var firstRequest: CheckedContinuation<Void, Never>?
+    private var startedWaiter: CheckedContinuation<Void, Never>?
+    private var requestCount = 0
+
+    func fetch() async throws -> [PiCodexModel] {
+        requestCount += 1
+        if requestCount == 1 {
+            await withCheckedContinuation { continuation in
+                firstRequest = continuation
+                startedWaiter?.resume()
+                startedWaiter = nil
+            }
+            return [PiCodexModel(id: "old-model", name: "Old", supported: true)]
+        }
+        return [PiCodexModel(id: "new-model", name: "New", supported: true)]
+    }
+
+    func waitUntilStarted() async {
+        if firstRequest != nil { return }
+        await withCheckedContinuation { startedWaiter = $0 }
+    }
+
+    func resume() {
+        firstRequest?.resume()
+        firstRequest = nil
+    }
+}
+
+private final class SettingsChatGPTCatalogURLProtocol: URLProtocol {
+    static let fixture = #"""
+    {"providers":{"openai":{"name":"OpenAI","npm":"@ai-sdk/openai","api":"https://api.openai.com/v1","models":{
+      "gpt-6.1-sol":{"name":"GPT-6.1 Sol","reasoning":true,"tool_call":true,
+        "reasoning_options":[{"type":"effort","values":["low","medium","high","max"]}],
+        "modalities":{"input":["text","image"],"output":["text"]},"limit":{"context":1050000,"output":128000}}
+    }}}}
+    """#
+
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "models.dev" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(Self.fixture.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }

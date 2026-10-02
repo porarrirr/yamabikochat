@@ -1687,6 +1687,11 @@ struct SettingsScreen: View {
                         }
                     }
                 )) {
+                    if !viewModel.codexModels.contains(where: { $0.id == viewModel.settings.defaultModel }) {
+                        Text(viewModel.settings.defaultModel)
+                            .tag(viewModel.settings.defaultModel)
+                            .disabled(true)
+                    }
                     ForEach(CodexModelCatalog.visiblePresets(from: viewModel.codexModels)) { preset in
                         Text(preset.isSupported ? preset.displayName : "\(preset.displayName) · \(preset.unsupportedReason ?? "unsupported")")
                             .tag(preset.model)
@@ -1694,13 +1699,24 @@ struct SettingsScreen: View {
                     }
                 }
 
-                if !viewModel.codexModels.contains(where: { $0.id == viewModel.settings.defaultModel }) {
+                if viewModel.codexModelsLoading {
+                    ProgressView("モデル一覧を読み込み中...")
+                } else if let error = viewModel.codexModelsError {
+                    Text("モデル一覧を取得できませんでした: \(error)")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                } else if !viewModel.codexModels.contains(where: { $0.id == viewModel.settings.defaultModel }) {
                     Text(viewModel.codexAuthState.planUsageEnabled
                          ? "この保存済みモデルは現在のアカウントの一覧にありません。モデルを選択してください。"
                          : "ChatGPTに接続し、プラン利用を許可するとモデル一覧を取得できます。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+
+                Button("モデル一覧を更新") {
+                    Task { await viewModel.refreshCodexModels(forceRefresh: true) }
+                }
+                .disabled(viewModel.codexModelsLoading || viewModel.isCodexAuthActionRunning || !viewModel.codexAuthState.planUsageEnabled)
 
                 if let preset = CodexModelCatalog.findPreset(viewModel.settings.defaultModel, in: viewModel.codexModels) {
                     Text(preset.description)

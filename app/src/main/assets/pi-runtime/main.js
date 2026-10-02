@@ -312446,6 +312446,8 @@ var DYNAMIC_CLIENT = "dynamic_agent_client";
 var PLAN_SCOPE = "chatgpt.tokens.use.direct";
 var SCOPES2 = `openid profile email offline_access resource.invoke ${PLAN_SCOPE}`;
 var UUID_URI = /^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+var CONTRACT_EFFORT_VALUES = /* @__PURE__ */ new Set(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
+var CONTRACT_LEVEL_KEYS = ["minimal", "low", "medium", "high", "xhigh", "max"];
 function failure(code, message2) {
   return Object.assign(new Error(message2), { code });
 }
@@ -312464,6 +312466,15 @@ function authURL(value3) {
     throw failure("chatgpt_discovery_invalid", "Unexpected ChatGPT discovery endpoint");
   }
   return url.toString();
+}
+function earliestRefreshMs(value3) {
+  if (value3 === void 0) return 0;
+  const milliseconds = typeof value3 === "number" ? value3 * 1e3 : typeof value3 === "string" ? Date.parse(value3) : NaN;
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) throw failure("chatgpt_contract_invalid", "Invalid ChatGPT earliest refresh time");
+  return milliseconds;
+}
+function chatGPTPlanCompleted(message2) {
+  return message2?.rawStopReason === "completed" && !message2.errorMessage && ["stop", "toolUse"].includes(message2.stopReason);
 }
 function parseChatGPTCallback(url, pending2) {
   if (url.pathname !== "/auth/callback") throw failure("chatgpt_callback_invalid", "Unexpected callback path");
@@ -312557,6 +312568,50 @@ function chatGPTRegistration(credential) {
     email: credential.email ?? null
   };
 }
+function catalogContractModel(id, name, contract) {
+  if (!contract || typeof contract !== "object" || !["provider", "model"].includes(contract.provenance)) {
+    return { reason: "catalog_contract_incomplete" };
+  }
+  if (contract.shape !== void 0 && contract.shape !== null) {
+    if (contract.shape !== "responses") return { reason: "protocol_conflict" };
+    if (contract.npm !== void 0 && contract.npm !== null && contract.npm !== "@ai-sdk/openai") {
+      return { reason: "protocol_conflict" };
+    }
+  } else if (contract.npm !== "@ai-sdk/openai") {
+    return { reason: "protocol_conflict" };
+  }
+  if (contract.api !== void 0 && contract.api !== null) {
+    const api = typeof contract.api === "string" ? contract.api.trim().replace(/\/+$/, "") : null;
+    if (api !== RESOURCE) return { reason: "endpoint_conflict" };
+  }
+  const input = Array.isArray(contract.input) ? contract.input.filter((value3) => typeof value3 === "string") : [];
+  const contextWindow = Number(contract.contextWindow);
+  const maxTokens = Number(contract.maxTokens);
+  if (!input.includes("text") || !Number.isInteger(contextWindow) || contextWindow <= 0 || !Number.isInteger(maxTokens) || maxTokens <= 0 || typeof contract.reasoning !== "boolean") {
+    return { reason: "catalog_contract_incomplete" };
+  }
+  const efforts = !contract.reasoning ? [] : (Array.isArray(contract.reasoningEfforts) ? contract.reasoningEfforts : []).map((value3) => typeof value3 === "string" ? value3.trim().toLowerCase() : "");
+  if (contract.reasoning && (!efforts.length || efforts.some((value3) => !CONTRACT_EFFORT_VALUES.has(value3)))) {
+    return { reason: "catalog_contract_incomplete" };
+  }
+  const model = {
+    id,
+    name,
+    api: "openai-responses",
+    provider: CHATGPT_PLAN_PROVIDER,
+    baseUrl: RESOURCE,
+    reasoning: contract.reasoning,
+    input: input.filter((value3) => ["text", "image"].includes(value3)),
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow,
+    maxTokens
+  };
+  if (contract.reasoning) {
+    model.thinkingLevelMap = { off: efforts.includes("none") ? "none" : null };
+    for (const level of CONTRACT_LEVEL_KEYS) model.thinkingLevelMap[level] = efforts.includes(level) ? level : null;
+  }
+  return { model };
+}
 function createChatGPTPlanPlugin({
   fetch: fetcher = globalThis.fetch,
   callbackListener = startChatGPTCallback,
@@ -312568,6 +312623,7 @@ function createChatGPTPlanPlugin({
   let catalogGeneration = 0;
   let catalogRequestClient = null;
   const builtin = new Map(openaiProvider().getModels().map((model) => [model.id, model]));
+  const contractCache = /* @__PURE__ */ new Map();
   let discoveryCache = null;
   let keysCache = null;
   async function readJSON(url, signal, options = {}) {
@@ -312622,12 +312678,16 @@ function createChatGPTPlanPlugin({
       throw failure("chatgpt_contract_invalid", "Invalid ChatGPT token response");
     }
     const scopes = required(token2.scope, "granted scopes").split(/\s+/);
+    const accessExpiresAt = now() + token2.expires_in * 1e3;
+    const earliest = earliestRefreshMs(token2.earliest_refresh_at);
     return {
       type: "oauth",
       contract: "siwc-v1",
       access: token2.access_token,
       refresh: token2.refresh_token,
-      expires: now() + token2.expires_in * 1e3 - 18e4,
+      expires: Math.min(accessExpiresAt, Math.max(accessExpiresAt - 18e4, earliest)),
+      accessExpiresAt,
+      ...token2.earliest_refresh_at !== void 0 ? { earliestRefreshAt: token2.earliest_refresh_at } : {},
       clientId: registration.clientId,
       hostId: registration.hostId,
       issuer: ISSUER2,
@@ -312694,6 +312754,13 @@ function createChatGPTPlanPlugin({
     },
     async refresh(credential, signal) {
       const registration = chatGPTRegistration(credential);
+      const earliest = earliestRefreshMs(credential.earliestRefreshAt);
+      if (now() < earliest) {
+        if (!Number.isFinite(credential.accessExpiresAt) || now() >= credential.accessExpiresAt) {
+          throw failure("chatgpt_refresh_not_yet_allowed", "ChatGPT access token expired before its permitted refresh time");
+        }
+        return { ...credential, expires: Math.min(credential.accessExpiresAt, earliest) };
+      }
       const token2 = await tokenRequest({ grant_type: "refresh_token", client_id: registration.clientId, refresh_token: credential.refresh }, signal);
       let identity = { sub: registration.subject, email: credential.email };
       if (token2.id_token) {
@@ -312737,14 +312804,23 @@ function createChatGPTPlanPlugin({
       catalogRequestClient = null;
       accountCatalog = [];
       catalogClientId = null;
+      contractCache.clear();
     },
     modelStatus(id) {
       const entry = accountCatalog.find((entry2) => entry2.id === id);
       return entry ? entry.reason : catalogClientId ? "chatgpt_model_unavailable" : "chatgpt_catalog_required";
     },
-    async catalog(credential, signal) {
+    modelSource(id) {
+      return accountCatalog.find((entry) => entry.id === id)?.source ?? null;
+    },
+    async catalog(credential, signal, contracts = {}) {
       const registration = chatGPTRegistration(credential);
       await oauth.toAuth(credential);
+      if (contracts && typeof contracts === "object") {
+        for (const [slug, contract] of Object.entries(contracts)) {
+          if (slug) contractCache.set(slug, contract);
+        }
+      }
       const generation = catalogRequestClient === registration.clientId ? catalogGeneration : ++catalogGeneration;
       catalogRequestClient = registration.clientId;
       accountCatalog = [];
@@ -312757,17 +312833,24 @@ function createChatGPTPlanPlugin({
         if (seen.has(id)) throw failure("chatgpt_catalog_invalid", "ChatGPT catalog contains duplicate models");
         seen.add(id);
         const original = builtin.get(id);
-        const model = original && original.api === "openai-responses" ? { ...original, name, provider: CHATGPT_PLAN_PROVIDER, baseUrl: RESOURCE } : null;
-        return { id, name, model, reason: model ? null : "pi_model_missing" };
+        if (original && original.api === "openai-responses") {
+          return { id, name, model: { ...original, name, provider: CHATGPT_PLAN_PROVIDER, baseUrl: RESOURCE }, reason: null, source: "pi_builtin" };
+        }
+        if (contractCache.has(id)) {
+          const resolved = catalogContractModel(id, name, contractCache.get(id));
+          return { id, name, model: resolved.model ?? null, reason: resolved.reason ?? null, source: resolved.model ? "models_dev_contract" : null };
+        }
+        return { id, name, model: null, reason: "pi_model_missing", source: null };
       });
       if (generation !== catalogGeneration) throw failure("chatgpt_catalog_superseded", "ChatGPT account catalog changed during discovery");
       accountCatalog = catalog;
       catalogClientId = registration.clientId;
-      return accountCatalog.map(({ id, name, model, reason }) => ({
+      return accountCatalog.map(({ id, name, model, reason, source }) => ({
         id,
         name,
         supported: !!model,
         reason,
+        source,
         supportedThinkingLevels: model?.reasoning ? getSupportedThinkingLevels(model).filter((level) => level !== "off") : []
       }));
     },
@@ -313583,7 +313666,7 @@ function resolutionFor(config) {
     provider: model.provider,
     model: model.id,
     api: model.api,
-    source: model.provider === CHATGPT_PLAN_PROVIDER ? "verified_official_contract" : VERIFIED_MODEL_SOURCES.get(`${model.provider}/${model.id}`) || "pi_builtin",
+    source: model.provider === CHATGPT_PLAN_PROVIDER ? chatGPTPlan.modelSource(model.id) : VERIFIED_MODEL_SOURCES.get(`${model.provider}/${model.id}`) || "pi_builtin",
     reasoning: model.reasoning,
     input: model.input,
     contextWindow: model.contextWindow,
@@ -313897,12 +313980,19 @@ function replayableProviderTranscript(messages) {
     return [];
   });
 }
-function finalResponse(assistants, contextUsage, generatedMessages = []) {
+function finalResponse(assistants, contextUsage, generatedMessages = [], provider) {
   const last = assistants.at(-1);
   if (!last) throw new Error("Pi provider returned no assistant message");
   if (last.stopReason === "error" || last.stopReason === "aborted" || last.errorMessage) {
     const detail = last.errorMessage || last.rawStopReason || "unknown provider error";
     throw Object.assign(new Error(`Pi provider failed: ${detail}`), { code: last.errorCode });
+  }
+  if (provider === CHATGPT_PLAN_PROVIDER && assistants.some((message2) => !chatGPTPlanCompleted(message2))) {
+    const incomplete = assistants.find((message2) => !chatGPTPlanCompleted(message2));
+    throw Object.assign(
+      new Error(`ChatGPT plan response did not complete: ${incomplete.errorMessage || incomplete.rawStopReason || incomplete.stopReason || "unknown"}`),
+      { code: "chatgpt_response_incomplete" }
+    );
   }
   const text = (last?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
   const reasoning = assistants.flatMap((message2) => (message2.content || []).filter((part) => part.type === "thinking").map((part) => part.thinking)).join("");
@@ -313982,7 +314072,7 @@ async function runAgent(envelope, res) {
   if (config.provider === CHATGPT_PLAN_PROVIDER) {
     const credential = await authCredentials.read(CHATGPT_PLAN_PROVIDER);
     if (!credential || credential.access !== config.apiKey) throw Object.assign(new Error("ChatGPT account credentials must be resolved before execution"), { code: "chatgpt_reconnect_required" });
-    await chatGPTPlan.catalog(credential, AbortSignal.timeout(3e4));
+    await chatGPTPlan.catalog(credential, AbortSignal.timeout(3e4), config.catalogContract ? { [config.model]: config.catalogContract } : {});
   }
   const skillAppliedRequest = applyExplicitSkillInvocations(request);
   const startedAtMs = Date.now();
@@ -314033,6 +314123,10 @@ async function runAgent(envelope, res) {
         }
       });
     }),
+    // End through Pi's lifecycle hook so truncated tools cannot trigger another inference.
+    ...config.provider === CHATGPT_PLAN_PROVIDER ? {
+      finishTurn: ({ message: message2 }) => chatGPTPlanCompleted(message2) ? void 0 : { action: "end" }
+    } : {},
     toolExecution: "parallel",
     maxRetryDelayMs: 6e4
   });
@@ -314077,7 +314171,7 @@ async function runAgent(envelope, res) {
         type: "llm_end",
         stepId: activeStep,
         timeMs: Date.now(),
-        succeeded: event.message.stopReason !== "error" && event.message.stopReason !== "aborted" && !event.message.errorMessage,
+        succeeded: config.provider === CHATGPT_PLAN_PROVIDER ? chatGPTPlanCompleted(event.message) : event.message.stopReason !== "error" && event.message.stopReason !== "aborted" && !event.message.errorMessage,
         usage: providerUsage(event.message.usage)
       });
       activeStep = null;
@@ -314105,7 +314199,7 @@ async function runAgent(envelope, res) {
     const contextWindow = model.contextWindow || null;
     const contextEstimate = contextWindow && last?.usage ? { tokens: last.pccToolCalls?.length ? null : last.usage.totalTokens, contextWindow } : null;
     const generatedMessages = agent.state.messages.slice(initialMessageCount);
-    const response = finalResponse(runAssistants, contextEstimate, generatedMessages);
+    const response = finalResponse(runAssistants, contextEstimate, generatedMessages, config.provider);
     response.piExecution = piExecutionSnapshot({
       agent,
       effectiveRequest,
@@ -314203,7 +314297,7 @@ var handleRequest = async (req, res) => {
       const value3 = await body(req);
       const credential = await authCredentials.read(CHATGPT_PLAN_PROVIDER);
       if (!credential || credential.clientId !== value3.credential?.clientId) throw new Error("ChatGPT account credentials must be resolved before discovery");
-      const models = await chatGPTPlan.catalog(credential, AbortSignal.timeout(3e4));
+      const models = await chatGPTPlan.catalog(credential, AbortSignal.timeout(3e4), value3.contracts || {});
       return json2(res, 200, { contractVersion: RUNTIME_CONTRACT_VERSION, models });
     }
     if (req.method === "POST" && req.url === "/v1/auth/registration") {

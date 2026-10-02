@@ -89,6 +89,8 @@ final class AppServices {
         let localTools = makeLocalTools()
         modelsDevCatalogRepository = ModelsDevCatalogRepository()
         let modelsDevCredentials = credentialStore
+        let codexAuth = CodexAuthRepository(credentialStore: credentialStore)
+        codexAuthRepository = codexAuth
         requestSettingsResolver = ProviderRequestSettingsResolver(
             modelService: openRouterModelService,
             skillRepository: skillRepository,
@@ -98,9 +100,9 @@ final class AppServices {
                 try? modelsDevCredentials.readSecret(
                     key: ModelsDevReasoningPreference.storageKey(providerID: providerID, modelID: modelID)
                 )
-            }
+            },
+            codexModelsProvider: { codexAuth.cachedModels() }
         )
-        codexAuthRepository = CodexAuthRepository(credentialStore: credentialStore)
         superGrokAuthRepository = SuperGrokAuthRepository(credentialStore: credentialStore)
         providerGateway = ProviderGateway(
             settingsRepository: settingsRepository,

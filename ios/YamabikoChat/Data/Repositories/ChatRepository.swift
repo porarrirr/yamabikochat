@@ -189,7 +189,7 @@ final class ChatRepository {
             )
         case "CODEX_AUTH":
             guard settings.codexReasoningEnabled,
-                  let preset = CodexModelCatalog.findPreset(normalizedModel)
+                  let preset = CodexModelCatalog.findPreset(normalizedModel, in: codexAuthRepository.cachedModels())
             else { return nil }
             return makeReasoningEffortConfiguration(
                 providerID: normalizedProvider,
@@ -1983,8 +1983,20 @@ final class ChatRepository {
         await codexAuthRepository.refreshIfNeeded(force: force)
     }
 
-    func chatGPTModels() async throws -> [PiCodexModel] {
-        try await codexAuthRepository.models()
+    func chatGPTModels(forceRefresh: Bool = false) async throws -> [PiCodexModel] {
+        _ = await modelsDevCatalogRepository?.load(forceRefresh: forceRefresh)
+        let openAIProvider = modelsDevCatalogRepository?.provider(for: .modelsDev("openai"))
+        if openAIProvider == nil {
+            // Fail closed: without the models.dev contract, account slugs missing
+            // from Pi built-ins stay disabled as pi_model_missing instead of guessing.
+            DiagnosticsLogger.log(
+                "models.dev openai provider unavailable; ChatGPT catalog contracts omitted",
+                category: .network
+            )
+        }
+        return try await codexAuthRepository.models(
+            contracts: CodexModelCatalog.modelsDevContracts(from: openAIProvider)
+        )
     }
 
     func retrieveOpenCodeGoUsage(apiKey: String) async -> Result<OpenCodeGoUsageStatus, Error> {
