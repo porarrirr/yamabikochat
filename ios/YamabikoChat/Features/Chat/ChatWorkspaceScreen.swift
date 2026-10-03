@@ -49,6 +49,7 @@ struct ChatWorkspaceScreen: View {
                 }
             )
         }
+        .siriConversationContext(id: conversationID, isSecret: viewModel.isSecretConversation || !viewModel.isConversationLoaded)
         .background(workspaceBackground.ignoresSafeArea())
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)

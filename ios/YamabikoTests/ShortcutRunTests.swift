@@ -232,6 +232,27 @@ final class ShortcutRunTests: XCTestCase {
         }
     }
 
+    func testSiriUsesSavedModelAndPiExecutionAndOptionallySaves() async throws {
+        let runtime = successRuntime()
+        let fixture = try makeFixture(runtime: runtime) { settings in
+            settings.apiProvider = "OPENROUTER"
+            settings.defaultModel = "openai/gpt-4o-mini"
+        }
+        try fixture.credentials.setCredential("openrouter-key", for: .openRouter)
+        let settings = try SettingsRepository(dbQueue: fixture.dbQueue).load()
+        let reply = try await SiriConversationService.ask(
+            prompt: "Siri question", save: false, settings: settings, repository: fixture.repository)
+        XCTAssertEqual(reply.text, "shortcut answer")
+        XCTAssertNil(reply.conversationId)
+        XCTAssertEqual(runtime.calls.last?.request.model, settings.currentModel())
+        XCTAssertEqual(runtime.calls.last?.request.messages.last?.content, "Siri question")
+        let saved = try await SiriConversationService.ask(
+            prompt: "Save this question", save: true, settings: settings, repository: fixture.repository)
+        let conversationID = try XCTUnwrap(saved.conversationId)
+        XCTAssertEqual(try fixture.conversations.fetchConversation(id: conversationID)?.apiProvider, settings.apiProvider)
+        XCTAssertEqual(try fixture.conversations.fetchMessages(conversationId: conversationID).count, 2)
+    }
+
     private func makeFixture(
         runtime: PiStreamSpy = PiStreamSpy(),
         conversationTitleGenerator: any ConversationTitleGenerating = ConversationTitleGeneratorSpy(),

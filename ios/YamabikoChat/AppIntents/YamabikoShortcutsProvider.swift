@@ -5,6 +5,24 @@ struct YamabikoShortcutsProvider: AppShortcutsProvider {
     @AppShortcutsBuilder
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
+            intent: AskYamabikoIntent(),
+            phrases: ["\(.applicationName) に質問", "\(.applicationName) に聞く"],
+            shortTitle: "やまびこに質問",
+            systemImageName: "sparkles"
+        )
+        AppShortcut(
+            intent: OpenConversationIntent(),
+            phrases: ["\(.applicationName) で会話を開く", "\(.applicationName) で \(\.$target) を開く"],
+            shortTitle: "会話を開く",
+            systemImageName: "bubble.left.and.bubble.right"
+        )
+        AppShortcut(
+            intent: FindConversationsIntent(),
+            phrases: ["\(.applicationName) で会話を検索"],
+            shortTitle: "会話を検索",
+            systemImageName: "magnifyingglass"
+        )
+        AppShortcut(
             intent: RunYamabikoModelIntent(),
             phrases: [
                 "Shortcuts: \(.applicationName) でモデルに聞く",

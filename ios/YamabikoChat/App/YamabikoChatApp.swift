@@ -63,6 +63,15 @@ private struct AppRootHost: View {
             .environmentObject(container)
             .environmentObject(appState)
             .onOpenURL { url in
+                if let id = SiriConversationService.conversationID(from: url) {
+                    do {
+                        _ = try SiriConversationService.resolve(id: id, repository: container.conversationRepository)
+                        SiriNavigation.shared.request(.conversation(id))
+                    } catch {
+                        DiagnosticsLogger.log("Siri conversation link unavailable", category: .app, error: error)
+                    }
+                    return
+                }
                 guard url == AppConstants.importShareURL else { return }
                 while appState.importSharePayload(
                     from: container.sharePayloadStore,

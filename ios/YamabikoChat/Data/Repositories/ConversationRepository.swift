@@ -409,6 +409,26 @@ final class ConversationRepository: @unchecked Sendable {
         }
     }
 
+    // Siri queries never decrypt or expose secret conversations. Use bound values and
+    // literal substring matching so '%' and '_' are ordinary search characters.
+    func siriConversations(matching term: String? = nil, ids: [Int64]? = nil, limit: Int = 50) throws -> [Conversation] {
+        if let ids, ids.isEmpty { return [] }
+        return try dbQueue.read { db in
+            var clauses = ["c.isSecret = 0"]
+            var arguments = StatementArguments()
+            if let ids {
+                clauses.append("c.id IN (\(Array(repeating: "?", count: ids.count).joined(separator: ",")))")
+                arguments += StatementArguments(ids)
+            }
+            if let term = term?.trimmingCharacters(in: .whitespacesAndNewlines), !term.isEmpty {
+                clauses.append("(instr(lower(c.title), lower(?)) > 0 OR EXISTS (SELECT 1 FROM chat_messages m WHERE m.conversationId = c.id AND instr(lower(m.text), lower(?)) > 0))")
+                arguments += [term, term]
+            }
+            arguments += [max(1, min(limit, 500))]
+            return try Conversation.fetchAll(db, sql: "SELECT c.* FROM conversations c WHERE \(clauses.joined(separator: " AND ")) ORDER BY c.updatedAtMs DESC, c.id DESC LIMIT ?", arguments: arguments)
+        }
+    }
+
     func pendingInitialMessage(conversationId: Int64) throws -> String? {
         try dbQueue.read { db in
             let value = try String.fetchOne(

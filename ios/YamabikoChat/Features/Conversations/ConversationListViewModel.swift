@@ -14,6 +14,8 @@ final class ConversationListViewModel: ObservableObject {
     @Published var isSelectionMode: Bool = false
     @Published var selectedConversationIds: Set<Int64> = []
 
+    private var siriSearchTerm: String?
+    private var siriConversationRepository: ConversationRepository?
     private var repository: ChatRepository?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -247,6 +249,13 @@ final class ConversationListViewModel: ObservableObject {
         }
     }
 
+    func searchFromSiri(term: String, conversations: ConversationRepository) {
+        siriConversationRepository = conversations
+        siriSearchTerm = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        searchQuery = term
+        rebuildFilteredConversations()
+    }
+
     private func rebuildFilteredConversations() {
         let base: [ConversationListEntry]
         if let selectedProjectId {
@@ -257,7 +266,16 @@ final class ConversationListViewModel: ObservableObject {
 
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         let filtered: [ConversationListEntry]
-        if query.isEmpty {
+        if let siriSearchTerm, siriSearchTerm == query, let siriConversationRepository {
+            do {
+                let ids = Set(try siriConversationRepository.siriConversations(matching: query).compactMap(\.id))
+                filtered = base.filter { ids.contains($0.id) }
+            } catch {
+                filtered = []
+                errorMessage = error.localizedDescription
+                DiagnosticsLogger.log("Siri in-app search failed", category: .app, error: error)
+            }
+        } else if query.isEmpty {
             filtered = base
         } else {
             filtered = base.filter { entry in
@@ -265,6 +283,10 @@ final class ConversationListViewModel: ObservableObject {
                 (entry.lastMessagePreview?.localizedCaseInsensitiveContains(query) ?? false) ||
                 (entry.projectTitle?.localizedCaseInsensitiveContains(query) ?? false)
             }
+        }
+        if siriSearchTerm != query {
+            siriSearchTerm = nil
+            siriConversationRepository = nil
         }
         guard filteredConversations != filtered else { return }
         filteredConversations = filtered

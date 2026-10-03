@@ -536,6 +536,7 @@ struct ConversationListScreen: View {
             }
           }
         }
+        .siriConversationContext(id: entry.id, isSecret: entry.isSecret)
         .buttonStyle(.plain)
         .padding(.horizontal, 10)
         .padding(.vertical, 10)

@@ -18,9 +18,11 @@ final class AppContainer: ObservableObject {
     let fusionService: FusionService
     let chatRepository: ChatRepository
     let sharePayloadStore: SharePayloadStore
+    private let conversationSpotlightIndexer: ConversationSpotlightIndexer
     let userQuestionCoordinator: UserQuestionCoordinator
 
     init(services: AppServices) {
+        conversationSpotlightIndexer = ConversationSpotlightIndexer(repository: services.conversationRepository)
         dbQueue = services.dbQueue
         credentialStore = services.credentialStore
         settingsRepository = services.settingsRepository

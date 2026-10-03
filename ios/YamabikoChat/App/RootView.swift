@@ -109,7 +109,12 @@ struct RootView: View {
                 applyAppearance(settings)
             }
             importSharePayloadIfNeeded()
+            applySiriNavigation()
             await applyScreenshotRoutingIfNeeded()
+        }
+        .onReceive(SiriNavigation.shared.$pendingRequest) { request in
+            guard request != nil else { return }
+            Task { @MainActor in applySiriNavigation() }
         }
         .onReceive(NotificationCenter.default.publisher(for: AppConstants.sharePayloadDidChangeNotification)) { _ in
             importSharePayloadIfNeeded()
@@ -327,6 +332,26 @@ struct RootView: View {
         }
 
         try? await Task.sleep(nanoseconds: 500_000_000)
+    }
+
+    private func applySiriNavigation() {
+        guard let request = SiriNavigation.shared.consume() else { return }
+        switch request {
+        case .conversation(let id):
+            do {
+                _ = try SiriConversationService.resolve(id: id, repository: container.conversationRepository)
+                listViewModel.selectedProjectId = nil
+                listViewModel.searchQuery = ""
+                selectConversation(id: id, closeHistory: true)
+            } catch {
+                DiagnosticsLogger.log("Siri navigation rejected unavailable conversation", category: .app, error: error)
+            }
+        case .search(let term):
+            listViewModel.selectedProjectId = nil
+            listViewModel.searchFromSiri(term: term, conversations: container.conversationRepository)
+            appState.isConversationHistoryPresented = true
+            setPreferredCompactColumn(.sidebar)
+        }
     }
 
     private func selectConversation(id: Int64, closeHistory: Bool = false) {

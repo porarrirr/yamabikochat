@@ -38,6 +38,7 @@ final class ChatViewModel: ObservableObject {
         set { composerStore.canAttachImages = newValue }
     }
     @Published private(set) var isSecretConversation: Bool = false
+    @Published private(set) var isConversationLoaded = false
     @Published private(set) var conversationTitle: String = "New Chat"
     @Published private(set) var enabledSkills: [AgentSkillCatalogEntry] = []
     @Published private(set) var conversationStats: ConversationStats = .init()
@@ -194,6 +195,7 @@ final class ChatViewModel: ObservableObject {
                 activeConversationModel = conversation.model
                 isSecretConversation = conversation.isSecret
                 conversationTitle = conversation.title
+                isConversationLoaded = true
                 updateActiveChatPresetName()
                 updateActiveSystemPromptPresetName()
                 refreshReasoningEffortConfiguration()
