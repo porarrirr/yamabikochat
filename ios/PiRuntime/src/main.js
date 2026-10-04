@@ -83,30 +83,36 @@ const PROVIDER_IDENTITY_EXCEPTIONS = new Map([
   ["alibaba-token-plan-cn", "qwen-token-plan-cn"]
 ]);
 const VERIFIED_OPENCODE_GO_ROUTES = [
+  { id: "grok-4.7", api: "openai-responses" },
   { id: "grok-4.6", api: "openai-responses" },
+  { id: "gpt-6-luna", api: "openai-responses" },
   { id: "gpt-5.6-luna", api: "openai-responses" },
   { id: "glm-5.3-flash", api: "openai-completions" },
   { id: "glm-5.3", api: "openai-completions" },
   { id: "glm-5.2", api: "openai-completions" },
-  { id: "glm-5.1", api: "openai-completions" },
   { id: "kimi-k3", api: "openai-completions" },
   { id: "kimi-k2.7-code", api: "openai-completions" },
   { id: "kimi-k2.6", api: "openai-completions" },
   { id: "longcat-2.0", api: "openai-completions" },
+  { id: "longcat-2.5-preview-free", api: "openai-completions" },
+  { id: "deepseek-v4.1-flash", api: "openai-completions" },
   { id: "deepseek-v4-pro", api: "openai-completions" },
   { id: "deepseek-v4-flash", api: "openai-completions" },
   { id: "deepseek-v4-flash-vision-exp", api: "openai-completions" },
+  { id: "mimo-v2.6-flash", api: "openai-completions" },
+  { id: "mimo-v2.6-pro", api: "openai-completions" },
   { id: "mimo-v2.5", api: "openai-completions" },
   { id: "mimo-v2.5-pro", api: "openai-completions" },
   { id: "minimax-m3", api: "anthropic-messages" },
   { id: "minimax-m2.7", api: "anthropic-messages" },
-  { id: "minimax-m2.5", api: "anthropic-messages" },
+  { id: "muse-spark-1.3-contributor", api: "openai-responses" },
   { id: "muse-spark-1.2-contributor", api: "openai-responses" },
   { id: "qwen3.8-max", api: "anthropic-messages" },
-  { id: "qwen3.7-max", api: "anthropic-messages" },
+  { id: "qwen3.8-flash", api: "anthropic-messages" },
   { id: "qwen3.7-plus", api: "anthropic-messages" },
-  { id: "qwen3.6-plus", api: "anthropic-messages" },
-  { id: "hy3", api: "openai-completions" }
+  { id: "hy4-preview", api: "openai-completions" },
+  { id: "hy3", api: "openai-completions" },
+  { id: "space-bunny-free", api: "openai-completions" }
 ];
 
 function zeroCost() {
@@ -116,77 +122,13 @@ function zeroCost() {
 function installVerifiedOpenCodeGoContracts() {
   const provider = runtimeModels.getProvider("opencode-go");
   if (!provider) throw new Error("Pi does not provide the required opencode-go provider");
-  const missingModels = new Map([
-    ["grok-4.6", {
-      id: "grok-4.6",
-      name: "Grok 4.6",
-      provider: "opencode-go",
-      reasoning: true,
-      input: ["text", "image"],
-      cost: { input: 2, output: 6, cacheRead: 0.5, cacheWrite: 0 },
-      contextWindow: 500000,
-      maxTokens: 500000,
-      thinkingLevelMap: { low: "low", medium: "medium", high: "high", xhigh: "xhigh" }
-    }],
-    ["glm-5.3-flash", {
-      id: "glm-5.3-flash",
-      name: "GLM-5.3-Flash (2x usage)",
-      provider: "opencode-go",
-      reasoning: true,
-      input: ["text", "image", "video", "pdf"],
-      cost: { input: 0.075, output: 0.25, cacheRead: 0.015, cacheWrite: 0 },
-      contextWindow: 1000000,
-      maxTokens: 131072,
-      thinkingLevelMap: { low: "low", high: "high", max: "max" }
-    }],
-    ["longcat-2.0", {
-      id: "longcat-2.0",
-      name: "LongCat-2.0",
-      provider: "opencode-go",
-      reasoning: true,
-      input: ["text"],
-      cost: { input: 0.3, output: 1.2, cacheRead: 0.006, cacheWrite: 0 },
-      contextWindow: 1000000,
-      maxTokens: 131072
-    }],
-    ["deepseek-v4-flash-vision-exp", {
-      id: "deepseek-v4-flash-vision-exp",
-      name: "DeepSeek V4 Flash Vision Exp",
-      provider: "opencode-go",
-      reasoning: true,
-      input: ["text", "image"],
-      cost: { input: 0.22, output: 0.66, cacheRead: 0.007, cacheWrite: 0 },
-      contextWindow: 1000000,
-      maxTokens: 384000,
-      thinkingLevelMap: { minimal: null, low: "low", medium: null, high: "high", max: "max" }
-    }],
-    ["minimax-m2.5", {
-      id: "minimax-m2.5",
-      name: "MiniMax-M2.5",
-      provider: "opencode-go",
-      reasoning: true,
-      input: ["text"],
-      cost: { input: 0.3, output: 1.2, cacheRead: 0.03, cacheWrite: 0 },
-      contextWindow: 204800,
-      maxTokens: 65536
-    }],
-    ["muse-spark-1.2-contributor", {
-      id: "muse-spark-1.2-contributor",
-      name: "Muse Spark 1.2 Contributor",
-      provider: "opencode-go",
-      reasoning: true,
-      input: ["text", "image"],
-      cost: { input: 0.1, output: 0.2, cacheRead: 0.002, cacheWrite: 0 },
-      contextWindow: 1048576,
-      maxTokens: 131072,
-      thinkingLevelMap: { off: null, minimal: "minimal", low: "low", medium: "medium", high: "high", xhigh: "xhigh" }
-    }]
-  ]);
   const originals = provider.getModels();
   const byId = new Map(originals.map((model) => [model.id, model]));
   const merged = VERIFIED_OPENCODE_GO_ROUTES.map(({ id, api }) => {
-    const original = byId.get(id) || missingModels.get(id);
-    if (!original) throw new Error(`Pi is missing metadata for verified OpenCode Go model: ${id}`);
+    const original = byId.get(id);
+    // A verified route alone cannot supply missing capabilities or token limits.
+    // Keep such catalog entries visible but let resolution return pi_model_missing.
+    if (!original) return null;
     const model = {
       ...original,
       api,
@@ -197,7 +139,7 @@ function installVerifiedOpenCodeGoContracts() {
     };
     VERIFIED_MODEL_SOURCES.set(`${model.provider}/${model.id}`, "verified_official_contract");
     return model;
-  });
+  }).filter(Boolean);
   runtimeModels.setProvider({ ...provider, getModels: () => merged });
 }
 

@@ -267,9 +267,9 @@ test("invalid earliest refresh time rejects credentials", async () => {
   await assert.rejects(h.login(), { code: "chatgpt_contract_invalid" });
 });
 
-const solCatalog = [{ slug: "gpt-6.1-sol", display_name: "GPT 6.1 Sol", visibility: "list" }];
+const solCatalog = [{ slug: "yamabiko-test-unbundled-model", display_name: "Unbundled Test Model", visibility: "list" }];
 const solContract = (overrides = {}) => ({
-  provenance: "provider", npm: "@ai-sdk/openai", name: "GPT 6.1 Sol",
+  provenance: "provider", npm: "@ai-sdk/openai", name: "Unbundled Test Model",
   reasoning: true, input: ["text", "image", "pdf"],
   contextWindow: 1_050_000, maxTokens: 128_000,
   reasoningEfforts: ["low", "medium", "high", "xhigh", "max"], toolCall: true,
@@ -294,15 +294,15 @@ test("built-in slugs keep exact Pi metadata and ignore models.dev contracts", as
 test("account slug missing from Pi is enabled by a valid models.dev contract", async () => {
   const h = await harness({ catalog: solCatalog });
   const credential = await h.login();
-  const catalog = await h.plugin.catalog(credential, new AbortController().signal, { "gpt-6.1-sol": solContract() });
-  const entry = catalog.find(model => model.id === "gpt-6.1-sol");
+  const catalog = await h.plugin.catalog(credential, new AbortController().signal, { "yamabiko-test-unbundled-model": solContract() });
+  const entry = catalog.find(model => model.id === "yamabiko-test-unbundled-model");
   assert.equal(entry.supported, true);
   assert.equal(entry.reason, null);
   assert.equal(entry.source, "models_dev_contract");
   assert.deepEqual(entry.supportedThinkingLevels, ["low", "medium", "high", "xhigh", "max"]);
-  assert.equal(h.plugin.modelSource("gpt-6.1-sol"), "models_dev_contract");
-  const model = h.models.getModel(CHATGPT_PLAN_PROVIDER, "gpt-6.1-sol");
-  assert.equal(model.name, "GPT 6.1 Sol");
+  assert.equal(h.plugin.modelSource("yamabiko-test-unbundled-model"), "models_dev_contract");
+  const model = h.models.getModel(CHATGPT_PLAN_PROVIDER, "yamabiko-test-unbundled-model");
+  assert.equal(model.name, "Unbundled Test Model");
   assert.equal(model.api, "openai-responses");
   assert.equal(model.provider, CHATGPT_PLAN_PROVIDER);
   assert.equal(model.baseUrl, "https://api.openai.com/v1");
@@ -319,12 +319,12 @@ test("a contract effort of none maps the off thinking level", async () => {
   const h = await harness({ catalog: solCatalog });
   const credential = await h.login();
   const catalog = await h.plugin.catalog(credential, new AbortController().signal, {
-    "gpt-6.1-sol": solContract({ reasoningEfforts: ["none", "low", "medium"] })
+    "yamabiko-test-unbundled-model": solContract({ reasoningEfforts: ["none", "low", "medium"] })
   });
-  const entry = catalog.find(model => model.id === "gpt-6.1-sol");
+  const entry = catalog.find(model => model.id === "yamabiko-test-unbundled-model");
   assert.equal(entry.supported, true);
   assert.deepEqual(entry.supportedThinkingLevels, ["low", "medium"]);
-  const model = h.models.getModel(CHATGPT_PLAN_PROVIDER, "gpt-6.1-sol");
+  const model = h.models.getModel(CHATGPT_PLAN_PROVIDER, "yamabiko-test-unbundled-model");
   assert.equal(model.thinkingLevelMap.off, "none");
   assert.equal(model.thinkingLevelMap.high, null);
 });
@@ -333,11 +333,11 @@ test("account slug without a contract stays disabled", async () => {
   const h = await harness({ catalog: solCatalog });
   const credential = await h.login();
   const catalog = await h.plugin.catalog(credential, new AbortController().signal);
-  const entry = catalog.find(model => model.id === "gpt-6.1-sol");
+  const entry = catalog.find(model => model.id === "yamabiko-test-unbundled-model");
   assert.equal(entry.supported, false);
   assert.equal(entry.reason, "pi_model_missing");
   assert.equal(entry.source, null);
-  assert.equal(h.plugin.modelSource("gpt-6.1-sol"), null);
+  assert.equal(h.plugin.modelSource("yamabiko-test-unbundled-model"), null);
 });
 
 for (const [name, contract, reason] of [
@@ -354,24 +354,24 @@ for (const [name, contract, reason] of [
 ]) test(`contract validation fails closed for ${name}`, async () => {
   const h = await harness({ catalog: solCatalog });
   const credential = await h.login();
-  const catalog = await h.plugin.catalog(credential, new AbortController().signal, { "gpt-6.1-sol": contract });
-  const entry = catalog.find(model => model.id === "gpt-6.1-sol");
+  const catalog = await h.plugin.catalog(credential, new AbortController().signal, { "yamabiko-test-unbundled-model": contract });
+  const entry = catalog.find(model => model.id === "yamabiko-test-unbundled-model");
   assert.equal(entry.supported, false);
   assert.equal(entry.reason, reason);
   assert.equal(entry.source, null);
-  assert.equal(h.models.getModel(CHATGPT_PLAN_PROVIDER, "gpt-6.1-sol"), undefined);
-  assert.equal(h.plugin.modelSource("gpt-6.1-sol"), null);
+  assert.equal(h.models.getModel(CHATGPT_PLAN_PROVIDER, "yamabiko-test-unbundled-model"), undefined);
+  assert.equal(h.plugin.modelSource("yamabiko-test-unbundled-model"), null);
 });
 
 test("merged contracts persist across catalog calls until cleared", async () => {
   const h = await harness({ catalog: solCatalog });
   const credential = await h.login();
-  await h.plugin.catalog(credential, new AbortController().signal, { "gpt-6.1-sol": solContract() });
+  await h.plugin.catalog(credential, new AbortController().signal, { "yamabiko-test-unbundled-model": solContract() });
   const second = await h.plugin.catalog(credential, new AbortController().signal);
-  assert.equal(second.find(model => model.id === "gpt-6.1-sol").source, "models_dev_contract");
+  assert.equal(second.find(model => model.id === "yamabiko-test-unbundled-model").source, "models_dev_contract");
   h.plugin.clearCatalog();
   const third = await h.plugin.catalog(credential, new AbortController().signal);
-  const entry = third.find(model => model.id === "gpt-6.1-sol");
+  const entry = third.find(model => model.id === "yamabiko-test-unbundled-model");
   assert.equal(entry.supported, false);
   assert.equal(entry.reason, "pi_model_missing");
 });

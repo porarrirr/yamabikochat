@@ -2,7 +2,7 @@
 
 `src/chatgpt-plan-plugin.js` implements the official **Sign in with ChatGPT**
 contract as a native Pi provider extension, registered through `Models.setProvider`.
-It uses Pi 0.87.1's existing `openAIResponsesApi`; it does not copy or replace Pi's
+It uses Pi 1.0.2's existing `openAIResponsesApi`; it does not copy or replace Pi's
 stream parser, agent loop, tools, usage accounting or context management.
 The iOS `CODEX_AUTH` saved setting now selects `openai-chatgpt`. The Android
 client continues to use its existing `openai-codex` identity. The runtime bundle

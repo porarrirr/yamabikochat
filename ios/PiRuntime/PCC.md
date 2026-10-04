@@ -99,7 +99,7 @@ counts on an entitled physical device.
 
 Reference: https://developer.apple.com/documentation/foundationmodels/optimizing-key-value-caching-in-language-model-sessions
 
-## Audited Pi 0.84.2 extension
+## Audited Pi 1.0.2 extension
 
 `npm ci` applies `scripts/patch-pi-contract.mjs`, with version and exact-source
 checks that reject dependency drift. This preserves the Pi execution path:

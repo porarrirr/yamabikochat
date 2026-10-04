@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { applyExplicitSkillInvocations } from "../src/skill-context.js";
 
-test("formats explicit mentions with Pi Agent Core's skill invocation contract", () => {
+test("formats explicit mentions with Pi's skill invocation contract", () => {
   const request = {
     messages: [{ role: "user", content: "@review-helper check this" }],
     skillContext: {
@@ -18,9 +18,7 @@ test("formats explicit mentions with Pi Agent Core's skill invocation contract",
   const applied = applyExplicitSkillInvocations(request);
 
   assert.equal(request.messages[0].content, "@review-helper check this");
-  assert.match(applied.messages[0].content, /^<skill name="review-helper" location="\/skills\/review-helper\/SKILL\.md">/);
-  assert.match(applied.messages[0].content, /Follow the review checklist\./);
-  assert.match(applied.messages[0].content, /@review-helper check this$/);
+  assert.equal(applied.messages[0].content, '<skill name="review-helper" location="/skills/review-helper/SKILL.md">\nReferences are relative to /skills/review-helper.\n\nFollow the review checklist.\n</skill>\n\n@review-helper check this');
 });
 
 test("rejects incomplete explicit invocation context instead of silently skipping it", () => {
@@ -55,4 +53,29 @@ test("keeps prior skill invocations in later conversation requests", () => {
 
   assert.match(applied.messages[0].content, /^<skill name="review-helper"/);
   assert.equal(applied.messages[2].content, "continue");
+});
+
+test("combines explicit skills in order while preserving native attachments", () => {
+  const attachments = [{ fileName: "image.png" }];
+  const request = {
+    messages: [{ role: "user", content: "Review", attachments }],
+    skillContext: {
+      explicitlyRequestedNames: ["first", "second"],
+      explicitInstructions: ["First instructions", "Second instructions"],
+      skillFilePaths: ["/skills/first/SKILL.md", "/skills/second/SKILL.md"],
+      explicitMessageIndices: [0, 0]
+    }
+  };
+  const applied = applyExplicitSkillInvocations(request);
+  const content = applied.messages[0].content;
+  assert.ok(content.indexOf('<skill name="first"') < content.indexOf('<skill name="second"'));
+  assert.match(content, /References are relative to \/skills\/second\./);
+  assert.match(content, /<\/skill>\n\nReview$/);
+  assert.equal(applied.messages[0].attachments, attachments);
+  assert.equal(request.messages[0].content, "Review");
+});
+
+test("leaves messages untouched when no skill was explicitly selected", () => {
+  const request = { messages: [{ role: "user", content: "Hello" }] };
+  assert.equal(applyExplicitSkillInvocations(request), request);
 });

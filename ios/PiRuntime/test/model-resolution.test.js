@@ -3,6 +3,7 @@ import { once } from "node:events";
 import { spawn } from "node:child_process";
 import net from "node:net";
 import test from "node:test";
+import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 
 async function availablePort() {
   const server = net.createServer();
@@ -60,22 +61,23 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
   assert.equal(codexCatalog.contractVersion, 2);
   assert.ok(codexCatalog.models.some((model) => model.id === "gpt-6-sol"));
   assert.ok(codexCatalog.models.some((model) => model.id === "gpt-6-luna"));
+  assert.ok(codexCatalog.models.some((model) => model.id === "gpt-6.1-sol"));
   assert.ok(codexCatalog.models.every((model) => model.id && model.name));
 
   const providerIdentityCases = [
     ["alibaba-token-plan", "qwen3.7-max", "qwen-token-plan", "openai-completions", { api: "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1", npm: "@ai-sdk/openai-compatible" }],
     ["alibaba-token-plan-cn", "qwen3.7-max", "qwen-token-plan-cn", "openai-completions", { api: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1", npm: "@ai-sdk/openai-compatible" }],
     ["azure", "gpt-5.2", "azure-openai-responses", "azure-openai-responses", { providerName: "Azure", npm: "@ai-sdk/azure" }],
-    ["fireworks-ai", "accounts/fireworks/models/deepseek-v4-pro", "fireworks", "anthropic-messages", { providerName: "Fireworks AI", api: "https://api.fireworks.ai/inference/v1/", npm: "@ai-sdk/openai-compatible" }],
+    ["fireworks-ai", "accounts/fireworks/models/deepseek-v4p1-flash", "fireworks", "anthropic-messages", { providerName: "Fireworks AI", api: "https://api.fireworks.ai/inference/v1/", npm: "@ai-sdk/openai-compatible" }],
     ["google-vertex", "gemini-3.1-pro-preview", "google-vertex", "google-vertex", { providerName: "Vertex", npm: "@ai-sdk/google-vertex" }],
     ["kimi-for-coding", "k3", "kimi-coding", "anthropic-messages", { providerName: "Kimi For Coding", api: "https://api.kimi.com/coding/v1", npm: "@ai-sdk/anthropic" }],
     ["minimax-coding-plan", "MiniMax-M2.7", "minimax", "anthropic-messages", { providerName: "MiniMax Token Plan (minimax.io)", api: "https://api.minimax.io/anthropic/v1", npm: "@ai-sdk/anthropic" }],
     ["minimax-cn-coding-plan", "MiniMax-M2.7", "minimax-cn", "anthropic-messages", { providerName: "MiniMax Token Plan (minimaxi.com)", api: "https://api.minimaxi.com/anthropic/v1", npm: "@ai-sdk/anthropic" }],
-    ["togetherai", "deepseek-ai/DeepSeek-V4-Pro", "together", "openai-completions", { providerName: "Together AI", npm: "@ai-sdk/togetherai" }],
+    ["togetherai", "deepseek-ai/DeepSeek-V4-Pro-0813", "together", "openai-completions", { providerName: "Together AI", npm: "@ai-sdk/togetherai" }],
     ["vercel", "alibaba/qwen-3-14b", "vercel-ai-gateway", "anthropic-messages", { providerName: "Vercel AI Gateway", npm: "@ai-sdk/gateway" }],
     ["zai-coding-plan", "glm-5.3", "zai", "openai-completions", { providerName: "Z.AI Coding Plan", api: "https://api.z.ai/api/coding/paas/v4", npm: "@ai-sdk/openai-compatible" }],
     ["zhipuai-coding-plan", "glm-5.3", "zai-coding-cn", "openai-completions", { providerName: "Zhipu AI Coding Plan", api: "https://open.bigmodel.cn/api/coding/paas/v4", npm: "@ai-sdk/openai-compatible" }],
-    ["future-together-provider-id", "deepseek-ai/DeepSeek-V4-Pro", "together", "openai-completions", { providerName: "Together AI", npm: "@ai-sdk/togetherai" }],
+    ["future-together-provider-id", "deepseek-ai/DeepSeek-V4-Pro-0813", "together", "openai-completions", { providerName: "Together AI", npm: "@ai-sdk/togetherai" }],
     ["future-zhipu-provider-id", "glm-5.3", "zai-coding-cn", "openai-completions", { providerName: "Future Zhipu Service", api: "https://open.bigmodel.cn/api/coding/paas/v4", npm: "@ai-sdk/openai-compatible" }]
   ];
 
@@ -103,7 +105,7 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
     {
       contractVersion: 2,
       provider: "opencode-go",
-      model: "qwen3.7-max",
+      model: "qwen3.8-max",
       catalogContract: { toolCall: true }
     },
     {
@@ -141,9 +143,9 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
       catalogContract: { shape: "unknown", provenance: "model" }
     },
     { contractVersion: 2, provider: "opencode-go", model: "minimax-m3" },
-    { contractVersion: 2, provider: "opencode-go", model: "minimax-m2.5" },
+    { contractVersion: 2, provider: "opencode-go", model: "qwen3.8-flash" },
     { contractVersion: 2, provider: "opencode-go", model: "glm-5.3" },
-    { contractVersion: 2, provider: "opencode-go", model: "qwen3.6-plus" },
+    { contractVersion: 2, provider: "opencode-go", model: "qwen3.7-plus" },
     { contractVersion: 2, provider: "opencode-go", model: "minimax-m2.7" },
     { contractVersion: 2, provider: "opencode-go", model: "deepseek-v4-flash-vision-exp" },
     { contractVersion: 2, provider: "opencode-go", model: "glm-5.3-flash" },
@@ -226,7 +228,7 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
     {
       contractVersion: 2,
       provider: "opencode-go",
-      model: "qwen3.7-max",
+      model: "qwen3.8-max",
       catalogContract: {
         npm: "@ai-sdk/openai-compatible",
         api: "https://opencode.ai/zen/go/v1",
@@ -249,13 +251,13 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
     {
       contractVersion: 2,
       provider: "togetherai",
-      model: "deepseek-ai/DeepSeek-V4-Pro",
+      model: "deepseek-ai/DeepSeek-V4-Pro-0813",
       catalogContract: { npm: "@ai-sdk/togetherai", provenance: "provider", toolCall: true }
     },
     {
       contractVersion: 2,
       provider: "fireworks-ai",
-      model: "accounts/fireworks/models/deepseek-v4-pro",
+      model: "accounts/fireworks/models/deepseek-v4p1-flash",
       catalogContract: {
         npm: "@ai-sdk/openai-compatible",
         api: "https://api.fireworks.ai/inference/v1/",
@@ -401,7 +403,7 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
   });
   assert.equal(result.models[18].supported, true);
   assert.equal(result.models[18].api, "openai-responses");
-  assert.equal(result.models[18].source, "pi_builtin");
+  assert.equal(result.models[18].source, "model");
   assert.equal(result.models[19].supported, true);
   assert.equal(result.models[19].api, "openai-completions");
   assert.equal(result.models[19].source, "official_provider_catalog");
@@ -437,4 +439,54 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
   assert.equal(result.models[32 + providerIdentityCases.length].reason, "pi_provider_missing");
   assert.equal(result.models[33 + providerIdentityCases.length].reason, "pi_provider_missing");
   assert.equal(result.models[34 + providerIdentityCases.length].reason, "pi_provider_ambiguous");
+});
+
+test("bundled runtime preserves every built-in chat model across native and catalog identities", { timeout: 30_000 }, async (context) => {
+  const port = await availablePort();
+  const token = "builtin-resolution-test";
+  const child = spawn(process.execPath, [new URL("../bundle/main.js", import.meta.url).pathname, String(port), token]);
+  context.after(() => child.kill());
+  const baseURL = `http://127.0.0.1:${port}`;
+  await waitUntilReady(baseURL, token);
+  // These three heterogeneous routes use the separately verified official Go
+  // contract. All other fields must remain exactly those shipped by Pi.
+  const goOverrides = new Set(["minimax-m2.7", "qwen3.8-max", "qwen3.7-plus"]);
+  for (const provider of builtinProviders()) {
+    const models = provider.getModels();
+    if (!models.length) {
+      // Classifier-only providers cannot become chat providers after upgrading.
+      const model = provider.getAllModels()[0];
+      const result = await resolveModels(baseURL, token, [{
+        contractVersion: 2, provider: provider.id, model: model.id
+      }]);
+      assert.equal(result.models[0].supported, false, provider.id);
+      assert.equal(result.models[0].reason, "pi_model_missing", provider.id);
+      continue;
+    }
+    for (const catalog of [false, true]) {
+      // Native clients strip MODELS_DEV: before sending the catalog identity.
+      const result = await resolveModels(baseURL, token, models.map(model => ({
+        contractVersion: 2, provider: provider.id, model: model.id,
+        ...(catalog ? { catalogContract: { providerName: provider.name, provenance: "provider" } } : {})
+      })));
+      assert.equal(result.models.length, models.length);
+      for (const [index, model] of models.entries()) {
+        const resolution = result.models[index];
+        const identity = `${catalog ? "MODELS_DEV:" : ""}${provider.id}/${model.id}`;
+        assert.equal(resolution.supported, true, `${identity}: ${JSON.stringify(resolution)}`);
+        assert.equal(resolution.provider, provider.id, identity);
+        assert.equal(resolution.model, model.id, identity);
+        const api = provider.id === "opencode-go" && goOverrides.has(model.id) ? "anthropic-messages" : model.api;
+        assert.equal(resolution.api, api, identity);
+        assert.equal(resolution.reasoning, model.reasoning, identity);
+        assert.deepEqual(resolution.input, model.input, identity);
+        assert.equal(resolution.contextWindow, model.contextWindow, identity);
+        assert.equal(resolution.maxTokens, model.maxTokens, identity);
+      }
+    }
+  }
+  const unavailable = await resolveModels(baseURL, token, ["glm-5.1", "qwen3.7-max", "qwen3.6-plus", "minimax-m2.5", "kimi-k2.6"].map(model => ({
+    contractVersion: 2, provider: "opencode-go", model
+  })));
+  assert.ok(unavailable.models.every(model => !model.supported && model.reason === "pi_model_missing"));
 });

@@ -34,7 +34,7 @@ class ProviderCatalogTest {
             AlibabaCodingPlanModelCatalog.defaultModel,
             ProviderCatalog.defaultModel("ALIBABA_CODING_PLAN")
         )
-        assertTrue(OpenCodeGoModelCatalog.modelFor("opencode-go/qwen3.7-max")?.endpointKind == OpenCodeGoEndpointKind.MESSAGES)
+        assertTrue(OpenCodeGoModelCatalog.modelFor("opencode-go/qwen3.8-max")?.endpointKind == OpenCodeGoEndpointKind.MESSAGES)
         assertEquals(
             "cline-pass/glm-5.2",
             ClinePassModelCatalog.modelFor("glm-5.2")?.id
@@ -62,6 +62,16 @@ class ProviderCatalogTest {
             "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/v1/",
             ProviderCatalog.defaultAlibabaCodingPlanBaseUrl
         )
+    }
+
+    @Test
+    fun openCodeGoCurrentRoutesKeepRemovedSavedModelsUnchanged() {
+        assertEquals("glm-5.3", OpenCodeGoModelCatalog.defaultModel)
+        assertEquals(OpenCodeGoEndpointKind.RESPONSES, OpenCodeGoModelCatalog.modelFor("gpt-6-luna")?.endpointKind)
+        assertEquals(OpenCodeGoEndpointKind.MESSAGES, OpenCodeGoModelCatalog.modelFor("qwen3.8-flash")?.endpointKind)
+        assertEquals(OpenCodeGoEndpointKind.CHAT_COMPLETIONS, OpenCodeGoModelCatalog.modelFor("deepseek-v4.1-flash")?.endpointKind)
+        assertEquals(null, OpenCodeGoModelCatalog.modelFor("glm-5.1"))
+        assertEquals("glm-5.1", ProviderCatalog.migrateLegacyModelId("OPENCODE_GO", "glm-5.1"))
     }
 
     @Test

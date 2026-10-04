@@ -1,10 +1,10 @@
-// Audited local contract extension for Pi 0.87.1. Fails closed on upstream drift.
+// Audited local contract extension for Pi 1.0.2. Fails closed on upstream drift.
 // This is applied by npm ci (postinstall), never by editing an installed bundle.
 import fs from 'node:fs';
 const root = new URL('../node_modules/@earendil-works/', import.meta.url);
 for (const name of ['pi-ai', 'pi-agent-core']) {
   const pkg = JSON.parse(fs.readFileSync(new URL(`${name}/package.json`, root)));
-  if (pkg.version !== '0.87.1') throw new Error(`Review PCC contract patch for ${name} ${pkg.version}`);
+  if (pkg.version !== '1.0.2') throw new Error(`Review PCC contract patch for ${name} ${pkg.version}`);
 }
 function patch(path, before, after) {
   const file = new URL(path, root);
@@ -20,7 +20,7 @@ const usage = source.slice(source.indexOf('export interface Usage {'), source.in
 if (!usage.includes('number | null')) patch(types, usage, usage.replaceAll(': number;', ': number | null;'));
 patch(types, '"pending" | "stop" | "length"', '"pending" | "unknown" | "stop" | "length"');
 patch(types, 'Extract<StopReason, "stop" | "length" | "toolUse" | "deferred">', 'Extract<StopReason, "unknown" | "stop" | "length" | "toolUse" | "deferred">');
-patch(types, '    baseUrl: string;\n    reasoning: boolean;', '    /** null for native APIs with no wire endpoint. */\n    baseUrl: string | null;\n    reasoning: boolean;');
+patch(types, '    baseUrl: string;\n    input: ("text" | "image")[];', '    /** null for native APIs with no wire endpoint. */\n    baseUrl: string | null;\n    input: ("text" | "image")[];');
 patch('pi-ai/dist/models.js', 'export function calculateCost(model, usage) {', `export function calculateCost(model, usage) {
     // PCC contract: unknown usage must not become zero through JS arithmetic.
     if ([usage.input, usage.output, usage.cacheRead, usage.cacheWrite].some(v => v === null)) {

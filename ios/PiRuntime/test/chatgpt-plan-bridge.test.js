@@ -156,10 +156,10 @@ test("bundled Pi SIWC run executes a models.dev contract slug through openai-res
         const idToken=await new SignJWT({nonce,email:'bridge@example.com'}).setProtectedHeader({alg:'RS256',kid:'bridge'}).setIssuer('https://auth.openai.com').setAudience(params.get('client_id')).setSubject('bridge-subject').setIssuedAt().setExpirationTime('1h').sign(privateKey);
         return Response.json({access_token:'bridge-access',refresh_token:'bridge-refresh',id_token:idToken,token_type:'Bearer',expires_in:3600,scope:'openid email profile offline_access resource.invoke chatgpt.tokens.use.direct'});
       }
-      if(value==='https://api.openai.com/v1/models')return Response.json({models:[{slug:'gpt-6.1-sol',display_name:'GPT 6.1 Sol',visibility:'list'}]});
+      if(value==='https://api.openai.com/v1/models')return Response.json({models:[{slug:'yamabiko-test-unbundled-model',display_name:'Unbundled Test Model',visibility:'list'}]});
       if(value==='https://api.openai.com/v1/responses') {
         const payload=JSON.parse(options.body);
-        if(payload.model!=='gpt-6.1-sol'||!payload.stream||payload.store!==false)throw new Error('Wrong SIWC preview payload');
+        if(payload.model!=='yamabiko-test-unbundled-model'||!payload.stream||payload.store!==false)throw new Error('Wrong SIWC preview payload');
         const item={type:'message',id:'msg_bridge',role:'assistant',status:'completed',content:[{type:'output_text',text:'Hello from ChatGPT plan',annotations:[]}]};
         const events=[{type:'response.created',response:{id:'resp_bridge',status:'in_progress'}},{type:'response.output_item.done',output_index:0,item},{type:'response.completed',response:{id:'resp_bridge',status:'completed',output:[item],usage:{input_tokens:2,output_tokens:1,total_tokens:3}}}];
         return new Response(events.map(e=>'event: '+e.type+'\\ndata: '+JSON.stringify(e)+'\\n\\n').join(''),{headers:{'content-type':'text/event-stream'}});
@@ -213,22 +213,22 @@ test("bundled Pi SIWC run executes a models.dev contract slug through openai-res
   }
   assert.ok(credential);
   const contract = {
-    provenance: "provider", npm: "@ai-sdk/openai", name: "GPT 6.1 Sol",
+    provenance: "provider", npm: "@ai-sdk/openai", name: "Unbundled Test Model",
     reasoning: true, input: ["text", "image"], contextWindow: 1050000, maxTokens: 128000,
     reasoningEfforts: ["low", "medium", "high", "xhigh", "max"], toolCall: true
   };
-  const catalog = await (await post("/v1/models/chatgpt", { credential, contracts: { "gpt-6.1-sol": contract } })).json();
-  const entry = catalog.models.find(model => model.id === "gpt-6.1-sol");
+  const catalog = await (await post("/v1/models/chatgpt", { credential, contracts: { "yamabiko-test-unbundled-model": contract } })).json();
+  const entry = catalog.models.find(model => model.id === "yamabiko-test-unbundled-model");
   assert.equal(entry.supported, true);
   assert.equal(entry.source, "models_dev_contract");
   assert.deepEqual(entry.supportedThinkingLevels, ["low", "medium", "high", "xhigh", "max"]);
-  const resolutions = await (await post("/v1/models/resolve", { models: [{ contractVersion: 2, provider: "openai-chatgpt", model: "gpt-6.1-sol" }] })).json();
+  const resolutions = await (await post("/v1/models/resolve", { models: [{ contractVersion: 2, provider: "openai-chatgpt", model: "yamabiko-test-unbundled-model" }] })).json();
   assert.equal(resolutions.models[0].supported, true);
   assert.equal(resolutions.models[0].source, "models_dev_contract");
   let completed, failure;
   const envelope = {
     runId: "siwc-contract-run",
-    config: { contractVersion: 2, provider: "openai-chatgpt", model: "gpt-6.1-sol", apiKey: credential.access, catalogContract: contract },
+    config: { contractVersion: 2, provider: "openai-chatgpt", model: "yamabiko-test-unbundled-model", apiKey: credential.access, catalogContract: contract },
     request: { messages: [{ role: "user", content: "hello", attachments: [] }], tools: [] }
   };
   for await (const event of events(await post("/v1/run", envelope))) {

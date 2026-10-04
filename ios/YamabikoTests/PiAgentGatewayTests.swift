@@ -348,7 +348,44 @@ final class PiAgentGatewayTests: XCTestCase {
 
         XCTAssertEqual(resolutions.map(\.supported), [true, true, true])
         XCTAssertEqual(resolutions.map(\.api), ["openai-completions", "openai-responses", "openai-completions"])
-        XCTAssertEqual(resolutions.map(\.source), ["pi_builtin", "pi_builtin", "official_provider_catalog"])
+        XCTAssertEqual(resolutions.map(\.source), ["pi_builtin", "model", "official_provider_catalog"])
+    }
+
+    func testBundledPiRuntimeResolvesEveryCurrentOpenCodeGoRoute() async throws {
+        for catalog in [false, true] {
+            let models = OpenCodeGoModelCatalog.supportedModels
+            let configurations = models.map { model in
+                PiAgentConfiguration(
+                    provider: "opencode-go",
+                    model: model.id,
+                    catalogContract: catalog ? PiCatalogModelContract(
+                        providerName: "OpenCode Go",
+                        npm: "@ai-sdk/openai-compatible",
+                        api: "https://opencode.ai/zen/go/v1",
+                        toolCall: true,
+                        provenance: "provider"
+                    ) : nil
+                )
+            }
+            let resolutions = try await PiAgentRuntime.shared.resolveModels(configurations)
+            XCTAssertEqual(resolutions.count, models.count)
+            for (model, resolution) in zip(models, resolutions) {
+                if model.id == "kimi-k2.6" {
+                    // The official route exists but Pi 1.0.2 lacks model metadata.
+                    XCTAssertFalse(resolution.supported)
+                    XCTAssertEqual(resolution.reason, catalog ? "catalog_contract_incomplete" : "pi_model_missing")
+                } else {
+                    XCTAssertTrue(resolution.supported, "\(model.id): \(resolution.reason ?? "")")
+                    XCTAssertEqual(resolution.api, model.endpointKind.piAPI, model.id)
+                    XCTAssertEqual(resolution.source, "verified_official_contract", model.id)
+                }
+            }
+        }
+        let retired = try await PiAgentRuntime.shared.resolveModels([
+            PiAgentConfiguration(provider: "opencode-go", model: "glm-5.1")
+        ])
+        XCTAssertEqual(retired.first?.supported, false)
+        XCTAssertEqual(retired.first?.reason, "pi_model_missing")
     }
 
     func testBundledPiResolvesFreshCodexCredential() async throws {

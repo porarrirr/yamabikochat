@@ -1,80 +1,70 @@
 # Pi runtime npm production licenses
 
 Generated from `ios/PiRuntime/package-lock.json`.
-esbuild is a development dependency and is not listed.
+Includes production peer dependencies installed for `pi-grok`; the Pi CLI is not imported into the mobile bundle.
+The root esbuild development dependency is not listed.
 
-Count: 173 packages.
+Count: 148 packages.
 
 | Package | Version | License |
 | --- | --- | --- |
-| `@anthropic-ai/sdk` | 0.91.1 | MIT |
-| `@aws-crypto/crc32` | 5.2.0 | Apache-2.0 |
-| `@aws-crypto/sha256-browser` | 5.2.0 | Apache-2.0 |
-| `@aws-crypto/sha256-js` | 5.2.0 | Apache-2.0 |
-| `@aws-crypto/supports-web-crypto` | 5.2.0 | Apache-2.0 |
-| `@aws-crypto/util` | 5.2.0 | Apache-2.0 |
-| `@aws-sdk/client-bedrock-runtime` | 3.1048.0 | Apache-2.0 |
-| `@aws-sdk/core` | 3.974.11 | Apache-2.0 |
-| `@aws-sdk/core` | 3.977.8 | Apache-2.0 |
-| `@aws-sdk/credential-provider-env` | 3.972.37 | Apache-2.0 |
-| `@aws-sdk/credential-provider-env` | 3.972.69 | Apache-2.0 |
-| `@aws-sdk/credential-provider-http` | 3.972.39 | Apache-2.0 |
-| `@aws-sdk/credential-provider-http` | 3.972.71 | Apache-2.0 |
-| `@aws-sdk/credential-provider-ini` | 3.972.41 | Apache-2.0 |
-| `@aws-sdk/credential-provider-ini` | 3.973.14 | Apache-2.0 |
-| `@aws-sdk/credential-provider-login` | 3.972.41 | Apache-2.0 |
-| `@aws-sdk/credential-provider-login` | 3.972.76 | Apache-2.0 |
-| `@aws-sdk/credential-provider-node` | 3.972.42 | Apache-2.0 |
-| `@aws-sdk/credential-provider-node` | 3.972.80 | Apache-2.0 |
-| `@aws-sdk/credential-provider-process` | 3.972.37 | Apache-2.0 |
-| `@aws-sdk/credential-provider-process` | 3.972.69 | Apache-2.0 |
-| `@aws-sdk/credential-provider-sso` | 3.972.41 | Apache-2.0 |
-| `@aws-sdk/credential-provider-sso` | 3.973.13 | Apache-2.0 |
-| `@aws-sdk/credential-provider-web-identity` | 3.972.41 | Apache-2.0 |
-| `@aws-sdk/credential-provider-web-identity` | 3.972.75 | Apache-2.0 |
-| `@aws-sdk/eventstream-handler-node` | 3.972.16 | Apache-2.0 |
-| `@aws-sdk/eventstream-handler-node` | 3.972.33 | Apache-2.0 |
-| `@aws-sdk/middleware-eventstream` | 3.972.12 | Apache-2.0 |
-| `@aws-sdk/middleware-eventstream` | 3.972.28 | Apache-2.0 |
-| `@aws-sdk/middleware-websocket` | 3.972.19 | Apache-2.0 |
-| `@aws-sdk/middleware-websocket` | 3.972.51 | Apache-2.0 |
-| `@aws-sdk/nested-clients` | 3.997.43 | Apache-2.0 |
-| `@aws-sdk/nested-clients` | 3.997.9 | Apache-2.0 |
-| `@aws-sdk/signature-v4-multi-region` | 3.996.27 | Apache-2.0 |
-| `@aws-sdk/signature-v4-multi-region` | 3.996.45 | Apache-2.0 |
-| `@aws-sdk/token-providers` | 3.1048.0 | Apache-2.0 |
-| `@aws-sdk/token-providers` | 3.1111.0 | Apache-2.0 |
-| `@aws-sdk/types` | 3.973.8 | Apache-2.0 |
-| `@aws-sdk/types` | 3.974.4 | Apache-2.0 |
-| `@aws-sdk/util-locate-window` | 3.965.10 | Apache-2.0 |
-| `@aws-sdk/util-locate-window` | 3.965.5 | Apache-2.0 |
-| `@aws-sdk/xml-builder` | 3.972.24 | Apache-2.0 |
-| `@aws-sdk/xml-builder` | 3.972.39 | Apache-2.0 |
-| `@aws/lambda-invoke-store` | 0.2.4 | Apache-2.0 |
+| `@anthropic-ai/sdk` | 0.129.0 | MIT |
+| `@aws-sdk/client-bedrock-runtime` | 3.1127.0 | Apache-2.0 |
+| `@aws-sdk/core` | 3.978.1 | Apache-2.0 |
+| `@aws-sdk/credential-provider-env` | 3.972.72 | Apache-2.0 |
+| `@aws-sdk/credential-provider-http` | 3.972.74 | Apache-2.0 |
+| `@aws-sdk/credential-provider-ini` | 3.973.17 | Apache-2.0 |
+| `@aws-sdk/credential-provider-login` | 3.972.79 | Apache-2.0 |
+| `@aws-sdk/credential-provider-node` | 3.972.84 | Apache-2.0 |
+| `@aws-sdk/credential-provider-process` | 3.972.72 | Apache-2.0 |
+| `@aws-sdk/credential-provider-sso` | 3.973.16 | Apache-2.0 |
+| `@aws-sdk/credential-provider-web-identity` | 3.972.78 | Apache-2.0 |
+| `@aws-sdk/eventstream-handler-node` | 3.972.35 | Apache-2.0 |
+| `@aws-sdk/middleware-eventstream` | 3.972.30 | Apache-2.0 |
+| `@aws-sdk/middleware-websocket` | 3.972.54 | Apache-2.0 |
+| `@aws-sdk/nested-clients` | 3.997.46 | Apache-2.0 |
+| `@aws-sdk/signature-v4-multi-region` | 3.996.47 | Apache-2.0 |
+| `@aws-sdk/token-providers` | 3.1127.0 | Apache-2.0 |
+| `@aws-sdk/token-providers` | 3.1138.0 | Apache-2.0 |
+| `@aws-sdk/types` | 3.974.6 | Apache-2.0 |
+| `@aws-sdk/xml-builder` | 3.972.41 | Apache-2.0 |
 | `@aws/lambda-invoke-store` | 0.3.0 | Apache-2.0 |
-| `@babel/runtime` | 7.29.2 | MIT |
 | `@babel/runtime` | 7.29.7 | MIT |
-| `@earendil-works/pi-agent-core` | 0.84.2 | MIT |
-| `@earendil-works/pi-ai` | 0.84.2 | MIT |
-| `@earendil-works/pi-client` | 0.84.2 | MIT |
-| `@earendil-works/pi-coding-agent` | 0.84.2 | MIT |
-| `@earendil-works/pi-protocol` | 0.84.2 | MIT |
-| `@earendil-works/pi-telemetry` | 0.84.2 | MIT |
-| `@earendil-works/pi-tui` | 0.84.2 | MIT |
-| `@google/genai` | 1.52.0 | Apache-2.0 |
-| `@mariozechner/clipboard` | 0.3.9 | MIT |
-| `@mariozechner/clipboard-darwin-arm64` | 0.3.9 | MIT |
-| `@mariozechner/clipboard-darwin-universal` | 0.3.9 | MIT |
-| `@mariozechner/clipboard-darwin-x64` | 0.3.9 | MIT |
-| `@mariozechner/clipboard-linux-arm64-gnu` | 0.3.9 | MIT |
-| `@mariozechner/clipboard-linux-arm64-musl` | 0.3.9 | MIT |
-| `@mariozechner/clipboard-linux-riscv64-gnu` | 0.3.9 | MIT |
-| `@mariozechner/clipboard-linux-x64-gnu` | 0.3.9 | MIT |
-| `@mariozechner/clipboard-linux-x64-musl` | 0.3.9 | MIT |
-| `@mariozechner/clipboard-win32-arm64-msvc` | 0.3.9 | MIT |
-| `@mariozechner/clipboard-win32-x64-msvc` | 0.3.9 | MIT |
-| `@nodable/entities` | 2.1.0 | MIT |
-| `@opentelemetry/api` | 1.9.0 | Apache-2.0 |
+| `@earendil-works/chord` | 1.0.2 | MIT |
+| `@earendil-works/pi-agent-core` | 1.0.2 | MIT |
+| `@earendil-works/pi-ai` | 1.0.2 | MIT |
+| `@earendil-works/pi-codemode` | 1.0.2 | MIT |
+| `@earendil-works/pi-coding-agent` | 1.0.2 | MIT |
+| `@earendil-works/pi-mcp` | 1.0.2 | MIT |
+| `@earendil-works/pi-telemetry` | 1.0.2 | MIT |
+| `@earendil-works/pi-tui` | 1.0.2 | MIT |
+| `@esbuild/aix-ppc64` | 0.28.2 | MIT |
+| `@esbuild/android-arm` | 0.28.2 | MIT |
+| `@esbuild/android-arm64` | 0.28.2 | MIT |
+| `@esbuild/android-x64` | 0.28.2 | MIT |
+| `@esbuild/darwin-arm64` | 0.28.2 | MIT |
+| `@esbuild/darwin-x64` | 0.28.2 | MIT |
+| `@esbuild/freebsd-arm64` | 0.28.2 | MIT |
+| `@esbuild/freebsd-x64` | 0.28.2 | MIT |
+| `@esbuild/linux-arm` | 0.28.2 | MIT |
+| `@esbuild/linux-arm64` | 0.28.2 | MIT |
+| `@esbuild/linux-ia32` | 0.28.2 | MIT |
+| `@esbuild/linux-loong64` | 0.28.2 | MIT |
+| `@esbuild/linux-mips64el` | 0.28.2 | MIT |
+| `@esbuild/linux-ppc64` | 0.28.2 | MIT |
+| `@esbuild/linux-riscv64` | 0.28.2 | MIT |
+| `@esbuild/linux-s390x` | 0.28.2 | MIT |
+| `@esbuild/linux-x64` | 0.28.2 | MIT |
+| `@esbuild/netbsd-arm64` | 0.28.2 | MIT |
+| `@esbuild/netbsd-x64` | 0.28.2 | MIT |
+| `@esbuild/openbsd-arm64` | 0.28.2 | MIT |
+| `@esbuild/openbsd-x64` | 0.28.2 | MIT |
+| `@esbuild/openharmony-arm64` | 0.28.2 | MIT |
+| `@esbuild/sunos-x64` | 0.28.2 | MIT |
+| `@esbuild/win32-arm64` | 0.28.2 | MIT |
+| `@esbuild/win32-ia32` | 0.28.2 | MIT |
+| `@esbuild/win32-x64` | 0.28.2 | MIT |
+| `@google/genai` | 2.21.0 | Apache-2.0 |
 | `@protobufjs/aspromise` | 1.1.2 | BSD-3-Clause |
 | `@protobufjs/base64` | 1.1.2 | BSD-3-Clause |
 | `@protobufjs/codegen` | 2.0.5 | BSD-3-Clause |
@@ -83,127 +73,86 @@ Count: 173 packages.
 | `@protobufjs/float` | 1.0.2 | BSD-3-Clause |
 | `@protobufjs/path` | 1.1.2 | BSD-3-Clause |
 | `@protobufjs/pool` | 1.1.0 | BSD-3-Clause |
-| `@protobufjs/utf8` | 1.1.1 | BSD-3-Clause |
 | `@protobufjs/utf8` | 1.1.2 | BSD-3-Clause |
 | `@silvia-odwyer/photon-node` | 0.3.4 | Apache-2.0 |
-| `@smithy/core` | 3.24.3 | Apache-2.0 |
-| `@smithy/core` | 3.33.0 | Apache-2.0 |
-| `@smithy/credential-provider-imds` | 4.3.3 | Apache-2.0 |
-| `@smithy/credential-provider-imds` | 4.5.0 | Apache-2.0 |
-| `@smithy/fetch-http-handler` | 5.4.3 | Apache-2.0 |
-| `@smithy/fetch-http-handler` | 5.7.0 | Apache-2.0 |
-| `@smithy/is-array-buffer` | 2.2.0 | Apache-2.0 |
-| `@smithy/node-http-handler` | 4.11.0 | Apache-2.0 |
-| `@smithy/node-http-handler` | 4.7.3 | Apache-2.0 |
-| `@smithy/signature-v4` | 5.4.3 | Apache-2.0 |
-| `@smithy/signature-v4` | 5.7.0 | Apache-2.0 |
-| `@smithy/types` | 4.14.2 | Apache-2.0 |
-| `@smithy/types` | 4.17.0 | Apache-2.0 |
-| `@smithy/util-buffer-from` | 2.2.0 | Apache-2.0 |
-| `@smithy/util-utf8` | 2.3.0 | Apache-2.0 |
-| `@types/node` | 22.19.19 | MIT |
-| `@types/node` | 26.2.0 | MIT |
+| `@smithy/core` | 3.35.0 | Apache-2.0 |
+| `@smithy/credential-provider-imds` | 4.5.2 | Apache-2.0 |
+| `@smithy/fetch-http-handler` | 5.8.0 | Apache-2.0 |
+| `@smithy/node-http-handler` | 4.12.1 | Apache-2.0 |
+| `@smithy/signature-v4` | 5.7.4 | Apache-2.0 |
+| `@smithy/types` | 4.19.0 | Apache-2.0 |
+| `@stablelib/base64` | 1.0.1 | MIT |
+| `@types/node` | 26.6.3 | MIT |
 | `@types/retry` | 0.12.0 | MIT |
 | `agent-base` | 7.1.4 | MIT |
+| `agent-base` | 9.0.0 | MIT |
 | `balanced-match` | 4.0.4 | MIT |
 | `base64-js` | 1.5.1 | MIT |
 | `bignumber.js` | 9.3.1 | MIT |
 | `bowser` | 2.14.1 | MIT |
-| `brace-expansion` | 5.0.9 | MIT |
+| `brace-expansion` | 5.0.12 | MIT |
 | `buffer-equal-constant-time` | 1.0.1 | BSD-3-Clause |
-| `chalk` | 5.6.2 | MIT |
+| `chalk` | 6.0.0 | MIT |
 | `cross-spawn` | 7.0.6 | MIT |
 | `data-uri-to-buffer` | 4.0.1 | MIT |
 | `debug` | 4.4.3 | MIT |
 | `diff` | 8.0.4 | BSD-3-Clause |
 | `ecdsa-sig-formatter` | 1.0.11 | Apache-2.0 |
+| `esbuild` | 0.28.2 | MIT |
 | `extend` | 3.0.2 | MIT |
-| `fast-xml-builder` | 1.2.0 | MIT |
-| `fast-xml-parser` | 5.7.3 | MIT |
+| `fast-sha256` | 1.3.0 | Unlicense |
 | `fetch-blob` | 3.2.0 | MIT |
 | `formdata-polyfill` | 4.0.10 | MIT |
-| `gaxios` | 7.1.4 | Apache-2.0 |
 | `gaxios` | 7.3.1 | Apache-2.0 |
 | `gcp-metadata` | 8.1.2 | Apache-2.0 |
 | `get-east-asian-width` | 1.6.0 | MIT |
-| `glob` | 13.0.6 | BlueOak-1.0.0 |
-| `google-auth-library` | 10.6.2 | Apache-2.0 |
 | `google-auth-library` | 10.9.1 | Apache-2.0 |
 | `google-logging-utils` | 1.1.3 | Apache-2.0 |
 | `graceful-fs` | 4.2.11 | ISC |
-| `grok-mermaid` | 0.2.2 | Apache-2.0 |
+| `grok-mermaid` | 0.2.3 | Apache-2.0 |
 | `highlight.js` | 10.7.3 | BSD-3-Clause |
 | `hosted-git-info` | 9.0.3 | ISC |
-| `http-proxy-agent` | 7.0.2 | MIT |
+| `http-proxy-agent` | 9.1.0 | MIT |
 | `https-proxy-agent` | 7.0.6 | MIT |
-| `ignore` | 7.0.5 | MIT |
+| `https-proxy-agent` | 9.1.0 | MIT |
+| `ignore` | 7.0.8 | MIT |
 | `isexe` | 2.0.0 | ISC |
 | `jiti` | 2.7.0 | MIT |
+| `jose` | 6.2.12 | MIT |
 | `json-bigint` | 1.0.0 | MIT |
 | `json-schema-to-ts` | 3.1.1 | MIT |
 | `jwa` | 2.0.1 | MIT |
 | `jws` | 4.0.1 | MIT |
 | `long` | 5.3.2 | Apache-2.0 |
 | `lru-cache` | 11.4.0 | BlueOak-1.0.0 |
-| `marked` | 18.0.5 | MIT |
-| `minimatch` | 10.2.5 | BlueOak-1.0.0 |
-| `minipass` | 7.1.3 | BlueOak-1.0.0 |
+| `marked` | 18.0.11 | MIT |
+| `minimatch` | 10.2.6 | BlueOak-1.0.0 |
 | `ms` | 2.1.3 | MIT |
 | `node-domexception` | 1.0.0 | MIT |
 | `node-fetch` | 3.3.2 | MIT |
-| `openai` | 6.40.0 | Apache-2.0 |
+| `openai` | 7.19.0 | Apache-2.0 |
 | `p-retry` | 4.6.2 | MIT |
 | `partial-json` | 0.1.7 | MIT |
-| `path-expression-matcher` | 1.5.0 | MIT |
 | `path-key` | 3.1.1 | MIT |
-| `path-scurry` | 2.0.2 | BlueOak-1.0.0 |
 | `pi-grok` | 0.10.1 | MIT |
 | `proper-lockfile` | 4.1.2 | MIT |
-| `protobufjs` | 7.6.5 | BSD-3-Clause |
+| `protobufjs` | 7.6.6 | BSD-3-Clause |
+| `proxy-agent-negotiate` | 1.1.0 | MIT |
+| `quickjs-wasi` | 3.6.2 | MIT |
 | `retry` | 0.12.0 | MIT |
 | `retry` | 0.13.1 | MIT |
 | `safe-buffer` | 5.2.1 | MIT |
-| `semver` | 7.8.0 | ISC |
+| `semver` | 7.8.5 | ISC |
 | `shebang-command` | 2.0.0 | MIT |
 | `shebang-regex` | 3.0.0 | MIT |
 | `signal-exit` | 3.0.7 | ISC |
-| `strnum` | 2.3.0 | MIT |
+| `standardwebhooks` | 1.1.1 | MIT |
 | `ts-algebra` | 2.0.0 | MIT |
 | `tslib` | 2.8.1 | 0BSD |
-| `typebox` | 1.3.7 | MIT |
-| `undici` | 8.9.0 | MIT |
-| `undici-types` | 6.21.0 | MIT |
-| `undici-types` | 8.3.0 | MIT |
+| `typebox` | 1.3.27 | MIT |
+| `undici` | 8.10.2 | MIT |
+| `undici-types` | 8.9.0 | MIT |
 | `web-streams-polyfill` | 3.3.3 | MIT |
 | `which` | 2.0.2 | ISC |
-| `ws` | 8.21.0 | MIT |
 | `ws` | 8.21.3 | MIT |
-| `xml-naming` | 0.1.0 | MIT |
 | `yaml` | 2.9.0 | ISC |
-
-
-## jose (6.2.12)
-
-Source: https://github.com/panva/jose
-
-The MIT License (MIT)
-
-Copyright (c) 2018 Filip Skokan
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.

@@ -8,7 +8,7 @@ assets_dir="$root_dir/app/src/main/assets/pi-runtime"
 archive_url="https://github.com/gmaclennan/nodejs-mobile/releases/download/v24.18.0-0/nodejs-mobile-android-24.18.0-0.zip"
 archive_sha256="ceb86b0b8130006195a60cd37393ebe0fd665b644ce8d5674dfba1da65d3be28"
 
-if [[ ! -f "$jni_dir/arm64-v8a/libnode.so" || ! -f "$jni_dir/x86_64/libnode.so" ]]; then
+if [[ ! -f "$jni_dir/arm64-v8a/libnode.so" || ! -f "$jni_dir/armeabi-v7a/libnode.so" || ! -f "$jni_dir/x86_64/libnode.so" ]]; then
   temp_dir="$(mktemp -d)"
   trap 'rm -rf "$temp_dir"' EXIT
   echo "Downloading nodejs-mobile Android binaries..."
@@ -37,10 +37,40 @@ with zipfile.ZipFile(zip_path) as z:
 "
 fi
 
-if [[ -d "$runtime_dir" ]]; then
-  (cd "$runtime_dir" && npm ci && npm run build)
-  mkdir -p "$assets_dir"
-  cp "$runtime_dir/bundle/main.js" "$assets_dir/main.js"
-fi
+# The NodeMobile archive ships libnode.so but not its shared C++ dependency.
+# Restore the official NDK r27 runtime from an immutable Google source revision.
+python3 - "$jni_dir" <<'PY'
+import base64
+import hashlib
+import pathlib
+import sys
+import urllib.request
 
-echo "Prepared NodeMobile Android 24.18.0-0 and Pi Agent runtime bundle"
+root = pathlib.Path(sys.argv[1])
+revision = "77eba0d553f8f58557f99fa98f327eb5f46e0c8c"
+base = f"https://android.googlesource.com/toolchain/prebuilts/ndk/r27/+/{revision}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib"
+libraries = [
+    ("arm64-v8a", "aarch64-linux-android", "46b51d661454b9cfaf42c1dc90893b5ad601b7a7ffc2e09d44bb3cc9d20e7ae2"),
+    ("armeabi-v7a", "arm-linux-androideabi", "0ce8906c20a019f56d2cefbadeac35cca102234971d2c8a1e09c69ee099f957a"),
+    ("x86_64", "x86_64-linux-android", "936e1150309bdae86216f14e493f478d39e588095f1577105856da6d0f24f149"),
+]
+for abi, triple, checksum in libraries:
+    target = root / abi / "libc++_shared.so"
+    if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest() == checksum:
+        continue
+    print(f"Restoring Android C++ runtime for {abi}...", flush=True)
+    with urllib.request.urlopen(f"{base}/{triple}/libc%2B%2B_shared.so?format=TEXT", timeout=60) as response:
+        data = base64.b64decode(response.read(), validate=True)
+    if hashlib.sha256(data).hexdigest() != checksum:
+        raise SystemExit(f"Android C++ runtime checksum mismatch for {abi}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(".so.tmp")
+    temporary.write_bytes(data)
+    temporary.replace(target)
+PY
+
+mkdir -p "$assets_dir"
+(cd "$runtime_dir" && npm ci && npm run build)
+pi_version="$(cd "$runtime_dir" && node -p "require('./node_modules/@earendil-works/pi-ai/package.json').version")"
+
+echo "Prepared NodeMobile Android 24.18.0-0 and Pi $pi_version runtime"

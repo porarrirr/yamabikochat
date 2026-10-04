@@ -66,5 +66,6 @@
     <string name="license_third_party">第三者ソフトウェア</string>
     <string name="license_npm">Pi runtime npm ライセンス</string>
     <string name="license_nodejs">Node.js / NodeMobile ライセンス</string>
+    <string name="license_libcxx">Android libc++ ライセンス</string>
     <string name="license_load_failed">ライセンスファイルを読み込めませんでした</string>
 </resources>

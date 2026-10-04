@@ -16,6 +16,7 @@ import com.porarri.yamabikochat.data.tools.LocalToolRegistry
 import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
@@ -87,7 +88,9 @@ class PiAgentRuntime private constructor(private val context: Context) {
             return Pair(existingEndpoint, existingToken)
         }
 
-        withContext(Dispatchers.IO) {
+        // Node is process-owned and can only start once. A disappearing view or
+        // cancelled model lookup must not interrupt startup before caching it.
+        withContext(Dispatchers.IO + NonCancellable) {
             val scriptFile = extractBundledScript()
             val port = Random.nextInt(49152, 60000)
             val token = UUID.randomUUID().toString().replace("-", "")

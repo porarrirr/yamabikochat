@@ -84,6 +84,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import com.porarri.yamabikochat.utils.DiagnosticsLogger
 import java.time.Instant
 import java.util.Locale
 import androidx.activity.compose.BackHandler
@@ -1893,6 +1895,25 @@ fun SettingsScreen(
                         }
                         "OPENCODE_GO" -> {
                             val selectedModel = OpenCodeGoModelCatalog.modelFor(model)
+                            var modelResolutions by remember { mutableStateOf<Map<String, PiModelResolution>>(emptyMap()) }
+                            var modelResolutionError by remember { mutableStateOf<String?>(null) }
+                            LaunchedEffect(model) {
+                                val ids = (OpenCodeGoModelCatalog.supportedModels.map { it.id } +
+                                    OpenCodeGoModelCatalog.normalizedModelId(model)).filter { it.isNotBlank() }.distinct()
+                                runCatching {
+                                    PiAgentRuntime.getInstance(context).resolveModels(ids.map { id ->
+                                        PiAgentConfiguration(provider = "opencode-go", model = id)
+                                    })
+                                }.onSuccess { values ->
+                                    modelResolutions = ids.zip(values).toMap()
+                                    modelResolutionError = null
+                                }.onFailure { error ->
+                                    if (error is CancellationException) throw error
+                                    modelResolutions = emptyMap()
+                                    modelResolutionError = error.localizedMessage
+                                    DiagnosticsLogger.log("OpenCode Go model resolution failed", error)
+                                }
+                            }
                             var showOpenCodeGoModelSheet by remember { mutableStateOf(false) }
                             YamabikoSelectRow(
                                 title = "OpenCode Go Model",
@@ -1903,6 +1924,7 @@ fun SettingsScreen(
                                 YamabikoOptionBottomSheet(
                                     title = "OpenCode Go Model",
                                     options = OpenCodeGoModelCatalog.supportedModels.map { option ->
+                                        val resolution = modelResolutions[option.id]
                                         val endpoint = when (option.endpointKind) {
                                             OpenCodeGoEndpointKind.CHAT_COMPLETIONS -> "chat/completions"
                                             OpenCodeGoEndpointKind.RESPONSES -> "responses"
@@ -1911,13 +1933,28 @@ fun SettingsScreen(
                                         YamabikoOption(
                                             key = option.id,
                                             title = option.displayName,
-                                            subtitle = endpoint
+                                            subtitle = when {
+                                                resolution == null -> modelResolutionError ?: "Piでモデルを確認中…"
+                                                !resolution.supported -> "${modelsDevUnsupportedReason(resolution.reason)} (${resolution.reason.orEmpty()})"
+                                                else -> endpoint
+                                            },
+                                            enabled = resolution?.supported == true
                                         )
                                     },
                                     selectedKey = selectedModel?.id ?: model,
                                     onOptionSelected = { option -> model = option.key },
                                     onDismissRequest = { showOpenCodeGoModelSheet = false }
                                 )
+                            }
+                            modelResolutions[OpenCodeGoModelCatalog.normalizedModelId(model)]?.takeIf { !it.supported }?.let { resolution ->
+                                Text(
+                                    text = "${modelsDevUnsupportedReason(resolution.reason)} (${resolution.reason.orEmpty()})",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                            modelResolutionError?.let { error ->
+                                Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                             }
                             selectedModel?.let { selected ->
                                 val endpoint = when (selected.endpointKind) {

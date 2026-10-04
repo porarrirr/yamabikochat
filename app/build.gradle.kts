@@ -21,6 +21,10 @@ android {
         buildConfigField("boolean", "DIAGNOSTIC", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            // JNA and NodeMobile must ship the same supported architectures.
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -30,6 +34,9 @@ android {
         compose = true
         buildConfig = true
     }
+
+    // Exercise the native Pi bridge with R8 enabled as well as in debug builds.
+    testBuildType = providers.gradleProperty("yamabikoTestBuildType").getOrElse("debug")
 
 
     packaging {
@@ -97,7 +104,8 @@ dependencies {
     // Core
     implementation("org.snakeyaml:snakeyaml-engine:3.0.1")
     implementation("androidx.documentfile:documentfile:1.0.1")
-    implementation(libs.jna)
+    // The JAR omits Android libjnidispatch.so; the AAR includes it for each ABI.
+    implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime)
@@ -175,6 +183,9 @@ val copyLegalAssets by tasks.registering(Copy::class) {
     from(rootProject.file("THIRD_PARTY_NOTICES.md"))
     from(rootProject.file("third_party/nodejs-mobile/LICENSE")) {
         rename { "NODEJS_LICENSE.txt" }
+    }
+    from(rootProject.file("third_party/android-libcxx/LICENSE.txt")) {
+        rename { "LIBCXX_LICENSE.txt" }
     }
     from(rootProject.file("third_party/npm-licenses.md"))
     into(legalAssetsDir.map { it.dir("legal") })

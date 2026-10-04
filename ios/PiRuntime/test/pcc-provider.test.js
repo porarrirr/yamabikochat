@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Agent } from '@earendil-works/pi-agent-core';
-import { createModels, calculateCost } from '@earendil-works/pi-ai';
+import { createModels, calculateCost, createAssistantMessageEventStream } from '@earendil-works/pi-ai';
+import { calculateContextTokens } from '@earendil-works/pi-ai/utils/estimate';
 import { PCC_PROVIDER, PCC_MODEL, pccResolution, withPCCBridge, receivePCCEvent, appleUsage, unknownUsage } from '../src/pcc-provider.js';
 import { providerUsage, aggregateUsage } from '../src/usage-contract.js';
 
@@ -61,6 +62,41 @@ test('partial/unknown usage cannot turn into a known monetary cost', () => {
   assert.equal(calculateCost({ ...model, cost: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1 } }, result).total, null);
   assert.equal(providerUsage(result).inputTokens, null);
   assert.throws(() => appleUsage({ ...usage, cachedInputTokens: 100 }), /invalid_usage/);
+});
+
+test('Pi context estimates preserve unknown counts and an explicit zero total', () => {
+  assert.ok(Number.isNaN(calculateContextTokens(unknownUsage())));
+  assert.equal(calculateContextTokens({ ...unknownUsage(), totalTokens: 0 }), 0);
+  assert.equal(calculateContextTokens({ ...unknownUsage(), input: 2, output: 3, cacheRead: 4, cacheWrite: 0 }), 9);
+});
+
+test('Pi never executes tools or requests another inference after unknown termination', async () => {
+  const { model } = setup();
+  let inferences = 0;
+  let executions = 0;
+  const agent = new Agent({
+    initialState: { model, messages: [{ role: 'user', content: 'Use a tool', timestamp: 1 }], tools: [{
+      name: 'local_echo', label: 'Echo', description: 'Echo', parameters: { type: 'object', properties: {} },
+      execute: async () => { executions++; return { content: [] }; }
+    }] },
+    streamFn() {
+      assert.equal(++inferences, 1);
+      const message = { role: 'assistant', api: model.api, provider: model.provider, model: model.id,
+        content: [{ type: 'toolCall', id: 'unknown-call', name: 'local_echo', arguments: {} }],
+        usage: unknownUsage(), stopReason: 'unknown', timestamp: 2 };
+      const stream = createAssistantMessageEventStream();
+      stream.push({ type: 'done', reason: 'unknown', message });
+      stream.end();
+      return stream;
+    }
+  });
+  await agent.continue();
+  assert.equal(inferences, 1);
+  assert.equal(executions, 0);
+  const result = agent.state.messages.at(-1);
+  assert.equal(result.role, 'toolResult');
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /termination reason/);
 });
 
 test('native quota errors are terminal and keep their code', async () => {

@@ -48,7 +48,8 @@ private val legalDocuments = listOf(
     LegalDocument("LICENSE.txt", R.string.license_yamabiko),
     LegalDocument("THIRD_PARTY_NOTICES.md", R.string.license_third_party),
     LegalDocument("npm-licenses.md", R.string.license_npm),
-    LegalDocument("NODEJS_LICENSE.txt", R.string.license_nodejs)
+    LegalDocument("NODEJS_LICENSE.txt", R.string.license_nodejs),
+    LegalDocument("LIBCXX_LICENSE.txt", R.string.license_libcxx)
 )
 
 @Composable

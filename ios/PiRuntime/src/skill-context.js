@@ -1,7 +1,15 @@
-import { formatSkillInvocation } from "@earendil-works/pi-agent-core";
+import { dirname } from "node:path";
+
+// Pi 1.0 removed the public formatSkillInvocation helper. The user authorized
+// this prompt-formatting-only compatibility exception on 2026-10-04.
+// Matches Pi's skill block for the absolute POSIX paths used on iOS/Android:
+// https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/src/core/agent-session.ts
+function formatSkillInvocation({ name, filePath, content }) {
+  return `<skill name="${name}" location="${filePath}">\nReferences are relative to ${dirname(filePath)}.\n\n${content}\n</skill>`;
+}
 
 /**
- * Convert an explicit native skill selection into Pi Agent Core's built-in skill
+ * Convert an explicit native skill selection into Pi's standard skill
  * invocation prompt. The native request carries the already trusted SKILL.md
  * content because the embedded Node runtime does not own skill installation.
  */
@@ -19,7 +27,6 @@ export function applyExplicitSkillInvocations(request) {
     throw new Error("Pi skill invocation context is incomplete");
   }
 
-  const catalog = new Map((context.catalog || []).map((entry) => [entry.name, entry]));
   const messages = [...(request.messages || [])];
   const promptsByMessage = new Map();
   names.forEach((name, index) => {
@@ -30,10 +37,8 @@ export function applyExplicitSkillInvocations(request) {
     }
     const prompt = formatSkillInvocation({
       name,
-      description: catalog.get(name)?.description || "Explicitly selected skill",
       content: instructions[index],
-      filePath: filePaths[index],
-      disableModelInvocation: false
+      filePath: filePaths[index]
     });
     promptsByMessage.set(messageIndex, [...(promptsByMessage.get(messageIndex) || []), prompt]);
   });

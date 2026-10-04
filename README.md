@@ -32,9 +32,16 @@ API credentials are stored with Android Keystore-backed encrypted preferences on
 Android:
 
 ```bash
+./scripts/bootstrap-pi-runtime-android.sh
 ./gradlew assembleDebug
-./gradlew test
+./gradlew :app:testDebugUnitTest
+./gradlew :app:connectedDebugAndroidTest
+./gradlew -PyamabikoTestBuildType=diagnostic :app:connectedDiagnosticAndroidTest
 ```
+
+The Android bootstrap restores NodeMobile for all bundled ABIs and builds Pi from
+the shared, locked dependencies in `ios/PiRuntime`. Connected tests require an
+Android device or emulator and verify the packaged Pi runtime without API keys.
 
 iOS:
 

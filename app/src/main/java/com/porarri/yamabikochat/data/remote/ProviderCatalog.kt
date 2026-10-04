@@ -171,33 +171,39 @@ object SuperGrokModelCatalog {
 }
 
 object OpenCodeGoModelCatalog {
-    const val defaultModel = "glm-5.1"
+    const val defaultModel = "glm-5.3"
 
     val supportedModels = listOf(
+        OpenCodeGoModel("grok-4.7", "Grok 4.7", OpenCodeGoEndpointKind.RESPONSES),
         OpenCodeGoModel("grok-4.6", "Grok 4.6", OpenCodeGoEndpointKind.RESPONSES),
-        OpenCodeGoModel("gpt-5.6-luna", "GPT-5.6 Luna", OpenCodeGoEndpointKind.RESPONSES),
-        OpenCodeGoModel("glm-5.3-flash", "GLM-5.3 Flash", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("gpt-6-luna", "GPT 6 Luna", OpenCodeGoEndpointKind.RESPONSES),
+        OpenCodeGoModel("gpt-5.6-luna", "GPT 5.6 Luna", OpenCodeGoEndpointKind.RESPONSES),
+        OpenCodeGoModel("glm-5.3-flash", "GLM-5.3-Flash", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("glm-5.3", "GLM-5.3", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("glm-5.2", "GLM-5.2", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
-        OpenCodeGoModel("glm-5.1", "GLM-5.1", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("kimi-k3", "Kimi K3", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("kimi-k2.7-code", "Kimi K2.7 Code", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("kimi-k2.6", "Kimi K2.6", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
-        OpenCodeGoModel("longcat-2.0", "LongCat 2.0", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("longcat-2.0", "LongCat-2.0", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("longcat-2.5-preview-free", "LongCat 2.5 Preview Free", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("deepseek-v4.1-flash", "DeepSeek V4.1 Flash", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("deepseek-v4-pro", "DeepSeek V4 Pro", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("deepseek-v4-flash", "DeepSeek V4 Flash", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("deepseek-v4-flash-vision-exp", "DeepSeek V4 Flash Vision Exp", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
-        OpenCodeGoModel("mimo-v2.5-pro", "MiMo-V2.5-Pro", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("mimo-v2.6-flash", "MiMo-V2.6-Flash", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("mimo-v2.6-pro", "MiMo-V2.6-Pro", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("mimo-v2.5", "MiMo-V2.5", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
-        OpenCodeGoModel("hy3", "HY 3", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
-        OpenCodeGoModel("qwen3.8-max", "Qwen3.8 Max", OpenCodeGoEndpointKind.MESSAGES),
-        OpenCodeGoModel("qwen3.7-max", "Qwen3.7 Max", OpenCodeGoEndpointKind.MESSAGES),
-        OpenCodeGoModel("qwen3.7-plus", "Qwen3.7 Plus", OpenCodeGoEndpointKind.MESSAGES),
-        OpenCodeGoModel("qwen3.6-plus", "Qwen3.6 Plus", OpenCodeGoEndpointKind.MESSAGES),
+        OpenCodeGoModel("mimo-v2.5-pro", "MiMo-V2.5-Pro", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
         OpenCodeGoModel("minimax-m3", "MiniMax M3", OpenCodeGoEndpointKind.MESSAGES),
         OpenCodeGoModel("minimax-m2.7", "MiniMax M2.7", OpenCodeGoEndpointKind.MESSAGES),
-        OpenCodeGoModel("minimax-m2.5", "MiniMax M2.5", OpenCodeGoEndpointKind.MESSAGES),
-        OpenCodeGoModel("muse-spark-1.2-contributor", "Muse Spark 1.2 Contributor", OpenCodeGoEndpointKind.RESPONSES)
+        OpenCodeGoModel("muse-spark-1.3-contributor", "Muse Spark 1.3 Contributor", OpenCodeGoEndpointKind.RESPONSES),
+        OpenCodeGoModel("muse-spark-1.2-contributor", "Muse Spark 1.2 Contributor", OpenCodeGoEndpointKind.RESPONSES),
+        OpenCodeGoModel("qwen3.8-max", "Qwen3.8 Max", OpenCodeGoEndpointKind.MESSAGES),
+        OpenCodeGoModel("qwen3.8-flash", "Qwen3.8 Flash", OpenCodeGoEndpointKind.MESSAGES),
+        OpenCodeGoModel("qwen3.7-plus", "Qwen3.7 Plus", OpenCodeGoEndpointKind.MESSAGES),
+        OpenCodeGoModel("hy4-preview", "Hy4 preview", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("hy3", "Hy3", OpenCodeGoEndpointKind.CHAT_COMPLETIONS),
+        OpenCodeGoModel("space-bunny-free", "Space Bunny Free", OpenCodeGoEndpointKind.CHAT_COMPLETIONS)
     )
 
     fun normalizedModelId(raw: String): String {

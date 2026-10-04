@@ -47,6 +47,11 @@
 -keep @androidx.room.Entity class *
 -keep @androidx.room.Dao class *
 
+# Preserve JNA reflection and the native symbol names used by NodeMobile.
+-keep class com.sun.jna.** { *; }
+-keep interface com.porarri.yamabikochat.pi.NodeLibrary { *; }
+-dontwarn java.awt.**
+
 # Preserve Retrofit and serialization
 -keep class retrofit2.** { *; }
 -keep class com.google.gson.** { *; }

@@ -26,4 +26,5 @@ cd "$runtime_dir"
 npm ci
 npm run build
 
-echo "Prepared NodeMobile 24.18.0-0 and Pi 0.84.2 runtime"
+pi_version="$(node -p "require('./node_modules/@earendil-works/pi-ai/package.json').version")"
+echo "Prepared NodeMobile 24.18.0-0 and Pi $pi_version runtime"

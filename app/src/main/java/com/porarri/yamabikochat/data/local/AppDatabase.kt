@@ -48,7 +48,13 @@ abstract class AppDatabase : RoomDatabase() {
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onOpen(db: SupportSQLiteDatabase) {
                             super.onOpen(db)
-                            db.execSQL("PRAGMA secure_delete = ON")
+                            // This PRAGMA returns a row; newer Android SQLite
+                            // rejects executing it through executeUpdateDelete.
+                            db.query("PRAGMA secure_delete = ON").use { cursor ->
+                                check(cursor.moveToFirst() && cursor.getInt(0) == 1) {
+                                    "SQLite secure deletion could not be enabled"
+                                }
+                            }
                         }
                     })
                     .build()

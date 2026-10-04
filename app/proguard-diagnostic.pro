@@ -13,6 +13,27 @@
 -keep @androidx.room.Entity class *
 -keep @androidx.room.Dao class *
 
+# Preserve JNA reflection and the native symbol names used by NodeMobile.
+-keep class com.sun.jna.** { *; }
+-keep interface com.porarri.yamabikochat.pi.NodeLibrary { *; }
+-dontwarn java.awt.**
+
+# The instrumentation APK shares these runtime dependencies with the tested
+# APK. Retain their APIs for the runner and coroutine-based device tests.
+-keep class androidx.tracing.** { *; }
+-keep class kotlin.** { *; }
+-keep class kotlinx.coroutines.** { *; }
+
+# Preserve the public entry points called from the separate instrumentation APK
+# while allowing R8 to optimize their implementations and private code.
+-keep,allowoptimization class com.porarri.yamabikochat.pi.** { public *; }
+-keep,allowoptimization class com.porarri.yamabikochat.utils.DiagnosticsLogger { public *; }
+-keep,allowoptimization class com.porarri.yamabikochat.data.remote.OpenCodeGo** { public *; }
+-keep,allowoptimization class com.porarri.yamabikochat.data.local.AppDatabase { public *; }
+-keep,allowoptimization class com.porarri.yamabikochat.data.local.AppDatabase$Companion { public *; }
+-keep,allowoptimization class androidx.room.RoomDatabase { public *; }
+-keep,allowoptimization class androidx.sqlite.db.** { public *; }
+
 # Preserve Retrofit and serialization
 -keep class retrofit2.** { *; }
 -keep class com.google.gson.** { *; }
