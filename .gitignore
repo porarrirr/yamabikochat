@@ -116,3 +116,6 @@ tmp/
 *.rej
 *.swp
 *~
+
+# Local-only reference repositories and workspace material
+/.local/

@@ -46,6 +46,21 @@ open YamabikoChat.xcodeproj
 
 配布用ビルドは [GitHub Releases](https://github.com/porarrirr/yamabikochat/releases) に掲載します。CIで生成したiOS成果物は未署名の場合があり、通常の端末へそのままインストールできるとは限りません。
 
+## フォルダ構成
+
+| 場所 | 用途 |
+|---|---|
+| `app/` | Androidアプリとテスト |
+| [ios/](ios/README.md) | iOSアプリ、テスト、ビルドツール |
+| [ios/docs/](ios/docs/README.md) | 開発メモとデザイン検証資料 |
+| `scripts/` | 共通ランタイムの準備とプロバイダー契約の検証 |
+| [docs/](docs/README.md) | 公開サイト、規約、サポートページ |
+| `third_party/` | 第三者ソフトウェアの契約・ライセンス資料 |
+| `gradle/` | Androidの依存設定とラッパー |
+
+ローカルの参照用リポジトリは `.local/reference-repos/` にまとめます（Git管理対象外）。
+ビルドキャッシュや復元された依存ライブラリは、ビルドツールが必要とする配置を保ちます。
+
 ## ライセンス
 
 独自コードは [MIT License](LICENSE) で公開しています。同梱・復元される第三者ソフトウェアには個別のライセンスが適用されます。詳細は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) を参照してください。

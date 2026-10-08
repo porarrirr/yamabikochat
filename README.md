@@ -53,6 +53,21 @@ open YamabikoChat.xcodeproj
 
 Builds intended for distribution are published on [GitHub Releases](https://github.com/porarrirr/yamabikochat/releases). CI-generated iOS artifacts may be unsigned and are not necessarily installable on a normal device.
 
+## Repository layout
+
+| Location | Purpose |
+|---|---|
+| `app/` | Android app and tests |
+| [ios/](ios/README.md) | iOS app, tests, and build tooling |
+| [ios/docs/](ios/docs/README.md) | Development notes and design QA evidence |
+| `scripts/` | Shared runtime bootstrap and provider contract checks |
+| [docs/](docs/README.md) | Public website and legal/support pages |
+| `third_party/` | Third-party contracts and notices |
+| `gradle/` | Android build dependencies and wrapper |
+
+Local reference clones belong in `.local/reference-repos/` (ignored by Git).
+Build caches and restored dependencies remain in the locations expected by the build tools.
+
 ## License
 
 Original project code is available under the [MIT License](LICENSE). Bundled and restored third-party software remains subject to its own terms; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

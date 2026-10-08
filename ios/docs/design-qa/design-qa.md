@@ -96,8 +96,8 @@ final result: passed
 # Design QA: selection-aware chat composer
 
 - Source visual truth: `/var/folders/5w/7hrzp8fx3b9dh79n6jk19l980000gn/T/codex-clipboard-7890948e-581f-41e2-bcfb-c9d12a5084de.png`
-- Implementation screenshot: `/Users/porari/kaihatu/ios/yamabikochat/design-qa-composer-implementation.jpeg`
-- Combined comparison: `/Users/porari/kaihatu/ios/yamabikochat/design-qa-composer-comparison.png`
+- Implementation screenshot: [design-qa-composer-implementation.jpeg](design-qa-composer-implementation.jpeg)
+- Combined comparison: [design-qa-composer-comparison.png](design-qa-composer-comparison.png)
 - Viewport: iPhone 17 simulator, portrait, iOS 27.0, software keyboard visible
 - Source pixels: 1170 × 2532
 - Implementation capture pixels: 456 × 972; device screen normalized from a 406 × 880 crop to 1170 × 2532 for comparison

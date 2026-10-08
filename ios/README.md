@@ -2,6 +2,8 @@
 
 This directory contains the native iOS implementation for YamabikoChat.
 
+Development notes and design QA evidence are indexed in [docs/README.md](docs/README.md).
+
 ## Requirements
 - macOS with Xcode 16+
 - XcodeGen (`brew install xcodegen`)

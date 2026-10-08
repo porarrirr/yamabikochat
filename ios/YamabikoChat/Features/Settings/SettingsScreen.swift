@@ -10,6 +10,7 @@ struct SettingsScreen: View {
     var initialTab: SettingsTab? = nil
     @State private var navigationPath: [SettingsCategory] = []
     #if DEBUG
+    @ScaledMetric(relativeTo: .subheadline) private var diagnosticsActionMinimumWidth = 120
     @State private var showDiagnosticsSheet = false
     #endif
     @State private var modelsDevFieldDrafts: [String: String] = [:]
@@ -1861,37 +1862,51 @@ struct SettingsScreen: View {
     #if DEBUG
     private var diagnosticsSection: some View {
         Section {
-            HStack {
-                Button("更新") {
-                    viewModel.refreshDiagnosticsLog()
-                }
-                .buttonStyle(.bordered)
-
-                Button("コピー") {
-                    UIPasteboard.general.string = viewModel.diagnosticsLogText
-                    viewModel.statusMessage = L10n.text("診断ログをコピーしました")
-                }
-                .buttonStyle(.bordered)
-                .disabled(viewModel.diagnosticsLogText.isEmpty)
-
-                Button("クリア") {
-                    viewModel.clearDiagnosticsLog()
-                }
-                .buttonStyle(.bordered)
-                .disabled(viewModel.diagnosticsLogText.isEmpty)
-
-                Button("表示") {
+            VStack(spacing: 12) {
+                Button {
                     showDiagnosticsSheet = true
+                } label: {
+                    Label("表示", systemImage: "doc.text.magnifyingglass")
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(viewModel.diagnosticsLogText.isEmpty)
 
-                ShareLink(item: viewModel.diagnosticsLogText) {
-                    Text("共有")
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: diagnosticsActionMinimumWidth), spacing: 12)], spacing: 12) {
+                    Button {
+                        viewModel.refreshDiagnosticsLog()
+                    } label: {
+                        Label("更新", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+
+                    Button {
+                        UIPasteboard.general.string = viewModel.diagnosticsLogText
+                        viewModel.statusMessage = L10n.text("診断ログをコピーしました")
+                    } label: {
+                        Label("コピー", systemImage: "doc.on.doc")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .disabled(viewModel.diagnosticsLogText.isEmpty)
+
+                    ShareLink(item: viewModel.diagnosticsLogText) {
+                        Label("共有", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .disabled(viewModel.diagnosticsLogText.isEmpty)
+
+                    Button(role: .destructive) {
+                        viewModel.clearDiagnosticsLog()
+                    } label: {
+                        Label("クリア", systemImage: "trash")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .disabled(viewModel.diagnosticsLogText.isEmpty)
                 }
                 .buttonStyle(.bordered)
-                .disabled(viewModel.diagnosticsLogText.isEmpty)
             }
+            .font(.subheadline)
+            .lineLimit(1)
 
             if viewModel.diagnosticsLogText.isEmpty {
                 Text("ログはありません。")
@@ -1899,7 +1914,9 @@ struct SettingsScreen: View {
                     .foregroundStyle(.secondary)
             } else {
                 Text(String(viewModel.diagnosticsLogText.suffix(2000)))
-                    .font(.caption2)
+                    .font(.system(.caption, design: .monospaced))
+                    .lineLimit(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }
         } header: {
