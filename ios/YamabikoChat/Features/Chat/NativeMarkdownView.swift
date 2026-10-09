@@ -58,6 +58,15 @@ enum NativeMarkdownParser {
         baseUTF8Offset: Int = 0
     ) -> [NativeMarkdownBlock] {
         let document = Document(parsing: source)
+        return blocks(in: document, source: source, rendersMath: rendersMath, baseUTF8Offset: baseUTF8Offset)
+    }
+
+    fileprivate static func blocks(
+        in document: Markdown.Document,
+        source: String,
+        rendersMath: Bool,
+        baseUTF8Offset: Int
+    ) -> [NativeMarkdownBlock] {
         let offsets = SourceOffsetMap(source: source, baseUTF8Offset: baseUTF8Offset)
         return parseChildren(of: document, path: "root", rendersMath: rendersMath, offsets: offsets)
     }
@@ -339,61 +348,83 @@ private actor NativeMarkdownBlockCache {
 @MainActor
 final class NativeMarkdownIncrementalParser {
     private var stablePrefix = ""
+    private var stablePrefixUTF8Count = 0
     private var stableBlocks: [NativeMarkdownBlock] = []
+    private var lastSource: String?
+    private var lastBlocks: [NativeMarkdownBlock] = []
+
+    #if DEBUG
+    private(set) var parsedUTF8ByteCount = 0
+    #endif
 
     func streamingBlocks(for source: String) -> [NativeMarkdownBlock] {
-        if !source.hasPrefix(stablePrefix) {
+        if let lastSource {
+            if source.utf8.count == lastSource.utf8.count,
+               source.utf8.elementsEqual(lastSource.utf8) { return lastBlocks }
+            // A replacement can join a new list to an earlier confirmed list,
+            // even when the confirmed prefix itself is unchanged. Only appends
+            // may reuse it. Compare bytes so normalized Unicode cannot shift IDs.
+            if !source.utf8.starts(with: lastSource.utf8) { reset() }
+        }
+
+        // Reference definitions can change links in any earlier paragraph. Keep
+        // those documents in one parse context, including incomplete definitions.
+        // This conservative check also covers image and escaped bracket syntax.
+        let needsDocumentContext = source.utf8.contains(0x5B)
+        if needsDocumentContext {
             stablePrefix = ""
+            stablePrefixUTF8Count = 0
             stableBlocks = []
         }
-
-        let split = Self.streamingSplit(source)
-        if split.prefix != stablePrefix {
-            let newStableSource = String(split.prefix.dropFirst(stablePrefix.count))
-            let appendedBlocks = NativeMarkdownParser.parse(
-                newStableSource,
-                rendersMath: false,
-                baseUTF8Offset: stablePrefix.utf8.count
-            )
-            stableBlocks.append(contentsOf: appendedBlocks)
-            stablePrefix = split.prefix
-        }
-
-        let tailBlocks = NativeMarkdownParser.parse(
-            split.tail,
+        let tailStart = source.utf8.index(source.utf8.startIndex, offsetBy: stablePrefixUTF8Count)
+        let tail = String(source[tailStart...])
+        #if DEBUG
+        parsedUTF8ByteCount += tail.utf8.count
+        #endif
+        let document = Document(parsing: tail)
+        let tailBlocks = NativeMarkdownParser.blocks(
+            in: document,
+            source: tail,
             rendersMath: false,
-            baseUTF8Offset: split.prefix.utf8.count
+            baseUTF8Offset: stablePrefixUTF8Count
         )
-        return stableBlocks + tailBlocks
+        lastSource = source
+        lastBlocks = stableBlocks + tailBlocks
+
+        // Retain TWO blocks: an incomplete last line such as "#" can become
+        // "#text" and merge back into the preceding list/quote on the next token.
+        // Keep indentation before the boundary block, too (not just its AST range).
+        if !needsDocumentContext,
+           let boundary = Self.tailBoundary(in: document, source: tail, retainingBlocks: 2) {
+            let absoluteBoundary = stablePrefixUTF8Count + boundary
+            stableBlocks.append(contentsOf: tailBlocks.filter { block in
+                guard let offset = Int(block.id.dropFirst("block-".count)) else { return false }
+                return offset < absoluteBoundary
+            })
+            let prefixEnd = source.utf8.index(source.utf8.startIndex, offsetBy: absoluteBoundary)
+            stablePrefix = String(source[..<prefixEnd])
+            stablePrefixUTF8Count = absoluteBoundary
+        }
+        return lastBlocks
     }
 
     func reset() {
         stablePrefix = ""
+        stablePrefixUTF8Count = 0
         stableBlocks = []
+        lastSource = nil
+        lastBlocks = []
     }
 
-    static func streamingSplit(_ source: String) -> (prefix: String, tail: String) {
-        let document = Document(parsing: source)
-        guard document.childCount > 1,
-              let lastBlock = document.child(at: document.childCount - 1),
-              let location = lastBlock.range?.lowerBound
-        else {
-            return ("", source)
-        }
+    private static func tailBoundary(in document: Markdown.Document, source: String, retainingBlocks: Int) -> Int? {
+        guard document.childCount > retainingBlocks,
+              let block = document.child(at: document.childCount - retainingBlocks),
+              let location = block.range?.lowerBound
+        else { return nil }
         let offsets = NativeMarkdownParser.SourceOffsetMap(source: source, baseUTF8Offset: 0)
-        guard let boundaryOffset = offsets.utf8Offset(for: location),
-              boundaryOffset > 0,
-              boundaryOffset <= source.utf8.count
-        else {
-            return ("", source)
-        }
-        let utf8Boundary = source.utf8.index(source.utf8.startIndex, offsetBy: boundaryOffset)
-        guard let boundary = String.Index(utf8Boundary, within: source) else {
-            return ("", source)
-        }
-        let split = (prefix: String(source[..<boundary]), tail: String(source[boundary...]))
-        assert(split.prefix + split.tail == source)
-        return split
+        guard offsets.lineStartUTF8Offsets.indices.contains(location.line - 1) else { return nil }
+        let boundary = offsets.lineStartUTF8Offsets[location.line - 1]
+        return boundary > 0 ? boundary : nil
     }
 }
 
@@ -723,8 +754,42 @@ private extension NSAttributedString.Key {
     static let yamabikoQuoteDepth = NSAttributedString.Key("com.porarri.yamabikochat.quote-depth")
 }
 
-private final class SelectableChatTextView: UITextView {
+final class SelectableChatTextView: UITextView {
     static let quoteIndent: CGFloat = 15
+    private var measuredSizes: [CGFloat: CGSize] = [:]
+    private var measuredContentSizeCategory: UIContentSizeCategory?
+
+    #if DEBUG
+    private(set) var textMeasurementCount = 0
+    private(set) var attributedTextUpdateCount = 0
+    #endif
+
+    override var attributedText: NSAttributedString! {
+        didSet {
+            measuredSizes.removeAll(keepingCapacity: true)
+            #if DEBUG
+            attributedTextUpdateCount += 1
+            #endif
+        }
+    }
+
+    func measuredSize(for width: CGFloat) -> CGSize {
+        if measuredContentSizeCategory != traitCollection.preferredContentSizeCategory {
+            measuredSizes.removeAll(keepingCapacity: true)
+            measuredContentSizeCategory = traitCollection.preferredContentSizeCategory
+        }
+        if let size = measuredSizes[width] { return size }
+        #if DEBUG
+        textMeasurementCount += 1
+        #endif
+        let fitted = sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        let size = CGSize(width: width, height: ceil(fitted.height))
+        // SwiftUI can probe several widths in a single layout pass. Bound the
+        // cache while allowing the final width and the proposed width to coexist.
+        if measuredSizes.count >= 4 { measuredSizes.removeAll(keepingCapacity: true) }
+        measuredSizes[width] = size
+        return size
+    }
 
     override func draw(_ rect: CGRect) {
         super.draw(rect)
@@ -755,7 +820,7 @@ private final class SelectableChatTextView: UITextView {
 }
 
 private struct SelectableChatText: UIViewRepresentable {
-    private struct Fragment {
+    fileprivate struct Fragment: Equatable {
         let text: AttributedString
         let style: UIFont.TextStyle
         let weight: UIFont.Weight
@@ -785,7 +850,7 @@ private struct SelectableChatText: UIViewRepresentable {
         Coordinator(onAskChatWithSelection: onAskChatWithSelection)
     }
 
-    func makeUIView(context: Context) -> UITextView {
+    func makeUIView(context: Context) -> SelectableChatTextView {
         let textView = SelectableChatTextView()
         textView.delegate = context.coordinator
         textView.isEditable = false
@@ -798,11 +863,19 @@ private struct SelectableChatText: UIViewRepresentable {
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         textView.setContentHuggingPriority(.required, for: .vertical)
         textView.accessibilityIdentifier = "selectable-chat-text"
+        textView.linkTextAttributes = [
+            .foregroundColor: UIColor.label,
+            .underlineStyle: NSUnderlineStyle.single.rawValue
+        ]
         return textView
     }
 
-    func updateUIView(_ textView: UITextView, context: Context) {
+    func updateUIView(_ textView: SelectableChatTextView, context: Context) {
         context.coordinator.onAskChatWithSelection = onAskChatWithSelection
+        guard context.coordinator.needsTextUpdate(
+            fragments: fragments,
+            dynamicTypeSize: context.environment.dynamicTypeSize
+        ) else { return }
         let rendered = renderedText()
         if textView.attributedText != rendered {
             let selectedRange = textView.selectedRange
@@ -811,22 +884,15 @@ private struct SelectableChatText: UIViewRepresentable {
                 textView.selectedRange = selectedRange
             }
         }
-        textView.linkTextAttributes = [
-            .foregroundColor: UIColor.label,
-            .underlineStyle: NSUnderlineStyle.single.rawValue
-        ]
     }
 
     func sizeThatFits(
         _ proposal: ProposedViewSize,
-        uiView: UITextView,
+        uiView: SelectableChatTextView,
         context: Context
     ) -> CGSize? {
         guard let width = proposal.width, width > 0 else { return nil }
-        let measured = uiView.sizeThatFits(
-            CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
-        )
-        return CGSize(width: width, height: ceil(measured.height))
+        return uiView.measuredSize(for: width)
     }
 
     private func renderedText() -> NSAttributedString {
@@ -962,6 +1028,15 @@ private struct SelectableChatText: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var onAskChatWithSelection: (String) -> Void
+        private var renderedFragments: [Fragment]?
+        private var renderedDynamicTypeSize: DynamicTypeSize?
+
+        fileprivate func needsTextUpdate(fragments: [Fragment], dynamicTypeSize: DynamicTypeSize) -> Bool {
+            guard renderedFragments != fragments || renderedDynamicTypeSize != dynamicTypeSize else { return false }
+            renderedFragments = fragments
+            renderedDynamicTypeSize = dynamicTypeSize
+            return true
+        }
 
         init(onAskChatWithSelection: @escaping (String) -> Void) {
             self.onAskChatWithSelection = onAskChatWithSelection

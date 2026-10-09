@@ -497,11 +497,15 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         let second = 2
         """
 
-        let split = NativeMarkdownIncrementalParser.streamingSplit(source)
-
-        XCTAssertEqual(split.prefix, "Intro\n\n")
-        XCTAssertEqual(split.prefix + split.tail, source)
-        XCTAssertTrue(split.tail.hasPrefix("```swift"))
+        let parser = NativeMarkdownIncrementalParser()
+        let blocks = parser.streamingBlocks(for: source)
+        XCTAssertEqual(blocks, NativeMarkdownParser.parse(source, rendersMath: false))
+        XCTAssertEqual(blocks.count, 2)
+        guard case let .code(_, language, code) = blocks.last else {
+            return XCTFail("An open fence must remain one code block across blank lines")
+        }
+        XCTAssertEqual(language, "swift")
+        XCTAssertTrue(code.contains("let first = 1\n\nlet second = 2"))
     }
 
     @MainActor
@@ -2017,6 +2021,11 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             width: cellFrame.width,
             height: max(cellFrame.height - 1, 1)
         )
+        let stableTextViews = selectableTextViews(in: cell)
+        XCTAssertEqual(stableTextViews.count, 2)
+        let textMeasurements = stableTextViews.map(\.textMeasurementCount)
+        let textAssignments = stableTextViews.map(\.attributedTextUpdateCount)
+        stableTextViews.last?.selectedRange = NSRange(location: 0, length: 3)
         let baselineFrame = try XCTUnwrap(renderedPixels(of: controller.view))
         let baselineInkRows = baselineFrame.darkPixelCountsByRow(in: stableRegion)
         XCTAssertGreaterThan(baselineInkRows.max() ?? 0, 0)
@@ -2051,6 +2060,13 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             0,
             "Existing heading/paragraph moved vertically in \(changedVerticalProfiles) intermediate frames; baseline=\(baselineInkRows), firstChanged=\(firstChangedProfile ?? [])"
         )
+        let currentTextViews = selectableTextViews(in: cell)
+        for (index, textView) in stableTextViews.enumerated() {
+            XCTAssertTrue(currentTextViews.contains { $0 === textView }, "Confirmed paragraphs must keep their native view identity")
+            XCTAssertEqual(textView.textMeasurementCount, textMeasurements[index], "Appending another paragraph must not remeasure unchanged text")
+            XCTAssertEqual(textView.attributedTextUpdateCount, textAssignments[index])
+        }
+        XCTAssertEqual(stableTextViews.last?.selectedRange, NSRange(location: 0, length: 3))
         XCTAssertGreaterThan(
             cell.bounds.height,
             cellFrame.height,
@@ -2200,6 +2216,11 @@ final class ChatPresentationArchitectureTests: XCTestCase {
                 previousOffset = collectionView.contentOffset.y
             }
         }
+    }
+
+    private func selectableTextViews(in view: UIView) -> [SelectableChatTextView] {
+        if let textView = view as? SelectableChatTextView { return [textView] }
+        return view.subviews.flatMap(selectableTextViews)
     }
 
     private func findCollectionView(in view: UIView) -> UICollectionView? {

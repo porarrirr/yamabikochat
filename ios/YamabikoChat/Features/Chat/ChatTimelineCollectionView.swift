@@ -1,4 +1,4 @@
-    import Combine
+import Combine
 import SwiftUI
 import UIKit
 
@@ -85,6 +85,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var previousDualSplitLayout = "VERTICAL"
     private var previousDualSplitRatio = 0.5
     private var isTimelineVisible = true
+    private var lastPublishedFollowState: (following: Bool, unread: Int)?
 
     var regeneratableMessageID: Int64?
     var mathRenderingEnabled = true
@@ -597,7 +598,9 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private func pinToTail() {
         let inset = collectionView.adjustedContentInset
         let y = max(-inset.top, collectionView.contentSize.height - collectionView.bounds.height + inset.bottom)
-        collectionView.setContentOffset(CGPoint(x: 0, y: y), animated: false)
+        if TailFollowPolicy.shouldAdjustOffset(current: collectionView.contentOffset.y, target: y) {
+            collectionView.setContentOffset(CGPoint(x: 0, y: y), animated: false)
+        }
     }
 
     private func clampedOffset(_ value: CGFloat) -> CGFloat {
@@ -683,7 +686,11 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     }
 
     private func publishFollowState() {
-        onFollowStateChanged(isNearTail, unreadCount)
+        let following = isNearTail
+        guard lastPublishedFollowState?.following != following
+            || lastPublishedFollowState?.unread != unreadCount else { return }
+        lastPublishedFollowState = (following, unreadCount)
+        onFollowStateChanged(following, unreadCount)
     }
 
     private func maintainViewportLockIfNeeded() {
@@ -740,18 +747,26 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     }
 }
 
-private final class ChatTimelineLayoutInvalidationContext: UICollectionViewLayoutInvalidationContext {
+final class ChatTimelineLayoutInvalidationContext: UICollectionViewLayoutInvalidationContext {
     var preferredHeights: [IndexPath: CGFloat] = [:]
 }
 
-private final class ChatTimelineLayout: UICollectionViewLayout {
+final class ChatTimelineLayout: UICollectionViewLayout {
     var contentInsets = UIEdgeInsets(top: 20, left: 18, bottom: 24, right: 18)
 
     private let estimatedHeight: CGFloat = 120
     private let itemSpacing: CGFloat = 22
     private var measuredHeights: [IndexPath: CGFloat] = [:]
-    private var attributesByIndexPath: [IndexPath: UICollectionViewLayoutAttributes] = [:]
+    private var itemAttributes: [UICollectionViewLayoutAttributes] = []
     private var calculatedContentSize = CGSize.zero
+    private var firstDirtyItem = 0
+    private var preparedWidth: CGFloat?
+    private var preparedInsets = UIEdgeInsets.zero
+
+    #if DEBUG
+    private(set) var preparedItemCount = 0
+    private(set) var lastElementLookupCount = 0
+    #endif
 
     override class var invalidationContextClass: AnyClass {
         ChatTimelineLayoutInvalidationContext.self
@@ -759,9 +774,12 @@ private final class ChatTimelineLayout: UICollectionViewLayout {
 
     func resetMeasuredHeights() {
         measuredHeights.removeAll()
+        firstDirtyItem = 0
     }
 
     func remapMeasuredHeights(from previousIDs: [String], to nextIDs: [String]) {
+        let unchangedCount = zip(previousIDs, nextIDs).prefix { $0 == $1 }.count
+        firstDirtyItem = min(firstDirtyItem, unchangedCount)
         guard !measuredHeights.isEmpty else { return }
         var heightsByID: [String: CGFloat] = [:]
         for (indexPath, height) in measuredHeights where previousIDs.indices.contains(indexPath.item) {
@@ -786,21 +804,32 @@ private final class ChatTimelineLayout: UICollectionViewLayout {
             1,
             collectionView.bounds.width - contentInsets.left - contentInsets.right
         )
-        var nextAttributes: [IndexPath: UICollectionViewLayoutAttributes] = [:]
-        var y = contentInsets.top
-        for item in 0..<itemCount {
+        if preparedWidth != collectionView.bounds.width || preparedInsets != contentInsets {
+            firstDirtyItem = 0
+        }
+        preparedWidth = collectionView.bounds.width
+        preparedInsets = contentInsets
+        let start = min(firstDirtyItem, min(itemAttributes.count, itemCount))
+        var y = start > 0 ? itemAttributes[start - 1].frame.maxY + itemSpacing : contentInsets.top
+        if start < itemAttributes.count {
+            itemAttributes.removeSubrange(start...)
+        }
+        for item in start..<itemCount {
             let indexPath = IndexPath(item: item, section: 0)
             let height = measuredHeights[indexPath] ?? estimatedHeight
             let attributes = UICollectionViewLayoutAttributes(forCellWith: indexPath)
             attributes.frame = CGRect(x: contentInsets.left, y: y, width: itemWidth, height: height)
-            nextAttributes[indexPath] = attributes
+            itemAttributes.append(attributes)
+            #if DEBUG
+            preparedItemCount += 1
+            #endif
             y += height + itemSpacing
         }
         if itemCount > 0 {
             y -= itemSpacing
         }
         y += contentInsets.bottom
-        attributesByIndexPath = nextAttributes
+        firstDirtyItem = itemCount
         calculatedContentSize = CGSize(width: collectionView.bounds.width, height: max(0, y))
     }
 
@@ -809,13 +838,39 @@ private final class ChatTimelineLayout: UICollectionViewLayout {
     }
 
     override func layoutAttributesForElements(in rect: CGRect) -> [UICollectionViewLayoutAttributes]? {
-        attributesByIndexPath.values
-            .filter { $0.frame.intersects(rect) }
-            .sorted { $0.indexPath < $1.indexPath }
+        #if DEBUG
+        lastElementLookupCount = 0
+        #endif
+        // Frames are ordered and disjoint. Scrolling should visit visible rows,
+        // not filter and sort every message in the conversation on every frame.
+        var lower = 0
+        var upper = itemAttributes.count
+        while lower < upper {
+            #if DEBUG
+            lastElementLookupCount += 1
+            #endif
+            let middle = (lower + upper) / 2
+            if itemAttributes[middle].frame.maxY < rect.minY {
+                lower = middle + 1
+            } else {
+                upper = middle
+            }
+        }
+        var visible: [UICollectionViewLayoutAttributes] = []
+        for index in lower..<itemAttributes.count {
+            #if DEBUG
+            lastElementLookupCount += 1
+            #endif
+            let attributes = itemAttributes[index]
+            if attributes.frame.minY > rect.maxY { break }
+            if attributes.frame.intersects(rect) { visible.append(attributes) }
+        }
+        return visible
     }
 
     override func layoutAttributesForItem(at indexPath: IndexPath) -> UICollectionViewLayoutAttributes? {
-        attributesByIndexPath[indexPath]
+        guard indexPath.section == 0, itemAttributes.indices.contains(indexPath.item) else { return nil }
+        return itemAttributes[indexPath.item]
     }
 
     override func shouldInvalidateLayout(
@@ -840,7 +895,11 @@ private final class ChatTimelineLayout: UICollectionViewLayout {
 
     override func invalidateLayout(with context: UICollectionViewLayoutInvalidationContext) {
         if let context = context as? ChatTimelineLayoutInvalidationContext {
-            measuredHeights.merge(context.preferredHeights) { _, new in new }
+            for (indexPath, height) in context.preferredHeights where height.isFinite && height > 0 {
+                guard measuredHeights[indexPath] != height else { continue }
+                measuredHeights[indexPath] = height
+                firstDirtyItem = min(firstDirtyItem, indexPath.item)
+            }
         }
         super.invalidateLayout(with: context)
     }
