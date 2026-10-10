@@ -15,6 +15,26 @@ final class AppStoreScreenshotTests: XCTestCase {
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
     }
 
+    func testSettingsConnectionNavigationCanBeRepeated() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-AppStoreScreenshotDemo", "-ScreenshotScene", "list",
+            "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"
+        ]
+        app.launch()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
+
+        for _ in 0..<2 {
+            XCTAssertTrue(openSettings(app: app))
+            for _ in 0..<3 {
+                XCTAssertTrue(openSettingsCategory(app: app, subtitle: "API・モデル", title: "接続"))
+                XCTAssertTrue(app.buttons["provider-picker-field"].waitForExistence(timeout: 5))
+                XCTAssertTrue(returnToSettingsIndex(app: app))
+            }
+            closeSettings(app: app)
+        }
+    }
+
     func testCaptureAppStoreScreenshots() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-AppStoreScreenshotDemo"]

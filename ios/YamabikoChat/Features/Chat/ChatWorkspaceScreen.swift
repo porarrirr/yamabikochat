@@ -17,7 +17,6 @@ enum ChatWorkspacePrimaryAction: Equatable {
 struct ChatWorkspaceScreen: View {
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var appState: AppState
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let conversationID: Int64
@@ -435,11 +434,7 @@ struct ChatWorkspaceScreen: View {
     }
 
     private func openConversationHistory() {
-        if horizontalSizeClass == .compact {
-            appState.isConversationHistoryPresented = true
-        } else {
-            appState.requestConversationSidebarReveal()
-        }
+        appState.requestConversationSidebarReveal()
     }
 }
 

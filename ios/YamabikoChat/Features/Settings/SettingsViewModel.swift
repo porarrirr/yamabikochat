@@ -66,6 +66,12 @@ final class SettingsViewModel: ObservableObject {
     private var skillRepository: AgentSkillRepository?
     private var cancellables: Set<AnyCancellable> = []
     private var autoSaveWorkItem: DispatchWorkItem?
+    private var modelCatalogPrefetchTask: Task<Void, Never>?
+    #if DEBUG
+    private var diagnosticsReadTask: Task<Void, Never>?
+    #endif
+    private var modelsDevFieldCache: [String: String] = [:]
+    private var persistedSettingsSnapshot: AppSettings?
     private var isHydratingFromPersistence = false
     private var isPersistingSettings = false
     private var activeOpenRouterModelsFetchID = UUID()
@@ -104,7 +110,9 @@ final class SettingsViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newSettings in
                 guard let self else { return }
-                guard !self.isPersistingSettings else { return }
+                guard !self.isPersistingSettings,
+                      newSettings != self.persistedSettingsSnapshot,
+                      newSettings != self.settings else { return }
                 guard self.autoSaveWorkItem == nil else {
                     self.statusMessage = L10n.text("外部の設定変更があります。編集中の内容を保存してから再読み込みしてください。")
                     DiagnosticsLogger.log(
@@ -116,6 +124,8 @@ final class SettingsViewModel: ObservableObject {
                 }
                 self.isHydratingFromPersistence = true
                 self.settings = newSettings
+                self.persistedSettingsSnapshot = newSettings
+                self.modelsDevFieldCache.removeAll()
                 self.syncSystemPromptPresetName()
                 self.loadCurrentProviderAPIKey()
                 self.loadAlibabaMCPAuthorizationToken()
@@ -187,6 +197,7 @@ final class SettingsViewModel: ObservableObject {
 
         do {
             settings = try repository.loadSettings()
+            persistedSettingsSnapshot = settings
             loadCurrentProviderAPIKey()
             loadSelectedOpenAICompatApiKey()
             loadAlibabaMCPAuthorizationToken()
@@ -200,20 +211,27 @@ final class SettingsViewModel: ObservableObject {
 
         Task {
             await refreshCodexAuth(force: false)
-            refreshDiagnosticsLog()
         }
     }
 
-    func prefetchLatestModelCatalogs() {
-        Task {
-            async let modelsDevRefresh: CatalogLoadState? = modelsDevCatalogRepository?.load(forceRefresh: true)
-            async let openRouterRefresh: Void = refreshOpenRouterModels(force: true)
+    func prefetchLatestModelCatalogs() async {
+        if let task = modelCatalogPrefetchTask {
+            await task.value
+            return
+        }
+        modelsDevFieldCache.removeAll()
+        let task = Task {
+            async let modelsDevRefresh: CatalogLoadState? = modelsDevCatalogRepository?.load()
+            async let openRouterRefresh: Void = refreshOpenRouterModels(force: false)
             // Resolve account models against the newly refreshed contracts, rather
             // than racing discovery against the previous models.dev cache.
             _ = await modelsDevRefresh
             await refreshCodexModels()
             _ = await openRouterRefresh
         }
+        modelCatalogPrefetchTask = task
+        await task.value
+        modelCatalogPrefetchTask = nil
     }
 
     func refreshCodexModels(forceRefresh: Bool = false) async {
@@ -287,16 +305,26 @@ final class SettingsViewModel: ObservableObject {
 
     func modelsDevField(providerID: String, fieldName: String) -> String {
         guard let credentialStore else { return "" }
-        return (try? credentialStore.readSecret(key: modelsDevFieldKey(providerID: providerID, fieldName: fieldName))) ?? ""
+        let key = modelsDevFieldKey(providerID: providerID, fieldName: fieldName)
+        if let cached = modelsDevFieldCache[key] { return cached }
+        do {
+            let value = try credentialStore.readSecret(key: key) ?? ""
+            modelsDevFieldCache[key] = value
+            return value
+        } catch {
+            return ""
+        }
     }
 
     func saveModelsDevFields(providerID: String, fields: [String: String]) {
         do {
             for (name, value) in fields {
+                let key = modelsDevFieldKey(providerID: providerID, fieldName: name)
                 try credentialStore?.saveSecret(
                     value.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
-                    key: modelsDevFieldKey(providerID: providerID, fieldName: name)
+                    key: key
                 )
+                modelsDevFieldCache.removeValue(forKey: key)
             }
             statusMessage = L10n.text("保存しました")
             errorMessage = nil
@@ -326,13 +354,12 @@ final class SettingsViewModel: ObservableObject {
             return
         }
         do {
-            try credentialStore?.saveSecret(
-                normalized.nilIfBlank,
-                key: modelsDevFieldKey(
-                    providerID: providerID,
-                    fieldName: ModelsDevReasoningPreference.fieldName(modelID: modelID)
-                )
+            let key = modelsDevFieldKey(
+                providerID: providerID,
+                fieldName: ModelsDevReasoningPreference.fieldName(modelID: modelID)
             )
+            try credentialStore?.saveSecret(normalized.nilIfBlank, key: key)
+            modelsDevFieldCache.removeValue(forKey: key)
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -344,6 +371,7 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func flushPendingSettingsSave() {
+        guard autoSaveWorkItem != nil else { return }
         autoSaveWorkItem?.cancel()
         autoSaveWorkItem = nil
         persistSettings(showSuccessMessage: false)
@@ -351,6 +379,7 @@ final class SettingsViewModel: ObservableObject {
 
     private func setupAutoSave() {
         $settings
+            .removeDuplicates()
             .dropFirst()
             .sink { [weak self] _ in
                 self?.scheduleAutoSave()
@@ -358,6 +387,7 @@ final class SettingsViewModel: ObservableObject {
             .store(in: &cancellables)
 
         $alibabaMCPAuthorizationTokenInput
+            .removeDuplicates()
             .dropFirst()
             .sink { [weak self] _ in
                 self?.scheduleAutoSave()
@@ -365,6 +395,7 @@ final class SettingsViewModel: ObservableObject {
             .store(in: &cancellables)
 
         $apiKeyDraft
+            .removeDuplicates()
             .dropFirst()
             .sink { [weak self] value in
                 guard let self else { return }
@@ -378,6 +409,7 @@ final class SettingsViewModel: ObservableObject {
             .store(in: &cancellables)
 
         $openAICompatApiKeyInput
+            .removeDuplicates()
             .dropFirst()
             .sink { [weak self] _ in
                 self?.scheduleAutoSave()
@@ -389,6 +421,7 @@ final class SettingsViewModel: ObservableObject {
         guard !isHydratingFromPersistence, !isPersistingSettings else { return }
         autoSaveWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
+            self?.autoSaveWorkItem = nil
             self?.persistSettings(showSuccessMessage: false)
         }
         autoSaveWorkItem = work
@@ -452,6 +485,8 @@ final class SettingsViewModel: ObservableObject {
 
     private func persistSettings(showSuccessMessage: Bool) {
         guard let repository else { return }
+        autoSaveWorkItem?.cancel()
+        autoSaveWorkItem = nil
         isPersistingSettings = true
         defer { isPersistingSettings = false }
 
@@ -491,6 +526,9 @@ final class SettingsViewModel: ObservableObject {
                 )
                 throw error
             }
+            // Ignore our own database observation even when a rejected MCP draft
+            // intentionally differs from the values saved to persistence.
+            persistedSettingsSnapshot = persisted
             if !hasInvalidMCP {
                 settings = persisted
             }
@@ -562,6 +600,7 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func setProvider(_ provider: String) {
+        modelsDevFieldCache.removeAll()
         let nextProvider = provider.uppercased()
         let currentProvider = settings.apiProvider.uppercased()
         apiKeyDraftsByProvider[currentProvider] = apiKeyDraft
@@ -1093,12 +1132,18 @@ final class SettingsViewModel: ObservableObject {
 
     func refreshDiagnosticsLog() {
         #if DEBUG
-        diagnosticsLogText = DiagnosticsLogger.read()
+        diagnosticsReadTask?.cancel()
+        diagnosticsReadTask = Task { [weak self] in
+            let text = await Task.detached(priority: .utility) { DiagnosticsLogger.read() }.value
+            guard !Task.isCancelled, let self, self.diagnosticsLogText != text else { return }
+            self.diagnosticsLogText = text
+        }
         #endif
     }
 
     func clearDiagnosticsLog() {
         #if DEBUG
+        diagnosticsReadTask?.cancel()
         DiagnosticsLogger.clear()
         diagnosticsLogText = ""
         statusMessage = L10n.text("診断ログをクリアしました")
@@ -1359,10 +1404,9 @@ final class SettingsViewModel: ObservableObject {
             // The visible draft is authoritative when the user taps refresh, even if
             // the settings debounce has not fired yet.
             if ProviderReference(persistedID: settings.apiProvider).modelsDevID == "opencode-go" {
-                try credentialStore.saveSecret(
-                    apiKey,
-                    key: modelsDevFieldKey(providerID: "opencode-go", fieldName: "OPENCODE_API_KEY")
-                )
+                let key = modelsDevFieldKey(providerID: "opencode-go", fieldName: "OPENCODE_API_KEY")
+                try credentialStore.saveSecret(apiKey, key: key)
+                modelsDevFieldCache.removeValue(forKey: key)
             } else {
                 try credentialStore.setCredential(apiKey, for: .openCodeGo)
             }

@@ -17,6 +17,7 @@ struct ConversationListScreen: View {
     var onSelect: (Int64) -> Void
     var onOpenSettings: () -> Void
     var onClose: (() -> Void)? = nil
+    var allowsRowSwipeActions = true
 
     @State private var navigationState: NavigationState = .conversations
     @State private var isDeleteConfirmationPresented = false
@@ -554,6 +555,14 @@ struct ConversationListScreen: View {
                 Label("選択", systemImage: "checkmark.circle")
             }
 
+            if !allowsRowSwipeActions {
+                Button(role: .destructive) {
+                    conversationPendingDeletion = entry.id
+                } label: {
+                    Label("削除", systemImage: "trash")
+                }
+            }
+
             if !viewModel.projects.isEmpty {
                 ForEach(viewModel.projects) { project in
                     Button {
@@ -575,7 +584,7 @@ struct ConversationListScreen: View {
             }
         })
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if !viewModel.isSelectionMode {
+            if allowsRowSwipeActions && !viewModel.isSelectionMode {
                 Button {
                     openConversation(id: entry.id)
                 } label: {

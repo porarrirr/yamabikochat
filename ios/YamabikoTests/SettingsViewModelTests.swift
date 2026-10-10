@@ -4,8 +4,11 @@ import GRDB
 
 private final class SettingsViewModelCredentialStore: SecureCredentialStore {
     private var storage: [String: String] = [:]
+    private(set) var readKeys: [String] = []
+    private(set) var savedKeys: [String] = []
 
     func saveSecret(_ value: String?, key: String) throws {
+        savedKeys.append(key)
         if let value {
             storage[key] = value
         } else {
@@ -14,7 +17,8 @@ private final class SettingsViewModelCredentialStore: SecureCredentialStore {
     }
 
     func readSecret(key: String) throws -> String? {
-        storage[key]
+        readKeys.append(key)
+        return storage[key]
     }
 
     func deleteSecret(key: String) throws {
@@ -504,6 +508,58 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testClosingUneditedSettingsDoesNotWriteCredentials() throws {
+        let fixture = try makeFixture()
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        let savedKeys = fixture.credentials.savedKeys
+
+        viewModel.flushPendingSettingsSave()
+        viewModel.flushPendingSettingsSave()
+
+        XCTAssertEqual(fixture.credentials.savedKeys, savedKeys)
+    }
+
+    @MainActor
+    func testCompletedAutoSaveDoesNotSaveAgainOnCloseAndAcceptsExternalUpdates() async throws {
+        let fixture = try makeFixture()
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.settings.themeMode = "DARK"
+        try await Task.sleep(nanoseconds: 900_000_000)
+        let savedKeys = fixture.credentials.savedKeys
+
+        viewModel.flushPendingSettingsSave()
+        XCTAssertEqual(fixture.credentials.savedKeys, savedKeys)
+
+        var externalSettings = try fixture.repository.loadSettings()
+        externalSettings.themeMode = "LIGHT"
+        try fixture.repository.saveSettings(externalSettings)
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(viewModel.settings.themeMode, "LIGHT")
+    }
+
+    @MainActor
+    func testCatalogCredentialReadsAreCachedAndInvalidatedAfterSave() throws {
+        let fixture = try makeFixture()
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        let key = ModelsDevReasoningPreference.fieldKey(providerID: "example", fieldName: "API_KEY")
+
+        for _ in 0..<20 {
+            XCTAssertEqual(viewModel.modelsDevField(providerID: "example", fieldName: "API_KEY"), "")
+        }
+        XCTAssertEqual(fixture.credentials.readKeys.filter { $0 == key }.count, 1)
+
+        viewModel.saveModelsDevFields(providerID: "example", fields: ["API_KEY": " new-key "])
+        XCTAssertEqual(viewModel.modelsDevField(providerID: "example", fieldName: "API_KEY"), "new-key")
+        XCTAssertEqual(fixture.credentials.readKeys.filter { $0 == key }.count, 2)
+
+        viewModel.saveModelsDevFields(providerID: "example", fields: ["API_KEY": ""])
+        XCTAssertEqual(viewModel.modelsDevField(providerID: "example", fieldName: "API_KEY"), "")
+    }
+
+    @MainActor
     func testAutoSavePersistsSettingsAfterDebounce() async throws {
         let fixture = try makeFixture()
         let viewModel = SettingsViewModel()
@@ -594,6 +650,23 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.errorMessage, L10n.text("Remote MCP URL に有効な https:// URL を入力してください。"))
         XCTAssertFalse(try fixture.repository.loadSettings().alibabaMCPEnabled)
         XCTAssertEqual(try fixture.repository.loadSettings().themeMode, "DARK")
+    }
+
+    @MainActor
+    func testInvalidMCPDraftSurvivesItsOwnSaveObservation() async throws {
+        let fixture = try makeFixture()
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.settings.alibabaMCPEnabled = true
+        viewModel.setAlibabaMCPServerURL("http://example.com/mcp")
+
+        viewModel.flushPendingSettingsSave()
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertEqual(viewModel.settings.alibabaMCPServerURL, "http://example.com/mcp")
+        XCTAssertTrue(viewModel.settings.alibabaMCPEnabled)
+        XCTAssertFalse(try fixture.repository.loadSettings().alibabaMCPEnabled)
+        XCTAssertEqual(viewModel.errorMessage, L10n.text("Remote MCP URL に有効な https:// URL を入力してください。"))
     }
 
     private func makeFixture(

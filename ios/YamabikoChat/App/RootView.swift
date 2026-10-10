@@ -43,66 +43,22 @@ struct RootView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @StateObject private var listViewModel = ConversationListViewModel()
-    @StateObject private var settingsViewModel = SettingsViewModel()
+    @StateObject private var settingsStore = SettingsViewModelStore()
     @State private var isSettingsPresented = false
     @State private var screenshotSettingsTab: SettingsScreen.SettingsTab?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
+    @State private var isCompactDrawerOpen = false
     @State private var dynamicColorEnabled = true
     @State private var themeColor = "BLUE_PURPLE"
     @State private var themeMode = "SYSTEM"
     @State private var keepSidebarAfterSecretDiscard = false
     @State private var privacyCoverVisible = false
 
+    private var settingsViewModel: SettingsViewModel { settingsStore.viewModel }
+
     var body: some View {
-        NavigationSplitView(
-            columnVisibility: $columnVisibility,
-            preferredCompactColumn: $preferredCompactColumn
-        ) {
-            ConversationListScreen(
-                viewModel: listViewModel,
-                selection: $appState.selectedConversationID,
-                onSelect: { id in
-                    selectConversation(id: id)
-                },
-                onOpenSettings: {
-                    isSettingsPresented = true
-                }
-            )
-            .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 360)
-        } detail: {
-            ZStack {
-                if let conversationID = appState.selectedConversationID {
-                    ConversationDetailHost(
-                        conversationID: conversationID,
-                        onSelectConversation: { id in
-                            selectConversation(id: id)
-                        }
-                    )
-                    .id(conversationID)
-                    .transition(.asymmetric(
-                        insertion: .offset(x: 28).combined(with: .opacity),
-                        removal: .opacity
-                    ))
-                } else {
-                    ContentUnavailableView {
-                        Label(L10n.text("会話を始めましょう"), systemImage: "bubble.left.and.bubble.right")
-                    } description: {
-                        Text(L10n.text("既存の会話を選ぶか、新しいチャットを作成してください。"))
-                    } actions: {
-                        Button {
-                            createConversationFromEmptyDetail()
-                        } label: {
-                            Label(L10n.text("新しいチャット"), systemImage: "square.and.pencil")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .accessibilityIdentifier("empty-detail-new-chat")
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+        navigationContent
         .task {
             listViewModel.bind(repository: container.chatRepository)
             if let settings = try? container.chatRepository.loadSettings() {
@@ -230,6 +186,80 @@ struct RootView: View {
         }
     }
 
+    @ViewBuilder
+    private var navigationContent: some View {
+        if horizontalSizeClass == .compact {
+            ConversationDrawer(
+                isOpen: $isCompactDrawerOpen,
+                hasConversation: appState.selectedConversationID != nil,
+                reduceMotion: reduceMotion
+            ) {
+                NavigationStack { conversationSidebar }
+                    .environmentObject(container)
+                    .environmentObject(appState)
+                    .tint(resolvedTintColor)
+            } detail: {
+                conversationDetail
+                    .environmentObject(container)
+                    .environmentObject(appState)
+                    .tint(resolvedTintColor)
+            }
+            .ignoresSafeArea()
+        } else {
+            NavigationSplitView(
+                columnVisibility: $columnVisibility,
+                preferredCompactColumn: $preferredCompactColumn
+            ) {
+                conversationSidebar
+                    .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 360)
+            } detail: {
+                conversationDetail
+            }
+        }
+    }
+
+    private var conversationSidebar: some View {
+        ConversationListScreen(
+            viewModel: listViewModel,
+            selection: $appState.selectedConversationID,
+            onSelect: { id in selectConversation(id: id) },
+            onOpenSettings: { isSettingsPresented = true },
+            allowsRowSwipeActions: horizontalSizeClass != .compact || appState.selectedConversationID == nil
+        )
+    }
+
+    private var conversationDetail: some View {
+        ZStack {
+            if let conversationID = appState.selectedConversationID {
+                ConversationDetailHost(
+                    conversationID: conversationID,
+                    onSelectConversation: { id in selectConversation(id: id) }
+                )
+                .id(conversationID)
+                .transition(horizontalSizeClass == .compact ? .identity : .asymmetric(
+                    insertion: .offset(x: 28).combined(with: .opacity),
+                    removal: .opacity
+                ))
+            } else {
+                ContentUnavailableView {
+                    Label(L10n.text("会話を始めましょう"), systemImage: "bubble.left.and.bubble.right")
+                } description: {
+                    Text(L10n.text("既存の会話を選ぶか、新しいチャットを作成してください。"))
+                } actions: {
+                    Button {
+                        createConversationFromEmptyDetail()
+                    } label: {
+                        Label(L10n.text("新しいチャット"), systemImage: "square.and.pencil")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .accessibilityIdentifier("empty-detail-new-chat")
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private var resolvedColorScheme: ColorScheme? {
         switch themeMode.uppercased() {
         case "LIGHT":
@@ -291,12 +321,21 @@ struct RootView: View {
 
         try? await Task.sleep(nanoseconds: 300_000_000)
 
+        // The list observation can arrive after the launch animation. Wait for
+        // actual data when routing directly to a conversation in UI fixtures.
+        var screenshotConversations = listViewModel.conversations
+        if screenshotConversations.isEmpty, launch.scene == .chat || launch.scene == .performance {
+            guard let entries = await listViewModel.$conversations.values.first(where: { !$0.isEmpty }),
+                  !Task.isCancelled else { return }
+            screenshotConversations = entries
+        }
+
         switch launch.scene {
         case .list:
             appState.selectedConversationID = nil
             setPreferredCompactColumn(.sidebar)
         case .chat:
-            if let conversationID = launch.conversationID ?? listViewModel.conversations.first?.id {
+            if let conversationID = launch.conversationID ?? screenshotConversations.first?.id {
                 selectConversation(id: conversationID)
             }
         case .temporaryChat:
@@ -306,7 +345,7 @@ struct RootView: View {
                 selectConversation(id: conversationID)
             }
         case .performance:
-            if let conversationID = listViewModel.conversations.first(where: {
+            if let conversationID = screenshotConversations.first(where: {
                 $0.title == "Timeline Performance Fixture"
             })?.id {
                 selectConversation(id: conversationID)
@@ -349,7 +388,7 @@ struct RootView: View {
         case .search(let term):
             listViewModel.selectedProjectId = nil
             listViewModel.searchFromSiri(term: term, conversations: container.conversationRepository)
-            appState.isConversationHistoryPresented = true
+            appState.requestConversationSidebarReveal()
             setPreferredCompactColumn(.sidebar)
         }
     }
@@ -417,6 +456,7 @@ struct RootView: View {
             return
         }
         preferredCompactColumn = column
+        isCompactDrawerOpen = column == .sidebar
     }
 
     private func createConversationFromEmptyDetail() {
@@ -475,7 +515,7 @@ private struct ConversationHistorySheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @ObservedObject var viewModel: ConversationListViewModel
-    @ObservedObject var settingsViewModel: SettingsViewModel
+    let settingsViewModel: SettingsViewModel
     @Binding var selection: Int64?
 
     let onSelect: (Int64) -> Void
@@ -502,4 +542,10 @@ private struct ConversationHistorySheet: View {
                 .environmentObject(container)
         }
     }
+}
+
+// Preserve one settings model without forwarding its publications to the chat tree.
+@MainActor
+private final class SettingsViewModelStore: ObservableObject {
+    let viewModel = SettingsViewModel()
 }

@@ -6,17 +6,11 @@ struct SettingsScreen: View {
     @EnvironmentObject private var container: AppContainer
     @Environment(\.dismiss) private var dismiss
 
-    @ObservedObject var viewModel: SettingsViewModel
+    let viewModel: SettingsViewModel
     var initialTab: SettingsTab? = nil
     @State private var navigationPath: [SettingsCategory] = []
-    #if DEBUG
-    @ScaledMetric(relativeTo: .subheadline) private var diagnosticsActionMinimumWidth = 120
-    @State private var showDiagnosticsSheet = false
-    #endif
+    @State private var hasPrefetchedConnectionCatalogs = false
     @State private var modelsDevFieldDrafts: [String: String] = [:]
-    @State private var showAgentSkillImporter = false
-    @State private var pendingAgentSkillDeletionName: String?
-    @State private var pendingSystemPromptPresetDeletionName: String?
 
     enum SettingsTab: String, Identifiable {
         case api
@@ -79,7 +73,12 @@ struct SettingsScreen: View {
             settingsIndex
             .navigationTitle("設定")
             .navigationDestination(for: SettingsCategory.self) { category in
-                settingsDetail(for: category)
+                SettingsDetailScreen(
+                    viewModel: viewModel,
+                    category: category,
+                    hasPrefetchedConnectionCatalogs: $hasPrefetchedConnectionCatalogs,
+                    modelsDevFieldDrafts: $modelsDevFieldDrafts
+                )
             }
             .toolbar {
                 if navigationPath.isEmpty {
@@ -89,51 +88,23 @@ struct SettingsScreen: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 4) {
-                    if let status = viewModel.statusMessage {
-                        Text(status)
-                            .font(.caption)
-                            .foregroundStyle(.green)
-                    }
-                    if let error = viewModel.errorMessage {
-                        HStack(alignment: .top) {
-                            Text(error)
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                            Spacer()
-                            Button {
-                                viewModel.errorMessage = nil
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .frame(width: 44, height: 44)
-                            }
-                            .accessibilityLabel(Text(L10n.text("エラーを閉じる")))
-                        }
-                        .padding(.horizontal, 12)
-                        .background(.regularMaterial)
-                        .accessibilityElement(children: .combine)
-                    }
-                }
+                SettingsStatusFooter(viewModel: viewModel)
             }
-            .task {
-                viewModel.bind(
-                    repository: container.chatRepository,
-                    credentialStore: container.credentialStore,
-                    modelsDevCatalogRepository: container.modelsDevCatalogRepository,
-                    skillRepository: container.skillRepository
-                )
-                viewModel.prefetchLatestModelCatalogs()
-            }
-            .onDisappear {
-                viewModel.flushPendingSettingsSave()
-            }
-            .onAppear {
-                #if DEBUG
-                viewModel.refreshDiagnosticsLog()
-                #endif
-                if let initialTab {
-                    navigationPath = [initialTab.category]
-                }
+        }
+        .task {
+            viewModel.bind(
+                repository: container.chatRepository,
+                credentialStore: container.credentialStore,
+                modelsDevCatalogRepository: container.modelsDevCatalogRepository,
+                skillRepository: container.skillRepository
+            )
+        }
+        .onDisappear {
+            viewModel.flushPendingSettingsSave()
+        }
+        .onAppear {
+            if let initialTab {
+                navigationPath = [initialTab.category]
             }
         }
     }
@@ -157,9 +128,23 @@ struct SettingsScreen: View {
             }
         }
     }
+}
 
-    @ViewBuilder
-    private func settingsDetail(for category: SettingsCategory) -> some View {
+// Model/usage updates should redraw the detail, without rebuilding navigation.
+private struct SettingsDetailScreen: View {
+    @ObservedObject var viewModel: SettingsViewModel
+    let category: SettingsScreen.SettingsCategory
+    @Binding var hasPrefetchedConnectionCatalogs: Bool
+    @Binding var modelsDevFieldDrafts: [String: String]
+    #if DEBUG
+    @ScaledMetric(relativeTo: .subheadline) private var diagnosticsActionMinimumWidth = 120
+    @State private var showDiagnosticsSheet = false
+    #endif
+    @State private var showAgentSkillImporter = false
+    @State private var pendingAgentSkillDeletionName: String?
+    @State private var pendingSystemPromptPresetDeletionName: String?
+
+    var body: some View {
         Form {
             switch category {
             case .connection:
@@ -174,6 +159,17 @@ struct SettingsScreen: View {
         }
         .navigationTitle(category.title)
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            if category == .connection, !hasPrefetchedConnectionCatalogs {
+                hasPrefetchedConnectionCatalogs = true
+                await viewModel.prefetchLatestModelCatalogs()
+            }
+            #if DEBUG
+            if category == .management {
+                viewModel.refreshDiagnosticsLog()
+            }
+            #endif
+        }
         .fileImporter(
             isPresented: $showAgentSkillImporter,
             allowedContentTypes: [UTType(filenameExtension: "md")!, .zip, .folder],
@@ -2500,5 +2496,37 @@ private extension String {
     func ifBlank(_ fallback: String) -> String {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? fallback : trimmed
+    }
+}
+
+private struct SettingsStatusFooter: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        VStack(spacing: 4) {
+            if let status = viewModel.statusMessage {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+            if let error = viewModel.errorMessage {
+                HStack(alignment: .top) {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                    Spacer()
+                    Button {
+                        viewModel.errorMessage = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel(Text(L10n.text("エラーを閉じる")))
+                }
+                .padding(.horizontal, 12)
+                .background(.regularMaterial)
+                .accessibilityElement(children: .combine)
+            }
+        }
     }
 }
