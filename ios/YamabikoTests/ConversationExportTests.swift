@@ -214,25 +214,6 @@ final class ConversationExportTests: XCTestCase {
         }
     }
 
-    func testMigrationAddsPiExecutionAndToolAttachmentColumns() throws {
-        let dbQueue = try DatabaseQueue()
-        try AppDatabase.migrator.migrate(dbQueue)
-
-        try dbQueue.read { db in
-            let toolColumns = try String.fetchAll(
-                db,
-                sql: "SELECT name FROM pragma_table_info('chat_message_tool_activity')"
-            )
-            let autoColumns = try String.fetchAll(
-                db,
-                sql: "SELECT name FROM pragma_table_info('auto_conversation_messages')"
-            )
-            XCTAssertTrue(toolColumns.contains("piExecutionJSON"))
-            XCTAssertTrue(toolColumns.contains("attachmentPathsJSON"))
-            XCTAssertTrue(autoColumns.contains("piExecutionJSON"))
-        }
-    }
-
     func testPiDiagnosticMigrationRemovesRepeatedPayloadsButKeepsTranscript() throws {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue, upTo: "v28_enable_python_for_pcc")

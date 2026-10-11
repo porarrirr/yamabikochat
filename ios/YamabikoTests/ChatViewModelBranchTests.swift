@@ -104,31 +104,49 @@ final class ChatViewModelBranchTests: XCTestCase {
         XCTAssertNil(viewModel.errorMessage)
     }
 
-    func testCodexReasoningEffortConfigurationUsesModelContractAndPersistsSelection() throws {
-        let fixture = try makeFixture()
+    func testCodexReasoningEffortConfigurationUsesAccountCatalogAndPersistsSelection() async throws {
+        let auth = CodexAuthRepository(
+            credentialStore: PiAuthTestCredentialStore(),
+            loginHandler: { host, _, _ in chatGPTResolution(hostID: host) },
+            resolveHandler: { _, _, _ in chatGPTResolution() },
+            catalogHandler: { _, _ in
+                [PiCodexModel(id: "account-model", name: "Account Model", supported: true,
+                              supportedThinkingLevels: ["low", "medium", "high"])]
+            }
+        )
+        _ = await auth.loginWithBrowser()
+        let fixture = try makeFixture(codexAuthRepository: auth)
         var settings = try fixture.repository.loadSettings()
         settings.apiProvider = "CODEX_AUTH"
-        settings.defaultModel = "gpt-5.6-terra"
+        settings.defaultModel = "account-model"
         settings.codexReasoningEnabled = true
         settings.codexReasoningEffort = "medium"
         try fixture.repository.saveSettings(settings)
 
+        XCTAssertNil(fixture.repository.reasoningEffortConfiguration(
+            settings: settings, provider: "CODEX_AUTH", model: "account-model"
+        ), "Options must not be guessed before the account catalog arrives")
+        _ = try await auth.models(contracts: [:])
         let configuration = fixture.repository.reasoningEffortConfiguration(
             settings: settings,
             provider: "CODEX_AUTH",
-            model: "gpt-5.6-terra"
+            model: "account-model"
         )
 
-        XCTAssertEqual(configuration?.modelLabel, "GPT-5.6-Terra")
-        XCTAssertEqual(configuration?.options, ["low", "medium", "high", "xhigh", "max", "ultra"])
+        XCTAssertEqual(configuration?.modelLabel, "Account Model")
+        XCTAssertEqual(configuration?.options, ["low", "medium", "high"])
         XCTAssertEqual(configuration?.selectedValue, "medium")
 
         try fixture.repository.setReasoningEffort(
-            "xhigh",
+            "high",
             provider: "CODEX_AUTH",
-            model: "gpt-5.6-terra"
+            model: "account-model"
         )
-        XCTAssertEqual(try fixture.repository.loadSettings().codexReasoningEffort, "xhigh")
+        XCTAssertEqual(try fixture.repository.loadSettings().codexReasoningEffort, "high")
+        XCTAssertThrowsError(try fixture.repository.setReasoningEffort(
+            "xhigh", provider: "CODEX_AUTH", model: "account-model"
+        ))
+        XCTAssertEqual(try fixture.repository.loadSettings().codexReasoningEffort, "high")
     }
 
     func testPCCReasoningEffortConfigurationUsesPCCContractAndPersistsSelection() throws {
@@ -358,7 +376,8 @@ final class ChatViewModelBranchTests: XCTestCase {
     }
 
     private func makeFixture(
-        modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil
+        modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
+        codexAuthRepository: CodexAuthRepository? = nil
     ) throws -> (
         repository: ChatRepository,
         conversations: ConversationRepository,
@@ -379,7 +398,8 @@ final class ChatViewModelBranchTests: XCTestCase {
             conversations: conversations,
             credentials: credentials,
             modelService: modelService,
-            modelsDevCatalogRepository: modelsDevCatalogRepository
+            modelsDevCatalogRepository: modelsDevCatalogRepository,
+            codexAuthRepository: codexAuthRepository
         )
         return (repository, conversations, credentials, modelService)
     }

@@ -542,7 +542,9 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         if let zaiModel = models["ZAI"] {
             models["ZAI"] = ZAICodingPlanModelCatalog.migrateLegacyModel(zaiModel)
         }
-        if let data = try? JSONEncoder().encode(models),
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        if let data = try? encoder.encode(models),
            let json = String(data: data, encoding: .utf8) {
             providerDefaultModelsJSON = json
         }
@@ -585,7 +587,9 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
                 remappedModels[newKey] = value
             }
         }
-        if let data = try? JSONEncoder().encode(remappedModels),
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        if let data = try? encoder.encode(remappedModels),
            let json = String(data: data, encoding: .utf8) {
             providerDefaultModelsJSON = json
         }
@@ -595,7 +599,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         for (key, value) in visibility {
             remappedVisibility[remap(key)] = value
         }
-        if let data = try? JSONEncoder().encode(remappedVisibility),
+        if let data = try? encoder.encode(remappedVisibility),
            let json = String(data: data, encoding: .utf8) {
             showGlobalProviderPresetsInChatByProviderJSON = json
         }
@@ -753,7 +757,9 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         }
         var models = providerModelMap()
         if apiProvider.uppercased() == "APPLE_INTELLIGENCE" { models["APPLE_INTELLIGENCE"] = defaultModel }
-        if let data = try? JSONEncoder().encode(models), let json = String(data: data, encoding: .utf8) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        if let data = try? encoder.encode(models), let json = String(data: data, encoding: .utf8) {
             providerDefaultModelsJSON = json
         }
 

@@ -3,6 +3,22 @@ import GRDB
 @testable import YamabikoChat
 
 final class AppSettingsTests: XCTestCase {
+    func testNormalizationIsStableAcrossSaveAndReload() throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let repository = SettingsRepository(dbQueue: database)
+        var settings = AppSettings()
+        settings.providerDefaultModelsJSON = #"{"OPENROUTER":"saved-router-model","OPENAI":"saved-openai-model","GEMINI":"saved-gemini-model"}"#
+        settings.showGlobalProviderPresetsInChatByProviderJSON = #"{"OPENROUTER":true,"OPENAI":false,"GEMINI":true}"#
+        let normalized = settings.normalizedForPersistence()
+
+        try repository.save(normalized)
+        let reloaded = try repository.load()
+
+        XCTAssertEqual(reloaded, normalized, "Saving unchanged settings must not look like an external edit")
+        XCTAssertEqual(reloaded.normalizedForPersistence(), reloaded)
+    }
+
     func testPythonToolIsEnabledByDefault() {
         XCTAssertTrue(AppSettings().pythonToolEnabled)
     }

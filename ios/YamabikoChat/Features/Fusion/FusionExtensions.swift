@@ -12,7 +12,10 @@ extension AppSettings {
     }
 
     func encodeFusionCustomPreset(_ definition: FusionPresetDefinition) -> String {
-        guard let data = try? JSONEncoder().encode(definition),
+        // Settings equality drives autosave and distinguishes our own DB updates.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(definition),
               let json = String(data: data, encoding: .utf8) else {
             return ""
         }

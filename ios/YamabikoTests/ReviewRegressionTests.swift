@@ -54,13 +54,21 @@ final class ReviewRegressionTests: XCTestCase {
     }
 
     func testShareInboxIsDurableDistinctAndIdempotent() throws {
-        let db = try DatabaseQueue()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("share.sqlite").path
+        let db = try DatabaseQueue(path: path)
         try AppDatabase.migrator.migrate(db)
         let repository = ConversationRepository(dbQueue: db)
         let first = try XCTUnwrap(repository.importShare(payloadID: "first", text: "one", model: "model", provider: "provider", systemPrompt: nil))
         let second = try XCTUnwrap(repository.importShare(payloadID: "second", text: "two", model: "model", provider: "provider", systemPrompt: nil))
         XCTAssertNotEqual(first, second)
-        let restarted = ConversationRepository(dbQueue: db)
+        try db.close()
+        let reopened = try DatabaseQueue(path: path)
+        defer { try? reopened.close() }
+        try AppDatabase.migrator.migrate(reopened)
+        let restarted = ConversationRepository(dbQueue: reopened)
         XCTAssertEqual(try restarted.shareImportText(conversationID: first), "one")
         XCTAssertEqual(try restarted.shareImportText(conversationID: second), "two")
         XCTAssertEqual(try restarted.importShare(payloadID: "first", text: "changed", model: "model", provider: "provider", systemPrompt: nil), first)

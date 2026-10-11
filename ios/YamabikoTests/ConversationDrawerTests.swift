@@ -101,6 +101,123 @@ final class ConversationDrawerTests: XCTestCase {
         }
     }
 
+    func testDragKeepsContentSizeAndSafeAreaStableAndCancellationRestoresChat() async throws {
+        let (controller, window) = try makeVisibleDrawer()
+        defer { window.isHidden = true }
+        try await Task.sleep(for: .milliseconds(100))
+        let detail = controller.detailHost.view!
+        let card = try XCTUnwrap(detail.superview)
+        let initialBounds = detail.bounds
+        let initialSafeArea = detail.safeAreaInsets
+        let pan = DrawerTestPanGestureRecognizer()
+
+        sendPan(pan, to: controller, state: .began, translation: 0)
+        for distance in stride(from: CGFloat(10), through: 240, by: 10) {
+            sendPan(pan, to: controller, state: .changed, translation: distance)
+            controller.view.layoutIfNeeded()
+            detail.layoutIfNeeded()
+            XCTAssertEqual(card.frame.minX, distance, accuracy: 0.1)
+            XCTAssertEqual(detail.bounds, initialBounds)
+            XCTAssertEqual(detail.safeAreaInsets, initialSafeArea)
+        }
+
+        sendPan(pan, to: controller, state: .cancelled, translation: 240)
+        XCTAssertEqual(card.frame.minX, 0, accuracy: 0.1)
+        XCTAssertTrue(detail.isUserInteractionEnabled)
+        XCTAssertFalse(detail.accessibilityElementsHidden)
+    }
+
+    func testClosingKeepsBackdropVisibleUntilAnimationFinishes() async throws {
+        let (controller, window) = try makeVisibleDrawer()
+        defer { window.isHidden = true }
+        controller.configure(isOpen: true, hasConversation: true, reduceMotion: true)
+        try await Task.sleep(for: .milliseconds(100))
+        let card = try XCTUnwrap(controller.detailHost.view.superview)
+        let backdrop = try XCTUnwrap(card.subviews.compactMap { $0 as? UIButton }.first)
+
+        controller.configure(isOpen: false, hasConversation: true, reduceMotion: false)
+        XCTAssertFalse(backdrop.isHidden, "The scrim must fade with the card instead of disappearing at release")
+        XCTAssertFalse(controller.detailHost.view.isUserInteractionEnabled)
+
+        try await Task.sleep(for: .milliseconds(350))
+        XCTAssertTrue(backdrop.isHidden)
+        XCTAssertTrue(controller.detailHost.view.isUserInteractionEnabled)
+        XCTAssertEqual(card.frame.minX, 0, accuracy: 0.1)
+    }
+
+    func testGrabbingAnimationKeepsPositionCornersAndBackdropTogether() async throws {
+        let (controller, window) = try makeVisibleDrawer()
+        defer { window.isHidden = true }
+        try await Task.sleep(for: .milliseconds(100))
+        let card = try XCTUnwrap(controller.detailHost.view.superview)
+        let backdrop = try XCTUnwrap(card.subviews.compactMap { $0 as? UIButton }.first)
+        let width = ConversationDrawerGesturePolicy.sidebarWidth(containerWidth: controller.view.bounds.width)
+
+        controller.configure(isOpen: true, hasConversation: true, reduceMotion: false)
+        try await Task.sleep(for: .milliseconds(60))
+        let visibleOffset = try XCTUnwrap(card.layer.presentation()).frame.minX
+        XCTAssertGreaterThan(visibleOffset, 0)
+        XCTAssertLessThan(visibleOffset, width)
+
+        let pan = DrawerTestPanGestureRecognizer()
+        sendPan(pan, to: controller, state: .began, translation: 0)
+        XCTAssertEqual(card.frame.minX, visibleOffset, accuracy: 1)
+        sendPan(pan, to: controller, state: .changed, translation: -20)
+        let draggedOffset = max(0, visibleOffset - 20)
+        try await Task.sleep(for: .milliseconds(60))
+
+        XCTAssertEqual(card.layer.presentation()?.frame.minX ?? card.frame.minX, draggedOffset, accuracy: 1)
+        XCTAssertEqual(
+            CGFloat(backdrop.layer.presentation()?.opacity ?? backdrop.layer.opacity),
+            draggedOffset / width, accuracy: 0.02
+        )
+        XCTAssertEqual(card.layer.presentation()?.cornerRadius ?? card.layer.cornerRadius,
+                       24 * draggedOffset / width, accuracy: 0.5)
+
+        sendPan(pan, to: controller, state: .cancelled, translation: -20)
+        try await Task.sleep(for: .milliseconds(350))
+        XCTAssertEqual(card.frame.minX, width, accuracy: 0.1)
+    }
+
+    func testResizeDuringDragUsesCommittedStateAndNewWidth() throws {
+        let (controller, window) = try makeVisibleDrawer()
+        defer { window.isHidden = true }
+        controller.configure(isOpen: true, hasConversation: true, reduceMotion: true)
+        let card = try XCTUnwrap(controller.detailHost.view.superview)
+        let pan = DrawerTestPanGestureRecognizer()
+        sendPan(pan, to: controller, state: .began, translation: 0)
+        sendPan(pan, to: controller, state: .changed, translation: -80)
+
+        controller.view.frame.size = CGSize(width: 600, height: 390)
+        controller.view.setNeedsLayout()
+        controller.view.layoutIfNeeded()
+        XCTAssertEqual(card.frame.minX, 420, accuracy: 0.1)
+        XCTAssertEqual(controller.detailHost.view.bounds.size, CGSize(width: 600, height: 390))
+    }
+
+    private func makeVisibleDrawer() throws -> (ConversationDrawerController<Text, Text>, UIWindow) {
+        let controller = ConversationDrawerController(sidebar: Text("List"), detail: Text("Chat"))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        controller.configure(isOpen: false, hasConversation: true, reduceMotion: true)
+        window.layoutIfNeeded()
+        controller.view.layoutIfNeeded()
+        return (controller, window)
+    }
+
+    private func sendPan(
+        _ pan: DrawerTestPanGestureRecognizer,
+        to controller: ConversationDrawerController<Text, Text>,
+        state: UIGestureRecognizer.State,
+        translation: CGFloat
+    ) {
+        pan.simulatedState = state
+        pan.simulatedTranslation = CGPoint(x: translation, y: 0)
+        controller.perform(NSSelectorFromString("handlePan:"), with: pan)
+    }
+
     private func canBegin(x: CGFloat, y: CGFloat, isOpen: Bool = false) -> Bool {
         ConversationDrawerGesturePolicy.canBegin(
             translation: CGPoint(x: x, y: y), velocity: CGPoint(x: x * 10, y: y * 10), isOpen: isOpen
@@ -114,4 +231,17 @@ final class ConversationDrawerTests: XCTestCase {
     private func isInteractive(_ view: UIView, dismissalView: UIView) -> Bool {
         ConversationDrawerGesturePolicy.isInteractiveContent(view, dismissalView: dismissalView)
     }
+}
+
+@MainActor
+private final class DrawerTestPanGestureRecognizer: UIPanGestureRecognizer {
+    var simulatedState: UIGestureRecognizer.State = .possible
+    var simulatedTranslation = CGPoint.zero
+
+    override var state: UIGestureRecognizer.State {
+        get { simulatedState }
+        set { simulatedState = newValue }
+    }
+    override func translation(in view: UIView?) -> CGPoint { simulatedTranslation }
+    override func velocity(in view: UIView?) -> CGPoint { .zero }
 }

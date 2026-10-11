@@ -133,7 +133,9 @@ final class ChatRepositorySyncTests: XCTestCase {
                 attachments: []
             )
             XCTFail("Expected sendMessage to fail without credentials in test fixture.")
-        } catch {}
+        } catch ProviderClientError.missingCredential {} catch {
+            XCTFail("Unexpected failure: \(error)")
+        }
 
         let updated = try fixture.repository.conversation(id: conversationID)
         XCTAssertEqual(updated?.title, "New Chat")
@@ -141,7 +143,9 @@ final class ChatRepositorySyncTests: XCTestCase {
 
     func testFailedResponsesDoNotRenameSecretConversation() async throws {
         let fixture = try makeFixture()
-        let conversationID = try fixture.repository.createConversation(title: "Secret Chat")
+        let conversationID = try fixture.repository.createSecretConversation()
+        defer { SecretConversationVault.shared.destroy(conversationID: conversationID) }
+        XCTAssertEqual(try fixture.repository.conversation(id: conversationID)?.isSecret, true)
 
         do {
             _ = try await fixture.repository.sendMessage(
@@ -150,7 +154,9 @@ final class ChatRepositorySyncTests: XCTestCase {
                 attachments: []
             )
             XCTFail("Expected sendMessage to fail without credentials in test fixture.")
-        } catch {}
+        } catch ProviderClientError.missingCredential {} catch {
+            XCTFail("Unexpected failure: \(error)")
+        }
 
         do {
             _ = try await fixture.repository.sendMessage(
@@ -159,7 +165,9 @@ final class ChatRepositorySyncTests: XCTestCase {
                 attachments: []
             )
             XCTFail("Expected sendMessage to fail without credentials in test fixture.")
-        } catch {}
+        } catch ProviderClientError.missingCredential {} catch {
+            XCTFail("Unexpected failure: \(error)")
+        }
 
         let updated = try fixture.repository.conversation(id: conversationID)
         XCTAssertEqual(updated?.title, "Secret Chat")

@@ -502,8 +502,76 @@ final class ChatStreamSessionTests: XCTestCase {
         XCTAssertNil(try conversations.streamCheckpoint(messageId: messageId, variantId: nil))
     }
 
-    func testInterruptedStreamCheckpointRecoversOnColdLaunch() throws {
-        let dbQueue = try DatabaseQueue()
+    func testCancellationCommitsPartialMessageOrVariantAndStopsRunningTools() async throws {
+        for useVariant in [false, true] {
+            let conversations = try makeConversations()
+            let conversationID = try conversations.createConversation(title: "Cancellation", model: "model", provider: "OPENAI")
+            let messageID = try conversations.insertMessage(
+                ChatMessage(conversationId: conversationID, role: "model", text: useVariant ? "original answer" : "")
+            )
+            let variantID = useVariant
+                ? try XCTUnwrap(conversations.insertMessageVariant(baseMessageId: messageID, text: "").id)
+                : nil
+            let kind: ChatStreamPersistenceKind = variantID.map {
+                .variant(variantId: $0, snapshotMessageId: messageID)
+            } ?? .message(messageId: messageID)
+            let (stream, continuation) = AsyncThrowingStream<ProviderStreamEvent, Error>.makeStream()
+            defer { continuation.finish() }
+            let toolStarted = expectation(description: "Partial answer and running tool are visible")
+            let snapshots = StreamingSnapshotCollector()
+            let task = Task {
+                try await ChatStreamSession.run(
+                    stream: stream,
+                    conversations: conversations,
+                    kind: kind,
+                    onStreamEvent: nil,
+                    onStreamingSnapshot: { snapshot in
+                        snapshots.append(snapshot)
+                        if !snapshot.isFinal, snapshot.toolActivity?.steps.first?.status == .running {
+                            toolStarted.fulfill()
+                        }
+                    }
+                )
+            }
+            continuation.yield(.textDelta("partial answer"))
+            continuation.yield(.reasoningDelta("saved reasoning"))
+            continuation.yield(.toolActivity(ToolActivityEvent(
+                phase: .started,
+                call: ToolCall(id: "pending-tool", name: WebSearchTool.name, argumentsJSON: #"{"query":"test"}"#),
+                result: nil,
+                createdAtMs: 1
+            )))
+            await fulfillment(of: [toolStarted], timeout: 2)
+
+            task.cancel()
+            do {
+                _ = try await task.value
+                XCTFail("User cancellation must not report a successful response")
+            } catch is CancellationError {} catch {
+                XCTFail("Unexpected failure: \(error)")
+            }
+
+            let saved = try XCTUnwrap(conversations.fetchFullMessage(id: messageID))
+            let text = useVariant ? try XCTUnwrap(saved.variants.first).text : saved.message.text
+            let thinking = useVariant ? saved.variants.first?.thinkingStream : saved.thinkingStream
+            let activity = variantID.map { saved.variantToolActivities[$0] } ?? saved.toolActivity
+            XCTAssertTrue(text.hasPrefix("partial answer"))
+            XCTAssertEqual(thinking, "saved reasoning")
+            XCTAssertEqual(activity?.steps.first?.status, .failed)
+            if useVariant { XCTAssertEqual(saved.message.text, "original answer") }
+            XCTAssertNil(try conversations.streamCheckpoint(messageId: useVariant ? nil : messageID, variantId: variantID))
+            XCTAssertEqual(snapshots.values.last?.isFinal, true)
+            XCTAssertEqual(snapshots.values.last?.targetId, messageID)
+            XCTAssertEqual(snapshots.values.last?.text, text)
+        }
+    }
+
+    func testInterruptedMessageAndVariantCheckpointsRecoverAfterDatabaseReopens() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("recovery.sqlite").path
+        let dbQueue = try DatabaseQueue(path: path)
         try AppDatabase.migrator.migrate(dbQueue)
         let conversations = ConversationRepository(dbQueue: dbQueue)
         let conversationId = try conversations.createConversation(
@@ -520,12 +588,31 @@ final class ChatStreamSessionTests: XCTestCase {
             text: "recovered",
             thinking: "saved reasoning"
         )
+        let originalID = try conversations.insertMessage(
+            ChatMessage(conversationId: conversationId, role: "model", text: "original answer", createdAtMs: 2)
+        )
+        let variantID = try XCTUnwrap(conversations.insertMessageVariant(baseMessageId: originalID, text: "").id)
+        try conversations.saveStreamCheckpoint(
+            messageId: nil, variantId: variantID, text: "recovered variant", thinking: "variant reasoning"
+        )
+        try dbQueue.close()
 
-        try AppDatabase.recoverStreamCheckpoints(in: dbQueue)
+        let reopened = try DatabaseQueue(path: path)
+        defer { try? reopened.close() }
+        try AppDatabase.migrator.migrate(reopened)
+        try AppDatabase.recoverStreamCheckpoints(in: reopened)
+        let recovered = ConversationRepository(dbQueue: reopened)
 
-        XCTAssertEqual(try conversations.fetchMessages(conversationId: conversationId).last?.text, "recovered")
-        XCTAssertEqual(try conversations.fetchFullMessage(id: messageId)?.thinkingStream, "saved reasoning")
-        XCTAssertNil(try conversations.streamCheckpoint(messageId: messageId, variantId: nil))
+        XCTAssertEqual(try recovered.fetchFullMessage(id: messageId)?.message.text, "recovered")
+        XCTAssertEqual(try recovered.fetchFullMessage(id: messageId)?.thinkingStream, "saved reasoning")
+        let original = try XCTUnwrap(recovered.fetchFullMessage(id: originalID))
+        XCTAssertEqual(original.message.text, "original answer")
+        XCTAssertEqual(original.variants.first?.text, "recovered variant")
+        XCTAssertEqual(original.variants.first?.thinkingStream, "variant reasoning")
+        XCTAssertNil(try recovered.streamCheckpoint(messageId: messageId, variantId: nil))
+        XCTAssertNil(try recovered.streamCheckpoint(messageId: nil, variantId: variantID))
+        try AppDatabase.recoverStreamCheckpoints(in: reopened)
+        XCTAssertEqual(try recovered.fetchFullMessage(id: originalID), original)
     }
 
     private func makeConversations() throws -> ConversationRepository {

@@ -69,7 +69,7 @@ enum ChatRepositoryTestSupport {
         let fusionService = FusionService(
             settingsRepository: settings,
             providerGateway: providers,
-            pricingRepository: pricingRepository ?? LiteLlmPricingRepository(),
+            pricingRepository: pricingRepository ?? FusionNoopPricingRepository(),
             traceStore: fusionTraceStore,
             requestSettingsResolver: requestSettingsResolver
         )
@@ -84,7 +84,7 @@ enum ChatRepositoryTestSupport {
             codexAuthRepository: codexAuth,
             superGrokAuthRepository: superGrokAuth,
             openCodeGoUsageRepository: openCodeGoUsageRepository,
-            pricingRepository: pricingRepository ?? LiteLlmPricingRepository(),
+            pricingRepository: pricingRepository ?? FusionNoopPricingRepository(),
             fusionService: fusionService,
             fusionTraceStore: fusionTraceStore,
             conversationTitleGenerator: conversationTitleGenerator

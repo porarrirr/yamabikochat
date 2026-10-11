@@ -36,6 +36,10 @@ final class AppStoreScreenshotTests: XCTestCase {
     }
 
     func testCaptureAppStoreScreenshots() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["YAMABIKO_CAPTURE_SCREENSHOTS"] == "1",
+            "App Store capture is opt-in; set YAMABIKO_CAPTURE_SCREENSHOTS=1 in the test scheme environment."
+        )
         let app = XCUIApplication()
         app.launchArguments = ["-AppStoreScreenshotDemo"]
         app.launch()

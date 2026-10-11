@@ -6,8 +6,10 @@ private final class SettingsViewModelCredentialStore: SecureCredentialStore {
     private var storage: [String: String] = [:]
     private(set) var readKeys: [String] = []
     private(set) var savedKeys: [String] = []
+    var failingKey: String?
 
     func saveSecret(_ value: String?, key: String) throws {
+        if key == failingKey { throw KeychainStoreError.invalidEncoding }
         savedKeys.append(key)
         if let value {
             storage[key] = value
@@ -526,7 +528,10 @@ final class SettingsViewModelTests: XCTestCase {
         let viewModel = SettingsViewModel()
         viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
         viewModel.settings.themeMode = "DARK"
-        try await Task.sleep(nanoseconds: 900_000_000)
+        let saved = expectation(for: NSPredicate { _, _ in
+            (try? fixture.repository.loadSettings().themeMode) == "DARK"
+        }, evaluatedWith: nil)
+        await fulfillment(of: [saved], timeout: 2)
         let savedKeys = fixture.credentials.savedKeys
 
         viewModel.flushPendingSettingsSave()
@@ -535,7 +540,10 @@ final class SettingsViewModelTests: XCTestCase {
         var externalSettings = try fixture.repository.loadSettings()
         externalSettings.themeMode = "LIGHT"
         try fixture.repository.saveSettings(externalSettings)
-        try await Task.sleep(nanoseconds: 200_000_000)
+        let reloaded = expectation(for: NSPredicate { _, _ in
+            viewModel.settings.themeMode == "LIGHT"
+        }, evaluatedWith: nil)
+        await fulfillment(of: [reloaded], timeout: 2)
         XCTAssertEqual(viewModel.settings.themeMode, "LIGHT")
     }
 
@@ -565,12 +573,16 @@ final class SettingsViewModelTests: XCTestCase {
         let viewModel = SettingsViewModel()
         viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
         viewModel.settings.mathRenderingEnabled.toggle()
+        let expected = viewModel.settings.mathRenderingEnabled
 
-        try await Task.sleep(nanoseconds: 900_000_000)
+        let saved = expectation(for: NSPredicate { _, _ in
+            (try? fixture.repository.loadSettings().mathRenderingEnabled) == expected
+        }, evaluatedWith: nil)
+        await fulfillment(of: [saved], timeout: 2)
 
         XCTAssertEqual(
             try fixture.repository.loadSettings().mathRenderingEnabled,
-            viewModel.settings.mathRenderingEnabled
+            expected
         )
     }
 
@@ -585,9 +597,46 @@ final class SettingsViewModelTests: XCTestCase {
         viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
         viewModel.apiKeyDraft = "auto-saved-key"
 
-        try await Task.sleep(nanoseconds: 900_000_000)
+        let saved = expectation(for: NSPredicate { _, _ in
+            (try? fixture.credentials.credential(for: .openRouter)) == "auto-saved-key"
+        }, evaluatedWith: nil)
+        await fulfillment(of: [saved], timeout: 2)
 
         XCTAssertEqual(try fixture.credentials.credential(for: .openRouter), "auto-saved-key")
+    }
+
+    @MainActor
+    func testCredentialSaveFailureRollsBackSettingsAndKeepsDraftForRetry() throws {
+        let fixture = try makeFixture()
+        var original = try fixture.repository.loadSettings()
+        original.apiProvider = "OPENROUTER"
+        original.themeMode = "LIGHT"
+        try fixture.repository.saveSettings(original)
+        try fixture.credentials.setCredential("old-key", for: .openRouter)
+        try fixture.credentials.saveSecret("old-mcp-token", key: AppConstants.alibabaMCPAuthorizationTokenKey)
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.settings.themeMode = "DARK"
+        viewModel.apiKeyDraft = "new-key"
+        viewModel.alibabaMCPAuthorizationTokenInput = "new-mcp-token"
+        fixture.credentials.failingKey = "provider_key_OPENROUTER"
+
+        viewModel.saveSettings()
+
+        XCTAssertNotNil(viewModel.errorMessage)
+        XCTAssertNil(viewModel.statusMessage)
+        XCTAssertEqual(try fixture.repository.loadSettings().themeMode, "LIGHT")
+        XCTAssertEqual(try fixture.credentials.credential(for: .openRouter), "old-key")
+        XCTAssertEqual(try fixture.credentials.readSecret(key: AppConstants.alibabaMCPAuthorizationTokenKey), "old-mcp-token")
+        XCTAssertEqual(viewModel.apiKeyDraft, "new-key")
+
+        fixture.credentials.failingKey = nil
+        viewModel.saveSettings()
+
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertEqual(try fixture.repository.loadSettings().themeMode, "DARK")
+        XCTAssertEqual(try fixture.credentials.credential(for: .openRouter), "new-key")
+        XCTAssertEqual(try fixture.credentials.readSecret(key: AppConstants.alibabaMCPAuthorizationTokenKey), "new-mcp-token")
     }
 
     @MainActor

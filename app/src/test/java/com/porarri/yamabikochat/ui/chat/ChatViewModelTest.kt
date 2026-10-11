@@ -112,6 +112,10 @@ class ChatViewModelTest {
         assertNotNull("Error message should be set", viewModel.errorMessage.value)
         assertTrue("Error message should mention file size",
             viewModel.errorMessage.value?.contains("10MB制限を超えています") == true)
+
+        viewModel.clearErrorMessage()
+        assertNull("Dismissing the error must clear it", viewModel.errorMessage.value)
+        assertTrue(viewModel.attachments.value.isEmpty())
     }
     
     @Test
@@ -141,6 +145,12 @@ class ChatViewModelTest {
         
         viewModel.addAttachment(uri)
         advanceUntilIdle()
+        assertTrue(viewModel.attachments.value.contains(uri))
+        val invalidUri = mockk<Uri>()
+        coEvery { repository.validateFile(invalidUri) } returns FileValidationUtils.FileValidationResult.UnsupportedType
+        viewModel.addAttachment(invalidUri)
+        advanceUntilIdle()
+        assertNotNull(viewModel.errorMessage.value)
         
         // When
         viewModel.removeAttachment(uri)
@@ -148,36 +158,6 @@ class ChatViewModelTest {
         // Then
         assertFalse("Should not contain removed attachment", viewModel.attachments.value.contains(uri))
         assertNull("Error message should be cleared", viewModel.errorMessage.value)
-    }
-    
-    @Test
-    fun `clearErrorMessage should clear error state`() = runTest {
-        // Given
-        val uri = mockk<Uri>()
-        val invalidResult = FileValidationUtils.FileValidationResult.UnsupportedType
-        coEvery { repository.validateFile(uri) } returns invalidResult
-        
-        viewModel.addAttachment(uri)
-        advanceUntilIdle()
-        
-        // When
-        viewModel.clearErrorMessage()
-        
-        // Then
-        assertNull("Error message should be cleared", viewModel.errorMessage.value)
-    }
-
-    // メッセージ編集のテスト
-    @Test
-    fun `startEditing should set editing message`() = runTest {
-        // Given
-        val message = ChatMessage(id = 1L, conversationId = 1L, role = "user", text = "Test message")
-        
-        // When
-        viewModel.startEditing(message)
-        
-        // Then
-        assertEquals("Should set editing message", message, viewModel.editingMessage.value)
     }
     
     @Test
@@ -200,6 +180,7 @@ class ChatViewModelTest {
         // Given
         val original = ChatMessage(id = 10L, conversationId = 1L, role = "user", text = "Before")
         viewModel.startEditing(original)
+        assertEquals(original, viewModel.editingMessage.value)
         clearMocks(repository, answers = false, recordedCalls = true, verificationMarks = true)
 
         // When

@@ -89,6 +89,7 @@ final class ConversationDrawerController<Sidebar: View, Detail: View>: UIViewCon
     private var touchStartLocation = CGPoint.zero
     private var offset: CGFloat = 0
     private var previousSize = CGSize.zero
+    private var settlingAnimator: UIViewPropertyAnimator?
 
     init(sidebar: Sidebar, detail: Detail) {
         sidebarHost = UIHostingController(rootView: sidebar)
@@ -141,6 +142,8 @@ final class ConversationDrawerController<Sidebar: View, Detail: View>: UIViewCon
         if changed || !isConfigured {
             isDragging = false
             if isOpen { view.endEditing(true) }
+            view.setNeedsLayout()
+            view.layoutIfNeeded()
             settle(animated: animate)
         }
         isConfigured = true
@@ -150,49 +153,83 @@ final class ConversationDrawerController<Sidebar: View, Detail: View>: UIViewCon
         super.viewDidLayoutSubviews()
         if previousSize != view.bounds.size {
             // Rotation/resizing cancels an unfinished drag and uses the committed state.
+            stopSettling()
             isDragging = false
             pan.isEnabled = false
             pan.isEnabled = hasConversation
             previousSize = view.bounds.size
             offset = isOpen ? sidebarWidth : 0
+            updatePresentation()
         }
         layoutScreens()
+        updateInteraction()
     }
 
     private func layoutScreens() {
-        sidebarHost.view.frame = CGRect(
+        let sidebarFrame = CGRect(
             x: 0, y: 0,
             width: hasConversation ? sidebarWidth : view.bounds.width,
             height: view.bounds.height
         )
-        detailCard.frame = view.bounds.offsetBy(dx: offset, dy: 0)
-        detailHost.view.frame = detailCard.bounds
-        dismissalButton.frame = detailCard.bounds
+        if sidebarHost.view.frame != sidebarFrame {
+            sidebarHost.view.frame = sidebarFrame
+        }
+        // Keep hosted content geometry fixed. Dragging must not relayout the
+        // SwiftUI tree (and remeasure long messages) on every touch update.
+        if detailCard.bounds.size != view.bounds.size {
+            detailCard.bounds = CGRect(origin: .zero, size: view.bounds.size)
+            detailCard.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+            detailHost.view.frame = detailCard.bounds
+            dismissalButton.frame = detailCard.bounds
+        }
+    }
+
+    private func updatePresentation() {
+        detailCard.transform = CGAffineTransform(translationX: offset, y: 0)
         let progress = sidebarWidth > 0 ? offset / sidebarWidth : 0
         detailCard.layer.cornerRadius = 24 * progress
         dismissalButton.alpha = progress
-        dismissalButton.isHidden = !hasConversation || offset <= 0
+    }
+
+    private func updateInteraction() {
+        dismissalButton.isHidden = !hasConversation ||
+            (!isOpen && !isDragging && settlingAnimator == nil && offset <= 0)
         detailCard.isHidden = !hasConversation
         sidebarHost.view.accessibilityElementsHidden = hasConversation && !isOpen
         detailHost.view.accessibilityElementsHidden = isOpen
-        detailHost.view.isUserInteractionEnabled = !isOpen && !isDragging
+        detailHost.view.isUserInteractionEnabled = !isOpen && !isDragging && settlingAnimator == nil
     }
 
     private func settle(animated: Bool) {
+        stopSettling()
         let updates = {
             self.offset = self.isOpen ? self.sidebarWidth : 0
-            self.layoutScreens()
+            self.updatePresentation()
         }
         if animated {
-            UIView.animate(
-                withDuration: 0.25, delay: 0,
-                options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction],
-                animations: updates
-            )
+            let animator = UIViewPropertyAnimator(duration: 0.25, curve: .easeOut, animations: updates)
+            settlingAnimator = animator
+            updateInteraction()
+            animator.addCompletion { [weak self, weak animator] _ in
+                guard let self, let animator, self.settlingAnimator === animator else { return }
+                self.settlingAnimator = nil
+                self.updateInteraction()
+            }
+            animator.startAnimation()
         } else {
-            detailCard.layer.removeAllAnimations()
-            updates()
+            UIView.performWithoutAnimation(updates)
+            updateInteraction()
         }
+    }
+
+    private func stopSettling() {
+        guard let animator = settlingAnimator else { return }
+        // Capture the visible position before stopping all animated properties,
+        // including the scrim and corners, so a new drag cannot jump ahead.
+        offset = detailCard.layer.presentation()?.affineTransform().tx ?? detailCard.transform.tx
+        settlingAnimator = nil
+        animator.stopAnimation(true)
+        UIView.performWithoutAnimation { updatePresentation() }
     }
 
     @objc private func closeDrawer() {
@@ -247,20 +284,22 @@ final class ConversationDrawerController<Sidebar: View, Detail: View>: UIViewCon
         let translation = recognizer.translation(in: view).x
         switch recognizer.state {
         case .began:
-            dragStartOffset = detailCard.layer.presentation()?.frame.minX ?? offset
-            detailCard.layer.removeAllAnimations()
+            stopSettling()
+            dragStartOffset = offset
             isDragging = true
             view.endEditing(true)
+            updateInteraction()
             fallthrough
         case .changed:
             offset = min(sidebarWidth, max(0, dragStartOffset + translation))
-            layoutScreens()
+            updatePresentation()
         case .ended:
             commit(isOpen: ConversationDrawerGesturePolicy.shouldOpen(
                 offset: offset, width: sidebarWidth,
                 translation: translation, velocity: recognizer.velocity(in: view).x
             ))
         case .cancelled, .failed:
+            guard isDragging else { return }
             isDragging = false
             settle(animated: !reduceMotion)
         default:

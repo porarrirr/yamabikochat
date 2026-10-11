@@ -20,13 +20,14 @@ final class PCCSessionStoreTests: XCTestCase {
         XCTAssertEqual(omitted.canonical, explicitFalse.canonical)
     }
 
-    func testSameChatPreservesSDKSessionAndPrefixWithPerTurnUsage() async throws {
+    func testSameChatReusesSessionAndPreservesHistoryWithPerTurnUsage() async throws {
         guard #available(iOS 27.0, *) else { throw XCTSkip("Requires iOS 27") }
         let store = PCCSessionStore()
         let model = PCCCacheTestModel()
         var request = makeRequest(key: "conversation-1")
         let first = try await run(request, model: model, store: store)
         XCTAssertEqual(first.sessionReused, false)
+        XCTAssertEqual(first.usage?.cachedInputTokens, 0)
         request.context.messages += [assistant(first), .init(role: "user", content: .string("Next"))]
         let second = try await run(request, model: model, store: store)
         XCTAssertEqual(second.sessionReused, true)
@@ -34,6 +35,17 @@ final class PCCSessionStoreTests: XCTestCase {
         XCTAssertEqual(second.usage?.inputTokens, 100)
         XCTAssertEqual(second.usage?.outputTokens, 2)
         XCTAssertEqual(second.usage?.totalTokens, 102)
+        let requests = await model.state.requests
+        XCTAssertEqual(requests.count, 2)
+        let history = try XCTUnwrap(requests.last)
+        XCTAssertEqual(history.compactMap { entry -> String? in
+            guard case .prompt(let prompt) = entry else { return nil }
+            return text(prompt.segments)
+        }, ["Hello", "Next"])
+        XCTAssertEqual(history.compactMap { entry -> String? in
+            guard case .response(let response) = entry else { return nil }
+            return text(response.segments)
+        }, ["Answer"])
         let archived = try JSONDecoder().decode(Transcript.self, from: Data(try XCTUnwrap(second.transcript).utf8))
         XCTAssertEqual(archived.count, 1, "Only this turn is archived, not all earlier turns")
     }
@@ -119,6 +131,14 @@ final class PCCSessionStoreTests: XCTestCase {
         .init(context: .init(systemPrompt: "Stable instructions", messages: [.init(role: "user", content: .string("Hello"))]), reasoningLevel: "light", sessionID: key, contextSize: 32_768)
     }
 
+    @available(iOS 27.0, *)
+    private func text(_ segments: [Transcript.Segment]) -> String {
+        segments.compactMap { segment in
+            if case .text(let value) = segment { return value.content }
+            return nil
+        }.joined()
+    }
+
     private func definition(_ name: String) -> PCCNativeRequest.ToolDefinition {
         .init(name: name, description: name, parameters: .object(["type": .string("object"), "properties": .object([:])]))
     }
@@ -147,8 +167,8 @@ private actor PCCCacheEventCollector {
     func last() -> PCCNativeEvent? { events.last }
 }
 
-/// Deterministic simulated cache; verifies unchanged transcript prefixes and
-/// executor state retention. Actual PCC hit rate still requires a physical device.
+/// Scripted usage verifies accounting and conversation history without depending
+/// on SDK-generated transcript IDs. Actual cache hits require a physical device.
 @available(iOS 27.0, *)
 private struct PCCCacheTestModel: LanguageModel {
     struct Configuration: Hashable, Sendable {
@@ -156,25 +176,24 @@ private struct PCCCacheTestModel: LanguageModel {
         var wantsTools = false
     }
     let executorConfiguration: Configuration
+    // Keep the script across executor instances created by the SDK.
+    let state = State()
     init(wantsTools: Bool = false) { executorConfiguration = .init(wantsTools: wantsTools) }
     var capabilities: LanguageModelCapabilities { .init([.reasoning, .toolCalling, .guidedGeneration]) }
 
     actor State {
-        var previous: [Transcript.Entry] = []
-        func cachedTokens(_ transcript: Transcript) -> Int {
-            let current = Array(transcript)
-            let preserved = !previous.isEmpty && Array(current.prefix(previous.count)) == previous
-            previous = current
-            return preserved ? 60 : 0
+        private(set) var requests: [Transcript] = []
+        func record(_ transcript: Transcript) -> Int {
+            requests.append(transcript)
+            return requests.count == 1 ? 0 : 60
         }
     }
 
     struct Executor: LanguageModelExecutor {
         typealias Model = PCCCacheTestModel
-        let state = State()
         init(configuration: Configuration) {}
         func respond(to request: LanguageModelExecutorGenerationRequest, model: PCCCacheTestModel, streamingInto channel: LanguageModelExecutorGenerationChannel) async throws {
-            let cached = await state.cachedTokens(request.transcript)
+            let cached = await model.state.record(request.transcript)
             let promptIndex = request.transcript.lastIndex { if case .prompt = $0 { return true }; return false } ?? 0
             let result = request.transcript.suffix(from: promptIndex).compactMap { entry -> Transcript.ToolOutput? in
                 if case .toolOutput(let output) = entry { return output }; return nil

@@ -281,18 +281,17 @@ final class ConversationVariantSelectionTests: XCTestCase {
     }
 
     func testInsertDualMessageUpdatesConversationTimestamp() throws {
-        let repository = try makeRepository()
+        let (repository, dbQueue) = try makeRepositoryWithQueue()
         let conversationId = try repository.createConversation(
             title: "New Chat",
             model: "gpt-4o-mini",
             provider: "OPENAI"
         )
 
-        guard let before = try repository.fetchConversation(id: conversationId)?.updatedAtMs else {
-            XCTFail("Missing conversation")
-            return
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE conversations SET updatedAtMs = 1 WHERE id = ?", arguments: [conversationId])
         }
-        Thread.sleep(forTimeInterval: 0.01)
+        let before = try XCTUnwrap(repository.fetchConversation(id: conversationId)).updatedAtMs
         _ = try repository.insertDualMessage(
             DualChatMessage(
                 conversationId: conversationId,
@@ -394,10 +393,10 @@ final class ConversationVariantSelectionTests: XCTestCase {
             ChatMessage(
                 conversationId: conversationId,
                 role: "model",
-                text: "older chat text"
+                text: "older chat text",
+                createdAtMs: 1
             )
         )
-        Thread.sleep(forTimeInterval: 0.01)
         _ = try repository.insertDualMessage(
             DualChatMessage(
                 conversationId: conversationId,
@@ -407,7 +406,8 @@ final class ConversationVariantSelectionTests: XCTestCase {
                 modelAName: "mA",
                 modelBName: "mB",
                 providerA: "OPENAI",
-                providerB: "OPENAI"
+                providerB: "OPENAI",
+                createdAtMs: 2
             )
         )
 

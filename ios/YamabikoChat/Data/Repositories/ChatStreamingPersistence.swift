@@ -170,6 +170,7 @@ enum ChatStreamSession {
         var coordinator = ChatStreamingPersistenceCoordinator()
         do {
             for try await event in stream {
+                try Task.checkCancellation()
                 try consumeStreamEvent(
                     event,
                     target: target,
@@ -184,6 +185,9 @@ enum ChatStreamSession {
                     onStreamingSnapshot: onStreamingSnapshot
                 )
             }
+            // AsyncThrowingStream can end normally when its consumer is cancelled.
+            // Keep cancellation on the interruption path so running tools are closed.
+            try Task.checkCancellation()
         } catch {
             toolActivity.failRunning(message: L10n.text("ツールの実行が中断されました"))
             if toolActivity.hasPersistableContent {
