@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>iOS GenUI 仕様書</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #f3f7f6;
+      --paper: #fff;
+      --ink: #18312e;
+      --muted: #60736f;
+      --line: #dce7e4;
+      --soft: #edf5f3;
+      --accent: #148d83;
+      --accent2: #356fbd;
+      --warn: #fff5dc;
+      --shadow: 0 18px 48px #18312e12;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
+      color: var(--ink);
+      background: var(--page);
+      line-height: 1.7;
+      scroll-behavior: smooth;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --page: #101918;
+        --paper: #182321;
+        --ink: #e3eeeb;
+        --muted: #a3b6b1;
+        --line: #30413d;
+        --soft: #202f2c;
+        --accent: #64cbbf;
+        --accent2: #86b5f0;
+        --warn: #382f1c;
+        --shadow: 0 18px 48px #0004;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    a { color: var(--accent); text-underline-offset: 3px; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    code { overflow-wrap: anywhere; }
+    .page { max-width: 1440px; margin: auto; padding: 28px; }
+    .layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 26px; align-items: start; }
+    .rail { position: sticky; top: 18px; }
+    .brand { font-size: 12px; letter-spacing: .13em; font-weight: 800; color: var(--accent); text-transform: uppercase; }
+    .rail h2 { margin: 8px 0 18px; font-size: 19px; line-height: 1.3; }
+    .rail nav { display: grid; gap: 4px; }
+    .rail nav a { color: var(--muted); font-size: 13px; padding: 7px 10px; text-decoration: none; border-radius: 8px; }
+    .rail nav a:hover { color: var(--ink); background: var(--soft); }
+    .rail-note { margin-top: 22px; padding: 13px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); font-size: 12px; }
+    main { min-width: 0; }
+    .hero { padding: 38px; border: 1px solid var(--line); border-radius: 24px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--paper)), var(--paper) 62%, color-mix(in srgb, var(--accent2) 9%, var(--paper))); box-shadow: var(--shadow); }
+    .eyebrow { color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .12em; }
+    h1 { margin: 10px 0 12px; font-size: clamp(32px, 5vw, 52px); line-height: 1.12; letter-spacing: -.04em; }
+    .hero p { max-width: 760px; margin: 0; color: var(--muted); font-size: 17px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+    .chip { padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--muted); font-size: 12px; font-weight: 650; }
+    .section { margin-top: 24px; padding: 28px; border: 1px solid var(--line); border-radius: 20px; background: var(--paper); box-shadow: var(--shadow); }
+    .section h2 { margin: 0 0 12px; font-size: 25px; letter-spacing: -.025em; }
+    .section h3 { margin: 25px 0 8px; font-size: 17px; }
+    .section > p:first-of-type { margin-top: 0; }
+    p { margin: 8px 0 14px; }
+    .muted { color: var(--muted); }
+    .small { font-size: 12px; color: var(--muted); }
+    .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .panel { min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 15px; background: color-mix(in srgb, var(--soft) 52%, var(--paper)); }
+    .panel h3 { margin: 0 0 8px; }
+    .tag { display: inline-block; padding: 2px 7px; border-radius: 6px; background: var(--soft); color: var(--accent); font-size: 11px; font-weight: 750; }
+    .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0; }
+    .flow span { padding: 8px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); font-size: 13px; }
+    .flow b { color: var(--accent); }
+    .preview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
+    .gallery-frame { display: block; width: 100%; height: 1100px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
+    .gallery-copy { padding: 10px 2px 0; font-size: 12px; color: var(--muted); }
+    .preview { overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); }
+    .preview-head { padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+    .preview-body { padding: 17px; }
+    .preview-title { font-size: 16px; font-weight: 760; }
+    .preview-sub { margin: 3px 0 13px; color: var(--muted); font-size: 11px; }
+    .metric { padding: 12px 0; color: var(--accent); font-size: 27px; font-weight: 800; letter-spacing: -.03em; }
+    .metric-caption { font-size: 11px; color: var(--muted); }
+    .segmented { display: flex; padding: 3px; border-radius: 9px; background: var(--soft); font-size: 11px; }
+    .segmented span { flex: 1; text-align: center; padding: 5px; border-radius: 7px; color: var(--muted); }
+    .segmented .on { color: var(--ink); background: var(--paper); box-shadow: 0 1px 4px #0002; font-weight: 700; }
+    .mini-chart { height: 76px; margin: 12px 0 3px; display: flex; align-items: end; gap: 8px; border-bottom: 1px solid var(--line); }
+    .mini-chart i { display: block; flex: 1; border-radius: 5px 5px 0 0; background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 40%, var(--accent2))); }
+    .mini-labels { display: flex; justify-content: space-between; color: var(--muted); font-size: 9px; }
+    .mock-control { margin-top: 9px; padding: 8px 9px; border: 1px solid var(--line); border-radius: 9px; font-size: 11px; }
+    .mock-control b { float: right; }
+    .rich-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+    .rich-card { padding: 10px; border: 1px solid var(--line); border-radius: 11px; background: var(--soft); }
+    .rich-card small { display: block; color: var(--muted); font-size: 9px; }
+    .rich-card strong { font-size: 17px; }
+    .rich-slider { height: 7px; margin: 9px 0 13px; border-radius: 8px; background: linear-gradient(90deg, var(--accent) 65%, var(--line) 65%); }
+    .rich-chart { display: flex; height: 62px; align-items: end; gap: 9px; padding: 0 10px; border-bottom: 1px solid var(--line); }
+    .rich-chart i { width: 20%; border-radius: 4px 4px 0 0; background: var(--accent2); }
+    .rich-button { display: inline-block; margin: 7px 6px 0 0; padding: 6px 10px; border-radius: 8px; background: var(--accent); color: var(--paper); font-size: 10px; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; vertical-align: top; padding: 10px 11px; border-bottom: 1px solid var(--line); }
+    th { background: var(--soft); font-size: 12px; }
+    td:first-child { font-weight: 700; white-space: nowrap; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+    pre { overflow: auto; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); font-size: 12px; line-height: 1.6; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 5px 0; }
+    .notice { padding: 14px 16px; border-left: 4px solid var(--accent); border-radius: 9px; background: var(--soft); }
+    .warning { border-left-color: #c58b1d; background: var(--warn); }
+    details { margin: 8px 0; border: 1px solid var(--line); border-radius: 11px; }
+    summary { cursor: pointer; padding: 11px 14px; font-weight: 700; }
+    details > div { padding: 0 14px 14px; }
+    .sources { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; margin: 14px 0 0; padding: 0; list-style: none; }
+    .sources a { font-size: 12px; }
+    .footer { padding: 24px 6px 4px; color: var(--muted); font-size: 12px; text-align: right; }
+    @media (max-width: 900px) {
+      .page { padding: 15px; }
+      .layout { display: block; }
+      .rail { position: static; margin-bottom: 14px; }
+      .rail nav { display: flex; overflow-x: auto; gap: 2px; }
+      .rail nav a { white-space: nowrap; }
+      .rail-note { display: none; }
+      .hero { padding: 27px; }
+    }
+    @media (max-width: 650px) {
+      .page { padding: 9px; }
+      .section { padding: 19px; border-radius: 15px; }
+      .preview-grid, .two, .three { grid-template-columns: 1fr; }
+      .sources { grid-template-columns: 1fr; }
+      td:first-child { white-space: normal; }
+      h1 { font-size: 34px; }
+    }
+    @media print {
+      :root { --page: #fff; --paper: #fff; --ink: #111; --muted: #444; --line: #bbb; --soft: #f4f4f4; }
+      .page { max-width: none; padding: 0; }
+      .layout { display: block; }
+      .rail { display: none; }
+      .hero, .section { box-shadow: none; break-inside: avoid; }
+      details > div { display: block; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="layout">
+      <aside class="rail">
+        <div class="brand">YamabikoChat / iOS</div>
+        <h2>GenUI 仕様書</h2>
+        <nav aria-label="目次">
+          <a href="#overview">概要・表示位置</a>
+          <a href="#modes">2つの表示方式</a>
+          <a href="#legacy">基本形式</a>
+          <a href="#rich">リッチ形式</a>
+          <a href="#map">地図・外部操作</a>
+          <a href="#state">状態・保存</a>
+          <a href="#limits">制限・フォールバック</a>
+          <a href="#validation">検証と安全性</a>
+          <a href="#sources">実装参照</a>
+        </nav>
+        <div class="rail-note">実装資料<br>対象: iOSアプリ内の <code>genui</code> ツール<br>確認日: 2026-10-12</div>
+      </aside>
+
+      <main>
+        <header class="hero">
+          <div class="eyebrow">IMPLEMENTATION SPEC · 2026-10-12</div>
+          <h1>iOS版 GenUI</h1>
+          <p>GenUIは、会話の中に計算フォーム、カード、表、グラフなどの操作できるUIを表示するローカルツールです。基本形式はSwiftUI、リッチ形式はアプリに同梱したJavaScript/CSSをWKWebViewで描画します。</p>
+          <div class="chips">
+            <span class="chip">会話内にインライン表示</span>
+            <span class="chip">SwiftUI + WKWebView</span>
+            <span class="chip">入力変更はローカル計算</span>
+            <span class="chip">ライト / ダーク対応</span>
+          </div>
+          <div class="preview-grid">
+            <article class="preview">
+              <div class="preview-head"><span>基本形式 / SwiftUI</span><span class="tag">ネイティブ部品</span></div>
+              <div class="preview-body">
+                <div class="preview-title">住宅ローンを比較</div>
+                <div class="preview-sub">借入額を変えて、毎月の負担を確認しましょう。</div>
+                <div class="metric">月々の返済額</div>
+                <div class="metric" style="padding:0">¥91,855</div>
+                <div class="metric-caption">元利均等返済・ボーナス返済なしの概算</div>
+                <div class="segmented" style="margin-top:14px"><span class="on">結果</span><span>条件</span></div>
+                <div class="mini-chart"><i style="height:82%"></i><i style="height:68%"></i><i style="height:57%"></i><i style="height:48%"></i></div>
+                <div class="mini-labels"><span>20年</span><span>25年</span><span>30年</span><span>35年</span></div>
+                <div class="small" style="margin-top:8px">見本表示。実際は入力値と文書の数式で計算。</div>
+              </div>
+            </article>
+            <article class="preview">
+              <div class="preview-head"><span>リッチ形式 / WKWebView</span><span class="tag">部品を組み合わせ</span></div>
+              <div class="preview-body">
+                <div class="preview-title">ひとつの操作で、表示が変わる</div>
+                <div class="preview-sub">入力・カード・グラフをつないだGenUI</div>
+                <div class="mock-control">表示する名前 <b>東京</b></div>
+                <div class="mock-control">表示モード　 ライト　 /　ダーク</div>
+                <div class="mock-control">slider.value <b>65</b><div class="rich-slider"></div></div>
+                <div class="rich-cards">
+                  <div class="rich-card"><small>現在の名前</small><strong>東京</strong></div>
+                  <div class="rich-card"><small>現在の値</small><strong>65%</strong></div>
+                </div>
+                <div class="rich-chart"><i style="height:65%"></i><i style="height:80%"></i></div>
+                <span class="rich-button">初期値に戻す</span><span class="rich-button">状態をコピー</span>
+                <div class="small" style="margin-top:8px">配置見本。リッチ形式は作成されたUIツリー / コードに従う。</div>
+              </div>
+            </article>
+          </div>
+        </header>
+
+        <section class="section" id="overview">
+          <h2>概要と表示位置</h2>
+          <p><code>genui</code> ツールが成功し、結果がGenUI文書として検証されたときだけ、アシスタントのメッセージ内にキャンバスが表示されます。通常会話ではツールの実行順に応答文の前へ並び、デュアル会話では各モデル側のカード内に表示されます。実行中の活動表示は先に出ますが、文書が完成するまではキャンバスを描画しません。</p>
+          <div class="flow" aria-label="GenUI表示の流れ">
+            <span>モデルが genui を呼ぶ</span><b>→</b><span>文書を検証</span><b>→</b><span>SwiftUI または WKWebView で描画</span><b>→</b><span>アシスタント応答</span>
+          </div>
+          <div class="two">
+            <div class="panel">
+              <h3>ツールが提供される会話</h3>
+              <p class="muted">プロバイダーがクライアントツールに対応し、通常またはデュアル会話のツール許可範囲にある場合に提供されます。Secret会話、auto会話、Fusionパネルでは使いません。Geminiにネイティブツールがある場合はそちらを優先します。</p>
+            </div>
+            <div class="panel">
+              <h3>実行方式</h3>
+              <p class="muted">Piの既存ツールレジストリ／ストリームを通します。Apple PCCでは再帰的なJSON Schemaを渡せないため、同じ文書をJSON文字列の <code>document</code> 引数で渡します。独自のプロバイダ通信経路は作りません。</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="modes">
+          <h2>2つの表示方式</h2>
+          <p>文書のトップレベルで、<code>components</code>、<code>ui</code>、<code>code</code> のいずれか一つを選びます。最初の方式は定型的な計算・比較UI向け、後ろの2つはレイアウトや連動操作を構成するリッチ方式です。</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>方式</th><th>文書フィールド</th><th>iOS描画</th><th>向いている表示</th></tr></thead>
+              <tbody>
+                <tr><td>基本形式</td><td><code>title</code>、<code>subtitle</code>、<code>inputs</code>、<code>components</code></td><td>SwiftUI</td><td>入力フォーム + KPI + 表/グラフ/カード</td></tr>
+                <tr><td>リッチUIツリー</td><td><code>title</code>、任意の <code>subtitle</code>、<code>ui</code>、任意の <code>state/resources</code></td><td>WKWebView + 同梱ランタイム</td><td>指定部品の自由な組み合わせ、ローカル状態の共有</td></tr>
+                <tr><td>リッチクライアントコード</td><td><code>title</code>、任意の <code>subtitle</code>、<code>code</code>、任意の <code>state/resources</code></td><td>WKWebView + 同梱ランタイム</td><td>DIL.h / DIL hooksを使った状態連動UI</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="notice" style="margin-top:15px">リッチ形式はChatGPT独自のUIレンダラーやReactパッケージではなく、このアプリが定義した部品カタログと互換ランタイムです。</div>
+        </section>
+
+        <section class="section" id="legacy">
+          <h2>基本形式（SwiftUI）</h2>
+          <p>見出しの下に、主要な結果を置きます。入力があると「結果 / 条件」の切り替えが現れ、結果を見ながら条件を調整できます。条件表示中も先頭のKPIまたはカード要約は残ります。</p>
+          <h3>入力部品</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th><code>kind</code></th><th>画面上の表示</th><th>動作</th></tr></thead>
+              <tbody>
+                <tr><td><code>slider</code></td><td>ラベル、現在値、スライダー。広い画面では最小値と最大値も表示</td><td><code>min/max/step/unit</code> の数値範囲をその場で変更</td></tr>
+                <tr><td><code>number</code></td><td>数値入力欄と任意の単位</td><td>入力中の不正値はヒント表示し、直近の有効値で計算</td></tr>
+                <tr><td><code>select</code></td><td>システムのメニュー形式ピッカー</td><td>数値の候補から選択</td></tr>
+                <tr><td><code>text</code></td><td>テキストフィールド</td><td>文字列を状態として置換表示に使う</td></tr>
+                <tr><td><code>toggle</code></td><td>iOS標準トグル</td><td>数値状態 <code>0 / 1</code> として扱う</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>表示コンポーネント</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th><code>kind</code></th><th>描画</th><th>初期表示</th></tr></thead>
+              <tbody>
+                <tr><td><code>text</code></td><td>折り返し可能な本文。テキスト選択可</td><td>他の詳細と同様に折りたたみ対象</td></tr>
+                <tr><td><code>metric</code></td><td>大きなティール色の値と任意の補足文</td><td>最初のmetricなら先頭に固定</td></tr>
+                <tr><td><code>cards</code></td><td>画面幅に応じたカードグリッド。各カードに見出し・値・任意の「前提」折りたたみ</td><td>metricより先にカードがあれば先頭に固定</td></tr>
+                <tr><td><code>chart</code></td><td>Swift Chartsの折れ線 + 点、系列凡例を下側に表示</td><td>最初のグラフは結果欄で展開</td></tr>
+                <tr><td><code>table</code></td><td>交互に薄い背景色を付けた行。狭い画面では横スクロール</td><td>詳細欄で折りたたみ可能</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="three" style="margin-top:14px">
+            <div class="panel"><h3>サマリー優先</h3><p class="muted">components内の先頭metricまたはcardsを主要結果として上部に配置します。</p></div>
+            <div class="panel"><h3>段階的に開く</h3><p class="muted">先頭グラフと単一コンポーネントは展開。それ以外の詳細はDisclosureGroupに入ります。</p></div>
+            <div class="panel"><h3>リセット</h3><p class="muted">入力がある文書はヘッダーに44ptタップ領域のリセットボタンを表示します。</p></div>
+          </div>
+          <h3>式と値の差し込み</h3>
+          <p>式は文字列の先頭に <code>=</code> を付けます。入力IDは数値変数として参照し、表示テキスト中の <code>{{inputID}}</code> は現在値に置き換わります。式で計算できない場合は値欄に <code>—</code> を表示します。</p>
+          <pre><code>{"id":"monthly","kind":"metric","title":"月々の返済額",
+ "value":"=round(payment(principal,rate,years))",
+ "format":"currency","unit":"円"}</code></pre>
+          <p class="small">演算子: <code>+ - * / ^</code> と括弧。関数: <code>min</code>、<code>max</code>、<code>abs</code>、<code>round</code>、<code>pow</code>、<code>payment(principal, annualPercent, years)</code>。<code>payment</code>の金利引数は年率%（例: 5 = 5%）です。任意コードや条件分岐は実行しません。</p>
+        </section>
+
+        <section class="section" id="rich">
+          <h2>リッチ形式（UIツリー / コード）</h2>
+          <p><code>ui</code> は <code>{type, props, children}</code> の部品ツリーです。<code>code</code> は <code>DIL.h(...)</code> でノードを返すJavaScript関数本体で、JSXやimportは使いません。どちらも同じホワイトリスト部品を使い、部品間でローカル状態を共有できます。</p>
+          <pre><code>const [count, setCount] = DIL.useState(0);
+return DIL.h("button", {
+  label: "回数を増やす",
+  onClick: () =&gt; setCount(count + 1)
+}, String(count));</code></pre>
+          <p>JSONのUIツリーでは、最上位の <code>state</code> を初期状態にし、部品の <code>bind</code> でキーを結びます。イベントオブジェクトは <code>setState</code> / <code>resetState</code> またはユーザー起点のホスト操作を表します。DIL hooksは <code>useState</code>、<code>useMemo</code>、<code>useCallback</code>、<code>useRef</code>、<code>useEffect</code>、<code>useId</code>、<code>useTheme</code>、<code>useBreakpoint</code> です。</p>
+          <h3>利用できる部品と表示</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>分類</th><th>部品名</th><th>表示・振る舞い</th></tr></thead>
+              <tbody>
+                <tr><td>文字・装飾</td><td><code>text</code>, <code>title</code>, <code>caption</code>, <code>label</code>, <code>badge</code>, <code>bold</code>, <code>italic</code>, <code>underline</code>, <code>strikethrough</code>, <code>code</code>, <code>math</code>, <code>blockquote</code></td><td>見出し、補助ラベル、バッジ、強調、インラインコード、数式、引用を描画。MathJaxが同梱利用できる場合は数式組版。</td></tr>
+                <tr><td>レイアウト</td><td><code>box</code>, <code>row</code>, <code>col</code>, <code>grid</code>, <code>grid-item</code>, <code>flow</code>, <code>flow-item</code>, <code>card</code>, <code>divider</code>, <code>spacer</code></td><td>縦横スタック、グリッド、カード、区切り、余白。gapやpaddingの数値は4px単位。狭い幅では行を折り返す。</td></tr>
+                <tr><td>入力・操作</td><td><code>button</code>, <code>pressable</code>, <code>input</code>, <code>textarea</code>, <code>slider</code>, <code>checkbox</code>, <code>select</code>, <code>segmented-control</code>, <code>radio-group</code>, <code>radio</code>, <code>date-picker</code>, <code>form</code></td><td>フォーム部品、送信操作、ボタン。選択候補はシステム標準selectで表示。操作ターゲットは原則44px以上。</td></tr>
+                <tr><td>表・リスト</td><td><code>table</code>, <code>table-section</code>, <code>table-row</code>, <code>table-cell</code>, <code>list</code>, <code>list-item</code></td><td>見出し・区切り・結合セルに対応する表、番号/箇条書きリスト、説明付き行。</td></tr>
+                <tr><td>複合表示</td><td><code>carousel</code>, <code>carousel-item</code>, <code>carousel-media-item</code>, <code>popover</code>, <code>popover-trigger</code>, <code>popover-content</code></td><td>横スナップ式カルーセルと前後ボタン、文書フロー内で開く補足パネル。</td></tr>
+                <tr><td>メディア</td><td><code>AsyncImage</code>, <code>AsyncImageGroup</code>, <code>AsyncVideo</code>, <code>favicon</code>, <code>icon</code></td><td>明示されたHTTPS画像/動画、アイコン、favicon。画像は遅延読み込み。動画には再生コントロール。</td></tr>
+                <tr><td>グラフ・図形</td><td><code>Chart</code>, <code>svg</code> とSVG子部品</td><td>Chartは <code>bar</code>/<code>line</code>/<code>scatter</code>/<code>pie</code> のSVG図。SVGは許可された基本図形とローカルID参照。</td></tr>
+                <tr><td>地図</td><td><code>MapWidgetV2</code></td><td>本文に地点概要と「Open map」ボタンを表示し、タップするとネイティブMapKit画面へ。</td></tr>
+                <tr><td>参照・遷移</td><td><code>Link</code>, <code>Entity</code>, <code>Cite</code>, <code>FileCite</code>, <code>CodeCite</code>, <code>MemoryCite</code>, <code>FileNavList</code>, <code>FollowUp</code></td><td>明示URLや提供済みresourceに対するリンク/詳細/引用表示、またはユーザーが押した時の追質問。</td></tr>
+                <tr><td>埋め込み・コード</td><td><code>AppBlock</code>, <code>CodeBlock</code>, <code>WritingBlock</code></td><td>アプリ内に含めたノード、コード表示/編集、見出し付き文章ブロック。外部アプリバンドルやコード実行は行わない。</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="small" style="margin-top:12px">SVG子部品: <code>g</code>、<code>path</code>、<code>circle</code>、<code>ellipse</code>、<code>rect</code>、<code>line</code>、<code>polyline</code>、<code>polygon</code>、<code>defs</code>、<code>linearGradient</code>、<code>radialGradient</code>、<code>stop</code>、<code>clipPath</code>。これらは <code>svg</code> の内側でのみ使用できます。</p>
+          <h3>各部品を実際に描画したサンプル</h3>
+          <p>下のカタログは、アプリに同梱されているGenUIランタイムとスタイルで各部品を描画します。入力、ボタン、カルーセルを操作できます。画像・動画はサンプルHTTPSリソースを読み込みます。</p>
+          <iframe id="genui-component-gallery" class="gallery-frame" src="GenUI-components.html" title="iOS GenUI部品の実画面サンプル" loading="eager" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+          <p class="gallery-copy">ブラウザで再現できるのはリッチUIのWeb表示部分です。MapKitシート、詳細シート、クリップボード、外部リンク、新しい会話ターンなどのホスト操作はiOSアプリ内でのみ動きます。端末やWKWebViewの差でネイティブ画面とピクセル単位では一致しません。</p>
+          <div class="notice warning" style="margin-top:14px">現行のリッチ文書validatorでは <code>radio-group.options</code> が許可されていないため、ギャラリーでは空のグループ枠を表示しています。選択肢付きのグループは現状の有効なGenUI文書から指定できません。</div>
+          <div class="notice warning" style="margin-top:14px">カタログに含まれていても、プロパティの意味がすべてWeb標準やChatGPT側の実装と同じとは限りません。selectはブラウザ/iOS相当、popoverは文書内配置など、このアプリの互換動作になります。</div>
+        </section>
+
+        <section class="section" id="map">
+          <h2>地図・外部操作</h2>
+          <h3>MapWidgetV2 の画面遷移</h3>
+          <div class="flow">
+            <span>GenUI内にタイトル・説明・地点一覧</span><b>→</b><span>ユーザーが地図ボタンをタップ</span><b>→</b><span>ネイティブMapKitシート</span><b>→</b><span>必要なら地点カードからApple Mapsへ</span>
+          </div>
+          <ul>
+            <li><code>points</code> と任意の <code>origin</code> は緯度・経度が必須です（<code>lat/lng</code> または <code>latitude/longitude</code>）。住所文字列だけから座標検索はしません。</li>
+            <li>ネイティブ画面ではピン、グループ色、地点カード、任意の説明文を表示します。<code>carousel: true</code> は地点カードを横スクロールにします。</li>
+            <li>実経路は <code>show_route: true</code> のときだけMapKitに依頼します。<code>driving</code>、<code>walking</code>、<code>transit</code>に対応し、経路取得中・成功・失敗を状態文で知らせます。</li>
+            <li>stop順の自動最適化は未対応です。時刻指定は2地点間だけで、<code>arrive_by</code> と <code>depart_at</code> は同時に使えません。</li>
+          </ul>
+          <h3>ホスト操作</h3>
+          <p><code>copy</code>、<code>openUrl</code>、<code>issueNewTurn</code>、<code>openEntityDetail</code> は明示的なユーザー操作からのみ実行します。新しい会話ターンはPiの通常経路に流します。URLは認証情報を含まないHTTPSのみ許可し、送信中の応答や入力欄の下書きがあると実行できない状態を案内します。</p>
+        </section>
+
+        <section class="section" id="state">
+          <h2>状態・保存と寿命</h2>
+          <div class="two">
+            <div class="panel"><h3>入力の反映</h3><p class="muted">基本形式はSwiftUI内で即時計算し、モデルへ再問い合わせしません。リッチ形式もbindやDIL hooksで同じキャンバス内を更新します。明示的なFollowUp / issueNewTurnのみ新しい会話ターンになります。</p></div>
+            <div class="panel"><h3>保持範囲</h3><p class="muted">成功した文書は既存のツール活動と選択された応答バリアントに保存します。入力状態は行表示の再利用中は保ちますが、会話を開き直した後は文書の初期値に戻ります。別のツール呼び出しは別状態です。</p></div>
+          </div>
+          <p>古いPiデータで成功結果がプロバイダートランスクリプトだけに保存されている場合も、ツール呼び出しIDと成功結果を照合し、検証できた文書のみ画面用ステップとして復元します。モデルやツールを再実行せず、エラー・不正JSON・孤立結果は表示しません。</p>
+        </section>
+
+        <section class="section" id="limits">
+          <h2>表示上の制限とフォールバック</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>機能</th><th>iOSでの扱い</th></tr></thead>
+              <tbody>
+                <tr><td>モバイルレイアウト</td><td>基本形式はコンパクト時の余白を詰め、チャート高160pt、入力操作の高さ44ptを維持。通常サイズではチャート高220pt。大きな文字にも折り返して対応。</td></tr>
+                <tr><td>リッチキャンバス</td><td>コンパクト幅は最大400pt、regular幅は最大560pt。内容が上限を超えるとWKWebView内でスクロール。</td></tr>
+                <tr><td>画像・動画検索</td><td>query文字列からの取得はしません。文書内resourcesまたはノードにHTTPS URL / 参照IDを明示します。解決できなければ「利用できません」表示。</td></tr>
+                <tr><td>リンク・引用・Entity</td><td>外部バックエンドを自動照会しません。URLや引用テキストなどのresourceが無ければ未解決表示または無効ボタンになります。</td></tr>
+                <tr><td>AppBlock</td><td>文書に含まれたinline node treeまたはクライアント関数のみ。bundle id / version / entrypoint名だけではChatGPTアプリ資産にアクセスしません。</td></tr>
+                <tr><td>CodeBlock</td><td>表示と任意の編集のみ。外部コード実行やモデルプレビューは行いません。</td></tr>
+                <tr><td>ポップオーバー</td><td>文書フロー内に展開。ポータル配置や衝突回避、side指定どおりの画面外位置調整はしません。</td></tr>
+                <tr><td>互換外コンテンツ</td><td>未対応の部品/参照/表示データは、推測した内容の代わりに目に見えるUnavailable表示やステータスを出します。</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="small">スタイルはアプリ内CSSのティールアクセント、角丸カード、淡い背景が基本です。ダークモードでは背景色・文字色・境界色を切り替えます。リッチ文書で指定した各部品のサイズや見た目は尊重されます。</p>
+        </section>
+
+        <section class="section" id="validation">
+          <h2>検証・安全性</h2>
+          <p>GenUI文書は実行結果として採用する前に検証します。レンダラー選択、部品名、props、ID、式、データ範囲の不正はツールエラーになります。</p>
+          <div class="three">
+            <div class="panel"><h3>リッチ文書の容量</h3><p class="muted">ui / code形式は文書・コード容量、UIノード数・深さ、state / resources件数のアプリ独自固定上限なし。実際の容量は端末メモリ、JSONパーサー、JavaScript / WebKitに依存し、無制限動作やChatGPT内部仕様との一致は保証しません。</p></div>
+            <div class="panel"><h3>基本形式上限</h3><p class="muted">inputs 24個、components 48個、table列12・行100、chart系列8・各100点、cards 24個。</p></div>
+            <div class="panel"><h3>URL / 通信</h3><p class="muted">リモートJS、iframe、フォーム送信、任意ネット接続は無効。宣言済みHTTPSメディアホストだけを許可します。</p></div>
+          </div>
+          <p class="notice" style="margin-top:14px">生成コードの描画、effect、保存stateの復元だけではネイティブ操作や新しいモデルターンは始まりません。WebKitの信頼済みユーザー操作を検知し、1回の操作に対応するホスト動作だけを通します。</p>
+        </section>
+
+        <section class="section" id="sources">
+          <h2>実装参照</h2>
+          <p>本書はiOS実装と既存GenUIガイドに基づく動作仕様です。部品名・propsや見た目を変更する場合は、下記のランタイム／検証器／SwiftUI表示を合わせて更新します。</p>
+          <ul class="sources">
+            <li><a href="GenUI.md">既存 iOS GenUIガイド</a></li>
+            <li><a href="YamabikoChat/Features/Chat/GenUIView.swift">基本形式のSwiftUI描画</a></li>
+            <li><a href="YamabikoChat/Features/Chat/GenUIRichView.swift">リッチ形式のWKWebViewとホスト操作</a></li>
+            <li><a href="YamabikoChat/Features/Chat/GenUIMapView.swift">ネイティブMapKit表示・経路</a></li>
+            <li><a href="YamabikoChat/Features/Tools/GenUI/GenUIDocument.swift">基本文書schema・検証・式の差し込み</a></li>
+            <li><a href="YamabikoChat/Features/Tools/GenUI/GenUIRichDocument.swift">リッチ部品カタログと検証</a></li>
+            <li><a href="YamabikoChat/Features/Tools/GenUI/GenUITool.swift">ツール定義・引数schema</a></li>
+            <li><a href="YamabikoChat/App/Resources/genui/runtime.js">リッチ描画ランタイム</a></li>
+            <li><a href="YamabikoChat/App/Resources/genui/styles.css">リッチ画面スタイル</a></li>
+            <li><a href="GenUI-components.html">すべてのリッチ部品の描画サンプル</a></li>
+            <li><a href="YamabikoChat/App/GenUIDemoFixture.swift">基本形式のローン計算サンプル</a></li>
+            <li><a href="YamabikoChat/App/GenUIRichDemoFixture.swift">リッチ形式の状態共有サンプル</a></li>
+            <li><a href="YamabikoChat/Data/Models/ChatMessageToolActivity.swift">ツール結果の保存と旧データ復元</a></li>
+          </ul>
+          <p class="small" style="margin-top:18px">UIテスト用表示: <code>-AppStoreScreenshotDemo -GenUIFixture -ScreenshotScene chat</code> または <code>-AppStoreScreenshotDemo -GenUIRichFixture -ScreenshotScene chat</code>。ダーク表示は <code>-GenUIDarkFixture</code> を追加します。</p>
+        </section>
+        <footer class="footer">YamabikoChat iOS · GenUI 実装仕様 · 2026-10-12</footer>
+      </main>
+    </div>
+  </div>
+  <script>
+    const galleryFrame = document.getElementById('genui-component-gallery');
+    window.addEventListener('message', event => {
+      if (event.source !== galleryFrame.contentWindow || !event.data) return;
+      if (event.data.type === 'genui-catalog-height' && Number.isFinite(event.data.height)) {
+        galleryFrame.style.height = Math.min(16000, Math.max(900, event.data.height + 24)) + 'px';
+      }
+    });
+  </script>
+</body>
+</html>

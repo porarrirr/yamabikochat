@@ -25,28 +25,31 @@ struct GenUIRichView: View {
     let document: GenUIDocument
     @ObservedObject var state: GenUIState
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.onGenUINewTurn) private var issueNewTurn
     @Environment(\.openURL) private var openURL
-    @State private var height: CGFloat = 240
+    @State private var height: CGFloat = 60
     @State private var status: String?
     @Environment(\.onGenUIRoute) private var presentRoute
 
+    private var viewportHeight: CGFloat { sizeClass == .regular ? 800 : 560 }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            GenUIRichWebView(document: document, state: state, dark: colorScheme == .dark, height: $height, onStatus: { status = $0 }, onAction: handle)
-                .frame(height: height)
+        VStack(alignment: .leading, spacing: 4) {
+            GenUIRichWebView(document: document, state: state, dark: colorScheme == .dark, maximumHeight: viewportHeight, height: $height, onStatus: { status = $0 }, onAction: handle)
+                .frame(height: min(height, viewportHeight))
                 .accessibilityIdentifier("genui-rich-canvas")
-            // Reserve feedback space so status updates preserve the hosted canvas bounds.
-            Text(status ?? " ").font(.caption).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
-                .padding(.horizontal, 16)
-                .opacity(status == nil ? 0 : 1)
-                .accessibilityHidden(status == nil)
-                .accessibilityIdentifier("genui-rich-status")
+            if let status {
+                Text(status).font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
+                    .accessibilityIdentifier("genui-rich-status")
+            }
         }
-        .background(Color.teal.opacity(0.04), in: RoundedRectangle(cornerRadius: 22))
-        .overlay { RoundedRectangle(cornerRadius: 22).strokeBorder(Color.teal.opacity(0.18)) }
-        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.1)) }
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     private func handle(_ object: [String: Any]) {
@@ -72,7 +75,7 @@ struct GenUIRichView: View {
                   let data = try? JSONSerialization.data(withJSONObject: props),
                   let decoded = try? JSONDecoder().decode([String: JSONValue].self, from: data),
                   let configuration = GenUIMapConfiguration(props: decoded) else {
-                status = L10n.text("地図には有効な緯度・経度が必要です")
+                status = L10n.text("地図には場所名・住所、または有効な緯度・経度を指定してください")
                 return
             }
             presentRoute(.genUIMap(configuration))
@@ -129,9 +132,17 @@ enum GenUIHostPolicy {
         return url
     }
 
+    static func mapFrame(from object: Any?) -> CGRect? {
+        guard let values = object as? [String: Any] else { return nil }
+        let numbers = ["x", "y", "width", "height"].compactMap { values[$0] as? NSNumber }.map(\.doubleValue)
+        guard numbers.count == 4, numbers.allSatisfy({ $0.isFinite && abs($0) <= 1_000_000 }),
+              (0...10_000).contains(numbers[2]), (0...900).contains(numbers[3]) else { return nil }
+        return CGRect(x: numbers[0], y: numbers[1], width: numbers[2], height: numbers[3])
+    }
+
     static func snapshot(from object: Any) -> [String: JSONValue]? {
         guard JSONSerialization.isValidJSONObject(object),
-              let data = try? JSONSerialization.data(withJSONObject: object), data.count <= 131_072,
+              let data = try? JSONSerialization.data(withJSONObject: object),
               let state = try? JSONDecoder().decode([String: JSONValue].self, from: data) else { return nil }
         return state
     }
@@ -141,6 +152,7 @@ struct GenUIRichWebView: UIViewRepresentable {
     let document: GenUIDocument
     let state: GenUIState
     let dark: Bool
+    let maximumHeight: CGFloat
     @Binding var height: CGFloat
     let onStatus: (String?) -> Void
     let onAction: ([String: Any]) -> Void
@@ -162,7 +174,10 @@ struct GenUIRichWebView: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
-        webView.scrollView.isScrollEnabled = true
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.bounces = false
+        webView.scrollView.keyboardDismissMode = .interactive
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.navigationDelegate = context.coordinator
         return webView
     }
@@ -170,11 +185,13 @@ struct GenUIRichWebView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.load(in: webView)
+        webView.scrollView.isScrollEnabled = webView.scrollView.contentSize.height > maximumHeight
     }
 
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "genui")
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "genuiGesture", contentWorld: .world(name: "GenUIHostGestures"))
+        coordinator.removeMaps()
         webView.navigationDelegate = nil
         webView.stopLoading()
     }
@@ -185,8 +202,71 @@ struct GenUIRichWebView: UIViewRepresentable {
         private var lastTheme: Bool?
         private var lastPhysicalTouch = Date.distantPast
         private var actionConsumed = true
+        private var mapHosts: [String: MapHost] = [:]
+
+        private struct MapHost {
+            let props: [String: JSONValue]
+            let controller: UIHostingController<AnyView>
+            let container: UIView
+
+            func remove() {
+                controller.willMove(toParent: nil)
+                controller.view.removeFromSuperview()
+                controller.removeFromParent()
+                container.removeFromSuperview()
+            }
+        }
 
         init(parent: GenUIRichWebView) { self.parent = parent }
+
+        func removeMaps() {
+            mapHosts.values.forEach { $0.remove() }
+            mapHosts.removeAll()
+        }
+
+        private func updateMaps(_ maps: [[String: Any]], in webView: WKWebView) {
+            var retained = Set<String>()
+            for map in maps {
+                guard let id = map["id"] as? String, !id.isEmpty,
+                      let props = map["props"].flatMap(GenUIHostPolicy.snapshot),
+                      let frame = GenUIHostPolicy.mapFrame(from: map["frame"]),
+                      let clip = GenUIHostPolicy.mapFrame(from: map["clip"]), retained.insert(id).inserted else { continue }
+                if mapHosts[id]?.props != props {
+                    mapHosts.removeValue(forKey: id)?.remove()
+                    let content: AnyView
+                    if let configuration = GenUIMapConfiguration(props: props) {
+                        content = AnyView(GenUIInlineMapView(configuration: configuration))
+                    } else {
+                        let reason = L10n.text("地図には場所名・住所、または有効な緯度・経度を指定してください")
+                        content = AnyView(Text(reason).font(.caption).padding().foregroundStyle(.secondary))
+                        DiagnosticsLogger.log("GenUI inline map configuration rejected", level: .error, category: .app)
+                    }
+                    let controller = UIHostingController(rootView: content)
+                    controller.safeAreaRegions = []
+                    controller.view.backgroundColor = .clear
+                    let container = UIView()
+                    container.clipsToBounds = true
+                    var responder: UIResponder? = webView
+                    while let current = responder, !(current is UIViewController) { responder = current.next }
+                    let parentController = responder as? UIViewController
+                    parentController?.addChild(controller)
+                    container.addSubview(controller.view)
+                    webView.scrollView.addSubview(container)
+                    if parentController != nil { controller.didMove(toParent: parentController) }
+                    mapHosts[id] = MapHost(props: props, controller: controller, container: container)
+                }
+                guard let host = mapHosts[id] else { continue }
+                host.controller.overrideUserInterfaceStyle = parent.dark ? .dark : .light
+                let visible = frame.intersection(clip)
+                host.container.isHidden = visible.isNull || visible.isEmpty
+                if !host.container.isHidden {
+                    host.container.frame = visible
+                    host.controller.view.frame = CGRect(x: frame.minX - visible.minX, y: frame.minY - visible.minY,
+                                                        width: frame.width, height: frame.height)
+                }
+            }
+            for id in Set(mapHosts.keys).subtracting(retained) { mapHosts.removeValue(forKey: id)?.remove() }
+        }
 
         func load(in webView: WKWebView) {
             guard loadedDocument != parent.document else {
@@ -200,6 +280,7 @@ struct GenUIRichWebView: UIViewRepresentable {
                 DispatchQueue.main.async { [weak self] in self?.parent.onStatus(L10n.text("GenUIの表示リソースを読み込めません")) }
                 return
             }
+            removeMaps()
             loadedDocument = parent.document
             lastTheme = parent.dark
             let mathDirectory = MathMarkdownResourceResolver.mathJaxScriptURL(in: .main)?.deletingLastPathComponent()
@@ -220,11 +301,17 @@ struct GenUIRichWebView: UIViewRepresentable {
                 guard let number = object["height"] as? NSNumber, number.doubleValue.isFinite else { return }
                 // Keep long web UIs in a usable viewport. WebKit owns scrolling
                 // inside the canvas, preserving native input gesture handling.
-                let height = CGFloat(min(max(number.doubleValue, 60), 560))
+                let height = min(max(CGFloat(number.doubleValue), 60), parent.maximumHeight)
                 DispatchQueue.main.async { [weak self, weak webView = message.webView] in
                     guard let self else { return }
                     if abs(self.parent.height - height) > 1 { self.parent.height = height }
-                    webView?.scrollView.isScrollEnabled = number.doubleValue > 560
+                    webView?.scrollView.isScrollEnabled = CGFloat(number.doubleValue) > self.parent.maximumHeight
+                }
+            case "maps":
+                guard let maps = object["maps"] as? [[String: Any]] else { return }
+                DispatchQueue.main.async { [weak self, weak webView = message.webView] in
+                    guard let self, let webView else { return }
+                    self.updateMaps(maps, in: webView)
                 }
             case "state":
                 guard let state = object["state"].flatMap(GenUIHostPolicy.snapshot) else { return }

@@ -8,6 +8,7 @@ final class GenUIState: ObservableObject {
     @Published var texts: [String: String]
     @Published var numberDrafts: [String: String]
     @Published var richSnapshot: [String: JSONValue]?
+    @Published var showsInputs = false
 
     init(document: GenUIDocument) {
         self.document = document
@@ -36,6 +37,8 @@ struct GenUITimelineView: View {
 /// A local, declarative canvas. Input changes never execute remote code or make requests.
 struct GenUIView: View {
     let document: GenUIDocument
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicType
     @ObservedObject private var state: GenUIState
 
     init(document: GenUIDocument, state: GenUIState? = nil) {
@@ -56,50 +59,78 @@ struct GenUIView: View {
         nonmutating set { state.numberDrafts = newValue }
     }
 
+    private var compact: Bool { sizeClass != .regular }
+    private var primaryComponent: GenUIComponent? {
+        document.components.first { $0.kind == "metric" || $0.kind == "cards" }
+    }
+    private var firstChart: GenUIComponent? { document.components.first { $0.kind == "chart" } }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: compact ? 12 : 20) {
             header
+            if let primary = primaryComponent { componentView(primary) }
             if !document.inputs.isEmpty {
-                VStack(alignment: .leading, spacing: 18) {
-                    Label(L10n.text("条件を調整"), systemImage: "slider.horizontal.3")
-                        .font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Picker(L10n.text("表示"), selection: $state.showsInputs) {
+                    Text(L10n.text("結果")).tag(false)
+                    Text(L10n.text("条件")).tag(true)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("genui-section-picker")
+            }
+            if state.showsInputs && !document.inputs.isEmpty {
+                VStack(alignment: .leading, spacing: compact ? 8 : 16) {
                     ForEach(document.inputs, id: \.id) { input in inputView(input) }
                 }
-                .padding(16)
-                .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16))
-            }
-            VStack(alignment: .leading, spacing: 20) {
-                ForEach(document.components, id: \.id) { component in componentView(component) }
+                .padding(compact ? 10 : 16)
+                .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+            } else {
+                ForEach(document.components.filter { $0.id != primaryComponent?.id }, id: \.id) { component in
+                    if component.id == firstChart?.id || document.components.count == 1 {
+                        componentView(component)
+                    } else {
+                        DisclosureGroup {
+                            componentView(component, showsTitle: false).padding(.top, 8)
+                        } label: {
+                            Text(render(component.title ?? componentLabel(component.kind)))
+                                .font(.subheadline.weight(.medium))
+                        }
+                    }
+                }
             }
         }
-        .padding(20)
+        .padding(compact ? 12 : 20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: 22)
+            RoundedRectangle(cornerRadius: 16)
                 .fill(LinearGradient(colors: [.teal.opacity(0.09), .blue.opacity(0.035)], startPoint: .topLeading, endPoint: .bottomTrailing))
         }
-        .overlay { RoundedRectangle(cornerRadius: 22).strokeBorder(.teal.opacity(0.18), lineWidth: 1) }
+        .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(.teal.opacity(0.18), lineWidth: 1) }
         .tint(.teal)
     }
 
+    private func componentLabel(_ kind: String) -> String {
+        switch kind {
+        case "table": return L10n.text("表")
+        case "chart": return L10n.text("グラフ")
+        case "cards", "metric": return L10n.text("詳細")
+        default: return L10n.text("補足")
+        }
+    }
+
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label(L10n.text("インタラクティブ"), systemImage: "sparkles")
-                    .font(.caption.weight(.semibold)).foregroundStyle(.teal)
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .background(.teal.opacity(0.1), in: Capsule())
-                Spacer(minLength: 4)
-                if !document.inputs.isEmpty {
-                    Button(action: reset) { Image(systemName: "arrow.counterclockwise").frame(width: 44, height: 44) }
-                        .buttonStyle(.plain).foregroundStyle(.secondary)
-                        .accessibilityLabel(L10n.text("条件をリセット"))
-                        .accessibilityIdentifier("genui-reset")
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(render(document.title)).font(.headline).fixedSize(horizontal: false, vertical: true)
+                if let subtitle = document.subtitle {
+                    Text(render(subtitle)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Text(render(document.title)).font(.title3.weight(.bold)).fixedSize(horizontal: false, vertical: true)
-            if let subtitle = document.subtitle {
-                Text(render(subtitle)).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            if !document.inputs.isEmpty {
+                Button(action: reset) { Image(systemName: "arrow.counterclockwise").frame(width: 44, height: 44) }
+                    .buttonStyle(.plain).foregroundStyle(.secondary)
+                    .accessibilityLabel(L10n.text("条件をリセット"))
+                    .accessibilityIdentifier("genui-reset")
             }
         }
     }
@@ -107,7 +138,7 @@ struct GenUIView: View {
     @ViewBuilder private func inputView(_ input: GenUIInput) -> some View {
         switch input.kind {
         case "slider":
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: compact ? 2 : 8) {
                 ViewThatFits(in: .horizontal) {
                     HStack { Text(input.label); Spacer(); Text(inputValue(input)).fontWeight(.semibold).monospacedDigit() }
                     VStack(alignment: .leading) { Text(input.label); Text(inputValue(input)).fontWeight(.semibold).monospacedDigit() }
@@ -115,33 +146,27 @@ struct GenUIView: View {
                 let lower = input.min ?? 0
                 let upper = max(input.max ?? 100, lower + 0.0001)
                 Slider(value: numericBinding(input, range: lower...upper), in: lower...upper, step: max(input.step ?? 1, 0.0001))
+                    .frame(minHeight: 44)
                     .accessibilityLabel(input.label).accessibilityValue(inputValue(input))
                     .accessibilityIdentifier("genui-slider-\(input.id)")
-                HStack { Text(number(lower)); Spacer(); Text(number(upper)) }.font(.caption).foregroundStyle(.secondary)
+                if !compact {
+                    HStack { Text(number(lower)); Spacer(); Text(number(upper)) }.font(.caption).foregroundStyle(.secondary)
+                }
             }
         case "toggle":
             Toggle(input.label, isOn: Binding(get: { (values[input.id] ?? 0) != 0 }, set: { values[input.id] = $0 ? 1 : 0 }))
                 .frame(minHeight: 44)
         case "select":
-            VStack(alignment: .leading, spacing: 6) {
-                Text(input.label).font(.subheadline)
-                Picker(input.label, selection: numericBinding(input)) {
-                    ForEach(input.options ?? [], id: \.value) { option in Text(option.label).tag(option.value) }
-                }
-                .pickerStyle(.menu).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { Text(input.label).font(.subheadline); Spacer(minLength: 0); selectionEditor(input) }
+                VStack(alignment: .leading, spacing: 4) { Text(input.label).font(.subheadline); selectionEditor(input) }
             }
         case "number":
-            VStack(alignment: .leading, spacing: 6) {
-                Text(input.label).font(.subheadline)
-                HStack {
-                    TextField(input.label, text: Binding(get: { numberDrafts[input.id] ?? "" }, set: { draft in
-                        numberDrafts[input.id] = draft
-                        if let value = validNumber(draft, input: input) { values[input.id] = value }
-                    }))
-                    .keyboardType(.numbersAndPunctuation).accessibilityLabel(input.label)
-                    if let unit = input.unit { Text(unit).foregroundStyle(.secondary) }
-                }.padding(12).background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 4) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { Text(input.label).font(.subheadline); Spacer(minLength: 0); numberEditor(input) }
+                    VStack(alignment: .leading, spacing: 4) { Text(input.label).font(.subheadline); numberEditor(input) }
+                }
                 if validNumber(numberDrafts[input.id] ?? "", input: input) == nil {
                     Text(numberHint(input)).font(.caption).foregroundStyle(.secondary)
                         .accessibilityLabel(numberHint(input))
@@ -156,14 +181,35 @@ struct GenUIView: View {
         }
     }
 
-    @ViewBuilder private func componentView(_ component: GenUIComponent) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if let title = component.title { Text(render(title)).font(.headline).fixedSize(horizontal: false, vertical: true) }
+    private func selectionEditor(_ input: GenUIInput) -> some View {
+        Picker(input.label, selection: numericBinding(input)) {
+            ForEach(input.options ?? [], id: \.value) { option in Text(option.label).tag(option.value) }
+        }
+        .pickerStyle(.menu).frame(minHeight: 44)
+        .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func numberEditor(_ input: GenUIInput) -> some View {
+        HStack(spacing: 4) {
+            TextField(input.label, text: Binding(get: { numberDrafts[input.id] ?? "" }, set: { draft in
+                numberDrafts[input.id] = draft
+                if let value = validNumber(draft, input: input) { values[input.id] = value }
+            }))
+            .keyboardType(.numbersAndPunctuation).accessibilityLabel(input.label)
+            .multilineTextAlignment(.trailing).frame(minWidth: 80, maxWidth: 140)
+            if let unit = input.unit { Text(unit).font(.subheadline).foregroundStyle(.secondary) }
+        }.padding(.horizontal, 8).frame(minHeight: 44)
+            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder private func componentView(_ component: GenUIComponent, showsTitle: Bool = true) -> some View {
+        VStack(alignment: .leading, spacing: compact ? 6 : 12) {
+            if showsTitle, let title = component.title { Text(render(title)).font(.headline).fixedSize(horizontal: false, vertical: true) }
             switch component.kind {
             case "metric":
                 VStack(alignment: .leading, spacing: 6) {
                     Text(formatted(component.value ?? "—", format: component.format, unit: component.unit))
-                        .font(.system(.largeTitle, design: .rounded).weight(.bold)).foregroundStyle(.teal)
+                        .font(.system(compact ? .title2 : .largeTitle, design: .rounded).weight(.bold)).foregroundStyle(.teal)
                         .contentTransition(.numericText()).minimumScaleFactor(0.65)
                         .accessibilityIdentifier("genui-metric-\(component.id)")
                     if let text = component.text { Text(render(text)).font(.subheadline).foregroundStyle(.secondary) }
@@ -171,13 +217,16 @@ struct GenUIView: View {
             case "table": table(component).accessibilityIdentifier("genui-component-\(component.id)")
             case "chart": chart(component).accessibilityIdentifier("genui-component-\(component.id)")
             case "cards":
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], alignment: .leading, spacing: 10) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: dynamicType.isAccessibilitySize ? 240 : 120), spacing: 8)], alignment: .leading, spacing: 8) {
                     ForEach(Array((component.items ?? []).enumerated()), id: \.offset) { _, item in
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(render(item.title)).font(.subheadline).foregroundStyle(.secondary)
-                            Text(render(item.value)).font(.title3.weight(.semibold)).monospacedDigit()
-                            if let detail = item.detail { Text(render(detail)).font(.caption).foregroundStyle(.secondary) }
-                        }.frame(maxWidth: .infinity, alignment: .leading).padding(14)
+                            Text(render(item.value)).font(.headline).monospacedDigit()
+                            if let detail = item.detail {
+                                DisclosureGroup(L10n.text("前提")) { Text(render(detail)).font(.caption).foregroundStyle(.secondary) }
+                                    .font(.caption)
+                            }
+                        }.frame(maxWidth: .infinity, alignment: .leading).padding(compact ? 10 : 14)
                             .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
                     }
                 }
@@ -193,13 +242,13 @@ struct GenUIView: View {
             Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 0) {
                 if let columns = component.columns {
                     GridRow { ForEach(Array(columns.enumerated()), id: \.offset) { _, column in
-                        Text(render(column)).font(.subheadline.weight(.semibold)).padding(.vertical, 12)
+                        Text(render(column)).font(.subheadline.weight(.semibold)).padding(.vertical, compact ? 8 : 12)
                     } }
                     Divider().gridCellUnsizedAxes(.horizontal)
                 }
                 ForEach(Array((component.rows ?? []).enumerated()), id: \.offset) { index, row in
                     GridRow { ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                        Text(render(cell)).font(.subheadline).monospacedDigit().padding(.vertical, 12)
+                        Text(render(cell)).font(.subheadline).monospacedDigit().padding(.vertical, compact ? 8 : 12)
                             .frame(minWidth: 80, alignment: .leading)
                     } }.background(index.isMultiple(of: 2) ? Color.primary.opacity(0.025) : .clear)
                 }
@@ -207,7 +256,31 @@ struct GenUIView: View {
         }.background(.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 12))
     }
 
+    @ViewBuilder
     private func chart(_ component: GenUIComponent) -> some View {
+        if component.resolvedChartType == "pie" {
+            if let amounts = component.pieValues(values: values), let series = component.series?.first {
+                Chart {
+                    ForEach(Array(series.points.enumerated()), id: \.offset) { index, point in
+                        SectorMark(angle: .value(L10n.text("値"), amounts[index]))
+                            .foregroundStyle(by: .value(L10n.text("項目"), render(point.label)))
+                    }
+                }
+                .chartForegroundStyleScale(range: [Color.teal, Color.blue, Color.orange, Color.purple, Color.green, Color.pink])
+                .chartLegend(position: .bottom, alignment: .leading)
+                .frame(height: compact ? 200 : 260)
+                .accessibilityLabel(render(component.title ?? L10n.text("グラフ")))
+                .accessibilityValue(chartSummary(component))
+            } else {
+                Text(L10n.text("—"))
+                    .accessibilityValue("Pie chart requires nonnegative values with a positive total")
+            }
+        } else {
+            lineChart(component)
+        }
+    }
+
+    private func lineChart(_ component: GenUIComponent) -> some View {
         Chart {
             ForEach(Array((component.series ?? []).enumerated()), id: \.offset) { _, series in
                 ForEach(Array(series.points.enumerated()), id: \.offset) { _, point in
@@ -222,7 +295,7 @@ struct GenUIView: View {
         }
         .chartForegroundStyleScale(range: [Color.teal, Color.blue, Color.orange, Color.purple])
         .chartLegend(position: .bottom, alignment: .leading)
-        .frame(height: 220)
+        .frame(height: compact ? 160 : 220)
         .accessibilityLabel(render(component.title ?? L10n.text("グラフ")))
         .accessibilityValue(chartSummary(component))
     }

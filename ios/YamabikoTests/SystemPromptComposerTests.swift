@@ -7,6 +7,13 @@ final class SystemPromptComposerTests: XCTestCase {
         let disabled = SystemPromptComposer.composeForAPI(nil)
         XCTAssertTrue(enabled?.contains("Use genui when") == true)
         XCTAssertTrue(enabled?.contains("Inputs update locally") == true)
+        XCTAssertTrue(enabled?.contains("Prefer code for interactive calculations") == true)
+        XCTAssertTrue(enabled?.contains("Math.min/Math.max/Math.abs/Math.round/Math.pow") == true)
+        XCTAssertTrue(enabled?.contains("legacy formula language applies only to components") == true)
+        XCTAssertTrue(enabled?.contains("no app-defined fixed document/code size") == true)
+        XCTAssertTrue(enabled?.contains("defaults to a line chart") == true)
+        XCTAssertTrue(enabled?.contains("chartType:\"pie\"") == true)
+        XCTAssertTrue(enabled?.contains("Never call a line chart a pie chart") == true)
         XCTAssertFalse(disabled?.contains("Use genui when") == true)
     }
 

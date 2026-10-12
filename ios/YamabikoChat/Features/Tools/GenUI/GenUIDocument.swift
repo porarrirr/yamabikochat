@@ -42,6 +42,23 @@ struct GenUIComponent: Codable, Sendable, Equatable {
     var rows: [[String]]?
     var series: [GenUISeries]?
     var items: [GenUICard]?
+    var chartType: String? = nil
+
+    var resolvedChartType: String { chartType ?? "line" }
+
+    func pieValues(values: [String: Double]) -> [Double]? {
+        guard let series, series.count == 1 else { return nil }
+        let numbers = series[0].points.compactMap { point -> Double? in
+            let value = point.value.hasPrefix("=")
+                ? try? GenUIExpression.evaluate(point.value, values: values)
+                : Double(point.value)
+            guard let value, value.isFinite, value >= 0 else { return nil }
+            return value
+        }
+        let total = numbers.reduce(0, +)
+        guard numbers.count == series[0].points.count, total.isFinite, total > 0 else { return nil }
+        return numbers
+    }
 }
 struct GenUIDocument: Codable, Sendable, Equatable {
     var title: String
@@ -85,7 +102,6 @@ struct GenUIDocument: Codable, Sendable, Equatable {
     }
 
     static func validated(from json: String) throws -> Self {
-        guard json.utf8.count <= 262_144 else { throw GenUIError.invalid("document exceeds 256 KiB") }
         let document = try JSONDecoder().decode(Self.self, from: Data(json.utf8))
         try document.validate()
         return document
@@ -111,12 +127,12 @@ struct GenUIDocument: Codable, Sendable, Equatable {
             string.range(of: "^[A-Za-z_][A-Za-z0-9_]{0,63}$", options: .regularExpression) != nil
         }
         try check(!title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "title is required")
-        try short(title)
         if ui != nil || code != nil {
             try check(components.isEmpty && inputs.isEmpty, "choose exactly one renderer: components, ui or code")
             try validateRichDocument()
             return
         }
+        try short(title)
         try check(state == nil && resources == nil, "state and resources require ui or code")
         try check(inputs.count <= 24 && !components.isEmpty && components.count <= 48, "input/component count exceeds limits")
         var ids = Set<String>()
@@ -170,7 +186,11 @@ struct GenUIDocument: Codable, Sendable, Equatable {
                 for column in columns { try display(column) }
                 for row in rows { try check(row.count == columns.count, "table row width differs from columns"); for cell in row { try display(cell) } }
             case "chart":
+                try check(["line", "pie"].contains(component.resolvedChartType), "unsupported chartType; use line or pie")
                 let series = component.series ?? []
+                if component.resolvedChartType == "pie" {
+                    try check(component.pieValues(values: values) != nil, "pie requires exactly one series with finite nonnegative values and a positive finite total")
+                }
                 try check(!series.isEmpty && series.count <= 8, "chart requires 1–8 series")
                 for series in series {
                     try display(series.name); try check(!series.points.isEmpty && series.points.count <= 100, "chart requires 1–100 points")

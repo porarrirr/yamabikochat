@@ -817,7 +817,7 @@ actor PiAgentRuntime {
                             let arguments = Self.jsonString(event.arguments ?? .object([:]))
                             let call = try Self.localToolCall(id: callID, name: name, arguments: arguments, request: request)
                             let createdAtMs = event.timeMs ?? nowMs()
-                            let reportsActivity = name == WebSearchTool.name || name == FetchUrlTool.name || name == PythonExecuteTool.name || name == StrReplaceEditorTool.name
+                            let reportsActivity = ToolActivityEvent.reportsActivity(for: name)
                             if reportsActivity {
                                 continuation.yield(.toolActivity(ToolActivityEvent(
                                     phase: .started,

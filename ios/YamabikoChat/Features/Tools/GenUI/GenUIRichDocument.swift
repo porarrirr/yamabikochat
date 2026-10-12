@@ -130,25 +130,19 @@ extension GenUIDocument {
             guard condition else { throw GenUIError.invalid(message) }
         }
         try require((ui != nil) != (code != nil), "choose exactly one renderer: ui or code")
-        try require((subtitle?.count ?? 0) <= 4096, "subtitle exceeds 4096 characters")
         if let code {
             try require(!code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "code is empty")
-            try require(code.utf8.count <= 65_536, "code exceeds 64 KiB")
             try GenUICodeValidator.validate(code)
         }
-        try require((state?.count ?? 0) <= 64, "state exceeds 64 keys")
-        try require((resources?.count ?? 0) <= 64, "resources exceeds 64 entries")
-        func value(_ item: JSONValue, depth: Int = 0) throws {
-            try require(depth <= 32, "JSON nesting exceeds 32 levels")
-            switch item {
-            case .number(let number): try require(number.isFinite, "non-finite number")
-            case .array(let array):
-                try require(array.count <= 512, "array exceeds 512 entries")
-                for element in array { try value(element, depth: depth + 1) }
-            case .object(let object):
-                try require(object.count <= 128, "object exceeds 128 keys")
-                for element in object.values { try value(element, depth: depth + 1) }
-            default: break
+        func value(_ item: JSONValue) throws {
+            var pending = [item]
+            while let item = pending.popLast() {
+                switch item {
+                case .number(let number): try require(number.isFinite, "non-finite number")
+                case .array(let array): pending.append(contentsOf: array)
+                case .object(let object): pending.append(contentsOf: object.values)
+                default: break
+                }
             }
         }
         for item in state?.values ?? Dictionary<String, JSONValue>().values { try value(item) }
@@ -173,13 +167,11 @@ extension GenUIDocument {
             default: break
             }
         }
-        var count = 0
-        func node(_ node: GenUINode, depth: Int, inSVG: Bool = false) throws {
-            let svgPrimitive = Set(["g", "path", "circle", "ellipse", "rect", "line", "polyline", "polygon", "defs", "linearGradient", "radialGradient", "stop", "clipPath"])
+        let svgPrimitive = Set(["g", "path", "circle", "ellipse", "rect", "line", "polyline", "polygon", "defs", "linearGradient", "radialGradient", "stop", "clipPath"])
+        var pending: [(GenUINode, Bool)] = ui.map { [($0, false)] } ?? []
+        while let (node, inSVG) = pending.popLast() {
             try require(!svgPrimitive.contains(node.type) || inSVG, "SVG primitives require an svg ancestor")
             let svgContext = inSVG || node.type == "svg"
-            count += 1
-            try require(depth <= 32 && count <= 512, "UI exceeds 32 levels or 512 nodes")
             guard let allowedProps = Self.componentCatalog[node.type] else { throw GenUIError.invalid("unknown component type: \(node.type)") }
             for (key, item) in node.props ?? [:] {
                 try require(allowedProps.contains(key), "unsupported property \(key) on \(node.type)")
@@ -190,23 +182,20 @@ extension GenUIDocument {
                 }
                 if node.type == "AppBlock", ["content", "entrypoint"].contains(key), case .object = item {
                     let nested = try JSONDecoder().decode(GenUINode.self, from: JSONEncoder().encode(item))
-                    try nodeVisit(nested, depth: depth + 1, inSVG: svgContext)
+                    pending.append((nested, svgContext))
                 }
                 if svgContext, ["fill", "stroke", "clipPath"].contains(key), case .string(let paint) = item, paint.lowercased().contains("url(") {
                     try require(paint.range(of: #"^url\(#[A-Za-z_][A-Za-z0-9_-]*\)$"#, options: .regularExpression) != nil, "SVG references must be local fragment IDs")
                 }
                 if key == "bind" { guard case .string(let key) = item, !key.isEmpty else { throw GenUIError.invalid("bind requires a state key") }; }
             }
-            try require((node.children?.count ?? 0) <= 512, "too many children")
             for child in node.children ?? [] {
                 switch child {
-                case .node(let child): try nodeVisit(child, depth: depth + 1, inSVG: svgContext)
+                case .node(let child): pending.append((child, svgContext))
                 case .number(let number): try require(number.isFinite, "non-finite child number")
                 case .string: break
                 }
             }
         }
-        func nodeVisit(_ item: GenUINode, depth: Int, inSVG: Bool) throws { try node(item, depth: depth, inSVG: inSVG) }
-        if let ui { try node(ui, depth: 1) }
     }
 }

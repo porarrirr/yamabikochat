@@ -119,6 +119,71 @@ final class GenUIIntegrationTests: XCTestCase {
         XCTAssertEqual(payload.steps.first?.status, .failed)
     }
 
+    func testPiBridgeReportsGenUIActivityAlongsideExistingLocalTools() {
+        for name in [GenUITool.name, WebSearchTool.name, FetchUrlTool.name,
+                     PythonExecuteTool.name, StrReplaceEditorTool.name] {
+            XCTAssertTrue(ToolActivityEvent.reportsActivity(for: name), name)
+        }
+        XCTAssertFalse(ToolActivityEvent.reportsActivity(for: "unknown"))
+    }
+
+    func testTranscriptOnlyGenUIIsRestoredForNormalVariantsAndDualMessages() throws {
+        let richJSON = String(decoding: try JSONEncoder().encode(GenUIDocument(
+            title: "Rich demo", code: GenUIRichDemoFixture.code
+        )), as: UTF8.self)
+        let transcript = genUITranscript(id: "saved", content: GenUIDemoFixture.documentJSON)
+            + genUITranscript(id: "rich", content: richJSON)
+        let transcriptData = try JSONEncoder().encode(transcript)
+        let record = ChatMessageToolActivity(
+            messageId: 42, stepsJSON: "[]",
+            providerTranscriptJSON: String(decoding: transcriptData, as: UTF8.self)
+        )
+        XCTAssertEqual(record.steps.map(\.id), ["saved", "rich"])
+        XCTAssertTrue(record.steps.allSatisfy { $0.genUIDocument != nil })
+        XCTAssertEqual(record.steps.map(\.round), [1, 2])
+        let variant = ChatMessageToolActivity(
+            variantId: 43, stepsJSON: "[]", providerTranscriptJSON: record.providerTranscriptJSON
+        )
+        XCTAssertEqual(variant.steps, record.steps)
+        let rawPayload = #"{"steps":[],"providerTranscript":\#(String(decoding: transcriptData, as: UTF8.self))}"#
+        let restored = try JSONDecoder().decode(ToolActivityPayload.self, from: Data(rawPayload.utf8))
+        XCTAssertEqual(restored.steps, record.steps)
+        let reloaded = try JSONDecoder().decode(ToolActivityPayload.self, from: JSONEncoder().encode(restored))
+        XCTAssertEqual(reloaded.steps, restored.steps)
+        XCTAssertEqual(reloaded.providerTranscript.map(\.content), transcript.map(\.content))
+    }
+
+    func testTranscriptRecoveryRequiresSuccessfulValidatedResultAndMatchingCall() throws {
+        var transcript = genUITranscript(id: "failed", content: GenUIDemoFixture.documentJSON)
+        transcript[1].toolResultIsError = true
+        transcript += genUITranscript(id: "invalid", content: "not-json")
+        transcript += [ProviderRequestMessage(role: "tool", content: GenUIDemoFixture.documentJSON,
+                                              toolCallId: "orphan", toolName: GenUITool.name, toolResultIsError: false)]
+        transcript += [ProviderRequestMessage(role: "assistant", content: "", toolCalls: [
+            ToolCall(id: "unfinished", name: GenUITool.name, argumentsJSON: GenUIDemoFixture.documentJSON)
+        ])]
+        XCTAssertTrue(ToolActivityPayload(providerTranscript: transcript).steps.isEmpty)
+    }
+
+    func testTranscriptRecoveryPreservesExistingStepsAndDoesNotDuplicateResults() throws {
+        var payload = ToolActivityPayload()
+        let call = ToolCall(id: "existing", name: GenUITool.name, argumentsJSON: GenUIDemoFixture.documentJSON)
+        payload.apply(ToolActivityEvent(phase: .finished, call: call, result: ToolResult(
+            callId: call.id, name: call.name, content: GenUIDemoFixture.documentJSON
+        ), createdAtMs: 123))
+        let transcript = payload.providerTranscript + genUITranscript(id: "missing", content: GenUIDemoFixture.documentJSON)
+        let restored = ToolActivityPayload(steps: payload.steps, providerTranscript: transcript + transcript)
+        XCTAssertEqual(restored.steps.map(\.id), ["existing", "missing"])
+        XCTAssertEqual(restored.steps.first, payload.steps.first)
+    }
+
+    private func genUITranscript(id: String, content: String) -> [ProviderRequestMessage] {
+        [ProviderRequestMessage(role: "assistant", content: "", toolCalls: [
+            ToolCall(id: id, name: GenUITool.name, argumentsJSON: content)
+        ]), ProviderRequestMessage(role: "tool", content: content,
+                                   toolCallId: id, toolName: GenUITool.name, toolResultIsError: false)]
+    }
+
     func testLegacyToolActivityWithoutGenUIDocumentStillDecodes() throws {
         let json = #"{"id":"legacy","round":1,"toolName":"web_search","title":"Web","detail":"query","status":"completed","sources":[],"createdAtMs":1}"#
         let step = try JSONDecoder().decode(ToolActivityStep.self, from: Data(json.utf8))
@@ -133,10 +198,12 @@ final class GenUIIntegrationTests: XCTestCase {
         let state = row.genUIState(id: "loan", document: document)
         state.values["principal"] = 45_000_000
         state.numberDrafts["principal"] = "45000000"
+        state.showsInputs = true
         let reused = row.genUIState(id: "loan", document: document)
         XCTAssertTrue(state === reused)
         XCTAssertEqual(reused.values["principal"], 45_000_000)
         XCTAssertEqual(reused.numberDrafts["principal"], "45000000")
+        XCTAssertTrue(reused.showsInputs)
     }
 
     @MainActor

@@ -12,7 +12,63 @@ final class GenUIToolTests: XCTestCase {
         XCTAssertTrue(invalid.isError)
     }
 
+    func testLargeDocumentsUseDirectAndNativeEnvelopePaths() async throws {
+        let document = GenUIDocument(title: "Large", code: "return DIL.h('text', {}, resources.source.text);",
+                                     resources: ["source": GenUIResource(text: String(repeating: "資料", count: 100_000))])
+        let json = String(decoding: try JSONEncoder().encode(document), as: UTF8.self)
+        let envelope = String(decoding: try JSONEncoder().encode(["document": json]), as: UTF8.self)
+        for arguments in [json, envelope] {
+            XCTAssertGreaterThan(arguments.utf8.count, 524_288)
+            let result = try await GenUITool().execute(call: ToolCall(id: "large", name: GenUITool.name, argumentsJSON: arguments))
+            XCTAssertEqual(try GenUIDocument.validated(from: result.content), document)
+        }
+    }
+
     private let minimal = #"{"title":"Demo","components":[{"id":"text","kind":"text","text":"Hello"}]}"#
+
+    func testChartTypeSchemaIsExplicit() throws {
+        let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(GenUITool.definition.parametersJSON.utf8)) as? [String: Any])
+        let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
+        let components = try XCTUnwrap(properties["components"] as? [String: Any])
+        let items = try XCTUnwrap(components["items"] as? [String: Any])
+        let fields = try XCTUnwrap(items["properties"] as? [String: Any])
+        let chartType = try XCTUnwrap(fields["chartType"] as? [String: Any])
+        XCTAssertEqual(chartType["enum"] as? [String], ["line", "pie"])
+        XCTAssertTrue(GenUITool.definition.description.contains("IDs/titles do not select chart type"))
+    }
+
+    func testExplicitPieChartAndLegacyLineDefault() async throws {
+        // Regression: coin_pie in the diagnostics had no chartType and was a line chart.
+        let legacy = #"{"title":"Coins","components":[{"id":"coin_pie","kind":"chart","series":[{"name":"割合","points":[{"label":"1円","value":"8"},{"label":"100円","value":"40"}]}]}]}"#
+        XCTAssertEqual(try GenUIDocument.validated(from: legacy).components[0].resolvedChartType, "line")
+        let pie = legacy.replacingOccurrences(of: "\"kind\":\"chart\"", with: "\"kind\":\"chart\",\"chartType\":\"pie\"")
+        let result = try await GenUITool().execute(call: ToolCall(id: "pie", name: "genui", argumentsJSON: pie))
+        let document = try GenUIDocument.validated(from: result.content)
+        XCTAssertEqual(document.components[0].chartType, "pie")
+        XCTAssertEqual(document.components[0].pieValues(values: [:]), [8, 40])
+        XCTAssertEqual(try JSONDecoder().decode(GenUIDocument.self, from: JSONEncoder().encode(document)), document)
+    }
+
+    func testPieRejectsInvalidValuesAndSeries() throws {
+        func chart(_ series: String, type: String = "pie") -> String {
+            "{\"title\":\"Pie\",\"components\":[{\"id\":\"pie\",\"kind\":\"chart\",\"chartType\":\"\(type)\",\"series\":\(series)}]}"
+        }
+        func series(_ value: String) -> String {
+            "{\"name\":\"Share\",\"points\":[{\"label\":\"A\",\"value\":\"\(value)\"}]}"
+        }
+        for value in ["-1", "0", "=1/0", "nan"] {
+            XCTAssertThrowsError(try GenUIDocument.validated(from: chart("[\(series(value))]")))
+        }
+        XCTAssertThrowsError(try GenUIDocument.validated(from: chart("[\(series("1")),\(series("2"))]")))
+        XCTAssertThrowsError(try GenUIDocument.validated(from: chart("[\(series("1"))]", type: "unknown")))
+        let document = try GenUIDocument.validated(from: chart("[\(series("=2*3"))]"))
+        XCTAssertEqual(document.components[0].pieValues(values: [:]), [6])
+        var dynamic = document.components[0]
+        dynamic.series?[0].points[0].value = "=x"
+        XCTAssertNil(dynamic.pieValues(values: ["x": -1]))
+        XCTAssertNil(dynamic.pieValues(values: ["x": 0]))
+        XCTAssertEqual(dynamic.pieValues(values: ["x": 10]), [10])
+    }
 
     func testPaymentAndArithmetic() throws {
         XCTAssertEqual(try GenUIExpression.evaluate("=payment(principal,rate,years)", values: ["principal":12000,"rate":0,"years":1]), 1000)

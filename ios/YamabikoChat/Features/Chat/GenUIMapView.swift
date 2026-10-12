@@ -4,10 +4,15 @@ import MapKit
 struct GenUIMapConfiguration: Identifiable {
     struct Point: Identifiable {
         let id: String
-        let coordinate: CLLocationCoordinate2D
+        var coordinate: CLLocationCoordinate2D?
         let title: String
         let address: String?
         let group: String?
+        let query: String?
+
+        var searchQuery: String {
+            query ?? [title, address == title ? nil : address].compactMap { $0 }.joined(separator: " ")
+        }
     }
 
     let id = UUID()
@@ -29,7 +34,10 @@ struct GenUIMapConfiguration: Identifiable {
 
     init?(props: [String: JSONValue]) {
         func string(_ value: JSONValue?) -> String? {
-            if case let .string(text) = value { return text }
+            if case let .string(text) = value {
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
             return nil
         }
         func bool(_ value: JSONValue?) -> Bool {
@@ -41,15 +49,24 @@ struct GenUIMapConfiguration: Identifiable {
             return nil
         }
         func point(_ value: JSONValue, index: Int) -> Point? {
-            guard case let .object(object) = value,
-                  let latitude = number(object["lat"] ?? object["latitude"]),
-                  let longitude = number(object["lng"] ?? object["longitude"]),
-                  (-90...90).contains(latitude), (-180...180).contains(longitude) else { return nil }
+            guard case let .object(object) = value else { return nil }
+            let title = string(object["title"] ?? object["name"])
+            let address = string(object["address"])
+            let query = string(object["query"])
+            var coordinate: CLLocationCoordinate2D?
+            if object["lat"] != nil || object["latitude"] != nil || object["lng"] != nil || object["longitude"] != nil {
+                guard let latitude = number(object["lat"] ?? object["latitude"]),
+                      let longitude = number(object["lng"] ?? object["longitude"]),
+                      (-90...90).contains(latitude), (-180...180).contains(longitude) else { return nil }
+                coordinate = .init(latitude: latitude, longitude: longitude)
+            }
+            guard coordinate != nil || title != nil || address != nil || query != nil else { return nil }
             return Point(id: string(object["id"]) ?? "__genui_point_\(index)",
-                         coordinate: .init(latitude: latitude, longitude: longitude),
-                         title: string(object["title"] ?? object["name"]) ?? (index < 0 ? L10n.text("出発地点") : L10n.format("地点 %d", index + 1)),
-                         address: string(object["address"]),
-                         group: string(object["group"] ?? object["group_id"]))
+                         coordinate: coordinate,
+                         title: title ?? address ?? query ?? (index < 0 ? L10n.text("出発地点") : L10n.format("地点 %d", index + 1)),
+                         address: address,
+                         group: string(object["group"] ?? object["group_id"]),
+                         query: query)
         }
         guard case let .array(values) = props["points"], !values.isEmpty, values.count <= 100 else { return nil }
         let parsed = values.enumerated().compactMap { point($0.element, index: $0.offset) }
@@ -99,13 +116,67 @@ struct GenUIMapConfiguration: Identifiable {
 }
 
 @MainActor
-private final class GenUIMapModel: ObservableObject {
+final class GenUIMapModel: ObservableObject {
     @Published var routes: [MKRoute] = []
     @Published var status: String?
+    @Published var points: [GenUIMapConfiguration.Point] = []
+    @Published var origin: GenUIMapConfiguration.Point?
+    @Published var failedPointIDs: Set<String> = []
     private var activeDirections: MKDirections?
+    private var activeSearch: MKLocalSearch?
+    private let resolve: ((String) async throws -> CLLocationCoordinate2D)?
+
+    init(resolve: ((String) async throws -> CLLocationCoordinate2D)? = nil) {
+        self.resolve = resolve
+    }
+
+    private func locate(_ point: GenUIMapConfiguration.Point) async throws -> GenUIMapConfiguration.Point {
+        guard point.coordinate == nil else { return point }
+        var located = point
+        if let resolve {
+            located.coordinate = try await resolve(point.searchQuery)
+        } else {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = point.searchQuery
+            let search = MKLocalSearch(request: request)
+            activeSearch = search
+            defer { activeSearch = nil }
+            let response = try await search.start()
+            guard let item = response.mapItems.first else { throw MKError(.placemarkNotFound) }
+            located.coordinate = item.placemark.coordinate
+        }
+        try Task.checkCancellation()
+        return located
+    }
 
     func load(_ configuration: GenUIMapConfiguration) async {
         routes = []
+        status = nil
+        points = configuration.points
+        origin = configuration.origin
+        failedPointIDs = []
+        let supplied = (configuration.origin.map { [$0] } ?? []) + configuration.points
+        if supplied.contains(where: { $0.coordinate == nil }) {
+            status = L10n.text("場所を検索しています…")
+        }
+        for point in supplied {
+            do {
+                try Task.checkCancellation()
+                let located = try await locate(point)
+                if point.id == configuration.origin?.id { origin = located }
+                else if let index = points.firstIndex(where: { $0.id == point.id }) { points[index] = located }
+            } catch {
+                if Task.isCancelled || error is CancellationError { return }
+                failedPointIDs.insert(point.id)
+                DiagnosticsLogger.log("GenUI MapKit place search failed", level: .error, category: .network,
+                                      metadata: ["pointID": point.id], error: error)
+            }
+        }
+        guard failedPointIDs.isEmpty else {
+            let titles = supplied.filter { failedPointIDs.contains($0.id) }.map(\.title).joined(separator: "、")
+            status = L10n.format("場所が見つからないか、検索に失敗しました: %@", titles)
+            return
+        }
         status = nil
         guard !configuration.optimizeStopOrder else {
             status = L10n.text("訪問順の自動最適化には対応していません。地点の順序を指定してください。")
@@ -116,7 +187,7 @@ private final class GenUIMapModel: ObservableObject {
             status = L10n.text("この移動手段には対応していません。")
             return
         }
-        let stops = (configuration.origin.map { [$0] } ?? []) + configuration.points
+        let stops = (origin.map { [$0] } ?? []) + points
         guard stops.count > 1 else { status = L10n.text("経路には2地点以上が必要です。"); return }
         guard !(configuration.arriveBy != nil && configuration.departAt != nil) else {
             status = L10n.text("到着時刻と出発時刻は同時には指定できません。")
@@ -130,9 +201,10 @@ private final class GenUIMapModel: ObservableObject {
         do {
             for index in 1..<stops.count {
                 try Task.checkCancellation()
+                guard let source = stops[index - 1].coordinate, let destination = stops[index].coordinate else { return }
                 let request = MKDirections.Request()
-                request.source = MKMapItem(placemark: MKPlacemark(coordinate: stops[index - 1].coordinate))
-                request.destination = MKMapItem(placemark: MKPlacemark(coordinate: stops[index].coordinate))
+                request.source = MKMapItem(placemark: MKPlacemark(coordinate: source))
+                request.destination = MKMapItem(placemark: MKPlacemark(coordinate: destination))
                 request.transportType = configuration.travelMode == "walking" ? .walking : configuration.travelMode == "transit" ? .transit : .automobile
                 request.arrivalDate = configuration.arriveBy
                 request.departureDate = configuration.departAt
@@ -154,7 +226,62 @@ private final class GenUIMapModel: ObservableObject {
         }
     }
 
-    func cancel() { activeDirections?.cancel() }
+    func cancel() { activeSearch?.cancel(); activeDirections?.cancel() }
+}
+
+struct GenUIMapCanvas: View {
+    let configuration: GenUIMapConfiguration
+    @ObservedObject var model: GenUIMapModel
+    @Binding var position: MapCameraPosition
+    @Binding var selection: String?
+
+    var body: some View {
+        Map(position: $position, selection: $selection) {
+            ForEach(model.points) { point in
+                if let coordinate = point.coordinate {
+                    Marker(point.title, coordinate: coordinate).tint(color(point)).tag(point.id)
+                }
+            }
+            if let origin = model.origin, let coordinate = origin.coordinate {
+                Marker(origin.title, systemImage: "flag.fill", coordinate: coordinate).tint(.green).tag(origin.id)
+            }
+            ForEach(Array(model.routes.enumerated()), id: \.offset) { _, route in
+                MapPolyline(route.polyline).stroke(.teal, lineWidth: 5)
+            }
+        }
+        .mapControls { MapCompass(); MapScaleView(); MapPitchToggle() }
+        .onChange(of: model.points.compactMap(\.coordinate).count) { position = .automatic }
+        .onChange(of: model.origin?.coordinate?.latitude) { position = .automatic }
+        .onChange(of: model.routes.count) { position = .automatic }
+    }
+
+    private func color(_ point: GenUIMapConfiguration.Point) -> Color {
+        let colors: [Color] = [.teal, .orange, .purple, .blue, .pink]
+        guard let group = point.group, let index = configuration.groups.firstIndex(where: { $0.id == group }) else { return .teal }
+        return colors[index % colors.count]
+    }
+}
+
+struct GenUIInlineMapView: View {
+    let configuration: GenUIMapConfiguration
+    @StateObject private var model = GenUIMapModel()
+    @State private var position: MapCameraPosition = .automatic
+    @State private var selection: String?
+
+    var body: some View {
+        GenUIMapCanvas(configuration: configuration, model: model, position: $position, selection: $selection)
+            .overlay(alignment: .bottomLeading) {
+                if let status = model.status {
+                    Text(status).font(.caption).padding(8)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        .padding(8)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .accessibilityIdentifier("genui-inline-map")
+            .task { await model.load(configuration) }
+            .onDisappear { model.cancel() }
+    }
 }
 
 struct GenUIMapView: View {
@@ -162,6 +289,7 @@ struct GenUIMapView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model = GenUIMapModel()
     @State private var selection: String?
+    @State private var position: MapCameraPosition = .automatic
     private let colors: [Color] = [.teal, .orange, .purple, .blue, .pink]
 
     private func color(_ point: GenUIMapConfiguration.Point) -> Color {
@@ -173,11 +301,15 @@ struct GenUIMapView: View {
         VStack(alignment: .leading, spacing: 8) {
             Button { selection = point.id } label: { Label(point.title, systemImage: "mappin.circle.fill").foregroundStyle(color(point)) }
             if let address = point.address { Text(address).font(.caption).foregroundStyle(.secondary) }
-            Text("\(point.coordinate.latitude), \(point.coordinate.longitude)").font(.caption2).foregroundStyle(.secondary)
-            Button(L10n.text("マップで開く"), systemImage: "arrow.up.right.square") {
-                let item = MKMapItem(placemark: MKPlacemark(coordinate: point.coordinate))
-                item.name = point.title
-                item.openInMaps()
+            if model.failedPointIDs.contains(point.id) {
+                Text(L10n.text("場所を取得できませんでした")).font(.caption).foregroundStyle(.secondary)
+            }
+            if let coordinate = point.coordinate {
+                Button(L10n.text("マップで開く"), systemImage: "arrow.up.right.square") {
+                    let item = MKMapItem(placemark: MKPlacemark(coordinate: coordinate))
+                    item.name = point.title
+                    item.openInMaps()
+                }
             }
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
@@ -189,18 +321,7 @@ struct GenUIMapView: View {
             GeometryReader { geometry in
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Map(initialPosition: .automatic, selection: $selection) {
-                        ForEach(configuration.points) { point in
-                            Marker(point.title, coordinate: point.coordinate).tint(color(point)).tag(point.id)
-                        }
-                        if let origin = configuration.origin {
-                            Marker(origin.title, systemImage: "flag.fill", coordinate: origin.coordinate).tint(.green).tag(origin.id)
-                        }
-                        ForEach(Array(model.routes.enumerated()), id: \.offset) { _, route in
-                            MapPolyline(route.polyline).stroke(.teal, lineWidth: 5)
-                        }
-                    }
-                    .mapControls { MapCompass(); MapScaleView(); MapPitchToggle() }
+                    GenUIMapCanvas(configuration: configuration, model: model, position: $position, selection: $selection)
                     .frame(height: max(configuration.minHeight, configuration.fill ? min(900, geometry.size.height * 0.65) : 360))
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     if !configuration.groups.isEmpty {
@@ -215,13 +336,13 @@ struct GenUIMapView: View {
                     if configuration.carousel {
                         ScrollView(.horizontal) {
                             LazyHStack(alignment: .top, spacing: 12) {
-                                ForEach((configuration.origin.map { [$0] } ?? []) + configuration.points) { point in
+                                ForEach((model.origin.map { [$0] } ?? []) + model.points) { point in
                                     pointCard(point).frame(width: min(320, max(200, geometry.size.width - 48)))
                                 }
                             }
                         }.scrollIndicators(.hidden)
                     } else {
-                        ForEach((configuration.origin.map { [$0] } ?? []) + configuration.points) { point in pointCard(point) }
+                        ForEach((model.origin.map { [$0] } ?? []) + model.points) { point in pointCard(point) }
                     }
                 }.padding()
             }

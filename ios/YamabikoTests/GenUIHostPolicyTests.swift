@@ -14,10 +14,11 @@ final class GenUIHostPolicyTests: XCTestCase {
         }
     }
 
-    func testInteractionSnapshotsAreJSONAndBounded() {
+    func testInteractionSnapshotsRequireJSONWithoutFixedByteLimit() {
         XCTAssertEqual(GenUIHostPolicy.snapshot(from: ["bindings": ["count": 3]])?["bindings"], .object(["count": .number(3)]))
         XCTAssertNil(GenUIHostPolicy.snapshot(from: ["value": Double.infinity]))
-        XCTAssertNil(GenUIHostPolicy.snapshot(from: ["value": String(repeating: "x", count: 131_073)]))
+        let text = String(repeating: "資料", count: 100_000)
+        XCTAssertEqual(GenUIHostPolicy.snapshot(from: ["value": text])?["value"], .string(text))
     }
 
     func testRichDemoUsesTheSameValidatedToolContract() throws {

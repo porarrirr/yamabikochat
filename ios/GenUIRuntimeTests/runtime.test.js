@@ -30,7 +30,7 @@ class Element {
     getBoundingClientRect() {return {x:0, y:0, width:320, height:180};}
 }
 
-function mount(config) {
+function mount(config, width = 320) {
     const root = new Element('main'), html = new Element('html'), messages = [], tasks = [];
     html.scrollHeight = 300;
     const documentListeners={};
@@ -42,7 +42,7 @@ function mount(config) {
         createElement:tag => new Element(tag), createElementNS:(_, tag) => new Element(tag),
         createTextNode:text => ({textContent:String(text)}), createDocumentFragment:() => new Element('fragment')
     };
-    const context = {document, __GENUI_DOCUMENT__:config, innerWidth:320, URL,
+    const context = {document, __GENUI_DOCUMENT__:config, innerWidth:width, URL,
         webkit:{messageHandlers:{genui:{postMessage(value) {messages.push(value);}}}},
         addEventListener() {}, requestAnimationFrame:fn => fn(),
         ResizeObserver:class {observe() {}}, queueMicrotask:fn => tasks.push(fn),
@@ -111,16 +111,34 @@ test('local binding updates shared text without submitting a model turn', () => 
     assert.equal(app.messages.some(m => m.type === 'issueNewTurn'), false);
 });
 
-test('maps only request native presentation following a trusted click', () => {
+test('maps render inline without an open button or presentation action', () => {
     const props = {title:'Tokyo', points:[{lat:35.6, lng:139.7, name:'Stop'}]};
     const app = mount({ui:api.h('MapWidgetV2', props)});
-    assert.equal(app.messages.some(m => ['openMap','map'].includes(m.type)), false);
-    const button = app.root.querySelectorAll('button')[0];
-    button.fire('click');
+    assert.equal(app.root.querySelectorAll('button').length, 0);
     assert.equal(app.messages.some(m => m.type === 'openMap'), false);
-    button.fire('click', true);
-    const message = app.messages.find(m => m.type === 'openMap');
-    assert.deepEqual(JSON.parse(JSON.stringify(message.props.points)), props.points);
+    const message = app.messages.find(m => m.type === 'maps');
+    assert.equal(message.maps.length, 1);
+    assert.deepEqual(JSON.parse(JSON.stringify(message.maps[0].props)), props);
+    assert.deepEqual(JSON.parse(JSON.stringify(message.maps[0].frame)), {x:0,y:0,width:320,height:180});
+});
+
+test('maps display and forward place names addresses and queries without coordinates', () => {
+    const props = {points:[{name:'東京駅'},{address:'大阪市北区'},{query:'京都駅'}], origin:{name:'品川駅'}};
+    const app = mount({ui:api.h('MapWidgetV2', props)});
+    for (const place of ['東京駅','大阪市北区','京都駅']) assert.ok(app.root.textContent.includes(place));
+    assert.equal(app.root.textContent.includes('undefined'), false);
+    assert.equal(app.messages.some(m => m.type === 'openMap'), false);
+    const message = app.messages.find(m => m.type === 'maps');
+    assert.deepEqual(JSON.parse(JSON.stringify(message.maps[0].props)), props);
+});
+
+test('inline map layout removes hidden maps and follows local state changes', () => {
+    const app = mount({state:{visible:true}, code:"return DIL.h('col',{},state.visible && DIL.h('MapWidgetV2',{points:[{name:'東京駅'}]}),DIL.h('button',{label:'Hide',onClick:{type:'setState',key:'visible',value:false}}));"});
+    assert.equal(app.messages.filter(m => m.type === 'maps').at(-1).maps.length, 1);
+    app.root.querySelectorAll('button')[0].fire('click', true);
+    app.flush();
+    assert.equal(app.messages.filter(m => m.type === 'maps').at(-1).maps.length, 0);
+    assert.equal(app.messages.some(m => m.type === 'openMap'), false);
 });
 
 test('unknown image references and app bundles show an unavailable result', () => {
@@ -177,6 +195,72 @@ test('range pointer drag retains the input node while shared content updates', (
     assert.ok(app.root.textContent.includes('Amount 55'));
     app.context.document.fire('pointerup',slider);app.flush();
     assert.notEqual(app.root.querySelectorAll('input')[1],slider,'drag ends and normal reconciliation resumes');
+});
+
+test('JavaScript arithmetic Math functions and custom calculations use the code renderer', () => {
+    const code = `
+        const [principal, setPrincipal] = DIL.useState(300000);
+        const monthly = DIL.useMemo(() => {
+            const rate = 5 / 1200, months = 30 * 12;
+            return principal * rate / (1 - (1 + rate) ** -months);
+        }, [principal]);
+        function compound(amount, rate, years) { return amount * Math.pow(1 + rate, years); }
+        const stats = [1, 2, 3].reduce((sum, n) => sum + n, 0) / 3;
+        const arithmetic = (8 + 4 - 2) * 3 / 2 + 2 ** 3;
+        return DIL.h('col', {},
+            DIL.h('text', {}, JSON.stringify([monthly, arithmetic, Math.min(4, 2, 3), Math.max(4, 2, 3), Math.abs(-3), Math.round(4.6), Math.pow(2, 3), compound(100, 0.1, 2), stats])),
+            DIL.h('button', {label: 'Double', onClick: () => setPrincipal(p => p * 2)}));
+    `;
+    const app = mount({code});
+    const numbers = () => JSON.parse(app.root.children[0].children[0].children[0].textContent);
+    assert.ok(Math.abs(numbers()[0] - 1610.464869) < 0.00001);
+    assert.deepEqual(numbers().slice(1, 7), [23, 2, 4, 3, 5, 8]);
+    assert.ok(Math.abs(numbers()[7] - 121) < 0.00001);
+    assert.equal(numbers()[8], 2);
+    app.root.querySelectorAll('button')[0].fire('click', true); app.flush();
+    assert.ok(Math.abs(numbers()[0] - 3220.929738) < 0.00001);
+    assert.equal(app.messages.some(m => m.type === 'error' || m.type === 'issueNewTurn'), false);
+});
+
+test('large code trees and local snapshots are not truncated to the previous limits', () => {
+    const text = '資料'.repeat(100000);
+    const code = "const [value] = DIL.useState(resources.source.text); return DIL.h('text', {}, value);" + ' '.repeat(65537);
+    const app = mount({code, resources:{source:{text}}});
+    assert.equal(app.root.textContent, text);
+    assert.equal(app.context.GenUIRuntime.getSnapshot().hooks[0], text);
+    let ui = api.h('text', {}, 'Deep leaf');
+    for (let i = 0; i < 64; i++) ui = api.h('col', {}, ui);
+    const tree = mount({ui:api.h('col', {}, ui, ...Array.from({length:1024}, (_, i) => api.h('text', {}, String(i))))});
+    assert.equal(tree.root.children[0].children[0].children.length, 1025);
+    assert.ok(tree.root.textContent.includes('Deep leaf'));
+    assert.equal(tree.messages.some(m => m.type === 'error'), false);
+});
+
+test('mobile forms cap whitespace and fit content while preserving input updates', () => {
+    const app = mount({state:{count:0}, ui:api.h('col', {gap:40,padding:24,height:900,minHeight:800,justify:'between'},
+        api.h('row', {gap:24}, api.h('label', {}, '50円玉'), api.h('input', {inputType:'number',bind:'count'}), api.h('text', {}, '{{count}}枚')),
+        api.h('spacer', {minSize:200}), api.h('Link', {title:'参照',url:'https://example.com'}))});
+    const column = app.root.children[0].children[0];
+    assert.equal(column.style.gap, 'clamp(0px, 160px, 12px)');
+    assert.equal(column.style.padding, 'clamp(0px, 96px, 16px)');
+    assert.equal(column.style.height, 'auto');
+    assert.equal(column.style.minHeight, '0');
+    assert.equal(column.style.justifyContent, 'flex-start');
+    assert.equal(column.children[1].style.flex, '0 0 8px');
+    assert.equal(column.children[1].style.minHeight, '0');
+    const input=app.root.querySelectorAll('input')[0];input.value='12';input.fire('input',true);app.flush();
+    assert.ok(app.root.textContent.includes('12枚'));
+    app.root.querySelectorAll('button')[0].fire('click',true);
+    assert.equal(app.messages.find(m=>m.type==='openUrl').url,'https://example.com/');
+});
+
+test('desktop authored layout and mobile media or explicit scrolling sizes remain available', () => {
+    const ui=api.h('col',{height:900,gap:24},api.h('box',{height:240,scrollable:true}),api.h('AsyncImage',{src:'https://example.com/image.png',height:180}));
+    const desktop=mount({ui},1024).root.children[0].children[0];
+    assert.equal(desktop.style.height,'900px');assert.equal(desktop.style.gap,'96px');
+    const mobile=mount({ui}).root.children[0].children[0];
+    assert.equal(mobile.children[0].style.height,'240px');
+    assert.equal(mobile.children[1].style.height,'180px');
 });
 
 test('unchanged hook state in an effect does not schedule a render loop', () => {

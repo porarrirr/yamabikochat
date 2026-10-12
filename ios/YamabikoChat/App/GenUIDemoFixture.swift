@@ -28,6 +28,9 @@ enum GenUIDemoFixture {
             phase: .finished, call: call,
             result: ToolResult(callId: call.id, name: call.name, content: content), createdAtMs: timestamp + 1
         ))
+        if ProcessInfo.processInfo.arguments.contains("-GenUITranscriptOnlyFixture") {
+            payload.steps = []
+        }
         try conversations.saveToolActivity(messageId: messageID, variantId: nil, payload: payload)
     }
 

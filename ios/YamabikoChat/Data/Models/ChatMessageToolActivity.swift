@@ -38,6 +38,10 @@ struct ChatMessageToolActivity: Codable, FetchableRecord, MutablePersistableReco
     }
 
     var steps: [ToolActivityStep] {
+        ToolActivityPayload(steps: decodedSteps, providerTranscript: providerTranscript ?? []).steps
+    }
+
+    private var decodedSteps: [ToolActivityStep] {
         guard let data = stepsJSON.data(using: .utf8) else { return [] }
         return (try? JSONDecoder().decode([ToolActivityStep].self, from: data)) ?? []
     }
@@ -72,7 +76,7 @@ struct ChatMessageToolActivity: Codable, FetchableRecord, MutablePersistableReco
 
     var payload: ToolActivityPayload {
         ToolActivityPayload(
-            steps: steps,
+            steps: decodedSteps,
             providerTranscript: providerTranscript ?? [],
             attachmentPaths: attachmentPaths,
             piExecution: piExecution,
@@ -115,6 +119,11 @@ struct ToolActivityEvent: Sendable, Equatable {
         case finished
     }
 
+    static func reportsActivity(for name: String) -> Bool {
+        [WebSearchTool.name, FetchUrlTool.name, PythonExecuteTool.name,
+         StrReplaceEditorTool.name, GenUITool.name].contains(name)
+    }
+
     var phase: Phase
     var call: ToolCall
     var result: ToolResult?
@@ -140,6 +149,7 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
         self.attachmentPaths = attachmentPaths
         self.piExecution = piExecution
         self.rotationNotices = rotationNotices
+        restoreMissingGenUISteps()
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -153,6 +163,7 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
         attachmentPaths = try container.decodeIfPresent([String].self, forKey: .attachmentPaths) ?? []
         piExecution = try container.decodeIfPresent(JSONValue.self, forKey: .piExecution)
         rotationNotices = try container.decodeIfPresent([ProviderRotationNotice].self, forKey: .rotationNotices) ?? []
+        restoreMissingGenUISteps()
     }
 
     var hasPersistableContent: Bool {
@@ -199,6 +210,32 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
                 toolResultIsError: result.isError
             )
         )
+    }
+
+    // Older Pi bridge builds executed GenUI but persisted only its transcript.
+    // Recover validated results locally without executing the tool or model again.
+    private mutating func restoreMissingGenUISteps() {
+        var calls: [String: ToolCall] = [:]
+        var existingIDs = Set(steps.map(\.id))
+        for message in providerTranscript {
+            if message.role == "assistant" {
+                for call in message.toolCalls ?? [] where call.name == GenUITool.name {
+                    calls[call.id] = call
+                }
+            }
+            guard message.role == "tool", message.toolName == GenUITool.name,
+                  message.toolResultIsError == false,
+                  let id = message.toolCallId, let call = calls[id],
+                  !existingIDs.contains(id) else { continue }
+            let result = ToolResult(callId: id, name: call.name, content: message.content)
+            var step = Self.step(for: ToolActivityEvent(
+                phase: .finished, call: call, result: result, createdAtMs: 0
+            ))
+            guard step.genUIDocument != nil else { continue }
+            step.round = (steps.map(\.round).max() ?? 0) + 1
+            steps.append(step)
+            existingIDs.insert(id)
+        }
     }
 
     mutating func failRunning(message: String) {
