@@ -141,7 +141,7 @@ private struct SettingsDetailScreen: View {
     @State private var showDiagnosticsSheet = false
     #endif
     @State private var showAgentSkillImporter = false
-    @State private var pendingAgentSkillDeletionName: String?
+    @State private var selectedAgentSkill: InstalledAgentSkill?
     @State private var pendingSystemPromptPresetDeletionName: String?
 
     var body: some View {
@@ -191,27 +191,8 @@ private struct SettingsDetailScreen: View {
                 }
             )
         }
-        .alert(
-            "Agent Skillを削除しますか？",
-            isPresented: Binding(
-                get: { pendingAgentSkillDeletionName != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        pendingAgentSkillDeletionName = nil
-                    }
-                }
-            ),
-            presenting: pendingAgentSkillDeletionName
-        ) { skillName in
-            Button("削除", role: .destructive) {
-                viewModel.deleteAgentSkill(name: skillName)
-                pendingAgentSkillDeletionName = nil
-            }
-            Button("キャンセル", role: .cancel) {
-                pendingAgentSkillDeletionName = nil
-            }
-        } message: { skillName in
-            Text("$\(skillName) を完全に削除します。この操作は取り消せません。")
+        .sheet(item: $selectedAgentSkill) { skill in
+            AgentSkillDetailScreen(viewModel: viewModel, skillName: skill.manifest.name)
         }
     }
 
@@ -452,8 +433,12 @@ private struct SettingsDetailScreen: View {
                 Text("端末内のZIPまたはフォルダを選択してインストールします。")
             }
 
-            ForEach(viewModel.installedAgentSkills) { skill in
-                agentSkillSection(skill)
+            if !viewModel.installedAgentSkills.isEmpty {
+                Section("インストール済み (\(viewModel.installedAgentSkills.count))") {
+                    ForEach(viewModel.installedAgentSkills) { skill in
+                        agentSkillRow(skill)
+                    }
+                }
             }
 
             if !viewModel.installedAgentSkills.isEmpty {
@@ -471,80 +456,39 @@ private struct SettingsDetailScreen: View {
         }
     }
 
-    private func agentSkillSection(_ skill: InstalledAgentSkill) -> some View {
-        Section {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("$\(skill.manifest.name)")
-                        .font(.headline)
-                        .textSelection(.enabled)
-                    Text(skill.isEnabled ? "有効" : "無効")
-                        .font(.caption)
-                        .foregroundStyle(skill.isEnabled ? Color.green : Color.secondary)
-                }
-
-                Spacer(minLength: 8)
-
-                Toggle("", isOn: Binding(
-                    get: { skill.isEnabled },
-                    set: { viewModel.setAgentSkillEnabled($0, name: skill.manifest.name) }
-                ))
-                .labelsHidden()
-                .accessibilityLabel("$\(skill.manifest.name)を有効化")
-            }
-            .padding(.vertical, 2)
-
-            Text(skill.manifest.description)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(3)
-
-            HStack(spacing: 16) {
-                Label("\(skill.files.count)ファイル", systemImage: "doc.on.doc")
-                Label(
-                    skill.hasScripts ? "スクリプトあり・実行対象外" : "指示・資料のみ",
-                    systemImage: skill.hasScripts ? "exclamationmark.triangle" : "doc.text"
-                )
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            DisclosureGroup("技術情報") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(skill.manifest.description)
-                        .font(.caption)
-
-                    Divider()
-
-                    Group {
-                        Text("SHA-256: \(skill.contentHash)")
-                        if let license = skill.manifest.license { Text("license: \(license)") }
-                        if let compatibility = skill.manifest.compatibility { Text("compatibility: \(compatibility)") }
-                        Text("allowed-tools: \(skill.manifest.allowedTools.isEmpty ? "なし" : skill.manifest.allowedTools.joined(separator: ", "))")
-                        ForEach(skill.manifest.metadata.sorted(by: { $0.key < $1.key }), id: \.key) { entry in
-                            Text("\(entry.key): \(entry.value)")
-                        }
-                    }
-                    .font(.caption2.monospaced())
-
-                    Divider()
-
-                    ForEach(skill.files) { file in
-                        Text("\(file.isScript ? "⚠ " : "")\(file.path) · \(ByteCountFormatter.string(fromByteCount: file.size, countStyle: .file))")
-                            .font(.caption2.monospaced())
-                    }
-                }
-                .foregroundStyle(.secondary)
-                .padding(.top, 8)
-            }
-
-            Button(role: .destructive) {
-                pendingAgentSkillDeletionName = skill.manifest.name
+    private func agentSkillRow(_ skill: InstalledAgentSkill) -> some View {
+        HStack(spacing: 12) {
+            Button {
+                selectedAgentSkill = skill
             } label: {
-                Label("このSkillを削除", systemImage: "trash")
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("$\(skill.manifest.name)")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Text(skill.manifest.description)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                     .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
             }
-            .accessibilityHint("確認後にこのSkillを削除します")
+            .buttonStyle(.plain)
+            .accessibilityLabel("$\(skill.manifest.name)の詳細")
+            .accessibilityHint("説明・ファイル・削除操作を表示します")
+
+            Toggle("$\(skill.manifest.name)を有効化", isOn: Binding(
+                get: { skill.isEnabled },
+                set: { viewModel.setAgentSkillEnabled($0, name: skill.manifest.name) }
+            ))
+            .labelsHidden()
         }
     }
 
@@ -2529,4 +2473,128 @@ private struct SettingsStatusFooter: View {
             }
         }
     }
+}
+
+private struct AgentSkillDetailScreen: View {
+    @ObservedObject var viewModel: SettingsViewModel
+    let skillName: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var pendingAgentSkillDeletionName: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if let skill = viewModel.installedAgentSkills.first(where: { $0.manifest.name == skillName }) {
+                    agentSkillSection(skill)
+                }
+            }
+            .navigationTitle("Skillの詳細")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("閉じる") { dismiss() }
+                }
+            }
+            .alert(
+                "Agent Skillを削除しますか？",
+                isPresented: Binding(
+                    get: { pendingAgentSkillDeletionName != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            pendingAgentSkillDeletionName = nil
+                        }
+                    }
+                ),
+                presenting: pendingAgentSkillDeletionName
+            ) { skillName in
+                Button("削除", role: .destructive) {
+                    viewModel.deleteAgentSkill(name: skillName)
+                    pendingAgentSkillDeletionName = nil
+                }
+                Button("キャンセル", role: .cancel) {
+                    pendingAgentSkillDeletionName = nil
+                }
+            } message: { skillName in
+                Text("$\(skillName) を完全に削除します。この操作は取り消せません。")
+            }
+        }
+        .onChange(of: viewModel.installedAgentSkills) { _, skills in
+            if !skills.contains(where: { $0.manifest.name == skillName }) {
+                dismiss()
+            }
+        }
+    }
+
+    private func agentSkillSection(_ skill: InstalledAgentSkill) -> some View {
+        Section {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("$\(skill.manifest.name)")
+                        .font(.headline)
+                        .textSelection(.enabled)
+                    Text(skill.isEnabled ? "有効" : "無効")
+                        .font(.caption)
+                        .foregroundStyle(skill.isEnabled ? Color.green : Color.secondary)
+                }
+
+                Spacer(minLength: 8)
+
+                Toggle("", isOn: Binding(
+                    get: { skill.isEnabled },
+                    set: { viewModel.setAgentSkillEnabled($0, name: skill.manifest.name) }
+                ))
+                .labelsHidden()
+                .accessibilityLabel("$\(skill.manifest.name)を有効化")
+            }
+            .padding(.vertical, 2)
+
+            Text(skill.manifest.description)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            HStack(spacing: 16) {
+                Label("\(skill.files.count)ファイル", systemImage: "doc.on.doc")
+                Label(
+                    skill.hasScripts ? "スクリプトあり・実行対象外" : "指示・資料のみ",
+                    systemImage: skill.hasScripts ? "exclamationmark.triangle" : "doc.text"
+                )
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            DisclosureGroup("技術情報") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Group {
+                        Text("SHA-256: \(skill.contentHash)")
+                        if let license = skill.manifest.license { Text("license: \(license)") }
+                        if let compatibility = skill.manifest.compatibility { Text("compatibility: \(compatibility)") }
+                        Text("allowed-tools: \(skill.manifest.allowedTools.isEmpty ? "なし" : skill.manifest.allowedTools.joined(separator: ", "))")
+                        ForEach(skill.manifest.metadata.sorted(by: { $0.key < $1.key }), id: \.key) { entry in
+                            Text("\(entry.key): \(entry.value)")
+                        }
+                    }
+                    .font(.caption2.monospaced())
+
+                    Divider()
+
+                    ForEach(skill.files) { file in
+                        Text("\(file.isScript ? "⚠ " : "")\(file.path) · \(ByteCountFormatter.string(fromByteCount: file.size, countStyle: .file))")
+                            .font(.caption2.monospaced())
+                    }
+                }
+                .foregroundStyle(.secondary)
+                .padding(.top, 8)
+            }
+
+            Button(role: .destructive) {
+                pendingAgentSkillDeletionName = skill.manifest.name
+            } label: {
+                Label("このSkillを削除", systemImage: "trash")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .accessibilityHint("確認後にこのSkillを削除します")
+        }
+    }
+
 }
