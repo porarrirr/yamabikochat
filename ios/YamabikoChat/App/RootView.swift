@@ -335,7 +335,11 @@ struct RootView: View {
             appState.selectedConversationID = nil
             setPreferredCompactColumn(.sidebar)
         case .chat:
-            if let conversationID = launch.conversationID ?? screenshotConversations.first?.id {
+            let genUITitle = ProcessInfo.processInfo.arguments.contains("-GenUIRichFixture")
+                ? GenUIRichDemoFixture.title : GenUIDemoFixture.title
+            let genUIFixtureID = ProcessInfo.processInfo.arguments.contains("-GenUIFixture") || ProcessInfo.processInfo.arguments.contains("-GenUIRichFixture")
+                ? screenshotConversations.first(where: { $0.title == genUITitle })?.id : nil
+            if let conversationID = launch.conversationID ?? genUIFixtureID ?? screenshotConversations.first?.id {
                 selectConversation(id: conversationID)
             }
         case .temporaryChat:

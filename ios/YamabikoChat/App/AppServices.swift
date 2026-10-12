@@ -77,13 +77,13 @@ final class AppServices {
         let pythonTool = PythonExecuteTool(attachments: attachmentRepository)
         let editorTool = StrReplaceEditorTool(attachments: attachmentRepository)
         let clientWebTools = LocalToolRegistry(
-            executors: [WebSearchTool(), FetchUrlTool(), pythonTool, editorTool, askUserQuestionTool]
+            executors: [WebSearchTool(), FetchUrlTool(), pythonTool, editorTool, askUserQuestionTool, GenUITool()]
         )
         // Recreate per request: WebSearch/FetchUrl are stateless, pythonTool is reused
         // (tied to attachmentRepository), and AgentSkill executors snapshot latest enabledSkills.
         let makeLocalTools: @Sendable () -> LocalToolRegistry = { [repository, pythonTool, editorTool, askUserQuestionTool] in
             LocalToolRegistry(
-                executors: [WebSearchTool(), FetchUrlTool(), pythonTool, editorTool, askUserQuestionTool] + AgentSkillTools.executors(repository: repository)
+                executors: [WebSearchTool(), FetchUrlTool(), pythonTool, editorTool, askUserQuestionTool, GenUITool()] + AgentSkillTools.executors(repository: repository)
             )
         }
         let localTools = makeLocalTools()

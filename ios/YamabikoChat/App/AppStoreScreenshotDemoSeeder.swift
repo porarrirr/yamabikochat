@@ -22,10 +22,12 @@ enum AppStoreScreenshotDemoSeeder {
         let isReasoningEffortFixture = ProcessInfo.processInfo.arguments.contains(
             "-ReasoningEffortSliderFixture"
         )
+        let isGenUIFixture = ProcessInfo.processInfo.arguments.contains("-GenUIFixture")
+            || ProcessInfo.processInfo.arguments.contains("-GenUIRichFixture")
         var settings = try chatRepository.loadSettings()
-        settings.themeMode = isReasoningEffortFixture ? "DARK" : "LIGHT"
+        settings.themeMode = isReasoningEffortFixture || ProcessInfo.processInfo.arguments.contains("-GenUIDarkFixture") ? "DARK" : "LIGHT"
         settings.dynamicColorEnabled = true
-        settings.isDualModeEnabled = !isReasoningEffortFixture
+        settings.isDualModeEnabled = !isReasoningEffortFixture && !isGenUIFixture
         settings.isFusionModeEnabled = false
         settings.isAutoConversationEnabled = false
         settings.apiProvider = isReasoningEffortFixture ? "CODEX_AUTH" : "OPENROUTER"
@@ -175,6 +177,12 @@ enum AppStoreScreenshotDemoSeeder {
                     )
                 )
             }
+        }
+        if isGenUIFixture {
+            try GenUIDemoFixture.seed(chatRepository: chatRepository, conversations: conversations, timestamp: baseTime + 500_000)
+        }
+        if ProcessInfo.processInfo.arguments.contains("-GenUIRichFixture") {
+            try GenUIRichDemoFixture.seed(chatRepository: chatRepository, conversations: conversations, timestamp: baseTime + 600_000)
         }
     }
 }

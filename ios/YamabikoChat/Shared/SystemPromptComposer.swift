@@ -44,12 +44,17 @@ enum SystemPromptComposer {
     Use ask_user_question only when you need the user's confirmation, a user-owned choice, or information that cannot be discovered from the available context or tools. Keep each question concise and give it a stable id. You may ask multiple questions in one call. Put a recommended option first and append "(Recommended)" to its label. Set multi_select to true only when more than one option may be selected. If the user cancels, do not invent an answer or claim that the question was answered.
     """
 
+    static let genUIToolInstructions = """
+    Use genui when an interactive calculator, comparison table, chart, cards, map or input form would make the answer easier to understand. Choose and compose the components to suit the user's question. Select exactly one renderer: legacy components with =arithmetic expressions, a ui component tree with state bindings, or code using DIL.h/createElement and DIL hooks. JavaScript is a client-side function body returning nodes; JSX, imports and remote executable bundles are unavailable. Keep hook state JSON serializable so inputs survive scrolling. The tool definition lists supported component names and properties. Inputs update locally; only an explicit user-activated GenUI.issueNewTurn or FollowUp requests another Pi conversation turn. Host copying, URL opening and entity/map presentation also require a user gesture. Forms update client state, without external submission. Use the user's language for labels, and state units and assumptions. Get external facts with available research tools first and put explicit HTTPS media/citation URLs in resources. Unknown ChatGPT reference IDs, search queries and external AppBlock bundles cannot supply data in this app; never claim they resolved. MapWidgetV2 requires supplied latitude/longitude; native iOS map directions are requested only with show_route. After a successful call, add a brief explanation rather than repeating the entire UI as text.
+    """
+
     static func composeForAPI(
         _ systemPrompt: String?,
         enablesAgenticWebSearch: Bool = false,
         enablesEditorInstructions: Bool = false,
         enablesPythonInstructions: Bool = false,
         enablesUserQuestionInstructions: Bool = false,
+        enablesGenUIInstructions: Bool = false,
         now: Date = Date()
     ) -> String? {
         let dateSuffix = dateLabel + formattedDate(now)
@@ -59,6 +64,7 @@ enum SystemPromptComposer {
             enablesEditorInstructions ? editorToolInstructions : nil,
             enablesPythonInstructions ? pythonToolInstructions : nil,
             enablesUserQuestionInstructions ? userQuestionToolInstructions : nil,
+            enablesGenUIInstructions ? genUIToolInstructions : nil,
             dateSuffix
         ]
         .compactMap { $0 }

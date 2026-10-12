@@ -1096,7 +1096,8 @@ final class ChatRepository {
                 enablesAgenticWebSearch: !conversation.isSecret && resolvedSettings.tools.containsWebSearchTool,
                 enablesEditorInstructions: !conversation.isSecret && resolvedSettings.tools.containsEditorTool,
                 enablesPythonInstructions: !conversation.isSecret && resolvedSettings.tools.containsPythonTool,
-                enablesUserQuestionInstructions: !conversation.isSecret && resolvedSettings.tools.containsAskUserQuestionTool
+                enablesUserQuestionInstructions: !conversation.isSecret && resolvedSettings.tools.containsAskUserQuestionTool,
+                enablesGenUIInstructions: !conversation.isSecret && resolvedSettings.tools.containsGenUITool
             ),
             stream: settings.isStreamingEnabled,
             tools: conversation.isSecret ? [] : resolvedSettings.tools,
@@ -2699,7 +2700,8 @@ final class ChatRepository {
                 systemPrompt,
                 enablesAgenticWebSearch: clientToolsAllowed && resolvedSettings.tools.containsWebSearchTool,
                 enablesEditorInstructions: clientToolsAllowed && resolvedSettings.tools.containsEditorTool,
-                enablesPythonInstructions: clientToolsAllowed && resolvedSettings.tools.containsPythonTool
+                enablesPythonInstructions: clientToolsAllowed && resolvedSettings.tools.containsPythonTool,
+                enablesGenUIInstructions: clientToolsAllowed && resolvedSettings.tools.containsGenUITool
             ),
             stream: stream ?? settings.isStreamingEnabled,
             tools: clientToolsAllowed ? resolvedSettings.tools : [],

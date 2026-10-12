@@ -18,6 +18,15 @@ final class ChatTimelineRowStore: ObservableObject, Identifiable {
     @Published private(set) var item: ChatTimelineItem
     @Published private(set) var streamingPresentation: StreamingPresentation?
     private let markdownParser = NativeMarkdownIncrementalParser()
+    // Keep interaction state with the message rather than a recycled hosting cell.
+    private var genUIStates: [String: GenUIState] = [:]
+
+    func genUIState(id: String, document: GenUIDocument) -> GenUIState {
+        if let state = genUIStates[id], state.document == document { return state }
+        let state = GenUIState(document: document)
+        genUIStates[id] = state
+        return state
+    }
 
     var streamingSnapshot: ChatStreamingSnapshot? {
         streamingPresentation?.snapshot

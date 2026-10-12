@@ -56,7 +56,7 @@ final class ProviderGateway {
         superGrokAuthRepository: SuperGrokAuthRepository? = nil,
         modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
         openRouterModelService: OpenRouterModelService? = nil,
-        localTools: LocalToolRegistry = LocalToolRegistry(executors: [WebSearchTool(), FetchUrlTool(), PythonExecuteTool()]),
+        localTools: LocalToolRegistry = LocalToolRegistry(executors: [WebSearchTool(), FetchUrlTool(), PythonExecuteTool(), GenUITool()]),
         localToolFactory: (@Sendable () -> LocalToolRegistry)? = nil,
         projectWorkspaces: ProjectWorkspaceStore = .shared,
         editorWorkspaces: EditorWorkspaceStore = .shared,

@@ -587,3 +587,17 @@
 "プリセット「%@」を削除しますか？" = "¿Eliminar el preset «%@»?";
 "プリセットを削除" = "Eliminar preset";
 "削除後は新規作成の状態になり、システムプロンプトは空になります。" = "Después de eliminarlo, se seleccionará un preset nuevo y el prompt del sistema quedará vacío.";
+
+// Generative UI
+"インタラクティブUIを作成" = "Crear UI interactiva";
+"インタラクティブ" = "Interactivo";
+"条件を調整" = "Ajustar valores";
+"条件をリセット" = "Restablecer valores";
+"%@〜%@の数値を入力してください" = "Introduce un número entre %@ y %@";
+"%@以上の数値を入力してください" = "Introduce un número mayor o igual que %@";
+"%@以下の数値を入力してください" = "Introduce un número menor o igual que %@";
+"有効な数値を入力してください" = "Introduce un número válido";
+"項目" = "Categoría";
+"値" = "Valor";
+"系列" = "Serie";
+"グラフ" = "Gráfico";

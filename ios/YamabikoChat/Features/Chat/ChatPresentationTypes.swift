@@ -169,6 +169,8 @@ enum ChatWorkspaceRoute: Identifiable {
     case fusionInspector(messageID: Int64, trace: FusionTrace, debugModeEnabled: Bool)
     case artifactViewer(id: String, block: ChatArtifactBlock)
     case mermaidViewer(id: String, source: String)
+    case genUIMap(GenUIMapConfiguration)
+    case genUIEntity(GenUIEntityDetail)
 
     var id: String {
         switch self {
@@ -179,6 +181,8 @@ enum ChatWorkspaceRoute: Identifiable {
         case let .fusionInspector(messageID, _, _): "fusion-\(messageID)"
         case let .artifactViewer(id, _): "artifact-\(id)"
         case let .mermaidViewer(id, _): "mermaid-\(id)"
+        case let .genUIMap(configuration): "genui-map-\(configuration.id)"
+        case let .genUIEntity(detail): "genui-entity-\(detail.id)"
         }
     }
 }

@@ -2,6 +2,14 @@ import XCTest
 @testable import YamabikoChat
 
 final class SystemPromptComposerTests: XCTestCase {
+    func testGenUIInstructionsAreIncludedOnlyWhenToolIsProvided() {
+        let enabled = SystemPromptComposer.composeForAPI(nil, enablesGenUIInstructions: true)
+        let disabled = SystemPromptComposer.composeForAPI(nil)
+        XCTAssertTrue(enabled?.contains("Use genui when") == true)
+        XCTAssertTrue(enabled?.contains("Inputs update locally") == true)
+        XCTAssertFalse(disabled?.contains("Use genui when") == true)
+    }
+
     private var tokyoTimeZone: TimeZone {
         TimeZone(identifier: "Asia/Tokyo")!
     }

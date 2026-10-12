@@ -1,0 +1,67 @@
+import XCTest
+@testable import YamabikoChat
+
+final class GenUIToolTests: XCTestCase {
+    func testNativeJSONEnvelopeUsesTheSameExecutorAndValidation() async throws {
+        let registry = LocalToolRegistry(executors: [GenUITool()])
+        let arguments = String(decoding: try JSONEncoder().encode(["document": minimal]), as: UTF8.self)
+        let result = await registry.execute(call: ToolCall(id: "native", name: GenUITool.name, argumentsJSON: arguments))
+        XCTAssertFalse(result.isError)
+        XCTAssertEqual(try GenUIDocument.validated(from: result.content).title, "Demo")
+        let invalid = await registry.execute(call: ToolCall(id: "invalid", name: GenUITool.name, argumentsJSON: #"{"document":"{}","title":"Extra"}"#))
+        XCTAssertTrue(invalid.isError)
+    }
+
+    private let minimal = #"{"title":"Demo","components":[{"id":"text","kind":"text","text":"Hello"}]}"#
+
+    func testPaymentAndArithmetic() throws {
+        XCTAssertEqual(try GenUIExpression.evaluate("=payment(principal,rate,years)", values: ["principal":12000,"rate":0,"years":1]), 1000)
+        XCTAssertEqual(try GenUIExpression.evaluate("payment(12000,1e-20,1)", values: [:]), 1000, accuracy: 0.00001)
+        XCTAssertEqual(try GenUIExpression.evaluate("payment(300000,5,30)", values: [:]), 1610.464869, accuracy: 0.00001)
+        XCTAssertEqual(try GenUIExpression.evaluate("-2^2 + max(3,round(4.6))", values: [:]), 1)
+        XCTAssertEqual(try GenUIExpression.evaluate("pow(x,2)+abs(-3)", values: ["x":4]), 19)
+    }
+
+    func testDynamicFormulasAndInterpolation() throws {
+        let document = try GenUIDocument.validated(from: #"{"title":"Demo","inputs":[{"id":"x","label":"X","kind":"number","value":2},{"id":"name","label":"Name","kind":"text"}],"components":[{"id":"value","kind":"metric","value":"=x*3"}]}"#)
+        XCTAssertEqual(document.render("=x*3", values: ["x":4], texts: [:]), "12.0")
+        XCTAssertEqual(document.render("=x*1000", values: ["x":4], texts: [:]), "4000.0")
+        XCTAssertEqual(document.render("{{x}} {{name}}", values: ["x":4], texts: ["x":"", "name":"Ada"]), "4 Ada")
+        XCTAssertEqual(document.render("Hello {{name}}", values: [:], texts: ["name":"Ada"]), "Hello Ada")
+        XCTAssertEqual(document.render("=1/0", values: [:], texts: [:]), "—")
+    }
+
+    func testOptionalDefaultsAndRoundTrip() throws {
+        let document = try GenUIDocument.validated(from: minimal)
+        XCTAssertEqual(document.inputs, [])
+        XCTAssertEqual(try JSONDecoder().decode(GenUIDocument.self, from: JSONEncoder().encode(document)), document)
+        let input = try JSONDecoder().decode(GenUIInput.self, from: Data(#"{"id":"x","label":"X","kind":"number"}"#.utf8))
+        XCTAssertEqual(input.value, 0)
+        XCTAssertEqual(input.text, "")
+    }
+
+    func testRejectsMalformedUnsafeAndOversizedDocuments() {
+        for json in ["{", String(repeating: " ", count: 131073),
+            #"{"title":"Demo","components":[{"id":"x","kind":"html","text":"Hello"}]}"#,
+            #"{"title":"Demo","components":[{"id":"x","kind":"metric","value":"=unknown+1"}]}"#,
+            #"{"title":"Demo","inputs":[{"id":"x","label":"X","kind":"slider","value":3,"min":0,"max":2}],"components":[{"id":"x","kind":"text","text":"Hello"}]}"#,
+            #"{"title":"Demo","inputs":[{"id":"x","label":"X","kind":"slider","value":0,"min":-1e308,"max":1e308}],"components":[{"id":"x","kind":"text","text":"Hello"}]}"#,
+            #"{"title":"Demo","inputs":[{"id":"x","label":"X","kind":"number"},{"id":"x","label":"Again","kind":"number"}],"components":[{"id":"x","kind":"text","text":"Hello"}]}"#,
+            #"{"title":"Demo","components":[{"id":"x","kind":"text","text":"{{missing}}"}]}"#] {
+            XCTAssertThrowsError(try GenUIDocument.validated(from: json))
+        }
+        for expression in ["1/0", "sqrt(4)", "x.foo", "fetch('url')", "payment(1,0,0)", String(repeating:"(",count:40) + "1" + String(repeating:")",count:40)] {
+            XCTAssertThrowsError(try GenUIExpression.evaluate(expression, values: [:]))
+        }
+    }
+
+    func testRegistryExecutesCanonicalDocumentAndRejectsFailure() async throws {
+        let registry = LocalToolRegistry(executors: [GenUITool()])
+        let result = await registry.execute(call: ToolCall(id:"call", name:"genui", argumentsJSON:minimal))
+        XCTAssertFalse(result.isError)
+        XCTAssertEqual(result.callId, "call")
+        XCTAssertEqual(try GenUIDocument.validated(from: result.content).title, "Demo")
+        let failure = await registry.execute(call: ToolCall(id:"bad", name:"genui", argumentsJSON:"{}"))
+        XCTAssertTrue(failure.isError)
+    }
+}

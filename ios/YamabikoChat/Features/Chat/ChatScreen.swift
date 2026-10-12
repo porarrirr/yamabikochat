@@ -501,6 +501,13 @@ struct ChatScreen: View {
                         isComposerFocused = true
                     }
                 },
+                onGenUINewTurn: { query in
+                    guard !viewModel.isSending, viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, viewModel.attachments.isEmpty else { return false }
+                    composerSelection = nil
+                    viewModel.inputText = query
+                    viewModel.sendMessage()
+                    return viewModel.isSending
+                },
                 onEditUserMessage: { text in
                     composerSelection = nil
                     viewModel.inputText = text

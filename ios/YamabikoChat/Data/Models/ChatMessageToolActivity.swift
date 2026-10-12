@@ -102,6 +102,7 @@ struct ToolActivityStep: Codable, Sendable, Equatable, Identifiable {
     var outputPreview: String? = nil
     var artifactNames: [String]? = nil
     var durationMs: Int64? = nil
+    var genUIDocument: GenUIDocument? = nil
 
     var isWebActivity: Bool {
         toolName == WebSearchTool.name || toolName == FetchUrlTool.name
@@ -216,13 +217,14 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
         let isSearch = event.call.name == WebSearchTool.name
         let isFetch = event.call.name == FetchUrlTool.name
         let isPython = event.call.name == PythonExecuteTool.name
+        let isGenUI = event.call.name == GenUITool.name
         let code = (arguments?["code"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = isPython
+        let title = isGenUI ? L10n.text("インタラクティブUIを作成") : isPython
             ? L10n.text("Pythonを実行")
             : (isSearch
                 ? L10n.text("Webを検索")
                 : (isFetch ? L10n.text("ページを確認") : displayName(event.call.name)))
-        let detail = isPython
+        let detail = isGenUI ? ((arguments?["title"] as? String) ?? "GenUI") : isPython
             ? (code?.trimmedNonEmpty ?? L10n.text("コードを確認中"))
             : (isSearch
                 ? (query?.trimmedNonEmpty ?? L10n.text("検索語を確認中"))
@@ -257,7 +259,9 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
             resultPreview: resultPreview,
             outputPreview: outputPreview,
             artifactNames: artifactNames?.isEmpty == false ? artifactNames : nil,
-            durationMs: durationMs
+            durationMs: durationMs,
+            genUIDocument: isGenUI && event.phase == .finished && result?.isError == false
+                ? result.flatMap { try? GenUIDocument.validated(from: $0.content) } : nil
         )
     }
 

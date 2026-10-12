@@ -41,6 +41,10 @@ struct ChatWorkspaceRouteSheet: View {
             ChatArtifactViewer(block: block)
         case let .mermaidViewer(_, source):
             MermaidDiagramViewer(source: source)
+        case let .genUIMap(configuration):
+            GenUIMapView(configuration: configuration)
+        case let .genUIEntity(detail):
+            GenUIEntityDetailView(detail: detail)
         case .modelPicker, .modePicker:
             EmptyView()
         }

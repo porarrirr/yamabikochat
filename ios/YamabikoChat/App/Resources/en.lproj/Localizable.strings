@@ -612,3 +612,40 @@
 "プリセット「%@」を削除しますか？" = "Delete preset “%@”?";
 "プリセットを削除" = "Delete preset";
 "削除後は新規作成の状態になり、システムプロンプトは空になります。" = "After deletion, a new preset will be selected and the system prompt will be empty.";
+
+// Generative UI
+"インタラクティブUIを作成" = "Create interactive UI";
+"インタラクティブ" = "Interactive";
+"条件を調整" = "Adjust inputs";
+"条件をリセット" = "Reset inputs";
+"%@〜%@の数値を入力してください" = "Enter a number between %@ and %@";
+"%@以上の数値を入力してください" = "Enter a number greater than or equal to %@";
+"%@以下の数値を入力してください" = "Enter a number less than or equal to %@";
+"有効な数値を入力してください" = "Enter a valid number";
+"項目" = "Category";
+"値" = "Value";
+"系列" = "Series";
+"グラフ" = "Chart";
+
+// Rich GenUI
+"GenUIの表示リソースを読み込めません" = "Unable to load GenUI resources";
+"GenUIの表示処理が停止しました。会話を開き直してください" = "GenUI rendering stopped. Reopen the conversation.";
+"送信中の応答や入力欄の下書きを確認してください" = "Wait for the current response or clear the composer draft before continuing.";
+"地図には有効な緯度・経度が必要です" = "Valid latitude and longitude are required for the map.";
+"このリンクは開けません" = "This link cannot be opened.";
+"この操作は利用できません" = "This action is unavailable.";
+"地点 %d" = "Point %d";
+"出発地点" = "Origin";
+"地図" = "Map";
+"訪問順の自動最適化には対応していません。地点の順序を指定してください。" = "Automatic stop optimization is unavailable. Supply the stop order.";
+"この移動手段には対応していません。" = "This travel mode is unavailable.";
+"経路には2地点以上が必要です。" = "A route requires at least two points.";
+"到着時刻と出発時刻は同時には指定できません。" = "Specify an arrival time or a departure time, not both.";
+"時刻を指定した複数区間の経路には対応していません。2地点の経路を指定してください。" = "Timed routes require exactly two points.";
+"経路を検索しています…" = "Finding a route…";
+"この区間の経路が見つかりませんでした。" = "No route was found for this segment.";
+"%d区間・%.1f km" = "%d segments · %.1f km";
+"経路を取得できませんでした: %@" = "Unable to retrieve a route: %@";
+"マップで開く" = "Open in Maps";
+"リンクを開く" = "Open link";
+"コピーしました" = "Copied";

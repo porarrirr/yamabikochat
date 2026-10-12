@@ -19,6 +19,7 @@ struct ChatTimelineCollectionView: UIViewControllerRepresentable {
     let onBranch: (Int64) -> Void
     let onRegenerate: () -> Void
     let onAskChatWithSelection: (String) -> Void
+    var onGenUINewTurn: (String) -> Bool = { _ in false }
     let onEditUserMessage: (String) -> Void
     let onSelectUserMessageText: (String) -> Void
 
@@ -49,6 +50,7 @@ struct ChatTimelineCollectionView: UIViewControllerRepresentable {
             onBranch: onBranch,
             onRegenerate: onRegenerate,
             onAskChatWithSelection: onAskChatWithSelection,
+            onGenUINewTurn: onGenUINewTurn,
             onEditUserMessage: onEditUserMessage,
             onSelectUserMessageText: onSelectUserMessageText
         )
@@ -99,6 +101,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     var onBranch: (Int64) -> Void = { _ in }
     var onRegenerate: () -> Void = {}
     var onAskChatWithSelection: (String) -> Void = { _ in }
+    var onGenUINewTurn: (String) -> Bool = { _ in false }
     var onEditUserMessage: (String) -> Void = { _ in }
     var onSelectUserMessageText: (String) -> Void = { _ in }
     var onFollowStateChanged: (Bool, Int) -> Void = { _, _ in }
@@ -156,6 +159,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                     onBranch: self.onBranch,
                     onRegenerate: self.onRegenerate,
                     onAskChatWithSelection: self.onAskChatWithSelection,
+                    onGenUINewTurn: self.onGenUINewTurn,
                     onEditUserMessage: self.onEditUserMessage,
                     onSelectUserMessageText: self.onSelectUserMessageText,
                     onIntrinsicHeightChange: { [weak self] height in
@@ -229,6 +233,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         onBranch: @escaping (Int64) -> Void,
         onRegenerate: @escaping () -> Void,
         onAskChatWithSelection: @escaping (String) -> Void,
+        onGenUINewTurn: @escaping (String) -> Bool = { _ in false },
         onEditUserMessage: @escaping (String) -> Void,
         onSelectUserMessageText: @escaping (String) -> Void
     ) {
@@ -283,6 +288,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         self.onBranch = onBranch
         self.onRegenerate = onRegenerate
         self.onAskChatWithSelection = onAskChatWithSelection
+        self.onGenUINewTurn = onGenUINewTurn
         self.onEditUserMessage = onEditUserMessage
         self.onSelectUserMessageText = onSelectUserMessageText
 
@@ -1002,12 +1008,17 @@ private struct ChatTimelineRowView: View {
     let onBranch: (Int64) -> Void
     let onRegenerate: () -> Void
     let onAskChatWithSelection: (String) -> Void
+    var onGenUINewTurn: (String) -> Bool = { _ in false }
     let onEditUserMessage: (String) -> Void
     let onSelectUserMessageText: (String) -> Void
     let onIntrinsicHeightChange: (CGFloat) -> Void
     let onContentLayoutChange: () -> Void
 
     private var shouldReportIntrinsicHeight: Bool {
+        if case let .dual(message) = store.item {
+            return [message.modelAToolActivity, message.modelBToolActivity]
+                .compactMap { $0 }.flatMap(\.steps).contains { $0.genUIDocument != nil }
+        }
         guard case let .message(message) = store.item else { return false }
         let hasAttachments = (
             try? JSONDecoder().decode(
@@ -1022,6 +1033,8 @@ private struct ChatTimelineRowView: View {
         let presentedText = store.streamingSnapshot?.text.trimmedNonEmpty
             ?? message.displayText
         return hasAttachments
+            || (store.streamingSnapshot?.toolActivity?.steps ?? message.displayToolActivity?.steps ?? [])
+                .contains { $0.genUIDocument != nil }
             || (message.message.role != "user" && presentedText.contains("\n\n"))
     }
 
@@ -1073,6 +1086,9 @@ private struct ChatTimelineRowView: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .environment(\.onAskChatWithSelection, onAskChatWithSelection)
+        .environment(\.onGenUINewTurn, onGenUINewTurn)
+        .environment(\.onGenUIRoute, onRoute)
+        .environmentObject(store)
         .transaction { transaction in
             transaction.animation = nil
         }
@@ -1228,6 +1244,13 @@ private struct ChatMessageRow: View {
 
                     if !attachmentItems.isEmpty {
                         MessageAttachmentList(attachments: attachmentItems, isOutgoing: false)
+                    }
+
+                    ForEach(toolSteps.filter { $0.genUIDocument != nil }) { step in
+                        if let document = step.genUIDocument {
+                            GenUITimelineView(document: document, toolCallID: step.id)
+                                .id(step.id)
+                        }
                     }
 
                     if UserFacingErrorFormatter.looksLikeChatError(responseText) {
@@ -1741,6 +1764,12 @@ private struct DualResponseColumn: View {
             }
             if !attachmentItems.isEmpty {
                 MessageAttachmentList(attachments: attachmentItems, isOutgoing: false)
+            }
+            ForEach(presentation.toolSteps.filter { $0.genUIDocument != nil }) { step in
+                if let document = step.genUIDocument {
+                    GenUITimelineView(document: document, toolCallID: "\(title)-\(step.id)")
+                        .id(step.id)
+                }
             }
             responseContent
         }

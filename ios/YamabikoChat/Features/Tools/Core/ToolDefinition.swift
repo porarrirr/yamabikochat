@@ -143,6 +143,10 @@ struct ToolArtifact: Codable, Sendable, Equatable {
 }
 
 extension Collection where Element == ProviderTool {
+    var containsGenUITool: Bool {
+        contains { $0.type == "function" && $0.payload["name"] == GenUITool.name }
+    }
+
     var containsWebSearchTool: Bool {
         contains {
             $0.type == "function" && $0.payload["name"] == WebSearchTool.name
