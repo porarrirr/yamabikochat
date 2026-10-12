@@ -35,6 +35,70 @@ final class AppStoreScreenshotTests: XCTestCase {
         }
     }
 
+    func testSystemPromptEditorAndPresetFlow() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-AppStoreScreenshotDemo", "-ScreenshotScene", "list",
+            "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"
+        ]
+        app.launch()
+        XCTAssertTrue(openSettings(app: app))
+        XCTAssertTrue(openSettingsCategory(app: app, subtitle: "プロンプト・モード", title: "会話"))
+
+        let enabled = app.switches["system-prompt-enabled"]
+        XCTAssertTrue(enabled.waitForExistence(timeout: 5))
+        if enabled.value as? String == "0" { enabled.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap() }
+        let editor = app.descendants(matching: .any)["system-prompt-editor"].firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        capture("system-prompt-redesign", app: app)
+
+        enabled.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertTrue(editor.waitForNonExistence(timeout: 5))
+        enabled.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+
+        let presets = app.buttons["system-prompt-presets"]
+        presets.tap()
+        XCTAssertTrue(app.navigationBars["プリセットを選ぶ"].waitForExistence(timeout: 5))
+        app.navigationBars["プリセットを選ぶ"].buttons["閉じる"].tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+
+        editor.tap()
+        editor.typeText(" UI test prompt")
+        app.swipeUp()
+        let name = app.textFields["system-prompt-preset-name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        name.typeText(" UI test preset")
+        let save = app.buttons["system-prompt-save-preset"]
+        if !save.isHittable { app.swipeUp() }
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+        XCTAssertTrue(app.staticTexts["プリセット保存済み"].waitForExistence(timeout: 5))
+        XCTAssertFalse(save.isEnabled)
+
+        app.swipeDown()
+        presets.tap()
+        let preset = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "UI test preset")).firstMatch
+        XCTAssertTrue(preset.waitForExistence(timeout: 5))
+        capture("system-prompt-preset-picker", app: app)
+        preset.tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+
+        editor.tap()
+        editor.typeText(" unsaved edit")
+        app.buttons["完了"].tap()
+        presets.tap()
+        preset.tap()
+        XCTAssertTrue(app.buttons["置き換える"].waitForExistence(timeout: 5))
+        app.buttons["キャンセル"].tap()
+        XCTAssertTrue(app.navigationBars["プリセットを選ぶ"].exists)
+        preset.tap()
+        app.buttons["置き換える"].tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertFalse((editor.value as? String ?? "").contains("unsaved edit"))
+    }
+
     func testCaptureAppStoreScreenshots() throws {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["YAMABIKO_CAPTURE_SCREENSHOTS"] == "1",
