@@ -51,6 +51,7 @@ targets:
       CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER: NO
       HEADER_SEARCH_PATHS:
         - "$(BUILT_PRODUCTS_DIR)/Python.framework/Headers"
+        - "$(SRCROOT)/YamabikoChat/Features/Tools/GenUI/NativeCEL/quickjs"
       EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
     dependencies:
       - package: GRDB

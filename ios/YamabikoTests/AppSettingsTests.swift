@@ -30,7 +30,7 @@ final class AppSettingsTests: XCTestCase {
         settings.apiProvider = "APPLE_INTELLIGENCE"
         settings.defaultModel = AppleIntelligenceModelCatalog.pccModel
         settings.pythonToolEnabled = false
-        try database.write { db in try settings.save(db) }
+        try database.write { db in try LegacyURLSettingsFixture(settings: settings).save(db) }
 
         try AppDatabase.migrator.migrate(database)
 
@@ -45,7 +45,7 @@ final class AppSettingsTests: XCTestCase {
         settings.apiProvider = "OPENAI"
         settings.defaultModel = "gpt-5.6"
         settings.pythonToolEnabled = false
-        try database.write { db in try settings.save(db) }
+        try database.write { db in try LegacyURLSettingsFixture(settings: settings).save(db) }
 
         try AppDatabase.migrator.migrate(database)
 
@@ -300,12 +300,79 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.currentModel(), "gpt-4o-mini")
     }
 
-    func testSelectedCompatBaseURLReturnsPresetURL() {
-        var settings = AppSettings()
-        settings.openAICompatPresetsJSON = "[{\"name\":\"internal\",\"baseURL\":\"https://example.com/v1/\"}]"
-        settings.selectedOpenAICompatPreset = "internal"
+    func testCustomEndpointRoundTripKeepsExplicitProtocolAndCapabilities() throws {
+        for api in ["anthropic-messages", "openai-completions", "openai-responses"] {
+            var preset = OpenAICompatPreset(name: "Custom", baseURL: "https://example.com/v1")
+            preset.apiProtocol = api
+            preset.modelId = "private-model"
+            preset.reasoning = true
+            preset.reasoningEffort = "high"
+            preset.vision = true
+            preset.toolCall = true
+            preset.temperature = 0.4
+            XCTAssertNil(preset.validationError)
+            let data = try JSONEncoder().encode(preset)
+            XCTAssertEqual(try JSONDecoder().decode(OpenAICompatPreset.self, from: data), preset)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            XCTAssertEqual(json["protocol"] as? String, api)
+            XCTAssertEqual(json["baseUrl"] as? String, preset.baseURL)
+        }
+    }
 
-        XCTAssertEqual(settings.selectedCompatBaseURL()?.absoluteString, "https://example.com/v1/")
+    func testMigrationRemovesLegacyEndpointColumnsAndPreservesSettings() throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database, upTo: "v29_compact_pi_diagnostics")
+        var settings = AppSettings()
+        settings.apiProvider = "SARASHINA"
+        settings.defaultModel = "sarashina3-nano"
+        settings.themeMode = "DARK"
+        var custom = OpenAICompatPreset(name: "Current", baseURL: "https://current.example/v1")
+        custom.apiProtocol = "openai-responses"
+        custom.modelId = "custom-model"
+        settings.openAICompatPresetsJSON = String(decoding: try JSONEncoder().encode([custom]), as: UTF8.self)
+        settings.selectedOpenAICompatPreset = "Current"
+        try database.write { db in try LegacyURLSettingsFixture(settings: settings).save(db) }
+        try AppDatabase.migrator.migrate(database)
+        try database.read { db in
+            let columns = Set(try db.columns(in: "settings").map(\.name))
+            XCTAssertFalse(columns.contains("openAIBaseURL"))
+            XCTAssertFalse(columns.contains("miniMaxBaseURL"))
+            let migrated = try XCTUnwrap(AppSettings.fetchOne(db))
+            XCTAssertEqual(migrated.apiProvider, "SARASHINA")
+            XCTAssertEqual(migrated.defaultModel, "sarashina3-nano")
+            XCTAssertEqual(migrated.themeMode, "DARK")
+            XCTAssertEqual(migrated.openAICompatPresets(), [custom])
+            XCTAssertEqual(migrated.selectedOpenAICompatPreset, "Current")
+        }
+    }
+
+    func testPersistenceDeletesURLOnlyPresetsWithoutSelectingAnotherEndpoint() throws {
+        var settings = AppSettings()
+        var retained = OpenAICompatPreset(name: "Current", baseURL: "https://example.com/v1")
+        retained.apiProtocol = "openai-responses"
+        retained.modelId = "private-model"
+        settings.openAICompatPresetsJSON = String(decoding: try JSONEncoder().encode([OpenAICompatPreset(name: "Old", baseURL: "https://old.example/v1"), retained]), as: UTF8.self)
+        settings.selectedOpenAICompatPreset = "Old"
+        let normalized = settings.normalizedForPersistence()
+        XCTAssertEqual(normalized.openAICompatPresets(), [retained])
+        XCTAssertNil(normalized.selectedOpenAICompatPreset)
+        XCTAssertEqual(normalized.normalizedForPersistence(), normalized)
+    }
+
+    func testCustomEndpointRejectsMissingProtocolAndInvalidBudget() {
+        var preset = OpenAICompatPreset(name: "Local", baseURL: "http://localhost:8080/v1")
+        preset.modelId = "private-model"
+        XCTAssertNotNil(preset.validationError)
+        preset.apiProtocol = "anthropic-messages"
+        XCTAssertNil(preset.validationError)
+        preset.reasoning = true
+        preset.reasoningEffort = "high"
+        preset.thinkingBudget = preset.maxTokens
+        XCTAssertNotNil(preset.validationError)
+        preset.thinkingBudget = 2048
+        XCTAssertNil(preset.validationError)
+        preset.baseURL = "https://user:secret@example.com/v1"
+        XCTAssertNotNil(preset.validationError)
     }
 
     func testNormalizedForPersistenceDisablesAutoConversationWhenDualIsEnabled() {
@@ -402,20 +469,6 @@ final class AppSettingsTests: XCTestCase {
 
         XCTAssertEqual(normalized.fusionPresetName, FusionPresetLoader.presetLabel)
         XCTAssertNotNil(normalized.decodeFusionCustomPreset())
-    }
-
-    func testResolvedOpenAIBaseURLFallsBackWhenInvalid() {
-        var settings = AppSettings()
-        settings.openAIBaseURL = "   "
-
-        XCTAssertEqual(settings.resolvedOpenAIBaseURL(), AppConstants.defaultOpenAIBaseURL.absoluteString)
-    }
-
-    func testResolvedMiniMaxBaseURLFallsBackWhenInvalid() {
-        var settings = AppSettings()
-        settings.miniMaxBaseURL = "not-a-url"
-
-        XCTAssertEqual(settings.resolvedMiniMaxBaseURL(), AppConstants.defaultMiniMaxBaseURL.absoluteString)
     }
 
     func testPreferredProvidersListRespectsNormalizationAndSelectionMax() {
@@ -629,5 +682,16 @@ final class AppSettingsTests: XCTestCase {
         let openRouterOverrideA = settings.openRouterOverride(for: .autoA)
         XCTAssertEqual(openRouterOverrideA.mode, "effort")
         XCTAssertEqual(openRouterOverrideA.effort, "high")
+    }
+}
+
+// Fixtures for historical schemas only; production settings no longer contain URL overrides.
+struct LegacyURLSettingsFixture: PersistableRecord {
+    static let databaseTableName = "settings"
+    var settings: AppSettings
+    func encode(to container: inout PersistenceContainer) throws {
+        try settings.encode(to: &container)
+        container["openAIBaseURL"] = "https://legacy.example/v1"
+        container["miniMaxBaseURL"] = "https://legacy.example/anthropic"
     }
 }

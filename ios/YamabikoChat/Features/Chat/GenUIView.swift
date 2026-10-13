@@ -3,11 +3,15 @@ import Charts
 
 @MainActor
 final class GenUIState: ObservableObject {
-    let document: GenUIDocument
+    var document: GenUIDocument
     @Published var values: [String: Double]
     @Published var texts: [String: String]
     @Published var numberDrafts: [String: String]
     @Published var richSnapshot: [String: JSONValue]?
+    @Published var richHeight: CGFloat = 60 {
+        didSet { if abs(richHeight - oldValue) > 1 { onLayoutChange?() } }
+    }
+    var onLayoutChange: (() -> Void)?
     @Published var showsInputs = false
 
     init(document: GenUIDocument) {
@@ -66,7 +70,7 @@ struct GenUIView: View {
     private var firstChart: GenUIComponent? { document.components.first { $0.kind == "chart" } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: compact ? 12 : 20) {
+        VStack(alignment: .leading, spacing: 20) {
             header
             if let primary = primaryComponent { componentView(primary) }
             if !document.inputs.isEmpty {
@@ -98,14 +102,10 @@ struct GenUIView: View {
                 }
             }
         }
-        .padding(compact ? 12 : 20)
+        .padding(.vertical, compact ? 12 : 16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(LinearGradient(colors: [.teal.opacity(0.09), .blue.opacity(0.035)], startPoint: .topLeading, endPoint: .bottomTrailing))
-        }
-        .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(.teal.opacity(0.18), lineWidth: 1) }
-        .tint(.teal)
+        .background(Color(uiColor: .systemBackground))
+        .tint(.primary)
     }
 
     private func componentLabel(_ kind: String) -> String {
@@ -120,9 +120,9 @@ struct GenUIView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(render(document.title)).font(.headline).fixedSize(horizontal: false, vertical: true)
+                Text(render(document.title)).font(.title3.weight(.bold)).fixedSize(horizontal: false, vertical: true)
                 if let subtitle = document.subtitle {
-                    Text(render(subtitle)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(render(subtitle)).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 0)
@@ -209,7 +209,7 @@ struct GenUIView: View {
             case "metric":
                 VStack(alignment: .leading, spacing: 6) {
                     Text(formatted(component.value ?? "—", format: component.format, unit: component.unit))
-                        .font(.system(compact ? .title2 : .largeTitle, design: .rounded).weight(.bold)).foregroundStyle(.teal)
+                        .font(.system(compact ? .title : .largeTitle).weight(.semibold)).foregroundStyle(.primary)
                         .contentTransition(.numericText()).minimumScaleFactor(0.65)
                         .accessibilityIdentifier("genui-metric-\(component.id)")
                     if let text = component.text { Text(render(text)).font(.subheadline).foregroundStyle(.secondary) }
@@ -221,7 +221,7 @@ struct GenUIView: View {
                     ForEach(Array((component.items ?? []).enumerated()), id: \.offset) { _, item in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(render(item.title)).font(.subheadline).foregroundStyle(.secondary)
-                            Text(render(item.value)).font(.headline).monospacedDigit()
+                            Text(render(item.value)).font(.title2.weight(.semibold)).monospacedDigit()
                             if let detail = item.detail {
                                 DisclosureGroup(L10n.text("前提")) { Text(render(detail)).font(.caption).foregroundStyle(.secondary) }
                                     .font(.caption)
@@ -266,7 +266,7 @@ struct GenUIView: View {
                             .foregroundStyle(by: .value(L10n.text("項目"), render(point.label)))
                     }
                 }
-                .chartForegroundStyleScale(range: [Color.teal, Color.blue, Color.orange, Color.purple, Color.green, Color.pink])
+                .chartForegroundStyleScale(range: [Color.blue, Color.green, Color.purple, Color.orange, Color.pink, Color.yellow])
                 .chartLegend(position: .bottom, alignment: .leading)
                 .frame(height: compact ? 200 : 260)
                 .accessibilityLabel(render(component.title ?? L10n.text("グラフ")))
@@ -293,7 +293,7 @@ struct GenUIView: View {
                 }
             }
         }
-        .chartForegroundStyleScale(range: [Color.teal, Color.blue, Color.orange, Color.purple])
+        .chartForegroundStyleScale(range: [Color.blue, Color.green, Color.purple, Color.orange])
         .chartLegend(position: .bottom, alignment: .leading)
         .frame(height: compact ? 160 : 220)
         .accessibilityLabel(render(component.title ?? L10n.text("グラフ")))

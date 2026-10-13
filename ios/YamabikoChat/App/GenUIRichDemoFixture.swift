@@ -3205,7 +3205,11 @@ enum GenUIRichDemoFixture {
         let state = try JSONDecoder().decode([String: JSONValue].self, from: stateData)
         let resources = try JSONDecoder().decode([String: GenUIResource].self, from: resourcesData)
         let document: GenUIDocument
-        if ProcessInfo.processInfo.arguments.contains("-GenUICompactFixture") {
+        if ProcessInfo.processInfo.arguments.contains("-GenUIOriginalFixture") {
+            document = GenUIOriginalFixture.document
+        } else if ProcessInfo.processInfo.arguments.contains("-GenUIReferenceFixture") {
+            document = GenUIReferenceFixture.document
+        } else if ProcessInfo.processInfo.arguments.contains("-GenUICompactFixture") {
             // Deliberately oversized authored spacing reproduces the broken mobile cards.
             document = GenUIDocument(title: "硬貨の枚数と参照", code: #"""
             const [counts,setCounts]=DIL.useState([0,0,0]);
@@ -3224,6 +3228,9 @@ enum GenUIRichDemoFixture {
                 DIL.h('text',{},'日本銀行のページで硬貨の種類別データを確認できます。'),
                 DIL.h('Link',{title:'日本銀行「通貨流通高」',url:'https://www.boj.or.jp/statistics/money/ryutsu/index.htm'})));
             """#)
+        } else if ProcessInfo.processInfo.arguments.contains("-GenUIFlowFixture") {
+            document = GenUIDocument(title: "PoWを見て、試して理解する", subtitle: "計算の繰り返しで、ブロックの合意をつくる仕組み", code: flowCode,
+                                     state: ["simulatorOnly": .bool(ProcessInfo.processInfo.arguments.contains("-GenUISimulatorFixture"))])
         } else if ProcessInfo.processInfo.arguments.contains("-GenUIInlineMapFixture") {
             document = GenUIDocument(title: "東京駅から皇居まで徒歩", code: inlineMapCode)
         } else if ProcessInfo.processInfo.arguments.contains("-GenUIRichStateFixture") {
@@ -3238,6 +3245,43 @@ enum GenUIRichDemoFixture {
         payload.apply(ToolActivityEvent(phase: .finished, call: call, result: ToolResult(callId: call.id, name: call.name, content: json), createdAtMs: timestamp))
         try conversations.saveToolActivity(messageId: messageID, variantId: nil, payload: payload)
     }
+
+    static let flowCode = #"""
+    const h = DIL.h;
+    const [difficulty,setDifficulty] = DIL.useState(4);
+    const [sample,setSample] = DIL.useState(null);
+    const expected = 2 ** difficulty;
+    const change = value => {setDifficulty(Number(value));setSample(null);};
+    const experiment = () => {
+      let attempts = 1;
+      while (attempts < 4096 && Math.random() >= 1 / expected) attempts++;
+      setSample(attempts < 4096 ? attempts : '4096回で打ち切り');
+    };
+    return h('col',{gap:6},
+      !state.simulatorOnly && h('title',{},'1. PoWの処理フロー'),
+      !state.simulatorOnly && h('card',{padding:3},h('list',{connector:true,marker:'none'},
+        h('list-item',{icon:'shuffle',label:'取引データを収集',description:'未承認の取引をブロック候補にまとめる'}),
+        h('list-item',{icon:'cpu',iconColor:'info',variant:'outline',label:'Nonceを変えながらハッシュを計算',description:'条件に合うハッシュ値を探索'}),
+        h('list-item',{variant:'decision',label:'ハッシュ値が目標値未満？'},
+          h('grid',{columns:2,gap:2},
+            h('card',{variant:'soft'},h('text',{strong:true},'いいえ'),h('icon',{name:'refresh',color:'secondary'}),h('caption',{},'Nonceを変えて再計算')),
+            h('card',{variant:'success'},h('text',{strong:true,color:'success'},'はい'),h('icon',{name:'check',color:'success'}),h('caption',{},'ブロックをネットワークへ送信')))),
+        h('list-item',{icon:'blocks',iconColor:'success',label:'他ノードによる検証・チェーンへの追加',description:'有効なチェーンへの採用後、報酬を獲得'})
+      )),
+      h('title',{},'2. 探索シミュレーター'),
+      h('text',{},'難易度を上げると、成功までの平均試行回数が増えます。'),
+      h('card',{},
+        h('row',{},h('label',{},'難易度'),h('badge',{label:difficulty+' bit'})),
+        h('slider',{name:'難易度',min:1,max:10,step:1,value:difficulty,onChange:change,marks:[{value:1,label:'易しい'},{value:10,label:'難しい'}]}),
+        h('grid',{columns:2},
+          h('card',{variant:'metric'},h('caption',{},'1回の成功確率'),h('text',{},(100/expected).toFixed(2)+'%')),
+          h('card',{variant:'metric'},h('caption',{},'平均試行回数'),h('text',{},expected+'回'))),
+        h('button',{onClick:experiment},h('icon',{name:'play'}),'探索を試す'),
+        sample !== null && h('text',{tabularNums:true},typeof sample==='number'?'今回の試行：'+sample+'回':sample),
+        h('caption',{},'成功確率を1/2ⁿとする簡略モデルです。実際のハッシュ計算や実測値ではなく、毎回の結果はランダムに変わります。'),
+        h('button',{variant:'outline',onClick:()=>{setDifficulty(4);setSample(null);}},h('icon',{name:'refresh'}),'初期値に戻す'))
+    );
+    """#
 
     static let inlineMapCode = #"""
     const h = DIL.h;

@@ -275,8 +275,8 @@ enum AppDatabase {
                 t.column("providerSelectionMax", .integer).notNull().defaults(to: 12)
                 t.column("providerSort", .text).notNull().defaults(to: "price")
 
-                t.column("openAIBaseURL", .text).notNull()
-                t.column("miniMaxBaseURL", .text).notNull()
+                t.column("openAIBaseURL", .text).notNull().defaults(to: "")
+                t.column("miniMaxBaseURL", .text).notNull().defaults(to: "")
                 t.column("openAICompatPresetsJSON", .text).notNull().defaults(to: "[]")
                 t.column("selectedOpenAICompatPreset", .text)
                 t.column("alibabaMCPEnabled", .boolean).notNull().defaults(to: false)
@@ -1016,6 +1016,12 @@ enum AppDatabase {
                     sql: "UPDATE fusion_traces SET traceJSON = ? WHERE id = ?",
                     arguments: [String(decoding: data, as: UTF8.self), id]
                 )
+            }
+        }
+        migrator.registerMigration("v30_remove_url_only_endpoints") { db in
+            let columns = Set(try db.columns(in: "settings").map(\.name))
+            for column in ["openAIBaseURL", "miniMaxBaseURL"] where columns.contains(column) {
+                try db.execute(sql: "ALTER TABLE settings DROP COLUMN \(column)")
             }
         }
         return migrator

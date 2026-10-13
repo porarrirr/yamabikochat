@@ -19,7 +19,8 @@ class ProviderCatalogTest {
                 "MINIMAX",
                 "OPENAI",
                 "CODEX_AUTH",
-                "OPENAI_COMPAT"
+                "OPENAI_COMPAT",
+                "SARASHINA"
             ),
             ProviderCatalog.options.map { it.key }
         )

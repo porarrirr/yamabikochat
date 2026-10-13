@@ -81,8 +81,6 @@ data class SettingsUpdateRequest(
     val requireParameters: Boolean = false,
     val providerSelectionMax: Int = 12,
     val providerSort: String = "price",
-    val openAiBaseUrl: String = "https://api.openai.com/v1/",
-    val miniMaxBaseUrl: String = "https://api.minimax.io/v1/",
     val openAiCompatPresets: List<com.porarri.yamabikochat.data.remote.OpenAiCompatPreset> = emptyList(),
     val selectedOpenAiCompatPreset: String? = null,
     val alibabaMcpEnabled: Boolean = false,

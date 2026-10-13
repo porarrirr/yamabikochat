@@ -20,12 +20,26 @@ final class ChatTimelineRowStore: ObservableObject, Identifiable {
     private let markdownParser = NativeMarkdownIncrementalParser()
     // Keep interaction state with the message rather than a recycled hosting cell.
     private var genUIStates: [String: GenUIState] = [:]
+    @Published private(set) var genUILayoutRevision = 0
 
     func genUIState(id: String, document: GenUIDocument) -> GenUIState {
+        if let state = genUIStates[id], state.document.isRich && document.isRich { state.document = document; return state }
         if let state = genUIStates[id], state.document == document { return state }
         let state = GenUIState(document: document)
+        state.onLayoutChange = { [weak self] in self?.genUILayoutRevision += 1 }
         genUIStates[id] = state
         return state
+    }
+
+    var hasGenUIContent: Bool {
+        switch item {
+        case .message(let message):
+            return (streamingSnapshot?.toolActivity?.steps ?? message.displayToolActivity?.steps ?? [])
+                .contains { $0.genUIDocument != nil }
+        case .dual(let message):
+            return [message.modelAToolActivity, message.modelBToolActivity]
+                .compactMap { $0 }.flatMap(\.steps).contains { $0.genUIDocument != nil }
+        }
     }
 
     var streamingSnapshot: ChatStreamingSnapshot? {

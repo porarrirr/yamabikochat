@@ -376,7 +376,13 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
 
     private func applyIntrinsicHeight(_ height: CGFloat, rowID: String) {
         guard height.isFinite, height > 0, configuredIDs.contains(rowID) else { return }
-        // The SwiftUI preference is a layout-completion signal, not the
+        // GenUI's asynchronous WebKit size can outgrow the hosting view's cached
+        // fitted height. This preference measures the complete row, including its
+        // native content; commit it so the cell's hit area matches what is drawn.
+        if store?.row(id: rowID)?.hasGenUIContent == true {
+            pendingMeasuredCellHeights[rowID] = ceil(height)
+        }
+        // For other rows the SwiftUI preference is a layout-completion signal, not the
         // authoritative collection-cell height. A delayed preference from an
         // older streaming frame can otherwise overwrite a newer full-cell
         // measurement with the inner Markdown height. Measure the hosting cell
@@ -1086,11 +1092,18 @@ private struct ChatTimelineRowView: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .environment(\.onAskChatWithSelection, onAskChatWithSelection)
+        .environment(\.onGenUIPrefill, onEditUserMessage)
         .environment(\.onGenUINewTurn, onGenUINewTurn)
         .environment(\.onGenUIRoute, onRoute)
         .environmentObject(store)
         .transaction { transaction in
             transaction.animation = nil
+        }
+        .onChange(of: store.genUILayoutRevision) { _, _ in
+            // Child WebKit state alone does not invalidate UIHostingConfiguration's
+            // cached fitting size when UIKit self-sizing is disabled. Remeasure
+            // after the row's observed layout revision has reached SwiftUI.
+            DispatchQueue.main.async { onContentLayoutChange() }
         }
         .onPreferenceChange(ChatTimelineIntrinsicHeightPreference.self) { height in
             guard shouldReportIntrinsicHeight else { return }

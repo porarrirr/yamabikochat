@@ -323,18 +323,12 @@
 "Max price (USD / 1M tokens, 0=unlimited)" = "最大価格 (USD / 100万トークン, 0=無制限)";
 "Max reasoning tokens (0=auto)" = "最大推論トークン (0=自動)";
 "medium" = "中";
-"MiniMax Base URL" = "MiniMax Base URL";
-"MiniMax Endpoint" = "MiniMaxエンドポイント";
 "Model A" = "モデルA";
 "Model B" = "モデルB";
 "Model" = "モデル";
 "none" = "なし";
 "OAuth Client ID" = "OAuthクライアントID";
-"OpenAI (Custom) Presets" = "OpenAI (カスタム) プリセット";
-"OpenAI Base URL" = "OpenAI Base URL";
-"OpenAI Endpoint" = "OpenAIエンドポイント";
 "persistent" = "persistent";
-"Preset Base URL" = "Preset Base URL";
 "Preset Name" = "プリセット名";
 "Preset name" = "プリセット名";
 "price" = "価格";

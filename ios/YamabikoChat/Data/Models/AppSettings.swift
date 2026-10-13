@@ -1,15 +1,41 @@
 import Foundation
 import GRDB
 
-struct OpenAICompatPreset: Codable, Equatable, Identifiable {
+struct OpenAICompatPreset: Codable, Equatable, Identifiable, Sendable {
     var id: String { name }
     var name: String
     var baseURL: String
+    var apiProtocol: String = ""
+    var modelId: String = ""
+    var contextWindow: Int = 128000
+    var maxTokens: Int = 8192
+    var reasoning: Bool = false
+    var toolCall: Bool = false
+    var vision: Bool = false
+    var reasoningEffort: String = "off"
+    var thinkingBudget: Int? = nil
+    var temperature: Double? = nil
+    var maxTokensField: String = "max_completion_tokens"
+    var supportsStore: Bool = false
+    var supportsDeveloperRole: Bool = false
+    var supportsUsageInStreaming: Bool = true
 
     enum CodingKeys: String, CodingKey {
-        case name
-        case baseURL
-        case baseUrl
+        case name, baseURL, baseUrl
+        case apiProtocol = "protocol"
+        case modelId
+        case contextWindow
+        case maxTokens
+        case reasoning
+        case toolCall
+        case vision
+        case reasoningEffort
+        case thinkingBudget
+        case temperature
+        case maxTokensField
+        case supportsStore
+        case supportsDeveloperRole
+        case supportsUsageInStreaming
     }
 
     init(name: String, baseURL: String) {
@@ -20,15 +46,55 @@ struct OpenAICompatPreset: Codable, Equatable, Identifiable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
-        baseURL = try container.decodeIfPresent(String.self, forKey: .baseURL)
-            ?? container.decodeIfPresent(String.self, forKey: .baseUrl)
-            ?? AppConstants.defaultOpenAIBaseURL.absoluteString
+        baseURL = try container.decodeIfPresent(String.self, forKey: .baseUrl)
+            ?? container.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
+        apiProtocol = try container.decodeIfPresent(String.self, forKey: .apiProtocol) ?? ""
+        modelId = try container.decodeIfPresent(String.self, forKey: .modelId) ?? ""
+        contextWindow = try container.decodeIfPresent(Int.self, forKey: .contextWindow) ?? 128000
+        maxTokens = try container.decodeIfPresent(Int.self, forKey: .maxTokens) ?? 8192
+        reasoning = try container.decodeIfPresent(Bool.self, forKey: .reasoning) ?? false
+        toolCall = try container.decodeIfPresent(Bool.self, forKey: .toolCall) ?? false
+        vision = try container.decodeIfPresent(Bool.self, forKey: .vision) ?? false
+        reasoningEffort = try container.decodeIfPresent(String.self, forKey: .reasoningEffort) ?? "off"
+        thinkingBudget = try container.decodeIfPresent(Int.self, forKey: .thinkingBudget)
+        temperature = try container.decodeIfPresent(Double.self, forKey: .temperature)
+        maxTokensField = try container.decodeIfPresent(String.self, forKey: .maxTokensField) ?? "max_completion_tokens"
+        supportsStore = try container.decodeIfPresent(Bool.self, forKey: .supportsStore) ?? false
+        supportsDeveloperRole = try container.decodeIfPresent(Bool.self, forKey: .supportsDeveloperRole) ?? false
+        supportsUsageInStreaming = try container.decodeIfPresent(Bool.self, forKey: .supportsUsageInStreaming) ?? true
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(name, forKey: .name)
-        try container.encode(baseURL, forKey: .baseURL)
+        try container.encode(baseURL, forKey: .baseUrl)
+        try container.encode(apiProtocol, forKey: .apiProtocol)
+        try container.encode(modelId, forKey: .modelId)
+        try container.encode(contextWindow, forKey: .contextWindow)
+        try container.encode(maxTokens, forKey: .maxTokens)
+        try container.encode(reasoning, forKey: .reasoning)
+        try container.encode(toolCall, forKey: .toolCall)
+        try container.encode(vision, forKey: .vision)
+        try container.encode(reasoningEffort, forKey: .reasoningEffort)
+        try container.encodeIfPresent(thinkingBudget, forKey: .thinkingBudget)
+        try container.encodeIfPresent(temperature, forKey: .temperature)
+        try container.encode(maxTokensField, forKey: .maxTokensField)
+        try container.encode(supportsStore, forKey: .supportsStore)
+        try container.encode(supportsDeveloperRole, forKey: .supportsDeveloperRole)
+        try container.encode(supportsUsageInStreaming, forKey: .supportsUsageInStreaming)
+    }
+
+    var validationError: String? {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "プリセット名を入力してください" }
+        guard ["anthropic-messages", "openai-completions", "openai-responses"].contains(apiProtocol) else { return "APIプロトコルを選択してください" }
+        guard let url = URL(string: baseURL), ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil,
+              url.user == nil, url.password == nil, url.query == nil, url.fragment == nil else { return "有効なBase URLを入力してください" }
+        guard !modelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "モデルIDを入力してください" }
+        guard contextWindow > 0, maxTokens > 0, maxTokens <= contextWindow else { return "トークン上限を確認してください" }
+        guard ["off", "minimal", "low", "medium", "high", "xhigh", "max"].contains(reasoningEffort), reasoning || reasoningEffort == "off" else { return "reasoning設定を確認してください" }
+        if let thinkingBudget, apiProtocol != "anthropic-messages" || !reasoning || reasoningEffort == "off" || thinkingBudget < 1024 || thinkingBudget >= maxTokens { return "Thinking budgetはAnthropicのreasoning有効時に1024以上、出力上限未満を指定してください" }
+        if let temperature, !temperature.isFinite || !(0...2).contains(temperature) { return "temperatureは0〜2を指定してください" }
+        return nil
     }
 }
 
@@ -180,8 +246,6 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var providerSelectionMax: Int
     var providerSort: String
 
-    var openAIBaseURL: String
-    var miniMaxBaseURL: String
     var openAICompatPresetsJSON: String
     var selectedOpenAICompatPreset: String?
     var alibabaMCPEnabled: Bool
@@ -335,8 +399,6 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         providerSelectionMax = 12
         providerSort = "price"
 
-        openAIBaseURL = "https://api.openai.com/v1/"
-        miniMaxBaseURL = "https://api.minimax.io/v1/"
         openAICompatPresetsJSON = "[]"
         selectedOpenAICompatPreset = nil
         alibabaMCPEnabled = false
@@ -392,6 +454,15 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
 
     func normalizedForPersistence() -> AppSettings {
         var normalized = self
+        let customPresets = openAICompatPresets()
+        let retainedPresets = customPresets.filter { !$0.apiProtocol.isEmpty }
+        if retainedPresets.count != customPresets.count {
+            normalized.openAICompatPresetsJSON = String(decoding: (try? JSONEncoder().encode(retainedPresets)) ?? Data("[]".utf8), as: UTF8.self)
+            if !retainedPresets.contains(where: { $0.name.caseInsensitiveCompare(selectedOpenAICompatPreset ?? "") == .orderedSame }) {
+                normalized.selectedOpenAICompatPreset = nil
+            }
+            DiagnosticsLogger.log("Removed legacy URL-only custom endpoint presets count=\(customPresets.count - retainedPresets.count)")
+        }
         normalized.geminiComputerUseEnabled = false
         normalized.geminiResponseMimeType = ""
         normalized.geminiResponseJSONSchema = ""
@@ -971,27 +1042,6 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         }
     }
 
-    func selectedCompatBaseURL() -> URL? {
-        guard let selectedOpenAICompatPreset else { return nil }
-        let preset = openAICompatPresets().first { $0.name.caseInsensitiveCompare(selectedOpenAICompatPreset) == .orderedSame }
-        guard let preset else { return nil }
-        return URL(string: preset.baseURL)
-    }
-
-    func resolvedOpenAIBaseURL() -> String {
-        Self.resolveBaseURL(
-            openAIBaseURL,
-            fallback: AppConstants.defaultOpenAIBaseURL.absoluteString
-        )
-    }
-
-    func resolvedMiniMaxBaseURL() -> String {
-        Self.resolveBaseURL(
-            miniMaxBaseURL,
-            fallback: AppConstants.defaultMiniMaxBaseURL.absoluteString
-        )
-    }
-
     func resolvedAlibabaMCPServerURL() -> String? {
         Self.resolveRemoteMCPURL(alibabaMCPServerURL)
     }
@@ -1008,20 +1058,6 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             .flatMap { $0.split(separator: ",") }
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-    }
-
-    private static func resolveBaseURL(_ value: String, fallback: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              let components = URLComponents(string: trimmed),
-              let scheme = components.scheme?.lowercased(),
-              !scheme.isEmpty,
-              let host = components.host?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !host.isEmpty
-        else {
-            return fallback
-        }
-        return trimmed
     }
 
     private static func nonBlank(_ value: String) -> String? {

@@ -259,7 +259,7 @@ private struct SettingsDetailScreen: View {
             }
 
             if currentModelsDevProvider == nil,
-               currentProviderKey != "CODEX_AUTH", currentProviderKey != "SUPERGROK", currentProviderKey != "APPLE_INTELLIGENCE" {
+               currentProviderKey != "CODEX_AUTH", currentProviderKey != "SUPERGROK", currentProviderKey != "APPLE_INTELLIGENCE", currentProviderKey != "OPENAI_COMPAT" {
                 Section("APIキー") {
                     SecureField(currentProviderAPIKeyLabel, text: $viewModel.apiKeyDraft)
                 }
@@ -284,14 +284,8 @@ private struct SettingsDetailScreen: View {
             if currentProviderKey == "CLINEPASS" {
                 clinePassSection
             }
-            if currentProviderKey == "OPENAI" {
-                openAIEndpointSection
-            }
             if currentProviderKey == "ALIBABA_CODING_PLAN" {
                 alibabaCodingPlanSection
-            }
-            if currentProviderKey == "MINIMAX" {
-                miniMaxEndpointSection
             }
             codexProviderSettingsSection
             geminiProviderSettingsSection
@@ -631,47 +625,97 @@ private struct SettingsDetailScreen: View {
     }
 
     private var openAICompatSection: some View {
-        Section("OpenAI (Custom) Presets") {
-            TextField("Preset name", text: $viewModel.openAICompatPresetNameInput)
-            TextField("Preset Base URL", text: $viewModel.openAICompatPresetBaseURLInput)
-            Button("プリセット追加/更新") {
-                viewModel.addOrUpdateOpenAICompatPreset()
-            }
-            .buttonStyle(.bordered)
-
+        Section("カスタムエンドポイント") {
             if !viewModel.openAICompatPresets.isEmpty {
-                Picker("Selected preset", selection: Binding(
+                Picker("プリセット", selection: Binding(
                     get: { viewModel.settings.selectedOpenAICompatPreset ?? "" },
-                    set: { newValue in
-                        viewModel.settings.selectedOpenAICompatPreset = newValue.nilIfBlank
-                        viewModel.loadSelectedOpenAICompatApiKey()
-                    }
+                    set: { viewModel.selectCustomEndpointPreset($0) }
                 )) {
-                    Text("-").tag("")
-                    ForEach(viewModel.openAICompatPresets) { preset in
-                        Text(preset.name).tag(preset.name)
+                    Text("新規").tag("")
+                    ForEach(viewModel.openAICompatPresets) { Text($0.name).tag($0.name) }
+                }
+            }
+            TextField("プリセット名", text: $viewModel.customEndpointDraft.name)
+            Picker("APIプロトコル", selection: $viewModel.customEndpointDraft.apiProtocol) {
+                Text("選択してください").tag("")
+                Text("Anthropic Messages").tag("anthropic-messages")
+                Text("OpenAI Chat Completions").tag("openai-completions")
+                Text("OpenAI Responses").tag("openai-responses")
+            }
+            .onChange(of: viewModel.customEndpointDraft.apiProtocol) { _, api in
+                if api != "anthropic-messages" { viewModel.customEndpointDraft.thinkingBudget = nil }
+            }
+            TextField("Base URL", text: $viewModel.customEndpointDraft.baseURL)
+                .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+            Text("APIのベースURLを指定してください（OpenAI系では通常 /v1 まで）。")
+                .font(.caption).foregroundStyle(.secondary)
+            TextField("モデルID", text: $viewModel.customEndpointDraft.modelId)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            LabeledContent("コンテキスト上限") {
+                TextField("tokens", value: $viewModel.customEndpointDraft.contextWindow, format: .number)
+                    .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+            }
+            LabeledContent("最大出力") {
+                TextField("tokens", value: $viewModel.customEndpointDraft.maxTokens, format: .number)
+                    .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+            }
+            Text("上限と対応機能はモデルの仕様に合わせて設定してください。")
+                .font(.caption).foregroundStyle(.secondary)
+            Toggle("画像入力に対応", isOn: $viewModel.customEndpointDraft.vision)
+            Toggle("ツール呼び出しに対応", isOn: $viewModel.customEndpointDraft.toolCall)
+            Toggle("Reasoningに対応", isOn: $viewModel.customEndpointDraft.reasoning)
+                .onChange(of: viewModel.customEndpointDraft.reasoning) { _, enabled in
+                    if !enabled {
+                        viewModel.customEndpointDraft.reasoningEffort = "off"
+                        viewModel.customEndpointDraft.thinkingBudget = nil
                     }
                 }
-
-                SecureField("Selected preset API key", text: $viewModel.openAICompatApiKeyInput)
-
-                ForEach(viewModel.openAICompatPresets) { preset in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(preset.name)
-                                .font(.caption)
-                            Text(preset.baseURL)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button(role: .destructive) {
-                            viewModel.removeOpenAICompatPreset(name: preset.name)
-                        } label: {
-                            Image(systemName: "trash")
-                        }
+            if viewModel.customEndpointDraft.reasoning {
+                Picker("Reasoning effort", selection: $viewModel.customEndpointDraft.reasoningEffort) {
+                    ForEach(["off", "minimal", "low", "medium", "high", "xhigh", "max"], id: \.self) { Text($0).tag($0) }
+                }
+                .onChange(of: viewModel.customEndpointDraft.reasoningEffort) { _, effort in
+                    if effort == "off" { viewModel.customEndpointDraft.thinkingBudget = nil }
+                }
+                if viewModel.customEndpointDraft.apiProtocol == "anthropic-messages" {
+                    LabeledContent("Thinking budget") {
+                        TextField("省略可", value: $viewModel.customEndpointDraft.thinkingBudget, format: .number)
+                            .keyboardType(.numberPad).multilineTextAlignment(.trailing)
                     }
                 }
+            }
+            LabeledContent("Temperature") {
+                TextField("省略可・0〜2", value: $viewModel.customEndpointDraft.temperature, format: .number)
+                    .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+            }
+            if viewModel.customEndpointDraft.apiProtocol == "anthropic-messages", viewModel.customEndpointDraft.reasoningEffort != "off" {
+                Text("Anthropicのthinking使用時はtemperatureが省略されます。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if viewModel.customEndpointDraft.apiProtocol == "openai-completions" {
+                Picker("出力上限のパラメーター", selection: $viewModel.customEndpointDraft.maxTokensField) {
+                    Text("max_completion_tokens").tag("max_completion_tokens")
+                    Text("max_tokens").tag("max_tokens")
+                }
+                Toggle("storeパラメーターに対応", isOn: $viewModel.customEndpointDraft.supportsStore)
+                Toggle("ストリーム内のusageに対応", isOn: $viewModel.customEndpointDraft.supportsUsageInStreaming)
+            }
+            if viewModel.customEndpointDraft.apiProtocol != "anthropic-messages" {
+                Toggle("developerロールに対応", isOn: $viewModel.customEndpointDraft.supportsDeveloperRole)
+            }
+            Button("プリセット追加/更新") { viewModel.addOrUpdateOpenAICompatPreset() }
+                .buttonStyle(.bordered)
+            if let name = viewModel.settings.selectedOpenAICompatPreset, !name.isEmpty {
+                SecureField("選択中のプリセットのAPIキー", text: $viewModel.openAICompatApiKeyInput)
+                Button("APIキーを保存") { viewModel.saveSelectedOpenAICompatApiKey() }
+                Text("キー不要のローカルサーバーでは任意のダミーキーを入力してください。")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("選択中のプリセットを削除", role: .destructive) { viewModel.removeOpenAICompatPreset(name: name) }
+            }
+        }
+        .onAppear {
+            if viewModel.customEndpointDraft.name.isEmpty, let selected = viewModel.settings.selectedOpenAICompatPreset {
+                viewModel.selectCustomEndpointPreset(selected)
             }
         }
     }
@@ -923,36 +967,6 @@ private struct SettingsDetailScreen: View {
             Text("`provider` payload is sent only for OpenRouter requests.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-        }
-    }
-
-    private var openAIEndpointSection: some View {
-        Section("OpenAI Endpoint") {
-            TextField("OpenAI Base URL", text: Binding(
-                get: { viewModel.settings.openAIBaseURL },
-                set: { viewModel.settings.openAIBaseURL = $0 }
-            ))
-        }
-    }
-
-    private var miniMaxEndpointSection: some View {
-        Section("MiniMax Endpoint") {
-            HStack {
-                Button("Global") {
-                    viewModel.settings.miniMaxBaseURL = AppConstants.defaultMiniMaxBaseURL.absoluteString
-                }
-                .buttonStyle(.bordered)
-
-                Button("China") {
-                    viewModel.settings.miniMaxBaseURL = "https://api.minimaxi.com/v1/"
-                }
-                .buttonStyle(.bordered)
-            }
-
-            TextField("MiniMax Base URL", text: Binding(
-                get: { viewModel.settings.miniMaxBaseURL },
-                set: { viewModel.settings.miniMaxBaseURL = $0 }
-            ))
         }
     }
 
@@ -1470,7 +1484,21 @@ private struct SettingsDetailScreen: View {
 
     private var providerModelEditor: some View {
         Group {
-            if currentProviderKey == "OPENROUTER" {
+            if currentProviderKey == "OPENAI_COMPAT" {
+                Text("Model: \(viewModel.settings.defaultModel)")
+                Text("モデルはカスタムエンドポイントのプリセットで設定します。")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if currentProviderKey == "SARASHINA" {
+                Picker("Model", selection: Binding(get: { viewModel.settings.defaultModel }, set: { viewModel.setDefaultModel($0) })) {
+                    ForEach(["sarashina3-mini", "sarashina3-nano", "sarashina3-guard"], id: \.self) { Text($0).tag($0) }
+                    if !["sarashina3-mini", "sarashina3-nano", "sarashina3-guard"].contains(viewModel.settings.defaultModel) {
+                        Text(viewModel.settings.defaultModel).tag(viewModel.settings.defaultModel).disabled(true)
+                    }
+                }
+                Text("テキスト入力専用・最大出力8,000トークン。guardは安全性判定用です。")
+                    .font(.caption).foregroundStyle(.secondary)
+                Link("Sarashina API ドキュメント", destination: URL(string: "https://docs.sarashina.ai/")!)
+            } else if currentProviderKey == "OPENROUTER" {
                 OpenRouterModelPickerField(
                     titleKey: "Model",
                     model: Binding(

@@ -22,8 +22,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var openRouterEndpointModelId: String?
     @Published var modelSearchQuery: String = ""
     @Published var modelsDevCatalogState: CatalogLoadState = .init()
-    @Published var openAICompatPresetNameInput: String = ""
-    @Published var openAICompatPresetBaseURLInput: String = ""
+    @Published var customEndpointDraft = OpenAICompatPreset(name: "", baseURL: "")
     @Published var openAICompatApiKeyInput: String = ""
     @Published var geminiKeySlotNameInput: String = ""
     @Published var geminiKeySlotValueInput: String = ""
@@ -667,33 +666,32 @@ final class SettingsViewModel: ObservableObject {
         return settings.resolveSelectedSystemPromptPreset()?.name ?? Self.newSystemPromptSelection
     }
 
+    func selectCustomEndpointPreset(_ name: String) {
+        settings.selectedOpenAICompatPreset = name.nilIfBlank
+        if name.isEmpty { customEndpointDraft = OpenAICompatPreset(name: "", baseURL: "") }
+        if let preset = openAICompatPresets.first(where: { $0.name == name }) {
+            customEndpointDraft = preset
+            if !preset.modelId.isEmpty { setDefaultModel(preset.modelId) }
+        }
+        loadSelectedOpenAICompatApiKey()
+    }
+
     func addOrUpdateOpenAICompatPreset() {
-        guard let name = openAICompatPresetNameInput.nilIfBlank else {
-            errorMessage = L10n.text("プリセット名を入力してください")
-            return
-        }
-        guard let base = openAICompatPresetBaseURLInput.nilIfBlank else {
-            errorMessage = L10n.text("Base URLを入力してください")
-            return
-        }
-
+        var preset = customEndpointDraft
+        preset.name = preset.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        preset.baseURL = preset.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        preset.modelId = preset.modelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let error = preset.validationError { errorMessage = error; return }
         var presets = settings.openAICompatPresets()
-        if let index = presets.firstIndex(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
-            presets[index] = OpenAICompatPreset(name: name, baseURL: base)
-        } else {
-            presets.append(OpenAICompatPreset(name: name, baseURL: base))
-        }
-
-        if let data = try? JSONEncoder().encode(presets), let json = String(data: data, encoding: .utf8) {
-            settings.openAICompatPresetsJSON = json
-            if settings.selectedOpenAICompatPreset?.isEmpty != false {
-                settings.selectedOpenAICompatPreset = name
-            }
-            statusMessage = L10n.text("OPENAI_COMPATプリセットを保存しました")
-        } else {
-            errorMessage = L10n.text("プリセットの保存に失敗しました")
-            DiagnosticsLogger.log("OPENAI_COMPAT preset save failed")
-        }
+        if let index = presets.firstIndex(where: { $0.name.caseInsensitiveCompare(preset.name) == .orderedSame }) {
+            presets[index] = preset
+        } else { presets.append(preset) }
+        do {
+            settings.openAICompatPresetsJSON = String(decoding: try JSONEncoder().encode(presets), as: UTF8.self)
+            customEndpointDraft = preset
+            selectCustomEndpointPreset(preset.name)
+            statusMessage = "カスタムエンドポイントを保存しました"
+        } catch { errorMessage = error.localizedDescription }
     }
 
     func removeOpenAICompatPreset(name: String) {
@@ -702,7 +700,9 @@ final class SettingsViewModel: ObservableObject {
         if let data = try? JSONEncoder().encode(presets), let json = String(data: data, encoding: .utf8) {
             settings.openAICompatPresetsJSON = json
             if settings.selectedOpenAICompatPreset?.caseInsensitiveCompare(name) == .orderedSame {
-                settings.selectedOpenAICompatPreset = presets.first?.name
+                settings.selectedOpenAICompatPreset = nil
+                customEndpointDraft = OpenAICompatPreset(name: "", baseURL: "")
+                openAICompatApiKeyInput = ""
             }
             statusMessage = L10n.text("OPENAI_COMPATプリセットを削除しました")
         } else {

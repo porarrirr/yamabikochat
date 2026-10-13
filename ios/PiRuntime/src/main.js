@@ -1,5 +1,6 @@
 import { PCC_PROVIDER, pccResolution, withPCCBridge, receivePCCEvent } from "./pcc-provider.js";
 import { providerUsage, aggregateUsage as sumUsage } from "./usage-contract.js";
+import { genuiPreviewFromAgentEvent } from "./genui-preview.js";
 import { createEventRecorder } from "./event-recording.js";
 import http from "node:http";
 import { installRuntimeLifecycle } from "./runtime-lifecycle.js";
@@ -17,6 +18,8 @@ import { sanitizePayload as sanitizeGrokPayload } from "pi-grok/sanitize.ts";
 import { providerErrorDetails } from "./provider-error.js";
 import { applyExplicitSkillInvocations } from "./skill-context.js";
 import { createChatGPTPlanPlugin, CHATGPT_PLAN_PROVIDER, chatGPTPlanPayload, chatGPTPlanCompleted } from "./chatgpt-plan-plugin.js";
+import { installSarashinaProvider, sarashinaResolution } from "./sarashina-provider.js";
+import { CUSTOM_PROVIDER, customProviderResolution, customStreamOptions } from "./custom-provider.js";
 
 const port = Number(process.argv[2]);
 const token = process.argv[3];
@@ -169,6 +172,7 @@ function installSuperGrokProvider() {
 
 installVerifiedOpenCodeGoContracts();
 installSuperGrokProvider();
+installSarashinaProvider(runtimeModels);
 
 const AUTH_PROVIDER_IDS = {
   codex: "openai-codex",
@@ -653,6 +657,8 @@ function resolutionFor(config) {
   if (config.contractVersion !== RUNTIME_CONTRACT_VERSION) {
     throw new Error(`Pi runtime contract mismatch: expected ${RUNTIME_CONTRACT_VERSION}, received ${config.contractVersion ?? "missing"}`);
   }
+  if (config.provider === CUSTOM_PROVIDER) return customProviderResolution(config, runtimeModels);
+  if (config.provider === "sarashina") return sarashinaResolution(config, runtimeModels);
   if (config.provider === CHATGPT_PLAN_PROVIDER) {
     const reason = chatGPTPlan.modelStatus(config.model);
     if (reason) return { supported: false, reason, provider: config.provider, model: config.model };
@@ -1012,6 +1018,8 @@ function standardStreamFunction(request, config, report, captureProviderRequest)
       : effectiveHeaders(config, sessionId),
     timeoutMs: timeoutMs(request),
     reasoning: config.thinkingLevel,
+    ...customStreamOptions(config),
+    ...(config.catalogProvider === "sarashina" || config.provider === "sarashina" ? { toolChoice: "auto" } : {}),
     ...(config.provider === PCC_PROVIDER && request.metadata?.max_output_tokens
       ? { maxTokens: Number(request.metadata.max_output_tokens) } : {}),
     sessionId,
@@ -1305,6 +1313,8 @@ async function runAgent(envelope, res) {
       send(res, { type: "llm_start", stepId: activeStep, timeMs: Date.now() });
     } else if (event.type === "message_update") {
       const update = event.assistantMessageEvent;
+      const preview = genuiPreviewFromAgentEvent(event);
+      if (preview) send(res, { ...preview, timeMs: Date.now() });
       if (update.type === "text_delta") {
         if (event.message?.provider === PCC_PROVIDER) {
           const text = event.message.content?.find(part => part.type === "text")?.text;

@@ -1,184 +1,45 @@
 # GenUI on iOS
 
-The iOS `genui` local tool uses the existing Pi tool registry and stream. It is
-offered in normal and dual conversations to models advertising client tool
-support. Secret conversations, auto conversations, and Fusion panels do not
-receive it. Gemini native tools take precedence over this function tool.
-Apple PCC uses its existing public SDK tool path with a single JSON-string
-`document` parameter, because GenerationSchema cannot express recursive unions.
-The same local executor validates and persists the contained document; other
-providers receive the full document schema directly.
+GenUI uses the existing local tool registry and Pi Agents execution stream.
+Provider/model resolution, API communication, token usage and follow-up turns
+remain on the standard execution path. Tool exposure follows the existing
+conversation settings and model capability checks. Apple PCC retains its public
+SDK JSON-string `document` envelope; both envelope and direct arguments reach
+the same validator.
 
-The original declarative document remains supported. A document has
-a title, optional subtitle, inputs, and an ordered list of components. Supported
-inputs are sliders, numbers, numeric selections, text, and toggles. Supported
-components are text, metrics, tables, line/pie charts, and card grids.
+## Original component implementation
 
-Legacy `kind:"chart"` selects its visualization with `chartType:"line"` or
-`chartType:"pie"`. Omission preserves the historical **line** default; IDs and
-titles (including `coin_pie`) never select the chart type. Pie charts require
-exactly one series, finite nonnegative point values, and a positive finite total.
-They render native Swift Charts sectors colored by category with a legend.
-Formulas recalculate locally; invalid pie values after editing show an unavailable
-value, not a line chart. For example:
+The app bundles all 283 recovered generated component sources, 2,511 original
+SVG icons, original palettes and iOS typography/control metrics. Canonical
+components execute their original source expressions with the local DIL facade.
+Read [GenUI-reference.md](GenUI-reference.md) for extraction, evidence, tests and
+remaining differences. This is substantially more than a name-alias catalog,
+but does not claim that the whole native Valdi renderer has been ported.
 
-```json
-{"title":"構成比","components":[{"id":"shares","kind":"chart","chartType":"pie","series":[{"name":"割合","points":[{"label":"A","value":"40"},{"label":"B","value":"60"}]}]}]}
-```
+Use `genui_reference` with `componentName:"*"` to list original components, then
+request the desired component's source. Inspect its state shape and provide
+verified data in `__state`. Long source results support `sourceOffset` and
+`maxCharacters` pagination. Observed state-field lists are an index, not a full
+type definition. Do not guess sports/weather/finance data or backend actions.
 
-Rich `Chart` nodes use a different shape: `props.content` contains
-`{chartType:"pie",data:[{name:"A",value:40},{name:"B",value:60}],nameKey:"name",valueKey:"value"}`.
-Generation instructions require explicit pie selection and prohibit describing
-an unspecified legacy line chart as a pie chart. Previously saved documents
-without `chartType` retain their original line visualization.
-
-Strings beginning with `=` are bounded arithmetic expressions. Numeric input IDs
-are variables; supported operations are `+ - * / ^`, parentheses, `min`, `max`,
-`abs`, `round`, `pow`, and `payment(principal, annualPercent, years)`. `payment`
-calculates a monthly level payment, with the rate expressed as percent (2 means
-2%). Literal strings can interpolate any input with `{{inputID}}`.
-
-For example, combine a `principal` slider, a `rate` slider, and a `years` number
-input with a metric whose value is `=payment(principal,rate,years)`, format is
-`currency`, and unit is `円`. Table cells, chart points, and cards can reference
-the same inputs. Label assumptions and units in the document. Fetch current
-facts through existing tools before supplying chart or table data.
-
-Documents are validated before execution succeeds. Invalid kinds, unknown
-variables/functions, non-finite defaults, duplicate IDs, and invalid ranges
-are rejected. Runtime calculation failures display `—`.
-Legacy input edits update locally without another LLM call. Rich UI executes
-client callbacks; only an explicit user-activated follow-up starts a new
-conversation turn through the existing Pi execution path.
-
-The successful document is saved in existing tool activity with the message and
-its selected response variant. Input state lives in the timeline row, survives
-cell recycling, and returns to the document defaults after reopening the chat.
-No database migration or Pi provider routing change is required. Older iOS
-records that retained successful GenUI results only in the provider transcript
-restore validated documents when loaded, without another tool or model call.
-
-## Mobile presentation
-
-Legacy documents lead with their first metric or card summary. A Results / Inputs
-switch keeps that summary visible while editing conditions. The first chart stays
-in the results panel; other sections and card assumptions expand on demand.
-The selected panel belongs to the timeline row's local state. Compact layouts
-use smaller spacing and 160-point charts while retaining 44-point input targets,
-wrapping labels, and larger-text layouts. Rich documents use compact mobile
-styles with content-measured height, up to 560 points (800 in regular layouts).
-Only longer content scrolls within the canvas; no empty status row is reserved.
-Below 640px, gaps are capped at 12px and padding at 16px after applying the DIL
-4px spacing scale. Ordinary layout containers use intrinsic height rather than
-fixed/minimum heights or distributed vertical whitespace, and spacers use 8px.
-Media, charts, and explicitly scrollable regions retain authored dimensions;
-desktop layout properties are unchanged. Input rows stay inline and reference
-links use full-width 44px-or-larger touch targets. These rules apply to saved
-rich trees and client code as well as newly generated documents.
-
-## Component compatibility runtime
-
-Rich documents use `title`, optional `subtitle`, and either `ui` or `code`.
-`ui` is a component tree with `{type, props, children}`; children may be nodes,
-strings, or numbers. `code` uses the bundled compatibility runtime's `DIL.h` builder
-and `DIL` state hooks. Optional `state` supplies initial local state. Optional
-`resources` maps explicit reference IDs to supplied `title`, `url`, `src`, `text`,
-and `mime` content. Rich documents cannot also contain legacy `inputs` or
-`components`.
-
-This is an app compatibility API for the supplied component vocabulary, not
-ChatGPT's proprietary renderer or a React package. The runtime supplies text,
-layout, interactive controls, lists/tables, media, charts, map launchers, and
-special content components. A rich document can share local state across its
-controls and visualizations. Unknown or unavailable content produces a visible
-fallback rather than a fabricated result. Rich documents have no app-defined
-fixed document/code byte limit, node/depth limit, or initial state/resource
-count limit. Nested JSON arrays and objects and interaction snapshots likewise
-have no app-defined size limit. Actual capacity still depends on device memory,
-Foundation JSON parsing, JavaScript and WebKit; this is not a guarantee of
-unlimited execution or of ChatGPT's undocumented limits. Legacy `components`
-retain their original input/component/table/chart/card and arithmetic-parser
-limits for compatibility; use `code` for general calculations.
-
-The web runtime runs inside a restricted WKWebView with bundled code. No remote
-JavaScript bundles are loaded. `AppBlock` can render content supplied with the
-document; `app_block_id`, `bundle_version`, or an entrypoint do not grant access
-to ChatGPT app bundles. Proprietary image/video search references, entity
-lookup, memory/citation backends, and file references are unavailable unless the
-document supplies the corresponding resource. A `query` is not fetched or
-silently converted into a result.
-
-Host actions (`copy`, `openUrl`, `issueNewTurn`, and `openEntityDetail`) require
-an explicit user interaction and are guarded by the native host. Declarative
-events may update/reset local state or request those actions. Rendering,
-effects, and restoring saved state do not authorize an external action or a
-new model turn. Explicit external URLs use HTTPS. Supplied entity details are
-shown locally; unavailable entity lookup returns a visible status.
-
-## Native maps
-
-`MapWidgetV2` displays an interactive native MapKit map directly inside the chat
-card, without an open button or sheet. The map follows the web layout and scrolling;
-local state changes update or remove it. Supply `points` with a place
-`title`/`name`, `address`, or `query`; iOS searches Apple MapKit for the location.
-Include the city/address for ambiguous names. Numeric `lat`/`lng` (or
-`latitude`/`longitude`) remain supported and skip place search; supplied coordinates
-must be complete, finite and in range. `origin` accepts the same shape. Optional
-`id` and `group`/`group_id` preserve point identity and grouping. Failed searches
-remain visible and prevent routing through an incomplete set of stops. Optional `groups`
-accepts group IDs or `{id, title}` objects, and map markers use group colors.
-The card shows `title`, `narrative`, and `answer`, with search and route status
-on the map. Explicit map presentation actions still require a user gesture;
-rendering an inline map does not authorize external actions.
-
-Only `show_route: true` requests actual MapKit directions between supplied stops
-in their supplied order. `travel_mode` accepts `driving`, `walking`, or `transit`;
-MapKit availability and failures are shown as status text. Routes are never
-fabricated. `optimize_stop_order: true` reports that automatic stop optimization
-is unsupported. ISO 8601 `arrive_by` or `depart_at` may be supplied for a
-two-point route; specifying both or using timed multiple segments reports a
-visible unsupported status.
-
-`GenUIDemoFixture` and `GenUIUITests` provide a loan example and interaction
-coverage. Launch the simulator app with `-AppStoreScreenshotDemo -GenUIFixture
--ScreenshotScene chat` for the example, optionally adding `-GenUIDarkFixture`.
-
-Run `node --test ios/GenUIRuntimeTests/runtime.test.js` from the repository root
-for the dependency-free runtime tests. These exercise typed data interpolation,
-local state, guarded actions, native map launch, media fallbacks, and chart
-geometry through a lightweight DOM harness. Native coordinate parsing is covered by `GenUIMapTests`. `GenUIRichUITests`
-checks shared JavaScript state, reset, native copying, and map presentation.
-Launch `-AppStoreScreenshotDemo -GenUIRichFixture -ScreenshotScene chat` for
-this example.
-
-### Client code and property semantics
-
-`code` is a JavaScript function body, without JSX or imports. Calculations use
-JavaScript `+ - * / **`, `Math.min`, `Math.max`, `Math.abs`, `Math.round`,
-`Math.pow`, custom functions, `if`/`else`, loops and array iteration. They are
-not restricted to the legacy `components` formula language. Loan repayment,
-compound interest and statistics can be implemented locally with DIL hooks:
+A rich document has a nonempty `title`, optional `subtitle`, and either `ui` or
+`code`; optional `state` initializes local values and `resources` supplies
+explicit referenced content. The document title is tool metadata, not an extra
+heading automatically inserted into the canvas. A component owns its heading.
 
 ```js
-const [principal, setPrincipal] = DIL.useState(300000);
-const monthly = DIL.useMemo(() => {
-  const rate = 5 / 1200;
-  const months = 30 * 12;
-  return principal * rate / (1 - (1 + rate) ** -months);
-}, [principal]);
-return DIL.h('col', {},
-  DIL.h('slider', {value: principal, min: 0, max: 600000, onChange: setPrincipal}),
-  DIL.h('text', {}, Math.round(monthly) + ' / month at 5% for 30 years')
-);
+return DIL.h('DigitalTimerWidget', {
+  __state: {start_time: 90, auto_start: false, done_label: '完了'}
+});
 ```
 
-The runtime uses ordinary JavaScript conditionals and iteration, not a separate
-proprietary `if`/`each` template syntax. `AppBlock` supports inline component
-nodes and client function entrypoints, not arbitrary HTML documents or an
-unrestricted browser environment. Network connections, external modules and
-native host actions remain restricted.
-
-A basic shared-state example:
+`ui` accepts `{type, props, children}` trees. `code` is a JavaScript function
+body without imports or JSX, with `DIL`, `GenUI`, `state` and `resources` in
+scope. `DIL.h` composes elements or canonical components. Calculations use
+ordinary JavaScript, including `Math.pow`, loops and array operations. Hooks
+provide shared local state, effects, memoized values, refs, constants, current
+time, theme, breakpoints and local app data. Hook values must be JSON serializable
+to survive timeline-cell recycling.
 
 ```js
 const [volume, setVolume] = DIL.useState(65);
@@ -189,18 +50,104 @@ return DIL.h('col', {gap: 4},
 );
 ```
 
-For JSON-only documents, initialize `state`, use `bind: "volume"` on a slider,
-and display `{{volume}}` in another node. `onChange` can use
-`{type: "setState", key: "volume", value: "$value"}`. Host actions use the same
-object format. Hook state must be JSON serializable to survive cell recycling.
+JSON trees may use `bind:"volume"`, `{{volume}}` interpolation, and
+`{type:"setState", key:"volume", value:"$value"}` callbacks. Intrinsics support
+`Each` with `items`/`of`, `itemName` and `indexName`, `Scope` with local values,
+and `Show`/`Show.Else`. Properties prefixed with `$` evaluate CEL with the
+original native CEL resolver and scope, rather than an independently invented
+expression language.
 
-The supplied list does not define complete types/enumerations, so this API uses
-browser/iOS equivalents: spacing numbers are multiples of 4 px; `useTheme`
-returns `light`/`dark`; `useBreakpoint` returns `sm`/`md`/`lg`. Masks support
-`#`, `9`, `A`, `*` alphanumeric placeholders. Popovers stay in document flow;
-`side`/`align` do not implement portal positioning or collision avoidance.
-Selects use the system picker; custom popup side/icon presentation is advisory.
-Media queries require results from an existing research tool. CodeBlock is a
-displayed/editable excerpt without remote execution or model preview. AppBlock
-accepts inline nodes or a client function entrypoint without remote bundles.
-Unknown icon names and unresolved proprietary references show a fallback.
+## Rendering and state
+
+Spacing numbers use the original 4px unit without mobile spacing caps. Authored
+height, flexible spacers and alignment are retained. Native iOS is mobile even
+on a wide viewport. `useTheme()` returns `{theme,isDark,isLight}` and respects
+scoped component themes. `useBreakpoint(token)` uses the source thresholds:
+xs380, sm576, md768, lg1024, xl1280 and 2xl1536. Text/control sizes, palettes,
+card variants and SVG icon aliases follow recovered exports. Unknown icons
+produce a diagnostic rather than an invented substitute symbol.
+
+The canvas fits its measured content height inside the conversation. Native
+row-owned height and layout revisions keep collection-cell measurement and hit
+areas current. Keyed DOM reconciliation retains control identity, focus and
+numeric drafts. Snapshots retain local bindings and keyed component hooks.
+Rendering errors are isolated to the affected subtree and sent to diagnostics.
+
+Pi's standard `message_update` tool-call events provide already-parsed arguments
+for incremental GenUI previews. Only validated documents update the canvas.
+The preview does not execute a second tool, create a provider transcript result
+or start another model request. Updates retain user-edited values and component
+state. `GenUIRuntime.applyPatch` also supports atomic local JSON Pointer
+add/replace/remove/append batches for declarative trees.
+
+## Charts and media
+
+Rich charts use explicit type and supplied data. The actual iOS host calls the
+original `renderChartSvg` / `renderPieChartSvg` exports in native QuickJS;
+color/layout/XML dependencies are bundled with them. A compatible local chart
+fallback remains for the dependency-free browser test harness. Do not infer
+chart type from IDs or titles. Pointer hover integration is adapted to WebKit.
+
+Markdown uses bundled markdown-it and safe DOM construction; raw HTML is
+disabled. MathJax renders math. Lottie uses the bundled SVG player. Supplied
+images support a local image presentation; explicit shares use the iOS share
+sheet. YouTube playback runs in an isolated media WebView with no GenUI action
+or CEL bridge. Original server image references still require explicit resolved
+URLs. Audio currently uses browser audio controls.
+
+`MapWidgetV2` hosts MapKit inline. Supply complete finite coordinates, or a
+place title/address/query that MapKit can search. Groups preserve marker
+identity/colors. Only `show_route:true` requests actual directions in supplied
+stop order; supported modes are driving, walking and transit. Failures remain
+visible. Automatic stop-order optimization is unsupported; timed routing accepts
+one arrival/departure time for a two-point route, not multiple timed segments.
+
+## Host boundaries
+
+The canvas loads bundled executable assets in restricted WKWebView. Explicit
+HTTPS media URLs may load as resources; there is no remote executable-bundle
+loader. `AppBlock` supports supplied content/local entrypoints, not proprietary
+app bundle retrieval. Copy, link, share, supplied entity details and new-turn
+host actions require an actual user gesture. `prefill_composer` inserts a draft
+through the existing composer callback without sending. `email.mailto` opens a
+mail-client draft using encoded recipient, subject and body fields. Effects, restoration and rendering
+never authorize an external action or a new model turn.
+
+Widget refresh, original server actions, proprietary backend lookup, opaque
+image/file/citation references and remote view-state synchronization require the
+original service contract. Unsupported operations return a visible reason.
+These service exclusions do not excuse client-renderer differences: remaining
+motion, portal and control-presentation differences are documented separately in
+[GenUI-reference.md](GenUI-reference.md).
+
+## Legacy documents
+
+Existing documents with `inputs` and `components` remain supported. Inputs are
+sliders, numbers, numeric selections, text and toggles; components include text,
+metrics, tables, charts and cards. This older API retains its bounded arithmetic
+parser: strings starting with `=` support numeric variables, arithmetic, `min`,
+`max`, `abs`, `round`, `pow`, and `payment(principal, annualPercent, years)`.
+The latter computes a monthly level payment using annual percent units.
+
+Legacy `kind:"chart"` uses `chartType:"line"` or `"pie"`; omission preserves
+the historical line default. Pie requires one series, finite nonnegative values
+and a positive finite total. Invalid edited values show an unavailable result.
+Rich documents cannot mix `ui`/`code` with legacy `inputs`/`components`.
+
+## Development
+
+Regenerate `ios/YamabikoChat.xcodeproj` from `ios/project.yml` after structural
+changes. Run the runtime and native GenUI suites, and UI interaction coverage
+for visible changes. The original fixture uses actual recovered components with
+deterministic supplied inputs:
+
+```sh
+node --test ios/GenUIRuntimeTests/runtime.test.js
+cd ios/PiRuntime && node --test test/genui-preview.test.js
+```
+
+Launch `-AppStoreScreenshotDemo -GenUIRichFixture -GenUIOriginalFixture
+-ScreenshotScene chat`, optionally `-GenUIDarkFixture`. The budget/flow fixtures
+remain available for backward-compatibility checks. Factory initialization tests
+cover all 283 components; representative resolved-widget tests do not imply all
+possible server data shapes and interaction branches are verified.

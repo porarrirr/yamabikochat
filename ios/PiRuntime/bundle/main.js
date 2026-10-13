@@ -82743,7 +82743,7 @@ var require_websocket = __commonJS({
     var http4 = __require("http");
     var net = __require("net");
     var tls = __require("tls");
-    var { randomBytes: randomBytes5, createHash: createHash4 } = __require("crypto");
+    var { randomBytes: randomBytes5, createHash: createHash5 } = __require("crypto");
     var { Duplex, Readable: Readable2 } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -83411,7 +83411,7 @@ var require_websocket = __commonJS({
           abortHandshake(websocket, socket, "Invalid Upgrade header");
           return;
         }
-        const digest = createHash4("sha1").update(key + GUID).digest("base64");
+        const digest = createHash5("sha1").update(key + GUID).digest("base64");
         if (res.headers["sec-websocket-accept"] !== digest) {
           abortHandshake(websocket, socket, "Invalid Sec-WebSocket-Accept header");
           return;
@@ -83780,7 +83780,7 @@ var require_websocket_server = __commonJS({
     var EventEmitter = __require("events");
     var http4 = __require("http");
     var { Duplex } = __require("stream");
-    var { createHash: createHash4 } = __require("crypto");
+    var { createHash: createHash5 } = __require("crypto");
     var extension2 = require_extension();
     var PerMessageDeflate2 = require_permessage_deflate();
     var subprotocol2 = require_subprotocol();
@@ -84087,7 +84087,7 @@ var require_websocket_server = __commonJS({
           );
         }
         if (this._state > RUNNING) return abortHandshake(socket, 503);
-        const digest = createHash4("sha1").update(key + GUID).digest("base64");
+        const digest = createHash5("sha1").update(key + GUID).digest("base64");
         const headers = [
           "HTTP/1.1 101 Switching Protocols",
           "Upgrade: websocket",
@@ -181109,6 +181109,16 @@ function aggregateUsage(messages) {
   ]));
 }
 
+// src/genui-preview.js
+function genuiPreviewFromAgentEvent(event) {
+  const update = event?.assistantMessageEvent;
+  if (event?.type !== "message_update" || !["toolcall_start", "toolcall_delta", "toolcall_end"].includes(update?.type)) return null;
+  const block = (update.partial ?? event.message)?.content?.[update.contentIndex];
+  if (block?.type !== "toolCall" || block.name !== "genui" || typeof block.id !== "string") return null;
+  if (!block.arguments || typeof block.arguments !== "object" || Array.isArray(block.arguments)) return null;
+  return { type: "genui_preview", toolCallId: block.id, name: block.name, arguments: block.arguments };
+}
+
 // src/event-recording.js
 function exportableAgentEvent(event, sanitize) {
   const { message: message2, messages, assistantMessageEvent, ...metadata } = event;
@@ -185903,8 +185913,8 @@ function catalogContractModel(id, name, contract) {
   if (!input.includes("text") || !Number.isInteger(contextWindow) || contextWindow <= 0 || !Number.isInteger(maxTokens) || maxTokens <= 0 || typeof contract.reasoning !== "boolean") {
     return { reason: "catalog_contract_incomplete" };
   }
-  const efforts = !contract.reasoning ? [] : (Array.isArray(contract.reasoningEfforts) ? contract.reasoningEfforts : []).map((value) => typeof value === "string" ? value.trim().toLowerCase() : "");
-  if (contract.reasoning && (!efforts.length || efforts.some((value) => !CONTRACT_EFFORT_VALUES.has(value)))) {
+  const efforts2 = !contract.reasoning ? [] : (Array.isArray(contract.reasoningEfforts) ? contract.reasoningEfforts : []).map((value) => typeof value === "string" ? value.trim().toLowerCase() : "");
+  if (contract.reasoning && (!efforts2.length || efforts2.some((value) => !CONTRACT_EFFORT_VALUES.has(value)))) {
     return { reason: "catalog_contract_incomplete" };
   }
   const model = {
@@ -185920,8 +185930,8 @@ function catalogContractModel(id, name, contract) {
     maxTokens
   };
   if (contract.reasoning) {
-    model.thinkingLevelMap = { off: efforts.includes("none") ? "none" : null };
-    for (const level of CONTRACT_LEVEL_KEYS) model.thinkingLevelMap[level] = efforts.includes(level) ? level : null;
+    model.thinkingLevelMap = { off: efforts2.includes("none") ? "none" : null };
+    for (const level of CONTRACT_LEVEL_KEYS) model.thinkingLevelMap[level] = efforts2.includes(level) ? level : null;
   }
   return { model };
 }
@@ -186215,6 +186225,138 @@ function chatGPTPlanPayload(payload) {
   return value;
 }
 
+// src/sarashina-provider.js
+init_dist();
+init_openai_completions();
+var sarashinaModels = [
+  { id: "sarashina3-mini", contextWindow: 128e3, toolCall: true },
+  { id: "sarashina3-nano", contextWindow: 128e3, toolCall: true },
+  { id: "sarashina3-guard", contextWindow: 64e3, toolCall: false }
+];
+function installSarashinaProvider(models) {
+  models.setProvider(createProvider({
+    id: "sarashina",
+    name: "Sarashina",
+    auth: { apiKey: envApiKeyAuth("Sarashina API key", ["SARASHINA_API_KEY"]) },
+    models: sarashinaModels.map(({ id, contextWindow }) => ({
+      id,
+      name: id,
+      provider: "sarashina",
+      api: "openai-completions",
+      baseUrl: "https://api.sarashina.ai/v1",
+      reasoning: false,
+      input: ["text"],
+      contextWindow,
+      maxTokens: 8e3,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      compat: {
+        supportsStore: false,
+        supportsDeveloperRole: false,
+        supportsReasoningEffort: false,
+        supportsUsageInStreaming: false,
+        supportsStrictMode: false,
+        maxTokensField: "max_completion_tokens"
+      }
+    })),
+    api: { "openai-completions": { stream, streamSimple } }
+  }));
+}
+function sarashinaResolution(config, models) {
+  const model = models.getModel("sarashina", config.model);
+  const failure2 = (reason) => ({ supported: false, reason, provider: config.provider, model: config.model });
+  if (!model) return failure2("pi_model_missing");
+  const contract = config.catalogContract;
+  if (contract?.npm && !["@ai-sdk/openai", "@ai-sdk/openai-compatible"].includes(contract.npm)) return failure2("catalog_contract_ambiguous");
+  if (contract?.shape && !["chat", "chat-completions", "chat_completions"].includes(contract.shape)) return failure2("protocol_conflict");
+  if (contract?.api && ![model.baseUrl, `${model.baseUrl}/chat/completions`].includes(contract.api.replace(/\/+$/, ""))) return failure2("endpoint_conflict");
+  if (contract && (contract.reasoning != null && contract.reasoning !== model.reasoning || contract.input != null && JSON.stringify(contract.input) !== JSON.stringify(model.input) || contract.contextWindow != null && contract.contextWindow !== model.contextWindow || contract.maxTokens != null && contract.maxTokens !== model.maxTokens)) return failure2("catalog_contract_conflict");
+  if (config.thinkingLevel && config.thinkingLevel !== "off") return failure2("sarashina_reasoning_unsupported");
+  return {
+    supported: true,
+    provider: model.provider,
+    model: model.id,
+    api: model.api,
+    source: "verified_official_contract",
+    reasoning: false,
+    input: model.input,
+    contextWindow: model.contextWindow,
+    maxTokens: model.maxTokens,
+    toolCall: sarashinaModels.find((entry) => entry.id === model.id).toolCall && (contract ? contract.toolCall === true : true)
+  };
+}
+
+// src/custom-provider.js
+init_dist();
+init_openai_completions();
+init_openai_responses();
+init_anthropic_messages();
+import { createHash as createHash4 } from "node:crypto";
+var CUSTOM_PROVIDER = "yamabiko-custom";
+var apis = {
+  "openai-completions": { stream, streamSimple },
+  "openai-responses": { stream: stream5, streamSimple: streamSimple4 },
+  "anthropic-messages": { stream: stream3, streamSimple: streamSimple2 }
+};
+var efforts = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+function customProviderResolution(config, models) {
+  const custom = config.customEndpoint;
+  const failure2 = (reason) => ({ supported: false, reason, provider: config.provider, model: config.model });
+  if (!custom || !apis[custom.protocol]) return failure2("custom_protocol_required");
+  let url;
+  try {
+    url = new URL(custom.baseUrl);
+  } catch {
+    return failure2("custom_base_url_invalid");
+  }
+  if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) return failure2("custom_base_url_invalid");
+  if (!custom.modelId?.trim() || custom.modelId !== config.model) return failure2("custom_model_mismatch");
+  if (![custom.contextWindow, custom.maxTokens].every((v2) => Number.isSafeInteger(v2) && v2 > 0) || custom.maxTokens > custom.contextWindow) return failure2("custom_token_limits_invalid");
+  if (typeof custom.reasoning !== "boolean" || typeof custom.toolCall !== "boolean" || typeof custom.vision !== "boolean") return failure2("custom_capabilities_required");
+  if (!efforts.includes(custom.reasoningEffort) || !custom.reasoning && custom.reasoningEffort !== "off") return failure2("custom_reasoning_invalid");
+  if (custom.thinkingBudget != null && (!Number.isSafeInteger(custom.thinkingBudget) || custom.thinkingBudget < 1024 || custom.thinkingBudget >= custom.maxTokens || custom.protocol !== "anthropic-messages" || !custom.reasoning || custom.reasoningEffort === "off")) return failure2("custom_thinking_budget_invalid");
+  if (custom.temperature != null && (!Number.isFinite(custom.temperature) || custom.temperature < 0 || custom.temperature > 2)) return failure2("custom_temperature_invalid");
+  if (!["max_tokens", "max_completion_tokens"].includes(custom.maxTokensField)) return failure2("custom_max_tokens_field_invalid");
+  const provider = `yamabiko-custom-${createHash4("sha256").update(JSON.stringify(custom)).digest("hex")}`;
+  const compat = custom.protocol === "openai-completions" ? {
+    maxTokensField: custom.maxTokensField,
+    supportsStore: custom.supportsStore,
+    supportsDeveloperRole: custom.supportsDeveloperRole,
+    supportsReasoningEffort: custom.reasoning,
+    supportsUsageInStreaming: custom.supportsUsageInStreaming
+  } : custom.protocol === "openai-responses" ? { supportsDeveloperRole: custom.supportsDeveloperRole } : void 0;
+  const model = {
+    id: custom.modelId,
+    name: custom.name || custom.modelId,
+    provider,
+    api: custom.protocol,
+    baseUrl: custom.baseUrl,
+    reasoning: custom.reasoning,
+    input: custom.vision ? ["text", "image"] : ["text"],
+    contextWindow: custom.contextWindow,
+    maxTokens: custom.maxTokens,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    thinkingLevelMap: custom.reasoning ? { xhigh: "xhigh", max: "max" } : void 0,
+    compat
+  };
+  if (!models.getProvider(provider)) models.setProvider(createProvider({
+    id: provider,
+    name: custom.name || "Custom endpoint",
+    models: [model],
+    auth: { apiKey: { name: "Custom endpoint API key", resolve: async () => ({ auth: {} }) } },
+    api: { [model.api]: apis[model.api] }
+  }));
+  return { supported: true, provider, model: model.id, api: model.api, source: "user_configured", reasoning: model.reasoning, input: model.input, contextWindow: model.contextWindow, maxTokens: model.maxTokens, toolCall: custom.toolCall };
+}
+function customStreamOptions(config) {
+  if ((config.catalogProvider || config.provider) !== CUSTOM_PROVIDER) return {};
+  const custom = config.customEndpoint;
+  return {
+    maxTokens: custom.maxTokens,
+    ...custom.temperature != null ? { temperature: custom.temperature } : {},
+    ...custom.thinkingBudget != null ? { thinkingBudgets: { [custom.reasoningEffort]: custom.thinkingBudget } } : {}
+  };
+}
+
 // src/main.js
 var port = Number(process.argv[2]);
 var token = process.argv[3];
@@ -186347,6 +186489,7 @@ function installSuperGrokProvider() {
 }
 installVerifiedOpenCodeGoContracts();
 installSuperGrokProvider();
+installSarashinaProvider(runtimeModels);
 var AUTH_PROVIDER_IDS = {
   codex: "openai-codex",
   chatgpt: CHATGPT_PLAN_PROVIDER,
@@ -186781,6 +186924,8 @@ function resolutionFor(config) {
   if (config.contractVersion !== RUNTIME_CONTRACT_VERSION) {
     throw new Error(`Pi runtime contract mismatch: expected ${RUNTIME_CONTRACT_VERSION}, received ${config.contractVersion ?? "missing"}`);
   }
+  if (config.provider === CUSTOM_PROVIDER) return customProviderResolution(config, runtimeModels);
+  if (config.provider === "sarashina") return sarashinaResolution(config, runtimeModels);
   if (config.provider === CHATGPT_PLAN_PROVIDER) {
     const reason = chatGPTPlan.modelStatus(config.model);
     if (reason) return { supported: false, reason, provider: config.provider, model: config.model };
@@ -187128,6 +187273,8 @@ function standardStreamFunction(request, config, report, captureProviderRequest)
     } : effectiveHeaders(config, sessionId),
     timeoutMs: timeoutMs(request),
     reasoning: config.thinkingLevel,
+    ...customStreamOptions(config),
+    ...config.catalogProvider === "sarashina" || config.provider === "sarashina" ? { toolChoice: "auto" } : {},
     ...config.provider === PCC_PROVIDER && request.metadata?.max_output_tokens ? { maxTokens: Number(request.metadata.max_output_tokens) } : {},
     sessionId,
     onPayload: (payload) => {
@@ -187409,6 +187556,8 @@ async function runAgent(envelope, res) {
       send(res, { type: "llm_start", stepId: activeStep, timeMs: Date.now() });
     } else if (event.type === "message_update") {
       const update = event.assistantMessageEvent;
+      const preview = genuiPreviewFromAgentEvent(event);
+      if (preview) send(res, { ...preview, timeMs: Date.now() });
       if (update.type === "text_delta") {
         if (event.message?.provider === PCC_PROVIDER) {
           const text = event.message.content?.find((part) => part.type === "text")?.text;

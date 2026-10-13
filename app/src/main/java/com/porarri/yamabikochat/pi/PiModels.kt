@@ -21,6 +21,7 @@ data class PiAgentConfiguration(
     val apiKey: String? = null,
     val headers: Map<String, String> = emptyMap(),
     val env: Map<String, String> = emptyMap(),
+    val customEndpoint: com.porarri.yamabikochat.data.remote.OpenAiCompatPreset? = null,
     val catalogContract: PiCatalogModelContract? = null,
     val thinkingLevel: String? = null,
     val mcpAuthorizationToken: String? = null

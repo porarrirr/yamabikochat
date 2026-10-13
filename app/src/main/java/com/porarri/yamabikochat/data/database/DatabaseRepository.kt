@@ -314,9 +314,15 @@ class DatabaseRepository(private val chatDao: ChatDao) {
         chatDao.updateConversationTimestamp(conversationId, System.currentTimeMillis())
     }
 
-    fun getSettings(): Flow<Settings?> = chatDao.getSettings()
+    fun getSettings(): Flow<Settings?> = chatDao.getSettings().map { settings ->
+        settings?.let {
+            val normalized = it.normalizedForPersistence()
+            if (normalized != it) chatDao.saveSettings(normalized)
+            normalized
+        }
+    }
 
-    suspend fun getLatestSettings(): Settings? = chatDao.getSettings().first()
+    suspend fun getLatestSettings(): Settings? = getSettings().first()
 
     suspend fun saveSettings(settings: Settings) =
         chatDao.saveSettings(settings.normalizedForPersistence())

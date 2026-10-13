@@ -10,9 +10,11 @@ final class SettingsRepository {
     }
 
     func load() throws -> AppSettings {
-        try dbQueue.read { db in
+        try dbQueue.write { db in
             if let settings = try AppSettings.fetchOne(db, key: 1) {
-                return settings.normalizedForPersistence()
+                var normalized = settings.normalizedForPersistence()
+                if normalized != settings { try normalized.save(db) }
+                return normalized
             }
             var initial = AppSettings()
             try initial.insert(db)
@@ -33,7 +35,7 @@ final class SettingsRepository {
         }
             .publisher(in: dbQueue)
             .replaceError(with: nil)
-            .map { $0 ?? AppSettings() }
+            .map { ($0 ?? AppSettings()).normalizedForPersistence() }
             .eraseToAnyPublisher()
     }
 }

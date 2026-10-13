@@ -3,6 +3,102 @@ import WebKit
 @testable import YamabikoChat
 
 final class GenUIRichDocumentTests: XCTestCase {
+    @MainActor
+    func testScopedDarkThemeUsesTheRecoveredForegroundPalette() async throws {
+        let document = GenUIDocument(title: "Theme", ui: GenUINode(type: "card", props: ["theme": .string("dark")], children: [.node(GenUINode(type: "title", children: [.string("Read")]))]))
+        let html = try XCTUnwrap(GenUIRichWebView.Coordinator.html(document: document, snapshot: nil, dark: false))
+        let rendered = expectation(description: "Dark render")
+        let recorder = GenUIRenderRecorder(expectation: rendered)
+        let configuration = WKWebViewConfiguration()
+        configuration.userContentController.add(recorder, name: "genui")
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 300), configuration: configuration)
+        defer { configuration.userContentController.removeScriptMessageHandler(forName: "genui") }
+        webView.loadHTMLString(html, baseURL: nil)
+        await fulfillment(of: [rendered], timeout: 15)
+        let color = try await webView.callAsyncJavaScript("return getComputedStyle(document.querySelector('.genui-title')).color", arguments: [:], in: nil, contentWorld: .page) as? String
+        XCTAssertEqual(color, "rgb(255, 255, 255)")
+    }
+
+    @MainActor
+    func testWebKitPreservesInputIdentityAndUpdatesCallbacks() async throws {
+        let document = GenUIDocument(title: "Stable controls", code: #"""
+        const [n,setN] = DIL.useState(0);
+        return DIL.h('col', {}, DIL.h('input', {inputType:'number',value:n,onChange:value=>setN(Number(value)||0)}),
+          DIL.h('text', {}, 'Result '+n), DIL.h('button', {label:'Reset',onClick:()=>setN(0)}));
+        """#)
+        let html = try XCTUnwrap(GenUIRichWebView.Coordinator.html(document: document, snapshot: nil, dark: false))
+        let rendered = expectation(description: "Initial render")
+        let recorder = GenUIRenderRecorder(expectation: rendered)
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.userContentController.add(recorder, name: "genui")
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 600), configuration: configuration)
+        defer { configuration.userContentController.removeScriptMessageHandler(forName: "genui") }
+        webView.loadHTMLString(html, baseURL: nil)
+        await fulfillment(of: [rendered], timeout: 15)
+        let result = try await webView.callAsyncJavaScript("""
+        const input=document.querySelector('input'); input.focus(); input.value='12';
+        input.dispatchEvent(new Event('input',{bubbles:true}));
+        await new Promise(resolve=>setTimeout(resolve,0));
+        const same=input===document.querySelector('input'), focused=document.activeElement===input;
+        const edited=document.querySelector('.genui-text').textContent;
+        input.value=''; input.dispatchEvent(new Event('input',{bubbles:true}));
+        await new Promise(resolve=>setTimeout(resolve,0)); const draft=input.value;
+        input.value='12'; input.dispatchEvent(new Event('input',{bubbles:true}));
+        await new Promise(resolve=>setTimeout(resolve,0));
+        document.querySelector('button').click();
+        await new Promise(resolve=>setTimeout(resolve,0));
+        return {same,focused,edited,draft,reset:document.querySelector('.genui-text').textContent};
+        """, arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
+        XCTAssertEqual(result?["same"] as? Bool, true)
+        XCTAssertEqual(result?["focused"] as? Bool, true)
+        XCTAssertEqual(result?["edited"] as? String, "Result 12")
+        XCTAssertEqual(result?["draft"] as? String, "")
+        XCTAssertEqual(result?["reset"] as? String, "Result 0")
+        XCTAssertNil(recorder.error)
+    }
+
+    func testOriginalComponentCatalogAndFixtureValidate() throws {
+        XCTAssertEqual(GenUIReferenceCatalog.components.count, 283)
+        XCTAssertEqual(try validated(GenUIOriginalFixture.document), GenUIOriginalFixture.document)
+        let document = try GenUIDocument.validated(from: #"{"title":"Timer","ui":{"type":"DigitalTimerWidget","props":{"__state":{"start_time":90,"auto_start":false,"done_label":"Done"}}}}"#)
+        XCTAssertEqual(document.ui?.type, "DigitalTimerWidget")
+    }
+
+    func testReferenceCompositionValidatesAndRoundTrips() throws {
+        XCTAssertEqual(try validated(GenUIReferenceFixture.document), GenUIReferenceFixture.document)
+        let data = try JSONEncoder().encode(GenUIReferenceFixture.document)
+        XCTAssertEqual(try JSONDecoder().decode(GenUIDocument.self, from: data), GenUIReferenceFixture.document)
+    }
+
+    func testReferenceElementsAndWidgetNamesValidate() throws {
+        let document = try GenUIDocument.validated(from: #"""
+        {"title":"Reference","state":{"ready":true},"ui":{"type":"Col","children":[
+            {"type":"Scope","props":{"values":{"heading":"Heading"}},"children":[{"type":"title","children":["{{heading}}"]}]},
+            {"type":"Each","props":{"items":[{"id":"a","name":"A"}],"as":"entry","keyField":"id"},"children":[{"type":"text","children":["{{entry.name}}"]}]},
+            {"type":"Show","props":{"when":"{{ready}}"},"children":[{"type":"markdown","children":["**Ready**"]},{"type":"Show.Else","children":["Waiting"]}]},
+            {"type":"flashcard-flip","props":{"front":{"type":"text","children":["Question"]},"back":{"type":"text","children":["Answer"]}}},
+            {"type":"LoadingBlock","props":{"lines":3}},
+            {"type":"animate-group","props":{"stagger":60},"children":[{"type":"animate-item","props":{"name":"slide"},"children":[{"type":"Badge","props":{"label":"New"}}]}]}
+        ]}}
+        """#)
+        XCTAssertEqual(document.ui?.children?.count, 6)
+        for (alias, type) in GenUIDocument.widgetAliases {
+            XCTAssertEqual(GenUIDocument.componentCatalog[alias], GenUIDocument.componentCatalog[type], alias)
+        }
+    }
+
+    func testEmbeddedReferenceNodesAndUnsafeStateKeysAreRejected() {
+        for ui in [
+            #"{"type":"flashcard-flip","props":{"front":{"type":"script"}}}"#,
+            #"{"type":"component","props":{"content":[{"type":"Link","props":{"url":"javascript:alert(1)"}}]}}"#,
+            #"{"type":"input","props":{"bind":"__proto__"}}"#,
+            #"{"type":"button","props":{"onClick":{"type":"setState","key":"constructor","value":1}}}"#
+        ] {
+            XCTAssertThrowsError(try GenUIDocument.validated(from: "{\"title\":\"Invalid\",\"ui\":\(ui)}"))
+        }
+    }
+
     func testRichRoundTripAndDefaults() throws {
         let document = try GenUIDocument.validated(from: #"{"title":"Rich","ui":{"type":"col","children":["hello",2,{"type":"text","props":{"color":null},"children":["world"]}]},"state":{"empty":null}}"#)
         XCTAssertTrue(document.components.isEmpty)

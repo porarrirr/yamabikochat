@@ -1,0 +1,5656 @@
+[
+  {
+    "name": "ArtistUpcomingEventsWidget",
+    "sourceSHA256": "6f0629e9c70340b0312d014fcd956449dc2f2afbcbe0cd3f1a778cdf4454a20e",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "event_details_label",
+      "events",
+      "fallback_message",
+      "heading",
+      "view_tickets_label"
+    ]
+  },
+  {
+    "name": "AskUserDetails",
+    "sourceSHA256": "967d69cab315e975ffa06ebcd8e760ecfbcb55ca5e4026fe60cd3d8a34d2d908",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "display_button_label",
+      "invitation",
+      "questions",
+      "show_details_cta",
+      "submit_label"
+    ]
+  },
+  {
+    "name": "AskUserFiles",
+    "sourceSHA256": "c859672056d712384ad42eecc22b1528c916b59f4c488c0646ea1049ef23e933",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "file_label",
+      "kind",
+      "media_label",
+      "photo_label",
+      "show_upload_cta",
+      "video_label"
+    ]
+  },
+  {
+    "name": "AskUserLocation",
+    "sourceSHA256": "ff409882db66a07f36f91aa22ce9f1f66e9813993b1cff69f20eb6a3f9216132",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "description",
+      "dismissed",
+      "learn_more_label",
+      "learn_more_url",
+      "not_now_label",
+      "title",
+      "turn_on_label"
+    ]
+  },
+  {
+    "name": "AskUserLocationV2",
+    "sourceSHA256": "8cf3d02fd641ace4fc11b9cc9bf3adb2a50e3d567aa197273b1c99646063d6ba",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "choose_location_label",
+      "choose_location_web_label",
+      "cta_button_v2",
+      "cta_button_v3",
+      "description",
+      "dismiss_label",
+      "dismissed",
+      "fair_button_style",
+      "followup_suggestions_only",
+      "learn_more_label",
+      "learn_more_url",
+      "location_fallback_label",
+      "not_now_label",
+      "not_now_reroll",
+      "not_now_reroll_query",
+      "suggested_cities",
+      "title",
+      "turn_on_label",
+      "use_my_location_label"
+    ]
+  },
+  {
+    "name": "AskUserLocationV2Bidi",
+    "sourceSHA256": "b628a30aab9284bdef4df6ee09f3499076057c2fbf39c076845297ce6874a83b",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "choose_location_label",
+      "choose_location_web_label",
+      "cta_button_v2",
+      "cta_button_v3",
+      "description",
+      "dismiss_label",
+      "dismissed",
+      "fair_button_style",
+      "followup_suggestions_only",
+      "learn_more_label",
+      "learn_more_url",
+      "location_fallback_label",
+      "not_now_label",
+      "not_now_reroll",
+      "not_now_reroll_query",
+      "suggested_cities",
+      "title",
+      "turn_on_label",
+      "use_my_location_label"
+    ]
+  },
+  {
+    "name": "AsyncVideoCarousel",
+    "sourceSHA256": "7e312a75c931bcb8b96fcd4f5bdaa0f4b14fa2a5aa3838a30e1c5045d47f873e",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback",
+      "video_source_data"
+    ],
+    "stateFields": [
+      "is_loading",
+      "items"
+    ]
+  },
+  {
+    "name": "BasketballTournamentWidget",
+    "sourceSHA256": "f662d7ef06bc398e0eed6fa49141496e47c632a06bc3a7db0cab5c91c1f930e7",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_round_id",
+      "default_round_id",
+      "expanded",
+      "rounds",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "Bento",
+    "sourceSHA256": "ee4204685bec7ba434a17fd80923327d194a559df49805f2d324d1bb5262de34",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "large_card",
+      "medium_card",
+      "small_card_a",
+      "small_card_b"
+    ]
+  },
+  {
+    "name": "BusinessGalleryRefWidget",
+    "sourceSHA256": "9774f9af93929409c649b9e57f44b7e9b21c377eea5cb57d75d8f800c9daee0e",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "items"
+    ]
+  },
+  {
+    "name": "BusinessGalleryWidget",
+    "sourceSHA256": "287f2b2779eefbfbe83ab195ee19a0f5bc4f66c5454d24e87fc58ca5c23f3e2e",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "items"
+    ]
+  },
+  {
+    "name": "CalculatorAbcd2ScoreForTransientIschemicAttackWidget",
+    "sourceSHA256": "49bba6ac99a9d68dceb8248ef86ed158f357799060588f142f800b06ba76369a",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorApacheIiScoreWidget",
+    "sourceSHA256": "c2296cc5fa904ec27ef7ce84d66aba1ce71b27f70329a906098b0933bd98c56a",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorApgarScoreWidget",
+    "sourceSHA256": "a500474e42990c7583607ec710d37ae0587a09408ffa27b151a8656ea39e2ca2",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorAsaPhysicalStatusClassificationWidget",
+    "sourceSHA256": "44fc549c4d1a43d37adeee2878413be9c2205fcdbf10469453ef8bd600c3e852",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorBilitoolWidget",
+    "sourceSHA256": "542681ccd773a13274244d166256f97e3e035027cc24e4ef2343f4bbed04c675",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorBisapScoreForPancreatitisWidget",
+    "sourceSHA256": "ef9597a6540b70ad4fa9759bdaaa0e1bdea49ab1ab42105bff471f3b15f54881",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorBishopScoreForCervicalRipeningWidget",
+    "sourceSHA256": "38e909bddd4b49fb2538068e719ae0a2d52fc941c510fdc4f5c486784c2318ef",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorCanadianCtHeadRuleWidget",
+    "sourceSHA256": "41c6b5f1e475a2a4d7c5aa2cc165e40f78e85f32e413a188690bd4c833f8e717",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorCha2ds2VascScoreForAtrialFibrillationStrokeRiskWidget",
+    "sourceSHA256": "dbd738def7ab7a5a0fb964b707ec2ab487dc03d9054071eef01692f83d1932ed",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorChildPughScoreForCirrhosisWidget",
+    "sourceSHA256": "2cb56c3f87c1b370f806533ca98392a2b8e8d52d57ab605284ffd455cac6597b",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorCorrectedAdjustedAgeOfPretermInfantsWidget",
+    "sourceSHA256": "5959f60965c43197bb11f6764ddf362c4f04831b69fe5c0a9874b668ace1ed01",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorCurb65ScoreForPneumoniaWidget",
+    "sourceSHA256": "dcca73a53c363467106b0ce8d56ce2f909a6c67ee7bcb3324b7c0c6d1f1b759b",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorDukeTreadmillScoreWidget",
+    "sourceSHA256": "61a1369616c677d2b537e6fbf76539de9c46999134a1c9f1a704b499695d14f8",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorFourTScoreForHeparinInducedThrombocytopeniaWidget",
+    "sourceSHA256": "1e597dee8a969f84c5b4c7b9d9b759ab30444c52ecdb1ff56cf0c5e2da8e73a3",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorGlasgowBlatchfordScoreForUpperGiBleedingWidget",
+    "sourceSHA256": "50f187d9d94162d28dc3f87e9d5f0eafc03008c0fe6c9b84564db17f65bb8218",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorGlasgowComaScaleGcsWidget",
+    "sourceSHA256": "36cd79694e42c41908c444627d6227ef235123a84ceae0670440212d71010bcf",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorGraceScoreForAcuteCoronarySyndromeWidget",
+    "sourceSHA256": "e762365c19c8dca89c34c4a070b7456b14cef5ce6f8483ba3c521c90a2f92861",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorHasBledScoreForMajorBleedingRiskWidget",
+    "sourceSHA256": "43c54fe92a05c846440c66506e060187ee535dbe416f84d4bfb57a575bc98635",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorHeartScoreForMajorCardiacEventsWidget",
+    "sourceSHA256": "27ec5ebeed103f34ea9d6571a3a74739ee27e1493fcbb1ea6759be39ed87b076",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorHuntAndHessScoreForSubarachnoidHemorrhageWidget",
+    "sourceSHA256": "b6272151183854265d375859f9fc46e5f5f348bc5e5e0a5da8a6de5178bed5c9",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorIchScoreWidget",
+    "sourceSHA256": "700c7060d37ffb6f5e377e688a9dedc7440bdf2b1b55432306b0443716534934",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorIsthDicScoreWidget",
+    "sourceSHA256": "fac496faeed001a1843c44cb0c7240134db99294c95b1ed1b21d7f41448d015a",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorModifiedRankinScaleWidget",
+    "sourceSHA256": "f1e9141e0b2de4517e5f851cabf6556a16db718662579d966aaf9e783d6994ec",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorNexusCervicalSpineRuleWidget",
+    "sourceSHA256": "da2a7c9a5f60273b00c7e006792685d3ba1a7ae9737463f834944a31af732d23",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorNihStrokeScaleNihssWidget",
+    "sourceSHA256": "a6436766604660d9d94310011c66343dc9acebbbfc32b7d9ab0bacf7e218a391",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorOttawaAnkleRuleWidget",
+    "sourceSHA256": "c242b8743c0fc432dbc488cbc20cd2176820eec5d4b4620c69d93d01898f72b0",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorOttawaKneeRuleWidget",
+    "sourceSHA256": "078ecc5b2fa2bbda535025f57e7595e44cc6609ab7fa6b3bbc8fb9a254ab12cb",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorPaduaPredictionScoreForVenousThromboembolismRiskWidget",
+    "sourceSHA256": "f6bfdf0c2cfa0a3957879fcdb97e309e3e6ce0ae594672244e540cc179d95efc",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorPecarnPediatricHeadInjuryRuleWidget",
+    "sourceSHA256": "dc12cbc27167604f349725f661cb535de7aa0cb8f0b8d6a05c7e26104f809975",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorPediatricEarlyWarningScorePewsWidget",
+    "sourceSHA256": "33331c4c9a4c9965708881aa0adb69f162d0e54c83b5729ba65c6b299ec6cbfa",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorPercRuleForPulmonaryEmbolismWidget",
+    "sourceSHA256": "dacd99fb14b77b10d798f2629a2c2f8063d0f72f443b9474515076b0cd8564cf",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorPneumoniaSeverityIndexPsiPortWidget",
+    "sourceSHA256": "e1fd9f89926c174234b7f986365455d01cfbc61b1531b9ffb04197171e333a48",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorQsofaScoreWidget",
+    "sourceSHA256": "8cdf70421d08371f8ed5f5273ac3ed16808abf199d48f99e7ac6ec245f96c5ab",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorRansonCriteriaForPancreatitisWidget",
+    "sourceSHA256": "baf303d340e9c91836b3b7510a7d566ee75c576bbb0052acaad1fa11c0003e00",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorRevisedCardiacRiskIndexRcriWidget",
+    "sourceSHA256": "c15e991016c2477ec007810d614c67a83125346d64d55373f3deda172bb29b88",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorRevisedGenevaScoreForPulmonaryEmbolismWidget",
+    "sourceSHA256": "f23da046f1c996d6352aacce470e8eba154593c3a96bf51d199492e2de7c87a4",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorRochesterCriteriaForFebrileInfantsWidget",
+    "sourceSHA256": "a754c0ba69d6ecbe9dc5d12d437a5e9b33c8ce1e695a4392f5c0f85701dc25f0",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorRockallScoreForUpperGiBleedingWidget",
+    "sourceSHA256": "d93b6af2540c311cf7fed3902a29dbacd086133fbbc2fce9be006716fec86756",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorRoxIndexForHighFlowNasalCannulaWidget",
+    "sourceSHA256": "30f5798ce6c3d1608600881a0c03fcd1aa939f7bf97b328a1d33f89382974db4",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorSirsCriteriaWidget",
+    "sourceSHA256": "e2e6baa1aa63b9f9a41c460f4be7d4e1e5ddd7610a5e8346b6f4196810ea01c1",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorSofaScoreWidget",
+    "sourceSHA256": "86631c15eab20f1e76f51bb816cd4b4dc751f4ada6b80f3fb4cb205fb9cb2b32",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorStopBangScoreForObstructiveSleepApneaWidget",
+    "sourceSHA256": "0af1d18a88c7c2d5713314bd903542ab1e12273f6b232f0fff45de26752584ec",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorSurgicalApgarScoreWidget",
+    "sourceSHA256": "12d3e693eafd417ee1bf9cf4ea8fd432ff8708b58328c906173d4e9813c9946f",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorTimiRiskWidget",
+    "sourceSHA256": "11edf1536f12e538ed57b139469601b98890e49405f3f107e6f0878093d98298",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "defaults",
+      "info_tab",
+      "info_tabs",
+      "mode",
+      "mode_options",
+      "modes",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorWellsScoreForDeepVeinThrombosisWidget",
+    "sourceSHA256": "8dc7f5e2a420315086c63236de968a6e7e0575b20c2c27b2a1d5d60635c9dee5",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorWellsScoreForPulmonaryEmbolismWidget",
+    "sourceSHA256": "5f8a197c6d91ced56bd7b70457bdf9815640ab5f0de6a5015aa89b4a6d1ea8f6",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorWestleyCroupSeverityScoreWidget",
+    "sourceSHA256": "ebbbccdf84075a5b740f66376d28211b4739b232c70a6cff4940dc92435b4b6b",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalculatorWidget",
+    "sourceSHA256": "59e44381a78e541e7929f55e7ef377a3d8ca73fe2e694a1c17a9e8e8f1762ea6",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "angle_mode",
+      "inverse_mode",
+      "show_controls",
+      "show_scientific_controls",
+      "top",
+      "value"
+    ]
+  },
+  {
+    "name": "CalculatorYearsAlgorithmForPulmonaryEmbolismWidget",
+    "sourceSHA256": "9a438fa6094ac7c81bdabf2a360761c3ee5dda62dd836707b36982555977bd24",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_info_section",
+      "defaults",
+      "info_sections",
+      "inputs",
+      "notes",
+      "result_title",
+      "score_label",
+      "score_range_label",
+      "subtitle",
+      "summary_prefix",
+      "title",
+      "values"
+    ]
+  },
+  {
+    "name": "CalendarEventsWidget",
+    "sourceSHA256": "02091d1eed09a4f3db45160226b0a6177b7b8880089de649ff16dd72c2c18c65",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "date",
+      "events"
+    ]
+  },
+  {
+    "name": "CalendarList",
+    "sourceSHA256": "f46a0e146d246e5277da99abbea9aa9f2beb814f55b4ecd7c240a445001e5098",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "date",
+      "events",
+      "prep"
+    ]
+  },
+  {
+    "name": "CareProviderResultsWidget",
+    "sourceSHA256": "2974b4bed5a511293f5258d58f52090f7d1cc8b23be97fcfdf82936761cfa63e",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "empty_message",
+      "empty_title",
+      "error_message",
+      "error_title",
+      "expanded_providers_to_show",
+      "has_bookable_slots",
+      "has_more_results",
+      "more_results_label",
+      "more_results_query",
+      "next_cursor",
+      "no_availability_label",
+      "partial_notice",
+      "providers",
+      "providers_to_show",
+      "retry_label",
+      "retry_query",
+      "selected_date",
+      "selected_provider_id",
+      "should_render",
+      "show_more_label",
+      "status",
+      "subtitle",
+      "title"
+    ]
+  },
+  {
+    "name": "CareProviderSidebarWidget",
+    "sourceSHA256": "54c7b33622f0144b54d9305e3936e0f1041288197a2b57f417ba62f58f79b51e",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "appointments_heading",
+      "availability_days",
+      "calendar_months",
+      "calendar_weekday_labels",
+      "directions_label",
+      "directions_url",
+      "display_name_with_credentials",
+      "initials",
+      "location_label",
+      "location_options",
+      "next_month_label",
+      "no_appointments_label",
+      "partner_label",
+      "partner_logo_url",
+      "photo_alt",
+      "photo_url",
+      "previous_month_label",
+      "profile_url",
+      "rating_label",
+      "review_count_label",
+      "selected_calendar_month_index",
+      "selected_date",
+      "specialty_practice_label",
+      "view_on_zocdoc_label",
+      "visit_modality"
+    ]
+  },
+  {
+    "name": "CfbGames",
+    "sourceSHA256": "bfb275aa8cbdf02a108a831e59133a24257e90557ed8f569a01522e9577fe0c5",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "back_to_games_label",
+      "boxscores",
+      "default_active_game_id",
+      "game_count",
+      "league_name",
+      "season_label",
+      "title"
+    ]
+  },
+  {
+    "name": "CfbGamesWidget",
+    "sourceSHA256": "1220156f863891a6e6604d226caee486f1e55b935984b24d7b459d809348810f",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "back_to_games_label",
+      "boxscores",
+      "default_active_game_id",
+      "game_count",
+      "league_name",
+      "season_label",
+      "title"
+    ]
+  },
+  {
+    "name": "ChecklistWidget",
+    "sourceSHA256": "9d609950160afd36d5e59e4807fc40fce360dba17020d81e09dec9c6f9923122",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "sections"
+    ]
+  },
+  {
+    "name": "ClockWidget",
+    "sourceSHA256": "11736563b246131fe54ff41817c2cdb8cb9ee0204c0538b7b309334ede58cb98",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "fixed_tick",
+      "location",
+      "relative_offset_label",
+      "time_format",
+      "tz_offset_minutes"
+    ]
+  },
+  {
+    "name": "ConversationFollowUpActionList",
+    "sourceSHA256": "97e80e52b852f4fb86d1a9c5a5605276f31529fc2738488e0efb05a0967cb462",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "actions"
+    ]
+  },
+  {
+    "name": "ConversationalOnboardingAdvice",
+    "sourceSHA256": "0e90d87506b760978c2d4610d25a3d266881be10be4b3ecd4c0e65d82de22657",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "ask_me_label",
+      "everyday_fixes_label",
+      "plant_answer_title",
+      "plant_care_steps",
+      "plant_diagnosis",
+      "plant_image_alt",
+      "plant_question",
+      "recipe_content",
+      "recipe_name",
+      "recipe_question",
+      "recipe_tab_label",
+      "tab",
+      "troubleshooting_diagnostic_question",
+      "troubleshooting_next_step",
+      "troubleshooting_question",
+      "troubleshooting_tab_label",
+      "troubleshooting_title"
+    ]
+  },
+  {
+    "name": "ConversationalOnboardingFollowUpPills",
+    "sourceSHA256": "b4cfe154c27e4c236618d1bb7383e3a7194bf6509e558a5426df8ab96cbf7943",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "actions"
+    ]
+  },
+  {
+    "name": "ConversationalOnboardingSearch",
+    "sourceSHA256": "3a3ebfeb02cf8b247373ef2b895823ac68f00a6607a40560004c9bbe68c4cc24",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_index",
+      "after_hours",
+      "ask_me_label",
+      "asset_display_name",
+      "current_price_text",
+      "default_range",
+      "fallback_summary",
+      "follow_up_actions",
+      "has_timeframe_data",
+      "is_comparison_mode",
+      "items",
+      "labels",
+      "metrics_display",
+      "metrics_display_mobile",
+      "news_items",
+      "news_question",
+      "news_tab_label",
+      "resolved_news_items",
+      "share_button_variant",
+      "show_metrics",
+      "stock_asset_type",
+      "stock_market",
+      "stock_question",
+      "stock_tab_label",
+      "stock_ticker",
+      "tab",
+      "timeframe_configs",
+      "timeframe_order",
+      "weather_question",
+      "weather_tab_label"
+    ]
+  },
+  {
+    "name": "ConversationalOnboardingStudy",
+    "sourceSHA256": "1ad84077735971186fb6a23eca56f142b8cbced679fee6a998c7b5eceefe3f45",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "advance_label",
+      "answers",
+      "ask_me_label",
+      "copy_quiz_label",
+      "copy_quiz_text",
+      "correct_count",
+      "correct_count_labels",
+      "current_index",
+      "day",
+      "day_label",
+      "dismiss_label",
+      "dismissed",
+      "earth_years_label",
+      "error_label",
+      "false_statement_label",
+      "feedback_status",
+      "generation_complete",
+      "hint_label",
+      "hint_open",
+      "loading_label",
+      "math_graph_description",
+      "math_graph_question",
+      "math_graph_series_label",
+      "math_graph_tab_label",
+      "math_graph_title",
+      "native_quiz_state",
+      "next_question_label",
+      "next_quiz_label",
+      "next_quiz_query",
+      "phase",
+      "planet_names",
+      "previous_question_label",
+      "question_progress_labels",
+      "questions",
+      "quiz_question",
+      "quiz_tab_label",
+      "reset_label",
+      "restart_label",
+      "retry_label",
+      "review_messages",
+      "select_all_that_apply_label",
+      "selected_values",
+      "share_button_variant",
+      "share_label",
+      "submit_answer_label",
+      "tab",
+      "title",
+      "true_statement_label",
+      "visual_question",
+      "visual_tab_label"
+    ]
+  },
+  {
+    "name": "ConversationalOnboardingWriting",
+    "sourceSHA256": "53360dd004a99a478d2363218f6084333be4fe20c3127c4f13d7c4c5d33c901c",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "ask_me_label",
+      "email",
+      "email_question",
+      "email_tab_label",
+      "message",
+      "message_question",
+      "message_tab_label",
+      "tab",
+      "translation",
+      "translation_question",
+      "translation_tab_label"
+    ]
+  },
+  {
+    "name": "CopyWordsWidget",
+    "sourceSHA256": "2aeac09dff9310f4f2fc9d4bcffa83d25e2e7515d895d5b29e87d827ad94ff5b",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "words"
+    ]
+  },
+  {
+    "name": "CricketMatchBoxscoreWidget",
+    "sourceSHA256": "0f4f885c84faf2b98a500212b4ef260d42bfdc1e4def348ad12d488e4cf50c2e",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "away_display",
+      "batters_live",
+      "current_bowler_live",
+      "current_over_outcomes",
+      "final_result_text",
+      "home_display",
+      "innings_break_chase_text",
+      "is_final",
+      "is_innings_break",
+      "is_live",
+      "labels",
+      "left_display",
+      "recap_batters",
+      "recap_bowlers",
+      "right_display",
+      "run_rate_chart_data",
+      "run_rate_summary",
+      "scheduled_date_text",
+      "scheduled_time_text",
+      "score_side",
+      "scorecard_first_side",
+      "scorecard_second_side",
+      "scorecards_by_side",
+      "show_scores",
+      "status_text",
+      "tab",
+      "timeline_groups",
+      "title",
+      "venue_text"
+    ]
+  },
+  {
+    "name": "CricketSingleMatch",
+    "sourceSHA256": "8da09f9cedb526a9591cd4db6bc5338cfbfd5bd9e26320f8466f77db80aac2c5",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "away_display",
+      "batters_live",
+      "current_bowler_live",
+      "current_over_outcomes",
+      "final_result_text",
+      "home_display",
+      "innings_break_chase_text",
+      "is_final",
+      "is_innings_break",
+      "is_live",
+      "labels",
+      "left_display",
+      "recap_batters",
+      "recap_bowlers",
+      "right_display",
+      "run_rate_chart_data",
+      "run_rate_summary",
+      "scheduled_date_text",
+      "scheduled_time_text",
+      "score_side",
+      "scorecard_first_side",
+      "scorecard_second_side",
+      "scorecards_by_side",
+      "show_scores",
+      "status_text",
+      "tab",
+      "timeline_groups",
+      "title",
+      "venue_text"
+    ]
+  },
+  {
+    "name": "CurrencyConverterV2Widget",
+    "sourceSHA256": "ace852045bab66ea5bf81addff19d0a8d1bfe0363f9604e1904398b387eb326d",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "base_amount",
+      "exchange_rate",
+      "footer_label",
+      "from_currency",
+      "to_currency"
+    ]
+  },
+  {
+    "name": "CurrencyConverterV2WidgetWithSource",
+    "sourceSHA256": "99349b0cbd4a32ad930c396e304a64910c43b1d987f927f23db77c3b122a7b1c",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "base_amount",
+      "exchange_rate",
+      "footer_label",
+      "from_currency",
+      "to_currency"
+    ]
+  },
+  {
+    "name": "CurrencyConverterWidget",
+    "sourceSHA256": "405a5a1548a6b59047e594932c20f3c12d3d051de44e979254dab5eb1769c324",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "base_amount",
+      "exchange_rate",
+      "from_currency",
+      "to_currency"
+    ]
+  },
+  {
+    "name": "CurrencyConverterWidgetWithSource",
+    "sourceSHA256": "66233509d5366e3a0ea3ebe53a0fc05b1d299bb96262397fbffea25738923900",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "base_amount",
+      "exchange_rate",
+      "from_currency",
+      "to_currency"
+    ]
+  },
+  {
+    "name": "DigitalStopwatchWidget",
+    "sourceSHA256": "17750a5fb38417f0bb4097ed35d2ed59f6e18915b9680e850e3113d1d40248b7",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "auto_start",
+      "elapsedBaseMs",
+      "running",
+      "startTimestamp",
+      "start_time"
+    ]
+  },
+  {
+    "name": "DigitalTimerWidget",
+    "sourceSHA256": "6c9c5eed33851c7edc7290d6a03bca5ed21135827c19044f27e72b3438ec7265",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "auto_start",
+      "complete",
+      "done_label",
+      "initialMs",
+      "remainingMs",
+      "running",
+      "start_time"
+    ]
+  },
+  {
+    "name": "DraftEmail",
+    "sourceSHA256": "9447c85ba3c129ef9a57f5ee00986f295098e5d3194e86974ee97dcdbfe9de5c",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "defaultBody",
+      "defaultSubject",
+      "defaultTo",
+      "emailFrom"
+    ]
+  },
+  {
+    "name": "ElectionInfo",
+    "sourceSHA256": "964fc7d1304a65f8ed82412b694a503f2679372500e905ce2965f71647505457",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "attribution",
+      "carousel_label",
+      "is_loading",
+      "items",
+      "loading_label",
+      "widget_name"
+    ]
+  },
+  {
+    "name": "ElectionResults",
+    "sourceSHA256": "f2d38c6198b9ff8d7c2f644c22042c723aa5ad5bb8293deeda84d546e4dccf3b",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "candidates",
+      "geography",
+      "less_label",
+      "more_label",
+      "retrieved_label",
+      "source_label",
+      "source_name",
+      "source_url",
+      "subtitle",
+      "test_label",
+      "title"
+    ]
+  },
+  {
+    "name": "ElectionResultsWidget",
+    "sourceSHA256": "552f95f7cc9b74faedffce913443e1c45d1d27e1e5a2f0ce57d2d72eb5780bb5",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "candidates",
+      "geography",
+      "less_label",
+      "more_label",
+      "retrieved_label",
+      "source_label",
+      "source_name",
+      "source_url",
+      "subtitle",
+      "test_label",
+      "title"
+    ]
+  },
+  {
+    "name": "EmailPreview",
+    "sourceSHA256": "ad75526efda112f96180e5e11d5087081011a4bb88bc76e9c034fb86958d3f51",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "sender_initial",
+      "sender_name",
+      "subject",
+      "url"
+    ]
+  },
+  {
+    "name": "EntityCard",
+    "sourceSHA256": "6d9ecf0ca8985ec05ec2c31f837825f644e099494e2f40d2dd8235d370c983a8",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "click_action",
+      "image",
+      "subtitle",
+      "title"
+    ]
+  },
+  {
+    "name": "EntityExplorer",
+    "sourceSHA256": "f140ff4520e2ca0801c3af938aeae3b98cb00fb73b573100eacd872e788f5255",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "click_action",
+      "entities",
+      "image",
+      "subtitle",
+      "title"
+    ]
+  },
+  {
+    "name": "EntityOverviewCarouselWidget",
+    "sourceSHA256": "7ee51eafa01d85e64a45a0a2c0647b12d0679767aafa39a93cdc3926e41dcc7e",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "description",
+      "images",
+      "items",
+      "metadata",
+      "title"
+    ]
+  },
+  {
+    "name": "EntityOverviewWidget",
+    "sourceSHA256": "f9d7a53a79f3a6fc0c738fd4d8d49e187c4459fc271296c9cd203806a1d776fa",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "click_action",
+      "description",
+      "images",
+      "metadata",
+      "title"
+    ]
+  },
+  {
+    "name": "EntityReviewsRefWidget",
+    "sourceSHA256": "6ef319b0ed50f99daf0dffed92d686799d7890ddf582c8530b685020ce134434",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "cards"
+    ]
+  },
+  {
+    "name": "EntityReviewsWidget",
+    "sourceSHA256": "2199a12086d1547d902bab83570bf8ccc6b2a243a6bb256976fc582260021a45",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "cards"
+    ]
+  },
+  {
+    "name": "EntityThumbnailList",
+    "sourceSHA256": "50f857e8c44ef66979969ae23bacf7447f7eefdf8bc41d70e1ec89cba994bf4c",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "entities",
+      "is_carousel",
+      "title"
+    ]
+  },
+  {
+    "name": "EplScheduleWidget",
+    "sourceSHA256": "b25d4ffc1beddc5f4dc70ce0da168a95287c529689cffba4194515d89bfea2f5",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "EplScheduleWidgetWithSource",
+    "sourceSHA256": "c9427c4b26cc4247855fbd3ca20e5413ebcb090adc3978d36187f9aa0a247708",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "EplStandingsWidget",
+    "sourceSHA256": "25aa0c07fe09636acbab6718aca68b29f1fa234460f9736b7fbff42abb946d14",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "EplStandingsWidgetWithSource",
+    "sourceSHA256": "4f82fcb956bff1c9c13780de934e03199643ba395e175166cddee2399ed34098",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "EventSidebarWidget",
+    "sourceSHA256": "56c7bd2ec05fd92f9f887de51b7a8ac0ba17a62d70f6994432f781b487a290b7",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "address",
+      "detail_url",
+      "directions_label",
+      "event_details_label",
+      "location_in_map",
+      "map_url",
+      "schedule",
+      "ticket_metadata",
+      "ticket_url",
+      "title",
+      "venue",
+      "view_tickets_label"
+    ]
+  },
+  {
+    "name": "ExampleServerActionButton",
+    "sourceSHA256": "7283e49e978260616300dac12d6400cfdd82da5fcb9e8eefc63f7c242e1d168a",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "local_click_count"
+    ]
+  },
+  {
+    "name": "F1RacesWidget",
+    "sourceSHA256": "5ef0eef9bb6cceab0101fa31aa93adc74328cb7eae3e7a1e5e19e30757f5fe9a",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_race_id",
+      "active_session_id",
+      "detail_header",
+      "display_title",
+      "driver_header",
+      "races",
+      "rows_to_show",
+      "subtitle"
+    ]
+  },
+  {
+    "name": "F1RacesWidgetWithSource",
+    "sourceSHA256": "547b0e986dadaf8e47b06f07ad8a37ee599bcebfd2f458353216531ea79e8a7f",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_race_id",
+      "active_session_id",
+      "detail_header",
+      "display_title",
+      "driver_header",
+      "races",
+      "rows_to_show",
+      "subtitle"
+    ]
+  },
+  {
+    "name": "F1StandingsWidget",
+    "sourceSHA256": "e2279aa138c1dd3c10339b7a91d41be383ca99ca25121d59e35b0c5c20d5798c",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_tab_id",
+      "display_title",
+      "show_less_label",
+      "show_more_label",
+      "subtitle",
+      "tabs"
+    ]
+  },
+  {
+    "name": "F1StandingsWidgetWithSource",
+    "sourceSHA256": "64b38f0812bdeb1a3b1356a0403eb4d89298dfddfb4103da2244d61bc8b2d766",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_tab_id",
+      "display_title",
+      "show_less_label",
+      "show_more_label",
+      "subtitle",
+      "tabs"
+    ]
+  },
+  {
+    "name": "FinanceOnboardingSuggestions",
+    "sourceSHA256": "6657e971663266b442dc498f711222c00d1558386c36afbde507ca5ee7b27f2c",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "follow_up",
+      "heading",
+      "items"
+    ]
+  },
+  {
+    "name": "FlightResults",
+    "sourceSHA256": "4021261998e5386b178be09b9d9d96710d3f5ad84de5673cba9e0aa2a5473858",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "comparable_durations",
+      "comparable_prices",
+      "items",
+      "labels",
+      "response_id"
+    ]
+  },
+  {
+    "name": "FlightSearchForm",
+    "sourceSHA256": "d99b40b772bc067d6bc3920d2a85906ac3d0dd08ae83f2e46343bb3003ade22a",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "draft",
+      "labels"
+    ]
+  },
+  {
+    "name": "FlightTrackerWidget",
+    "sourceSHA256": "b68a0417ed2cc8a885d071122ccff774a0cbed31e0982c96c49a8a27ae2b1b7a",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "arrival_detail_title",
+      "arrival_detail_value",
+      "arrival_gate_title",
+      "arrival_gate_value",
+      "arrival_scheduled_time_label",
+      "arrival_terminal_title",
+      "arrival_terminal_value",
+      "arrival_time_color",
+      "arrival_time_label",
+      "attribution_label",
+      "badge_color",
+      "badge_label",
+      "completed_progress_dot_count",
+      "departure_detail_title",
+      "departure_detail_value",
+      "departure_gate_title",
+      "departure_gate_value",
+      "departure_scheduled_time_label",
+      "departure_terminal_title",
+      "departure_terminal_value",
+      "departure_time_color",
+      "departure_time_label",
+      "destination_city",
+      "destination_code",
+      "flight_progress_left",
+      "header_label",
+      "mobile_completed_progress_dot_count",
+      "mobile_flight_progress_left",
+      "origin_city",
+      "origin_code",
+      "progress_center_label",
+      "show_progress_plane",
+      "summary_emphasis",
+      "summary_emphasis_color",
+      "summary_lead",
+      "summary_trail"
+    ]
+  },
+  {
+    "name": "FollowUpCardGroup",
+    "sourceSHA256": "59e937e7354140d91a8f079a958c6d6990780b330b6c48dd1b209e8c6ba539ee",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "actions"
+    ]
+  },
+  {
+    "name": "FollowUpChoiceCard",
+    "sourceSHA256": "9a8f0cc8fb3dbc26c952ad64be246234cd335e2768f21e890b9e2ff8d1544d83",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "actions",
+      "appearance",
+      "title"
+    ]
+  },
+  {
+    "name": "FollowUpLinkList",
+    "sourceSHA256": "58d5c4dcaff696955d1b6e1ccee4c868b801ab95a8e6b7ca036122db7a9a029b",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "actions"
+    ]
+  },
+  {
+    "name": "FollowUpPillGroup",
+    "sourceSHA256": "a58eddfaefc3296b8c6b72a696a1b0eb93b7d88914739c4683212bdd16da485e",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "actions"
+    ]
+  },
+  {
+    "name": "FollowUpQuiz",
+    "sourceSHA256": "a1c28e3da3be8edf3eb9ecbc6c9d8dba59cdaad134abf1568c0926f4dc4b8482",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "answers",
+      "current_index",
+      "questions",
+      "submit_label",
+      "submit_query_prefix",
+      "title"
+    ]
+  },
+  {
+    "name": "Gpt4oSystemCard",
+    "sourceSHA256": "4c8798f045e46e24478261d39ecc54871f4101aab124f759d72e203dff2e2683",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "accessSummary",
+      "badges",
+      "benchmarks",
+      "capSummary",
+      "date",
+      "design",
+      "models",
+      "safetySummary",
+      "title"
+    ]
+  },
+  {
+    "name": "Gpt5SystemCard",
+    "sourceSHA256": "eb8fb827174212dff1603512df3a0df996ae5b365451df59ae5c2008dffb0a85",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "accessSummary",
+      "badges",
+      "benchmarks",
+      "capSummary",
+      "date",
+      "design",
+      "models",
+      "safetySummary",
+      "title"
+    ]
+  },
+  {
+    "name": "HolidayWidget",
+    "sourceSHA256": "b3f7c76c879949648d2a5da63b0a21c3b7325ca12c70d603def4d2a7670da548",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "holiday_date",
+      "holiday_descriptor",
+      "holiday_name",
+      "image"
+    ]
+  },
+  {
+    "name": "HomeworkHelperV2",
+    "sourceSHA256": "f93cdc8dfd9ba3d1e80b932b92a7dbd77916374a3c8f66d166bb6fcd19985482",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "options",
+      "prevent_repeated_submission",
+      "question",
+      "selected_value",
+      "submit_label",
+      "submitted"
+    ]
+  },
+  {
+    "name": "ImageGenWidget",
+    "sourceSHA256": "7d2e9889f6047713cba70ac48a1541847c121810d2e919d1e1d179eaa607628f",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "error",
+      "status",
+      "url"
+    ]
+  },
+  {
+    "name": "ImageGrid",
+    "sourceSHA256": "3348ec26237f76717e75317db47eeae7bb1b2e660e9cd00d146be4cc8e7151d6",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "is_loading",
+      "placeholder_rows",
+      "recommendation_rows_to_show",
+      "recommendations",
+      "row_aspect_ratio",
+      "rows",
+      "tiles"
+    ]
+  },
+  {
+    "name": "InstantSuggestionsWidget",
+    "sourceSHA256": "be12fcb79cb7819408223ee49b0b3ab2293ee7566fe68784089f97657e6b648b",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "category",
+      "suggestions",
+      "title"
+    ]
+  },
+  {
+    "name": "InternalPartnerAppWidget",
+    "sourceSHA256": "7c8c5328c08716488c76032a9f400d42fecc7ea9496958d4801c1f426fed9bfb",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "button_name",
+      "launcher_payload",
+      "provider_logo",
+      "title"
+    ]
+  },
+  {
+    "name": "IplScheduleWidget",
+    "sourceSHA256": "498e606a73311b823c90b0c10f3eb345fd3310fe99304bc7d4dc89152f7bdb40",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "IplScheduleWidgetWithSource",
+    "sourceSHA256": "9571697c57ee308b9f6395973a45c0970f4ff80a8a88a32e2a44669aefc5dc84",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "IplStandingsWidget",
+    "sourceSHA256": "0d1460a24888ab2f3a5cde39037c5dae2e4c522050494373290de09f75a82c31",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "IplStandingsWidgetWithSource",
+    "sourceSHA256": "8110de292d68396bb2de96addcfbee9df309451fd5ee5bb61837f5188f5cef56",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "JobsWidget",
+    "sourceSHA256": "f1b58d985774933e5434b3eb0374e009618d227f2a704518cd08097ab9542271",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "apply_url_with_tracking",
+      "company",
+      "company_logo_url",
+      "employment_type",
+      "location",
+      "role_summary",
+      "salary",
+      "source",
+      "title"
+    ]
+  },
+  {
+    "name": "LearningAudioLabelCard",
+    "sourceSHA256": "22877e1f764db14f14510243ce559dd17966a6b789345d4b99200e638c7c6326",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": []
+  },
+  {
+    "name": "LearningFillBlankCard",
+    "sourceSHA256": "0a3790ce1e258c4a54f93c9b2a11ec6cca22ed23d7baca7668ad123df1a4a680",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": []
+  },
+  {
+    "name": "LearningFlashcards",
+    "sourceSHA256": "480f9f7dc9c179b6faba253c636c432aa3c3d5c0be86da98a842334d6b69b5b6",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "answer_history",
+      "card_instance_ids",
+      "card_order",
+      "cards",
+      "celebration_step",
+      "celebrations_enabled",
+      "correct_count_labels",
+      "current_index",
+      "deck_instance_id",
+      "deck_version",
+      "dismiss_label",
+      "dismissed",
+      "display_cards",
+      "edit_card_label",
+      "error_label",
+      "error_operation",
+      "error_title",
+      "expanded",
+      "finish_label",
+      "flip_to_back_label",
+      "flip_to_front_label",
+      "flipped",
+      "generation_complete",
+      "interaction_state",
+      "library_file_id",
+      "loading_label",
+      "low_score_summary_label",
+      "mark_correct_label",
+      "mark_missed_label",
+      "missed_count_labels",
+      "missed_indices",
+      "mobile_progress_template",
+      "more_flashcards_label",
+      "more_flashcards_query",
+      "onboarding_mobile_labels",
+      "onboarding_web_labels",
+      "open_label",
+      "original_order",
+      "original_review_order",
+      "overflow_label",
+      "percentage_summary_labels",
+      "perfect_summary_label",
+      "phase",
+      "play_audio_label",
+      "reduced_motion",
+      "reset_label",
+      "retry_audio_label",
+      "retry_label",
+      "retry_missed_labels",
+      "retry_query",
+      "review_pass_id",
+      "review_pass_kind",
+      "revision",
+      "shuffle_index",
+      "shuffle_label",
+      "shuffle_orders",
+      "shuffle_phase",
+      "shuffle_primary_card",
+      "shuffle_revision",
+      "shuffle_secondary_card",
+      "stop_audio_label",
+      "tap_to_flip_label",
+      "tap_to_flip_visible",
+      "title",
+      "undo_label",
+      "unmark_missed_label",
+      "view_all_label"
+    ]
+  },
+  {
+    "name": "LearningImageChoiceCard",
+    "sourceSHA256": "3e8d1029f279ea0f96ff363ceb11d880d07e055b474e3c974d2f60cc91a95a3a",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": []
+  },
+  {
+    "name": "LearningImageLabelCard",
+    "sourceSHA256": "a807d709be8b5addcec63ac96b495a99888206a1c9497c8ed5afa0cf844ee329",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "alt",
+      "aspectRatio",
+      "fallback",
+      "fit",
+      "frame",
+      "height",
+      "interactive",
+      "maxHeight",
+      "maxWidth",
+      "minHeight",
+      "minWidth",
+      "query",
+      "radius",
+      "ref",
+      "src",
+      "width"
+    ],
+    "stateFields": [
+      "default_on_click_action",
+      "max_height"
+    ]
+  },
+  {
+    "name": "LearningQuiz",
+    "sourceSHA256": "e78d363ebe3a6704605d616565ecf8056a43130d0856661cbda21f0f1d96fcb8",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "advance_label",
+      "answers",
+      "copy_quiz_label",
+      "copy_quiz_text",
+      "correct_count",
+      "correct_count_labels",
+      "current_index",
+      "dismiss_label",
+      "dismissed",
+      "error_label",
+      "false_statement_label",
+      "feedback_status",
+      "generation_complete",
+      "hint_label",
+      "hint_open",
+      "loading_label",
+      "next_question_label",
+      "next_quiz_label",
+      "next_quiz_query",
+      "phase",
+      "previous_question_label",
+      "question_progress_labels",
+      "questions",
+      "restart_label",
+      "retry_label",
+      "review_messages",
+      "select_all_that_apply_label",
+      "selected_values",
+      "share_button_variant",
+      "share_label",
+      "submit_answer_label",
+      "title",
+      "true_statement_label"
+    ]
+  },
+  {
+    "name": "LearningSentenceBuilderCard",
+    "sourceSHA256": "143dac941b1b68d3b634d252585652ff3f48e9a478dfc28fc0c94ec0002ea3f8",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": []
+  },
+  {
+    "name": "LearningSpeakCard",
+    "sourceSHA256": "e22b7ba2d26117813f4c9f9f5ffa8b817d8716cdcd86eda1654a1eb981a6ee54",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "exercises",
+      "fallback"
+    ],
+    "stateFields": []
+  },
+  {
+    "name": "LearningVocabCard",
+    "sourceSHA256": "08d91e61f03162cb72124623aff03ae61a7632181fb8a370ca2ac6dd56bd5525",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": []
+  },
+  {
+    "name": "LearningVoiceModeLauncherCard",
+    "sourceSHA256": "df3aec9cc185ffe21181c729ff0d014991012e7ba19222b33b9e780e504acac5",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "description",
+      "fallback",
+      "startLabel",
+      "title",
+      "unavailableLabel",
+      "voiceSession"
+    ],
+    "stateFields": []
+  },
+  {
+    "name": "LedgerAccountBreakdownWidget",
+    "sourceSHA256": "e2f9843494e76b1d6bdfa451463c1080c174a62433548307cb1c2f47d8e7983f",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "categories",
+      "currency_conversion",
+      "empty_state_label",
+      "has_holdings",
+      "labels",
+      "sensitive_values_hidden",
+      "subtitle",
+      "title",
+      "total_value_label"
+    ]
+  },
+  {
+    "name": "LedgerAccountsWidget",
+    "sourceSHA256": "76daed6c42a0949a7831e0af64c35760c4a26df8670e0aa113c9cbd229cb99b0",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_view",
+      "chart_categories",
+      "has_connected_accounts",
+      "labels",
+      "sensitive_values_hidden",
+      "title",
+      "view_options",
+      "view_selector_label",
+      "views"
+    ]
+  },
+  {
+    "name": "LedgerCreditScoreDetail",
+    "sourceSHA256": "ef7e265e17350056fcf631d38e214d34804bdb8c6a4e37a3b1add27e993abf07",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "creditor_logos",
+      "labels",
+      "rating_color",
+      "rating_label",
+      "related_items",
+      "related_items_note",
+      "related_items_title",
+      "rows",
+      "score_factors",
+      "sensitive_values_hidden",
+      "status",
+      "summary_label"
+    ]
+  },
+  {
+    "name": "LedgerCreditScoreDetailWidget",
+    "sourceSHA256": "0000a55a1f5a8f3c064c6ee68e8ea3a53ef470adafabf5f4bbd6e2982efb846b",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "creditor_logos",
+      "labels",
+      "rating_color",
+      "rating_label",
+      "related_items",
+      "related_items_note",
+      "related_items_title",
+      "rows",
+      "score_factors",
+      "sensitive_values_hidden",
+      "status",
+      "summary_label"
+    ]
+  },
+  {
+    "name": "LedgerCreditScoreWidget",
+    "sourceSHA256": "d86e9be9fb7086af5f17a005a30222c16d1b73db66c1bf5d80dcf3cccc517f37",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_view",
+      "disclosure",
+      "has_history",
+      "history_period_options",
+      "history_views",
+      "labels",
+      "metrics",
+      "report_date_label",
+      "score_label",
+      "score_position",
+      "selected_period",
+      "sensitive_values_hidden",
+      "status",
+      "view_options"
+    ]
+  },
+  {
+    "name": "LedgerEquityUpdatesWidget",
+    "sourceSHA256": "078e4f9b2545f3cd96e2c0b031cddce5c2d5a289924fd3d9ff708e3c5fc1cf62",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "as_of_label",
+      "currency_conversion",
+      "empty_state_label",
+      "has_connected_accounts",
+      "has_positions",
+      "labels",
+      "rows",
+      "sensitive_values_hidden",
+      "title"
+    ]
+  },
+  {
+    "name": "LedgerFeeInterestPaidWidget",
+    "sourceSHA256": "c4eb56a982e1769f3338ec3cb72a0009dc495adecf4cf5fa9b363945c9afc31d",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "has_connected_accounts",
+      "labels",
+      "rows_to_show",
+      "selected_time_range_index",
+      "sensitive_values_hidden",
+      "time_range_views",
+      "title"
+    ]
+  },
+  {
+    "name": "LedgerFinanceOnboardingWidget",
+    "sourceSHA256": "64d59a59f57ce953b21db6f9e4b2aac2409be61f0c4c1527df3337084e9c7ef8",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "action",
+      "description",
+      "icon",
+      "icon_url",
+      "id",
+      "prompt",
+      "system_hint",
+      "thread_mode",
+      "title"
+    ]
+  },
+  {
+    "name": "LedgerFinanceStatusBannerWidget",
+    "sourceSHA256": "abf162dd2d89fcfa163a8900677919f3369dff24e434515d4e8c2a8789ea0571",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "description",
+      "title"
+    ]
+  },
+  {
+    "name": "LedgerIncomeTrackerWidget",
+    "sourceSHA256": "406755249e4962dfe2203ed4f051e4f0f282199785afcedf7110e769768792d8",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "empty_state_label",
+      "estimated_monthly_income_label",
+      "has_connected_accounts",
+      "has_income",
+      "income_sources_label",
+      "labels",
+      "next_paycheck",
+      "sensitive_values_hidden",
+      "subtitle",
+      "title"
+    ]
+  },
+  {
+    "name": "LedgerLowConfidenceCategoryCorrection",
+    "sourceSHA256": "625f439444f2a1f3d56e5a11906d2a6065b823a5435b6e645d4ee8f19f9e5c28",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "category_options",
+      "empty_state_label",
+      "has_connected_accounts",
+      "labels",
+      "sensitive_values_hidden",
+      "title",
+      "transactions"
+    ]
+  },
+  {
+    "name": "LedgerLowConfidenceCategoryCorrectionCombinedWidget",
+    "sourceSHA256": "0eedddd032fde27b0d103a9fd309ab5c28bcab5d98d74aa7e5e438e0a997f8c8",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "category_options",
+      "empty_state_label",
+      "has_connected_accounts",
+      "labels",
+      "sensitive_values_hidden",
+      "title",
+      "transactions"
+    ]
+  },
+  {
+    "name": "LedgerLowConfidenceCategoryCorrectionLegacyWidget",
+    "sourceSHA256": "45f1f02d341e1b8844b0ec064ad7df301677cde15b79093d7fe70b71a7caa88f",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "empty_state_label",
+      "has_connected_accounts",
+      "labels",
+      "sensitive_values_hidden",
+      "title",
+      "transactions"
+    ]
+  },
+  {
+    "name": "LedgerNetWorthWidget",
+    "sourceSHA256": "13a5da1338ab35a8fec5da3dd176e9751099676bff581c49ccacc4f968efb7cb",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "balance_status_note",
+      "currency_code",
+      "currency_conversion",
+      "default_interval",
+      "empty_state_label",
+      "has_connected_accounts",
+      "has_net_worth_data",
+      "interval_order",
+      "interval_views",
+      "label",
+      "labels",
+      "selected_interval",
+      "sensitive_values_hidden"
+    ]
+  },
+  {
+    "name": "LedgerPortfolioDistributionWidget",
+    "sourceSHA256": "fca0577beccbdb75ec9bd79e27aa362f1860e0ed54cd563684f8adf99564cac6",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "categories",
+      "currency_conversion",
+      "empty_state_label",
+      "has_holdings",
+      "labels",
+      "sensitive_values_hidden",
+      "subtitle",
+      "title",
+      "total_value_label"
+    ]
+  },
+  {
+    "name": "LedgerRecentTransactionsUpcomingActivityWidget",
+    "sourceSHA256": "5c0a2e2d081bfd8a95d0bd571ef30c045586ea937f0aaaf2536579ecd30072c5",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "empty_state_label",
+      "has_connected_accounts",
+      "labels",
+      "sensitive_values_hidden",
+      "title",
+      "transactions"
+    ]
+  },
+  {
+    "name": "LedgerRecentTransactionsWidget",
+    "sourceSHA256": "33dd3fb5039927e1f4f5b6af73575dc309dce34f624b51ed72b2973bc2da025d",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "empty_state_label",
+      "has_connected_accounts",
+      "labels",
+      "sensitive_values_hidden",
+      "title",
+      "transactions"
+    ]
+  },
+  {
+    "name": "LedgerRecurringTransactionsWidget",
+    "sourceSHA256": "ef5f701ef501e49319ca7eca06367beab61ed7592fc0382a3ba9a4c4e74c3c11",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_view",
+      "annual_recurring_transactions",
+      "annual_total_label",
+      "currency_conversion",
+      "default_recurring_transactions",
+      "default_total_label",
+      "has_connected_accounts",
+      "label",
+      "labels",
+      "monetary_value_references_enabled",
+      "monthly_recurring_transactions",
+      "monthly_total_label",
+      "rows_to_show",
+      "sensitive_values_hidden",
+      "show_billing_period_tabs"
+    ]
+  },
+  {
+    "name": "LedgerRepairBankConnectionWidget",
+    "sourceSHA256": "d1775cb5f801b68ea350b0e83ddb6bae66a318954739fd086f2494e912136855",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "cta_label",
+      "description",
+      "id",
+      "ledger_link_id",
+      "ledger_repair_initializing",
+      "prompt",
+      "system_hint",
+      "title"
+    ]
+  },
+  {
+    "name": "LedgerSpendByCategoryDetail",
+    "sourceSHA256": "5c39f92dcc26b3bb2d631f707ce0f6c7abc15f076b342d8d1b985a94dbd641c4",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "groups",
+      "is_loading",
+      "labels",
+      "sensitive_values_hidden"
+    ]
+  },
+  {
+    "name": "LedgerSpendByCategoryDetailWidget",
+    "sourceSHA256": "9b99825b543921c63829ae7a8e450ef55d9a2f50d057f4eaa52d98beacd69b1a",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "groups",
+      "is_loading",
+      "labels",
+      "sensitive_values_hidden"
+    ]
+  },
+  {
+    "name": "LedgerSpendByCategoryRecentTransactions",
+    "sourceSHA256": "e1aff3c76cb7b07913ea46d26f8ff6626e5860d596ff925cdcf7b00f2839927f",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "is_loading",
+      "labels",
+      "recent_transactions",
+      "sensitive_values_hidden"
+    ]
+  },
+  {
+    "name": "LedgerSpendByCategoryRecentTransactionsWidget",
+    "sourceSHA256": "941a5e586382885b9609d71718a253804fac400dce101a0295ccba5a3add1e6d",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "is_loading",
+      "labels",
+      "recent_transactions",
+      "sensitive_values_hidden"
+    ]
+  },
+  {
+    "name": "LedgerSpendByCategoryWidget",
+    "sourceSHA256": "6529fb941c10cadc1c5304bd678386aff2e912718d839508fba767e9c96c9034",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "currency_conversion",
+      "has_connected_accounts",
+      "labels",
+      "monetary_value_references_enabled",
+      "month_option_groups",
+      "month_views",
+      "selected_month_index",
+      "sensitive_values_hidden",
+      "title"
+    ]
+  },
+  {
+    "name": "LedgerSpendSoFarThisMonthWidget",
+    "sourceSHA256": "0688ce3ed67fb165fe4684c96c008da114d71d26a40cfd6ee2d7e9bf9d36f17d",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "average_series",
+      "comparison_option_groups",
+      "comparison_options",
+      "has_connected_accounts",
+      "labels",
+      "month_option_groups",
+      "month_views",
+      "oldest_previous_month_series",
+      "selected_comparison_index",
+      "selected_month_index",
+      "sensitive_values_hidden"
+    ]
+  },
+  {
+    "name": "LedgerTransactionDetail",
+    "sourceSHA256": "f98d0ef9446abb2aae4a9aa7908efd001b1ddb9be0a8a3c90b8d7e3be82dddad",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "account_name",
+      "amount_label",
+      "budget",
+      "category_icon",
+      "category_label",
+      "date_label",
+      "display_name",
+      "labels",
+      "logo_alt",
+      "logo_url",
+      "masked_amount_label",
+      "merchant_name",
+      "related_transactions",
+      "sensitive_values_hidden"
+    ]
+  },
+  {
+    "name": "LedgerTransactionDetailWidget",
+    "sourceSHA256": "c0e36dfb783b8d7336873290af84f5ecbe31810cbc879f6e0a6f86b51734eb08",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "account_name",
+      "amount_label",
+      "budget",
+      "category_icon",
+      "category_label",
+      "date_label",
+      "display_name",
+      "labels",
+      "logo_alt",
+      "logo_url",
+      "masked_amount_label",
+      "merchant_name",
+      "related_transactions",
+      "sensitive_values_hidden"
+    ]
+  },
+  {
+    "name": "LedgerUpcomingActivityRecentTransactions",
+    "sourceSHA256": "6906e09f28b1395f3ff8d5a23c27eab476965481091ca74bc4f4d672fa43cf84",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "empty_state_label",
+      "has_connected_accounts",
+      "labels",
+      "sensitive_values_hidden",
+      "title",
+      "transactions"
+    ]
+  },
+  {
+    "name": "LedgerUpcomingActivityWidget",
+    "sourceSHA256": "40d968cdc818a02cb09a531f4c3ed4f1b4837acf689bc07e0bafaeb765bb7419",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_view",
+      "expanded",
+      "has_connected_accounts",
+      "incoming_expanded_others",
+      "incoming_others",
+      "incoming_top",
+      "labels",
+      "monetary_value_references_enabled",
+      "others",
+      "outgoing_expanded_others",
+      "outgoing_others",
+      "outgoing_top",
+      "sensitive_values_hidden",
+      "show_flow_tabs",
+      "title",
+      "top"
+    ]
+  },
+  {
+    "name": "LedgerWatchlistWidget",
+    "sourceSHA256": "4f5a2399fcac4d3732a2d3dec2cac8d55111da45b6fdda9a4a0dfbbd21289829",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "as_of_label",
+      "empty_state_label",
+      "has_entries",
+      "labels",
+      "rows",
+      "rows_to_show",
+      "title"
+    ]
+  },
+  {
+    "name": "ListAutomations",
+    "sourceSHA256": "81868a7b5e7aca746e17a6eec1f065001ac1a12f8e065f0cdab8131d25a9dd3d",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "automations",
+      "header_label",
+      "view_all_label",
+      "view_all_url"
+    ]
+  },
+  {
+    "name": "LocalBusinessWidget",
+    "sourceSHA256": "baa132e99bb24054c545bc191c94d48649749dd5cbf8bd40f4a3e7eb93bd613f",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "call_label",
+      "category",
+      "click_action",
+      "directions_label",
+      "directions_url",
+      "hours_detail",
+      "images",
+      "is_open",
+      "open_status",
+      "phone_url",
+      "price",
+      "rating",
+      "title",
+      "website_label",
+      "website_url"
+    ]
+  },
+  {
+    "name": "LyricsWidget",
+    "sourceSHA256": "806575a9304d51d09189576692a73e9fc7f9e32651d1b92e748df4e20137d7ef",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "labels",
+      "lyrics",
+      "track",
+      "variant"
+    ]
+  },
+  {
+    "name": "LyricsWidgetWithSource",
+    "sourceSHA256": "e703356ad04842fc81a110b45ba03cd138f2cd2ac94e42d8e296cd7a193da8ba",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "labels",
+      "lyrics",
+      "track",
+      "variant"
+    ]
+  },
+  {
+    "name": "MarchMadness",
+    "sourceSHA256": "4fbd06c1b3698c0f449fb1622aceda1f679b191207962630e04204b671b6baf7",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_round_id",
+      "default_round_id",
+      "expanded",
+      "rounds",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "MlbScheduleWidget",
+    "sourceSHA256": "3ebaf0e41ecfa7e7026c6d90ae439465c9b589c3be288d8d1dc6b2833bc89fce",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "MlbScheduleWidgetWithSource",
+    "sourceSHA256": "87ab38643a64c3d4f1d45a4d295a445aa7f8391599b70503ad504489c4098673",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "MlbStandingsWidget",
+    "sourceSHA256": "979439b83ed919cb8f61a7b26af9a50660849c65e91ff355ac62e8fe1259e626",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "MlbStandingsWidgetWithSource",
+    "sourceSHA256": "24595e0e2df33ba7cd3c36d77aa0419af8467ed025a031c7dcfa68114d79adf3",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "MultipleChoiceBlockV2",
+    "sourceSHA256": "a875e841f09a4b79a294d0c0eba1667daefa27299f1a073d0a4b87e5ad1723af",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "correct_value",
+      "error_message",
+      "feedback_open",
+      "feedback_status",
+      "hint_text",
+      "options",
+      "selected_value"
+    ]
+  },
+  {
+    "name": "NbaGameBoxscoreWidget",
+    "sourceSHA256": "f5d0b292398a5942499fc43b4c2e827af7629b1ee099ef34f22b46c3eb8522a2",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "clock_string",
+      "date_string",
+      "final_label",
+      "game",
+      "halftime_label",
+      "has_started",
+      "is_scheduled",
+      "is_today",
+      "live_label",
+      "quarter_string",
+      "scoring_periods",
+      "team_label",
+      "time_string"
+    ]
+  },
+  {
+    "name": "NbaGameBoxscoreWidgetWithNbaGameBoxScoreSource",
+    "sourceSHA256": "04f729a391ac4829e939598051fb5af551209a9153f8e95ffd6d24775c2a0347",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "clock_string",
+      "date_string",
+      "final_label",
+      "game",
+      "halftime_label",
+      "has_started",
+      "is_scheduled",
+      "is_today",
+      "live_label",
+      "quarter_string",
+      "scoring_periods",
+      "team_label",
+      "time_string"
+    ]
+  },
+  {
+    "name": "NbaPlayerSummaryWidget",
+    "sourceSHA256": "90e1c69b68f8756ef6a8e8a671fbd92c6f5da2600c860cc07160d800420d1cbc",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "final_label",
+      "focus",
+      "has_image",
+      "image",
+      "image_content_url",
+      "live_label",
+      "name",
+      "recent_game",
+      "season_stats",
+      "top_details"
+    ]
+  },
+  {
+    "name": "NbaPlayerSummaryWidgetWithSource",
+    "sourceSHA256": "448bd97560987560968e69af5e7091bbe97cc555e9a0eb9c6549514521714a3d",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "final_label",
+      "focus",
+      "has_image",
+      "image",
+      "image_content_url",
+      "live_label",
+      "name",
+      "recent_game",
+      "season_stats",
+      "top_details"
+    ]
+  },
+  {
+    "name": "NbaScheduleWidget",
+    "sourceSHA256": "8aa43263832ebcc6006233374ad1eb83683de3cb755ed6f4ff6f5c667f0b7a29",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "NbaScheduleWidgetWithSource",
+    "sourceSHA256": "7ad3ee10f085545d9a4a7ba8914735b5b71f8318cab48ff65ab5859222ca8a42",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "NbaScores",
+    "sourceSHA256": "09851932384a5639ba270c7364333324a38d2a36c8b4b201628177a95720c815",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "back_to_scores_label",
+      "boxscores",
+      "clock_string",
+      "date_string",
+      "default_active_game_id",
+      "final_label",
+      "game",
+      "game_count",
+      "halftime_label",
+      "has_started",
+      "is_scheduled",
+      "is_today",
+      "league_logo_url",
+      "league_name",
+      "live_label",
+      "quarter_string",
+      "rows",
+      "scoring_periods",
+      "season_label",
+      "show_less_label",
+      "show_more_label",
+      "team_label",
+      "time_string",
+      "title"
+    ]
+  },
+  {
+    "name": "NbaScoresWidget",
+    "sourceSHA256": "6ab7c53c649e8152a6bcd289b6c7191abb78d272df8c26cb67b21a9b1afb86fd",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "back_to_scores_label",
+      "boxscores",
+      "clock_string",
+      "date_string",
+      "default_active_game_id",
+      "final_label",
+      "game",
+      "game_count",
+      "halftime_label",
+      "has_started",
+      "is_scheduled",
+      "is_today",
+      "league_logo_url",
+      "league_name",
+      "live_label",
+      "quarter_string",
+      "rows",
+      "scoring_periods",
+      "season_label",
+      "show_less_label",
+      "show_more_label",
+      "team_label",
+      "time_string",
+      "title"
+    ]
+  },
+  {
+    "name": "NbaStandingsWidget",
+    "sourceSHA256": "25cfcb99922ab2689ab2021ccdea38a6722fdfeef795dcb11dbfc5193548dd81",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "NbaStandingsWidgetWithSource",
+    "sourceSHA256": "ae95a5adee5c0490b9c06e4cd1ac79526bfb433597836f6229e6218c74d3e443",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "NcaambScheduleWidget",
+    "sourceSHA256": "64a050e61c72ae5dbeb4c9f8091d8dd339d5497419bf0e4e340cb94cf1fa23af",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "NcaambScheduleWidgetWithSource",
+    "sourceSHA256": "5418ebac59a69856ee434cc47bed03975deacf7c66e8b7b2bd44ea917126faa5",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "NcaambStandingsWidget",
+    "sourceSHA256": "43d2bcdb375d8f5b899ea8162178109e4e9f6b368849ed629dbf059290667527",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "NcaambStandingsWidgetWithSource",
+    "sourceSHA256": "d28b8193f37bd5f5adfb451f04f7a63adb5ea1dd8eee9b7e70df5f8817c79e4f",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "NcaawbScheduleWidget",
+    "sourceSHA256": "7db84a1f620b44f3260801036cb90d3c67f51ef3da92676648292d49cebf1c96",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "NcaawbScheduleWidgetWithSource",
+    "sourceSHA256": "120723e056fa75dbd2522c92f94a4af6b172fb9a11f200cd98799f5e2bf42caf",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "NcaawbStandingsWidget",
+    "sourceSHA256": "3550130c785968ef9a68b5ff5d91dc7904201b808c62e1816e091ce7a971c33c",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "NcaawbStandingsWidgetWithSource",
+    "sourceSHA256": "e2755d4c0c478881f31d351d0277d26c398becaa5dd9d2b1206da7ec72e95378",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "NewsArticleWidget",
+    "sourceSHA256": "949449daca6655e11b639c61231e33c7a1fbc8dc8152af0da89d92fb965ee0ea",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "date_label",
+      "domain",
+      "ref",
+      "snippet",
+      "source_label",
+      "thumbnail_url",
+      "title",
+      "url"
+    ]
+  },
+  {
+    "name": "NewsArticleWidgetCarousel",
+    "sourceSHA256": "75416166cfb28efef6642fbddef30120ce16b8f4503610f985586316604da095",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "items"
+    ]
+  },
+  {
+    "name": "NflGames",
+    "sourceSHA256": "78f682eb197163c797ff21f080c53e8c9ba1ec1eb39c7797037e56add7558a61",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "back_to_games_label",
+      "boxscores",
+      "default_active_game_id",
+      "game_count",
+      "league_name",
+      "season_label",
+      "title"
+    ]
+  },
+  {
+    "name": "NflGamesWidget",
+    "sourceSHA256": "35d2508fa2753b5254eb9d5c373fd8d9eb139ff713179b5238c645a2ea9a159d",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "back_to_games_label",
+      "boxscores",
+      "default_active_game_id",
+      "game_count",
+      "league_name",
+      "season_label",
+      "title"
+    ]
+  },
+  {
+    "name": "NflScheduleWidget",
+    "sourceSHA256": "ae81c82b6d14d89f0def8c131a8ec1cd0cf604662e9a0067797719b9e61f0a8c",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "NflScheduleWidgetWithSource",
+    "sourceSHA256": "fd2b71ccc750a5edb428bed1475afe83ff3e01b5c2da5bc511a2272f7b4dbee4",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "NflStandingsWidget",
+    "sourceSHA256": "0cd38aef004f3d4839aa18aeef296186a69cac5343c0573047c272cbd7f754ca",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "NflStandingsWidgetWithSource",
+    "sourceSHA256": "cd4f1d45d2ebecffa6a21b41fc9165620d118428dcf9f7f0ad7d44a4dd715d9e",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "NhlScheduleWidget",
+    "sourceSHA256": "af59c913dd7485710602322ebb203ba7696c4fd0f836704bce13325ad1a54d6d",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "NhlScheduleWidgetWithSource",
+    "sourceSHA256": "151b48bf1a39de5a62bb816f1ed3f7e2a70bb60338758983691a0cf9b81fd7b8",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "NhlStandingsWidget",
+    "sourceSHA256": "e228688fcfc1bd85868a372c80dd77b7477524a9dfba881530b4088d533b263a",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "NhlStandingsWidgetWithSource",
+    "sourceSHA256": "633dee68bdf2d27993d4850adf558d474a2e39523c3d985e5f072fd6f9270104",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "OfferScheduledPrompt",
+    "sourceSHA256": "4eda9fbf7b2e8fc629d7c30509de11068c9a5aa57212781cf6891ef339838bfc",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "creation_guidelines",
+      "label",
+      "origin_surface",
+      "submitted",
+      "task_opt_in_accept"
+    ]
+  },
+  {
+    "name": "OfferSiteSchedule",
+    "sourceSHA256": "bb19c418178edaa47b5d02f34e45aed8e401062ea1312e4ce41ecc42e9ac3c98",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "creation_guidelines",
+      "label",
+      "origin_surface",
+      "submitted",
+      "task_opt_in_accept"
+    ]
+  },
+  {
+    "name": "OfferVoiceConversation",
+    "sourceSHA256": "0d48bbe4953229b49d194fbd17332c1dbe6661fdf814b82ba5420ca6e9af16cc",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "button_label",
+      "description",
+      "icon_url",
+      "presentation"
+    ]
+  },
+  {
+    "name": "OnboardingFeatureCard",
+    "sourceSHA256": "480cdfb60a0a4ef833b454d8740b6ca1acc40f167c79bf2ed35d12ea51e530f2",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "analytics_context",
+      "benefit_rows",
+      "features",
+      "title",
+      "welcome_body",
+      "welcome_heading"
+    ]
+  },
+  {
+    "name": "OnboardingPluginSuggestions",
+    "sourceSHA256": "28af0e6524b6d36cf1c43146a38a8355d42de6f9cb7f7be0561c73863f6092d7",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "browse_label",
+      "events",
+      "plugins",
+      "title"
+    ]
+  },
+  {
+    "name": "OnboardingSelectionCard",
+    "sourceSHA256": "55f78887e79eb230ed6e2b1357406970cc1a58f4c0d24d0b29046d22272a549e",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "analytics_context",
+      "cta_label",
+      "footer_action",
+      "items",
+      "layout",
+      "welcome_body",
+      "welcome_heading"
+    ]
+  },
+  {
+    "name": "OnboardingText",
+    "sourceSHA256": "761c3d6982d4750178e1f36d05ffcbc7e0177699c01e5bf41df3b96a560cc0d1",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "animate_reveal",
+      "emphasize_first_paragraph",
+      "paragraphs"
+    ]
+  },
+  {
+    "name": "OpenDetailWidget",
+    "sourceSHA256": "8a0f86e72ed7f3cf78174ff77064b5aea1494f7444431ac37ee1d90e754dd274",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "action",
+      "actions",
+      "title"
+    ]
+  },
+  {
+    "name": "OpenLearningFlashcards",
+    "sourceSHA256": "50f4d761c18aa983d446bd86877adee4db550391e297f5cbe37563d11f2199e5",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "answer_history",
+      "card_instance_ids",
+      "card_order",
+      "cards",
+      "celebration_step",
+      "celebrations_enabled",
+      "correct_count_labels",
+      "current_index",
+      "deck_instance_id",
+      "deck_version",
+      "dismiss_label",
+      "dismissed",
+      "display_cards",
+      "edit_card_label",
+      "error_label",
+      "error_operation",
+      "error_title",
+      "expanded",
+      "finish_label",
+      "flip_to_back_label",
+      "flip_to_front_label",
+      "flipped",
+      "generation_complete",
+      "interaction_state",
+      "library_file_id",
+      "loading_label",
+      "low_score_summary_label",
+      "mark_correct_label",
+      "mark_missed_label",
+      "missed_count_labels",
+      "missed_indices",
+      "mobile_progress_template",
+      "more_flashcards_label",
+      "more_flashcards_query",
+      "onboarding_mobile_labels",
+      "onboarding_web_labels",
+      "open_label",
+      "original_order",
+      "original_review_order",
+      "overflow_label",
+      "percentage_summary_labels",
+      "perfect_summary_label",
+      "phase",
+      "play_audio_label",
+      "reduced_motion",
+      "reset_label",
+      "retry_audio_label",
+      "retry_label",
+      "retry_missed_labels",
+      "retry_query",
+      "review_pass_id",
+      "review_pass_kind",
+      "revision",
+      "shuffle_index",
+      "shuffle_label",
+      "shuffle_orders",
+      "shuffle_phase",
+      "shuffle_primary_card",
+      "shuffle_revision",
+      "shuffle_secondary_card",
+      "stop_audio_label",
+      "tap_to_flip_label",
+      "tap_to_flip_visible",
+      "title",
+      "undo_label",
+      "unmark_missed_label",
+      "view_all_label"
+    ]
+  },
+  {
+    "name": "OpenaiWidget",
+    "sourceSHA256": "4f4cd069626a2ea0282471e6102bfb3b0614350f5784856a9c8b3b21b1068b9a",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "image",
+      "morePrompt",
+      "name",
+      "tagline",
+      "websiteUrl"
+    ]
+  },
+  {
+    "name": "PackageTracker",
+    "sourceSHA256": "3620b49111d8782af1b0a1da16d9fa1ab66c0197139eb49720fe5d22c18a306e",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "attribution_label",
+      "attribution_provider_logo_url",
+      "attribution_provider_name",
+      "attribution_provider_url",
+      "carrier_label",
+      "carrier_logo_alt",
+      "carrier_logo_url",
+      "checkpoints",
+      "cta_label",
+      "cta_url",
+      "empty_checkpoints_message",
+      "headline_label",
+      "secondary_title",
+      "secondary_value",
+      "status_badge_color",
+      "status_label",
+      "summary_subtitle",
+      "summary_title",
+      "tracking_history_title",
+      "tracking_title",
+      "tracking_value"
+    ]
+  },
+  {
+    "name": "PackageTrackerWidget",
+    "sourceSHA256": "71fdd5b72a14d98e716803cc6bb6d49572b32d785997d42ddc1f0931568262c1",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "attribution_label",
+      "attribution_provider_logo_url",
+      "attribution_provider_name",
+      "attribution_provider_url",
+      "carrier_label",
+      "carrier_logo_alt",
+      "carrier_logo_url",
+      "checkpoints",
+      "cta_label",
+      "cta_url",
+      "empty_checkpoints_message",
+      "headline_label",
+      "secondary_title",
+      "secondary_value",
+      "status_badge_color",
+      "status_label",
+      "summary_subtitle",
+      "summary_title",
+      "tracking_history_title",
+      "tracking_title",
+      "tracking_value"
+    ]
+  },
+  {
+    "name": "PersistedWidgetDogfoodChecklistWidgetWithSource",
+    "sourceSHA256": "a610c1b7a73855f524d0ebc9ae2e4367358a3670c60202998fa4b02177976493",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "sections",
+      "title"
+    ]
+  },
+  {
+    "name": "PersistedWidgetDogfoodDailyNutritionWidgetWithSource",
+    "sourceSHA256": "021cf49785d753d099a504ca5499024f33bdced2f47a08a02441cb3d76aaef8a",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "calorie_progress_label",
+      "calorie_progress_width",
+      "date_label",
+      "meals",
+      "protein_progress_label",
+      "protein_progress_width",
+      "title"
+    ]
+  },
+  {
+    "name": "PersistedWidgetDogfoodExerciseLogWidgetWithSource",
+    "sourceSHA256": "89ece6c43188543651b1ef4412d41c3ceb4127a478aaa94ec27431d0dfd4014d",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "date_label",
+      "duration_summary_label",
+      "entries",
+      "title"
+    ]
+  },
+  {
+    "name": "PersistedWidgetDogfoodGoalWidgetWithSource",
+    "sourceSHA256": "c37c04252678a7adf9dee2cb33a066e73ae0ca0d3af94295fadea3bbf3562ef1",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "target_label",
+      "title"
+    ]
+  },
+  {
+    "name": "PersonBento",
+    "sourceSHA256": "aae9d37f1ee215189934f8d76375cc9cb221baefb68c5eb193a84dcff704feab",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "fact_cards",
+      "image_card",
+      "overview_items",
+      "overview_label",
+      "spotlight_active_index",
+      "spotlight_tabs_loading",
+      "spotlight_views"
+    ]
+  },
+  {
+    "name": "PersonBentoAlwaysTrigger",
+    "sourceSHA256": "3eea3b05409fe9659714663d8cecc7a442995d0288b213b937512a3a5b0757a1",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "fact_cards",
+      "image_card",
+      "overview_items",
+      "overview_label",
+      "spotlight_active_index",
+      "spotlight_tabs_loading",
+      "spotlight_views"
+    ]
+  },
+  {
+    "name": "PersonWidget",
+    "sourceSHA256": "e4b11a6f73f0ed048b37a31ae0415840505d79c020366fb2453b3ace90df026b",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "fact_cards",
+      "image_card",
+      "overview_items",
+      "overview_label",
+      "spotlight_active_index",
+      "spotlight_tabs_loading",
+      "spotlight_views"
+    ]
+  },
+  {
+    "name": "PersonWidgetAlwaysTrigger",
+    "sourceSHA256": "e0ca1c198ea9fa59875020f464fb5f0621a05ebbd1d994ee87638fa15a644e0d",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "fact_cards",
+      "image_card",
+      "overview_items",
+      "overview_label",
+      "spotlight_active_index",
+      "spotlight_tabs_loading",
+      "spotlight_views"
+    ]
+  },
+  {
+    "name": "PlacesMetadataBar",
+    "sourceSHA256": "c89c921edb1d075f533c9bc897d52c63af4ccfd04a81a0c3f77fa48d45db4277",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "items",
+      "provider_label",
+      "provider_logo_src",
+      "provider_logo_width",
+      "provider_url",
+      "rating_label",
+      "review_count_label"
+    ]
+  },
+  {
+    "name": "PluginFollowup",
+    "sourceSHA256": "2ca7d91c8841e8f7fc049758fc24ac2e11c649d8052a0c92c5a1bf56b845b4c7",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "hidden",
+      "icon_url",
+      "icon_url_dark",
+      "is_streaming",
+      "offer",
+      "pending",
+      "show_contextual_sentence"
+    ]
+  },
+  {
+    "name": "ProductCarousel",
+    "sourceSHA256": "67c0046b848242d1b6e52cd0e436319cde6ab81dac195ed8336b086bbfd23d74",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": []
+  },
+  {
+    "name": "PromptChecklist",
+    "sourceSHA256": "b6a9042c54157ac341facd3d4df3fa58e1bdd65ac1d6cb5b607f52f04589bde9",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "completed_items_expanded",
+      "completed_task_ids",
+      "completion_state",
+      "latest_completed_task_id",
+      "latest_completed_task_title",
+      "mode",
+      "selected_task_id",
+      "show_completed_items_label",
+      "tasks",
+      "title",
+      "try_your_own_label"
+    ]
+  },
+  {
+    "name": "PulseDraftEmail",
+    "sourceSHA256": "611954100cf6d13ab3a9c68a9253f1d94813ff37cfd1d041e3b697996afae5dc",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "defaultBody",
+      "defaultSubject",
+      "defaultTo",
+      "emailFrom"
+    ]
+  },
+  {
+    "name": "PulseExpansionCard",
+    "sourceSHA256": "c41e4e3cecb056261ada4a62cc4f89930b679bae4ced8a827b0ea0240f9989bf",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "card_id",
+      "conversation_id",
+      "description",
+      "feed_id",
+      "image",
+      "is_saved",
+      "reaction",
+      "show_actions",
+      "show_dismiss",
+      "show_save",
+      "show_share",
+      "show_thumbs_down",
+      "show_thumbs_up",
+      "title"
+    ]
+  },
+  {
+    "name": "PushDripSeriesIntro",
+    "sourceSHA256": "d4a82363d1a75f75f30ba75e8af2e7ea4abb43b9a75a146ddf2f80deb50191e0",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "cancel_label",
+      "confirm_label",
+      "confirmation_message",
+      "confirmation_title",
+      "confirming",
+      "intro_link_label",
+      "intro_prefix",
+      "intro_suffix",
+      "native_unavailable_label",
+      "stopped",
+      "stopped_label"
+    ]
+  },
+  {
+    "name": "Rating",
+    "sourceSHA256": "4785797a9e3511e88cb0f275586ddfd1a6602a0615ccf124f4b71a01a1b8eb12",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": []
+  },
+  {
+    "name": "RecommendationCard",
+    "sourceSHA256": "c249993f309aaab1fc3761d3174401f3a54756e228350e316683e9f2f99d5495",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conversation_id",
+      "description",
+      "emoji",
+      "icon_url",
+      "title"
+    ]
+  },
+  {
+    "name": "RecommendationLinkCard",
+    "sourceSHA256": "3f555f9e6a52242d43631a5ed31b8ed7936c5501be9d3db0edd74954aebde8f1",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "domain",
+      "image_url",
+      "refid",
+      "snippet",
+      "title",
+      "url"
+    ]
+  },
+  {
+    "name": "Reddit",
+    "sourceSHA256": "c3b4cc3314057f1274d962933b09cd379345e7acb783909340167a85686f3a62",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "items",
+      "widget_name"
+    ]
+  },
+  {
+    "name": "RedditFromProductSearch",
+    "sourceSHA256": "9af271f6603d2523b1d31a1fc6b2e7736e0bbe4c84cf9764f1700ccf34cdd1cc",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "items",
+      "widget_name"
+    ]
+  },
+  {
+    "name": "RedditFromSearch",
+    "sourceSHA256": "ed4a7ddcc6b989527b86f444d0afe8e4f2630ef83798283e4b01340b4d651ff1",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "items",
+      "widget_name"
+    ]
+  },
+  {
+    "name": "ReservationTimePillsRefCarouselWidget",
+    "sourceSHA256": "07fa488887714c686f13428b4c7c1a7679b2ad4447a93cb704dc32d4ac40b00c",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "carousel_label",
+      "groups",
+      "items",
+      "show_more_times_label",
+      "voice_card"
+    ]
+  },
+  {
+    "name": "ReservationTimePillsRefWidget",
+    "sourceSHA256": "8fd2e4e0c52d000c626b7b0b40aefe9fb4190ede67f3d624e645ec2a37f8032d",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "collapsed_groups_to_show",
+      "expanded_groups_to_show",
+      "groups",
+      "groups_to_show",
+      "rendering_mode",
+      "seating_options_enabled",
+      "see_more_dates_label",
+      "show_fewer_dates_label",
+      "show_more_times_label",
+      "voice_card"
+    ]
+  },
+  {
+    "name": "RestaurantMenuRefWidget",
+    "sourceSHA256": "d9260b1445ead50437e20f760a5818f9e690ef8fb1c09dd13d84f07b6ca2a4ee",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "items"
+    ]
+  },
+  {
+    "name": "RestaurantMenuWidget",
+    "sourceSHA256": "7a74552e562065cbc585a916e82299094e4d970c903e044b7e8b24c618c515eb",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "items"
+    ]
+  },
+  {
+    "name": "RestaurantReviews",
+    "sourceSHA256": "f91f21c9c8997435ca8c0d37a7f4fb62e0e33e8f16432e57c517cae30642123c",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "limit",
+      "loading",
+      "query",
+      "sort"
+    ]
+  },
+  {
+    "name": "SidebarFactTable",
+    "sourceSHA256": "a403a7f3766a1d9aa914a06fe00f96e69e605b3242b7d6c2fe72bcc5f935fdbd",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "facts"
+    ]
+  },
+  {
+    "name": "SidebarPeopleAlsoAsk",
+    "sourceSHA256": "8394b86a842f6a23a3bcddb5e9a42cdc63c7f328c4cdd61a6190dcad1bb3a0c6",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "category",
+      "entity_name",
+      "follow_up_context",
+      "suggestions"
+    ]
+  },
+  {
+    "name": "SoccerGames",
+    "sourceSHA256": "cf97e0969315adce82fa395bdfe10842a439f818797929f0fd3b13617c1ebc79",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "auto_expand_single_game",
+      "back_to_games_label",
+      "game_count",
+      "games",
+      "use_flag_icons"
+    ]
+  },
+  {
+    "name": "SoccerGamesWidget",
+    "sourceSHA256": "2706b4eb826b54987781db11bbbf447938e7564ac806b9bf92842acd7ceb9ae4",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "auto_expand_single_game",
+      "back_to_games_label",
+      "game_count",
+      "games",
+      "use_flag_icons"
+    ]
+  },
+  {
+    "name": "StockChart",
+    "sourceSHA256": "1310aa7390f615873d1439cf9f5f98514a9011d3d5f0f52f532deca74e2606fb",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "after_hours",
+      "asset_display_name",
+      "current_price_text",
+      "default_range",
+      "fallback_summary",
+      "follow_up_actions",
+      "has_timeframe_data",
+      "is_comparison_mode",
+      "labels",
+      "metrics_display",
+      "metrics_display_mobile",
+      "share_button_variant",
+      "show_metrics",
+      "timeframe_configs",
+      "timeframe_order"
+    ]
+  },
+  {
+    "name": "StockComparisonChart",
+    "sourceSHA256": "d1f7f5f198e599df8bbdee97a947cf55a97fecf11d3066d9c3598907c7313b4e",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "after_hours",
+      "asset_display_name",
+      "current_price_text",
+      "default_range",
+      "fallback_summary",
+      "follow_up_actions",
+      "has_timeframe_data",
+      "hover_comparison_rows",
+      "hover_price_text",
+      "is_comparison_mode",
+      "labels",
+      "live_activity_comparison_rows",
+      "metrics_display",
+      "metrics_display_mobile",
+      "share_button_variant",
+      "show_metrics",
+      "timeframe_configs",
+      "timeframe_order"
+    ]
+  },
+  {
+    "name": "StockHeatmap",
+    "sourceSHA256": "1a457efe2c40d35e598f684e650848a77c87b30ee94e2f888a9f98cbffcc9e23",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_group_id",
+      "as_of_text",
+      "companies",
+      "desktop_map_height",
+      "groups",
+      "legend",
+      "mobile_map_height",
+      "scope_subtitle",
+      "scope_title"
+    ]
+  },
+  {
+    "name": "StockHeatmapWidget",
+    "sourceSHA256": "df2c3274d6f3c5ca88127ed2ad43eff0face642da6ff8da86b68539f44f62869",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_group_id",
+      "as_of_text",
+      "companies",
+      "desktop_map_height",
+      "groups",
+      "legend",
+      "mobile_map_height",
+      "scope_subtitle",
+      "scope_title"
+    ]
+  },
+  {
+    "name": "StockQuoteComparisonWidget",
+    "sourceSHA256": "8fca66e4cadba9371e257a84dc4ee0f3eba55b5c6b8383ddf371d644a70ea025",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "after_hours",
+      "asset_display_name",
+      "current_price_text",
+      "default_range",
+      "fallback_summary",
+      "follow_up_actions",
+      "has_timeframe_data",
+      "hover_comparison_rows",
+      "hover_price_text",
+      "is_comparison_mode",
+      "labels",
+      "live_activity_comparison_rows",
+      "metrics_display",
+      "metrics_display_mobile",
+      "share_button_variant",
+      "show_metrics",
+      "timeframe_configs",
+      "timeframe_order"
+    ]
+  },
+  {
+    "name": "StockQuoteWidget",
+    "sourceSHA256": "06101465730b6e9db3d260a6692aae2567e63840884de871acacc40ebaad3622",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "after_hours",
+      "asset_display_name",
+      "current_price_text",
+      "default_range",
+      "fallback_summary",
+      "follow_up_actions",
+      "has_timeframe_data",
+      "is_comparison_mode",
+      "labels",
+      "metrics_display",
+      "metrics_display_mobile",
+      "share_button_variant",
+      "show_metrics",
+      "timeframe_configs",
+      "timeframe_order"
+    ]
+  },
+  {
+    "name": "StopPushDripSeries",
+    "sourceSHA256": "d89294bc1a8c9b397149c60c19fdd8af750f164329e7c1fdf619b0da9e34666c",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "action_style",
+      "cancel_label",
+      "confirm_label",
+      "confirmation_layout",
+      "confirmation_message",
+      "confirmation_title",
+      "confirming",
+      "label",
+      "native_unavailable_label",
+      "stopped",
+      "stopped_label"
+    ]
+  },
+  {
+    "name": "SuggestAutomation",
+    "sourceSHA256": "734e54bcd5d98a3daa1780b352b8b1cf8a2ce6602fb5bf951eb49287224b01ee",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "creation_guidelines",
+      "emoji",
+      "label",
+      "origin_surface",
+      "setup_label",
+      "submitted",
+      "task_opt_in_accept",
+      "use_new_suggest_ui",
+      "widget_dil_enabled"
+    ]
+  },
+  {
+    "name": "SuperbowlRiddleWidget",
+    "sourceSHA256": "97685d880bee443aebc69e37e03046b04e089d478f67a534e2c01b59adb934e6",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "boatSide",
+      "inBoat",
+      "left",
+      "right",
+      "status"
+    ]
+  },
+  {
+    "name": "TabGroup",
+    "sourceSHA256": "95ef1cc77317ff81e4e8528ca211c86bd46feea88c2d82d6e0fa2f347d87c6cb",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_tab_id",
+      "tabs"
+    ]
+  },
+  {
+    "name": "TabbedSectionWidget",
+    "sourceSHA256": "0a55acf01d8f5206c8f611d29da74ebec1d0a59bd0fd105ef15ef3de15fe4be6",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "active_index",
+      "tabs",
+      "vertical_tab"
+    ]
+  },
+  {
+    "name": "TaskAutopauseCard",
+    "sourceSHA256": "1ff915a43ec16ccc7934453f87a21a2d009dfdc61e40efdc30386102a240883c",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "body",
+      "continue_label",
+      "prompt",
+      "show_body",
+      "task_id",
+      "task_title"
+    ]
+  },
+  {
+    "name": "TaskExpansionCard",
+    "sourceSHA256": "236133f2b2b8436f89923a709cf02c88db106db59fabc56cc06037e7553766d1",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "card_id",
+      "conversation_id",
+      "description",
+      "feed_id",
+      "image",
+      "is_saved",
+      "reaction",
+      "show_actions",
+      "show_dismiss",
+      "show_image",
+      "show_save",
+      "show_share",
+      "show_thumbs_down",
+      "show_thumbs_up",
+      "task_emoji",
+      "task_title",
+      "title"
+    ]
+  },
+  {
+    "name": "TennisPlayerSummaryWidget",
+    "sourceSHA256": "95911241aded3c28dfce8912d1ffbde966426885ea4bf3bf64a8cd6f89f42ac3",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "image",
+      "image_content_url",
+      "image_fit",
+      "is_live",
+      "last_match_date_label",
+      "last_match_label",
+      "last_match_opponent_label",
+      "last_match_result",
+      "last_match_score",
+      "live_label",
+      "player",
+      "player_profile",
+      "season_stats",
+      "season_stats_header"
+    ]
+  },
+  {
+    "name": "TennisPlayerSummaryWidgetWithSource",
+    "sourceSHA256": "732056c5fdccf79390dde48879fa36be5178ff1d26a1e32b7801754245408056",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "image",
+      "image_content_url",
+      "image_fit",
+      "is_live",
+      "last_match_date_label",
+      "last_match_label",
+      "last_match_opponent_label",
+      "last_match_result",
+      "last_match_score",
+      "live_label",
+      "player",
+      "player_profile",
+      "season_stats",
+      "season_stats_header"
+    ]
+  },
+  {
+    "name": "UnitConverterV2Widget",
+    "sourceSHA256": "d6687631f810b19efeb5567cf1bc08e4a5b1748100dc17443accf892bf0e9ef2",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "bottom_amount",
+      "bottom_unit",
+      "categories_map",
+      "category",
+      "conversion_coefficients",
+      "round_tiny_nonzero_to_zero",
+      "significant_digits",
+      "top_amount",
+      "top_unit"
+    ]
+  },
+  {
+    "name": "UnitConverterWidget",
+    "sourceSHA256": "3f1dae809d2cbcdd78fef254d68e35c91ac37fd4c5f7246a9939d574d3869fc9",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "bottom_amount",
+      "bottom_unit",
+      "categories_map",
+      "category",
+      "conversion_coefficients",
+      "round_tiny_nonzero_to_zero",
+      "significant_digits",
+      "top_amount",
+      "top_unit"
+    ]
+  },
+  {
+    "name": "UpdateLearningFlashcards",
+    "sourceSHA256": "3df688bc48ddaf1a2084fc1cfa2f5ee1997b94a132e6f25aaab395ce6cd1c578",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "answer_history",
+      "card_instance_ids",
+      "card_order",
+      "cards",
+      "celebration_step",
+      "celebrations_enabled",
+      "correct_count_labels",
+      "current_index",
+      "deck_instance_id",
+      "deck_version",
+      "dismiss_label",
+      "dismissed",
+      "display_cards",
+      "edit_card_label",
+      "error_label",
+      "error_operation",
+      "error_title",
+      "expanded",
+      "finish_label",
+      "flip_to_back_label",
+      "flip_to_front_label",
+      "flipped",
+      "generation_complete",
+      "interaction_state",
+      "library_file_id",
+      "loading_label",
+      "low_score_summary_label",
+      "mark_correct_label",
+      "mark_missed_label",
+      "missed_count_labels",
+      "missed_indices",
+      "mobile_progress_template",
+      "more_flashcards_label",
+      "more_flashcards_query",
+      "onboarding_mobile_labels",
+      "onboarding_web_labels",
+      "open_label",
+      "original_order",
+      "original_review_order",
+      "overflow_label",
+      "percentage_summary_labels",
+      "perfect_summary_label",
+      "phase",
+      "play_audio_label",
+      "reduced_motion",
+      "reset_label",
+      "retry_audio_label",
+      "retry_label",
+      "retry_missed_labels",
+      "retry_query",
+      "review_pass_id",
+      "review_pass_kind",
+      "revision",
+      "shuffle_index",
+      "shuffle_label",
+      "shuffle_orders",
+      "shuffle_phase",
+      "shuffle_primary_card",
+      "shuffle_revision",
+      "shuffle_secondary_card",
+      "stop_audio_label",
+      "tap_to_flip_label",
+      "tap_to_flip_visible",
+      "title",
+      "undo_label",
+      "unmark_missed_label",
+      "view_all_label"
+    ]
+  },
+  {
+    "name": "VisualCardCarouselWidget",
+    "sourceSHA256": "24864d66b39dec4b0af1bde0acea61323e10b3aa792e32a4941c2d067a68fa58",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "items",
+      "lightbox_images",
+      "title"
+    ]
+  },
+  {
+    "name": "WeatherCurrentWithSource",
+    "sourceSHA256": "527dce856f77609d5d6ff1b49508bfb4767a06886132d05915af597f29d6b5c1",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "background",
+      "conditionDescription",
+      "conditionImage",
+      "location",
+      "temperature"
+    ]
+  },
+  {
+    "name": "WeatherSidebarTitleWidget",
+    "sourceSHA256": "d599903d931a25b06e1da821a16c3bcd4df9441f17afc20cb7c2187ab0ae2435",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "icon_src",
+      "initial_unit",
+      "region_label",
+      "subtitle",
+      "summary",
+      "temperature_a11y_label_c",
+      "temperature_a11y_label_f",
+      "temperature_c",
+      "temperature_f",
+      "title",
+      "unit",
+      "unit_toggle_c_selected_label",
+      "unit_toggle_f_selected_label",
+      "weather_ready"
+    ]
+  },
+  {
+    "name": "WeatherSidebarTitleWidgetWithSource",
+    "sourceSHA256": "62fdf776ec2d0701b875752382fb51bc92f5c34db7997af8aed7e12e6ce9161e",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "icon_src",
+      "initial_unit",
+      "region_label",
+      "subtitle",
+      "summary",
+      "temperature_a11y_label_c",
+      "temperature_a11y_label_f",
+      "temperature_c",
+      "temperature_f",
+      "title",
+      "unit",
+      "unit_toggle_c_selected_label",
+      "unit_toggle_f_selected_label",
+      "weather_ready"
+    ]
+  },
+  {
+    "name": "WeatherWidget",
+    "sourceSHA256": "64dcbf7037921756d9b58f4736da59d3bc6969fce347ed6976578539cfdaed0f",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "enable_use_my_location_toggle",
+      "focus",
+      "focus_date",
+      "focus_mode_label",
+      "follow_up_actions",
+      "follow_up_actions_by_date",
+      "forecast",
+      "initial_unit",
+      "issue_new_turn_query_on_success",
+      "precipitation_label",
+      "region_label",
+      "share_button_variant",
+      "share_label",
+      "show_date_picker",
+      "temperature_label",
+      "unit",
+      "unit_toggle_c_selected_label",
+      "unit_toggle_f_selected_label",
+      "use_current",
+      "use_my_location_label"
+    ]
+  },
+  {
+    "name": "WeatherWidgetV1WithSource",
+    "sourceSHA256": "13029bfa21aef26c16f9e0371f5f9a841e485d5f55e3e486da20a43ada050eda",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "forecast",
+      "initial_unit",
+      "show_less_label",
+      "show_more_label"
+    ]
+  },
+  {
+    "name": "WeatherWidgetV3",
+    "sourceSHA256": "8295e7e7c61d22caca0c9fe4ce9026165f25d89569d815d93458d638c81f81aa",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conditions_label",
+      "focus",
+      "focus_date",
+      "focus_mode_label",
+      "forecast",
+      "hourly_table_date_label",
+      "initial_unit",
+      "precipitation_label",
+      "presentation",
+      "region_label",
+      "share_button_variant",
+      "share_label",
+      "show_date_picker",
+      "temperature_label",
+      "time_label",
+      "unit",
+      "unit_toggle_c_selected_label",
+      "unit_toggle_f_selected_label",
+      "use_current"
+    ]
+  },
+  {
+    "name": "WeatherWidgetV3WithSource",
+    "sourceSHA256": "350df251df8621e4193a691203b5bf17ef405187db41a26ec65d8d4a78b9a573",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conditions_label",
+      "focus",
+      "focus_date",
+      "focus_mode_label",
+      "forecast",
+      "hourly_table_date_label",
+      "initial_unit",
+      "precipitation_label",
+      "presentation",
+      "region_label",
+      "share_button_variant",
+      "share_label",
+      "show_date_picker",
+      "temperature_label",
+      "time_label",
+      "unit",
+      "unit_toggle_c_selected_label",
+      "unit_toggle_f_selected_label",
+      "use_current"
+    ]
+  },
+  {
+    "name": "WeatherWidgetWithSource",
+    "sourceSHA256": "e1244c2ee113491f390312d0f3535a995868f188b034db848ad4459763b22565",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "enable_use_my_location_toggle",
+      "focus",
+      "focus_date",
+      "focus_mode_label",
+      "follow_up_actions",
+      "follow_up_actions_by_date",
+      "forecast",
+      "initial_unit",
+      "issue_new_turn_query_on_success",
+      "precipitation_label",
+      "region_label",
+      "share_button_variant",
+      "share_label",
+      "show_date_picker",
+      "temperature_label",
+      "unit",
+      "unit_toggle_c_selected_label",
+      "unit_toggle_f_selected_label",
+      "use_current",
+      "use_my_location_label"
+    ]
+  },
+  {
+    "name": "WebLinksCarousel",
+    "sourceSHA256": "9736ad4b3218189bad24d23839fff66c7047ef171265bc5cf129607ebe368829",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "attribution",
+      "carousel_label",
+      "is_loading",
+      "items",
+      "loading_label",
+      "widget_name"
+    ]
+  },
+  {
+    "name": "WhatsNewCapabilityWelcome",
+    "sourceSHA256": "e4bf8951a7fb751cc4110c27b3e4635039a6dee14d4760a09fd1c876abf1e3d1",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "items",
+      "whats_new_capability_actions",
+      "whats_new_capability_campaign_id"
+    ]
+  },
+  {
+    "name": "WnbaScheduleWidget",
+    "sourceSHA256": "77105492c97a6ee291a682fa61ce77a89281b715d89c5f4c4119aba94d675faf",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "WnbaScheduleWidgetWithSource",
+    "sourceSHA256": "c7b3834bda1551f043d0a54cf7381d761df9e7bd58d4b7eeda9c48e8774b95db",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "expanded",
+      "rows",
+      "show_less_label",
+      "show_more_label",
+      "title"
+    ]
+  },
+  {
+    "name": "WnbaStandingsWidget",
+    "sourceSHA256": "c2011ce9c898d0b5b50f9ecd32512502d33ce85eb0ae6c9afb8526e474914b2f",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "WnbaStandingsWidgetWithSource",
+    "sourceSHA256": "aa407a2196de518f0d94a64565355d191a001429ca0b7ece2dce44338e7c6de3",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "conferences",
+      "defaultConferenceId",
+      "hasMultipleConferences",
+      "teamHeader",
+      "title"
+    ]
+  },
+  {
+    "name": "WordCardWidget",
+    "sourceSHA256": "4e5ca599f29cf7aa1975586bf6fa733304383409feace64147ac3148c0138f7c",
+    "properties": [
+      "__resolutionId",
+      "__state",
+      "fallback"
+    ],
+    "stateFields": [
+      "examples",
+      "forms",
+      "ipa",
+      "langFrom",
+      "mnemonic",
+      "partOfSpeech",
+      "spelling",
+      "translationPairs"
+    ]
+  }
+]

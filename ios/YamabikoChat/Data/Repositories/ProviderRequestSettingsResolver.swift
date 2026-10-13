@@ -89,7 +89,7 @@ final class ProviderRequestSettingsResolver {
         skillRepository: AgentSkillRepository = AgentSkillRepository(),
         modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
         localToolRegistry: LocalToolRegistry = LocalToolRegistry(
-            executors: [WebSearchTool(), FetchUrlTool(), PythonExecuteTool(), StrReplaceEditorTool(), GenUITool()]
+            executors: [WebSearchTool(), FetchUrlTool(), PythonExecuteTool(), StrReplaceEditorTool(), GenUITool(), GenUIReferenceTool()]
         ),
         modelsDevReasoningEffort: @escaping (String, String) -> String? = { _, _ in nil },
         codexModelsProvider: @escaping () -> [PiCodexModel] = { [] }
@@ -251,6 +251,9 @@ final class ProviderRequestSettingsResolver {
            let definition = localToolRegistry.definitions.first(where: { $0.name == GenUITool.name }) {
             let isNativePCC = provider.caseInsensitiveCompare(LLMProvider.appleIntelligence.rawValue) == .orderedSame && model == AppleIntelligenceModelCatalog.pccModel
             tools.append((isNativePCC ? GenUITool.nativeDefinition : definition).providerTool)
+            if let reference = localToolRegistry.definitions.first(where: { $0.name == GenUIReferenceTool.name }) {
+                tools.append(reference.providerTool)
+            }
         }
         if toolScope.allowsAgentSkills, supportsClientWebSearch {
             tools.append(contentsOf: AgentSkillTools.definitions(repository: skillRepository).map(\.providerTool))

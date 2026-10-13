@@ -2,6 +2,18 @@ import XCTest
 @testable import YamabikoChat
 
 final class GenUIHostPolicyTests: XCTestCase {
+    func testFlowFixtureAndDeclarativeStageContract() throws {
+        let document = GenUIDocument(title: "Flow", code: GenUIRichDemoFixture.flowCode)
+        let json = String(decoding: try JSONEncoder().encode(document), as: UTF8.self)
+        XCTAssertEqual(try GenUIDocument.validated(from: json), document)
+        XCTAssertNoThrow(try GenUIDocument.validated(from: #"{"title":"Flow","ui":{"type":"list","props":{"connector":true,"marker":"none"},"children":[{"type":"list-item","props":{"icon":"cpu","iconColor":"info","variant":"outline","label":"Compute"}}]}}"#))
+        let properties = try XCTUnwrap(GenUIDocument.componentCatalog["list-item"])
+        for property in ["icon", "iconColor", "variant"] {
+            XCTAssertTrue(properties.contains(property))
+            XCTAssertTrue(GenUITool.definition.description.contains("\"" + property + "\""))
+        }
+    }
+
     func testCodeValidationParsesWithoutExecutingTheBody() throws {
         XCTAssertThrowsError(try GenUICodeValidator.validate("return ("))
         XCTAssertNoThrow(try GenUICodeValidator.validate("throw new Error('must not execute');"))

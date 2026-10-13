@@ -5,11 +5,20 @@ private struct GenUINewTurnKey: EnvironmentKey {
     static let defaultValue: (String) -> Bool = { _ in false }
 }
 
+private struct GenUIPrefillKey: EnvironmentKey {
+    static let defaultValue: (String) -> Void = { _ in }
+}
+
 private struct GenUIRouteKey: EnvironmentKey {
     static let defaultValue: (ChatWorkspaceRoute) -> Void = { _ in }
 }
 
 extension EnvironmentValues {
+    var onGenUIPrefill: (String) -> Void {
+        get { self[GenUIPrefillKey.self] }
+        set { self[GenUIPrefillKey.self] = newValue }
+    }
+
     var onGenUIRoute: (ChatWorkspaceRoute) -> Void {
         get { self[GenUIRouteKey.self] }
         set { self[GenUIRouteKey.self] = newValue }
@@ -25,19 +34,19 @@ struct GenUIRichView: View {
     let document: GenUIDocument
     @ObservedObject var state: GenUIState
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.onGenUIPrefill) private var prefillComposer
     @Environment(\.onGenUINewTurn) private var issueNewTurn
     @Environment(\.openURL) private var openURL
-    @State private var height: CGFloat = 60
     @State private var status: String?
+    @State private var imagePresentation: GenUIImagePresentation?
+    @State private var sharePresentation: GenUISharePresentation?
+    @State private var videoPresentation: GenUIVideoPresentation?
     @Environment(\.onGenUIRoute) private var presentRoute
-
-    private var viewportHeight: CGFloat { sizeClass == .regular ? 800 : 560 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            GenUIRichWebView(document: document, state: state, dark: colorScheme == .dark, maximumHeight: viewportHeight, height: $height, onStatus: { status = $0 }, onAction: handle)
-                .frame(height: min(height, viewportHeight))
+            GenUIRichWebView(document: document, state: state, dark: colorScheme == .dark, height: $state.richHeight, onStatus: { status = $0 }, onAction: handle)
+                .frame(height: state.richHeight)
                 .accessibilityIdentifier("genui-rich-canvas")
             if let status {
                 Text(status).font(.caption).foregroundStyle(.secondary)
@@ -47,9 +56,12 @@ struct GenUIRichView: View {
                     .accessibilityIdentifier("genui-rich-status")
             }
         }
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-        .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.1)) }
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // The document owns its card hierarchy; avoid a second enclosing panel.
+        .background(Color(uiColor: .systemBackground))
+        .sheet(item: $imagePresentation) { GenUIImagePresentationView(presentation: $0) }
+        .sheet(item: $sharePresentation) { GenUISharePresentationView(items: $0.items) }
+        .sheet(item: $videoPresentation) { GenUIVideoPresentationView(presentation: $0) }
     }
 
     private func handle(_ object: [String: Any]) {
@@ -65,11 +77,48 @@ struct GenUIRichView: View {
                 return
             }
             openURL(url)
+        case "prefillComposer":
+            guard let text = object["text"] as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.utf8.count <= 16_384 else { return }
+            prefillComposer(text)
+        case "composeEmail":
+            guard let args = object["args"] as? [String: Any], let email = args["email"] as? [String: Any],
+                  let to = email["to"] as? String, !to.contains("\n"), !to.contains("\r") else { return }
+            var draft = URLComponents()
+            draft.scheme = "mailto"
+            draft.path = to
+            draft.queryItems = [URLQueryItem(name: "subject", value: email["subject"] as? String ?? ""),
+                                URLQueryItem(name: "body", value: email["body"] as? String ?? "")]
+            guard let url = draft.url else { return }
+            openURL(url)
         case "issueNewTurn":
             guard let query = object["query"] as? String, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, query.utf8.count <= 16_384 else { return }
             status = issueNewTurn(query) ? nil : L10n.text("送信中の応答や入力欄の下書きを確認してください")
         case "openEntityDetail":
             presentRoute(.genUIEntity(GenUIEntityDetail(object["args"] as? [String: Any] ?? [:])))
+        case "openImageLightbox":
+            let args = object["args"] as? [String: Any] ?? [:]
+            let images = (args["images"] as? [[String: Any]] ?? []).compactMap { item -> GenUIImagePresentation.Image? in
+                guard let raw = item["image_url"] as? String ?? item["url"] as? String ?? item["src"] as? String,
+                      let url = GenUIHostPolicy.externalURL(raw) else { return nil }
+                return .init(url: url, title: item["alt_text"] as? String ?? item["title"] as? String ?? "")
+            }
+            guard !images.isEmpty else { status = L10n.text("表示できる画像がありません"); return }
+            imagePresentation = .init(images: images, selected: min(max(args["selected_index"] as? Int ?? 0, 0), images.count - 1))
+        case "openVideoLightbox":
+            let args = object["args"] as? [String: Any] ?? [:]
+            guard let id = args["video_id"] as? String, id.range(of: #"^[A-Za-z0-9_-]{11}$"#, options: .regularExpression) != nil else {
+                status = L10n.text("この動画の参照には参考元のサービスが必要です")
+                return
+            }
+            videoPresentation = .init(videoID: id, title: args["title"] as? String ?? "YouTube")
+        case "share":
+            let args = object["args"] as? [String: Any] ?? [:]
+            let payload = args["share_options"] as? [String: Any] ?? args
+            var items: [Any] = []
+            if let text = payload["text"] as? String ?? payload["message"] as? String ?? payload["title"] as? String { items.append(text) }
+            if let url = (payload["url"] as? String).flatMap(GenUIHostPolicy.externalURL) { items.append(url) }
+            guard !items.isEmpty else { status = L10n.text("共有データには参考元サーバーが必要です"); return }
+            sharePresentation = .init(items: items)
         case "openMap":
             guard let props = object["props"] as? [String: Any],
                   let data = try? JSONSerialization.data(withJSONObject: props),
@@ -94,7 +143,7 @@ struct GenUIEntityDetail: Identifiable {
 
     init(_ args: [String: Any]) {
         title = args["title"] as? String ?? args["name"] as? String ?? args["value"] as? String ?? L10n.text("詳細")
-        fields = ["description", "category", "location", "address"].compactMap { key in
+        fields = ["description", "text", "category", "location", "address"].compactMap { key in
             guard let value = args[key] as? String, !value.isEmpty else { return nil }
             return (L10n.text(key), value)
         }
@@ -152,7 +201,6 @@ struct GenUIRichWebView: UIViewRepresentable {
     let document: GenUIDocument
     let state: GenUIState
     let dark: Bool
-    let maximumHeight: CGFloat
     @Binding var height: CGFloat
     let onStatus: (String?) -> Void
     let onAction: ([String: Any]) -> Void
@@ -179,13 +227,14 @@ struct GenUIRichWebView: UIViewRepresentable {
         webView.scrollView.keyboardDismissMode = .interactive
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.load(in: webView)
-        webView.scrollView.isScrollEnabled = webView.scrollView.contentSize.height > maximumHeight
+        webView.scrollView.isScrollEnabled = false
     }
 
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
@@ -193,16 +242,19 @@ struct GenUIRichWebView: UIViewRepresentable {
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "genuiGesture", contentWorld: .world(name: "GenUIHostGestures"))
         coordinator.removeMaps()
         webView.navigationDelegate = nil
+        webView.uiDelegate = nil
         webView.stopLoading()
     }
 
-    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
         var parent: GenUIRichWebView
         private var loadedDocument: GenUIDocument?
+        private var ready = false
         private var lastTheme: Bool?
         private var lastPhysicalTouch = Date.distantPast
         private var actionConsumed = true
         private var mapHosts: [String: MapHost] = [:]
+        private var videoHosts: [String: GenUIYouTubePlayer] = [:]
 
         private struct MapHost {
             let props: [String: JSONValue]
@@ -222,6 +274,8 @@ struct GenUIRichWebView: UIViewRepresentable {
         func removeMaps() {
             mapHosts.values.forEach { $0.remove() }
             mapHosts.removeAll()
+            videoHosts.values.forEach { $0.remove() }
+            videoHosts.removeAll()
         }
 
         private func updateMaps(_ maps: [[String: Any]], in webView: WKWebView) {
@@ -268,6 +322,25 @@ struct GenUIRichWebView: UIViewRepresentable {
             for id in Set(mapHosts.keys).subtracting(retained) { mapHosts.removeValue(forKey: id)?.remove() }
         }
 
+        private func updateVideos(_ videos: [[String: Any]], in webView: WKWebView) {
+            var retained = Set<String>()
+            for video in videos {
+                guard let id = video["id"] as? String, let videoID = video["videoId"] as? String,
+                      videoID.range(of: #"^[A-Za-z0-9_-]{11}$"#, options: .regularExpression) != nil,
+                      let frame = GenUIHostPolicy.mapFrame(from: video["frame"]), retained.insert(id).inserted else { continue }
+                if videoHosts[id] == nil {
+                    let player = GenUIYouTubePlayer(videoID: videoID, title: video["title"] as? String ?? "YouTube", poster: video["poster"] as? Bool ?? false)
+                    player.onEvent = { [weak webView] type, value in
+                        webView?.callAsyncJavaScript("window.GenUIRuntime.videoEvent(id,type,value);", arguments: ["id": id, "type": type, "value": value as Any? ?? NSNull()], in: nil, in: .page, completionHandler: nil)
+                    }
+                    videoHosts[id] = player
+                    webView.scrollView.addSubview(player.webView)
+                }
+                videoHosts[id]?.webView.frame = frame
+            }
+            for id in Array(videoHosts.keys) where !retained.contains(id) { videoHosts.removeValue(forKey: id)?.remove() }
+        }
+
         func load(in webView: WKWebView) {
             guard loadedDocument != parent.document else {
                 if lastTheme != parent.dark {
@@ -276,6 +349,19 @@ struct GenUIRichWebView: UIViewRepresentable {
                 }
                 return
             }
+            if let loadedDocument, loadedDocument.isRich, parent.document.isRich {
+                guard ready else { return }
+                let encoder = JSONEncoder()
+                if let previous = try? encoder.encode(loadedDocument), let next = try? encoder.encode(parent.document),
+                   Self.mediaOrigins(previous) == Self.mediaOrigins(next) {
+                    self.loadedDocument = parent.document
+                    webView.callAsyncJavaScript("const value=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(encoded),c=>c.charCodeAt(0)))); window.GenUIRuntime.updateDocument(value);window.__GENUI_SET_THEME__(theme);", arguments: ["encoded": next.base64EncodedString(), "theme": parent.dark ? "dark" : "light"], in: nil, in: .page, completionHandler: { result in
+                        if case .failure(let error) = result { DiagnosticsLogger.log("GenUI document update failed", category: .app, error: error) }
+                    })
+                    return
+                }
+            }
+            ready = false
             guard let html = Self.html(document: parent.document, snapshot: parent.state.richSnapshot, dark: parent.dark) else {
                 DispatchQueue.main.async { [weak self] in self?.parent.onStatus(L10n.text("GenUIの表示リソースを読み込めません")) }
                 return
@@ -298,14 +384,31 @@ struct GenUIRichWebView: UIViewRepresentable {
             guard message.frameInfo.isMainFrame, let object = message.body as? [String: Any], let type = object["type"] as? String else { return }
             switch type {
             case "height":
+                ready = true
+                if loadedDocument != parent.document, let webView = message.webView { load(in: webView) }
                 guard let number = object["height"] as? NSNumber, number.doubleValue.isFinite else { return }
-                // Keep long web UIs in a usable viewport. WebKit owns scrolling
-                // inside the canvas, preserving native input gesture handling.
-                let height = min(max(CGFloat(number.doubleValue), 60), parent.maximumHeight)
+                // The conversation owns vertical scrolling. Fit the complete document
+                // so diagrams and controls stay in the same reading flow.
+                let height = max(CGFloat(number.doubleValue), 60)
                 DispatchQueue.main.async { [weak self, weak webView = message.webView] in
                     guard let self else { return }
                     if abs(self.parent.height - height) > 1 { self.parent.height = height }
-                    webView?.scrollView.isScrollEnabled = CGFloat(number.doubleValue) > self.parent.maximumHeight
+                    webView?.scrollView.isScrollEnabled = false
+                }
+            case "videos":
+                guard let videos = object["videos"] as? [[String: Any]] else { return }
+                DispatchQueue.main.async { [weak self, weak webView = message.webView] in
+                    guard let self, let webView else { return }
+                    self.updateVideos(videos, in: webView)
+                }
+            case "unsupported":
+                let reason = object["reason"] as? String ?? "reference-server-required"
+                DiagnosticsLogger.log("GenUI reference operation unavailable", category: .app, metadata: ["reason": reason])
+                DispatchQueue.main.async { [weak self] in
+                    let label = reason.hasPrefix("reference-server-required:")
+                        ? L10n.text("参考元のサービスが必要な操作です")
+                        : L10n.text("このクライアント操作は未対応です")
+                    self?.parent.onStatus(label + " (" + reason + ")")
                 }
             case "maps":
                 guard let maps = object["maps"] as? [[String: Any]] else { return }
@@ -316,10 +419,16 @@ struct GenUIRichWebView: UIViewRepresentable {
             case "state":
                 guard let state = object["state"].flatMap(GenUIHostPolicy.snapshot) else { return }
                 DispatchQueue.main.async { [weak self] in self?.parent.state.richSnapshot = state }
+            case "warning":
+                let reason = String((object["message"] as? String ?? "GenUI section failed").prefix(500))
+                DiagnosticsLogger.log("GenUI section rendering failed", category: .app,
+                                      metadata: ["reason": reason, "path": object["path"] as? String ?? "unknown"])
             case "error":
                 let text = String((object["message"] as? String ?? "GenUI rendering failed").prefix(500))
                 DiagnosticsLogger.log("GenUI rendering failed", category: .app, metadata: ["reason": text])
                 DispatchQueue.main.async { [weak self] in self?.parent.onStatus(text) }
+            case "referenceEvent":
+                DiagnosticsLogger.log("GenUI reference event", category: .app, metadata: ["event": String(describing: object["event"] ?? "")])
             default:
                 // JS cannot initiate native side effects on load or from timers.
                 guard !actionConsumed, Date().timeIntervalSince(lastPhysicalTouch) < 1.5 else {
@@ -333,11 +442,21 @@ struct GenUIRichWebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             let url = navigationAction.request.url
-            if navigationAction.navigationType == .other, url?.scheme == "about" || url?.isFileURL == true {
+            if navigationAction.targetFrame?.isMainFrame == false,
+               url?.scheme == "https", url?.host == "www.youtube-nocookie.com" {
+                decisionHandler(.allow)
+            } else if navigationAction.navigationType == .other, url?.scheme == "about" || url?.isFileURL == true {
                 decisionHandler(.allow)
             } else {
                 decisionHandler(.cancel)
             }
+        }
+
+        func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?) -> Void) {
+            guard frame.isMainFrame, (prompt.hasPrefix("__genuiCEL:") || prompt.hasPrefix("__genuiChart:")) else { completionHandler(nil); return }
+            let prefix = prompt.hasPrefix("__genuiChart:") ? "__genuiChart:" : "__genuiCEL:"
+            let result = GenUICELRuntime.evaluate(String(prompt.dropFirst(prefix.count)))
+            completionHandler(result)
         }
 
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
@@ -353,18 +472,30 @@ struct GenUIRichWebView: UIViewRepresentable {
             }
             guard let runtime = asset("runtime", extension: "js"), let css = asset("styles", extension: "css"),
                   let encoded = try? JSONEncoder().encode(document) else { return nil }
+            guard let components = asset("reference-components", extension: "js"),
+                  let tokens = asset("reference-tokens", extension: "js"),
+                  let icons = asset("reference-icons", extension: "js"),
+                  let lottie = asset("lottie-light", extension: "js"),
+                  let markdown = asset("markdown-it", extension: "js") else { return nil }
             let snapshot64 = (try? JSONEncoder().encode(snapshot ?? [:]).base64EncodedString()) ?? "e30="
             let origins = mediaOrigins(encoded)
-            let policy = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' file:; style-src 'unsafe-inline'; img-src data: \(origins); media-src \(origins.isEmpty ? "'none'" : origins); font-src file: data:; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+            let policy = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' file:; style-src 'unsafe-inline'; img-src data: \(origins); media-src \(origins.isEmpty ? "'none'" : origins); font-src file: data:; connect-src \(origins.isEmpty ? "'none'" : origins); frame-src https://www.youtube-nocookie.com; base-uri 'none'; form-action 'none'"
             let math = MathMarkdownResourceResolver.mathJaxScriptURL(in: .main).map {
-                "<script>window.MathJax={startup:{typeset:false}};</script><script src=\"\($0.lastPathComponent)\"></script>"
+                "<script>window.MathJax={startup:{typeset:false},tex:{inlineMath:[['$','$'],['\\\\(','\\\\)']]}};</script><script src=\"\($0.lastPathComponent)\"></script>"
             } ?? ""
             return """
             <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><meta http-equiv="Content-Security-Policy" content="\(policy)"><style>\(css)</style>\(math)</head><body><div id="root"></div><script>
             const decode=b=>JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0))));
             window.__GENUI_DOCUMENT__=decode('\(encoded.base64EncodedString())');
             window.__GENUI_SAVED_STATE__=decode('\(snapshot64)');
+            window.__GENUI_IS_MOBILE__=true;
             window.__GENUI_THEME__='\(dark ? "dark" : "light")';
+            window.__GENUI_LOCALE__='\(Locale.current.language.languageCode?.identifier ?? "en")';
+            \(markdown)
+            \(lottie)
+            \(components)
+            \(tokens)
+            \(icons)
             \(runtime)
             </script></body></html>
             """

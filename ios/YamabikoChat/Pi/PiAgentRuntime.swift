@@ -12,6 +12,7 @@ struct PiAgentConfiguration: Codable, Sendable {
     var apiKey: String?
     var headers: [String: String] = [:]
     var env: [String: String] = [:]
+    var customEndpoint: OpenAICompatPreset? = nil
     var catalogContract: PiCatalogModelContract? = nil
     var thinkingLevel: String?
     var mcpAuthorizationToken: String? = nil
@@ -638,6 +639,7 @@ actor PiAgentRuntime {
         configuration: PiAgentConfiguration,
         tools: LocalToolRegistry
     ) async throws -> AsyncThrowingStream<ProviderStreamEvent, Error> {
+        let tools = tools.scopedForExecution()
         let runID = UUID().uuidString
         let metricsContext = ProviderMetricsContext.current
         #if DEBUG
@@ -756,6 +758,12 @@ actor PiAgentRuntime {
                                 succeeded: event.succeeded ?? false,
                                 usage: event.usage
                             )
+                        case "genui_preview":
+                            guard event.name == GenUITool.name, let callID = event.toolCallId,
+                                  request.tools.contains(where: { $0.type == "function" && $0.payload["name"] == GenUITool.name }),
+                                  let arguments = event.arguments else { continue }
+                            let call = ToolCall(id: callID, name: GenUITool.name, argumentsJSON: Self.jsonString(arguments))
+                            continuation.yield(.toolActivity(ToolActivityEvent(phase: .generating, call: call, result: nil, createdAtMs: event.timeMs ?? nowMs())))
                         case "tool_start":
                             guard let callID = event.toolCallId else {
                                 throw ProviderClientError.parseFailure("Pi emitted an invalid tool start event")

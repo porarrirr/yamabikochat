@@ -11,11 +11,9 @@ enum AppConstants {
 
     static let maxAttachmentSizeBytes: Int = 10 * 1024 * 1024
 
-    static let defaultOpenAIBaseURL = URL(string: "https://api.openai.com/v1/")!
     static let defaultOpenCodeGoBaseURL = URL(string: "https://opencode.ai/zen/go/v1/")!
     static let defaultClinePassBaseURL = URL(string: "https://api.cline.bot/api/v1/")!
     static let defaultAlibabaCodingPlanBaseURL = URL(string: "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/")!
-    static let defaultMiniMaxBaseURL = URL(string: "https://api.minimax.io/v1/")!
     static let defaultZAICodingPlanBaseURL = URL(string: "https://api.z.ai/api/coding/paas/v4/")!
     static let defaultSuperGrokBaseURL = URL(string: "https://cli-chat-proxy.grok.com/v1/")!
 

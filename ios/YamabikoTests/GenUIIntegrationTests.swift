@@ -105,6 +105,24 @@ final class GenUIIntegrationTests: XCTestCase {
         XCTAssertEqual(record.payload.steps.compactMap(\.genUIDocument).count, 2)
     }
 
+    func testPiArgumentPreviewsRetainTheLatestValidDocumentUntilCompletion() {
+        var payload = ToolActivityPayload()
+        let initial = ToolCall(id: "live", name: GenUITool.name, argumentsJSON: #"{"title":"Preview","ui":{"type":"text","children":["First"]}}"#)
+        payload.apply(ToolActivityEvent(phase: .generating, call: initial, createdAtMs: 1))
+        XCTAssertEqual(payload.steps[0].status, .running)
+        XCTAssertNotNil(payload.steps[0].genUIDocument)
+        let incomplete = ToolCall(id: "live", name: GenUITool.name, argumentsJSON: #"{"title":"Preview","code":"return DIL.h("}"#)
+        payload.apply(ToolActivityEvent(phase: .generating, call: incomplete, createdAtMs: 2))
+        XCTAssertEqual(payload.steps.count, 1)
+        XCTAssertNotNil(payload.steps[0].genUIDocument)
+        payload.apply(ToolActivityEvent(phase: .started, call: initial, createdAtMs: 3))
+        XCTAssertNotNil(payload.steps[0].genUIDocument)
+        let result = ToolResult(callId: "live", name: GenUITool.name, content: initial.argumentsJSON)
+        payload.apply(ToolActivityEvent(phase: .finished, call: initial, result: result, createdAtMs: 4))
+        XCTAssertEqual(payload.steps[0].status, .completed)
+        XCTAssertEqual(payload.providerTranscript.count, 2)
+    }
+
     func testFailedAndInvalidGenUIResultsDoNotBecomeRenderableDocuments() {
         var payload = ToolActivityPayload()
         let validContent = #"{"title":"Demo","components":[{"id":"summary","kind":"text","text":"Hello"}]}"#
@@ -189,6 +207,18 @@ final class GenUIIntegrationTests: XCTestCase {
         let step = try JSONDecoder().decode(ToolActivityStep.self, from: Data(json.utf8))
         XCTAssertNil(step.genUIDocument)
         XCTAssertEqual(step.status, .completed)
+    }
+
+    @MainActor
+    func testGenUIHeightInvalidatesTheOwningRowAndSurvivesReuse() {
+        let row = makeTimelineRow()
+        let state = row.genUIState(id: "reference", document: GenUIReferenceFixture.document)
+        let revision = row.genUILayoutRevision
+        state.richHeight = 1100
+        XCTAssertEqual(row.genUILayoutRevision, revision + 1)
+        state.richHeight = 1100
+        XCTAssertEqual(row.genUILayoutRevision, revision + 1)
+        XCTAssertEqual(row.genUIState(id: "reference", document: GenUIReferenceFixture.document).richHeight, 1100)
     }
 
     @MainActor

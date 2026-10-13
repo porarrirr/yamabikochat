@@ -1,5 +1,7 @@
 import XCTest
 import WebKit
+import PDFKit
+import UIKit
 @testable import YamabikoChat
 
 private actor RecordingWebToolHTTPClient: WebToolHTTPClient {
@@ -18,6 +20,7 @@ private actor RecordingWebToolHTTPClient: WebToolHTTPClient {
 }
 
 private actor FailingWebToolHTTPClient: WebToolHTTPClient {
+    private(set) var calls = 0
     let statusCode: Int
     let body: String
 
@@ -27,6 +30,7 @@ private actor FailingWebToolHTTPClient: WebToolHTTPClient {
     }
 
     func get(url: URL, timeout: TimeInterval) async throws -> (Data, HTTPURLResponse) {
+        calls += 1
         let response = HTTPURLResponse(
             url: url,
             statusCode: statusCode,
@@ -106,6 +110,25 @@ private struct StaticSearchEngine: SearchEngine {
 
     func search(query: String, locale: Locale, maxResults: Int) async throws -> [SearchResult] {
         Array(results.prefix(maxResults))
+    }
+}
+
+private actor ScriptedSearchEngine: SearchEngine {
+    let results: [SearchResult]
+    private(set) var calls = 0
+    init(results: [SearchResult]) { self.results = results }
+    func search(query: String, locale: Locale, maxResults: Int) async throws -> [SearchResult] {
+        calls += 1
+        return Array(results.prefix(maxResults))
+    }
+}
+
+private struct BinaryWebToolHTTPClient: WebToolHTTPClient {
+    let data: Data
+    let contentType: String
+    func get(url: URL, timeout: TimeInterval) async throws -> (Data, HTTPURLResponse) {
+        (data, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
+                              headerFields: ["Content-Type": contentType])!)
     }
 }
 
@@ -270,16 +293,16 @@ final class WebSearchToolTests: XCTestCase {
         XCTAssertEqual(selection.content, "## おすすめパーティー\n\nオデットとサンドローネを編成します。")
     }
 
-    func testRelevantPageReaderReturnsExplicitNoMatchWithoutLeadingFallback() {
+    func testRelevantPageReaderReturnsReadableOverviewWhenWordingDiffers() {
         let selection = RelevantPageReader.select(
             paragraphs: [PageParagraph(index: 0, heading: "Cooking", text: "Bake bread slowly.")],
             goal: "quantum entanglement experiment",
             maxCharacters: 8_000
         )
 
-        XCTAssertEqual(selection.status, .noRelevantPassages)
-        XCTAssertEqual(selection.content, "")
-        XCTAssertEqual(selection.selectedParagraphCount, 0)
+        XCTAssertEqual(selection.status, .overview)
+        XCTAssertTrue(selection.content.contains("Bake bread slowly."))
+        XCTAssertEqual(selection.selectedParagraphCount, 1)
         XCTAssertFalse(selection.truncated)
     }
 
@@ -311,6 +334,415 @@ final class WebSearchToolTests: XCTestCase {
 
         XCTAssertEqual(selection.selectedParagraphCount, 3)
         XCTAssertEqual(selection.content.components(separatedBy: "Odette party paragraph 1").count - 1, 1)
+    }
+
+    func testWeatherTableRetainsEntitiesValuesMergedHeadersAndMissingCells() {
+        let html = """
+        <h2>2026年10月13日 20時現在</h2>
+        <table><tr><td rowspan="3">地点</td><td colspan="4">気温</td></tr>
+        <tr><td colspan="2">最高</td><td colspan="2">最低</td></tr>
+        <tr><td>値(℃)</td><td>起時</td><td>値(℃)</td><td>起時</td></tr>
+        <tr><td>大阪</td><td>27.4)</td><td>13:00)</td><td>19.2)</td><td>05:00)</td></tr>
+        <tr><td>名古屋</td><td>28.1]</td><td>14:00]</td><td></td><td></td></tr>
+        <tr><td>東京</td><td>26.8</td><td>12:00</td><td>18.5</td><td>04:00</td></tr></table>
+        """
+        let paragraphs = PageParagraphExtractor.extractHTML(html)
+        XCTAssertEqual(paragraphs.count, 3)
+        let selection = RelevantPageReader.select(
+            paragraphs: paragraphs,
+            goal: "大阪、名古屋、東京の2026年10月13日の最高気温と最低気温を確認する",
+            maxCharacters: 8_000
+        )
+        XCTAssertTrue(selection.content.contains("地点: 大阪 | 気温 / 最高 / 値(℃): 27.4)"))
+        XCTAssertTrue(selection.content.contains("地点: 東京 | 気温 / 最高 / 値(℃): 26.8"))
+        XCTAssertTrue(selection.content.contains("気温 / 最低 / 値(℃):  | 気温 / 最低 / 起時: "))
+        XCTAssertTrue(selection.content.contains("2026年10月13日 20時現在"))
+    }
+
+    func testTableEntityRowsBeatSharedHeadingsOnLongPage() {
+        var html = "<h2>2026年10月13日 最高気温 最低気温</h2><table><tr><th>地点</th><th>最高気温</th><th>最低気温</th></tr>"
+        for i in 0 ..< 150 {
+            html += "<tr><td>地点\(i)</td><td>25.0</td><td>15.0</td></tr>"
+        }
+        html += "<tr><td>大阪</td><td>27.4</td><td>19.2</td></tr>"
+        html += "<tr><td>名古屋</td><td>28.1</td><td>18.8</td></tr>"
+        html += "<tr><td>東京</td><td>26.8</td><td>18.5</td></tr></table>"
+        let selection = RelevantPageReader.select(
+            paragraphs: PageParagraphExtractor.extractHTML(html),
+            goal: "大阪 名古屋 東京 最高気温 最低気温 2026年10月13日",
+            maxCharacters: 1_000,
+            seedLimit: 3,
+            contextRadius: 0
+        )
+        XCTAssertTrue(selection.content.contains("大阪"))
+        XCTAssertTrue(selection.content.contains("名古屋"))
+        XCTAssertTrue(selection.content.contains("東京"))
+        XCTAssertFalse(selection.content.contains("地点0 |"))
+    }
+
+    func testTableDataRowHeaderAndCaptionStayTogether() {
+        let paragraphs = PageParagraphExtractor.extractHTML("""
+        <table><caption>Observed temperatures (℃)</caption>
+        <tr><th>City</th><th>High</th><th>Low</th></tr>
+        <tr><th scope="row">Tokyo</th><td>26.8</td><td>18.5</td></tr></table>
+        """)
+        XCTAssertEqual(paragraphs.map(\.text), [
+            "Observed temperatures (℃)", "City: Tokyo | High: 26.8 | Low: 18.5"
+        ])
+    }
+
+    func testTableWithRowHeadersDoesNotTreatFirstDataRowAsColumnLabels() {
+        let paragraphs = PageParagraphExtractor.extractHTML("""
+        <table><tr><th scope="row">大阪</th><td>27.4</td></tr>
+        <tr><th scope="row">東京</th><td>26.8</td></tr></table>
+        """)
+        XCTAssertEqual(paragraphs.map(\.text), ["大阪 | 27.4", "東京 | 26.8"])
+    }
+
+    func testQuestionFocusPreservesOtherMeasuresForIndependentEvidenceAssessment() {
+        let paragraphs = PageParagraphExtractor.extractHTML("""
+        <table><tr><th>地点</th><th>最高気温(℃)</th><th>最低気温(℃)</th><th>降水量(mm)</th></tr>
+        <tr><td>大阪</td><td>27.4)</td><td>19.2)</td><td>0.0)</td></tr></table>
+        """)
+        let selection = RelevantPageReader.select(paragraphs: paragraphs,
+            goal: "大阪の最高気温と最低気温を確認する", maxCharacters: 8_000)
+        XCTAssertTrue(selection.content.contains("地点: 大阪"))
+        XCTAssertTrue(selection.content.contains("最高気温(℃): 27.4)"))
+        XCTAssertTrue(selection.content.contains("最低気温(℃): 19.2)"))
+        XCTAssertTrue(selection.content.contains("降水量"))
+    }
+
+    func testTableFocusPreservesRequestedEntityOutsideFirstColumn() {
+        let paragraphs = PageParagraphExtractor.extractHTML("""
+        <table><tr><th>日付</th><th>都市</th><th>最高気温</th><th>降水量</th></tr>
+        <tr><td>2026-10-13</td><td>大阪</td><td>27.4</td><td>0.0</td></tr></table>
+        """)
+        let selection = RelevantPageReader.select(paragraphs: paragraphs,
+            goal: "大阪 最高気温", maxCharacters: 8_000)
+        XCTAssertTrue(selection.content.contains("日付: 2026-10-13"))
+        XCTAssertTrue(selection.content.contains("都市: 大阪"))
+        XCTAssertTrue(selection.content.contains("最高気温: 27.4"))
+        XCTAssertTrue(selection.content.contains("降水量"))
+    }
+
+    func testFetchURLReturnsSourceLinksWithoutInventingRoutes() async throws {
+        let tool = FetchUrlTool(httpClient: StaticWebToolHTTPClient(body: """
+        <p>東京の観測値はこちら</p>
+        <a href="../daily?city=tokyo&amp;day=13">東京の日別の値</a>
+        <a href="javascript:alert(1)">東京</a><a href="#top">東京</a>
+        <a href="/login">ログイン</a>
+        """))
+        let result = try await tool.execute(call: ToolCall(
+            id: "links", name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/data/index","goal":"東京 気温"}"#,
+            providerMetadata: nil
+        ))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.content.utf8)) as? [String: Any])
+        let links = try XCTUnwrap(object["links"] as? [[String: String]])
+        XCTAssertEqual(links.first, ["title": "東京の日別の値", "url": "https://example.com/daily?city=tokyo&day=13"])
+        XCTAssertFalse(links.contains { ($0["url"] ?? "").hasPrefix("javascript:") })
+    }
+
+    func testFetchURLReusesResponseAcrossGoalsAndPreservesRetrievalTime() async throws {
+        let client = RecordingWebToolHTTPClient()
+        let tool = FetchUrlTool(httpClient: client)
+        func call(_ goal: String) -> ToolCall {
+            ToolCall(id: goal, name: FetchUrlTool.name,
+                     argumentsJSON: "{\"url\":\"https://example.com/page\",\"goal\":\"\(goal)\"}", providerMetadata: nil)
+        }
+        let first = try await tool.execute(call: call("ok"))
+        let second = try await tool.execute(call: call("different goal"))
+        let requests = await client.requestedURLs
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(first.provenance?.fetchedAtMs, second.provenance?.fetchedAtMs)
+        XCTAssertTrue(second.content.contains("\"cache_hit\":true"))
+    }
+
+    func testFetchURLCacheKeepsDifferentQueryParametersSeparate() async throws {
+        let client = RecordingWebToolHTTPClient()
+        let tool = FetchUrlTool(httpClient: client)
+        for day in [12, 13] {
+            _ = try await tool.execute(call: ToolCall(id: "day-\(day)", name: FetchUrlTool.name,
+                argumentsJSON: "{\"url\":\"https://example.com/page?day=\(day)\",\"goal\":\"ok\"}", providerMetadata: nil))
+        }
+        let requests = await client.requestedURLs
+        XCTAssertEqual(requests.count, 2)
+    }
+
+    func testSearchWithGoalReturnsOriginalSourcePassagesInOneCall() async throws {
+        let reader = FetchUrlTool(httpClient: StaticWebToolHTTPClient(body: "<h2>Product policy</h2><p>The warranty covers repairs for two years.</p>"))
+        let tool = WebSearchTool(engine: StaticSearchEngine(results: [
+            SearchResult(title: "Policy", snippet: "Policy details", url: "https://example.com/policy"),
+            SearchResult(title: "Terms", snippet: "Warranty terms", url: "https://example.com/terms"),
+            SearchResult(title: "Other", snippet: "Other", url: "https://example.com/other")
+        ]), reader: reader)
+        let result = try await tool.execute(call: ToolCall(id: "one-round", name: WebSearchTool.name,
+            argumentsJSON: #"{"query":"product warranty","goal":"warranty repairs duration"}"#, providerMetadata: nil))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.content.utf8)) as? [String: Any])
+        let pages = try XCTUnwrap(object["pages"] as? [[String: Any]])
+        XCTAssertEqual(pages.count, 2)
+        XCTAssertTrue(result.content.contains("two years"))
+        XCTAssertEqual(pages[0]["source"] as? String, "https://example.com/policy")
+    }
+
+    func testSearchKeepsOtherEvidenceWhenOneTopSourceFails() async throws {
+        let tool = WebSearchTool(engine: StaticSearchEngine(results: [
+            SearchResult(title: "Unavailable", snippet: "", url: "https://example.com/fail"),
+            SearchResult(title: "Guide", snippet: "", url: "https://example.com/guide")
+        ]), reader: FetchUrlTool(httpClient: URLRoutingWebToolHTTPClient()))
+        let result = try await tool.execute(call: ToolCall(id: "partial", name: WebSearchTool.name,
+            argumentsJSON: #"{"query":"guide","goal":"Odette party"}"#, providerMetadata: nil))
+        XCTAssertFalse(result.isError)
+        XCTAssertTrue(result.content.contains("Odette recommended party details"))
+        XCTAssertTrue(result.content.contains("failure"))
+    }
+
+    func testSessionSkipsEquivalentQueriesAndResetsForEachExecution() async throws {
+        let engine = ScriptedSearchEngine(results: [SearchResult(title: "Cache", snippet: "", url: "https://example.com/cache")])
+        let base = LocalToolRegistry(executors: [WebSearchTool(engine: engine)])
+        let session = base.scopedForExecution()
+        func call(_ id: String, _ query: String) -> ToolCall {
+            ToolCall(id: id, name: WebSearchTool.name, argumentsJSON: "{\"query\":\"\(query)\"}", providerMetadata: nil)
+        }
+        _ = await session.execute(call: call("first", "cache ttl"))
+        let repeated = await session.execute(call: call("second", "ttl cache"))
+        XCTAssertTrue(repeated.content.contains("duplicate_request"))
+        XCTAssertTrue(repeated.content.contains("first"))
+        let initialCount = await engine.calls
+        XCTAssertEqual(initialCount, 1)
+        let fresh = await base.scopedForExecution().execute(call: call("fresh", "cache ttl"))
+        XCTAssertFalse(fresh.content.contains("duplicate_request"))
+        let freshCount = await engine.calls
+        XCTAssertEqual(freshCount, 1) // public response cache is reusable; execution bookkeeping is fresh
+    }
+
+    func testSessionPreservesQuotedPhraseMeaning() async throws {
+        let engine = ScriptedSearchEngine(results: [])
+        let session = LocalToolRegistry(executors: [WebSearchTool(engine: engine)])
+        for (index, query) in [#""cache ttl""#, #""ttl cache""#].enumerated() {
+            let json = String(decoding: try JSONSerialization.data(withJSONObject: ["query": query]), as: UTF8.self)
+            _ = await session.execute(call: ToolCall(id: "phrase-\(index)", name: WebSearchTool.name, argumentsJSON: json, providerMetadata: nil))
+        }
+        let count = await engine.calls
+        XCTAssertEqual(count, 2)
+    }
+
+    func testStalledSearchesStopButNewDocumentEvidenceReopensResearch() async throws {
+        let engine = ScriptedSearchEngine(results: [SearchResult(title: "Source", snippet: "", url: "https://example.com/source")])
+        let session = LocalToolRegistry(executors: [WebSearchTool(engine: engine),
+            FetchUrlTool(httpClient: StaticWebToolHTTPClient(body: "<p>A warranty includes repair for two years.</p>"))])
+        for i in 0 ..< 4 {
+            _ = await session.execute(call: ToolCall(id: "search-\(i)", name: WebSearchTool.name,
+                argumentsJSON: "{\"query\":\"approach \(i)\"}", providerMetadata: nil))
+        }
+        let blocked = await session.execute(call: ToolCall(id: "blocked", name: WebSearchTool.name,
+            argumentsJSON: #"{"query":"new approach"}"#, providerMetadata: nil))
+        XCTAssertTrue(blocked.content.contains("search_no_new_sources"))
+        let count = await engine.calls
+        XCTAssertEqual(count, 4)
+        _ = await session.execute(call: ToolCall(id: "read", name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/source","goal":"warranty"}"#, providerMetadata: nil))
+        let resumed = await session.execute(call: ToolCall(id: "resumed", name: WebSearchTool.name,
+            argumentsJSON: #"{"query":"new approach"}"#, providerMetadata: nil))
+        XCTAssertFalse(resumed.content.contains("search_no_new_sources"))
+        let resumedCount = await engine.calls
+        XCTAssertEqual(resumedCount, 5)
+    }
+
+    func testLongParagraphWindowContinuationDoesNotLoseItsTail() {
+        let text = String(repeating: "a", count: 5000) + "TAIL FACT"
+        let paragraphs = [PageParagraph(index: 0, heading: nil, text: text)]
+        var offset = 0
+        var reconstructed = ""
+        for _ in 0 ..< 10 {
+            let page = RelevantPageReader.window(paragraphs: paragraphs, start: 0, maxCharacters: 1000, startCharacter: offset)
+            reconstructed += page.content
+            guard let next = page.nextCharacter else { break }
+            XCTAssertEqual(page.nextParagraph, 0)
+            XCTAssertGreaterThan(next, offset)
+            offset = next
+        }
+        XCTAssertEqual(reconstructed, text)
+    }
+
+    func testFetchFindsTechnicalFactAtEndOfLongParagraph() async throws {
+        let body = "<h2>Configuration</h2><p>" + String(repeating: "Introduction. ", count: 900)
+            + "The ZetaCache timeout is 42 milliseconds.</p>"
+        let tool = FetchUrlTool(httpClient: StaticWebToolHTTPClient(body: body))
+        let result = try await tool.execute(call: ToolCall(id: "late-fact", name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/docs","goal":"ZetaCache timeout milliseconds"}"#, providerMetadata: nil))
+        XCTAssertTrue(result.content.contains("42 milliseconds"))
+    }
+
+    func testMultilingualReaderRetrievesDistinctiveTerms() {
+        for (goal, evidence) in [
+            ("garantía reparación", "La garantía incluye reparación durante dos años."),
+            ("гарантия ремонт", "Гарантия включает ремонт в течение двух лет."),
+            ("보증 수리", "보증 기간 동안 무료 수리가 가능합니다.")
+        ] {
+            let selection = RelevantPageReader.select(paragraphs: [
+                PageParagraph(index: 0, heading: nil, text: "Unrelated news."),
+                PageParagraph(index: 1, heading: nil, text: evidence)
+            ], goal: goal, maxCharacters: 2000, seedLimit: 1, contextRadius: 0)
+            XCTAssertEqual(selection.content, evidence)
+        }
+    }
+
+    func testHTMLReaderPreservesTechnicalCodeAndDefinitionLists() {
+        let paragraphs = PageParagraphExtractor.extractHTML("""
+        <h4>Timeout</h4><dl><dt>Default</dt><dd>42 milliseconds</dd></dl>
+        <pre>if enabled:\n    timeout = 42</pre>
+        """)
+        XCTAssertTrue(paragraphs.contains { $0.heading == "Timeout" && $0.text.contains("42 milliseconds") })
+        XCTAssertTrue(paragraphs.contains { $0.text.contains("\n    timeout = 42") })
+    }
+
+    func testFetchReadsTextPDFThroughSameGoalReader() async throws {
+        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 300, height: 300))
+        let pdf = renderer.pdfData { context in
+            context.beginPage()
+            ("Product warranty covers two years of repairs." as NSString).draw(at: CGPoint(x: 20, y: 30),
+                withAttributes: [.font: UIFont.systemFont(ofSize: 14)])
+        }
+        let tool = FetchUrlTool(httpClient: BinaryWebToolHTTPClient(data: pdf, contentType: "application/pdf"))
+        let result = try await tool.execute(call: ToolCall(id: "pdf", name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/policy.pdf","goal":"warranty repairs"}"#, providerMetadata: nil))
+        XCTAssertTrue(result.content.contains("two years"))
+        XCTAssertTrue(result.content.contains("PDF page 1"))
+    }
+
+    func testFetchWindowReadsCachedDocumentWithoutAnotherDownload() async throws {
+        let client = RecordingWebToolHTTPClient()
+        let tool = FetchUrlTool(httpClient: client)
+        _ = try await tool.execute(call: ToolCall(id: "first", name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/doc","goal":"unknown wording"}"#, providerMetadata: nil))
+        let window = try await tool.execute(call: ToolCall(id: "window", name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/doc","goal":"inspect","read_mode":"window","start_paragraph":0}"#, providerMetadata: nil))
+        let count = await client.requestedURLs.count
+        XCTAssertEqual(count, 1)
+        XCTAssertTrue(window.content.contains("\"read_mode\":\"window\""))
+        XCTAssertTrue(window.content.contains("ok"))
+    }
+
+    func testSearchReusesDiscoveryWhenGoalChanges() async throws {
+        let engine = ScriptedSearchEngine(results: [SearchResult(title: "Policy", snippet: "", url: "https://example.com/policy")])
+        let tool = WebSearchTool(engine: engine,
+            reader: FetchUrlTool(httpClient: StaticWebToolHTTPClient(body: "<p>The warranty covers repairs for two years. Returns are allowed for 30 days.</p>")))
+        for (id, goal) in [("warranty", "warranty"), ("returns", "returns")] {
+            _ = try await tool.execute(call: ToolCall(id: id, name: WebSearchTool.name,
+                argumentsJSON: "{\"query\":\"product policy\",\"goal\":\"\(goal)\"}", providerMetadata: nil))
+        }
+        let count = await engine.calls
+        XCTAssertEqual(count, 1)
+    }
+
+    func testSessionDoesNotRetryUnavailablePageWithDifferentGoal() async throws {
+        let client = FailingWebToolHTTPClient(statusCode: 404)
+        let session = LocalToolRegistry(executors: [FetchUrlTool(httpClient: client)])
+        _ = await session.execute(call: ToolCall(id: "missing", name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/missing","goal":"pricing"}"#, providerMetadata: nil))
+        let second = await session.execute(call: ToolCall(id: "retry", name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/missing","goal":"details"}"#, providerMetadata: nil))
+        XCTAssertTrue(second.content.contains("source_unavailable_this_execution"))
+        XCTAssertTrue(second.content.contains("missing"))
+        let count = await client.calls
+        XCTAssertEqual(count, 1)
+    }
+
+    func testContentRootRetainsSourceMetadataAndConditions() {
+        let paragraphs = PageParagraphExtractor.extractHTML("""
+        <header>Site menu</header><article>
+        <header>Author: Example. Published 2026-10-13.</header>
+        <h1>New findings</h1><p>The trial showed an improvement.</p>
+        <aside>Condition: this applies only to the measured group.</aside>
+        </article><footer>Global copyright</footer>
+        """)
+        let content = paragraphs.map(\.text).joined(separator: "\n")
+        XCTAssertTrue(content.contains("Published 2026-10-13"))
+        XCTAssertTrue(content.contains("measured group"))
+        XCTAssertFalse(content.contains("Site menu"))
+    }
+
+    func testSourceLinksKeepGenericDeeperLeadsAndExcludeScriptLiterals() async throws {
+        let tool = FetchUrlTool(httpClient: StaticWebToolHTTPClient(body: """
+        <article><p>The report describes the experiment.</p><a href=/full-report>Read more</a></article>
+        <script>let fake = '<a href="https://example.com/fake">experiment</a>';</script>
+        """))
+        let result = try await tool.execute(call: ToolCall(id: "leads", name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/article","goal":"experiment outcomes"}"#, providerMetadata: nil))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.content.utf8)) as? [String: Any])
+        let links = try XCTUnwrap(object["links"] as? [[String: String]])
+        XCTAssertEqual(links, [["title": "Read more", "url": "https://example.com/full-report"]])
+    }
+
+    func testRenderedDocumentIsReusedForFurtherReading() async throws {
+        let loader = await RecordingRenderedPageLoader(result: .success(.loaded(RenderedPageContent(
+            title: "Guide", finalURL: URL(string: "https://example.com/guide")!,
+            paragraphs: [PageParagraph(index: 0, heading: "Policy", text: "Warranty repairs last two years.")]
+        ))))
+        let tool = FetchUrlTool(httpClient: StaticWebToolHTTPClient(body: "<div id=app></div>"), renderedPageLoader: loader)
+        _ = try await tool.execute(call: ToolCall(id: "initial", name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/guide","goal":"warranty"}"#, providerMetadata: nil))
+        let next = try await tool.execute(call: ToolCall(id: "more", name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/guide","goal":"inspect","read_mode":"window"}"#, providerMetadata: nil))
+        let count = await loader.callCount
+        XCTAssertEqual(count, 1)
+        XCTAssertTrue(next.content.contains("Warranty repairs"))
+    }
+
+    func testParallelGoalsShareOneHTTPRetrieval() async throws {
+        let client = RecordingWebToolHTTPClient()
+        let reader = FetchUrlTool(httpClient: client)
+        async let first = reader.execute(call: ToolCall(id: "a", name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/doc","goal":"alpha"}"#, providerMetadata: nil))
+        async let second = reader.execute(call: ToolCall(id: "b", name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/doc","goal":"beta"}"#, providerMetadata: nil))
+        _ = try await (first, second)
+        let count = await client.requestedURLs.count
+        XCTAssertEqual(count, 1)
+    }
+
+    func testEvidenceRecoveryAfterContextLossDoesNotRepeatNetworkWork() async throws {
+        let engine = ScriptedSearchEngine(results: [SearchResult(title: "Policy", snippet: "Repairs for two years", url: "https://example.com/policy")])
+        let session = LocalToolRegistry(executors: [WebSearchTool(engine: engine)])
+        _ = await session.execute(call: ToolCall(id: "original", name: WebSearchTool.name,
+            argumentsJSON: #"{"query":"product policy"}"#, providerMetadata: nil))
+        let restored = await session.execute(call: ToolCall(id: "recover", name: WebSearchTool.name,
+            argumentsJSON: #"{"query":"product policy","recover_cached":true}"#, providerMetadata: nil))
+        XCTAssertTrue(restored.content.contains("cached_evidence_recovered"))
+        XCTAssertTrue(restored.content.contains("Repairs for two years"))
+        XCTAssertEqual(restored.sources.first?.url, "https://example.com/policy")
+        let count = await engine.calls
+        XCTAssertEqual(count, 1)
+    }
+
+    func testLiteralTemplateExamplesAreNeverDiscardedAsMissingContent() {
+        let paragraphs = PageParagraphExtractor.extractHTML("""
+        <article><h2>Template syntax</h2><pre>Hello {{ customer.name }}</pre>
+        <p>Use {% if enabled %} for conditional rendering.</p></article>
+        """)
+        let selected = RelevantPageReader.select(paragraphs: paragraphs, goal: "template syntax customer enabled", maxCharacters: 4000)
+        XCTAssertTrue(selected.content.contains("{{ customer.name }}"))
+        XCTAssertTrue(selected.content.contains("{% if enabled %}"))
+        let window = RelevantPageReader.window(paragraphs: paragraphs, start: 0, maxCharacters: 4000)
+        XCTAssertTrue(window.content.contains("{{ customer.name }}"))
+    }
+
+    func testPlainTextReaderPreservesCodeIndentationAndTabularDelimiters() {
+        let code = "if enabled:\n    timeout = 42"
+        let table = "name\tvalue\tcondition\nExample\t\tunknown"
+        XCTAssertEqual(PageParagraphExtractor.extractPlainText(code).first?.text, code)
+        XCTAssertEqual(PageParagraphExtractor.extractPlainText(table).first?.text, table)
+    }
+
+    func testNonHTMLTextIsNeverDestructivelyParsedAsHTML() async throws {
+        let xml = "<policy><warranty>2 years</warranty><condition>repairs only</condition></policy>"
+        let tool = FetchUrlTool(httpClient: StaticWebToolHTTPClient(body: xml, contentType: "text/xml"))
+        let result = try await tool.execute(call: ToolCall(id: "xml", name: FetchUrlTool.name,
+            argumentsJSON: #"{"url":"https://example.com/policy.xml","goal":"warranty"}"#, providerMetadata: nil))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.content.utf8)) as? [String: Any])
+        XCTAssertEqual(object["content"] as? String, xml)
+        XCTAssertEqual(object["document_format"] as? String, "text")
     }
 
     func testLocaleMapsJapaneseToDuckDuckGoJapanRegion() {
@@ -434,7 +866,7 @@ final class WebSearchToolTests: XCTestCase {
         XCTAssertEqual(renderCallCount, 0)
     }
 
-    func testFetchURLRejectsUnrenderedDynamicPageAsSelectedEvidence() async throws {
+    func testFetchURLRetainsReadableContentWhenUnrelatedTemplateIsUnresolved() async throws {
         let renderedLoader = await RecordingRenderedPageLoader()
         let tool = FetchUrlTool(
             httpClient: StaticWebToolHTTPClient(
@@ -458,11 +890,11 @@ final class WebSearchToolTests: XCTestCase {
         let data = try XCTUnwrap(result.content.data(using: .utf8))
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
-        XCTAssertEqual(object["selection_status"] as? String, "dynamic_content_unavailable")
-        XCTAssertEqual(object["selected_paragraph_count"] as? Int, 0)
-        XCTAssertEqual(object["content"] as? String, "")
-        XCTAssertEqual(object["render_attempted"] as? Bool, true)
-        XCTAssertEqual(object["render_outcome"] as? String, "access_restricted")
+        XCTAssertEqual(object["selection_status"] as? String, "partial_match")
+        XCTAssertEqual(object["selected_paragraph_count"] as? Int, 2)
+        XCTAssertTrue((object["content"] as? String)?.contains("8月22日") == true)
+        XCTAssertTrue((object["content"] as? String)?.contains("{{ content.title }}") == true)
+        XCTAssertEqual(object["render_attempted"] as? Bool, false)
     }
 
     func testFetchURLDoesNotSelectPassagesMissingMostGoalTerms() async throws {
@@ -492,7 +924,7 @@ final class WebSearchToolTests: XCTestCase {
         XCTAssertFalse((object["content"] as? String)?.isEmpty ?? true)
     }
 
-    func testFetchURLUsesRenderedDOMWhenStaticHTMLIsDynamicShell() async throws {
+    func testFetchURLUsesRenderedDOMWhenStaticHTMLHasNoReadableText() async throws {
         let renderedLoader = await RecordingRenderedPageLoader(result: .success(.loaded(
             RenderedPageContent(
                 title: "Rendered Party Guide",
@@ -504,7 +936,7 @@ final class WebSearchToolTests: XCTestCase {
             )
         )))
         let tool = FetchUrlTool(
-            httpClient: StaticWebToolHTTPClient(body: "<title>Loading</title><div id=app>{{ content }}</div>"),
+            httpClient: StaticWebToolHTTPClient(body: "<div id=app></div>"),
             renderedPageLoader: renderedLoader
         )
 
@@ -601,7 +1033,7 @@ final class WebSearchToolTests: XCTestCase {
         XCTAssertNotEqual(content.title, "EXECUTED HANDLER")
     }
 
-    func testFetchURLReportsRenderedTimeoutWithoutDiscardingStaticPartialContent() async throws {
+    func testFetchURLSkipsRenderingReadablePartialContent() async throws {
         let renderedLoader = await RecordingRenderedPageLoader(result: .failure(RenderedPageLoaderError.timedOut))
         let tool = FetchUrlTool(
             httpClient: StaticWebToolHTTPClient(body: "<p>Odette party overview.</p>"),
@@ -618,8 +1050,8 @@ final class WebSearchToolTests: XCTestCase {
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         XCTAssertEqual(object["fetch_method"] as? String, "url_session")
-        XCTAssertEqual(object["render_attempted"] as? Bool, true)
-        XCTAssertEqual(object["render_outcome"] as? String, "timed_out")
+        XCTAssertEqual(object["render_attempted"] as? Bool, false)
+        XCTAssertEqual(object["render_outcome"] as? String, "not_attempted")
         XCTAssertEqual(object["selection_status"] as? String, "partial_match")
         XCTAssertTrue((object["content"] as? String)?.contains("Odette") == true)
     }
@@ -698,7 +1130,9 @@ final class WebSearchToolTests: XCTestCase {
                 providerMetadata: nil
             )
         )
-        XCTAssertEqual(result.content, rawJSON)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.content.utf8)) as? [String: Any])
+        XCTAssertEqual(object["content"] as? String, rawJSON)
+        XCTAssertEqual(object["document_format"] as? String, "json")
         XCTAssertEqual(result.status, .complete)
         XCTAssertEqual(result.provenance?.contentType, "application/json; charset=utf-8")
         XCTAssertEqual(result.provenance?.url, "https://example.com/weather.json")
@@ -722,10 +1156,11 @@ final class WebSearchToolTests: XCTestCase {
         )
 
         XCTAssertFalse(result.isError)
-        XCTAssertEqual(result.content, #"{"title":"Release notes","version":"2.0"}"#)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.content.utf8)) as? [String: Any])
+        XCTAssertEqual(object["content"] as? String, #"{"title":"Release notes","version":"2.0"}"#)
     }
 
-    func testFetchURLMarksLargeJSONInsufficientWithoutPassageExtraction() async throws {
+    func testFetchURLReadsLargeJSONThroughGoalAwarePassages() async throws {
         let rawJSON = #"{"payload":"\#(String(repeating: "x", count: FetchUrlTool.maxCharacters))"}"#
         let tool = FetchUrlTool(
             httpClient: StaticWebToolHTTPClient(body: rawJSON, contentType: "application/json")
@@ -737,10 +1172,11 @@ final class WebSearchToolTests: XCTestCase {
             providerMetadata: nil
         ))
 
-        XCTAssertEqual(result.status, .insufficient)
         XCTAssertFalse(result.isError)
-        XCTAssertFalse(result.content.contains("$.payload"))
-        XCTAssertTrue(result.content.contains("direct-return limit"))
+        XCTAssertTrue(result.content.contains("$.payload"))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.content.utf8)) as? [String: Any])
+        XCTAssertLessThanOrEqual((object["content"] as? String)?.count ?? Int.max, 4000)
+        XCTAssertGreaterThan(object["total_paragraph_count"] as? Int ?? 0, 1)
     }
 
     func testFetchURLReadsJSONFileWithGenericContentType() async throws {
@@ -760,7 +1196,8 @@ final class WebSearchToolTests: XCTestCase {
         )
 
         XCTAssertFalse(result.isError)
-        XCTAssertEqual(result.content, #"{"status":"ok"}"#)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.content.utf8)) as? [String: Any])
+        XCTAssertEqual(object["content"] as? String, #"{"status":"ok"}"#)
     }
 
     func testFetchURLRejectsMalformedJSONWithoutHTMLFallback() async throws {

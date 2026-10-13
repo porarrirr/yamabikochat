@@ -115,13 +115,14 @@ struct ToolActivityStep: Codable, Sendable, Equatable, Identifiable {
 
 struct ToolActivityEvent: Sendable, Equatable {
     enum Phase: Sendable, Equatable {
+        case generating
         case started
         case finished
     }
 
     static func reportsActivity(for name: String) -> Bool {
         [WebSearchTool.name, FetchUrlTool.name, PythonExecuteTool.name,
-         StrReplaceEditorTool.name, GenUITool.name].contains(name)
+         StrReplaceEditorTool.name, GenUITool.name, GenUIReferenceTool.name].contains(name)
     }
 
     var phase: Phase
@@ -175,6 +176,7 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
         var step = Self.step(for: event)
         if let index = steps.firstIndex(where: { $0.id == step.id }) {
             step.round = steps[index].round
+            if event.phase != .finished, step.genUIDocument == nil { step.genUIDocument = steps[index].genUIDocument }
             steps[index] = step
         } else {
             step.round = (steps.map(\.round).max() ?? 0) + 1
@@ -288,7 +290,7 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
             toolName: event.call.name,
             title: title,
             detail: detail,
-            status: event.phase == .started ? .running : (result?.isError == true ? .failed : .completed),
+            status: event.phase != .finished ? .running : (result?.isError == true ? .failed : .completed),
             resultCount: resultCount,
             sources: sources,
             errorMessage: error,
@@ -297,8 +299,10 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
             outputPreview: outputPreview,
             artifactNames: artifactNames?.isEmpty == false ? artifactNames : nil,
             durationMs: durationMs,
-            genUIDocument: isGenUI && event.phase == .finished && result?.isError == false
-                ? result.flatMap { try? GenUIDocument.validated(from: $0.content) } : nil
+            genUIDocument: isGenUI
+                ? (event.phase == .finished
+                   ? (result?.isError == false ? result.flatMap { try? GenUIDocument.validated(from: $0.content) } : nil)
+                   : try? GenUITool.document(from: event.call.argumentsJSON)) : nil
         )
     }
 

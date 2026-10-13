@@ -56,7 +56,7 @@ final class ProviderGateway {
         superGrokAuthRepository: SuperGrokAuthRepository? = nil,
         modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
         openRouterModelService: OpenRouterModelService? = nil,
-        localTools: LocalToolRegistry = LocalToolRegistry(executors: [WebSearchTool(), FetchUrlTool(), PythonExecuteTool(), GenUITool()]),
+        localTools: LocalToolRegistry = LocalToolRegistry(executors: [WebSearchTool(), FetchUrlTool(), PythonExecuteTool(), GenUITool(), GenUIReferenceTool()]),
         localToolFactory: (@Sendable () -> LocalToolRegistry)? = nil,
         projectWorkspaces: ProjectWorkspaceStore = .shared,
         editorWorkspaces: EditorWorkspaceStore = .shared,
@@ -764,11 +764,25 @@ final class ProviderGateway {
             piProvider = "openrouter"
             apiKey = try credential(.openRouter)
             headers = Self.openRouterAttributionHeaders
+        case .sarashina:
+            piProvider = "sarashina"
+            apiKey = try credential(.sarashina)
         case .openAI:
             piProvider = "openai"
             apiKey = try credential(.openAI)
         case .openAICompat:
-            throw ProviderClientError.unsupportedModel(provider: provider.rawValue, model: request.model)
+            guard let preset = settings.openAICompatPresets().first(where: { $0.name.caseInsensitiveCompare(settings.selectedOpenAICompatPreset ?? "") == .orderedSame }),
+                  preset.validationError == nil else {
+                throw ProviderClientError.unsupportedModel(provider: provider.rawValue, model: request.model)
+            }
+            let key = forModelResolution ? "" : try credentialStore.openAICompatAPIKey(name: preset.name)
+            if !forModelResolution && key?.trimmedNonEmpty == nil {
+                throw ProviderClientError.missingCredential(provider.rawValue)
+            }
+            return PiAgentConfiguration(
+                provider: "yamabiko-custom", model: request.model, apiKey: key,
+                customEndpoint: preset, thinkingLevel: preset.reasoningEffort == "off" ? nil : preset.reasoningEffort
+            )
         case .miniMax:
             piProvider = "minimax"
             apiKey = try credential(.miniMax)

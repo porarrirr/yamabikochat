@@ -68,7 +68,6 @@ import com.porarri.yamabikochat.ui.settings.sections.openRouterAdvancedSettingsS
 import com.porarri.yamabikochat.ui.settings.sections.openRouterReasoningSection
 import com.porarri.yamabikochat.AppConstants
 import com.porarri.yamabikochat.R
-import com.porarri.yamabikochat.utils.MiniMaxUtils
 import com.porarri.yamabikochat.utils.ModelUtils
 import com.porarri.yamabikochat.utils.CodexModelPresets
 import com.porarri.yamabikochat.utils.CodexUserAgentUtils
@@ -135,6 +134,7 @@ fun SettingsScreen(
     )
 ) {
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val settings by viewModel.settings.collectAsState()
     val apiKeyStatus by viewModel.apiKeyStatus.collectAsState()
     val presets by viewModel.modelPresets.collectAsState()
@@ -248,6 +248,7 @@ fun SettingsScreen(
         }
     }
 
+    var sarashinaKeyDraft by rememberSaveable { mutableStateOf("") }
     with(state) {
         val dualReasoningStateA = dualReasoningStateA()
         val dualReasoningStateB = dualReasoningStateB()
@@ -436,7 +437,7 @@ fun SettingsScreen(
                         return@let
                     }
                     YamabikoOptionBottomSheet(
-                        title = "OpenAI (Custom) Preset",
+                        title = "カスタムエンドポイント",
                         options = openAiCompatPresetsLocal.map { preset ->
                             YamabikoOption(
                                 key = preset.name,
@@ -450,8 +451,13 @@ fun SettingsScreen(
                                 ?: return@YamabikoOptionBottomSheet
 
                             selectedOpenAiCompatPresetLocal = preset.name
-                            compatPresetName = preset.name
-                            compatPresetBaseUrl = preset.baseUrl
+                            customEndpointDraft = preset
+                            compatContextWindowInput = preset.contextWindow.toString()
+                            compatMaxTokensInput = preset.maxTokens.toString()
+                            compatThinkingBudgetInput = preset.thinkingBudget?.toString().orEmpty()
+                            compatTemperatureInput = preset.temperature?.toString().orEmpty()
+                            model = preset.modelId
+                            providerModels["OPENAI_COMPAT"] = model
                             viewModel.selectOpenAiCompatPreset(preset.name)
 
                             openAiCompatApiKeyInput = ""
@@ -1050,7 +1056,27 @@ fun SettingsScreen(
             }
         }
 
-        if (apiProvider != "CODEX_AUTH" && apiProvider != "SUPERGROK") {
+        if (apiProvider == "SARASHINA") {
+            item {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Sarashina")
+                    listOf("sarashina3-mini", "sarashina3-nano", "sarashina3-guard").forEach { id ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = model == id, onClick = { model = id; providerModels["SARASHINA"] = id })
+                            Text(id)
+                        }
+                    }
+                    Text("テキスト入力専用・最大出力8,000トークン。guardは安全性判定用です。")
+                    OutlinedTextField(value = sarashinaKeyDraft, onValueChange = { sarashinaKeyDraft = it }, label = { Text("Sarashina API Key") }, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
+                    Row {
+                        TextButton(onClick = { viewModel.saveProviderApiKey("SARASHINA", sarashinaKeyDraft); sarashinaKeyDraft = "" }) { Text("APIキーを保存") }
+                        TextButton(onClick = { viewModel.clearApiKey("SARASHINA") }) { Text("APIキーを削除") }
+                    }
+                    TextButton(onClick = { uriHandler.openUri("https://docs.sarashina.ai/") }) { Text("Sarashina API ドキュメント") }
+                }
+            }
+        }
+        if (apiProvider != "CODEX_AUTH" && apiProvider != "SUPERGROK" && apiProvider != "SARASHINA") {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -1120,7 +1146,7 @@ fun SettingsScreen(
                             isOpenRouterProvider -> "OpenRouter API Key"
                             isOpenAiProvider -> "OpenAI API Key"
                             isMiniMaxProvider -> "MiniMax API Key"
-                            isOpenAiCompatProvider -> "OpenAI (Custom) API Key"
+                            isOpenAiCompatProvider -> "Custom Endpoint API Key"
                             isOpenCodeGoProvider -> "OpenCode Go API Key"
                             isClinePassProvider -> "Cline Pass API Key"
                             isAlibabaCodingPlanProvider -> "Alibaba Coding Plan API Key"
@@ -1421,71 +1447,6 @@ fun SettingsScreen(
                 }
             }
         }
-        if (apiProvider == "OPENAI") {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text(
-                            text = "Endpoint",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        YamabikoTextField(
-                            value = openAiBaseUrl,
-                            onValueChange = { openAiBaseUrl = it },
-                            label = { Text("OpenAI Base URL") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-        }
-        if (apiProvider == "MINIMAX") {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text(
-                            text = "MiniMax Endpoint",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            TextButton(onClick = { miniMaxBaseUrl = MiniMaxUtils.INTERNATIONAL_BASE_URL }) {
-                                Text("Global")
-                            }
-                            TextButton(onClick = { miniMaxBaseUrl = MiniMaxUtils.CHINA_BASE_URL }) {
-                                Text("China")
-                            }
-                        }
-                        YamabikoTextField(
-                            value = miniMaxBaseUrl,
-                            onValueChange = { miniMaxBaseUrl = it },
-                            label = { Text("MiniMax Base URL") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-        }
         if (apiProvider == "OPENAI_COMPAT") {
             item {
                 Card(
@@ -1499,7 +1460,7 @@ fun SettingsScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Text(
-                            text = "OpenAI (Custom) Presets",
+                            text = "カスタムエンドポイント",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -1518,34 +1479,82 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            YamabikoTextField(
-                                value = compatPresetName,
-                                onValueChange = { compatPresetName = it },
-                                label = { Text("Preset Name") },
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            YamabikoTextField(
-                                value = compatPresetBaseUrl,
-                                onValueChange = { compatPresetBaseUrl = it },
-                                label = { Text("Base URL") },
-                                modifier = Modifier.weight(1.2f)
-                            )
+                        YamabikoTextField(value = customEndpointDraft.name, onValueChange = { customEndpointDraft = customEndpointDraft.copy(name = it) }, label = { Text("プリセット名") }, modifier = Modifier.fillMaxWidth())
+                        YamabikoTextField(value = customEndpointDraft.baseUrl, onValueChange = { customEndpointDraft = customEndpointDraft.copy(baseUrl = it) }, label = { Text("Base URL") }, modifier = Modifier.fillMaxWidth())
+                        YamabikoTextField(value = customEndpointDraft.modelId, onValueChange = { customEndpointDraft = customEndpointDraft.copy(modelId = it) }, label = { Text("モデルID") }, modifier = Modifier.fillMaxWidth())
+                        Text("APIプロトコル")
+                        listOf("anthropic-messages" to "Anthropic Messages", "openai-completions" to "OpenAI Chat Completions", "openai-responses" to "OpenAI Responses").forEach { (protocol, title) ->
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { customEndpointDraft = customEndpointDraft.copy(protocol = protocol, thinkingBudget = null) }) {
+                                RadioButton(selected = customEndpointDraft.protocol == protocol, onClick = { customEndpointDraft = customEndpointDraft.copy(protocol = protocol, thinkingBudget = null) })
+                                Text(title)
+                            }
                         }
+                        YamabikoTextField(value = compatContextWindowInput, onValueChange = { compatContextWindowInput = it; customEndpointDraft = customEndpointDraft.copy(contextWindow = it.toIntOrNull() ?: 0) }, label = { Text("コンテキスト上限（tokens）") })
+                        YamabikoTextField(value = compatMaxTokensInput, onValueChange = { compatMaxTokensInput = it; customEndpointDraft = customEndpointDraft.copy(maxTokens = it.toIntOrNull() ?: 0) }, label = { Text("最大出力（tokens）") })
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("画像入力に対応", modifier = Modifier.weight(1f))
+                            Switch(checked = customEndpointDraft.vision, onCheckedChange = { customEndpointDraft = customEndpointDraft.copy(vision = it) })
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("ツール呼び出しに対応", modifier = Modifier.weight(1f))
+                            Switch(checked = customEndpointDraft.toolCall, onCheckedChange = { customEndpointDraft = customEndpointDraft.copy(toolCall = it) })
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Reasoningに対応", modifier = Modifier.weight(1f))
+                            Switch(checked = customEndpointDraft.reasoning, onCheckedChange = { customEndpointDraft = customEndpointDraft.copy(reasoning = it, reasoningEffort = if (it) customEndpointDraft.reasoningEffort else "off", thinkingBudget = if (it) customEndpointDraft.thinkingBudget else null) })
+                        }
+                        if (customEndpointDraft.reasoning) {
+                            Text("Reasoning effort")
+                            Row {
+                                listOf("off", "minimal", "low", "medium").forEach { effort ->
+                                    TextButton(onClick = { customEndpointDraft = customEndpointDraft.copy(reasoningEffort = effort) }) { Text(if (customEndpointDraft.reasoningEffort == effort) "✓ $effort" else effort) }
+                                }
+                            }
+                            Row {
+                                listOf("high", "xhigh", "max").forEach { effort ->
+                                    TextButton(onClick = { customEndpointDraft = customEndpointDraft.copy(reasoningEffort = effort) }) { Text(if (customEndpointDraft.reasoningEffort == effort) "✓ $effort" else effort) }
+                                }
+                            }
+                            if (customEndpointDraft.protocol == "anthropic-messages") {
+                                YamabikoTextField(value = compatThinkingBudgetInput, onValueChange = { compatThinkingBudgetInput = it; customEndpointDraft = customEndpointDraft.copy(thinkingBudget = if (it.isBlank()) null else it.toIntOrNull() ?: 0) }, label = { Text("Thinking budget（省略可）") })
+                            }
+                        }
+                        YamabikoTextField(value = compatTemperatureInput, onValueChange = { compatTemperatureInput = it; customEndpointDraft = customEndpointDraft.copy(temperature = if (it.isBlank()) null else it.toDoubleOrNull() ?: Double.NaN) }, label = { Text("Temperature（省略可・0〜2）") })
+                        if (customEndpointDraft.protocol == "openai-completions") {
+                            Row {
+                                listOf("max_completion_tokens", "max_tokens").forEach { field ->
+                                    TextButton(onClick = { customEndpointDraft = customEndpointDraft.copy(maxTokensField = field) }) { Text(if (customEndpointDraft.maxTokensField == field) "✓ $field" else field) }
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("storeパラメーターに対応", modifier = Modifier.weight(1f))
+                                Switch(checked = customEndpointDraft.supportsStore, onCheckedChange = { customEndpointDraft = customEndpointDraft.copy(supportsStore = it) })
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("ストリーム内のusageに対応", modifier = Modifier.weight(1f))
+                                Switch(checked = customEndpointDraft.supportsUsageInStreaming, onCheckedChange = { customEndpointDraft = customEndpointDraft.copy(supportsUsageInStreaming = it) })
+                            }
+                        }
+                        if (customEndpointDraft.protocol != "anthropic-messages") {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("developerロールに対応", modifier = Modifier.weight(1f))
+                                Switch(checked = customEndpointDraft.supportsDeveloperRole, onCheckedChange = { customEndpointDraft = customEndpointDraft.copy(supportsDeveloperRole = it) })
+                            }
+                        }
+                        Text("モデルの仕様に合わせて設定してください。キー不要のローカルサーバーでは任意のダミーキーを入力してください。", style = MaterialTheme.typography.bodySmall)
                         Row {
                             TextButton(onClick = {
-                                if (compatPresetName.isNotBlank() && compatPresetBaseUrl.isNotBlank()) {
-                                    val normalizedName = compatPresetName.trim()
-                                    val normalizedBaseUrl = compatPresetBaseUrl.trim()
-                                    val idx = openAiCompatPresetsLocal.indexOfFirst { it.name.equals(normalizedName, ignoreCase = true) }
-                                    if (idx >= 0) {
-                                        openAiCompatPresetsLocal[idx] = OpenAiCompatPreset(normalizedName, normalizedBaseUrl)
-                                    } else {
-                                        openAiCompatPresetsLocal.add(OpenAiCompatPreset(normalizedName, normalizedBaseUrl))
-                                    }
-                                    selectedOpenAiCompatPresetLocal = normalizedName
-                                    viewModel.addOrUpdateOpenAiCompatPreset(normalizedName, normalizedBaseUrl)
+                                val preset = customEndpointDraft.copy(name = customEndpointDraft.name.trim(), baseUrl = customEndpointDraft.baseUrl.trim(), modelId = customEndpointDraft.modelId.trim())
+                                val error = preset.validationError()
+                                if (error != null) {
+                                    Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                                } else {
+                                    val idx = openAiCompatPresetsLocal.indexOfFirst { it.name.equals(preset.name, ignoreCase = true) }
+                                    if (idx >= 0) openAiCompatPresetsLocal[idx] = preset else openAiCompatPresetsLocal.add(preset)
+                                    selectedOpenAiCompatPresetLocal = preset.name
+                                    model = preset.modelId
+                                    providerModels["OPENAI_COMPAT"] = model
+                                    viewModel.addOrUpdateOpenAiCompatPreset(preset)
                                 }
                             }) { Text("Add/Update Preset") }
                             if (!selected.isNullOrBlank()) {
@@ -2634,7 +2643,7 @@ fun SettingsScreen(
                     }
                 }
             }
-        } else {
+        } else if (apiProvider != "SARASHINA" && apiProvider != "OPENAI_COMPAT") {
             item {
                 val thinkingLabel = when (apiProvider) {
                     "OPENROUTER" -> "Reasoning"

@@ -315,6 +315,14 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
         repository.peekAlibabaMcpAuthorizationToken()
     }
 
+    fun saveProviderApiKey(provider: String, apiKey: String) {
+        viewModelScope.launch {
+            val success = repository.saveApiKey(provider, apiKey.trim().takeIf { it.isNotEmpty() })
+            _secureStorageError.value = if (!success) "APIキーを保存できませんでした。" else null
+            updateApiKeyStatus()
+        }
+    }
+
     fun clearApiKey(provider: String) {
         viewModelScope.launch {
             val success = repository.saveApiKey(provider, null)
@@ -390,8 +398,6 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
             } ?: updatedSettingsBase.openAiCompatPresets
 
             val updatedSettings = updatedSettingsBase.copy(
-                openAiBaseUrl = request.openAiBaseUrl,
-                miniMaxBaseUrl = request.miniMaxBaseUrl,
                 openAiCompatPresets = compatJson,
                 selectedOpenAiCompatPreset = request.selectedOpenAiCompatPreset
                     ?: updatedSettingsBase.selectedOpenAiCompatPreset,
@@ -576,13 +582,15 @@ class SettingsViewModel(private val repository: ChatRepository) : ViewModel() {
     }
 
     // --- OpenAI-compatible preset helpers ---
-    fun addOrUpdateOpenAiCompatPreset(name: String, baseUrl: String) {
+    fun addOrUpdateOpenAiCompatPreset(preset: com.porarri.yamabikochat.data.remote.OpenAiCompatPreset) {
+        if (preset.validationError() != null) return
+        val name = preset.name
         viewModelScope.launch {
             val current = settings.value ?: Settings()
             val list = current.getOpenAiCompatPresetsList().toMutableList()
             val idx = list.indexOfFirst { it.name.equals(name, ignoreCase = true) }
-            if (idx >= 0) list[idx] = com.porarri.yamabikochat.data.remote.OpenAiCompatPreset(name, baseUrl)
-            else list.add(com.porarri.yamabikochat.data.remote.OpenAiCompatPreset(name, baseUrl))
+            if (idx >= 0) list[idx] = preset
+            else list.add(preset)
             val json = com.google.gson.Gson().toJson(list)
             repository.saveSettings(current.copy(openAiCompatPresets = json, selectedOpenAiCompatPreset = name))
         }

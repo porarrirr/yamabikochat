@@ -267,7 +267,8 @@ private final class WKRenderedPageSession: NSObject, WKNavigationDelegate {
 
     private func makeLoadedResult(_ payload: DOMExtractionPayload) throws -> RenderedPageLoadResult {
         let finalURL = sourceURL
-        let paragraphs = payload.paragraphs.enumerated().compactMap { offset, item -> PageParagraph? in
+        let extracted = payload.html.map(PageParagraphExtractor.extractHTML) ?? []
+        let paragraphs = !extracted.isEmpty ? extracted : payload.paragraphs.enumerated().compactMap { offset, item -> PageParagraph? in
             guard let text = item.text.trimmedNonEmpty else { return nil }
             return PageParagraph(
                 index: offset,
@@ -304,6 +305,7 @@ private final class WKRenderedPageSession: NSObject, WKNavigationDelegate {
         }
 
         let title: String?
+        let html: String?
         let url: String
         let restriction: String?
         let signature: String
@@ -366,6 +368,7 @@ private final class WKRenderedPageSession: NSObject, WKNavigationDelegate {
       const combined = paragraphs.map(item => item.text).join('\n');
       return JSON.stringify({
         title: normalize(document.title) || null,
+        html: root.outerHTML,
         url: document.location.href,
         restriction,
         signature: `${paragraphs.length}:${combined.length}:${combined.slice(-200)}`,

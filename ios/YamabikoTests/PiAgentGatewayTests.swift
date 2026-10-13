@@ -109,6 +109,48 @@ private final class ThrowingPiStreamSpy: @unchecked Sendable {
 }
 
 final class PiAgentGatewayTests: XCTestCase {
+    func testCustomEndpointUsesExplicitConfigurationAndPresetCredential() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let repository = SettingsRepository(dbQueue: database)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.setOpenAICompatAPIKey(name: "Custom", value: "custom-key")
+        let pi = PiStreamSpy()
+        let gateway = ProviderGateway(settingsRepository: repository, credentialStore: credentials, piStream: pi.stream)
+        for api in ["anthropic-messages", "openai-completions", "openai-responses"] {
+            var preset = OpenAICompatPreset(name: "Custom", baseURL: "https://private.example/v1")
+            preset.apiProtocol = api
+            preset.modelId = "custom-model"
+            preset.reasoning = true
+            preset.reasoningEffort = "high"
+            var settings = try repository.load()
+            settings.openAICompatPresetsJSON = String(decoding: try JSONEncoder().encode([preset]), as: UTF8.self)
+            settings.selectedOpenAICompatPreset = "Custom"
+            try repository.save(settings)
+            _ = try await gateway.generate(request: ProviderRequest(model: "custom-model", messages: []), provider: .openAICompat)
+            XCTAssertEqual(pi.calls.last?.configuration.provider, "yamabiko-custom")
+            XCTAssertEqual(pi.calls.last?.configuration.customEndpoint, preset)
+            XCTAssertEqual(pi.calls.last?.configuration.apiKey, "custom-key")
+            XCTAssertEqual(pi.calls.last?.configuration.thinkingLevel, "high")
+            XCTAssertNil(pi.calls.last?.configuration.catalogContract)
+        }
+    }
+
+    func testSarashinaUsesPiWithDedicatedCredential() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.setCredential("sarashina-key", for: .sarashina)
+        let pi = PiStreamSpy()
+        let gateway = ProviderGateway(settingsRepository: SettingsRepository(dbQueue: database), credentialStore: credentials, piStream: pi.stream)
+        for id in ["sarashina3-mini", "sarashina3-nano", "sarashina3-guard"] {
+            _ = try await gateway.generate(request: ProviderRequest(model: id, messages: []), provider: .sarashina)
+            XCTAssertEqual(pi.calls.last?.configuration.provider, "sarashina")
+            XCTAssertEqual(pi.calls.last?.configuration.model, id)
+            XCTAssertEqual(pi.calls.last?.configuration.apiKey, "sarashina-key")
+        }
+    }
+
     func testPCCUsesPiAndMapsAllReasoningLevelsWithoutCredentials() async throws {
         let database = try DatabaseQueue()
         try AppDatabase.migrator.migrate(database)

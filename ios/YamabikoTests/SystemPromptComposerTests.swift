@@ -82,12 +82,12 @@ final class SystemPromptComposerTests: XCTestCase {
         )
 
         XCTAssertTrue(composed?.contains("You have access to web_search and fetch_url.") == true)
-        XCTAssertTrue(composed?.contains("Search agentically when the task requires investigation:") == true)
-        XCTAssertTrue(composed?.contains("Start with a broad search") == true)
-        XCTAssertTrue(composed?.contains("Read titles and snippets") == true)
-        XCTAssertTrue(composed?.contains("fetch_url(url, goal)") == true)
-        XCTAssertTrue(composed?.contains("superficial wording changes") == true)
-        XCTAssertTrue(composed?.contains("Format every source as a descriptive Markdown link") == true)
+        XCTAssertTrue(composed?.contains("Work from evidence toward an answer:") == true)
+        XCTAssertTrue(composed?.contains("Start with a focused search") == true)
+        XCTAssertTrue(composed?.contains("Supply goal to web_search") == true)
+        XCTAssertTrue(composed?.contains("Table rows include column labels") == true)
+        XCTAssertTrue(composed?.contains("Read research_progress and research_status") == true)
+        XCTAssertTrue(composed?.contains("Cite only sources actually used with a descriptive Markdown link") == true)
         XCTAssertTrue(composed?.contains("Never expose a bare URL") == true)
         XCTAssertTrue(composed?.hasSuffix("Today's date: 2026/06/27") == true)
     }

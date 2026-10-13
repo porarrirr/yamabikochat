@@ -5,7 +5,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 object AppDatabaseMigrations {
     private const val LEGACY_TARGET_VERSION = 27
-    private const val LATEST_VERSION = 57
+    private const val LATEST_VERSION = 58
 
     private val legacyRebuildMigrations: List<Migration> = (1 until LEGACY_TARGET_VERSION).map { startVersion ->
         object : Migration(startVersion, LEGACY_TARGET_VERSION) {
@@ -420,6 +420,37 @@ object AppDatabaseMigrations {
         }
     }
 
+    private val migration57To58 = object : Migration(57, 58) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            val removed = setOf("openAiBaseUrl", "miniMaxBaseUrl")
+            val retained = mutableListOf<String>()
+            var hasLegacyColumns = false
+            db.query("PRAGMA table_info(`settings`)").use { cursor ->
+                while (cursor.moveToNext()) {
+                    val name = cursor.getString(cursor.getColumnIndexOrThrow("name"))
+                    if (name in removed) hasLegacyColumns = true else retained.add(name)
+                }
+            }
+            if (!hasLegacyColumns) return
+            val schema = db.query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'settings'").use { cursor ->
+                check(cursor.moveToFirst()) { "Missing settings schema" }
+                cursor.getString(0)
+            }
+            val withoutLegacy = schema.replace(
+                Regex("""(?i),\s*[`"\[]?(?:openAiBaseUrl|miniMaxBaseUrl)[`"\]]?\s+TEXT\b(?:[^,'()]|'(?:''|[^'])*')*"""), ""
+            ).replaceFirst(
+                Regex("""(?i)CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[`"\[]?settings[`"\]]?"""),
+                "CREATE TABLE `settings_without_legacy`"
+            )
+            check(withoutLegacy != schema) { "Could not remove legacy endpoint columns" }
+            db.execSQL(withoutLegacy)
+            val columns = retained.joinToString(",") { "`$it`" }
+            db.execSQL("INSERT INTO `settings_without_legacy` ($columns) SELECT $columns FROM `settings`")
+            db.execSQL("DROP TABLE `settings`")
+            db.execSQL("ALTER TABLE `settings_without_legacy` RENAME TO `settings`")
+        }
+    }
+
     val ALL_MIGRATIONS: Array<Migration> =
         (legacyRebuildMigrations + listOf(
             migration27To28,
@@ -451,7 +482,8 @@ object AppDatabaseMigrations {
             migration53To54,
             migration54To55,
             migration55To56,
-            migration56To57
+            migration56To57,
+            migration57To58
         )).toTypedArray()
 
     private fun rebuildSchema(db: SupportSQLiteDatabase) {
@@ -687,8 +719,6 @@ object AppDatabaseMigrations {
                 `providerSelectionMax` INTEGER NOT NULL DEFAULT 12,
                 `providerSort` TEXT NOT NULL DEFAULT 'price',
                 `providerDefaultModels` TEXT NOT NULL DEFAULT '',
-                `openAiBaseUrl` TEXT NOT NULL DEFAULT 'https://api.openai.com/v1/',
-                `miniMaxBaseUrl` TEXT NOT NULL DEFAULT 'https://api.minimax.io/v1/',
                 `openAiCompatPresets` TEXT NOT NULL DEFAULT '',
                 `selectedOpenAiCompatPreset` TEXT,
                 `alibabaMcpEnabled` INTEGER NOT NULL DEFAULT 0,
@@ -849,8 +879,6 @@ object AppDatabaseMigrations {
             Column("providerSelectionMax", "INTEGER", notNull = true, defaultValue = "12"),
             Column("providerSort", "TEXT", notNull = true, defaultValue = "'price'"),
             Column("providerDefaultModels", "TEXT", notNull = true, defaultValue = "''"),
-            Column("openAiBaseUrl", "TEXT", notNull = true, defaultValue = "'https://api.openai.com/v1/'"),
-            Column("miniMaxBaseUrl", "TEXT", notNull = true, defaultValue = "'https://api.minimax.io/v1/'"),
             Column("openAiCompatPresets", "TEXT", notNull = true, defaultValue = "''"),
             Column("selectedOpenAiCompatPreset", "TEXT"),
             Column("alibabaMcpEnabled", "INTEGER", notNull = true, defaultValue = "0"),

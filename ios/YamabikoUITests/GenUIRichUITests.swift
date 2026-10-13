@@ -3,6 +3,105 @@ import XCTest
 final class GenUIRichUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
+    func testOriginalComponentsRunInConversation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppStoreScreenshotDemo", "-GenUIRichFixture", "-GenUIOriginalFixture", "-ScreenshotScene", "chat", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["1:30"].firstMatch.waitForExistence(timeout: 20))
+        for _ in 0..<4 where !app.staticTexts["36"].firstMatch.exists { app.collectionViews["chat-timeline"].swipeDown() }
+        capture("genui-original-initial")
+        XCTAssertTrue(app.staticTexts["36"].firstMatch.exists, app.debugDescription)
+        let play = app.buttons["▶"].firstMatch
+        reveal(play, in: app)
+        play.tap()
+        XCTAssertTrue(app.buttons["⏸︎"].firstMatch.waitForExistence(timeout: 5))
+        app.buttons["⏸︎"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["09:00"].firstMatch.exists)
+        capture("genui-original-components")
+        let more = app.buttons["Show 2 more"].firstMatch
+        reveal(more, in: app)
+        more.tap()
+        XCTAssertTrue(app.staticTexts["現地の連絡先"].firstMatch.waitForExistence(timeout: 5))
+        capture("genui-original-checklist")
+        app.terminate()
+        app.launchArguments.append("-GenUIDarkFixture")
+        app.launch()
+        XCTAssertTrue(app.staticTexts["1:30"].firstMatch.waitForExistence(timeout: 20))
+        capture("genui-original-dark")
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "could not be rendered")).firstMatch.exists)
+    }
+
+    func testReferenceCompositionUpdatesAndFlipsLearningCard() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppStoreScreenshotDemo", "-GenUIRichFixture", "-GenUIReferenceFixture", "-ScreenshotScene", "chat", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        app.launch()
+        XCTAssertTrue(app.webViews["genui-rich-canvas"].firstMatch.waitForExistence(timeout: 20))
+        let canvas = app.webViews["genui-rich-canvas"].firstMatch
+        let cell = app.collectionViews["chat-timeline"].cells.firstMatch
+        let income = app.sliders["手取り収入"].firstMatch
+        reveal(income, in: app)
+        XCTAssertTrue(app.staticTexts["125,000円"].firstMatch.exists)
+        XCTAssertGreaterThanOrEqual(cell.frame.height, canvas.frame.height)
+        capture("genui-reference-controls")
+        income.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: income.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5)))
+        XCTAssertFalse(app.staticTexts["125,000円"].firstMatch.exists)
+        let learn = app.descendants(matching: .any).matching(identifier: "考え方").firstMatch
+        reveal(learn, in: app)
+        learn.tap()
+        let question = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "貯蓄に回せる金額は？")).firstMatch
+        reveal(question, in: app)
+        question.tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "収入 − 住居費 − その他の支出")).firstMatch.waitForExistence(timeout: 5))
+        capture("genui-reference-learning")
+        app.terminate()
+        app.launchArguments.append("-GenUIDarkFixture")
+        app.launch()
+        XCTAssertTrue(app.webViews["genui-rich-canvas"].firstMatch.waitForExistence(timeout: 20))
+        let darkLearn = app.descendants(matching: .any).matching(identifier: "考え方").firstMatch
+        reveal(darkLearn, in: app)
+        darkLearn.tap()
+        let darkCard = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "貯蓄に回せる金額は？")).firstMatch
+        reveal(darkCard, in: app)
+        capture("genui-reference-dark")
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "GenUI error")).firstMatch.exists)
+    }
+
+    func testFlowDiagramAndSimulator() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppStoreScreenshotDemo", "-GenUIRichFixture", "-GenUIFlowFixture", "-ScreenshotScene", "chat", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        app.launch()
+        XCTAssertTrue(app.webViews["genui-rich-canvas"].firstMatch.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["取引データを収集"].firstMatch.waitForExistence(timeout: 10))
+        let no = app.staticTexts["いいえ"].firstMatch
+        let yes = app.staticTexts["はい"].firstMatch
+        XCTAssertTrue(no.exists && yes.exists)
+        XCTAssertLessThan(abs(no.frame.minY - yes.frame.minY), 8)
+        XCTAssertLessThan(no.frame.maxX, yes.frame.minX)
+        app.swipeDown()
+        app.swipeDown()
+        capture("genui-flow-diagram")
+
+        // Test the same simulator code in a short document so WebKit's offscreen
+        // accessibility coordinates cannot redirect a drag to the chat drawer.
+        app.terminate()
+        app.launchArguments.append("-GenUISimulatorFixture")
+        app.launch()
+        let slider = app.sliders["難易度"].firstMatch
+        XCTAssertTrue(slider.waitForExistence(timeout: 20))
+        slider.coordinate(withNormalizedOffset: CGVector(dx: 0.33, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: slider.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)))
+        XCTAssertTrue(app.staticTexts["平均試行回数"].firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["16回"].exists)
+        app.swipeUp()
+        let reset = app.buttons["初期値に戻す"].firstMatch
+        XCTAssertTrue(reset.waitForExistence(timeout: 5))
+        reveal(reset, in: app)
+        reset.tap()
+        XCTAssertTrue(app.staticTexts["16回"].waitForExistence(timeout: 5))
+        capture("genui-flow-simulator")
+    }
+
     func testCompactCoinInputsAndReferenceHaveNoOversizedWhitespace() {
         let app = XCUIApplication()
         app.launchArguments = ["-AppStoreScreenshotDemo", "-GenUIRichFixture", "-GenUICompactFixture", "-ScreenshotScene", "chat", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
@@ -15,15 +114,18 @@ final class GenUIRichUITests: XCTestCase {
         XCTAssertTrue(second.waitForExistence(timeout: 5))
         XCTAssertLessThan(abs(second.frame.minY - first.frame.minY), 70)
         XCTAssertGreaterThanOrEqual(first.frame.height, 44)
-        first.tap()
-        first.typeText("12")
+        first.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        first.typeText(XCUIKeyboardKey.delete.rawValue + "12")
+        app.swipeDown()
         XCTAssertTrue(app.staticTexts["合計 12枚"].waitForExistence(timeout: 5))
         app.swipeDown() // Dismiss keyboard before capturing the content-sized card.
         let reference = app.buttons["日本銀行「通貨流通高」"].firstMatch
         reveal(reference, in: app)
         let description = app.staticTexts["日本銀行のページで硬貨の種類別データを確認できます。"].firstMatch
         XCTAssertLessThan(reference.frame.minY - description.frame.maxY, 30)
-        XCTAssertLessThanOrEqual(canvas.frame.height, 560)
+        // Content-measured documents are not limited to a fixed canvas height.
+        // Their full drawing and hit area must belong to the collection cell.
+        XCTAssertGreaterThanOrEqual(app.collectionViews["chat-timeline"].cells.firstMatch.frame.height, canvas.frame.height)
         capture("genui-compact-inputs-and-reference")
     }
 
@@ -133,8 +235,14 @@ final class GenUIRichUITests: XCTestCase {
                 return
             }
             let movingDown = element.exists && frame.midY <= top
-            canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: movingDown ? 0.4 : 0.7))
-                .press(forDuration: 0.05, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: movingDown ? 0.7 : 0.4)))
+            // A content-sized web view can extend beyond the screen. Swipe only
+            // within its visible intersection, away from horizontal controls.
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let x = min(app.frame.maxX - 24, canvas.frame.maxX - 24) - app.frame.minX
+            let startY = top + (bottom - top) * (movingDown ? 0.3 : 0.75)
+            let endY = top + (bottom - top) * (movingDown ? 0.75 : 0.3)
+            origin.withOffset(CGVector(dx: x, dy: startY - app.frame.minY))
+                .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: x, dy: endY - app.frame.minY)))
         }
         XCTAssertTrue(element.isHittable, "GenUI element must be hittable after scrolling")
         Thread.sleep(forTimeInterval: 1)

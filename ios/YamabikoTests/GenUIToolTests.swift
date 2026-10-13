@@ -34,7 +34,7 @@ final class GenUIToolTests: XCTestCase {
         let fields = try XCTUnwrap(items["properties"] as? [String: Any])
         let chartType = try XCTUnwrap(fields["chartType"] as? [String: Any])
         XCTAssertEqual(chartType["enum"] as? [String], ["line", "pie"])
-        XCTAssertTrue(GenUITool.definition.description.contains("IDs/titles do not select chart type"))
+        XCTAssertTrue(GenUITool.definition.description.contains("Do not infer chart type from IDs/titles"))
     }
 
     func testExplicitPieChartAndLegacyLineDefault() async throws {

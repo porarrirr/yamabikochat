@@ -323,18 +323,12 @@
 "Max price (USD / 1M tokens, 0=unlimited)" = "Precio maximo (USD / 1M tokens, 0=ilimitado)";
 "Max reasoning tokens (0=auto)" = "Tokens maximos de razonamiento (0=automatico)";
 "medium" = "medio";
-"MiniMax Base URL" = "URL base de MiniMax";
-"MiniMax Endpoint" = "Endpoint de MiniMax";
 "Model A" = "Modelo A";
 "Model B" = "Modelo B";
 "Model" = "Modelo";
 "none" = "ninguno";
 "OAuth Client ID" = "ID de cliente OAuth";
-"OpenAI (Custom) Presets" = "Presets de OpenAI (personalizados)";
-"OpenAI Base URL" = "URL base de OpenAI";
-"OpenAI Endpoint" = "Endpoint de OpenAI";
 "persistent" = "persistente";
-"Preset Base URL" = "URL base del preset";
 "Preset Name" = "Nombre del preset";
 "Preset name" = "Nombre del preset";
 "price" = "precio";

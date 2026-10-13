@@ -157,12 +157,23 @@ class ProviderGateway(
                 headers["HTTP-Referer"] = "https://yamabikochat.app"
                 headers["X-Title"] = "YamabikoChat Android"
             }
+            LLMProvider.SARASHINA -> {
+                piProvider = "sarashina"
+                apiKey = credential(provider)
+            }
             LLMProvider.OPENAI -> {
                 piProvider = "openai"
                 apiKey = credential(provider)
             }
             LLMProvider.OPENAI_COMPAT -> {
-                throw ProviderClientError.UnsupportedModel(provider.rawValue, request.model)
+                val preset = settings.getOpenAiCompatPresetsList().firstOrNull {
+                    it.name.equals(settings.selectedOpenAiCompatPreset, ignoreCase = true)
+                } ?: throw ProviderClientError.UnsupportedModel(provider.rawValue, request.model)
+                if (preset.validationError() != null) throw ProviderClientError.UnsupportedModel(provider.rawValue, request.model)
+                val key = securePreferences.getCustomApiKey(preset.name)
+                    ?.takeIf { it.isNotBlank() } ?: throw ProviderClientError.MissingCredential(provider.rawValue)
+                return PiAgentConfiguration(provider = "yamabiko-custom", model = request.model, apiKey = key,
+                    customEndpoint = preset, thinkingLevel = preset.reasoningEffort.takeUnless { it == "off" })
             }
             LLMProvider.MINIMAX -> {
                 piProvider = "minimax"
@@ -282,6 +293,7 @@ class ProviderGateway(
             LLMProvider.OPENROUTER -> securePreferences.getOpenRouterApiKey()
             LLMProvider.OPENAI -> securePreferences.getOpenAiApiKey()
             LLMProvider.MINIMAX -> securePreferences.getMiniMaxApiKey()
+            LLMProvider.SARASHINA -> securePreferences.readSecret("SARASHINA")
             LLMProvider.ZAI -> securePreferences.getZaiApiKey()
             LLMProvider.CLINEPASS -> securePreferences.getClinePassApiKey()
             LLMProvider.ALIBABA_CODING_PLAN -> securePreferences.getAlibabaCodingPlanApiKey()

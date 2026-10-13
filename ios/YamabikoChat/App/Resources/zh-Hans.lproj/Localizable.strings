@@ -323,18 +323,12 @@
 "Max price (USD / 1M tokens, 0=unlimited)" = "最高价格（USD / 100万 tokens，0=无限）";
 "Max reasoning tokens (0=auto)" = "最大推理 tokens（0=自动）";
 "medium" = "中";
-"MiniMax Base URL" = "MiniMax 基础 URL";
-"MiniMax Endpoint" = "MiniMax 端点";
 "Model A" = "模型 A";
 "Model B" = "模型 B";
 "Model" = "模型";
 "none" = "无";
 "OAuth Client ID" = "OAuth 客户端 ID";
-"OpenAI (Custom) Presets" = "OpenAI（自定义）预设";
-"OpenAI Base URL" = "OpenAI 基础 URL";
-"OpenAI Endpoint" = "OpenAI 端点";
 "persistent" = "持久";
-"Preset Base URL" = "预设基础 URL";
 "Preset Name" = "预设名称";
 "Preset name" = "预设名称";
 "price" = "价格";

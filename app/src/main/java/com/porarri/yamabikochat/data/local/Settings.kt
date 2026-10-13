@@ -8,7 +8,6 @@ import com.porarri.yamabikochat.data.remote.OpenCodeGoEndpointKind
 import com.porarri.yamabikochat.data.remote.OpenCodeGoModelCatalog
 import com.porarri.yamabikochat.data.remote.ProviderCatalog
 import com.porarri.yamabikochat.utils.CodexModelPresets
-import com.porarri.yamabikochat.utils.MiniMaxUtils
 import com.porarri.yamabikochat.utils.ModelUtils
 
 @Entity(tableName = "settings")
@@ -154,12 +153,6 @@ data class Settings(
     val providerSort: String = "price",
     val providerDefaultModels: String = "",
 
-    // OpenAI base URL (override allowed)
-    val openAiBaseUrl: String = "https://api.openai.com/v1/",
-
-    // MiniMax base URL (OpenAI-compatible)
-    val miniMaxBaseUrl: String = MiniMaxUtils.INTERNATIONAL_BASE_URL,
-
     // OpenAI-compatible endpoint presets (JSON list of OpenAiCompatPreset)     
     val openAiCompatPresets: String = "",
     val selectedOpenAiCompatPreset: String? = null,
@@ -211,7 +204,11 @@ data class Settings(
         val normalizedProviderModels = providerModelMap().toMutableMap().apply {
             this["ZAI"]?.let { this["ZAI"] = ProviderCatalog.migrateLegacyModelId("ZAI", it) }
         }
+        val customPresets = getOpenAiCompatPresetsList()
+        val retainedPresets = customPresets.filter { !it.protocol.isNullOrBlank() }
         return copy(
+            openAiCompatPresets = if (retainedPresets.size != customPresets.size) gson.toJson(retainedPresets) else openAiCompatPresets,
+            selectedOpenAiCompatPreset = selectedOpenAiCompatPreset?.takeIf { selected -> retainedPresets.any { it.name.equals(selected, ignoreCase = true) } },
             isDualModeEnabled = dual,
             isAutoConversationEnabled = auto,
             isFusionModeEnabled = fusion,
@@ -808,11 +805,6 @@ data class Settings(
     fun resolveSelectedSystemPromptPreset(): SystemPromptPreset? {
         val selected = selectedSystemPromptPreset ?: return null
         return getSystemPromptPresetsList().firstOrNull { it.name.equals(selected, ignoreCase = true) }
-    }
-
-    fun resolveSelectedCompatBaseUrl(): String? {
-        val sel = selectedOpenAiCompatPreset ?: return null
-        return getOpenAiCompatPresetsList().firstOrNull { it.name.equals(sel, ignoreCase = true) }?.baseUrl
     }
 
     fun resolvedAlibabaMcpServerUrl(): String? {

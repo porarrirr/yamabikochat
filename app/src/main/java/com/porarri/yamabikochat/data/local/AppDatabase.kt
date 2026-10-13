@@ -23,7 +23,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AutoConversationMessage::class,
         TokenUsageRecord::class
     ],
-    version = 57,
+    version = 58,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

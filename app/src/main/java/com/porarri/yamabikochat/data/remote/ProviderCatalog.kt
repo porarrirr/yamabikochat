@@ -18,8 +18,6 @@ object ProviderCatalog {
     const val CODEX_AUTH = "CODEX_AUTH"
     const val OPENAI_COMPAT = "OPENAI_COMPAT"
 
-    const val defaultOpenAiBaseUrl = "https://api.openai.com/v1/"
-    const val defaultMiniMaxBaseUrl = "https://api.minimax.io/v1/"
     const val defaultOpenCodeGoBaseUrl = "https://opencode.ai/zen/go/v1/"
     const val defaultSuperGrokBaseUrl = "https://api.x.ai/v1/"
     const val defaultClinePassBaseUrl = "https://api.cline.bot/api/v1/"
@@ -39,7 +37,8 @@ object ProviderCatalog {
         ProviderDisplay(MINIMAX, "MiniMax"),
         ProviderDisplay(OPENAI, "OpenAI"),
         ProviderDisplay(CODEX_AUTH, "ChatGPT plan"),
-        ProviderDisplay(OPENAI_COMPAT, "OpenAI (Custom)")
+        ProviderDisplay(OPENAI_COMPAT, "Custom Endpoint"),
+        ProviderDisplay("SARASHINA", "Sarashina")
     )
 
     val dualAutoConversationOptions: List<ProviderDisplay> = options
@@ -59,6 +58,7 @@ object ProviderCatalog {
         MINIMAX -> "MiniMax-M2.1"
         OPENAI -> "gpt-4.1-mini"
         CODEX_AUTH -> com.porarri.yamabikochat.utils.CodexModelPresets.defaultModel()
+        "SARASHINA" -> "sarashina3-mini"
         OPENAI_COMPAT -> ""
         OPENROUTER -> "deepseek/deepseek-chat"
         else -> ""

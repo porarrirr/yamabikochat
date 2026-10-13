@@ -25,7 +25,6 @@ import com.porarri.yamabikochat.ui.settings.sections.ReasoningOverrideUiState
 import com.porarri.yamabikochat.ui.settings.sections.ThinkingOverrideUiState
 import com.porarri.yamabikochat.ui.settings.sections.ToolingOverrideUiState
 import com.porarri.yamabikochat.ui.theme.ThemeColorPreset
-import com.porarri.yamabikochat.utils.MiniMaxUtils
 import com.porarri.yamabikochat.utils.CodexModelPresets
 import com.porarri.yamabikochat.utils.ModelUtils
 import kotlin.math.roundToInt
@@ -116,10 +115,11 @@ class SettingsScreenState(
     var alibabaMcpTokenDirty by mutableStateOf(false)
 
     // OpenAI base URL & OpenAI-compatible preset editing
-    var openAiBaseUrl by mutableStateOf("https://api.openai.com/v1/")
-    var miniMaxBaseUrl by mutableStateOf(MiniMaxUtils.INTERNATIONAL_BASE_URL)
-    var compatPresetName by mutableStateOf("")
-    var compatPresetBaseUrl by mutableStateOf("")
+    var customEndpointDraft by mutableStateOf(OpenAiCompatPreset("", ""))
+    var compatContextWindowInput by mutableStateOf("128000")
+    var compatMaxTokensInput by mutableStateOf("8192")
+    var compatThinkingBudgetInput by mutableStateOf("")
+    var compatTemperatureInput by mutableStateOf("")
     val openAiCompatPresetsLocal = mutableStateListOf<OpenAiCompatPreset>()     
     var selectedOpenAiCompatPresetLocal by mutableStateOf<String?>(null)
     var alibabaMcpEnabled by mutableStateOf(false)
@@ -524,6 +524,11 @@ class SettingsScreenState(
             openAiCompatPresetsLocal.clear()
             openAiCompatPresetsLocal.addAll(settingsState.getOpenAiCompatPresetsList())
             selectedOpenAiCompatPresetLocal = settingsState.selectedOpenAiCompatPreset
+            customEndpointDraft = openAiCompatPresetsLocal.firstOrNull { it.name == selectedOpenAiCompatPresetLocal } ?: OpenAiCompatPreset("", "")
+            compatContextWindowInput = customEndpointDraft.contextWindow.toString()
+            compatMaxTokensInput = customEndpointDraft.maxTokens.toString()
+            compatThinkingBudgetInput = customEndpointDraft.thinkingBudget?.toString().orEmpty()
+            compatTemperatureInput = customEndpointDraft.temperature?.toString().orEmpty()
 
             // API鍵の入力状態をリセット（セキュア表示の都度読み込み）
             apiKeyInput = ""
@@ -631,8 +636,6 @@ class SettingsScreenState(
             requireParameters = settingsState.requireParameters
             providerSelectionMax = settingsState.providerSelectionMax
             providerSort = settingsState.providerSort
-            openAiBaseUrl = settingsState.openAiBaseUrl.ifBlank { "https://api.openai.com/v1/" }
-            miniMaxBaseUrl = settingsState.miniMaxBaseUrl.ifBlank { MiniMaxUtils.INTERNATIONAL_BASE_URL }
             alibabaMcpEnabled = settingsState.alibabaMcpEnabled
             alibabaMcpServerUrl = settingsState.alibabaMcpServerUrl
             alibabaMcpServerName = settingsState.alibabaMcpServerName.ifBlank {
@@ -1043,8 +1046,6 @@ class SettingsScreenState(
             requireParameters = requireParameters,
             providerSelectionMax = providerSelectionMax,
             providerSort = providerSort,
-            openAiBaseUrl = openAiBaseUrl,
-            miniMaxBaseUrl = miniMaxBaseUrl,
             openAiCompatPresets = openAiCompatPresetsLocal.toList(),
             selectedOpenAiCompatPreset = selectedOpenAiCompatPresetLocal,
             alibabaMcpEnabled = alibabaMcpEnabled,

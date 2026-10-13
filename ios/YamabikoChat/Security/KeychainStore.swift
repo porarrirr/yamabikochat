@@ -9,6 +9,7 @@ enum CredentialProvider: String, CaseIterable {
     case alibabaCodingPlan = "ALIBABA_CODING_PLAN"
     case openAI = "OPENAI"
     case openAICompat = "OPENAI_COMPAT"
+    case sarashina = "SARASHINA"
     case miniMax = "MINIMAX"
     case codexAuth = "CODEX_AUTH"
     case superGrok = "SUPERGROK"

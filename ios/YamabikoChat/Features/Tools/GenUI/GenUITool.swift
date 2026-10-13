@@ -4,7 +4,14 @@ struct GenUITool: LocalToolExecutor {
     static let name = "genui"
     static let definition = ToolDefinition(
         name: name,
-        description: "Create a persisted interactive GenUI document. Choose exactly one renderer: legacy components with numeric inputs and =arithmetic formulas (+ - * / ^, parentheses, min, max, abs, round, pow, payment(principal,annualPercent,years); annualPercent=5 means 5%), a declarative ui node tree, or a code JavaScript function body returning DIL.h nodes. Component names and properties are case sensitive. Legacy kind:chart uses chartType:line by default; set chartType:pie explicitly for a pie chart with exactly one series, nonnegative values and a positive total. IDs/titles do not select chart type. Rich Chart requires props.content:{chartType:'pie',data:[{name:'A',value:40},{name:'B',value:60}],nameKey:'name',valueKey:'value'}; rich chartType also supports bar, line and scatter. Describe only the chart type actually specified in the successful result. Declarative bind names a state key; {{key}} interpolates state, and onChange setState actions use value \"$value\" for the changed value. Events take {type:\"setState\",key:\"count\",value:1}, resetState, copy(text), openUrl(url), issueNewTurn(query), or openEntityDetail(args) action objects. Host actions require a user gesture; AI follow-ups use the normal Pi conversation path. JavaScript supports DIL.useState/useMemo/useEffect/useCallback/useRef/useId/useTheme/useBreakpoint. Example code: const [count,setCount]=DIL.useState(0); return DIL.h(\"button\",{onClick:()=>setCount(count+1)},String(count)); Resources are explicit keyed title/url/src/text/mime objects. Use only supplied HTTPS URLs; missing refs display unavailable. MapWidgetV2 displays native interactive maps inline without an open button. Native maps accept points/origin with title/name, address, or query (e.g. {name: \"Tokyo Station\", address: \"Tokyo, Japan\"}); latitude/longitude are optional. Apple MapKit searches place names/addresses when coordinates are absent and provides directions; route stop optimization is unavailable. There is no proprietary ChatGPT data, search or backend API. SVG primitives require an svg ancestor; references use local fragment IDs. AppBlock.content or entrypoint can contain an inline node tree. Rich documents have no app-defined fixed size, node count, depth, state or resource count limit; device memory, JavaScript/WebKit and JSON parsing constraints still apply. For calculations prefer code with JavaScript + - * / **, Math.min/Math.max/Math.abs/Math.round/Math.pow, custom functions, conditionals and array iteration; loan, compound-interest and statistical calculations are not limited to legacy formulas. For mobile chat, use content-sized containers, gap:2 or 3 and padding:3; do not use fixed/minimum container heights, large spacers, or justify:between to distribute vertical content. Put a short label, numeric input and result in a row; keep reference descriptions and Link adjacent. The host caps mobile gap at 12px and padding at 16px and fits ordinary containers to content. Supported component properties: {\"text\":[\"bind\",\"color\",\"highlight\",\"inline\",\"italic\",\"key\",\"lineThrough\",\"maxLines\",\"minLines\",\"preserveWhitespace\",\"x\",\"y\",\"dx\",\"dy\",\"textAnchor\",\"dominantBaseline\",\"fill\",\"stroke\",\"fontSize\",\"transform\",\"size\",\"strong\",\"tabularNums\",\"textAlign\",\"truncate\",\"underline\",\"weight\",\"width\"],\"title\":[\"bind\",\"color\",\"italic\",\"key\",\"maxLines\",\"size\",\"strong\",\"tabularNums\",\"textAlign\",\"truncate\",\"weight\",\"width\"],\"caption\":[\"bind\",\"color\",\"key\",\"maxLines\",\"textAlign\",\"truncate\",\"weight\"],\"label\":[\"bind\",\"color\",\"htmlFor\",\"key\",\"size\",\"textAlign\",\"truncate\",\"weight\",\"width\"],\"badge\":[\"bind\",\"color\",\"key\",\"label\",\"maxWidth\",\"onHover\",\"padding\",\"pill\",\"size\",\"variant\",\"weight\"],\"bold\":[\"bind\",\"key\",\"weight\"],\"italic\":[\"bind\",\"key\"],\"underline\":[\"bind\",\"key\"],\"strikethrough\":[\"bind\",\"key\"],\"code\":[\"bind\",\"key\"],\"math\":[\"bind\",\"block\",\"key\",\"value\"],\"box\":[\"align\",\"aspectRatio\",\"background\",\"bind\",\"border\",\"clip\",\"columnGap\",\"direction\",\"disableAutoSpacing\",\"flex\",\"flush\",\"gap\",\"height\",\"justify\",\"key\",\"maxHeight\",\"maxSize\",\"maxWidth\",\"minHeight\",\"minSize\",\"minWidth\",\"padding\",\"radius\",\"role\",\"rowGap\",\"scrollable\",\"size\",\"theme\",\"width\",\"wrap\"],\"row\":[\"align\",\"aspectRatio\",\"background\",\"bind\",\"border\",\"clip\",\"direction\",\"disableAutoSpacing\",\"flex\",\"flush\",\"gap\",\"height\",\"justify\",\"key\",\"maxHeight\",\"maxSize\",\"maxWidth\",\"minHeight\",\"minSize\",\"minWidth\",\"padding\",\"radius\",\"role\",\"rowGap\",\"scrollable\",\"size\",\"theme\",\"width\",\"wrap\"],\"col\":[\"align\",\"aspectRatio\",\"background\",\"bind\",\"border\",\"clip\",\"columnGap\",\"direction\",\"disableAutoSpacing\",\"flex\",\"flush\",\"gap\",\"height\",\"justify\",\"key\",\"maxHeight\",\"maxSize\",\"maxWidth\",\"minHeight\",\"minSize\",\"minWidth\",\"padding\",\"radius\",\"role\",\"scrollable\",\"size\",\"theme\",\"width\",\"wrap\"],\"grid\":[\"bind\",\"columnGap\",\"columns\",\"gap\",\"key\",\"minChildWidth\",\"rowGap\",\"rows\"],\"grid-item\":[\"bind\",\"key\",\"rowSpan\",\"span\"],\"flow\":[\"bind\",\"columns\",\"gap\",\"key\",\"layout\",\"rows\"],\"flow-item\":[\"align\",\"aspectMode\",\"aspectRatio\",\"background\",\"bind\",\"border\",\"clip\",\"direction\",\"disableAutoSpacing\",\"flex\",\"flush\",\"gap\",\"height\",\"justify\",\"key\",\"maxHeight\",\"maxWidth\",\"minHeight\",\"minWidth\",\"padding\",\"radius\",\"role\",\"rowSpan\",\"scrollable\",\"span\",\"theme\",\"width\",\"wrap\"],\"card\":[\"background\",\"bind\",\"disableAutoSpacing\",\"gap\",\"height\",\"justify\",\"key\",\"padding\",\"shadow\",\"size\",\"theme\",\"variant\",\"width\"],\"divider\":[\"bind\",\"color\",\"flush\",\"key\",\"size\",\"spacing\"],\"spacer\":[\"bind\",\"key\",\"minSize\"],\"blockquote\":[\"bind\",\"key\"],\"button\":[\"bind\",\"block\",\"color\",\"disabled\",\"key\",\"label\",\"loading\",\"onClick\",\"pill\",\"size\",\"submit\",\"uniform\",\"variant\"],\"input\":[\"autoSelect\",\"bind\",\"defaultValue\",\"disabled\",\"fontSize\",\"inputType\",\"invalid\",\"key\",\"mask\",\"name\",\"onChange\",\"pill\",\"placeholder\",\"required\",\"size\",\"value\",\"variant\"],\"textarea\":[\"autoResize\",\"autoSelect\",\"bind\",\"defaultValue\",\"disabled\",\"invalid\",\"key\",\"maxRows\",\"name\",\"onChange\",\"placeholder\",\"required\",\"rows\",\"size\",\"value\",\"variant\"],\"slider\":[\"bind\",\"defaultValue\",\"disabled\",\"key\",\"marks\",\"max\",\"min\",\"name\",\"onChange\",\"required\",\"sliderStyle\",\"step\",\"value\"],\"checkbox\":[\"bind\",\"checked\",\"defaultChecked\",\"disabled\",\"key\",\"label\",\"lineThrough\",\"name\",\"onChange\",\"required\",\"shape\",\"value\"],\"select\":[\"align\",\"bind\",\"block\",\"clearable\",\"defaultValue\",\"disabled\",\"icon\",\"key\",\"name\",\"onChange\",\"options\",\"pill\",\"placeholder\",\"required\",\"side\",\"size\",\"value\",\"variant\"],\"segmented-control\":[\"bind\",\"defaultValue\",\"disabled\",\"key\",\"label\",\"onChange\",\"options\",\"pill\",\"size\",\"value\",\"variant\"],\"radio-group\":[\"bind\",\"defaultValue\",\"direction\",\"disabled\",\"key\",\"label\",\"name\",\"onChange\",\"required\",\"value\"],\"radio\":[\"bind\",\"disabled\",\"id\",\"key\",\"required\",\"value\"],\"date-picker\":[\"align\",\"bind\",\"block\",\"clearable\",\"defaultValue\",\"disabled\",\"key\",\"max\",\"min\",\"onChange\",\"pill\",\"placeholder\",\"required\",\"side\",\"size\",\"value\",\"variant\"],\"form\":[\"align\",\"background\",\"bind\",\"border\",\"clip\",\"direction\",\"disableAutoSpacing\",\"flex\",\"flush\",\"gap\",\"height\",\"justify\",\"key\",\"maxHeight\",\"maxWidth\",\"minHeight\",\"minWidth\",\"onSubmit\",\"padding\",\"radius\",\"role\",\"scrollable\",\"theme\",\"width\",\"wrap\"],\"pressable\":[\"align\",\"aspectRatio\",\"background\",\"bind\",\"border\",\"clip\",\"direction\",\"disableAutoSpacing\",\"disabled\",\"flex\",\"flush\",\"gap\",\"height\",\"inline\",\"justify\",\"key\",\"maxHeight\",\"maxSize\",\"maxWidth\",\"minHeight\",\"minSize\",\"minWidth\",\"onClick\",\"padding\",\"radius\",\"role\",\"scrollable\",\"size\",\"theme\",\"tooltip\",\"width\",\"wrap\"],\"table\":[\"bind\",\"columnSizing\",\"dividers\",\"emptyLabel\",\"key\",\"stickyHeader\"],\"table-section\":[\"bind\",\"header\",\"key\",\"rowDivider\"],\"table-row\":[\"bind\",\"header\",\"key\",\"label\",\"labelColSpan\"],\"table-cell\":[\"align\",\"bind\",\"colSpan\",\"header\",\"key\",\"padding\",\"rowSpan\",\"vAlign\",\"width\"],\"list\":[\"bind\",\"connector\",\"gap\",\"key\",\"marker\",\"maxMarkerSize\",\"start\"],\"list-item\":[\"bind\",\"description\",\"disabled\",\"key\",\"label\",\"marker\",\"markerSize\"],\"carousel\":[\"activeIndex\",\"bind\",\"flush\",\"gap\",\"key\",\"onChange\",\"showArrows\",\"snap\",\"snapAlign\",\"visibleItems\"],\"carousel-item\":[\"aspectRatio\",\"background\",\"bind\",\"border\",\"gap\",\"height\",\"key\",\"maxHeight\",\"maxWidth\",\"minHeight\",\"minWidth\",\"padding\",\"radius\",\"variant\",\"width\"],\"carousel-media-item\":[\"aspectRatio\",\"background\",\"bind\",\"border\",\"gap\",\"height\",\"key\",\"maxHeight\",\"maxWidth\",\"media\",\"minHeight\",\"minWidth\",\"padding\",\"radius\",\"size\",\"variant\",\"width\"],\"popover\":[\"bind\",\"hoverOpenDelay\",\"key\",\"open\",\"showOnHover\"],\"popover-trigger\":[\"bind\",\"block\",\"key\",\"onClick\"],\"popover-content\":[\"align\",\"bind\",\"key\",\"showCloseButton\",\"side\",\"sideOffset\"],\"AsyncImage\":[\"alt\",\"aspectRatio\",\"bind\",\"fallback\",\"fit\",\"frame\",\"group\",\"height\",\"key\",\"maxHeight\",\"maxWidth\",\"minHeight\",\"minWidth\",\"query\",\"radius\",\"ref\",\"src\",\"width\"],\"AsyncImageGroup\":[\"aspectRatio\",\"bind\",\"fallback\",\"key\",\"layout\",\"numPerQuery\",\"query\",\"ref\",\"refs\",\"size\"],\"AsyncVideo\":[\"bind\",\"key\",\"ref\"],\"Chart\":[\"bind\",\"content\",\"key\"],\"MapWidgetV2\":[\"answer\",\"arrive_by\",\"bind\",\"carousel\",\"depart_at\",\"fill\",\"groups\",\"groups_title\",\"key\",\"minHeight\",\"narrative\",\"optimize_stop_order\",\"origin\",\"points\",\"show_route\",\"title\",\"travel_mode\"],\"icon\":[\"bind\",\"color\",\"inline\",\"key\",\"name\",\"size\"],\"favicon\":[\"alt\",\"bind\",\"frame\",\"inline\",\"key\",\"size\",\"url\"],\"svg\":[\"bind\",\"color\",\"fill\",\"height\",\"key\",\"preserveAspectRatio\",\"size\",\"stroke\",\"strokeLinecap\",\"strokeLinejoin\",\"strokeWidth\",\"viewBox\",\"width\",\"xmlns\"],\"Link\":[\"bind\",\"key\",\"ref\",\"title\",\"url\"],\"Entity\":[\"address\",\"bind\",\"category\",\"disambig\",\"key\",\"location\",\"query\",\"ref\",\"value\"],\"Cite\":[\"bind\",\"key\",\"params\",\"ref\",\"refs\"],\"FileCite\":[\"bind\",\"key\",\"line_range_end\",\"line_range_start\",\"ref\"],\"CodeCite\":[\"bind\",\"citation_id\",\"key\",\"line_range_end\",\"line_range_start\",\"tool\"],\"FileNavList\":[\"bind\",\"items\",\"key\"],\"FollowUp\":[\"bind\",\"key\",\"query\",\"source\",\"value\"],\"MemoryCite\":[\"bind\",\"key\"],\"AppBlock\":[\"app_block_id\",\"bind\",\"bundle_version\",\"content\",\"entrypoint\",\"icon\",\"key\",\"language\",\"title\",\"variant\"],\"CodeBlock\":[\"bind\",\"editable\",\"interactive\",\"key\",\"language\",\"model_previewable\"],\"WritingBlock\":[\"bind\",\"id\",\"key\",\"options\",\"subject\",\"variant\"],\"g\":[\"clipPath\",\"fill\",\"fillOpacity\",\"fillRule\",\"id\",\"key\",\"opacity\",\"stroke\",\"strokeDasharray\",\"strokeDashoffset\",\"strokeLinecap\",\"strokeLinejoin\",\"strokeOpacity\",\"strokeWidth\",\"transform\"],\"path\":[\"clipPath\",\"d\",\"fill\",\"fillOpacity\",\"fillRule\",\"id\",\"key\",\"opacity\",\"pathLength\",\"stroke\",\"strokeDasharray\",\"strokeDashoffset\",\"strokeLinecap\",\"strokeLinejoin\",\"strokeOpacity\",\"strokeWidth\",\"transform\"],\"circle\":[\"clipPath\",\"cx\",\"cy\",\"fill\",\"fillOpacity\",\"fillRule\",\"id\",\"key\",\"opacity\",\"r\",\"stroke\",\"strokeDasharray\",\"strokeDashoffset\",\"strokeLinecap\",\"strokeLinejoin\",\"strokeOpacity\",\"strokeWidth\",\"transform\"],\"ellipse\":[\"clipPath\",\"cx\",\"cy\",\"fill\",\"fillOpacity\",\"fillRule\",\"id\",\"key\",\"opacity\",\"rx\",\"ry\",\"stroke\",\"strokeDasharray\",\"strokeDashoffset\",\"strokeLinecap\",\"strokeLinejoin\",\"strokeOpacity\",\"strokeWidth\",\"transform\"],\"rect\":[\"clipPath\",\"fill\",\"fillOpacity\",\"fillRule\",\"height\",\"id\",\"key\",\"opacity\",\"rx\",\"ry\",\"stroke\",\"strokeDasharray\",\"strokeDashoffset\",\"strokeLinecap\",\"strokeLinejoin\",\"strokeOpacity\",\"strokeWidth\",\"transform\",\"width\",\"x\",\"y\"],\"line\":[\"clipPath\",\"fill\",\"fillOpacity\",\"fillRule\",\"id\",\"key\",\"opacity\",\"stroke\",\"strokeDasharray\",\"strokeDashoffset\",\"strokeLinecap\",\"strokeLinejoin\",\"strokeOpacity\",\"strokeWidth\",\"transform\",\"x1\",\"x2\",\"y1\",\"y2\"],\"polyline\":[\"clipPath\",\"fill\",\"fillOpacity\",\"fillRule\",\"id\",\"key\",\"opacity\",\"points\",\"stroke\",\"strokeDasharray\",\"strokeDashoffset\",\"strokeLinecap\",\"strokeLinejoin\",\"strokeOpacity\",\"strokeWidth\",\"transform\"],\"polygon\":[\"clipPath\",\"fill\",\"fillOpacity\",\"fillRule\",\"id\",\"key\",\"opacity\",\"points\",\"stroke\",\"strokeDasharray\",\"strokeDashoffset\",\"strokeLinecap\",\"strokeLinejoin\",\"strokeOpacity\",\"strokeWidth\",\"transform\"],\"defs\":[\"clipPath\",\"fill\",\"fillOpacity\",\"fillRule\",\"id\",\"key\",\"opacity\",\"stroke\",\"strokeDasharray\",\"strokeDashoffset\",\"strokeLinecap\",\"strokeLinejoin\",\"strokeOpacity\",\"strokeWidth\",\"transform\"],\"linearGradient\":[\"clipPath\",\"fill\",\"fillOpacity\",\"fillRule\",\"gradientTransform\",\"gradientUnits\",\"id\",\"key\",\"opacity\",\"spreadMethod\",\"stroke\",\"strokeDasharray\",\"strokeDashoffset\",\"strokeLinecap\",\"strokeLinejoin\",\"strokeOpacity\",\"strokeWidth\",\"transform\",\"x1\",\"x2\",\"y1\",\"y2\"],\"radialGradient\":[\"clipPath\",\"cx\",\"cy\",\"fill\",\"fillOpacity\",\"fillRule\",\"fr\",\"fx\",\"fy\",\"gradientTransform\",\"gradientUnits\",\"id\",\"key\",\"opacity\",\"r\",\"spreadMethod\",\"stroke\",\"strokeDasharray\",\"strokeDashoffset\",\"strokeLinecap\",\"strokeLinejoin\",\"strokeOpacity\",\"strokeWidth\",\"transform\"],\"stop\":[\"clipPath\",\"fill\",\"fillOpacity\",\"fillRule\",\"id\",\"key\",\"offset\",\"opacity\",\"stopColor\",\"stopOpacity\",\"stroke\",\"strokeDasharray\",\"strokeDashoffset\",\"strokeLinecap\",\"strokeLinejoin\",\"strokeOpacity\",\"strokeWidth\",\"transform\"],\"clipPath\":[\"clipPath\",\"clipPathUnits\",\"fill\",\"fillOpacity\",\"fillRule\",\"id\",\"key\",\"opacity\",\"stroke\",\"strokeDasharray\",\"strokeDashoffset\",\"strokeLinecap\",\"strokeLinejoin\",\"strokeOpacity\",\"strokeWidth\",\"transform\"]}",
+        description: """
+        Create a persisted interactive GenUI in the conversation using exactly one of ui or code. Prefer the recovered original components for matching tasks: call genui_reference to inspect their actual source/state contract, then use {type:componentName,props:{__state:verifiedData}} or DIL.h(componentName,{__state:verifiedData}). There are 283 original templates including learning, calculators, clocks, timers, currency, weather, finance, sports and entity views. Their layout, calculations and local state handlers are preserved. A component name does not fetch data; provide the complete __state contract. Reference server actions/refresh require the original backend and return an unsupported reason. Never manufacture missing live data or claim those actions succeeded.
+        code is a JavaScript function body returning DIL.h(type,props,...children), __dil.jsx, or calling DIL.render. Compiled canonical component names are also available as globals. DIL.useState/useMemo/useEffect/useCallback/useRef/useId/useAppData/useConstants/useTheme/useBreakpoint/useIsMobile/useNow/useSpeechSynthesizer are supported. useTheme returns {theme,isDark}; useBreakpoint(token) returns whether the recovered breakpoint is active (xs380,sm576,md768,lg1024,xl1280,2xl1536). AI execution and follow-up turns remain on the existing Pi path. Local calculations support JavaScript Math.pow/Math.min/Math.max/Math.round and custom functions. No imports or raw JSX syntax.
+        When composing primitives, follow the reference metrics and hierarchy, without adding a second document heading or decorative enclosing panel. Numeric spacing is 4px per unit; default container gap is 2 units. Cards use original default/soft surfaces, padding and radii. Dimensions and justification are retained on phones. Text/title/caption use the original iOS typography and icons use the original SVG assets. Theme colors accept semantic tokens or {light,dark}. Padding/margin accept numbers, CSS lengths or {x,y,top,right,bottom,left}.
+        Declarative bindings use bind:"key", {{key}} / {{object.field}}, and onChange:{type:"setState",key:"key",value:"$value"}. Whole interpolations retain types. Events support setState/resetState/copy/openUrl/issueNewTurn/openEntityDetail/openMap; external host actions require user gestures. Each supports items/of, itemName/item, indexName/index. Scope supplies values; Show uses when with Show.Else. Props prefixed with $ use the exact original CEL parser/evaluator against the current binding scope, for example "$value":"price * quantity" or Each "$items":"rows.filter(row, row.active)". CEL maps/collections and its original standard library are supported locally.
+        chart accepts data,series,xAxis,yAxis and showLegend/showXAxis/showYAxis/showGrid; series carry dataKey,label,type,color. pie-chart also accepts innerRadius and row fill/stroke. Do not infer chart type from IDs/titles. Legacy chart types remain line/pie. Chart.content accepts explicit chartType bar/line/area/scatter/pie or supported Recharts JSON. flashcard-flip retains both faces and supports controlled flipped, reducedMotion and swipe handlers. Markdown supports nested lists, tables, code and math. Lottie accepts animationData or explicit HTTPS src; YouTube accepts videoId/url and embeds its player. Media resources must be explicit HTTPS. MapWidgetV2 renders native inline MapKit with supplied places/coordinates. AppBlock uses inline content. Do not add remote scripts, hidden model calls, or protocol fallbacks.
+        Rich documents retain saved compatibility; device limits still apply. Supported properties:
+        """ + GenUIDocument.componentGuide,
         parametersJSON: #"""
         {
           "type": "object",
@@ -320,86 +327,7 @@ struct GenUITool: LocalToolExecutor {
               "properties": {
                 "type": {
                   "type": "string",
-                  "enum": [
-                    "text",
-                    "title",
-                    "caption",
-                    "label",
-                    "badge",
-                    "bold",
-                    "italic",
-                    "underline",
-                    "strikethrough",
-                    "code",
-                    "math",
-                    "box",
-                    "row",
-                    "col",
-                    "grid",
-                    "grid-item",
-                    "flow",
-                    "flow-item",
-                    "card",
-                    "divider",
-                    "spacer",
-                    "blockquote",
-                    "button",
-                    "input",
-                    "textarea",
-                    "slider",
-                    "checkbox",
-                    "select",
-                    "segmented-control",
-                    "radio-group",
-                    "radio",
-                    "date-picker",
-                    "form",
-                    "pressable",
-                    "table",
-                    "table-section",
-                    "table-row",
-                    "table-cell",
-                    "list",
-                    "list-item",
-                    "carousel",
-                    "carousel-item",
-                    "carousel-media-item",
-                    "popover",
-                    "popover-trigger",
-                    "popover-content",
-                    "AsyncImage",
-                    "AsyncImageGroup",
-                    "AsyncVideo",
-                    "Chart",
-                    "MapWidgetV2",
-                    "icon",
-                    "favicon",
-                    "svg",
-                    "Link",
-                    "Entity",
-                    "Cite",
-                    "FileCite",
-                    "CodeCite",
-                    "FileNavList",
-                    "FollowUp",
-                    "MemoryCite",
-                    "AppBlock",
-                    "CodeBlock",
-                    "WritingBlock",
-                    "g",
-                    "path",
-                    "circle",
-                    "ellipse",
-                    "rect",
-                    "line",
-                    "polyline",
-                    "polygon",
-                    "defs",
-                    "linearGradient",
-                    "radialGradient",
-                    "stop",
-                    "clipPath"
-                  ]
+                  "enum": \#(String(decoding: try! JSONSerialization.data(withJSONObject: GenUIDocument.componentCatalog.keys.sorted()), as: UTF8.self))
                 },
                 "props": {
                   "type": "object"
@@ -442,14 +370,18 @@ struct GenUITool: LocalToolExecutor {
                        parametersJSON: #"{"type":"object","properties":{"document":{"type":"string","description":"Complete JSON GenUI document with title and exactly one of components, ui, or code; optional state and resources."}},"required":["document"],"additionalProperties":false}"#)
     }
 
-    func execute(call: ToolCall) async throws -> ToolResult {
+    static func document(from arguments: String) throws -> GenUIDocument {
         let raw: String
-        if let fields = try? JSONDecoder().decode([String: JSONValue].self, from: Data(call.argumentsJSON.utf8)),
+        if let fields = try? JSONDecoder().decode([String: JSONValue].self, from: Data(arguments.utf8)),
            let wrapped = fields["document"] {
             guard fields.count == 1, case .string(let json) = wrapped else { throw GenUIError.invalid("document envelope requires a single JSON string") }
             raw = json
-        } else { raw = call.argumentsJSON }
-        let document = try GenUIDocument.validated(from: raw)
+        } else { raw = arguments }
+        return try GenUIDocument.validated(from: raw)
+    }
+
+    func execute(call: ToolCall) async throws -> ToolResult {
+        let document = try Self.document(from: call.argumentsJSON)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(document)

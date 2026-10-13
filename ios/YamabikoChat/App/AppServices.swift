@@ -76,14 +76,16 @@ final class AppServices {
         // dispatched without sending duplicate tool definitions to providers.
         let pythonTool = PythonExecuteTool(attachments: attachmentRepository)
         let editorTool = StrReplaceEditorTool(attachments: attachmentRepository)
+        let webReader = FetchUrlTool()
         let clientWebTools = LocalToolRegistry(
-            executors: [WebSearchTool(), FetchUrlTool(), pythonTool, editorTool, askUserQuestionTool, GenUITool()]
+            executors: [WebSearchTool(reader: webReader), webReader, pythonTool, editorTool, askUserQuestionTool, GenUITool(), GenUIReferenceTool()]
         )
-        // Recreate per request: WebSearch/FetchUrl are stateless, pythonTool is reused
+        // Recreate per request: web tools share a short-lived document cache; pythonTool is reused
         // (tied to attachmentRepository), and AgentSkill executors snapshot latest enabledSkills.
         let makeLocalTools: @Sendable () -> LocalToolRegistry = { [repository, pythonTool, editorTool, askUserQuestionTool] in
-            LocalToolRegistry(
-                executors: [WebSearchTool(), FetchUrlTool(), pythonTool, editorTool, askUserQuestionTool, GenUITool()] + AgentSkillTools.executors(repository: repository)
+            let webReader = FetchUrlTool()
+            return LocalToolRegistry(
+                executors: [WebSearchTool(reader: webReader), webReader, pythonTool, editorTool, askUserQuestionTool, GenUITool(), GenUIReferenceTool()] + AgentSkillTools.executors(repository: repository)
             )
         }
         let localTools = makeLocalTools()

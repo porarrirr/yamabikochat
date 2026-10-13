@@ -1,4 +1,6 @@
 import Foundation
+import PDFKit
+import CoreFoundation
 
 private enum FetchUrlToolError: LocalizedError {
     case httpStatus(Int, host: String)
@@ -21,12 +23,16 @@ struct FetchUrlTool: LocalToolExecutor {
     let definition = ToolDefinition(
         name: name,
         description: """
-        Read an HTTP or HTTPS page for a specific goal and return the most relevant passages with nearby context, up to 8000 characters. Retrieved HTML may be parsed in an isolated WebKit document without executing page scripts or loading page subresources. Use it only after evaluating web_search snippets. Prefer primary or authoritative pages. Treat only selection_status=selected as sufficient evidence; partial_match, no_relevant_passages, dynamic_content_unavailable, and render_outcome values access_restricted, timed_out, or failed require another source or a narrower goal. Do not claim support for information absent from the returned content.
+        Read an HTTP/HTTPS document (HTML, plain text, JSON, text PDF) for a specific goal. Returns relevant passages (tables keep column labels and complete rows), source links, and up to 8000 characters. Use short factual keywords in goal; focus on the facts still missing. selection_status measures lexical retrieval, NOT whether the facts are true or complete: inspect content even for partial_match. Verify entities, dates, units, missing values and observation vs forecast yourself. Follow returned links when needed; never guess URL paths or parameters. If content supports the requested facts, answer immediately. If only some facts are present, keep them and investigate only the gap. Re-reading the same URL with a different goal uses a short-lived cached response. If the goal wording differs, overview content is still returned. Use read_mode=window and returned sections/start_paragraph/next_paragraph to inspect more of the SAME document before searching again. max_characters defaults to 4000. Page scripts and subresources are never executed; scanned PDFs, login-required and script-only content need an accessible source.
         """,
         parametersJSON: """
         {
           "type": "object",
           "properties": {
+            "recover_cached": {
+              "type": "boolean", "default": false,
+              "description": "Use only if an earlier response is no longer available in the model context. Recover the same retrieved evidence without repeating network work when retained; not for routine retries."
+            },
             "url": {
               "type": "string",
               "description": "The HTTP or HTTPS URL to fetch."
@@ -34,7 +40,15 @@ struct FetchUrlTool: LocalToolExecutor {
             "goal": {
               "type": "string",
               "description": "The specific facts or question to investigate on this page."
-            }
+            },
+            "read_mode": {
+              "type": "string", "enum": ["relevant", "window"], "default": "relevant",
+              "description": "Use relevant for goal-directed retrieval; window reads an unfiltered document range when wording differs or more context is needed."
+            },
+            "start_paragraph": {"type": "integer", "minimum": 0, "default": 0},
+            "start_character": {"type": "integer", "minimum": 0, "default": 0,
+              "description": "Continue inside a long paragraph using next_character returned by the preceding window."},
+            "max_characters": {"type": "integer", "minimum": 500, "maximum": 8000, "default": 4000}
           },
           "required": ["url", "goal"],
           "additionalProperties": false
@@ -42,6 +56,7 @@ struct FetchUrlTool: LocalToolExecutor {
         """
     )
 
+    private let responseCache = WebPageResponseCache()
     private let httpClient: any WebToolHTTPClient
     private let renderedPageLoader: any RenderedPageContentLoading
     private let concurrencyLimiter: any WebFetchConcurrencyLimiting
@@ -61,6 +76,13 @@ struct FetchUrlTool: LocalToolExecutor {
         guard let goal = (arguments["goal"] as? String)?.trimmedNonEmpty else {
             throw ProviderClientError.parseFailure("fetch_url requires a non-empty goal")
         }
+        let mode = (arguments["read_mode"] as? String) ?? "relevant"
+        guard ["relevant", "window"].contains(mode) else {
+            throw ProviderClientError.parseFailure("Unknown fetch_url read_mode")
+        }
+        let start = max(0, ToolArguments.int(arguments["start_paragraph"]) ?? 0)
+        let startCharacter = max(0, ToolArguments.int(arguments["start_character"]) ?? 0)
+        let characterLimit = min(Self.maxCharacters, max(500, ToolArguments.int(arguments["max_characters"]) ?? 4_000))
         guard let rawURL = (arguments["url"] as? String)?.trimmedNonEmpty,
               let url = URL(string: rawURL),
               let scheme = url.scheme?.lowercased(),
@@ -72,7 +94,14 @@ struct FetchUrlTool: LocalToolExecutor {
         try WebToolURLPolicy.validatePublicHTTPURL(url)
 
         let startedAt = Date()
-        let (data, response) = try await limitedHTTPGet(url: url)
+        let (entry, cacheHit) = try await responseCache.response(for: url) { [self] in
+            try await self.limitedHTTPGet(url: url)
+        }
+        try Task.checkCancellation()
+        let data = entry.data
+        let response = entry.response
+        let fetchedAtMs = entry.fetchedAtMs
+        let cached: WebPageResponseCache.Entry? = cacheHit ? entry : nil
         if let finalURL = response.url {
             try WebToolURLPolicy.validatePublicHTTPURL(finalURL)
         }
@@ -93,54 +122,72 @@ struct FetchUrlTool: LocalToolExecutor {
         let isJSON = mediaType == "application/json" ||
             mediaType.hasSuffix("+json") ||
             url.pathExtension.caseInsensitiveCompare("json") == .orderedSame
-        guard contentType.isEmpty ||
+        let isLiteralText = mediaType.hasPrefix("text/") && !mediaType.contains("html")
+        let isPDF = mediaType == "application/pdf" || data.starts(with: Data("%PDF-".utf8))
+        guard isPDF || contentType.isEmpty ||
             contentType.contains("text/") ||
             contentType.contains("application/xhtml+xml") ||
             isJSON
         else {
             throw ProviderClientError.parseFailure("Unsupported fetched content type: \(contentType)")
         }
-        let fetchedAtMs = Int64(Date().timeIntervalSince1970 * 1_000)
         let finalURL = response.url ?? url
         let provenance = ToolResultProvenance(
             url: finalURL.absoluteString,
             fetchedAtMs: fetchedAtMs,
             contentType: contentType
         )
-        if isJSON {
-            return try Self.jsonResult(
-                call: call,
-                data: data,
-                url: finalURL,
-                provenance: provenance,
-                startedAt: startedAt
-            )
+        if isJSON, (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) == nil {
+            throw ProviderClientError.parseFailure("Fetched JSON is invalid")
         }
-
+        let smallJSON = isJSON && mode == "relevant"
+            ? String(data: data, encoding: .utf8).flatMap { $0.count <= characterLimit ? $0 : nil } : nil
         let rawText: String
         let paragraphs: [PageParagraph]
-        guard let decoded = String(data: data, encoding: .utf8) ??
-            String(data: data, encoding: .isoLatin1)
-        else {
-            throw ProviderClientError.parseFailure("Fetched page encoding is unsupported")
+        if let document = cached?.document {
+            rawText = isPDF || isJSON ? "" : (Self.decodeText(data, response: response) ?? "")
+            paragraphs = document.paragraphs
+        } else if isPDF {
+            guard let document = PDFDocument(data: data), !document.isLocked else {
+                throw ProviderClientError.parseFailure("PDF is invalid or requires a password")
+            }
+            rawText = ""
+            paragraphs = (0 ..< document.pageCount).compactMap { page -> PageParagraph? in
+                guard let text = document.page(at: page)?.string?.trimmedNonEmpty else { return nil }
+                return PageParagraph(index: page, heading: "PDF page \(page + 1)", text: text)
+            }.enumerated().map { PageParagraph(index: $0.offset, heading: $0.element.heading, text: $0.element.text) }
+            guard !paragraphs.isEmpty else {
+                throw ProviderClientError.parseFailure("PDF contains no extractable text; scanned pages require OCR")
+            }
+        } else if isJSON {
+            rawText = ""
+            paragraphs = try PageParagraphExtractor.extractJSON(data)
+        } else {
+            guard let decoded = Self.decodeText(data, response: response) else {
+                throw ProviderClientError.parseFailure("Fetched page encoding is unsupported")
+            }
+            rawText = decoded
+            paragraphs = isLiteralText
+                ? PageParagraphExtractor.extractPlainText(rawText)
+                : PageParagraphExtractor.extractHTML(rawText)
         }
-        rawText = decoded
-        paragraphs = contentType.contains("text/plain")
-            ? PageParagraphExtractor.extractPlainText(rawText)
-            : PageParagraphExtractor.extractHTML(rawText)
-        var selection = RelevantPageReader.select(
-            paragraphs: paragraphs,
-            goal: goal,
-            maxCharacters: Self.maxCharacters
-        )
-        var title = (isJSON ? nil : Self.extractTitle(from: rawText)) ?? url.host ?? url.absoluteString
-        var fetchMethod = FetchMethod.urlSession
+        var documentParagraphs = cached?.document?.paragraphs ?? PageParagraphExtractor.prepare(paragraphs)
+        var selection = mode == "window"
+            ? RelevantPageReader.window(paragraphs: documentParagraphs, start: start, maxCharacters: characterLimit, startCharacter: startCharacter)
+            : RelevantPageReader.select(paragraphs: documentParagraphs, goal: goal, maxCharacters: characterLimit)
+        if let smallJSON {
+            selection = RelevantPageSelection(content: smallJSON, status: .selected,
+                                              selectedParagraphCount: documentParagraphs.count, truncated: false)
+        }
+        var totalParagraphs = documentParagraphs.count
+        var title = cached?.document?.title ?? ((isJSON ? nil : Self.extractTitle(from: rawText)) ?? url.host ?? url.absoluteString)
+        var fetchMethod = cached?.document?.usedWebKit == true ? FetchMethod.webKit : .urlSession
         var renderAttempted = false
         var renderOutcome = RenderOutcome.notAttempted
 
-        if !isJSON,
-           !contentType.contains("text/plain"),
-           selection.status != .selected {
+        if cached?.document == nil, !isJSON, !isPDF,
+           !isLiteralText,
+           (documentParagraphs.isEmpty || selection.status == .dynamicContentUnavailable) {
             renderAttempted = true
             do {
                 let renderedResult = try await limitedRenderedLoad(html: rawText, sourceURL: finalURL)
@@ -157,11 +204,10 @@ struct FetchUrlTool: LocalToolExecutor {
                         ]
                     )
                 case let .loaded(rendered):
-                    let renderedSelection = RelevantPageReader.select(
-                        paragraphs: rendered.paragraphs,
-                        goal: goal,
-                        maxCharacters: Self.maxCharacters
-                    )
+                    let renderedParagraphs = PageParagraphExtractor.prepare(rendered.paragraphs)
+                    let renderedSelection = mode == "window"
+                        ? RelevantPageReader.window(paragraphs: renderedParagraphs, start: start, maxCharacters: characterLimit, startCharacter: startCharacter)
+                        : RelevantPageReader.select(paragraphs: renderedParagraphs, goal: goal, maxCharacters: characterLimit)
                     renderOutcome = RenderOutcome(selectionStatus: renderedSelection.status)
                     if Self.shouldPrefer(
                         renderedSelection,
@@ -170,6 +216,8 @@ struct FetchUrlTool: LocalToolExecutor {
                         staticParagraphCount: paragraphs.count
                     ) {
                         selection = renderedSelection
+                        documentParagraphs = renderedParagraphs
+                        totalParagraphs = renderedParagraphs.count
                         title = rendered.title ?? title
                         fetchMethod = .webKit
                     }
@@ -188,12 +236,29 @@ struct FetchUrlTool: LocalToolExecutor {
             }
         }
 
+        await responseCache.storeDocument(.init(paragraphs: documentParagraphs, title: title,
+                                               usedWebKit: fetchMethod == .webKit), for: url)
         let object: [String: Any] = [
             "url": url.absoluteString,
             "title": title,
+            "document_format": isPDF ? "pdf" : (isJSON ? "json" : (isLiteralText ? "text" : "html")),
+            "content_format": smallJSON == nil ? "passages" : "json",
             "goal": goal,
             "content": selection.content,
+            "links": Self.sourceLinks(in: rawText, baseURL: finalURL, goal: goal),
+            "selection_note": "Lexical relevance only. Read the passages to assess factual sufficiency; partial_match can contain the answer.",
+            "cache_hit": cacheHit,
             "selection_status": selection.status.rawValue,
+            "read_mode": mode,
+            "total_paragraph_count": totalParagraphs,
+            "start_paragraph": mode == "window" ? start : NSNull(),
+            "next_paragraph": mode == "window" ? (selection.nextParagraph.map { $0 as Any } ?? NSNull()) : NSNull(),
+            "next_character": mode == "window" ? (selection.nextCharacter.map { $0 as Any } ?? NSNull()) : NSNull(),
+            "sections": documentParagraphs.filter { $0.heading != nil }.reduce(into: [[String: Any]]()) { sections, p in
+                if sections.count < 12, !sections.contains(where: { ($0["heading"] as? String) == p.heading }) {
+                    sections.append(["heading": String((p.heading ?? "").prefix(160)), "start_paragraph": p.index])
+                }
+            },
             "selected_paragraph_count": selection.selectedParagraphCount,
             "truncated": selection.truncated,
             "fetch_method": fetchMethod.rawValue,
@@ -207,6 +272,7 @@ struct FetchUrlTool: LocalToolExecutor {
             metadata: [
                 "url": url.absoluteString,
                 "character_count": String(selection.content.count),
+                "cache_hit": String(cacheHit),
                 "selection_status": selection.status.rawValue,
                 "selected_paragraph_count": String(selection.selectedParagraphCount),
                 "fetch_method": fetchMethod.rawValue,
@@ -225,56 +291,47 @@ struct FetchUrlTool: LocalToolExecutor {
         )
     }
 
-    private static func jsonResult(
-        call: ToolCall,
-        data: Data,
-        url: URL,
-        provenance: ToolResultProvenance,
-        startedAt: Date
-    ) throws -> ToolResult {
-        guard (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) != nil,
-              let rawJSON = String(data: data, encoding: .utf8)
-        else {
-            throw ProviderClientError.parseFailure("Fetched JSON is invalid")
+    private static func sourceLinks(in html: String, baseURL: URL, goal: String) -> [[String: String]] {
+        let visible = PageParagraphExtractor.contentHTML(html)
+        guard let regex = try? NSRegularExpression(pattern: #"(?is)<a\b[^>]*href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>(.*?)</a\s*>"#) else { return [] }
+        let terms = RelevantPageReader.importantTerms(goal)
+        var seen: Set<String> = []
+        var links: [(title: String, url: String, score: Int, position: Int)] = []
+        for (position, match) in regex.matches(in: visible, range: NSRange(visible.startIndex..., in: visible)).enumerated() {
+            guard let hrefRange = (1 ... 3).compactMap({ Range(match.range(at: $0), in: visible) }).first,
+                  let titleRange = Range(match.range(at: 4), in: visible) else { continue }
+            let href = HTMLTextExtractor.decodeEntities(String(visible[hrefRange]))
+            guard !href.hasPrefix("#"),
+                  let url = URL(string: href, relativeTo: baseURL)?.absoluteURL,
+                  ["https", "http"].contains(url.scheme?.lowercased() ?? ""),
+                  url.user == nil, url.password == nil else { continue }
+            let title = HTMLTextExtractor.extract(from: String(visible[titleRange]), maxCharacters: 160)
+            guard !title.isEmpty, seen.insert(url.absoluteString).inserted else { continue }
+            let normalized = RelevantPageReader.normalizeSearchQuery(title)
+            let score = terms.filter { normalized.contains($0) }.count
+            links.append((title, url.absoluteString, score, position))
         }
-        let isSmall = rawJSON.count <= maxCharacters
-        let content: String
-        if isSmall {
-            content = rawJSON
-        } else {
-            let object: [String: Any] = [
-                "url": url.absoluteString,
-                "content_type": provenance.contentType,
-                "byte_count": data.count,
-                "message": "Fetched JSON exceeds the 8000 character direct-return limit."
-            ]
-            content = String(decoding: try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]), as: UTF8.self)
+        return links.sorted {
+            $0.score == $1.score ? $0.position < $1.position : $0.score > $1.score
+        }.prefix(8).map { ["title": $0.title, "url": $0.url] }
+    }
+
+    private static func decodeText(_ data: Data, response: HTTPURLResponse) -> String? {
+        if let charset = response.textEncodingName {
+            let cfEncoding = CFStringConvertIANACharSetNameToEncoding(charset as CFString)
+            if cfEncoding != kCFStringEncodingInvalidId {
+                let encoding = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(cfEncoding))
+                if let decoded = String(data: data, encoding: encoding) { return decoded }
+            }
         }
-        DiagnosticsLogger.log(
-            "Client JSON fetch completed",
-            category: .network,
-            metadata: [
-                "url": url.absoluteString,
-                "character_count": String(rawJSON.count),
-                "tool_result_status": isSmall ? ToolResultStatus.complete.rawValue : ToolResultStatus.insufficient.rawValue,
-                "duration_ms": String(Int(Date().timeIntervalSince(startedAt) * 1_000))
-            ]
-        )
-        return ToolResult(
-            callId: call.id,
-            name: call.name,
-            content: content,
-            status: isSmall ? .complete : .insufficient,
-            provenance: provenance,
-            sources: [ToolSource(title: url.host ?? url.absoluteString, url: url.absoluteString)]
-        )
+        return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
     }
 
     private static func toolResultStatus(for selectionStatus: RelevantPageSelection.Status) -> ToolResultStatus {
         switch selectionStatus {
         case .selected:
             return .complete
-        case .partialMatch:
+        case .partialMatch, .overview:
             return .partial
         case .noRelevantPassages, .dynamicContentUnavailable:
             return .insufficient
@@ -343,6 +400,8 @@ struct FetchUrlTool: LocalToolExecutor {
             3
         case .partialMatch:
             2
+        case .overview:
+            1
         case .noRelevantPassages:
             1
         case .dynamicContentUnavailable:
@@ -357,6 +416,7 @@ struct FetchUrlTool: LocalToolExecutor {
 
     private enum RenderOutcome: String {
         case notAttempted = "not_attempted"
+        case overview
         case selected
         case partialMatch = "partial_match"
         case noRelevantPassages = "no_relevant_passages"
@@ -369,6 +429,8 @@ struct FetchUrlTool: LocalToolExecutor {
             switch selectionStatus {
             case .selected:
                 self = .selected
+            case .overview:
+                self = .overview
             case .partialMatch:
                 self = .partialMatch
             case .noRelevantPassages:
@@ -377,5 +439,68 @@ struct FetchUrlTool: LocalToolExecutor {
                 self = .dynamicContentUnavailable
             }
         }
+    }
+}
+
+// Per-tool cache: bounded memory, no disk persistence, and original retrieval time.
+private actor WebPageResponseCache {
+    struct Entry {
+        let data: Data
+        let response: HTTPURLResponse
+        let fetchedAtMs: Int64
+        var document: Document? = nil
+    }
+    struct Document: Sendable {
+        let paragraphs: [PageParagraph]
+        let title: String
+        let usedWebKit: Bool
+    }
+    private var entries: [String: Entry] = [:]
+    private var pending: [String: Task<Entry, Error>] = [:]
+    private let lifetimeMs: Int64 = 60_000
+
+    func response(for url: URL, load: @escaping @Sendable () async throws -> (Data, HTTPURLResponse)) async throws -> (Entry, Bool) {
+        if let cached = value(for: url) { return (cached, true) }
+        let cacheKey = key(url)
+        if let pending = pending[cacheKey] { return (try await pending.value, true) }
+        let task = Task {
+            let (data, response) = try await load()
+            return Entry(data: data, response: response, fetchedAtMs: Int64(Date().timeIntervalSince1970 * 1000))
+        }
+        pending[cacheKey] = task
+        do {
+            let entry = try await task.value
+            pending.removeValue(forKey: cacheKey)
+            if (200 ... 299).contains(entry.response.statusCode), entry.data.count <= FetchUrlTool.maxResponseBytes {
+                store(data: entry.data, response: entry.response, url: url, fetchedAtMs: entry.fetchedAtMs)
+            }
+            return (entry, false)
+        } catch {
+            pending.removeValue(forKey: cacheKey)
+            throw error
+        }
+    }
+
+    func value(for url: URL) -> Entry? {
+        let now = Int64(Date().timeIntervalSince1970 * 1_000)
+        entries = entries.filter { now - $0.value.fetchedAtMs < lifetimeMs }
+        return entries[key(url)]
+    }
+
+    func store(data: Data, response: HTTPURLResponse, url: URL, fetchedAtMs: Int64) {
+        if entries.count >= 8, let oldest = entries.min(by: { $0.value.fetchedAtMs < $1.value.fetchedAtMs })?.key {
+            entries.removeValue(forKey: oldest)
+        }
+        entries[key(url)] = Entry(data: data, response: response, fetchedAtMs: fetchedAtMs)
+    }
+
+    func storeDocument(_ document: Document, for url: URL) {
+        entries[key(url)]?.document = document
+    }
+
+    private func key(_ url: URL) -> String {
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: true)
+        components?.fragment = nil
+        return components?.string ?? url.absoluteString
     }
 }
