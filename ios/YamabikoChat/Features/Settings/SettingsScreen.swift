@@ -137,9 +137,9 @@ private struct SettingsDetailScreen: View {
     @Binding var hasPrefetchedConnectionCatalogs: Bool
     @Binding var modelsDevFieldDrafts: [String: String]
     #if DEBUG
-    @ScaledMetric(relativeTo: .subheadline) private var diagnosticsActionMinimumWidth = 120
     @State private var showDiagnosticsSheet = false
     #endif
+    @FocusState private var systemPromptFocusedField: SystemPromptSettingsSection.Field?
     @State private var showAgentSkillImporter = false
     @State private var selectedAgentSkill: InstalledAgentSkill?
 
@@ -158,6 +158,19 @@ private struct SettingsDetailScreen: View {
         }
         .navigationTitle(category.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if category == .conversation, viewModel.settings.isSystemPromptEnabled {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(viewModel.settings.selectedSystemPromptPreset == nil ? "保存" : "更新") {
+                        systemPromptFocusedField = nil
+                        viewModel.addOrUpdateSystemPromptPreset()
+                    }
+                    .disabled(!canSaveSystemPromptPreset)
+                    .accessibilityIdentifier("system-prompt-save-preset")
+                }
+            }
+        }
+
         .task {
             if category == .connection, !hasPrefetchedConnectionCatalogs {
                 hasPrefetchedConnectionCatalogs = true
@@ -299,8 +312,17 @@ private struct SettingsDetailScreen: View {
         }
     }
 
+    private var canSaveSystemPromptPreset: Bool {
+        guard let name = SettingsStringHelpers.nilIfBlank(viewModel.systemPromptPresetNameInput),
+              let prompt = SettingsStringHelpers.nilIfBlank(viewModel.settings.systemPrompt ?? "") else {
+            return false
+        }
+        guard let preset = viewModel.settings.resolveSelectedSystemPromptPreset() else { return true }
+        return name != preset.name || prompt != SettingsStringHelpers.nilIfBlank(preset.prompt)
+    }
+
     private var systemPromptTabContent: some View {
-        SystemPromptSettingsSection(viewModel: viewModel)
+        SystemPromptSettingsSection(viewModel: viewModel, focusedField: $systemPromptFocusedField)
     }
 
     private var dualTabContent: some View {
@@ -1752,51 +1774,38 @@ private struct SettingsDetailScreen: View {
     #if DEBUG
     private var diagnosticsSection: some View {
         Section {
-            VStack(spacing: 12) {
-                Button {
-                    showDiagnosticsSheet = true
-                } label: {
-                    Label("表示", systemImage: "doc.text.magnifyingglass")
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(viewModel.diagnosticsLogText.isEmpty)
-
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: diagnosticsActionMinimumWidth), spacing: 12)], spacing: 12) {
-                    Button {
-                        viewModel.refreshDiagnosticsLog()
-                    } label: {
-                        Label("更新", systemImage: "arrow.clockwise")
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-
-                    Button {
-                        UIPasteboard.general.string = viewModel.diagnosticsLogText
-                        viewModel.statusMessage = L10n.text("診断ログをコピーしました")
-                    } label: {
-                        Label("コピー", systemImage: "doc.on.doc")
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .disabled(viewModel.diagnosticsLogText.isEmpty)
-
-                    ShareLink(item: viewModel.diagnosticsLogText) {
-                        Label("共有", systemImage: "square.and.arrow.up")
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .disabled(viewModel.diagnosticsLogText.isEmpty)
-
-                    Button(role: .destructive) {
-                        viewModel.clearDiagnosticsLog()
-                    } label: {
-                        Label("クリア", systemImage: "trash")
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .disabled(viewModel.diagnosticsLogText.isEmpty)
-                }
-                .buttonStyle(.bordered)
+            Button {
+                showDiagnosticsSheet = true
+            } label: {
+                Label("表示", systemImage: "doc.text.magnifyingglass")
             }
-            .font(.subheadline)
-            .lineLimit(1)
+            .disabled(viewModel.diagnosticsLogText.isEmpty)
+
+            Button {
+                viewModel.refreshDiagnosticsLog()
+            } label: {
+                Label("更新", systemImage: "arrow.clockwise")
+            }
+
+            Button {
+                UIPasteboard.general.string = viewModel.diagnosticsLogText
+                viewModel.statusMessage = L10n.text("診断ログをコピーしました")
+            } label: {
+                Label("コピー", systemImage: "doc.on.doc")
+            }
+            .disabled(viewModel.diagnosticsLogText.isEmpty)
+
+            ShareLink(item: viewModel.diagnosticsLogText) {
+                Label("共有", systemImage: "square.and.arrow.up")
+            }
+            .disabled(viewModel.diagnosticsLogText.isEmpty)
+
+            Button(role: .destructive) {
+                viewModel.clearDiagnosticsLog()
+            } label: {
+                Label("クリア", systemImage: "trash")
+            }
+            .disabled(viewModel.diagnosticsLogText.isEmpty)
 
             if viewModel.diagnosticsLogText.isEmpty {
                 Text("ログはありません。")

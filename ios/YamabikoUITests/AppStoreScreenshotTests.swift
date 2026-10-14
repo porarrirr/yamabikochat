@@ -63,21 +63,25 @@ final class AppStoreScreenshotTests: XCTestCase {
         app.navigationBars["プリセットを選ぶ"].buttons["閉じる"].tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
 
-        editor.tap()
+        editor.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.1)).tap()
         editor.typeText(" UI test prompt")
-        app.swipeUp()
+        XCTAssertFalse(app.buttons["完了"].exists)
+        capture("system-prompt-editing", app: app)
         let name = app.textFields["system-prompt-preset-name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.tap()
         name.typeText(" UI test preset")
+        XCTAssertFalse(app.buttons["完了"].exists)
         let save = app.buttons["system-prompt-save-preset"]
-        if !save.isHittable { app.swipeUp() }
+        XCTAssertTrue(save.isHittable)
         XCTAssertTrue(save.isEnabled)
         save.tap()
-        XCTAssertTrue(app.staticTexts["プリセット保存済み"].waitForExistence(timeout: 5))
+        capture("system-prompt-after-save", app: app)
+        let updated = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "更新"), object: save)
+        XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 5), .completed)
         XCTAssertFalse(save.isEnabled)
 
-        app.swipeDown()
+        if !presets.isHittable { app.swipeDown() }
         presets.tap()
         let preset = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "UI test preset")).firstMatch
         XCTAssertTrue(preset.waitForExistence(timeout: 5))
@@ -85,18 +89,30 @@ final class AppStoreScreenshotTests: XCTestCase {
         preset.tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
 
-        editor.tap()
+        editor.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.1)).tap()
         editor.typeText(" unsaved edit")
-        app.buttons["完了"].tap()
+        XCTAssertFalse(app.buttons["完了"].exists)
+        if !presets.isHittable { app.swipeDown() }
         presets.tap()
         preset.tap()
         XCTAssertTrue(app.buttons["置き換える"].waitForExistence(timeout: 5))
-        app.buttons["キャンセル"].tap()
+        if app.buttons["キャンセル"].exists {
+            app.buttons["キャンセル"].tap()
+        } else {
+            // iOS popovers cancel by tapping outside the confirmation.
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.15)).tap()
+        }
         XCTAssertTrue(app.navigationBars["プリセットを選ぶ"].exists)
         preset.tap()
         app.buttons["置き換える"].tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         XCTAssertFalse((editor.value as? String ?? "").contains("unsaved edit"))
+        capture("system-prompt-updated", app: app)
+
+        XCTAssertTrue(returnToSettingsIndex(app: app))
+        XCTAssertTrue(openSettingsCategory(app: app, subtitle: "使用状況・診断", title: "管理"))
+        XCTAssertTrue(scrollToText(app: app, text: "診断ログ"))
+        capture("diagnostics-actions", app: app)
     }
 
     func testCaptureAppStoreScreenshots() throws {
