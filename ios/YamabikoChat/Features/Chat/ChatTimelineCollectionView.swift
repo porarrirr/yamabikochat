@@ -78,6 +78,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var viewportLockTargetY: CGFloat?
     private var isContentUpdateScheduled = false
     private var isCompletingRowMeasurement = false
+    private var isReconfiguringRows = false
     private var isUserScrollInProgress = false
     private var userScrollGeneration = 0
     private var lastUserDrivenOffsetY: CGFloat?
@@ -355,6 +356,8 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     }
 
     private func applyPendingRowReconfigurationsIfNeeded() {
+        isReconfiguringRows = true
+        defer { isReconfiguringRows = false }
         var snapshot = dataSource.snapshot()
         let availableIDs = Set(snapshot.itemIdentifiers)
         let reconfiguredIDs = pendingReconfiguredRowIDs.filter(availableIDs.contains)
@@ -476,13 +479,20 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                 collectionView.collectionViewLayout.invalidateLayout()
             }
             collectionView.layoutIfNeeded()
-            if isUserScrolling || contentChangeUserScrollGeneration != userScrollGeneration {
+            let userScrolledSinceCapture = contentChangeUserScrollGeneration.map {
+                $0 != userScrollGeneration
+            } ?? false
+            if isUserScrolling || userScrolledSinceCapture {
                 cancelPendingViewportRestoreForUserScroll()
                 // UIKit may adjust contentOffset as soon as invalidation starts,
                 // before this pass reaches layoutIfNeeded(). Preserve the last
                 // offset delivered by the scroll delegate, which is the actual
                 // finger/deceleration position, rather than that adjusted value.
-                let preservedOffsetY = clampedOffset(lastUserDrivenOffsetY ?? measurementOffsetY)
+                // A live drag can be outside the content bounds (rubber banding).
+                // Clamping it here snaps the viewport away from the finger.
+                let preservedOffsetY = isUserScrolling
+                    ? (lastUserDrivenOffsetY ?? measurementOffsetY)
+                    : clampedOffset(measurementOffsetY)
                 if TailFollowPolicy.shouldAdjustOffset(
                     current: collectionView.contentOffset.y,
                     target: preservedOffsetY
@@ -633,6 +643,15 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         return TailFollowPolicy.isNearTail(distance: collectionView.contentSize.height - visibleBottom)
     }
 
+    private var isAtTail: Bool {
+        let inset = collectionView.adjustedContentInset
+        let visibleBottom = collectionView.contentOffset.y + collectionView.bounds.height - inset.bottom
+        return TailFollowPolicy.isNearTail(
+            distance: collectionView.contentSize.height - visibleBottom,
+            threshold: TailFollowPolicy.offsetTolerance
+        )
+    }
+
     private var isUserScrolling: Bool {
         isUserScrollInProgress
             || collectionView?.isTracking == true
@@ -649,9 +668,11 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        guard isUserScrolling else { return }
+        // Layout and inset changes also invoke this delegate. They must not
+        // replace the last finger-driven position during a measurement pass.
+        guard isUserScrolling, !isCompletingRowMeasurement, !isReconfiguringRows else { return }
         lastUserDrivenOffsetY = scrollView.contentOffset.y
-        if isNearTail {
+        if isAtTail {
             followState = .followingTail
             unreadCount = 0
         } else {
@@ -672,7 +693,10 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     }
 
     private func settleFollowState() {
-        if isNearTail {
+        // The wider "near tail" threshold is for the latest-message affordance.
+        // Resuming automatic movement requires actually reaching the tail;
+        // even a small upward drag means the reader chose a different position.
+        if isAtTail {
             followState = .followingTail
             unreadCount = 0
         } else {

@@ -1406,6 +1406,65 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testSmallUpwardScrollDuringGenerationDoesNotResumeTailFollowing() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: (1...24).map {
+            timelineMessage(id: Int64($0), text: String(repeating: "Message \($0) line\n", count: 4))
+        })
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+        var source = String(repeating: "生成中の回答です。\n\n", count: 20)
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 24, text: source, thinking: "", toolActivity: nil, isFinal: false
+        ))
+        await settleTimeline(controller)
+
+        controller.scrollViewWillBeginDragging(collectionView)
+        let readingOffset = maximumContentOffset(in: collectionView) - 40
+        collectionView.setContentOffset(CGPoint(x: 0, y: readingOffset), animated: false)
+        controller.scrollViewDidScroll(collectionView)
+        controller.scrollViewDidEndDragging(collectionView, willDecelerate: false)
+
+        for _ in 0..<3 {
+            source += "さらに生成された文章です。\n\n"
+            store.applyStreamingSnapshot(ChatStreamingSnapshot(
+                targetId: 24, text: source, thinking: "", toolActivity: nil, isFinal: false
+            ))
+            await settleTimeline(controller)
+            XCTAssertEqual(collectionView.contentOffset.y, readingOffset, accuracy: 0.5,
+                           "Even a small upward scroll must leave the reader in control")
+        }
+    }
+
+    @MainActor
+    func testStreamingMeasurementPreservesActiveTopBounce() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: [timelineMessage(id: 1, text: "Short answer")])
+        let controller = configuredTimelineController(store: store)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+        controller.scrollViewWillBeginDragging(collectionView)
+        let bounceOffset = -collectionView.adjustedContentInset.top - 45
+        collectionView.setContentOffset(CGPoint(x: 0, y: bounceOffset), animated: false)
+        controller.scrollViewDidScroll(collectionView)
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 1, text: "Short answer with newly streamed text", thinking: "",
+            toolActivity: nil, isFinal: false
+        ))
+        await settleTimeline(controller)
+        XCTAssertEqual(collectionView.contentOffset.y, bounceOffset, accuracy: 0.5,
+                       "Height updates must not clamp a drag's rubber-band offset")
+        controller.scrollViewDidEndDragging(collectionView, willDecelerate: false)
+    }
+
+    @MainActor
     func testReturningToTailDuringGenerationContinuesFollowingNewContent() async throws {
         let store = ChatTimelineStore()
         store.update(messages: (1...24).map {
