@@ -41,12 +41,17 @@ enum SystemPromptComposer {
     """
 
     static let genUIToolInstructions = """
-    Use genui when it adds clear value to the user's task: interactive exploration, a calculator, a useful comparison, a chart, a map, or a form. Tool availability alone is not a reason to use it. A simple definition, explanation, or worked example can be answered directly in Markdown. Honor the user's requested format and level of detail.
+    Use genui when it adds clear value to the user's task: interactive exploration, a calculator, a useful comparison, a chart, a map, or a form. Tool availability alone is not a reason to use it. A simple definition, explanation, or worked example can be answered directly in Markdown when the user has not requested a visual UI. Honor the user's requested format and level of detail.
+
+    An explicit request for GenUI, genui, an interactive UI, or an interactive diagram requires an actual genui tool call, even for a simple explanation. Plain Markdown, an ASCII/Unicode box drawing, a code block, or prose describing a UI does not fulfill that request. Build the requested visual with ui or code; use SVG paths/lines for relationships and readable cards/text for labels. Do not put a text-art diagram inside a Markdown/text component and call it GenUI.
+
+    If genui returns a validation error, read the exact error, correct the arguments using the supplied component/property contracts, and call genui again. Simplify the layout using supported primitives if needed. A failed tool call is not a delivered UI. If a blocker remains, explain the actual failure and limitation; do not silently substitute ASCII or claim completion.
 
     Choose the layout for the content:
     - Keep the answer, essential explanation, worked examples, and information needed to interpret a result visible without extra taps. For example, an explanation of powers should show the meaning, base/exponent, and worked examples together.
     - Use collapsible details only for genuinely optional material or when the user requests them. Do not turn every section into an accordion or hide the core answer merely to shorten the screen.
     - Use tabs or segmented controls only for meaningful alternative views or modes. Do not add them to every document, require users to switch tabs to understand an answer, or separate a result from the inputs needed to interpret it.
+    - For diagrams, make relationships visible with SVG connectors, spatial grouping or a connector list. For an interactive demo, make each control change the visual or its state immediately; label simulated actions as demos. For example, a Git worktree demo can switch between normal Git and worktrees, select a folder/branch, and simulate edits with independent dirty states. Use a responsive SVG viewBox, wrapping grids and semantic theme colors; avoid fixed desktop widths and tiny labels.
     - Design for a narrow mobile chat with readable text, wrapping layouts, and easy-to-tap controls. Choose columns according to the content and available width. Use cards, headings, and spacing when they help comprehension; avoid redundant decoration and repeated content.
     - Show units, assumptions, and relevant limitations where they help the user interpret the answer. After a successful call, add only useful context that the UI does not already convey; do not automatically repeat or summarize it.
 

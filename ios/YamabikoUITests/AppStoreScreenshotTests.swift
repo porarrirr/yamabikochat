@@ -72,14 +72,8 @@ final class AppStoreScreenshotTests: XCTestCase {
         name.tap()
         name.typeText(" UI test preset")
         XCTAssertFalse(app.buttons["完了"].exists)
-        let save = app.buttons["system-prompt-save-preset"]
-        XCTAssertTrue(save.isHittable)
-        XCTAssertTrue(save.isEnabled)
-        save.tap()
-        capture("system-prompt-after-save", app: app)
-        let updated = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "更新"), object: save)
-        XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 5), .completed)
-        XCTAssertFalse(save.isEnabled)
+        XCTAssertFalse(app.buttons["system-prompt-save-preset"].exists)
+        capture("system-prompt-after-autosave", app: app)
 
         if !presets.isHittable { app.swipeDown() }
         presets.tap()
@@ -95,18 +89,9 @@ final class AppStoreScreenshotTests: XCTestCase {
         if !presets.isHittable { app.swipeDown() }
         presets.tap()
         preset.tap()
-        XCTAssertTrue(app.buttons["置き換える"].waitForExistence(timeout: 5))
-        if app.buttons["キャンセル"].exists {
-            app.buttons["キャンセル"].tap()
-        } else {
-            // iOS popovers cancel by tapping outside the confirmation.
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.15)).tap()
-        }
-        XCTAssertTrue(app.navigationBars["プリセットを選ぶ"].exists)
-        preset.tap()
-        app.buttons["置き換える"].tap()
+        XCTAssertFalse(app.buttons["置き換える"].exists)
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        XCTAssertFalse((editor.value as? String ?? "").contains("unsaved edit"))
+        XCTAssertTrue((editor.value as? String ?? "").contains("unsaved edit"))
         capture("system-prompt-updated", app: app)
 
         XCTAssertTrue(returnToSettingsIndex(app: app))

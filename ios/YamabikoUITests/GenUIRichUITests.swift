@@ -67,6 +67,47 @@ final class GenUIRichUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "GenUI error")).firstMatch.exists)
     }
 
+    func testSavedTextMarkdownRendersHeadingsAndCode() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppStoreScreenshotDemo", "-GenUIRichFixture", "-GenUIMarkdownFixture", "-ScreenshotScene", "chat", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        app.launch()
+        XCTAssertTrue(app.webViews["genui-rich-canvas"].firstMatch.waitForExistence(timeout: 20))
+        let heading = app.staticTexts["使い方"].firstMatch
+        reveal(heading, in: app)
+        XCTAssertTrue(heading.exists, app.debugDescription)
+        let commands = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "git worktree add")).firstMatch
+        reveal(commands, in: app)
+        XCTAssertTrue(commands.exists, app.debugDescription)
+        XCTAssertTrue(commands.label.contains("\ncd ../repo-feature\n"))
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "```bash")).firstMatch.exists)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "### 使い方")).firstMatch.exists)
+        capture("genui-markdown-text")
+    }
+
+    func testWorktreeDiagramSelectionAndEdits() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppStoreScreenshotDemo", "-GenUIRichFixture", "-GenUIWorktreeFixture", "-ScreenshotScene", "chat", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        app.launch()
+        XCTAssertTrue(app.webViews["genui-rich-canvas"].firstMatch.waitForExistence(timeout: 20))
+        let edit = app.buttons["ファイルを編集（デモ）"].firstMatch
+        reveal(edit, in: app)
+        edit.tap()
+        let main = app.buttons["project/ · main · 変更あり"].firstMatch
+        reveal(main, in: app)
+        XCTAssertTrue(main.exists)
+        let feature = app.buttons["project-feature/ · feature/login · 変更なし"].firstMatch
+        reveal(feature, in: app)
+        feature.tap()
+        reveal(edit, in: app)
+        edit.tap()
+        let editedFeature = app.buttons["project-feature/ · feature/login · 変更あり"].firstMatch
+        reveal(editedFeature, in: app)
+        XCTAssertTrue(editedFeature.exists)
+        XCTAssertTrue(main.exists)
+        capture("genui-worktree-interactive")
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "GenUI error")).firstMatch.exists)
+    }
+
     func testFlowDiagramAndSimulator() {
         let app = XCUIApplication()
         app.launchArguments = ["-AppStoreScreenshotDemo", "-GenUIRichFixture", "-GenUIFlowFixture", "-ScreenshotScene", "chat", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]

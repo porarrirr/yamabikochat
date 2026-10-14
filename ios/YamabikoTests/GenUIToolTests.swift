@@ -21,6 +21,16 @@ final class GenUIToolTests: XCTestCase {
         XCTAssertThrowsError(try GenUIDocument.validated(from: #"{"title":"Invalid","ui":{"type":"MissingWidget"}}"#))
     }
 
+    func testAdvertisedInteractiveDiagramPassesToolValidation() async throws {
+        for code in [GenUITool.interactiveDiagramExample, GenUITool.worktreeDiagramExample] {
+            let document = GenUIDocument(title: "Diagram", code: code)
+            let arguments = String(decoding: try JSONEncoder().encode(document), as: UTF8.self)
+            let result = try await GenUITool().execute(call: ToolCall(id: "diagram", name: "genui", argumentsJSON: arguments))
+            XCTAssertFalse(result.isError)
+            XCTAssertEqual(try GenUIDocument.validated(from: result.content), document)
+        }
+    }
+
     func testLegacySchemaAdvertisesKindSpecificRequiredFields() throws {
         let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(GenUITool.definition.parametersJSON.utf8)) as? [String: Any])
         let properties = try XCTUnwrap(schema["properties"] as? [String: Any])

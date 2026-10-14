@@ -3228,6 +3228,19 @@ enum GenUIRichDemoFixture {
                 DIL.h('text',{},'日本銀行のページで硬貨の種類別データを確認できます。'),
                 DIL.h('Link',{title:'日本銀行「通貨流通高」',url:'https://www.boj.or.jp/statistics/money/ryutsu/index.htm'})));
             """#)
+        } else if ProcessInfo.processInfo.arguments.contains("-GenUIMarkdownFixture") {
+            // Reproduce saved model output that used Text for Markdown prose.
+            document = try GenUIDocument.validated(from: #"""
+            {"title":"Git worktree","ui":{"type":"col","props":{"gap":3},"children":[
+              {"type":"text","props":{"value":"## Git worktree\n1つのリポジトリから複数の作業ディレクトリを用意します。"}},
+              {"type":"svg","props":{"viewBox":"0 0 300 70","width":"100%","height":70},"children":[
+                {"type":"rect","props":{"x":10,"y":10,"width":280,"height":50,"rx":10,"fill":"#e8eefc"}},
+                {"type":"text","props":{"x":150,"y":40,"textAnchor":"middle","fill":"#24336b","value":"共有リポジトリ"}}]},
+              {"type":"text","props":{"value":"### 使い方\n```bash\ngit worktree add ../repo-feature -b feature\ncd ../repo-feature\n\n# 作業ツリー一覧\ngit worktree list\n```\n\n**要点:** 各worktreeの作業ファイルは独立しています。"}}
+            ]}}
+            """#)
+        } else if ProcessInfo.processInfo.arguments.contains("-GenUIWorktreeFixture") {
+            document = GenUIDocument(title: "Git worktree", code: GenUITool.worktreeDiagramExample)
         } else if ProcessInfo.processInfo.arguments.contains("-GenUIFlowFixture") {
             document = GenUIDocument(title: "PoWを見て、試して理解する", subtitle: "計算の繰り返しで、ブロックの合意をつくる仕組み", code: flowCode,
                                      state: ["simulatorOnly": .bool(ProcessInfo.processInfo.arguments.contains("-GenUISimulatorFixture"))])

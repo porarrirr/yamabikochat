@@ -1509,6 +1509,17 @@
         }
         if (type === 'markdown' || type === 'text-only-markdown')
             return markdown(p.text ?? p.value ?? children.join(''), type === 'text-only-markdown');
+        // Older generated documents put Markdown prose in Text. Render its formatting
+        // without changing SVG labels, literal whitespace, or composed inline nodes.
+        if (type === 'text' && !p.preserveWhitespace && children.every(c => typeof c === 'string')) {
+            const source = children.map(c => interpolate(c, renderScope)).join('');
+            if (/^ {0,3}(?:#{1,6}\s|`{3,}|~{3,}|>\s|[-*+]\s|\d+[.)]\s)/m.test(source) ||
+                /\*\*[^*]+\*\*|`[^`\n]+`|\[[^\]]+\]\([^\s)]+\)/.test(source)) {
+                const formatted = markdown(source);
+                formatted.dataset.nodePath = path;
+                return formatted;
+            }
+        }
         if (type === 'highlight') {
             el = document.createElement('mark');
             append();
@@ -2342,14 +2353,16 @@
                 p.ariaLabel || p.label || p.name || p.placeholder || type,
             );
             if (p.sliderStyle) el.dataset.sliderStyle = String(p.sliderStyle);
-            el.type =
-                type === 'slider'
-                    ? 'range'
-                    : type === 'date-picker'
-                      ? 'date'
-                      : type === 'radio'
-                        ? 'radio'
-                        : p.inputType || 'text';
+            if (type !== 'textarea') {
+                el.type =
+                    type === 'slider'
+                        ? 'range'
+                        : type === 'date-picker'
+                          ? 'date'
+                          : type === 'radio'
+                            ? 'radio'
+                            : p.inputType || 'text';
+            }
             for (const key of ['name', 'placeholder', 'min', 'max', 'step', 'rows', 'id'])
                 if (p[key] != null) el[key] = p[key];
             if (p.name && !p.id) el.id = p.name;

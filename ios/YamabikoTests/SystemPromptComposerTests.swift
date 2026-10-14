@@ -39,6 +39,15 @@ final class SystemPromptComposerTests: XCTestCase {
         XCTAssertTrue(GenUITool.definition.description.contains("Use basic elements directly for ordinary layouts"))
     }
 
+    func testExplicitGenUIRequestsRequireRenderedUIAndErrorRecovery() throws {
+        let prompt = try XCTUnwrap(SystemPromptComposer.composeForAPI(nil, enablesGenUIInstructions: true))
+        XCTAssertTrue(prompt.contains("requires an actual genui tool call, even for a simple explanation"))
+        XCTAssertTrue(prompt.contains("Do not put a text-art diagram inside a Markdown/text component"))
+        XCTAssertTrue(prompt.contains("correct the arguments using the supplied component/property contracts, and call genui again"))
+        XCTAssertTrue(prompt.contains("do not silently substitute ASCII"))
+        XCTAssertTrue(GenUITool.definition.description.contains(GenUITool.interactiveDiagramExample))
+    }
+
     func testResearchAndClarificationAllowUsefulProgress() throws {
         let prompt = try XCTUnwrap(SystemPromptComposer.composeForAPI(
             nil, enablesAgenticWebSearch: true, enablesUserQuestionInstructions: true

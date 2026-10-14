@@ -1414,14 +1414,7 @@ private struct UserMessageTextSelectionSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                Text(text)
-                    .font(.body)
-                    .lineSpacing(2)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20)
-            }
+            ScrollablePlainTextView(text: text)
             .navigationTitle(L10n.text("テキストを選択"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

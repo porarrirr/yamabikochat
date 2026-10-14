@@ -399,6 +399,38 @@ test('Markdown creates semantic nodes and treats HTML and unsafe links as data',
     assert.equal(app.messages.find(message=>message.type==='openUrl').url,'https://example.com/');
 });
 
+test('saved Text prose formats headings and fenced commands while SVG labels remain literal', () => {
+    const commands = 'git worktree add ../repo-feature -b feature\ncd ../repo-feature\n\n# 作業ツリー一覧\ngit worktree list\n';
+    const app = mount({ui:api.h('col', {},
+        api.h('text', {value:'## Git worktree\n1つのリポジトリから複数の作業ディレクトリを用意します。'}),
+        api.h('svg', {viewBox:'0 0 360 60'}, api.h('text', {x:10,y:20,value:'## literal `label`'})),
+        api.h('text', {value:'### 使い方\n```bash\n' + commands + '```\n\n**要点:** 作業ファイルは独立'}))});
+    assert.equal(app.root.querySelectorAll('h2')[0].textContent,'Git worktree');
+    assert.equal(app.root.querySelectorAll('h3')[0].textContent,'使い方');
+    assert.equal(app.root.querySelectorAll('pre')[0].textContent,commands);
+    assert.equal(app.root.querySelectorAll('strong')[0].textContent,'要点:');
+    assert.equal(app.root.querySelectorAll('svg')[0].textContent,'## literal `label`');
+    assert.equal(app.messages.some(m => m.type === 'error'),false);
+});
+
+test('Text Markdown compatibility preserves literal and composed text and handles reactive prose safely', () => {
+    const app = mount({state:{description:'## Updated\n**Safe** <script>bad()</script>'},ui:api.h('col', {},
+        api.h('text', {value:'C# / issue #42 / 2 * 3'}),
+        api.h('text', {preserveWhitespace:true,value:'## literal\n```bash\ncommand\n```'}),
+        api.h('text', {}, '## ', api.h('bold',{},'composed')),
+        api.h('text', {color:'secondary'}, '{{description}}'),
+        api.h('button', {label:'Update',onClick:{type:'setState',key:'description',value:'### Changed\n`git status`'}}))});
+    assert.ok(app.root.textContent.includes('C# / issue #42 / 2 * 3'));
+    assert.ok(app.root.textContent.includes('## literal\n```bash\ncommand\n```'));
+    assert.ok(app.root.textContent.includes('## composed'));
+    assert.equal(app.root.querySelectorAll('h2').length,1);
+    assert.equal(app.root.querySelectorAll('script').length,0);
+    assert.ok(app.root.textContent.includes('<script>bad()</script>'));
+    app.root.querySelectorAll('button')[0].fire('click',true); app.flush();
+    assert.equal(app.root.querySelectorAll('h3')[0].textContent,'Changed');
+    assert.equal(app.root.querySelectorAll('code')[0].textContent,'git status');
+});
+
 test('subtree error boundaries preserve siblings and attach diagnostic paths', () => {
     const app=mount({code:"const broken=()=>{throw Error('failed child')};return DIL.h('col',{},DIL.h('text',{},'Before'),DIL.h(broken),DIL.h('text',{},'After'));"});
     assert.ok(app.root.textContent.includes('Before'));assert.ok(app.root.textContent.includes('After'));
@@ -566,4 +598,46 @@ test('original prefill and mail draft actions require a trusted click without st
     assert.equal(app.messages.find(message => message.type === 'prefillComposer').text, '下書き');
     assert.equal(app.messages.find(message => message.type === 'composeEmail').args.email.body, 'Draft');
     assert.equal(app.messages.some(message => message.type === 'issueNewTurn'), false);
+});
+
+
+test('worktree GenUI diagram renders SVG and keeps worktree edits independent', () => {
+    const swift = fs.readFileSync(path.join(__dirname, '../YamabikoChat/Features/Tools/GenUI/GenUITool.swift'), 'utf8');
+    const code = swift.match(/static let worktreeDiagramExample = #"""\n([\s\S]*?)\n    """#/)[1];
+    const app = mount({code}, 320);
+    const button = label => app.root.querySelectorAll('button').find(b => (b.attributes['aria-label'] || b.textContent) === label);
+    const click = label => {assert.ok(button(label), label); button(label).fire('click', true); app.flush();};
+    assert.equal(app.root.querySelectorAll('svg')[0].attributes.viewBox, '0 0 300 60');
+    assert.ok(app.root.querySelectorAll('path').some(p => p.attributes.d === 'M150 0 V20 M50 55 V20 H250 V55 M150 20 V55'));
+    click('ファイルを編集（デモ）');
+    assert.ok(button('project/ · main · 変更あり'));
+    click('project-feature/ · feature/login · 変更なし');
+    click('ファイルを編集（デモ）');
+    assert.ok(button('project/ · main · 変更あり'));
+    assert.ok(button('project-feature/ · feature/login · 変更あり'));
+    assert.ok(button('project-fix/ · fix/crash · 変更なし'));
+    click('変更を戻す（デモ）');
+    assert.ok(button('project-feature/ · feature/login · 変更なし'));
+    assert.ok(button('project/ · main · 変更あり'));
+    app.root.querySelectorAll('input').find(i => i.value === 'normal').fire('change', true); app.flush();
+    assert.equal(app.root.querySelectorAll('path')[0].attributes.d, 'M150 0 V55');
+    assert.equal(app.root.querySelectorAll('select').length, 1);
+    app.root.querySelectorAll('input').find(i => i.value === 'worktree').fire('change', true); app.flush();
+    assert.ok(button('project/ · main · 変更あり'));
+    assert.equal(app.messages.some(m => ['error','issueNewTurn','openUrl'].includes(m.type)), false);
+    const saved = app.context.GenUIRuntime.getSnapshot();
+    const restored = mount({code}, 768, saved);
+    assert.ok(restored.root.querySelectorAll('button').some(b => b.attributes['aria-label'] === 'project/ · main · 変更あり'));
+});
+
+
+test('advertised minimal diagram example renders and responds locally', () => {
+    const swift = fs.readFileSync(path.join(__dirname, '../YamabikoChat/Features/Tools/GenUI/GenUITool.swift'), 'utf8');
+    const code = swift.match(/static let interactiveDiagramExample = #"""\n([\s\S]*?)\n    """#/)[1];
+    const app = mount({code});
+    assert.equal(app.root.querySelectorAll('circle')[0].attributes.cx, '20');
+    app.root.querySelectorAll('button')[0].fire('click', true); app.flush();
+    assert.equal(app.root.querySelectorAll('circle')[0].attributes.cx, '180');
+    assert.ok(app.root.textContent.includes('Step 2'));
+    assert.equal(app.messages.some(m => m.type === 'error'), false);
 });
