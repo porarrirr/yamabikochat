@@ -59,7 +59,10 @@ struct SystemPromptSettingsSection: View {
 
                 Section {
                     LabeledContent("名前") {
-                        TextField("プリセット名", text: $viewModel.systemPromptPresetNameInput)
+                        TextField("プリセット名", text: Binding(
+                            get: { viewModel.systemPromptPresetNameInput },
+                            set: { viewModel.updateSystemPromptName($0) }
+                        ))
                             .textInputAutocapitalization(.never)
                             .focused($focusedField, equals: .name)
                             .accessibilityLabel("プリセット名")
@@ -68,19 +71,19 @@ struct SystemPromptSettingsSection: View {
 
                     TextEditor(text: Binding(
                         get: { viewModel.settings.systemPrompt ?? "" },
-                        set: { viewModel.settings.systemPrompt = SettingsStringHelpers.nilIfBlank($0) }
+                        set: { viewModel.updateSystemPromptText($0) }
                     ))
                     .frame(height: 200)
                     .focused($focusedField, equals: .prompt)
                     .accessibilityLabel("システムプロンプト本文")
                     .accessibilityIdentifier("system-prompt-editor")
                 } header: {
-                    HStack {
-                        Text(selectedPreset == nil ? "新しいプリセット" : "プリセットを編集")
-                        Spacer()
-                        if selectedPreset != nil {
-                            Text(hasPresetChanges ? "未保存" : "保存済み")
-                        }
+                    Text(selectedPreset == nil ? "新しいプリセット" : "プリセットを編集")
+                } footer: {
+                    if let message = viewModel.systemPromptPresetValidationMessage {
+                        Text(message).foregroundStyle(.red)
+                    } else {
+                        Text("変更は自動で保存されます。")
                     }
                 }
 
@@ -105,7 +108,7 @@ struct SystemPromptSettingsSection: View {
                         List {
                             if viewModel.systemPromptPresets.isEmpty {
                                 ContentUnavailableView("プリセットはまだありません", systemImage: "square.stack",
-                                                       description: Text("本文とプリセット名を入力して保存すると、ここから選べます。"))
+                                                       description: Text("名前や本文を入力すると自動保存され、ここから選べます。"))
                             } else {
                                 Section {
                                     ForEach(viewModel.systemPromptPresets) { preset in

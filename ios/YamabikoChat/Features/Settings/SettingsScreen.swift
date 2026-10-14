@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct SettingsScreen: View {
     @EnvironmentObject private var container: AppContainer
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     let viewModel: SettingsViewModel
     var initialTab: SettingsTab? = nil
@@ -102,6 +103,9 @@ struct SettingsScreen: View {
         .onDisappear {
             viewModel.flushPendingSettingsSave()
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { viewModel.flushPendingSettingsSave() }
+        }
         .onAppear {
             if let initialTab {
                 navigationPath = [initialTab.category]
@@ -156,21 +160,9 @@ private struct SettingsDetailScreen: View {
                 managementCategoryContent
             }
         }
+        .onDisappear { viewModel.flushPendingSettingsSave() }
         .navigationTitle(category.title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if category == .conversation, viewModel.settings.isSystemPromptEnabled {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(viewModel.settings.selectedSystemPromptPreset == nil ? "保存" : "更新") {
-                        systemPromptFocusedField = nil
-                        viewModel.addOrUpdateSystemPromptPreset()
-                    }
-                    .disabled(!canSaveSystemPromptPreset)
-                    .accessibilityIdentifier("system-prompt-save-preset")
-                }
-            }
-        }
-
         .task {
             if category == .connection, !hasPrefetchedConnectionCatalogs {
                 hasPrefetchedConnectionCatalogs = true
@@ -310,15 +302,6 @@ private struct SettingsDetailScreen: View {
             }
             superGrokProviderSettingsSection
         }
-    }
-
-    private var canSaveSystemPromptPreset: Bool {
-        guard let name = SettingsStringHelpers.nilIfBlank(viewModel.systemPromptPresetNameInput),
-              let prompt = SettingsStringHelpers.nilIfBlank(viewModel.settings.systemPrompt ?? "") else {
-            return false
-        }
-        guard let preset = viewModel.settings.resolveSelectedSystemPromptPreset() else { return true }
-        return name != preset.name || prompt != SettingsStringHelpers.nilIfBlank(preset.prompt)
     }
 
     private var systemPromptTabContent: some View {
@@ -1825,13 +1808,9 @@ private struct SettingsDetailScreen: View {
         }
         .sheet(isPresented: $showDiagnosticsSheet) {
             NavigationStack {
-                ScrollView {
-                    Text(viewModel.diagnosticsLogText)
-                        .font(.caption)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                }
+                ScrollablePlainTextView(text: viewModel.diagnosticsLogText, textStyle: .caption1,
+                                        inset: 16, lineSpacing: 0,
+                                        accessibilityIdentifier: "diagnostics-log-reader")
                 .navigationTitle("診断ログ")
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {

@@ -223,10 +223,8 @@ final class SettingsViewModelTests: XCTestCase {
             encoding: .utf8
         ) ?? "[]"
         viewModel.selectSystemPromptPreset("Review")
-        viewModel.systemPromptPresetNameInput = "Careful Review"
-        viewModel.settings.systemPrompt = "New prompt"
-
-        viewModel.addOrUpdateSystemPromptPreset()
+        viewModel.updateSystemPromptName("Careful Review")
+        viewModel.updateSystemPromptText("New prompt")
 
         XCTAssertEqual(viewModel.systemPromptPresets, [
             SystemPromptPreset(name: "Careful Review", prompt: "New prompt")
@@ -565,6 +563,68 @@ final class SettingsViewModelTests: XCTestCase {
 
         viewModel.saveModelsDevFields(providerID: "example", fields: ["API_KEY": ""])
         XCTAssertEqual(viewModel.modelsDevField(providerID: "example", fieldName: "API_KEY"), "")
+    }
+
+    @MainActor
+    func testSystemPromptEditsAutoSavePresetAfterDebounce() async throws {
+        let fixture = try makeFixture()
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.updateSystemPromptName("Review")
+        viewModel.updateSystemPromptText("Review carefully\n")
+
+        let saved = expectation(for: NSPredicate { _, _ in
+            (try? fixture.repository.loadSettings().resolveSelectedSystemPromptPreset()?.prompt) == "Review carefully\n"
+        }, evaluatedWith: nil)
+        await fulfillment(of: [saved], timeout: 2)
+        XCTAssertEqual(try fixture.repository.loadSettings().selectedSystemPromptPreset, "Review")
+    }
+
+    @MainActor
+    func testSystemPromptSwitchKeepsLatestEditsAndEmptyBody() throws {
+        let fixture = try makeFixture()
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.updateSystemPromptName("First")
+        viewModel.updateSystemPromptText("Original")
+        viewModel.selectSystemPromptOption(SettingsViewModel.newSystemPromptSelection)
+        viewModel.updateSystemPromptName("Second")
+        viewModel.updateSystemPromptText("Other")
+        viewModel.selectSystemPromptOption("First")
+        viewModel.updateSystemPromptText("")
+        viewModel.selectSystemPromptOption("Second")
+        viewModel.selectSystemPromptOption("First")
+        viewModel.flushPendingSettingsSave()
+
+        XCTAssertEqual(viewModel.settings.systemPrompt, "")
+        XCTAssertNil(viewModel.settings.effectiveSystemPrompt())
+        XCTAssertEqual(try fixture.repository.loadSettings().systemPromptPresets(), [
+            SystemPromptPreset(name: "First", prompt: ""),
+            SystemPromptPreset(name: "Second", prompt: "Other")
+        ])
+    }
+
+    @MainActor
+    func testAutomaticPromptNamingAndDuplicateRenamePreserveBothPresets() throws {
+        let fixture = try makeFixture()
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.updateSystemPromptText("First body")
+        let firstName = viewModel.settings.selectedSystemPromptPreset!
+        viewModel.selectSystemPromptOption(SettingsViewModel.newSystemPromptSelection)
+        viewModel.updateSystemPromptText("Second body")
+        let secondName = viewModel.settings.selectedSystemPromptPreset!
+        XCTAssertNotEqual(firstName, secondName)
+        viewModel.updateSystemPromptName(firstName)
+        viewModel.updateSystemPromptText("Updated second body")
+        XCTAssertNotNil(viewModel.systemPromptPresetValidationMessage)
+        XCTAssertEqual(viewModel.settings.selectedSystemPromptPreset, secondName)
+        XCTAssertEqual(viewModel.systemPromptPresets.first?.prompt, "First body")
+        XCTAssertEqual(viewModel.systemPromptPresets.last?.prompt, "Updated second body")
+        viewModel.updateSystemPromptName("Renamed")
+        viewModel.flushPendingSettingsSave()
+        XCTAssertNil(viewModel.systemPromptPresetValidationMessage)
+        XCTAssertEqual(try fixture.repository.loadSettings().selectedSystemPromptPreset, "Renamed")
     }
 
     @MainActor

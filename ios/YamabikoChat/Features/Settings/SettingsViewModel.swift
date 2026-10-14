@@ -28,6 +28,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var geminiKeySlotValueInput: String = ""
     @Published var geminiRotationModelInput: String = ""
     @Published var systemPromptPresetNameInput: String = ""
+    @Published private(set) var systemPromptPresetValidationMessage: String?
     @Published var alibabaMCPAuthorizationTokenInput: String = ""
 
     @Published var codexAuthState: CodexAuthState = .init()
@@ -1048,6 +1049,8 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func selectSystemPromptOption(_ selection: String) {
+        flushPendingSettingsSave()
+        systemPromptPresetValidationMessage = nil
         switch selection {
         case Self.disabledSystemPromptSelection:
             settings.isSystemPromptEnabled = false
@@ -1066,54 +1069,78 @@ final class SettingsViewModel: ObservableObject {
               let preset = systemPromptPresets.first(where: {
                   $0.name.caseInsensitiveCompare(selected) == .orderedSame
               }) else { return }
+        systemPromptPresetValidationMessage = nil
         settings.isSystemPromptEnabled = true
         settings.selectedSystemPromptPreset = preset.name
         settings.systemPrompt = preset.prompt
         systemPromptPresetNameInput = preset.name
     }
 
-    func addOrUpdateSystemPromptPreset() {
-        guard let name = systemPromptPresetNameInput.nilIfBlank else {
-            errorMessage = L10n.text("プリセット名を入力してください")
-            return
-        }
-        guard let prompt = settings.systemPrompt?.nilIfBlank else {
-            errorMessage = L10n.text("システムプロンプトを入力してください")
-            return
-        }
+    func updateSystemPromptName(_ name: String) {
+        systemPromptPresetNameInput = name
+        autoSaveSystemPromptPreset()
+    }
 
+    func updateSystemPromptText(_ text: String) {
+        settings.systemPrompt = text.isEmpty ? nil : text
+        autoSaveSystemPromptPreset()
+    }
+
+    private func autoSaveSystemPromptPreset() {
         var presets = systemPromptPresets
-        if let selected = settings.selectedSystemPromptPreset?.nilIfBlank,
-           let index = presets.firstIndex(where: {
-               $0.name.caseInsensitiveCompare(selected) == .orderedSame
-           }) {
-            if presets.enumerated().contains(where: { candidateIndex, preset in
-                candidateIndex != index && preset.name.caseInsensitiveCompare(name) == .orderedSame
-            }) {
-                errorMessage = L10n.text("同じ名前のプリセットがすでにあります")
-                return
-            }
-            presets[index] = SystemPromptPreset(name: name, prompt: prompt)
-        } else if let index = presets.firstIndex(where: {
-            $0.name.caseInsensitiveCompare(name) == .orderedSame
-        }) {
-            presets[index] = SystemPromptPreset(name: name, prompt: prompt)
+        let selectedIndex = presets.firstIndex { $0.name == settings.selectedSystemPromptPreset }
+        let name: String
+        if let input = systemPromptPresetNameInput.nilIfBlank {
+            name = input
+        } else if let selectedIndex {
+            // Keep the preset identity while its name field is temporarily empty.
+            name = presets[selectedIndex].name
         } else {
-            presets.append(SystemPromptPreset(name: name, prompt: prompt))
+            guard settings.systemPrompt?.nilIfBlank != nil else { return }
+            let base = "新しいプリセット"
+            var candidate = base
+            var suffix = 2
+            while presets.contains(where: { $0.name.caseInsensitiveCompare(candidate) == .orderedSame }) {
+                candidate = "\(base) \(suffix)"
+                suffix += 1
+            }
+            name = candidate
+            systemPromptPresetNameInput = name
         }
 
-        if let data = try? JSONEncoder().encode(presets), let json = String(data: data, encoding: .utf8) {
-            settings.systemPromptPresetsJSON = json
-            settings.isSystemPromptEnabled = true
-            settings.selectedSystemPromptPreset = name
-            statusMessage = L10n.text("システムプロンプトプリセットを保存しました")
+        guard !presets.enumerated().contains(where: { index, preset in
+            index != selectedIndex && preset.name.caseInsensitiveCompare(name) == .orderedSame
+        }) else {
+            systemPromptPresetValidationMessage = L10n.text("同じ名前のプリセットがすでにあります")
+            // The body still belongs to the selected preset even during an invalid rename.
+            if let selectedIndex {
+                presets[selectedIndex].prompt = settings.systemPrompt ?? ""
+                if let data = try? JSONEncoder().encode(presets), let json = String(data: data, encoding: .utf8) {
+                    settings.systemPromptPresetsJSON = json
+                }
+            }
+            return
+        }
+
+        let preset = SystemPromptPreset(name: name, prompt: settings.systemPrompt ?? "")
+        if let selectedIndex {
+            presets[selectedIndex] = preset
         } else {
-            errorMessage = L10n.text("システムプロンプトプリセットの保存に失敗しました")
-            DiagnosticsLogger.log("System prompt preset save failed")
+            presets.append(preset)
+        }
+        do {
+            let data = try JSONEncoder().encode(presets)
+            settings.systemPromptPresetsJSON = String(decoding: data, as: UTF8.self)
+            settings.selectedSystemPromptPreset = name
+            systemPromptPresetValidationMessage = nil
+        } catch {
+            systemPromptPresetValidationMessage = error.localizedDescription
+            DiagnosticsLogger.log("System prompt preset save failed", category: .settings, error: error)
         }
     }
 
     func removeSelectedSystemPromptPreset() {
+        systemPromptPresetValidationMessage = nil
         guard let selected = settings.selectedSystemPromptPreset?.nilIfBlank else { return }
         var presets = systemPromptPresets
         presets.removeAll { $0.name.caseInsensitiveCompare(selected) == .orderedSame }
