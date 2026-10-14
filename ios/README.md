@@ -16,6 +16,18 @@ cd ios
 open YamabikoChat.xcodeproj
 ```
 
+Bootstrap reuses npm dependencies, Pi bundles, and extracted Python packages
+when their inputs and output contents match. Wheel checksums and the active SDK
+are still validated. These caches live under the ignored `Vendor/` directory;
+deleting `Vendor/*cache.json` and `Vendor/PythonSitePackages/.*-cache.json`
+forces preparation on the next bootstrap.
+
+The Python build phase checks input and product hashes on every build, then
+reuses unchanged packaging. SDK, architecture, deployment target, and signing
+settings participate in the cache key. Its stamp lives in Xcode's target
+temporary directory, so a clean build repackages Python. Release builds reuse
+existing framework dSYMs only when their UUIDs match the binaries.
+
 ## Targets
 - `YamabikoChat`: iOS app (SwiftUI)
 - `YamabikoShareExtension`: Share extension for text import

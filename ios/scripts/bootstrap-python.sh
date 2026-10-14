@@ -138,7 +138,13 @@ done
 
 for target in iphoneos-arm64 iphonesimulator-arm64 iphonesimulator-x86_64; do
   destination="$site_root/$target"
-  find "$destination" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  cache_arguments=(
+    --input "$0"
+    --input "$ios_dir/scripts/build-cache.py"
+    --output "$destination"
+    --value "$target"
+  )
+  selected_wheels=()
   for wheel in "$wheelhouse"/*.whl; do
     filename="$(basename "$wheel")"
     include=false
@@ -149,9 +155,21 @@ for target in iphoneos-arm64 iphonesimulator-arm64 iphonesimulator-x86_64; do
       *:*none-any.whl) include=true ;;
     esac
     if [[ "$include" == true ]]; then
-      unzip -oq "$wheel" -d "$destination"
+      selected_wheels+=("$wheel")
+      cache_arguments+=(--input "$wheel")
     fi
   done
+  cache_stamp="$site_root/.$target-cache.json"
+  if python3 "$ios_dir/scripts/build-cache.py" check "$cache_stamp" "${cache_arguments[@]}"; then
+    echo "Reusing verified Python packages for $target"
+    continue
+  fi
+  rm -f "$cache_stamp"
+  find "$destination" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  for wheel in "${selected_wheels[@]}"; do
+    unzip -oq "$wheel" -d "$destination"
+  done
+  python3 "$ios_dir/scripts/build-cache.py" save "$cache_stamp" "${cache_arguments[@]}"
 done
 
 echo "Prepared CPython 3.14-b10 with verified NumPy, Matplotlib, Pillow, and plotting dependencies"
