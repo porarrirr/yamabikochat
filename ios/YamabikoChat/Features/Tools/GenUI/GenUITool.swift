@@ -5,9 +5,7 @@ struct GenUITool: LocalToolExecutor {
     static let definition = ToolDefinition(
         name: name,
         description: """
-        Create a persisted interactive calculator, chart, table, map or form in the conversation. Supply title and exactly one of code, ui, or legacy components. code is a client-side JavaScript function body returning DIL.h(type,props,...children); no imports or raw JSX. ui is a tree of {type,props,children} with optional state bindings.
-        Runtime rules and basic element properties follow below. Discover original templates and aliases with genui_reference(componentName:"*") and optional query; read a specific name for supported properties and original template source/state contract. Reuse retrieved contracts from conversation history. componentName:"@guide" retrieves runtime guidance if it is needed again. Provide verified data in __state for original templates; a name does not fetch data. Backend actions are unsupported. Never fabricate live data or action success.
-        Do not infer chart type from IDs/titles. Use explicit chartType for charts. External media must use explicit HTTPS URLs; host actions require user gestures. AI turns use the existing Pi path. After success, briefly explain the UI.
+        Create a persisted interactive UI. Supply title and exactly one of ui, code, or legacy components. ui is a {type,props,children} tree. code is a client-side JavaScript function body returning DIL.h(type,props,...children); no imports or raw JSX. Do not infer chart type from IDs/titles. Use explicit chartType. Add only useful context after success, without repeating the UI.
         """ + "\n" + usageGuide + "\nBasic element properties:\n" + GenUIDocument.coreComponentGuide,
         parametersJSON: #"""
         {
@@ -15,7 +13,9 @@ struct GenUITool: LocalToolExecutor {
           "additionalProperties": false,
           "properties": {
             "title": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
             },
             "subtitle": {
               "type": "string"
@@ -28,10 +28,14 @@ struct GenUITool: LocalToolExecutor {
                 "properties": {
                   "id": {
                     "type": "string",
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                    "description": "Unique input identifier within this document.",
+                    "maxLength": 4096
                   },
                   "label": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
                   },
                   "kind": {
                     "type": "string",
@@ -41,28 +45,33 @@ struct GenUITool: LocalToolExecutor {
                       "select",
                       "text",
                       "toggle"
-                    ]
+                    ],
+                    "maxLength": 4096
                   },
                   "value": {
                     "type": "number",
-                    "description": "Numeric default; defaults to 0. Toggle uses 0 or 1."
+                    "description": "Numeric default is 0 when omitted. Supply a value within min/max and, for select, equal to one option value. Toggle accepts only 0 or 1."
                   },
                   "text": {
                     "type": "string",
-                    "description": "Text default; defaults to empty."
+                    "description": "Text default; defaults to empty.",
+                    "maxLength": 4096
                   },
                   "min": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Required for slider. Must be less than max; default value must be at least min."
                   },
                   "max": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Required for slider. Must be greater than min; default value must be at most max."
                   },
                   "step": {
                     "type": "number",
                     "exclusiveMinimum": 0
                   },
                   "unit": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 4096
                   },
                   "options": {
                     "type": "array",
@@ -71,7 +80,9 @@ struct GenUITool: LocalToolExecutor {
                       "type": "object",
                       "properties": {
                         "label": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096
                         },
                         "value": {
                           "type": "number"
@@ -80,16 +91,75 @@ struct GenUITool: LocalToolExecutor {
                       "required": [
                         "label",
                         "value"
-                      ]
-                    }
+                      ],
+                      "additionalProperties": false
+                    },
+                    "description": "Required and non-empty for select. Values must be distinct and include its default value."
                   }
                 },
                 "required": [
                   "id",
                   "label",
                   "kind"
+                ],
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "slider"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "min",
+                      "max"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "select"
+                        ]
+                      },
+                      "options": {
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "options"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "toggle"
+                        ]
+                      },
+                      "value": {
+                        "enum": [
+                          0,
+                          1
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "number",
+                          "text"
+                        ]
+                      }
+                    }
+                  }
                 ]
-              }
+              },
+              "description": "Legacy components only. IDs must be unique; numeric defaults must satisfy ranges and select options."
             },
             "components": {
               "type": "array",
@@ -99,7 +169,10 @@ struct GenUITool: LocalToolExecutor {
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                    "description": "Unique component identifier within this document.",
+                    "maxLength": 4096
                   },
                   "kind": {
                     "type": "string",
@@ -109,18 +182,22 @@ struct GenUITool: LocalToolExecutor {
                       "table",
                       "chart",
                       "cards"
-                    ]
+                    ],
+                    "maxLength": 4096
                   },
                   "title": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 4096
                   },
                   "text": {
                     "type": "string",
-                    "description": "Required for text."
+                    "description": "Required for text.",
+                    "maxLength": 4096
                   },
                   "value": {
                     "type": "string",
-                    "description": "Required for metric; literal or =formula."
+                    "description": "Required for metric; literal or =formula.",
+                    "maxLength": 4096
                   },
                   "format": {
                     "type": "string",
@@ -128,17 +205,21 @@ struct GenUITool: LocalToolExecutor {
                       "number",
                       "currency",
                       "percent"
-                    ]
+                    ],
+                    "maxLength": 4096
                   },
                   "unit": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 4096
                   },
                   "columns": {
                     "type": "array",
                     "maxItems": 12,
                     "items": {
-                      "type": "string"
-                    }
+                      "type": "string",
+                      "maxLength": 4096
+                    },
+                    "description": "Required and non-empty for table. Every row must have exactly this many cells."
                   },
                   "rows": {
                     "type": "array",
@@ -146,14 +227,20 @@ struct GenUITool: LocalToolExecutor {
                     "items": {
                       "type": "array",
                       "items": {
-                        "type": "string"
+                        "type": "string",
+                        "maxLength": 4096
                       }
-                    }
+                    },
+                    "description": "Optional table rows; omitted means an empty table. Each row must match columns in length."
                   },
                   "chartType": {
                     "type": "string",
-                    "enum": ["line", "pie"],
-                    "description": "Chart only. Omitted means line, never pie. For pie explicitly select pie and provide exactly one series with nonnegative values and a positive total."
+                    "enum": [
+                      "line",
+                      "pie"
+                    ],
+                    "description": "Chart only. Omitted means line, never pie. For pie explicitly select pie and provide exactly one series with nonnegative values and a positive total.",
+                    "maxLength": 4096
                   },
                   "series": {
                     "type": "array",
@@ -162,7 +249,8 @@ struct GenUITool: LocalToolExecutor {
                       "type": "object",
                       "properties": {
                         "name": {
-                          "type": "string"
+                          "type": "string",
+                          "maxLength": 4096
                         },
                         "points": {
                           "type": "array",
@@ -171,25 +259,31 @@ struct GenUITool: LocalToolExecutor {
                             "type": "object",
                             "properties": {
                               "label": {
-                                "type": "string"
+                                "type": "string",
+                                "maxLength": 4096
                               },
                               "value": {
                                 "type": "string",
-                                "description": "Numeric literal or =formula."
+                                "description": "Numeric literal or =formula.",
+                                "maxLength": 4096
                               }
                             },
                             "required": [
                               "label",
                               "value"
-                            ]
-                          }
+                            ],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1
                         }
                       },
                       "required": [
                         "name",
                         "points"
-                      ]
-                    }
+                      ],
+                      "additionalProperties": false
+                    },
+                    "description": "Required and non-empty for chart; each series needs 1–100 numeric or formula points. Pie requires exactly one series."
                   },
                   "items": {
                     "type": "array",
@@ -198,37 +292,162 @@ struct GenUITool: LocalToolExecutor {
                       "type": "object",
                       "properties": {
                         "title": {
-                          "type": "string"
+                          "type": "string",
+                          "maxLength": 4096
                         },
                         "value": {
-                          "type": "string"
+                          "type": "string",
+                          "maxLength": 4096
                         },
                         "detail": {
-                          "type": "string"
+                          "type": "string",
+                          "maxLength": 4096
                         }
                       },
                       "required": [
                         "title",
                         "value"
-                      ]
-                    }
+                      ],
+                      "additionalProperties": false
+                    },
+                    "description": "Required and non-empty for cards."
                   }
                 },
                 "required": [
                   "id",
                   "kind"
+                ],
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "text"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "metric"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "table"
+                        ]
+                      },
+                      "columns": {
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "columns"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "chart"
+                        ]
+                      },
+                      "series": {
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "series"
+                    ],
+                    "oneOf": [
+                      {
+                        "properties": {
+                          "chartType": {
+                            "enum": [
+                              "pie"
+                            ]
+                          },
+                          "series": {
+                            "maxItems": 1
+                          }
+                        },
+                        "required": [
+                          "chartType"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "chartType": {
+                            "enum": [
+                              "line"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "cards"
+                        ]
+                      },
+                      "items": {
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "items"
+                    ]
+                  }
                 ]
-              }
+              },
+              "description": "Legacy renderer. Multiple text/table sections are automatically collapsed by the iOS host; use ui/code when essential sections must stay visible."
             },
             "ui": {
               "type": "object",
-              "description": "Component tree. Look up type and props with genui_reference. children may contain nodes, strings or numbers; validated locally.",
+              "description": "Component tree. Basic types/properties are listed below; use genui_reference only for missing template or alias contracts. Children may contain nodes, strings or numbers; validated locally.",
               "properties": {
-                "type": { "type": "string" },
-                "props": { "type": "object" },
-                "children": { "type": "array", "items": { "anyOf": [{ "type": "object" }, { "type": "string" }, { "type": "number" }] } }
+                "type": {
+                  "type": "string"
+                },
+                "props": {
+                  "type": "object"
+                },
+                "children": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "object"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  }
+                }
               },
-              "required": ["type"],
+              "required": [
+                "type"
+              ],
               "additionalProperties": false
             },
             "code": {
@@ -282,8 +501,26 @@ struct GenUITool: LocalToolExecutor {
                     "required": [
                       "code"
                     ]
+                  },
+                  {
+                    "required": [
+                      "state"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "resources"
+                    ]
                   }
                 ]
+              },
+              "properties": {
+                "title": {
+                  "maxLength": 4096
+                },
+                "subtitle": {
+                  "maxLength": 4096
+                }
               }
             },
             {
@@ -303,6 +540,11 @@ struct GenUITool: LocalToolExecutor {
                     ]
                   }
                 ]
+              },
+              "properties": {
+                "inputs": {
+                  "maxItems": 0
+                }
               }
             },
             {
@@ -322,6 +564,11 @@ struct GenUITool: LocalToolExecutor {
                     ]
                   }
                 ]
+              },
+              "properties": {
+                "inputs": {
+                  "maxItems": 0
+                }
               }
             }
           ]
@@ -330,12 +577,10 @@ struct GenUITool: LocalToolExecutor {
     )
     // This core is fixed. Retrieved template/alias details are appended only as tool results.
     static let usageGuide = """
-        Create a persisted interactive GenUI in the conversation using exactly one of ui or code. Prefer the recovered original components for matching tasks: call genui_reference to inspect their actual source/state contract, then use {type:componentName,props:{__state:verifiedData}} or DIL.h(componentName,{__state:verifiedData}). There are 283 original templates including learning, calculators, clocks, timers, currency, weather, finance, sports and entity views. Their layout, calculations and local state handlers are preserved. A component name does not fetch data; provide the complete __state contract. Reference server actions/refresh require the original backend and return an unsupported reason. Never manufacture missing live data or claim those actions succeeded.
-        code is a JavaScript function body returning DIL.h(type,props,...children), __dil.jsx, or calling DIL.render. Compiled canonical component names are also available as globals. DIL.useState/useMemo/useEffect/useCallback/useRef/useId/useAppData/useConstants/useTheme/useBreakpoint/useIsMobile/useNow/useSpeechSynthesizer are supported. useTheme returns {theme,isDark}; useBreakpoint(token) returns whether the recovered breakpoint is active (xs380,sm576,md768,lg1024,xl1280,2xl1536). AI execution and follow-up turns remain on the existing Pi path. Local calculations support JavaScript Math.pow/Math.min/Math.max/Math.round and custom functions. No imports or raw JSX syntax.
-        When composing primitives, follow the reference metrics and hierarchy, without adding a second document heading or decorative enclosing panel. Numeric spacing is 4px per unit; default container gap is 2 units. Cards use original default/soft surfaces, padding and radii. Dimensions and justification are retained on phones. Text/title/caption use the original iOS typography and icons use the original SVG assets. Theme colors accept semantic tokens or {light,dark}. Padding/margin accept numbers, CSS lengths or {x,y,top,right,bottom,left}.
-        Declarative bindings use bind:"key", {{key}} / {{object.field}}, and onChange:{type:"setState",key:"key",value:"$value"}. Whole interpolations retain types. Events support setState/resetState/copy/openUrl/issueNewTurn/openEntityDetail/openMap; external host actions require user gestures. Each supports items/of, itemName/item, indexName/index. Scope supplies values; Show uses when with Show.Else. Props prefixed with $ use the exact original CEL parser/evaluator against the current binding scope, for example "$value":"price * quantity" or Each "$items":"rows.filter(row, row.active)". CEL maps/collections and its original standard library are supported locally.
-        chart accepts data,series,xAxis,yAxis and showLegend/showXAxis/showYAxis/showGrid; series carry dataKey,label,type,color. pie-chart also accepts innerRadius and row fill/stroke. Do not infer chart type from IDs/titles. Legacy chart types remain line/pie. Chart.content accepts explicit chartType bar/line/area/scatter/pie or supported Recharts JSON. flashcard-flip retains both faces and supports controlled flipped, reducedMotion and swipe handlers. Markdown supports nested lists, tables, code and math. Lottie accepts animationData or explicit HTTPS src; YouTube accepts videoId/url and embeds its player. Media resources must be explicit HTTPS. MapWidgetV2 renders native inline MapKit with supplied places/coordinates. AppBlock uses inline content. Do not add remote scripts, hidden model calls, or protocol fallbacks.
-        Rich documents retain saved compatibility; device limits still apply. Look up individual supported properties with genui_reference(componentName: name).
+        Use basic elements directly for ordinary layouts. Query genui_reference(componentName:"*",query:...) to find templates/aliases; read an exact name for its properties and source/state contract, or @guide for this guide. Reuse contracts from history. Templates use props:{__state:verifiedData}; names do not fetch data. Backend actions are unsupported; Never manufacture missing live data or action success.
+        ui/code: return DIL.h(type,props,...children), __dil.jsx, or call DIL.render. Canonical names are globals. Hooks: DIL.useState/useMemo/useEffect/useCallback/useRef/useId/useAppData/useConstants/useTheme/useBreakpoint/useIsMobile/useNow/useSpeechSynthesizer. State must be JSON serializable. Calculations use JavaScript, including Math.pow. No imports, raw JSX, remote scripts or protocol fallbacks; AI turns use the existing Pi path.
+        bind:"key", {{key}} and {{object.field}} read state; whole interpolations retain types. onChange:{type:"setState",key:"key",value:"$value"} writes state. Events: setState/resetState/copy/openUrl/issueNewTurn/openEntityDetail/openMap. External host actions and new turns require user gestures. Each uses items/of, itemName/item, indexName/index; Scope uses values; Show uses when and Show.Else. $-prefixed props use the original CEL parser/evaluator, e.g. "$value":"price * quantity".
+        Numeric spacing is 4px per unit; default gap is 2. Colors accept semantic tokens or {light,dark}; padding/margin accept numbers, CSS lengths or {x,y,top,right,bottom,left}. Avoid repeating the document heading. Chart.content needs chartType and matching data keys. Markdown supports lists, tables, code and math. Media needs explicit HTTPS URLs; Lottie also accepts animationData and YouTube videoId. MapWidgetV2 uses supplied places/coordinates; AppBlock uses inline content. Look up component-specific properties when needed. Device limits apply.
         """
     var definition: ToolDefinition { Self.definition }
 

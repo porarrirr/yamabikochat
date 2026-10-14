@@ -13,11 +13,70 @@ final class SystemPromptComposerTests: XCTestCase {
         XCTAssertTrue(enabled?.contains("Prefer code for interactive calculations") == true)
         XCTAssertTrue(enabled?.contains("Math.min/Math.max/Math.abs/Math.round/Math.pow") == true)
         XCTAssertTrue(enabled?.contains("legacy formula language applies only to components") == true)
-        XCTAssertTrue(enabled?.contains("no app-defined fixed document/code size") == true)
+        XCTAssertTrue(enabled?.contains("Actual capacity depends on device memory") == true)
         XCTAssertTrue(enabled?.contains("defaults to a line chart") == true)
         XCTAssertTrue(enabled?.contains("chartType:\"pie\"") == true)
         XCTAssertTrue(enabled?.contains("Never call a line chart a pie chart") == true)
         XCTAssertFalse(disabled?.contains("Use genui when") == true)
+    }
+
+    func testExplanationsKeepEssentialContentVisibleWithoutMandatoryWidgets() throws {
+        let prompt = try XCTUnwrap(SystemPromptComposer.composeForAPI(nil, enablesGenUIInstructions: true))
+        for guidance in [
+            "A simple definition, explanation, or worked example can be answered directly in Markdown",
+            "visible without extra taps",
+            "an explanation of powers should show the meaning, base/exponent, and worked examples together",
+            "Do not turn every section into an accordion",
+            "Use tabs or segmented controls only for meaningful alternative views or modes",
+            "Use ui or code for explanatory layouts",
+            "do not automatically repeat or summarize it"
+        ] {
+            XCTAssertTrue(prompt.contains(guidance), guidance)
+        }
+        XCTAssertFalse(prompt.contains("put secondary tables, explanations, and code behind user-opened details"))
+        XCTAssertFalse(prompt.contains("For rich documents use segmented-control"))
+        XCTAssertFalse(GenUITool.definition.description.contains("After success, briefly explain the UI"))
+        XCTAssertTrue(GenUITool.definition.description.contains("Use basic elements directly for ordinary layouts"))
+    }
+
+    func testResearchAndClarificationAllowUsefulProgress() throws {
+        let prompt = try XCTUnwrap(SystemPromptComposer.composeForAPI(
+            nil, enablesAgenticWebSearch: true, enablesUserQuestionInstructions: true
+        ))
+        XCTAssertTrue(prompt.contains("After a transient error, retry only when there is a reasonable prospect of success"))
+        XCTAssertTrue(prompt.contains("For minor ambiguities, state a reasonable assumption and proceed"))
+        XCTAssertTrue(prompt.contains("do not invent an answer or treat cancellation as authorization"))
+        XCTAssertTrue(prompt.contains("Continue work that does not depend on that answer"))
+        XCTAssertFalse(prompt.contains("including after errors"))
+        XCTAssertFalse(prompt.contains("append \"(Recommended)\""))
+    }
+
+    func testAllToolCombinationsPreserveCustomPromptAndOnlyIncludeAvailableToolGuidance() throws {
+        let instructions = [
+            SystemPromptComposer.agenticWebSearchInstructions,
+            SystemPromptComposer.editorToolInstructions,
+            SystemPromptComposer.pythonToolInstructions,
+            SystemPromptComposer.userQuestionToolInstructions,
+            SystemPromptComposer.genUIToolInstructions
+        ]
+        for mask in 0..<32 {
+            let enabled = (0..<5).map { mask & (1 << $0) != 0 }
+            let prompt = try XCTUnwrap(SystemPromptComposer.composeForAPI(
+                "  Answer in Japanese with detailed examples.  ",
+                enablesAgenticWebSearch: enabled[0],
+                enablesEditorInstructions: enabled[1],
+                enablesPythonInstructions: enabled[2],
+                enablesUserQuestionInstructions: enabled[3],
+                enablesGenUIInstructions: enabled[4],
+                now: makeDate(year: 2026, month: 10, day: 14)
+            ))
+            XCTAssertTrue(prompt.hasPrefix("Answer in Japanese with detailed examples.\n\n"), "mask=\(mask)")
+            XCTAssertTrue(prompt.hasSuffix("Today's date: 2026/10/14"), "mask=\(mask)")
+            for (index, instruction) in instructions.enumerated() {
+                XCTAssertEqual(prompt.components(separatedBy: instruction).count - 1, enabled[index] ? 1 : 0,
+                               "mask=\(mask), instruction=\(index)")
+            }
+        }
     }
 
     private var tokyoTimeZone: TimeZone {
@@ -91,7 +150,7 @@ final class SystemPromptComposerTests: XCTestCase {
         XCTAssertTrue(composed?.contains("Table rows include column labels") == true)
         XCTAssertTrue(composed?.contains("Read research_progress and research_status") == true)
         XCTAssertTrue(composed?.contains("Cite only sources actually used with a descriptive Markdown link") == true)
-        XCTAssertTrue(composed?.contains("Never expose a bare URL") == true)
+        XCTAssertTrue(composed?.contains("provide a raw URL when the user requests it") == true)
         XCTAssertTrue(composed?.hasSuffix("Today's date: 2026/06/27") == true)
     }
 
@@ -154,7 +213,7 @@ final class SystemPromptComposerTests: XCTestCase {
 
         XCTAssertTrue(composed?.contains("Use ask_user_question only when") == true)
         XCTAssertTrue(composed?.contains("stable id") == true)
-        XCTAssertTrue(composed?.contains("(Recommended)") == true)
+        XCTAssertTrue(composed?.contains("only when there is a justified recommendation") == true)
         XCTAssertTrue(composed?.contains("If the user cancels") == true)
         XCTAssertTrue(composed?.hasSuffix("Today's date: 2026/06/27") == true)
     }

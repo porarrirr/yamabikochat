@@ -21,6 +21,56 @@ final class GenUIToolTests: XCTestCase {
         XCTAssertThrowsError(try GenUIDocument.validated(from: #"{"title":"Invalid","ui":{"type":"MissingWidget"}}"#))
     }
 
+    func testLegacySchemaAdvertisesKindSpecificRequiredFields() throws {
+        let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(GenUITool.definition.parametersJSON.utf8)) as? [String: Any])
+        let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
+        for (arrayName, expected) in [
+            ("inputs", ["slider": ["min", "max"], "select": ["options"]]),
+            ("components", ["text": ["text"], "metric": ["value"], "table": ["columns"], "chart": ["series"], "cards": ["items"]])
+        ] {
+            let array = try XCTUnwrap(properties[arrayName] as? [String: Any])
+            let item = try XCTUnwrap(array["items"] as? [String: Any])
+            let variants = try XCTUnwrap(item["oneOf"] as? [[String: Any]])
+            for (kind, required) in expected {
+                let variant = try XCTUnwrap(variants.first { variant in
+                    let props = variant["properties"] as? [String: Any]
+                    let kindSchema = props?["kind"] as? [String: Any]
+                    return (kindSchema?["enum"] as? [String]) == [kind]
+                })
+                XCTAssertEqual(variant["required"] as? [String], required, kind)
+            }
+        }
+    }
+
+    func testLegacyKindContractsAcceptCompleteInputsAndRejectMissingFields() throws {
+        let components = [
+            #"{"id":"t","kind":"text","text":"Meaning"}"#,
+            #"{"id":"m","kind":"metric","value":"8"}"#,
+            #"{"id":"table","kind":"table","columns":["Example"]}"#,
+            #"{"id":"chart","kind":"chart","series":[{"name":"Examples","points":[{"label":"2³","value":"8"}]}]}"#,
+            #"{"id":"cards","kind":"cards","items":[{"title":"Example","value":"8"}]}"#
+        ]
+        for component in components {
+            XCTAssertNoThrow(try GenUIDocument.validated(from: "{\"title\":\"Contract\",\"components\":[\(component)]}"))
+        }
+        for kind in ["text", "metric", "table", "chart", "cards"] {
+            XCTAssertThrowsError(try GenUIDocument.validated(from: "{\"title\":\"Invalid\",\"components\":[{\"id\":\"missing\",\"kind\":\"\(kind)\"}]}"))
+        }
+        for input in [
+            #"{"id":"x","label":"X","kind":"slider","min":1,"max":10,"value":2}"#,
+            #"{"id":"x","label":"X","kind":"select","value":2,"options":[{"label":"Two","value":2}]}"#
+        ] {
+            XCTAssertNoThrow(try GenUIDocument.validated(from: "{\"title\":\"Input\",\"inputs\":[\(input)],\"components\":[\(components[0])]}"))
+        }
+        for input in [
+            #"{"id":"x","label":"X","kind":"slider"}"#,
+            #"{"id":"x","label":"X","kind":"select"}"#,
+            #"{"id":"x","label":"X","kind":"select","value":1,"options":[{"label":"Two","value":2}]}"#
+        ] {
+            XCTAssertThrowsError(try GenUIDocument.validated(from: "{\"title\":\"Input\",\"inputs\":[\(input)],\"components\":[\(components[0])]}"))
+        }
+    }
+
     func testReferenceRetrievalPreservesToolPrefixAcrossScopesAndConversations() async throws {
         let registry = LocalToolRegistry(executors: [GenUIReferenceTool(), GenUITool()])
         let encoder = JSONEncoder()

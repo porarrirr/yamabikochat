@@ -134,7 +134,7 @@ struct AskUserQuestionTool: LocalToolExecutor {
 
     static let definition = ToolDefinition(
         name: name,
-        description: "Ask the user a concise question when you need confirmation, a choice, or missing information before proceeding. Send one or more questions, each with a stable id that will be echoed in the answer.",
+        description: "Ask a concise question only when missing information materially affects the answer or an action requires the user's authorization. Use available context first; state a reasonable assumption for minor ambiguities. Send one or more questions with unique non-empty ids and non-empty question text. Options are optional; omit them for a free-text question. Use the user's language. Cancellation is not an answer or authorization.",
         parametersJSON: #"""
         {
           "type": "object",
@@ -150,7 +150,9 @@ struct AskUserQuestionTool: LocalToolExecutor {
                   },
                   "id": {
                     "type": "string",
-                    "description": "Stable id for this question; echoed in the answer."
+                    "description": "Unique non-empty id within this call; echoed in the answer.",
+                    "minLength": 1,
+                    "pattern": "\\S"
                   },
                   "multi_select": {
                     "type": "boolean",
@@ -163,25 +165,40 @@ struct AskUserQuestionTool: LocalToolExecutor {
                       "properties": {
                         "label": {
                           "type": "string",
-                          "description": "Short user-facing option label."
+                          "description": "Short user-facing option label.",
+                          "minLength": 1,
+                          "pattern": "\\S"
                         },
                         "description": {
                           "type": "string",
                           "description": "One sentence explaining the tradeoff or impact."
                         }
                       },
-                      "required": ["label"]
+                      "required": [
+                        "label"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "question": {
                     "type": "string",
-                    "description": "The specific question to ask the user."
+                    "description": "The specific question to ask the user.",
+                    "minLength": 1,
+                    "pattern": "\\S"
                   }
-                }
-              }
+                },
+                "required": [
+                  "id",
+                  "question"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1
             }
           },
-          "required": ["questions"]
+          "required": [
+            "questions"
+          ]
         }
         """#
     )

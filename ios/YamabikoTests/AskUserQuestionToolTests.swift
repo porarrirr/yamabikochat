@@ -66,6 +66,35 @@ final class AskUserQuestionToolTests: XCTestCase {
         let itemProperties = try XCTUnwrap(items["properties"] as? [String: Any])
         XCTAssertNotNil(itemProperties["multi_select"])
         XCTAssertNotNil(itemProperties["options"])
+        XCTAssertEqual(questions["minItems"] as? Int, 1)
+        XCTAssertEqual(items["required"] as? [String], ["id", "question"])
+        XCTAssertEqual(items["additionalProperties"] as? Bool, false)
+        for key in ["id", "question"] {
+            let property = try XCTUnwrap(itemProperties[key] as? [String: Any])
+            XCTAssertEqual(property["minLength"] as? Int, 1)
+            XCTAssertEqual(property["pattern"] as? String, #"\S"#)
+        }
+    }
+
+    @MainActor
+    func testMissingAndBlankRequiredFieldsFailBeforePresentingUI() async {
+        let coordinator = UserQuestionCoordinator()
+        let tool = AskUserQuestionTool(coordinator: coordinator)
+        for arguments in [
+            #"{"questions":[]}"#,
+            #"{"questions":[{"question":"Which?"}]}"#,
+            #"{"questions":[{"id":"choice"}]}"#,
+            #"{"questions":[{"id":" ","question":"Which?"}]}"#,
+            #"{"questions":[{"id":"choice","question":" \n "}]}"#,
+            #"{"questions":[{"id":"choice","question":"Which?","options":[{"label":" "}]}]}"#
+        ] {
+            do {
+                _ = try await tool.execute(call: ToolCall(id: "invalid", name: tool.definition.name, argumentsJSON: arguments))
+                XCTFail("Expected invalid question to fail: \(arguments)")
+            } catch {
+                XCTAssertNil(coordinator.pending)
+            }
+        }
     }
 
     @MainActor
