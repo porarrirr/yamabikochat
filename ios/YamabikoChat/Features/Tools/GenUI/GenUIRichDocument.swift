@@ -169,7 +169,15 @@ extension GenUIDocument {
         return catalog
     }()
 
-    /// Keep model instructions compact without repeating common properties on every element.
+    /// A fixed, useful core keeps short conversations cacheable as well as avoiding discovery
+    /// calls for ordinary layouts. Templates and aliases are retrieved through genui_reference;
+    /// never vary this prefix by query, conversation, retrieved component or provider.
+    static var coreComponentGuide: String {
+        let guide: [String: Any] = ["commonProperties": commonProperties, "elements": elementProperties]
+        return String(decoding: try! JSONSerialization.data(withJSONObject: guide, options: [.sortedKeys]), as: UTF8.self)
+    }
+
+    /// Complete catalog for documentation and size comparisons, not the advertised tool prefix.
     static var componentGuide: String {
         let guide: [String: Any] = ["commonProperties": commonProperties,
                                     "elements": elementProperties, "widgetAliases": widgetAliases, "referenceComponents": GenUIReferenceCatalog.components]

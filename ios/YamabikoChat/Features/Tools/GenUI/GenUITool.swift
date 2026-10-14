@@ -5,13 +5,10 @@ struct GenUITool: LocalToolExecutor {
     static let definition = ToolDefinition(
         name: name,
         description: """
-        Create a persisted interactive GenUI in the conversation using exactly one of ui or code. Prefer the recovered original components for matching tasks: call genui_reference to inspect their actual source/state contract, then use {type:componentName,props:{__state:verifiedData}} or DIL.h(componentName,{__state:verifiedData}). There are 283 original templates including learning, calculators, clocks, timers, currency, weather, finance, sports and entity views. Their layout, calculations and local state handlers are preserved. A component name does not fetch data; provide the complete __state contract. Reference server actions/refresh require the original backend and return an unsupported reason. Never manufacture missing live data or claim those actions succeeded.
-        code is a JavaScript function body returning DIL.h(type,props,...children), __dil.jsx, or calling DIL.render. Compiled canonical component names are also available as globals. DIL.useState/useMemo/useEffect/useCallback/useRef/useId/useAppData/useConstants/useTheme/useBreakpoint/useIsMobile/useNow/useSpeechSynthesizer are supported. useTheme returns {theme,isDark}; useBreakpoint(token) returns whether the recovered breakpoint is active (xs380,sm576,md768,lg1024,xl1280,2xl1536). AI execution and follow-up turns remain on the existing Pi path. Local calculations support JavaScript Math.pow/Math.min/Math.max/Math.round and custom functions. No imports or raw JSX syntax.
-        When composing primitives, follow the reference metrics and hierarchy, without adding a second document heading or decorative enclosing panel. Numeric spacing is 4px per unit; default container gap is 2 units. Cards use original default/soft surfaces, padding and radii. Dimensions and justification are retained on phones. Text/title/caption use the original iOS typography and icons use the original SVG assets. Theme colors accept semantic tokens or {light,dark}. Padding/margin accept numbers, CSS lengths or {x,y,top,right,bottom,left}.
-        Declarative bindings use bind:"key", {{key}} / {{object.field}}, and onChange:{type:"setState",key:"key",value:"$value"}. Whole interpolations retain types. Events support setState/resetState/copy/openUrl/issueNewTurn/openEntityDetail/openMap; external host actions require user gestures. Each supports items/of, itemName/item, indexName/index. Scope supplies values; Show uses when with Show.Else. Props prefixed with $ use the exact original CEL parser/evaluator against the current binding scope, for example "$value":"price * quantity" or Each "$items":"rows.filter(row, row.active)". CEL maps/collections and its original standard library are supported locally.
-        chart accepts data,series,xAxis,yAxis and showLegend/showXAxis/showYAxis/showGrid; series carry dataKey,label,type,color. pie-chart also accepts innerRadius and row fill/stroke. Do not infer chart type from IDs/titles. Legacy chart types remain line/pie. Chart.content accepts explicit chartType bar/line/area/scatter/pie or supported Recharts JSON. flashcard-flip retains both faces and supports controlled flipped, reducedMotion and swipe handlers. Markdown supports nested lists, tables, code and math. Lottie accepts animationData or explicit HTTPS src; YouTube accepts videoId/url and embeds its player. Media resources must be explicit HTTPS. MapWidgetV2 renders native inline MapKit with supplied places/coordinates. AppBlock uses inline content. Do not add remote scripts, hidden model calls, or protocol fallbacks.
-        Rich documents retain saved compatibility; device limits still apply. Supported properties:
-        """ + GenUIDocument.componentGuide,
+        Create a persisted interactive calculator, chart, table, map or form in the conversation. Supply title and exactly one of code, ui, or legacy components. code is a client-side JavaScript function body returning DIL.h(type,props,...children); no imports or raw JSX. ui is a tree of {type,props,children} with optional state bindings.
+        Runtime rules and basic element properties follow below. Discover original templates and aliases with genui_reference(componentName:"*") and optional query; read a specific name for supported properties and original template source/state contract. Reuse retrieved contracts from conversation history. componentName:"@guide" retrieves runtime guidance if it is needed again. Provide verified data in __state for original templates; a name does not fetch data. Backend actions are unsupported. Never fabricate live data or action success.
+        Do not infer chart type from IDs/titles. Use explicit chartType for charts. External media must use explicit HTTPS URLs; host actions require user gestures. AI turns use the existing Pi path. After success, briefly explain the UI.
+        """ + "\n" + usageGuide + "\nBasic element properties:\n" + GenUIDocument.coreComponentGuide,
         parametersJSON: #"""
         {
           "type": "object",
@@ -224,7 +221,15 @@ struct GenUITool: LocalToolExecutor {
               }
             },
             "ui": {
-              "$ref": "#/$defs/node"
+              "type": "object",
+              "description": "Component tree. Look up type and props with genui_reference. children may contain nodes, strings or numbers; validated locally.",
+              "properties": {
+                "type": { "type": "string" },
+                "props": { "type": "object" },
+                "children": { "type": "array", "items": { "anyOf": [{ "type": "object" }, { "type": "string" }, { "type": "number" }] } }
+              },
+              "required": ["type"],
+              "additionalProperties": false
             },
             "code": {
               "type": "string",
@@ -319,47 +324,19 @@ struct GenUITool: LocalToolExecutor {
                 ]
               }
             }
-          ],
-          "$defs": {
-            "node": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "enum": \#(String(decoding: try! JSONSerialization.data(withJSONObject: GenUIDocument.componentCatalog.keys.sorted()), as: UTF8.self))
-                },
-                "props": {
-                  "type": "object"
-                },
-                "children": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/child"
-                  }
-                }
-              },
-              "required": [
-                "type"
-              ]
-            },
-            "child": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/node"
-                },
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "number"
-                }
-              ]
-            }
-          }
+          ]
         }
         """#
     )
+    // This core is fixed. Retrieved template/alias details are appended only as tool results.
+    static let usageGuide = """
+        Create a persisted interactive GenUI in the conversation using exactly one of ui or code. Prefer the recovered original components for matching tasks: call genui_reference to inspect their actual source/state contract, then use {type:componentName,props:{__state:verifiedData}} or DIL.h(componentName,{__state:verifiedData}). There are 283 original templates including learning, calculators, clocks, timers, currency, weather, finance, sports and entity views. Their layout, calculations and local state handlers are preserved. A component name does not fetch data; provide the complete __state contract. Reference server actions/refresh require the original backend and return an unsupported reason. Never manufacture missing live data or claim those actions succeeded.
+        code is a JavaScript function body returning DIL.h(type,props,...children), __dil.jsx, or calling DIL.render. Compiled canonical component names are also available as globals. DIL.useState/useMemo/useEffect/useCallback/useRef/useId/useAppData/useConstants/useTheme/useBreakpoint/useIsMobile/useNow/useSpeechSynthesizer are supported. useTheme returns {theme,isDark}; useBreakpoint(token) returns whether the recovered breakpoint is active (xs380,sm576,md768,lg1024,xl1280,2xl1536). AI execution and follow-up turns remain on the existing Pi path. Local calculations support JavaScript Math.pow/Math.min/Math.max/Math.round and custom functions. No imports or raw JSX syntax.
+        When composing primitives, follow the reference metrics and hierarchy, without adding a second document heading or decorative enclosing panel. Numeric spacing is 4px per unit; default container gap is 2 units. Cards use original default/soft surfaces, padding and radii. Dimensions and justification are retained on phones. Text/title/caption use the original iOS typography and icons use the original SVG assets. Theme colors accept semantic tokens or {light,dark}. Padding/margin accept numbers, CSS lengths or {x,y,top,right,bottom,left}.
+        Declarative bindings use bind:"key", {{key}} / {{object.field}}, and onChange:{type:"setState",key:"key",value:"$value"}. Whole interpolations retain types. Events support setState/resetState/copy/openUrl/issueNewTurn/openEntityDetail/openMap; external host actions require user gestures. Each supports items/of, itemName/item, indexName/index. Scope supplies values; Show uses when with Show.Else. Props prefixed with $ use the exact original CEL parser/evaluator against the current binding scope, for example "$value":"price * quantity" or Each "$items":"rows.filter(row, row.active)". CEL maps/collections and its original standard library are supported locally.
+        chart accepts data,series,xAxis,yAxis and showLegend/showXAxis/showYAxis/showGrid; series carry dataKey,label,type,color. pie-chart also accepts innerRadius and row fill/stroke. Do not infer chart type from IDs/titles. Legacy chart types remain line/pie. Chart.content accepts explicit chartType bar/line/area/scatter/pie or supported Recharts JSON. flashcard-flip retains both faces and supports controlled flipped, reducedMotion and swipe handlers. Markdown supports nested lists, tables, code and math. Lottie accepts animationData or explicit HTTPS src; YouTube accepts videoId/url and embeds its player. Media resources must be explicit HTTPS. MapWidgetV2 renders native inline MapKit with supplied places/coordinates. AppBlock uses inline content. Do not add remote scripts, hidden model calls, or protocol fallbacks.
+        Rich documents retain saved compatibility; device limits still apply. Look up individual supported properties with genui_reference(componentName: name).
+        """
     var definition: ToolDefinition { Self.definition }
 
     // Apple's public GenerationSchema supports a restricted JSON Schema subset.

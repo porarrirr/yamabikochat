@@ -230,8 +230,7 @@ final class GenUIRichDocumentTests: XCTestCase {
             XCTAssertNil(property["maxLength"], key)
             XCTAssertNil(property["maxProperties"], key)
         }
-        let definitions = try XCTUnwrap(schema["$defs"] as? [String: Any])
-        let node = try XCTUnwrap(definitions["node"] as? [String: Any])
+        let node = try XCTUnwrap(properties["ui"] as? [String: Any])
         let nodeProperties = try XCTUnwrap(node["properties"] as? [String: Any])
         XCTAssertNil((nodeProperties["children"] as? [String: Any])?["maxItems"])
         XCTAssertFalse(GenUITool.definition.description.contains("Maximum 256 KiB"))
@@ -277,14 +276,20 @@ final class GenUIRichDocumentTests: XCTestCase {
         XCTAssertNil(json["code"])
     }
 
-    func testToolSchemaContainsEveryComponent() throws {
+    func testToolSchemaDefersNamesWhileTheValidatorKeepsTheCompleteCatalog() throws {
         let data = Data(GenUITool.definition.parametersJSON.utf8)
         let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let definitions = try XCTUnwrap(schema["$defs"] as? [String: Any])
-        let node = try XCTUnwrap(definitions["node"] as? [String: Any])
+        let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
+        let node = try XCTUnwrap(properties["ui"] as? [String: Any])
         let props = try XCTUnwrap(node["properties"] as? [String: Any])
         let type = try XCTUnwrap(props["type"] as? [String: Any])
-        XCTAssertEqual(Set(try XCTUnwrap(type["enum"] as? [String])), Set(GenUIDocument.componentCatalog.keys))
+        XCTAssertEqual(type["type"] as? String, "string")
+        XCTAssertNil(type["enum"])
+        XCTAssertNil(schema["$defs"])
+        for name in GenUIReferenceCatalog.components.keys {
+            XCTAssertNotNil(GenUIDocument.componentCatalog[name], name)
+        }
+        XCTAssertThrowsError(try GenUIDocument.validated(from: #"{"title":"Invalid child","ui":{"type":"col","children":[{"type":"MissingWidget"}]}}"#))
     }
 }
 

@@ -2,6 +2,42 @@ import XCTest
 @testable import YamabikoChat
 
 final class GenUIToolTests: XCTestCase {
+    func testCompactDefinitionDoesNotEmbedTheCatalogAndStillValidatesUnknownNodes() throws {
+        let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(GenUITool.definition.parametersJSON.utf8)) as? [String: Any])
+        let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
+        let ui = try XCTUnwrap(properties["ui"] as? [String: Any])
+        XCTAssertEqual(ui["type"] as? String, "object")
+        XCTAssertEqual(ui["required"] as? [String], ["type"])
+        XCTAssertFalse(GenUITool.definition.description.contains(GenUIDocument.componentGuide))
+        XCTAssertFalse(GenUITool.definition.parametersJSON.contains("CurrencyConverterWidget"))
+        XCTAssertTrue(GenUITool.definition.description.contains("genui_reference"))
+        // Bound the actual serialized schema, rather than whitespace in the Swift literal.
+        let compactSchema = try JSONSerialization.data(withJSONObject: schema, options: [.sortedKeys])
+        let bytes = compactSchema.count + GenUITool.definition.description.utf8.count
+        XCTAssertLessThan(bytes, 22_000)
+        XCTAssertLessThan(bytes, GenUIDocument.componentGuide.utf8.count * 2 / 3)
+        XCTAssertTrue(GenUITool.definition.description.contains(GenUIDocument.coreComponentGuide))
+        XCTAssertTrue(GenUITool.definition.description.contains(GenUITool.usageGuide))
+        XCTAssertThrowsError(try GenUIDocument.validated(from: #"{"title":"Invalid","ui":{"type":"MissingWidget"}}"#))
+    }
+
+    func testReferenceRetrievalPreservesToolPrefixAcrossScopesAndConversations() async throws {
+        let registry = LocalToolRegistry(executors: [GenUIReferenceTool(), GenUITool()])
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let prefix = try encoder.encode(registry.definitions.map(\.providerTool))
+        for arguments in [#"{"componentName":"@guide"}"#, #"{"componentName":"*","query":"chart"}"#,
+                          #"{"componentName":"Slider"}"#, #"{"componentName":"DigitalTimerWidget","maxCharacters":100}"#] {
+            let scoped = registry.scopedForExecution()
+            let result = await scoped.execute(call: ToolCall(id: "read", name: GenUIReferenceTool.name, argumentsJSON: arguments))
+            XCTAssertFalse(result.isError)
+            XCTAssertEqual(try encoder.encode(scoped.definitions.map(\.providerTool)), prefix)
+            XCTAssertEqual(try encoder.encode(registry.definitions.map(\.providerTool)), prefix)
+        }
+        let reordered = LocalToolRegistry(executors: [GenUITool(), GenUIReferenceTool()])
+        XCTAssertEqual(try encoder.encode(reordered.definitions.map(\.providerTool)), prefix)
+    }
+
     func testNativeJSONEnvelopeUsesTheSameExecutorAndValidation() async throws {
         let registry = LocalToolRegistry(executors: [GenUITool()])
         let arguments = String(decoding: try JSONEncoder().encode(["document": minimal]), as: UTF8.self)
