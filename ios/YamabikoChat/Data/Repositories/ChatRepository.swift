@@ -1972,8 +1972,8 @@ final class ChatRepository {
         codexAuthRepository.state
     }
 
-    func loginCodexAuthWithBrowser(clientID: String? = nil, newAccount: Bool = false) async -> Result<CodexAuthState, Error> {
-        await codexAuthRepository.loginWithBrowser(clientID: clientID, newAccount: newAccount)
+    func loginCodexAuthWithBrowser() async -> Result<CodexAuthState, Error> {
+        await codexAuthRepository.loginWithBrowser()
     }
 
     func logoutCodexAuth() async -> Result<CodexAuthState, Error> {

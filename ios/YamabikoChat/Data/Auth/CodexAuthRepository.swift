@@ -138,18 +138,14 @@ final class CodexAuthRepository {
         }
     }
 
-    func loginWithBrowser(clientID: String? = nil, newAccount: Bool = false) async -> Result<CodexAuthState, Error> {
+    func loginWithBrowser() async -> Result<CodexAuthState, Error> {
         do {
             let (generation, host, registration) = try authLock.withLock {
                 guard !signingOut else { throw CancellationError() }
                 authGeneration += 1
                 catalogCache = nil
                 let accounts = try readAccounts()
-                if let clientID, accounts.registrations[clientID] == nil {
-                    throw ProviderClientError.parseFailure("Selected ChatGPT registration is missing")
-                }
-                let selectedID = newAccount ? nil : (clientID ?? accounts.selectedClientID)
-                let selected = selectedID.flatMap { accounts.registrations[$0] }
+                let selected = accounts.selectedClientID.flatMap { accounts.registrations[$0] }
                 let json = try selected.map { try PiAgentRuntime.credentialJSONString($0) }
                 return (authGeneration, try hostID(), json)
             }
@@ -276,11 +272,7 @@ final class CodexAuthRepository {
             email: object?["email"]?.stringValue,
             accountId: accounts.selectedClientID,
             lastRefreshISO8601: try? credentialStore.readSecret(key: "codex_last_refresh"),
-            planUsageEnabled: scopes.contains("chatgpt.tokens.use.direct"),
-            savedAccounts: accounts.registrations.keys.sorted().compactMap { id in
-                guard let value = accounts.registrations[id]?.objectValue, value["subject"]?.stringValue != nil else { return nil }
-                return CodexSavedAccount(clientID: id, email: value["email"]?.stringValue)
-            }
+            planUsageEnabled: scopes.contains("chatgpt.tokens.use.direct")
         )
     }
 

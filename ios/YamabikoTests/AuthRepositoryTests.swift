@@ -148,25 +148,19 @@ final class AuthRepositoryTests: XCTestCase {
         XCTAssertNil(token)
     }
 
-    func testSavedAccountsAreKeptSeparateAcrossSwitches() async throws {
+    func testReconnectUsesSavedRegistration() async throws {
         let store = PiAuthTestCredentialStore()
         let first = CodexAuthRepository(credentialStore: store, loginHandler: { host, _, _ in chatGPTResolution(hostID: host) })
-        _ = await first.loginWithBrowser()
-        let second = CodexAuthRepository(credentialStore: store, loginHandler: { host, registration, _ in
-            XCTAssertNil(registration)
-            return chatGPTResolution(access: "second-access", clientID: "oaiapp_second", hostID: host)
-        })
-        _ = await second.loginWithBrowser(newAccount: true)
-        XCTAssertEqual(second.currentState().savedAccounts.count, 2)
-        XCTAssertEqual(second.currentState().accountId, "oaiapp_second")
+        guard case .success = await first.loginWithBrowser() else { return XCTFail("Expected initial sign-in") }
         let returning = CodexAuthRepository(credentialStore: store, loginHandler: { host, registration, _ in
             XCTAssertTrue(registration?.contains("oaiapp_test") == true)
-            XCTAssertFalse(registration?.contains("second-access") == true)
-            return chatGPTResolution(hostID: host)
+            XCTAssertTrue(registration?.contains("access-token") == true)
+            return chatGPTResolution(access: "reconnected-access", hostID: host)
         })
-        _ = await returning.loginWithBrowser(clientID: "oaiapp_test")
-        XCTAssertEqual(returning.currentState().accountId, "oaiapp_test")
-        XCTAssertEqual(returning.currentState().savedAccounts.count, 2)
+        guard case let .success(state) = await returning.loginWithBrowser() else { return XCTFail("Expected reconnect") }
+        XCTAssertEqual(state.accountId, "oaiapp_test")
+        XCTAssertTrue(state.isLoggedIn)
+        XCTAssertTrue(try XCTUnwrap(store.readSecret(key: "pi_chatgpt_accounts_v1")).contains("reconnected-access"))
     }
 
     func testConcurrentTokenResolutionPersistsOneRotation() async throws {

@@ -1319,7 +1319,7 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
-    func loginCodexAuth(clientID: String? = nil, newAccount: Bool = false) async {
+    func loginCodexAuth() async {
         guard let repository = requireRepository(action: "codex_login") else { return }
         isCodexAuthActionRunning = true
         statusMessage = "ChatGPTへの接続を開始しました"
@@ -1334,7 +1334,7 @@ final class SettingsViewModel: ObservableObject {
             isCodexAuthActionRunning = false
             refreshDiagnosticsLog()
         }
-        let result = await repository.loginCodexAuthWithBrowser(clientID: clientID, newAccount: newAccount)
+        let result = await repository.loginCodexAuthWithBrowser()
         switch result {
         case let .success(state):
             codexAuthState = state

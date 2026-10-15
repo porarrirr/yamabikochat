@@ -1415,22 +1415,6 @@ private struct SettingsDetailScreen: View {
                 .disabled(viewModel.isCodexAuthActionRunning)
 
                 VStack(spacing: 0) {
-                    Menu {
-                        ForEach(viewModel.codexAuthState.savedAccounts) { account in
-                            Button(account.label) {
-                                Task { await viewModel.loginCodexAuth(clientID: account.clientID) }
-                            }
-                        }
-                        Button("別のアカウント・ワークスペースを追加") {
-                            Task { await viewModel.loginCodexAuth(newAccount: true) }
-                        }
-                    } label: {
-                        codexAccountActionLabel("アカウントを選択", systemImage: "person.crop.circle", trailingImage: "chevron.up.chevron.down")
-                    }
-                    .disabled(viewModel.isCodexAuthActionRunning)
-
-                    Divider()
-
                     Link(destination: URL(string: "https://chatgpt.com/settings/usage")!) {
                         codexAccountActionLabel("使用状況を確認", systemImage: "chart.bar", trailingImage: "arrow.up.right")
                     }
