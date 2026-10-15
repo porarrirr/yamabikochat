@@ -1300,59 +1300,119 @@ private struct SettingsDetailScreen: View {
     }
 
     private var superGrokAuthSection: some View {
-        Section("SuperGrok Auth") {
-            Text(superGrokSummary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        Section {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "sparkles")
+                        .font(.title3.weight(.medium))
+                        .frame(width: 44, height: 44)
+                        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                        .accessibilityHidden(true)
 
-            HStack {
-                Button("Sign in (Browser)") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("SuperGrok")
+                            .font(.headline)
+                        Label(
+                            viewModel.superGrokAuthState.isLoggedIn ? "接続済み" : "未接続",
+                            systemImage: viewModel.superGrokAuthState.isLoggedIn ? "checkmark.circle.fill" : "circle"
+                        )
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(viewModel.superGrokAuthState.isLoggedIn ? Color.green : Color.secondary)
+
+                        if !viewModel.superGrokEmailInput.isEmpty {
+                            Text(viewModel.superGrokEmailInput)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                if !viewModel.superGrokAuthState.isLoggedIn {
+                    Text("アカウントを接続して、SuperGrok / X Premium+ のサブスクリプションを利用します。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button {
                     Task { await viewModel.loginSuperGrokWithBrowser() }
+                } label: {
+                    HStack(spacing: 10) {
+                        Text(viewModel.superGrokAuthState.isLoggedIn ? "SuperGrokに再接続" : "SuperGrokに接続")
+                            .font(.subheadline.weight(.semibold))
+                            .multilineTextAlignment(.center)
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .padding(.vertical, 4)
+                    .foregroundStyle(Color(uiColor: .systemBackground))
+                    .background(Color.primary, in: RoundedRectangle(cornerRadius: 14))
+                    .contentShape(RoundedRectangle(cornerRadius: 14))
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
+                .disabled(viewModel.isSuperGrokAuthActionRunning)
 
-                Button("Sign in (Device Code)") {
-                    Task { await viewModel.loginSuperGrokWithDeviceCode() }
+                VStack(spacing: 0) {
+                    Button {
+                        Task { await viewModel.loginSuperGrokWithDeviceCode() }
+                    } label: {
+                        accountActionLabel("デバイスコードで接続", systemImage: "number.square", trailingImage: "arrow.up.right")
+                    }
+
+                    if viewModel.superGrokAuthState.isLoggedIn {
+                        Divider()
+                        Button {
+                            Task { await viewModel.refreshSuperGrok(force: true) }
+                        } label: {
+                            accountActionLabel("接続を更新", systemImage: "arrow.clockwise")
+                        }
+
+                        Divider()
+                        Button(role: .destructive) {
+                            Task { await viewModel.logoutSuperGrok() }
+                        } label: {
+                            accountActionLabel("サインアウト", systemImage: "rectangle.portrait.and.arrow.right")
+                                .foregroundStyle(.red)
+                        }
+                    }
                 }
-                .buttonStyle(.bordered)
-            }
-            .disabled(viewModel.isSuperGrokAuthActionRunning)
+                .buttonStyle(.plain)
+                .foregroundStyle(.primary)
+                .disabled(viewModel.isSuperGrokAuthActionRunning)
 
-            HStack {
-                Button("Refresh") {
-                    Task { await viewModel.refreshSuperGrok(force: true) }
+                if viewModel.isSuperGrokAuthActionRunning {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("接続を処理中…")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .buttonStyle(.bordered)
 
-                Button("Sign out") {
-                    Task { await viewModel.logoutSuperGrok() }
+                if let challenge = viewModel.superGrokAuthState.pendingDeviceCode {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("ブラウザで次のコードを入力してください。")
+                            .font(.subheadline)
+                        Text(challenge.userCode)
+                            .font(.title2.monospaced().weight(.semibold))
+                            .textSelection(.enabled)
+                        if let url = URL(string: challenge.browserURL) {
+                            Link(destination: url) {
+                                Label("認証ページを開く", systemImage: "arrow.up.right.square")
+                                    .font(.subheadline)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
                 }
-                .buttonStyle(.bordered)
             }
-            .disabled(viewModel.isSuperGrokAuthActionRunning)
-
-            if viewModel.isSuperGrokAuthActionRunning {
-                ProgressView("SuperGrok認証処理中...")
-                    .font(.caption2)
-            }
-
-            if let challenge = viewModel.superGrokAuthState.pendingDeviceCode {
-                Text("Verification URL: \(challenge.browserURL)")
-                    .font(.caption2)
-                    .textSelection(.enabled)
-                Text("User code: \(challenge.userCode)")
-                    .font(.caption2)
-                    .textSelection(.enabled)
-            }
-
-            if !viewModel.superGrokEmailInput.isEmpty {
-                Text("Email: \(viewModel.superGrokEmailInput)")
-                    .font(.caption2)
-            }
-
-            Text("認証・トークン更新・リクエスト整形は pi-grok が処理します。Device Code ログインではローカル待受ポートを使用しません。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            .padding(.vertical, 6)
+            .listRowSeparator(.hidden)
         }
     }
 
@@ -1425,7 +1485,7 @@ private struct SettingsDetailScreen: View {
 
                 VStack(spacing: 0) {
                     Link(destination: URL(string: "https://chatgpt.com/settings/usage")!) {
-                        codexAccountActionLabel("使用状況を確認", systemImage: "chart.bar", trailingImage: "arrow.up.right")
+                        accountActionLabel("使用状況を確認", systemImage: "chart.bar", trailingImage: "arrow.up.right")
                     }
 
                     if viewModel.codexAuthState.isLoggedIn || viewModel.codexAuthState.requiresReauthentication {
@@ -1434,7 +1494,7 @@ private struct SettingsDetailScreen: View {
                         Button(role: .destructive) {
                             Task { await viewModel.logoutCodexAuth() }
                         } label: {
-                            codexAccountActionLabel("サインアウト", systemImage: "rectangle.portrait.and.arrow.right")
+                            accountActionLabel("サインアウト", systemImage: "rectangle.portrait.and.arrow.right")
                                 .foregroundStyle(.red)
                         }
                         .disabled(viewModel.isCodexAuthActionRunning)
@@ -1448,7 +1508,7 @@ private struct SettingsDetailScreen: View {
         }
     }
 
-    private func codexAccountActionLabel(_ title: String, systemImage: String, trailingImage: String? = nil) -> some View {
+    private func accountActionLabel(_ title: String, systemImage: String, trailingImage: String? = nil) -> some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
                 .font(.body)
@@ -1474,10 +1534,6 @@ private struct SettingsDetailScreen: View {
     private var codexSummary: String {
         viewModel.codexAuthState.planUsageEnabled ? "プラン利用中" :
             viewModel.codexAuthState.isLoggedIn ? "接続済み・プラン利用は未許可" : "未接続"
-    }
-
-    private var superGrokSummary: String {
-        "loggedIn=\(viewModel.superGrokAuthState.isLoggedIn ? "yes" : "no")"
     }
 
     private var providerModelEditor: some View {
