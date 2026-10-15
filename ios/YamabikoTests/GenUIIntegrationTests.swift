@@ -17,6 +17,10 @@ final class GenUIIntegrationTests: XCTestCase {
         for provider in LLMProvider.allCases {
             let model = provider == .appleIntelligence ? "on-device" : "test-model"
             let resolved = try await resolver.resolve(settings: settings(), provider: provider.rawValue, model: model)
+            var disabled = settings()
+            disabled.genUIToolEnabled = false
+            let withoutGenUI = try await resolver.resolve(settings: disabled, provider: provider.rawValue, model: model)
+            assertNoGenUI(withoutGenUI)
             let expected = provider != .appleIntelligence
             XCTAssertEqual(containsGenUI(resolved.tools), expected, provider.rawValue)
             XCTAssertEqual(resolved.metadata["supportsClientTools"], expected ? "true" : "false", provider.rawValue)
@@ -26,6 +30,13 @@ final class GenUIIntegrationTests: XCTestCase {
             model: AppleIntelligenceModelCatalog.pccModel
         )
         XCTAssertTrue(containsGenUI(pcc.tools))
+        var disabled = settings()
+        disabled.genUIToolEnabled = false
+        let withoutGenUI = try await resolver.resolve(
+            settings: disabled, provider: LLMProvider.appleIntelligence.rawValue,
+            model: AppleIntelligenceModelCatalog.pccModel
+        )
+        assertNoGenUI(withoutGenUI)
     }
 
     func testGenUIRespectsConversationContextsAndToolScopes() async throws {
@@ -78,6 +89,12 @@ final class GenUIIntegrationTests: XCTestCase {
                 let resolved = try await resolver.resolve(settings: settings(), provider: "MODELS_DEV:\(provider.id)", model: model.id)
                 XCTAssertEqual(containsGenUI(resolved.tools), model.toolCall == true, "\(provider.npm)/\(model.id)")
                 XCTAssertEqual(resolved.metadata["supportsClientTools"], model.toolCall == true ? "true" : "false")
+                var disabled = settings()
+                disabled.genUIToolEnabled = false
+                let withoutGenUI = try await resolver.resolve(
+                    settings: disabled, provider: "MODELS_DEV:\(provider.id)", model: model.id
+                )
+                assertNoGenUI(withoutGenUI)
             }
         }
     }
@@ -269,6 +286,46 @@ final class GenUIIntegrationTests: XCTestCase {
             id: 1, message: ChatMessage(id: 1, conversationId: 1, role: "assistant", text: "Loan"),
             thinkingStream: nil, variants: []
         )))
+    }
+
+    func testGenUIToggleControlsDefinitionsAndPromptIndependentlyOfOtherTools() async throws {
+        let resolver = makeResolver()
+        for enabled in [false, true] {
+            for search in [false, true] {
+                for python in [false, true] {
+                    var value = settings()
+                    value.genUIToolEnabled = enabled
+                    value.clientWebSearchToolEnabled = search
+                    value.pythonToolEnabled = python
+                    let resolved = try await resolver.resolve(settings: value, provider: "OPENAI", model: "gpt-5.6")
+                    XCTAssertEqual(resolved.tools.containsGenUITool, enabled)
+                    XCTAssertEqual(resolved.tools.contains { $0.payload["name"] == GenUIReferenceTool.name }, enabled)
+                    XCTAssertEqual(resolved.tools.containsWebSearchTool, search)
+                    XCTAssertEqual(resolved.tools.containsPythonTool, python)
+                    let prompt = try XCTUnwrap(SystemPromptComposer.composeForAPI(
+                        "Custom instructions",
+                        enablesAgenticWebSearch: resolved.tools.containsWebSearchTool,
+                        enablesPythonInstructions: resolved.tools.containsPythonTool,
+                        enablesGenUIInstructions: resolved.tools.containsGenUITool
+                    ))
+                    XCTAssertTrue(prompt.hasPrefix("Custom instructions"))
+                    XCTAssertEqual(prompt.contains(SystemPromptComposer.genUIToolInstructions), enabled)
+                    XCTAssertEqual(prompt.contains(SystemPromptComposer.agenticWebSearchInstructions), search)
+                    XCTAssertEqual(prompt.contains(SystemPromptComposer.pythonToolInstructions), python)
+                    if !enabled { XCTAssertFalse(prompt.contains("genui")) }
+                }
+            }
+        }
+    }
+
+    private func assertNoGenUI(
+        _ resolved: ProviderRequestResolvedSettings,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        XCTAssertFalse(resolved.tools.containsGenUITool, file: file, line: line)
+        XCTAssertFalse(resolved.tools.contains { $0.payload["name"] == GenUIReferenceTool.name }, file: file, line: line)
+        let prompt = SystemPromptComposer.composeForAPI(nil, enablesGenUIInstructions: resolved.tools.containsGenUITool)
+        XCTAssertFalse(prompt?.contains("genui") == true, file: file, line: line)
     }
 
     private func settings() -> AppSettings {

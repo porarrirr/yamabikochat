@@ -592,3 +592,6 @@
 "値" = "Valeur";
 "系列" = "Série";
 "グラフ" = "Graphique";
+
+"GenUI（インタラクティブUI）" = "GenUI (interface interactive)";
+"Geminiツールとクライアント側Web検索・ローカルPython実行・GenUIは同時に有効化できません。" = "Les outils Gemini ne peuvent pas être activés en même temps que la recherche Web côté client, Python local ou GenUI.";

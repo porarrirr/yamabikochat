@@ -156,6 +156,7 @@ enum AppDatabase {
                 t.column("mathRenderingEnabled", .boolean).notNull().defaults(to: true)
                 t.column("clientWebSearchToolEnabled", .boolean).notNull().defaults(to: false)
                 t.column("pythonToolEnabled", .boolean).notNull().defaults(to: true)
+                t.column("genUIToolEnabled", .boolean).notNull().defaults(to: true)
 
                 t.column("dynamicColorEnabled", .boolean).notNull().defaults(to: true)
                 t.column("themeColor", .text).notNull().defaults(to: "BLUE_PURPLE")
@@ -1022,6 +1023,12 @@ enum AppDatabase {
             let columns = Set(try db.columns(in: "settings").map(\.name))
             for column in ["openAIBaseURL", "miniMaxBaseURL"] where columns.contains(column) {
                 try db.execute(sql: "ALTER TABLE settings DROP COLUMN \(column)")
+            }
+        }
+        migrator.registerMigration("v31_genui_tool_setting") { db in
+            guard !(try db.columns(in: "settings")).contains(where: { $0.name == "genUIToolEnabled" }) else { return }
+            try db.alter(table: "settings") { t in
+                t.add(column: "genUIToolEnabled", .boolean).notNull().defaults(to: true)
             }
         }
         return migrator

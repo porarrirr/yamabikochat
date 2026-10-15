@@ -453,6 +453,13 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    func setGenUIToolEnabled(_ enabled: Bool) {
+        settings.genUIToolEnabled = enabled
+        if enabled, settings.apiProvider.caseInsensitiveCompare("GEMINI") == .orderedSame {
+            settings.disableGeminiTools()
+        }
+    }
+
     func setGeminiGoogleSearchEnabled(_ enabled: Bool) {
         setGeminiToolEnabled(enabled, at: \AppSettings.geminiGoogleSearchEnabled)
     }

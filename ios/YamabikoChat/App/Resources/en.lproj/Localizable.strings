@@ -643,3 +643,6 @@
 "マップで開く" = "Open in Maps";
 "リンクを開く" = "Open link";
 "コピーしました" = "Copied";
+
+"GenUI（インタラクティブUI）" = "GenUI (interactive UI)";
+"Geminiツールとクライアント側Web検索・ローカルPython実行・GenUIは同時に有効化できません。" = "Gemini tools cannot be enabled together with client-side web search, local Python execution, or GenUI.";

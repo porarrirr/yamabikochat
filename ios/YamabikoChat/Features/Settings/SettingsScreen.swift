@@ -247,13 +247,22 @@ private struct SettingsDetailScreen: View {
                     )
                 )
 
+                Toggle(
+                    L10n.text("GenUI（インタラクティブUI）"),
+                    isOn: Binding(
+                        get: { viewModel.settings.genUIToolEnabled },
+                        set: { viewModel.setGenUIToolEnabled($0) }
+                    )
+                )
+                .accessibilityIdentifier("settings-genui-toggle")
+
                 if !LLMProvider(rawOrDefault: viewModel.settings.apiProvider).supportsClientTools(model: viewModel.settings.defaultModel) {
                     Text(L10n.text("現在のプロバイダーではこのツールは使用されません。"))
                         .font(.caption2)
                         .foregroundStyle(.orange)
                 }
                 if isGeminiProvider {
-                    Text(L10n.text("Geminiツールとクライアント側Web検索・ローカルPython実行は同時に有効化できません。"))
+                    Text(L10n.text("Geminiツールとクライアント側Web検索・ローカルPython実行・GenUIは同時に有効化できません。"))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

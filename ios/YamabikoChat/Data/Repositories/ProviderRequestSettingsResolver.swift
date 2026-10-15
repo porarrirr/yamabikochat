@@ -248,6 +248,7 @@ final class ProviderRequestSettingsResolver {
            context == .default || context == .dualA || context == .dualB,
            supportsClientWebSearch,
            !hasGeminiProviderTool,
+           settings.genUIToolEnabled,
            let definition = localToolRegistry.definitions.first(where: { $0.name == GenUITool.name }) {
             let isNativePCC = provider.caseInsensitiveCompare(LLMProvider.appleIntelligence.rawValue) == .orderedSame && model == AppleIntelligenceModelCatalog.pccModel
             tools.append((isNativePCC ? GenUITool.nativeDefinition : definition).providerTool)

@@ -128,6 +128,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var mathRenderingEnabled: Bool
     var clientWebSearchToolEnabled: Bool
     var pythonToolEnabled: Bool
+    var genUIToolEnabled: Bool
 
     var dynamicColorEnabled: Bool
     var themeColor: String
@@ -282,6 +283,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         mathRenderingEnabled = true
         clientWebSearchToolEnabled = false
         pythonToolEnabled = true
+        genUIToolEnabled = true
 
         dynamicColorEnabled = true
         themeColor = "BLUE_PURPLE"
@@ -450,6 +452,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     mutating func disableClientTools() {
         clientWebSearchToolEnabled = false
         pythonToolEnabled = false
+        genUIToolEnabled = false
     }
 
     func normalizedForPersistence() -> AppSettings {

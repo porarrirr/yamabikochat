@@ -19,6 +19,38 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(reloaded.normalizedForPersistence(), reloaded)
     }
 
+    func testGenUIToolDefaultsAndPersistence() throws {
+        XCTAssertTrue(AppSettings().genUIToolEnabled)
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let repository = SettingsRepository(dbQueue: database)
+        for enabled in [false, true, false] {
+            var settings = AppSettings()
+            settings.apiProvider = "OPENAI"
+            settings.genUIToolEnabled = enabled
+            try repository.save(settings)
+            XCTAssertEqual(try repository.load().genUIToolEnabled, enabled)
+        }
+    }
+
+    func testGenUIMigrationPreservesExistingSettings() throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database, upTo: "v29_compact_pi_diagnostics")
+        var existing = AppSettings()
+        existing.apiProvider = "OPENAI"
+        existing.pythonToolEnabled = false
+        existing.clientWebSearchToolEnabled = true
+        try database.write { db in
+            try db.execute(sql: "ALTER TABLE settings DROP COLUMN genUIToolEnabled")
+            try LegacyURLSettingsFixture(settings: existing).save(db)
+        }
+        try AppDatabase.migrator.migrate(database)
+        let settings = try database.read { db in try XCTUnwrap(AppSettings.fetchOne(db)) }
+        XCTAssertTrue(settings.genUIToolEnabled)
+        XCTAssertFalse(settings.pythonToolEnabled)
+        XCTAssertTrue(settings.clientWebSearchToolEnabled)
+    }
+
     func testPythonToolIsEnabledByDefault() {
         XCTAssertTrue(AppSettings().pythonToolEnabled)
     }
@@ -398,6 +430,7 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertTrue(normalized.geminiURLContextEnabled)
         XCTAssertFalse(normalized.clientWebSearchToolEnabled)
         XCTAssertFalse(normalized.pythonToolEnabled)
+        XCTAssertFalse(normalized.genUIToolEnabled)
     }
 
     func testNormalizedForPersistenceKeepsClientToolsForNonGeminiProvider() {
@@ -411,6 +444,7 @@ final class AppSettingsTests: XCTestCase {
 
         XCTAssertTrue(normalized.clientWebSearchToolEnabled)
         XCTAssertTrue(normalized.pythonToolEnabled)
+        XCTAssertTrue(normalized.genUIToolEnabled)
         XCTAssertTrue(normalized.geminiURLContextEnabled)
     }
 
@@ -690,7 +724,12 @@ struct LegacyURLSettingsFixture: PersistableRecord {
     static let databaseTableName = "settings"
     var settings: AppSettings
     func encode(to container: inout PersistenceContainer) throws {
-        try settings.encode(to: &container)
+        var current = container
+        try settings.encode(to: &current)
+        let fields = try JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as! [String: Any]
+        for column in fields.keys where column != "genUIToolEnabled" {
+            container[column] = current[column]
+        }
         container["openAIBaseURL"] = "https://legacy.example/v1"
         container["miniMaxBaseURL"] = "https://legacy.example/anthropic"
     }

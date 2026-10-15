@@ -324,6 +324,22 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.settings.geminiGoogleSearchEnabled)
         XCTAssertFalse(viewModel.settings.clientWebSearchToolEnabled)
         XCTAssertFalse(viewModel.settings.pythonToolEnabled)
+        XCTAssertFalse(viewModel.settings.genUIToolEnabled)
+    }
+
+    @MainActor
+    func testEnablingGenUIForGeminiDisablesNativeTools() {
+        let viewModel = SettingsViewModel()
+        viewModel.settings.apiProvider = "GEMINI"
+        viewModel.settings.geminiGoogleSearchEnabled = true
+        viewModel.settings.geminiCodeExecutionEnabled = true
+        viewModel.settings.geminiURLContextEnabled = true
+        viewModel.settings.geminiGoogleMapsEnabled = true
+        viewModel.setGenUIToolEnabled(true)
+        XCTAssertTrue(viewModel.settings.genUIToolEnabled)
+        XCTAssertFalse(viewModel.settings.hasEnabledGeminiTool)
+        viewModel.setGenUIToolEnabled(false)
+        XCTAssertFalse(viewModel.settings.genUIToolEnabled)
     }
 
     @MainActor
@@ -371,6 +387,7 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.settings.geminiCodeExecutionEnabled)
         XCTAssertFalse(viewModel.settings.clientWebSearchToolEnabled)
         XCTAssertFalse(viewModel.settings.pythonToolEnabled)
+        XCTAssertFalse(viewModel.settings.genUIToolEnabled)
     }
 
     @MainActor
