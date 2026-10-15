@@ -62,6 +62,77 @@ export function parseChatGPTCallback(url, pending) {
   return { code, clientId: issuedClient(returnedClient || pending.clientId) };
 }
 
+// Static and self-contained: never render callback values or load external assets.
+const CHATGPT_CALLBACK_HTML = `<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="no-referrer">
+  <title>ブラウザ認証完了 · YamabikoChat</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #f3f6f2; --card: #fff; --text: #1b332b; --muted: #586b61; --line: #dce6dd; --accent: #23634d; --soft: #eaf4ec; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; min-height: 100svh; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); display: grid; place-items: center; background: radial-gradient(ellipse at 50% 0%, var(--soft), transparent 65%), var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
+    main { width: 100%; max-width: 420px; }
+    .brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 28px; font-size: 17px; font-weight: 650; letter-spacing: -.3px; }
+    .brand svg { width: 28px; height: 28px; color: var(--accent); }
+    .card { padding: 36px 26px 28px; border: 1px solid var(--line); border-radius: 28px; background: var(--card); box-shadow: 0 18px 60px #143a2710; text-align: center; }
+    .check { display: grid; place-items: center; width: 76px; height: 76px; margin: 0 auto 24px; border: 1px solid var(--line); border-radius: 50%; background: var(--soft); color: var(--accent); }
+    .check svg { width: 34px; height: 34px; }
+    .eyebrow { margin: 0 0 12px; color: var(--accent); font-size: 12px; font-weight: 650; letter-spacing: 2px; }
+    h1 { margin: 0; font-size: clamp(23px, 6vw, 28px); line-height: 1.5; letter-spacing: -.7px; }
+    .description { margin: 16px 0 26px; color: var(--muted); font-size: 15px; line-height: 1.9; }
+    .return-link { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; margin-bottom: 24px; padding: 14px 16px; border-radius: 16px; background: var(--accent); color: var(--card); font-size: 15px; font-weight: 650; line-height: 1.5; text-decoration: none; }
+    .return-link:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+    .return-link:active { opacity: .8; }
+    .next { padding: 20px; border-radius: 18px; background: var(--soft); text-align: left; }
+    h2 { margin: 0 0 14px; font-size: 14px; }
+    ol { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; counter-reset: step; }
+    li { display: flex; align-items: flex-start; gap: 10px; color: var(--muted); font-size: 14px; line-height: 1.7; counter-increment: step; }
+    li::before { content: counter(step); display: grid; place-items: center; flex: 0 0 23px; height: 23px; margin-top: 1px; border: 1px solid var(--line); border-radius: 50%; color: var(--accent); font-size: 12px; font-weight: 650; }
+    .note { margin: 22px 0 0; color: var(--muted); font-size: 12px; line-height: 1.8; }
+    footer { margin-top: 24px; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.8; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #101b16; --card: #19271f; --text: #e5efe8; --muted: #a9bdb0; --line: #32493b; --accent: #99d4b3; --soft: #213a2c; } }
+    @media (max-width: 350px) { body { padding-left: 16px; padding-right: 16px; } .card { padding: 28px 20px 24px; } .next { padding: 16px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m3 25 10-18 5 9 3-5 8 14H3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m9 14 4 3 4-3" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      YamabikoChat
+    </div>
+    <section class="card" aria-labelledby="title">
+      <div class="check"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m7 16 6 6L25 10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <p class="eyebrow">CHATGPT SIGN IN</p>
+      <h1 id="title">ブラウザでの認証が<br>完了しました</h1>
+      <p class="description">あと少しで準備が整います。<br>YamabikoChatに戻って、<br>接続結果を確認してください。</p>
+      <!-- APP_RETURN_LINK -->
+      <div class="next">
+        <h2>アプリに戻って続ける</h2>
+        <ol>
+          <li>アプリ切り替え、または画面左上の「YamabikoChat」から戻ります。</li>
+          <li>アプリの設定画面で、ChatGPTの接続状態を確認します。</li>
+        </ol>
+      </div>
+      <p class="note">接続が確認できたら、<br>このタブは閉じてかまいません。</p>
+    </section>
+    <footer>あなたの会話を、ここから。</footer>
+  </main>
+</body>
+</html>`;
+
+function chatGPTCallbackHTML(userAgent = "") {
+  // iPad Safari can identify as Macintosh. Android has no registered app scheme.
+  const supportsAppReturn = /iPhone|iPad|iPod|Macintosh/.test(userAgent);
+  // This fixed link only foregrounds iOS; credentials still resolve through Pi.
+  return CHATGPT_CALLBACK_HTML.replace("<!-- APP_RETURN_LINK -->", supportsAppReturn
+    ? '<a class="return-link" href="yamabikochat://auth/complete">YamabikoChatに戻る <span aria-hidden="true">↗</span></a>'
+    : "");
+}
+
 // Listener failure is a hard failure. There is no pasted-code or alternate flow.
 export async function startChatGPTCallback(pending, signal, port = 0) {
   signal.throwIfAborted();
@@ -80,7 +151,7 @@ export async function startChatGPTCallback(pending, signal, port = 0) {
       const callback = parseChatGPTCallback(url, pending);
       consumed = true;
       response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-      response.end("<!doctype html><meta charset=utf-8><title>ChatGPT</title><p>ブラウザでの認証が完了しました。YamabikoChatに戻って接続結果を確認してください。</p>");
+      response.end(chatGPTCallbackHTML(request.headers["user-agent"]));
       resolveResult(callback);
     } catch (error) {
       response.writeHead(400, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });

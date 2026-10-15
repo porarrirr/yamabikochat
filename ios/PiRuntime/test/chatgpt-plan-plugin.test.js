@@ -178,6 +178,25 @@ test("loopback listener starts before authorization, ignores wrong state, and is
   second.close();
 });
 
+for (const [device, userAgent, hasAppLink] of [
+  ["iPhone", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)", true],
+  ["iPad desktop mode", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) Version/18.0 Safari/605.1.15", true],
+  ["Android", "Mozilla/5.0 (Linux; Android 15) Chrome/130.0 Mobile", false]
+]) test(`callback return link on ${device} preserves the Pi callback result`, async () => {
+  const listener = await startChatGPTCallback({ state: "expected" }, new AbortController().signal);
+  try {
+    const response = await fetch(`${listener.redirectURI}?state=expected&code=private-code&client_id=${clientId}`, {
+      headers: { "user-agent": userAgent }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const html = await response.text();
+    assert.equal(html.includes('href="yamabikochat://auth/complete"'), hasAppLink);
+    assert.ok(!html.includes("private-code"));
+    assert.deepEqual(await listener.result, { code: "private-code", clientId });
+  } finally { listener.close(); }
+});
+
 test("SIWC payload uses preview fields and groups local tools; hosted unsupported tools fail", () => {
   const payload = chatGPTPlanPayload({ input: [{ role: "system", content: "system" }], temperature: 0.2, max_output_tokens: 300,
     previous_response_id: "prior", store: true, stream: false,
