@@ -18,14 +18,8 @@ struct FusionModeSettingsSection: View {
                     set: { viewModel.setFusionModeEnabled($0) }
                 ))
 
-                Text(L10n.text("Fusion は複数モデルを並列実行し、ジャッジと合成で最終回答を生成します。"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
             } header: {
                 Text(L10n.text("Fusion モード"))
-            } footer: {
-                Text(L10n.text("Fusion・デュアル・自動会話は同時に有効化できません。"))
             }
 
             if viewModel.settings.isFusionModeEnabled {
@@ -70,9 +64,6 @@ struct FusionModeSettingsSection: View {
                         bulkModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     )
 
-                    Text(L10n.text("Panel・Judge・Synthesizerを同じモデルにまとめて設定します。"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
                 .onAppear(perform: initializeBulkModelIfNeeded)
 

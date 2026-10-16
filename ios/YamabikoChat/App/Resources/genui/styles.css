@@ -486,6 +486,10 @@ input[type='radio'] {
     padding-left: 24px;
     margin: 0;
 }
+.genui-list-item > strong,
+.genui-list-item > p {
+    white-space: pre-line;
+}
 .genui-list-item > strong {
     font-size: 16px;
     font-weight: 600;

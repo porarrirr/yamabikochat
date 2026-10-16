@@ -214,7 +214,6 @@ private struct CatalogModelListView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(model.name)
                         Text(model.id).font(.caption).foregroundStyle(.secondary)
-                        if let description = model.description { Text(description).font(.caption2).foregroundStyle(.secondary).lineLimit(2) }
                         HStack {
                             if let context = model.limits.context { Text("context \(context)") }
                             if model.reasoning == true { Text("reasoning") }

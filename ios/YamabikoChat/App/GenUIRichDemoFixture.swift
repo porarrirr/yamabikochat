@@ -3239,6 +3239,14 @@ enum GenUIRichDemoFixture {
               {"type":"text","props":{"value":"### 使い方\n```bash\ngit worktree add ../repo-feature -b feature\ncd ../repo-feature\n\n# 作業ツリー一覧\ngit worktree list\n```\n\n**要点:** 各worktreeの作業ファイルは独立しています。"}}
             ]}}
             """#)
+        } else if ProcessInfo.processInfo.arguments.contains("-GenUIAuthenticationFixture") {
+            document = GenUIDocument(title: "認証の流れ", code: GenUITool.interactiveDiagramExample)
+        } else if ProcessInfo.processInfo.arguments.contains("-GenUIPowersFixture") {
+            document = GenUIDocument(title: "pow", code: GenUITool.powersExample)
+        } else if ProcessInfo.processInfo.arguments.contains("-GenUILineBreakFixture") {
+            document = GenUIDocument(title: "ログインの流れ", ui: GenUINode(type: "text", props: [
+                "value": .string("① ユーザーがアプリでログイン情報を入力\n↓\n② アプリが認証サーバーに確認を依頼\n↓\n③ 認証サーバーが情報を検証\n↓\n④ 成功ならアプリにトークンを返す\n↓\n⑤ アプリはトークンを使ってAPIにアクセス")
+            ]))
         } else if ProcessInfo.processInfo.arguments.contains("-GenUIWorktreeFixture") {
             document = GenUIDocument(title: "Git worktree", code: GenUITool.worktreeDiagramExample)
         } else if ProcessInfo.processInfo.arguments.contains("-GenUIFlowFixture") {

@@ -117,7 +117,7 @@ final class PiAgentGatewayTests: XCTestCase {
         try credentials.setOpenAICompatAPIKey(name: "Custom", value: "custom-key")
         let pi = PiStreamSpy()
         let gateway = ProviderGateway(settingsRepository: repository, credentialStore: credentials, piStream: pi.stream)
-        for api in ["anthropic-messages", "openai-completions", "openai-responses"] {
+        for api in ["anthropic-messages", "openai-completions", "openai-responses", "google-generative-ai", "mistral-conversations"] {
             var preset = OpenAICompatPreset(name: "Custom", baseURL: "https://private.example/v1")
             preset.apiProtocol = api
             preset.modelId = "custom-model"

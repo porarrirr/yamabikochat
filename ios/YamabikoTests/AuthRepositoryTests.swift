@@ -241,6 +241,54 @@ final class AuthRepositoryTests: XCTestCase {
         }
     }
 
+    func testCatalogCacheSurvivesRepositoryRecreationWithExactPiMetadata() async throws {
+        let store = PiAuthTestCredentialStore()
+        let models = [
+            PiCodexModel(id: "supported", name: "Account name", supported: true, supportedThinkingLevels: ["high", "max"]),
+            PiCodexModel(id: "future", name: "Future", supported: false, reason: "pi_model_missing")
+        ]
+        let repo = CodexAuthRepository(
+            credentialStore: store,
+            loginHandler: { host, _, _ in chatGPTResolution(hostID: host) },
+            resolveHandler: { _, _, _ in chatGPTResolution() },
+            catalogHandler: { _, _ in models },
+            revokeHandler: { _ in }
+        )
+        _ = await repo.loginWithBrowser()
+        _ = try await repo.models(contracts: [:])
+
+        let restored = CodexAuthRepository(credentialStore: store)
+        XCTAssertEqual(restored.cachedModels(), models)
+        XCTAssertEqual(restored.freshCachedModels(), models)
+
+        _ = await repo.logout()
+        XCTAssertTrue(CodexAuthRepository(credentialStore: store).cachedModels().isEmpty)
+    }
+
+    func testExpiredCatalogRemainsAvailableForDisplayButRequiresRefresh() async throws {
+        let store = PiAuthTestCredentialStore()
+        let repo = CodexAuthRepository(
+            credentialStore: store,
+            loginHandler: { host, _, _ in chatGPTResolution(hostID: host) },
+            resolveHandler: { _, _, _ in chatGPTResolution() },
+            catalogHandler: { _, _ in [PiCodexModel(id: "model", name: "Model", supported: true)] }
+        )
+        _ = await repo.loginWithBrowser()
+        _ = try await repo.models(contracts: [:])
+        let json = try XCTUnwrap(store.readSecret(key: "pi_chatgpt_catalog_v1"))
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        object["fetchedAt"] = Date().addingTimeInterval(-3600).timeIntervalSinceReferenceDate
+        try store.saveSecret(String(decoding: JSONSerialization.data(withJSONObject: object), as: UTF8.self), key: "pi_chatgpt_catalog_v1")
+
+        let restored = CodexAuthRepository(credentialStore: store)
+        XCTAssertEqual(restored.cachedModels().map(\.id), ["model"])
+        XCTAssertNil(restored.freshCachedModels())
+
+        object["accountID"] = "different-account"
+        try store.saveSecret(String(decoding: JSONSerialization.data(withJSONObject: object), as: UTF8.self), key: "pi_chatgpt_catalog_v1")
+        XCTAssertTrue(CodexAuthRepository(credentialStore: store).cachedModels().isEmpty)
+    }
+
     func testLogoutClearsTheCatalogCache() async throws {
         let store = PiAuthTestCredentialStore()
         let repo = CodexAuthRepository(

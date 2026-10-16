@@ -577,16 +577,39 @@ struct GenUITool: LocalToolExecutor {
     )
     // This core is fixed. Retrieved template/alias details are appended only as tool results.
     static let usageGuide = """
-        Use basic elements directly for ordinary layouts. Find templates/aliases via genui_reference(componentName:"*",query:...), then read an exact name for contracts; @guide repeats this guide. Reuse history. Templates use props:{__state:verifiedData}; no automatic data fetching or backend actions. Never invent data or success.
-        ui/code: return DIL.h(type,props,...children), __dil.jsx, or call DIL.render. Canonical names are globals. Hooks: DIL.useState/useMemo/useEffect/useCallback/useRef/useId/useAppData/useConstants/useTheme/useBreakpoint/useIsMobile/useNow/useSpeechSynthesizer. State must be JSON serializable. Calculations use JavaScript, including Math.pow. No imports, raw JSX, remote scripts or protocol fallbacks; AI turns use the existing Pi path.
-        bind:"key", {{key}} and {{object.field}} read state; whole interpolations retain types. onChange:{type:"setState",key:"key",value:"$value"} writes state. Events: setState/resetState/copy/openUrl/issueNewTurn/openEntityDetail/openMap. External host actions and new turns require user gestures. Each uses items/of, itemName/item, indexName/index; Scope uses values; Show uses when and Show.Else. $-prefixed props use the original CEL parser/evaluator, e.g. "$value":"price * quantity".
-        Numeric spacing is 4px per unit; default gap is 2. Colors accept semantic tokens or {light,dark}; padding/margin accept numbers, CSS lengths or {x,y,top,right,bottom,left}. Avoid repeating the document heading. Chart.content needs chartType and matching data keys. Use markdown {text} for headings, prose and fenced code; text is for labels. Media needs explicit HTTPS URLs; Lottie also accepts animationData and YouTube videoId. MapWidgetV2 uses supplied places/coordinates; AppBlock uses inline content. Device limits apply.
+        Use basic elements directly for ordinary layouts. Search genui_reference(componentName:"*",query:...), then read the exact template/alias name for contracts. Reuse history. Templates: props:{__state:verifiedData}; no backend fetching/actions. Never invent data or success.
+        code returns DIL.h(type,props,...children), __dil.jsx or DIL.render. DIL hooks: useState/useEffect/useMemo/useRef/useTheme/useBreakpoint. State must be JSON. Calculations: JavaScript/Math.pow. No imports, JSX, remote scripts; AI uses Pi.
+        bind:"key", {{key}}, {{object.field}} read state. onChange:{type:"setState",key:"key",value:"$value"} writes it. External actions/new turns require gestures. Each:items/of,itemName,indexName. Scope:values. Show:when,Show.Else. $-props:CEL, e.g. "$value":"price * quantity".
+        Process:list {connector:true,marker:"none"} with separate list-item {label,description}. Comparison:grid {minChildWidth:160}. Text retains newlines; preserveWhitespace:true retains spaces. Text sizes use sm/md/lg/xl. Spacing:4px/unit; gap:2 default. Padding/margin:numbers,CSS lengths,{x,y,top,right,bottom,left}. Colors:tokens or {light,dark}. Avoid repeated headings/padding. markdown {text}:prose/code. Chart.content:explicit chartType/data keys. Media:HTTPS; Lottie:animationData; YouTube:videoId. MapWidgetV2:supplied places; AppBlock:inline content.
         """
-    // Small working example keeps the advertised tool within its context budget.
+    // Concrete examples teach visual structure and meaningful local state together.
     static let interactiveDiagramExample = #"""
     const h=DIL.h;
-    const [n,setN]=DIL.useState(0);
-    return h('col',{},h('svg',{viewBox:'0 0 200 60',width:'100%',height:60},h('path',{d:'M20 30 H180',stroke:'currentColor',strokeWidth:2}),h('circle',{cx:n?180:20,cy:30,r:8,fill:'currentColor'})),h('text',{},n?'Step 2':'Step 1'),h('button',{label:'Switch step',onClick:()=>setN(1-n)}));
+    const [step,setStep]=DIL.useState(0);
+    const stages=[['アプリ','ログイン情報を入力'],['認証サーバー','本人確認を行う'],['アプリ','発行されたトークンを受け取る'],['API','トークンを検証し、権限に応じて応答']];
+    return h('col',{gap:3},
+      h('title',{size:'lg'},'認証の流れ'),
+      h('list',{connector:true,marker:'none'},...stages.map(([label,description],i)=>
+        h('list-item',{key:String(i),label:(i+1)+'. '+label,description,variant:i===step?'success':'outline'}))),
+      h('text',{strong:true},'現在：'+stages[step][1]),
+      h('button',{label:step===stages.length-1?'最初から':'次のステップ',onClick:()=>setStep((step+1)%stages.length)}),
+      h('caption',{},'説明用デモ（通信なし）'));
+    """#
+
+    static let powersExample = #"""
+    const h=DIL.h;
+    const [base,setBase]=DIL.useState(2),[exponent,setExponent]=DIL.useState(3);
+    const result=Math.pow(base,exponent);
+    return h('col',{gap:3},
+      h('title',{size:'lg'},'pow：べき乗を試す'),
+      h('text',{},'指数が正の整数なら、底をその回数だけ掛けます。'),
+      h('grid',{minChildWidth:160,gap:3},
+        h('col',{},h('label',{},'底：'+base),h('slider',{label:'底',min:1,max:5,step:1,value:base,onChange:setBase})),
+        h('col',{},h('label',{},'指数：'+exponent),h('slider',{label:'指数',min:0,max:5,step:1,value:exponent,onChange:setExponent}))),
+      h('card',{variant:'soft',padding:3},
+        h('title',{size:'xl',tabularNums:true},'pow('+base+', '+exponent+') = '+result),
+        h('text',{},exponent===0?'0乗は1':Array(exponent).fill(base).join(' × ')+' = '+result)),
+      h('caption',{},'このデモの底は1〜5、指数は0〜5の整数です。一般のpowは負数や小数も扱います。'));
     """#
 
     static let worktreeDiagramExample = #"""

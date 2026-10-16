@@ -5,10 +5,6 @@ struct AutoConversationScreen: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("自動会話はモデルA/Bの応答を交互に実行します。")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
             TextField("開始メッセージを入力", text: $viewModel.inputText)
                 .textFieldStyle(.roundedBorder)
                 .disabled(viewModel.isAutoConversationRunning || viewModel.isAutoConversationPaused)

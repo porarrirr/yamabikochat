@@ -333,7 +333,7 @@ final class AppSettingsTests: XCTestCase {
     }
 
     func testCustomEndpointRoundTripKeepsExplicitProtocolAndCapabilities() throws {
-        for api in ["anthropic-messages", "openai-completions", "openai-responses"] {
+        for api in ["anthropic-messages", "openai-completions", "openai-responses", "google-generative-ai", "mistral-conversations"] {
             var preset = OpenAICompatPreset(name: "Custom", baseURL: "https://example.com/v1")
             preset.apiProtocol = api
             preset.modelId = "private-model"

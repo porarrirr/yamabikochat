@@ -86,7 +86,7 @@ struct OpenAICompatPreset: Codable, Equatable, Identifiable, Sendable {
 
     var validationError: String? {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "プリセット名を入力してください" }
-        guard ["anthropic-messages", "openai-completions", "openai-responses"].contains(apiProtocol) else { return "APIプロトコルを選択してください" }
+        guard ["anthropic-messages", "openai-completions", "openai-responses", "google-generative-ai", "mistral-conversations"].contains(apiProtocol) else { return "APIプロトコルを選択してください" }
         guard let url = URL(string: baseURL), ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil,
               url.user == nil, url.password == nil, url.query == nil, url.fragment == nil else { return "有効なBase URLを入力してください" }
         guard !modelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "モデルIDを入力してください" }

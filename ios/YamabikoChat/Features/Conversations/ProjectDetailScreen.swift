@@ -144,12 +144,6 @@ struct ProjectDetailScreen: View {
             }
 
             Button(L10n.text("キャンセル"), role: .cancel) {}
-        } message: {
-            if let project {
-                Text(L10n.format("「%@」には %d 件の会話があります。削除方法を選択してください。", project.title, viewModel.projectConversationCount(projectId: projectId)))
-            } else {
-                Text(L10n.text("削除方法を選択してください。"))
-            }
         }
     }
 
@@ -308,11 +302,6 @@ struct ProjectDetailScreen: View {
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.secondary)
 
-                        Text(L10n.text("下の入力欄からメッセージを送信してチャットを開始してください。"))
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary.opacity(0.8))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
                     }
                     .frame(maxWidth: .infinity)
                 } else {
@@ -380,9 +369,6 @@ struct ProjectDetailScreen: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(L10n.text("ワークスペースのファイル"))
                                 .font(.system(size: 15, weight: .semibold))
-                            Text(L10n.text("内容はチャットへ自動添付されません"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
                         }
                         Spacer()
                         Button {

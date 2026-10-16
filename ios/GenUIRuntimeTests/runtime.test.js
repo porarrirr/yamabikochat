@@ -631,13 +631,59 @@ test('worktree GenUI diagram renders SVG and keeps worktree edits independent', 
 });
 
 
-test('advertised minimal diagram example renders and responds locally', () => {
+test('advertised authentication diagram keeps all stages visible and advances locally', () => {
     const swift = fs.readFileSync(path.join(__dirname, '../YamabikoChat/Features/Tools/GenUI/GenUITool.swift'), 'utf8');
     const code = swift.match(/static let interactiveDiagramExample = #"""\n([\s\S]*?)\n    """#/)[1];
     const app = mount({code});
-    assert.equal(app.root.querySelectorAll('circle')[0].attributes.cx, '20');
+    assert.equal(app.root.querySelectorAll('li').length, 4);
+    assert.ok(app.root.textContent.includes('現在：ログイン情報を入力'));
     app.root.querySelectorAll('button')[0].fire('click', true); app.flush();
-    assert.equal(app.root.querySelectorAll('circle')[0].attributes.cx, '180');
-    assert.ok(app.root.textContent.includes('Step 2'));
-    assert.equal(app.messages.some(m => m.type === 'error'), false);
+    assert.ok(app.root.textContent.includes('現在：本人確認を行う'));
+    assert.equal(app.root.querySelectorAll('li')[1].dataset.variant, 'success');
+    for (let i=0;i<3;i++) {app.root.querySelectorAll('button')[0].fire('click', true);app.flush();}
+    assert.ok(app.root.textContent.includes('現在：ログイン情報を入力'));
+    assert.equal(app.messages.some(m => ['error','issueNewTurn','openUrl'].includes(m.type)), false);
+});
+
+test('advertised powers calculation recomputes result and multiplication including zero exponent', () => {
+    const swift = fs.readFileSync(path.join(__dirname, '../YamabikoChat/Features/Tools/GenUI/GenUITool.swift'), 'utf8');
+    const code = swift.match(/static let powersExample = #"""\n([\s\S]*?)\n    """#/)[1];
+    const app = mount({code});
+    assert.ok(app.root.textContent.includes('pow(2, 3) = 8'));
+    assert.ok(app.root.textContent.includes('2 × 2 × 2 = 8'));
+    const change = (index,value) => {const slider=app.root.querySelectorAll('input')[index];slider.value=String(value);slider.fire('input',true);app.flush();};
+    change(0,3);
+    assert.ok(app.root.textContent.includes('pow(3, 3) = 27'));
+    change(1,0);
+    assert.ok(app.root.textContent.includes('pow(3, 0) = 1'));
+    assert.ok(app.root.textContent.includes('0乗は1'));
+    assert.equal(app.messages.some(m => ['error','issueNewTurn'].includes(m.type)), false);
+});
+
+test('plain text line breaks survive across text primitives, bindings and whitespace overrides', () => {
+    for (const type of ['text','title','caption','label']) {
+        const app=mount({state:{flow:'① 入力\n↓\n② 確認'},ui:api.h(type,{value:'{{flow}}'})});
+        const element=app.root.children[0].children[0];
+        assert.equal(element.textContent,'① 入力\n↓\n② 確認',type);
+        assert.equal(element.style.whiteSpace,'pre-line',type);
+    }
+    for (const [props,whiteSpace] of [[{preserveWhitespace:true},'pre-wrap'],[{preserveWhitespace:false},'normal'],[{truncate:true},'nowrap']]) {
+        const app=mount({ui:api.h('text',props,'one\ntwo')});
+        assert.equal(app.root.children[0].children[0].style.whiteSpace,whiteSpace);
+    }
+    const markdown=mount({ui:api.h('markdown',{},'one\ntwo')});
+    assert.equal(markdown.root.children[0].children[0].style.whiteSpace,undefined);
+    const compatible=mount({ui:api.h('text',{},'**one**\ntwo')});
+    assert.equal(compatible.root.children[0].children[0].style.whiteSpace,undefined);
+});
+
+
+test('recovered checklist retains line breaks in supplied item text', () => {
+    const text='確認する項目\n補足の説明';
+    const app=mount({ui:api.h('ChecklistWidget',{__state:{sections:[{name:'確認',items:[text]}]}})});
+    const descendants=element=>[element,...(element.children||[]).flatMap(descendants)];
+    const label=descendants(app.root).find(element=>element.className==='genui-text' && element.textContent===text);
+    assert.ok(label,'original component must render the supplied text through the shared primitive');
+    assert.equal(label.style.whiteSpace,'pre-line');
+    assert.equal(app.messages.some(message=>message.type==='error'),false);
 });

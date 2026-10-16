@@ -498,7 +498,7 @@ test("bundled runtime resolves every explicit custom protocol and both Sarashina
   const baseURL = `http://127.0.0.1:${port}`;
   await waitUntilReady(baseURL, token);
   const custom = { name: "Local", modelId: "custom-model", baseUrl: "https://custom.example/v1", contextWindow: 128000, maxTokens: 4096, reasoning: true, reasoningEffort: "high", toolCall: true, vision: true, maxTokensField: "max_tokens", supportsStore: false, supportsDeveloperRole: false, supportsUsageInStreaming: false };
-  const protocols = ["anthropic-messages", "openai-completions", "openai-responses"];
+  const protocols = ["anthropic-messages", "openai-completions", "openai-responses", "google-generative-ai", "mistral-conversations"];
   const configs = protocols.map(protocol => ({ contractVersion: 2, provider: "yamabiko-custom", model: custom.modelId, customEndpoint: { ...custom, protocol } }));
   for (const model of ["sarashina3-mini", "sarashina3-nano", "sarashina3-guard"]) {
     configs.push({ contractVersion: 2, provider: "sarashina", model });
@@ -507,6 +507,6 @@ test("bundled runtime resolves every explicit custom protocol and both Sarashina
   configs.push({ contractVersion: 2, provider: "yamabiko-custom", model: custom.modelId, customEndpoint: { ...custom, protocol: "" } });
   const result = await resolveModels(baseURL, token, configs);
   protocols.forEach((protocol, index) => { assert.equal(result.models[index].supported, true); assert.equal(result.models[index].api, protocol); assert.equal(result.models[index].source, "user_configured"); });
-  for (const resolution of result.models.slice(3, 9)) { assert.equal(resolution.supported, true); assert.equal(resolution.api, "openai-completions"); assert.equal(resolution.source, "verified_official_contract"); assert.equal(resolution.maxTokens, 8000); }
-  assert.equal(result.models[9].reason, "custom_protocol_required");
+  for (const resolution of result.models.slice(protocols.length, protocols.length + 6)) { assert.equal(resolution.supported, true); assert.equal(resolution.api, "openai-completions"); assert.equal(resolution.source, "verified_official_contract"); assert.equal(resolution.maxTokens, 8000); }
+  assert.equal(result.models[protocols.length + 6].reason, "custom_protocol_required");
 });

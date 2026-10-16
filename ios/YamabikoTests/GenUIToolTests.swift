@@ -22,7 +22,7 @@ final class GenUIToolTests: XCTestCase {
     }
 
     func testAdvertisedInteractiveDiagramPassesToolValidation() async throws {
-        for code in [GenUITool.interactiveDiagramExample, GenUITool.worktreeDiagramExample] {
+        for code in [GenUITool.interactiveDiagramExample, GenUITool.powersExample, GenUITool.worktreeDiagramExample] {
             let document = GenUIDocument(title: "Diagram", code: code)
             let arguments = String(decoding: try JSONEncoder().encode(document), as: UTF8.self)
             let result = try await GenUITool().execute(call: ToolCall(id: "diagram", name: "genui", argumentsJSON: arguments))

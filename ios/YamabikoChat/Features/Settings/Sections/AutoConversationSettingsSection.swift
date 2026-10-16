@@ -14,13 +14,6 @@ struct AutoConversationSettingsSection: View {
         return L10n.format("最大ターン数: %d回", viewModel.settings.autoMaxTurns)
     }
 
-    private var endRuleDescription: String {
-        if isUnlimitedTurns {
-            return L10n.text("[END]シグナルまたは手動停止")
-        }
-        return L10n.text("[END]シグナルまたは最大ターン数")
-    }
-
     private var providerPresetOptions: [ModelPreset] {
         viewModel.settings.buildGlobalProviderPresets()
     }
@@ -33,14 +26,8 @@ struct AutoConversationSettingsSection: View {
                     set: { viewModel.setAutoConversationEnabled($0) }
                 ))
 
-                Text(L10n.text("自動会話はモデルA/Bの応答を交互に実行します。"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
             } header: {
                 Text(L10n.text("自動会話"))
-            } footer: {
-                Text(L10n.text("Fusion・デュアル・自動会話は同時に有効化できません。"))
             }
 
             if viewModel.settings.isAutoConversationEnabled {
@@ -110,16 +97,6 @@ struct AutoConversationSettingsSection: View {
                     )
                     .disabled(isUnlimitedTurns)
 
-                    Text(L10n.text("`0` を指定すると無制限で実行します。"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section(L10n.text("使用方法")) {
-                    Text(L10n.format("Auto conversation usage guide", endRuleDescription))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

@@ -162,12 +162,6 @@ struct RecentPhotoSheet: View {
                 .font(.headline)
                 .foregroundStyle(Color.chatComposerText)
 
-            Text(L10n.text("最近の写真をプレビューしてチャットにすぐ添付できます。"))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-
             Button(L10n.text("アクセスを許可")) {
                 library.requestAuthorization()
             }
@@ -188,12 +182,6 @@ struct RecentPhotoSheet: View {
             Text(L10n.text("写真へのアクセスが許可されていません"))
                 .font(.headline)
                 .foregroundStyle(Color.chatComposerText)
-
-            Text(L10n.text("「設定」アプリからYamabikoChatの写真アクセスを許可してください。"))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
 
             Button(L10n.text("設定を開く")) {
                 if let url = URL(string: UIApplication.openSettingsURLString) {

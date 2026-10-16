@@ -57,6 +57,27 @@ and `Show`/`Show.Else`. Properties prefixed with `$` evaluate CEL with the
 original native CEL resolver and scope, rather than an independently invented
 expression language.
 
+## Explanatory UI quality
+
+Choose a visual structure for the concept: connected list stages or SVG for a
+process, a responsive `grid` with `minChildWidth` for comparisons, and inputs
+with a live result and worked expression for calculations. A paragraph-only
+card stack does not explain relationships. The advertised tool example uses
+an authentication stepper (explicitly a local demo); a tested powers calculator
+also provides a development fixture. In both,
+all essential stages and explanations remain visible while controls update.
+Use `sm`/`md`/`lg`/`xl` typography tokens and avoid repeated outer padding.
+
+The October 2026 authentication diagnostic used only basic elements, not a
+recovered template. Its authored line breaks were collapsed by HTML whitespace
+handling. Plain `text`, `title`, `caption`, `label`, and list-item labels and
+descriptions now preserve newlines while wrapping. This also covers recovered
+components using those primitives and previously saved documents.
+`preserveWhitespace:true` additionally preserves spaces; explicit `false` on
+text primitives restores normal collapsing. Markdown and SVG retain their
+own whitespace behavior. This corrects rendering, but does not turn old prose
+into a newly authored interactive diagram.
+
 ## Rendering and state
 
 Spacing numbers use the original 4px unit without mobile spacing caps. Authored

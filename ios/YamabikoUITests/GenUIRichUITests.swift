@@ -3,6 +3,34 @@ import XCTest
 final class GenUIRichUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
+    func testExplanatoryDiagramsAndSavedLineBreaks() {
+        let app = XCUIApplication()
+        let base = ["-AppStoreScreenshotDemo", "-GenUIRichFixture", "-ScreenshotScene", "chat", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        app.launchArguments = base + ["-GenUIAuthenticationFixture"]
+        app.launch()
+        let next = app.buttons["次のステップ"].firstMatch
+        XCTAssertTrue(next.waitForExistence(timeout: 20))
+        reveal(next, in: app)
+        next.tap()
+        XCTAssertTrue(app.staticTexts["現在：本人確認を行う"].firstMatch.waitForExistence(timeout: 5))
+        capture("genui-authentication-explanation")
+        app.terminate()
+        app.launchArguments = base + ["-GenUIPowersFixture"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["pow(2, 3) = 8"].firstMatch.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.sliders["底"].firstMatch.exists)
+        XCTAssertTrue(app.sliders["指数"].firstMatch.exists)
+        capture("genui-powers-explanation")
+        app.terminate()
+        app.launchArguments = base + ["-GenUILineBreakFixture"]
+        app.launch()
+        let flow = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "① ユーザー")).firstMatch
+        XCTAssertTrue(flow.waitForExistence(timeout: 20))
+        // Nine authored lines use 24pt line boxes; accessibility reports slightly shorter glyph bounds.
+        XCTAssertGreaterThanOrEqual(flow.frame.height, 9 * 24 - 4)
+        capture("genui-saved-flow-line-breaks")
+    }
+
     func testOriginalComponentsRunInConversation() {
         let app = XCUIApplication()
         app.launchArguments = ["-AppStoreScreenshotDemo", "-GenUIRichFixture", "-GenUIOriginalFixture", "-ScreenshotScene", "chat", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]

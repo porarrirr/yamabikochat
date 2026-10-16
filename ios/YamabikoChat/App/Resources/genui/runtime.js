@@ -1003,6 +1003,11 @@
         if (p.textAlign) s.textAlign = p.textAlign;
         if (p.tabularNums) s.fontVariantNumeric = 'tabular-nums';
         if (p.highlight) s.background = 'var(--highlight)';
+        // Plain labels/prose retain authored line breaks, including recovered templates.
+        // Markdown and SVG keep their own whitespace rules. Explicit literal mode also
+        // preserves spaces; false opts back into ordinary HTML whitespace collapsing.
+        if (['text', 'title', 'caption', 'label'].includes(type) && el.className !== 'genui-markdown')
+            s.whiteSpace = p.preserveWhitespace === false ? 'normal' : 'pre-line';
         if (p.preserveWhitespace) s.whiteSpace = 'pre-wrap';
         if (p.inline) s.display = 'inline-flex';
         if (p.block) {

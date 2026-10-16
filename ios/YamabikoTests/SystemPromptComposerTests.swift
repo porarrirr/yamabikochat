@@ -48,6 +48,15 @@ final class SystemPromptComposerTests: XCTestCase {
         XCTAssertTrue(GenUITool.definition.description.contains(GenUITool.interactiveDiagramExample))
     }
 
+    func testExplanationsDescribeVisualStructureAndMeaningfulControls() throws {
+        let prompt = try XCTUnwrap(SystemPromptComposer.composeForAPI(nil, enablesGenUIInstructions: true))
+        for guidance in ["Do not concatenate numbered stages and Unicode arrows", "recompute the result", "keeping the entire flow visible", "minChildWidth:160"] {
+            XCTAssertTrue(prompt.contains(guidance), guidance)
+        }
+        XCTAssertTrue(GenUITool.definition.description.contains("list-item {label,description}"))
+        XCTAssertTrue(GenUITool.usageGuide.contains("Text sizes use sm/md/lg/xl"))
+    }
+
     func testResearchAndClarificationAllowUsefulProgress() throws {
         let prompt = try XCTUnwrap(SystemPromptComposer.composeForAPI(
             nil, enablesAgenticWebSearch: true, enablesUserQuestionInstructions: true

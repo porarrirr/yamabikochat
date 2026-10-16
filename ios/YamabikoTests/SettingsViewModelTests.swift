@@ -116,6 +116,45 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testChatGPTFreshCacheSkipsAccountDiscovery() async throws {
+        let calls = SettingsChatGPTCatalogGate()
+        let fixture = try await makeChatGPTFixture { _, _ in try await calls.fetch() }
+        // The first gate call blocks; use the second call to seed the account cache.
+        let initial = Task { await fixture.viewModel.refreshCodexModels() }
+        await calls.waitUntilStarted()
+        await fixture.viewModel.refreshCodexModels(forceRefresh: true)
+        await calls.resume()
+        await initial.value
+
+        await fixture.viewModel.refreshCodexModels()
+        XCTAssertEqual(fixture.viewModel.codexModels.map(\.id), ["new-model"])
+        let count = await calls.fetchCount()
+        XCTAssertEqual(count, 2)
+    }
+
+    @MainActor
+    func testChatGPTSlowRefreshAndFailureKeepCachedModelsVisible() async throws {
+        let mode = SettingsCatalogFailureMode()
+        let expected = [PiCodexModel(id: "saved", name: "Saved", supported: true)]
+        let fixture = try await makeChatGPTFixture { _, _ in
+            try await mode.check()
+            return expected
+        }
+        await fixture.viewModel.refreshCodexModels()
+        await mode.fail()
+        let refresh = Task { await fixture.viewModel.refreshCodexModels(forceRefresh: true) }
+        await mode.waitUntilStarted()
+        XCTAssertTrue(fixture.viewModel.codexModelsLoading)
+        XCTAssertEqual(fixture.viewModel.codexModels, expected)
+        await mode.resume()
+        await refresh.value
+
+        XCTAssertEqual(fixture.viewModel.codexModels, expected)
+        XCTAssertNotNil(fixture.viewModel.codexModelsError)
+        XCTAssertFalse(fixture.viewModel.codexModelsLoading)
+    }
+
+    @MainActor
     func testChatGPTCatalogDiscardsOlderRefreshAfterNewerRefreshCompletes() async throws {
         let gate = SettingsChatGPTCatalogGate()
         let fixture = try await makeChatGPTFixture { _, _ in try await gate.fetch() }
@@ -839,6 +878,8 @@ private actor SettingsChatGPTCatalogGate {
     private var startedWaiter: CheckedContinuation<Void, Never>?
     private var requestCount = 0
 
+    func fetchCount() -> Int { requestCount }
+
     func fetch() async throws -> [PiCodexModel] {
         requestCount += 1
         if requestCount == 1 {
@@ -881,4 +922,28 @@ private final class SettingsChatGPTCatalogURLProtocol: URLProtocol {
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
+}
+
+private actor SettingsCatalogFailureMode {
+    private var failing = false
+    private var pending: CheckedContinuation<Void, Never>?
+    private var started: CheckedContinuation<Void, Never>?
+    func fail() { failing = true }
+    func check() async throws {
+        guard failing else { return }
+        await withCheckedContinuation { continuation in
+            pending = continuation
+            started?.resume()
+            started = nil
+        }
+        throw URLError(.timedOut)
+    }
+    func waitUntilStarted() async {
+        if pending != nil { return }
+        await withCheckedContinuation { started = $0 }
+    }
+    func resume() {
+        pending?.resume()
+        pending = nil
+    }
 }

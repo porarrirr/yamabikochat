@@ -14,13 +14,10 @@ struct AgentSkillInstallReview: View {
                     Text(preview.manifest.description)
                     if let license = preview.manifest.license { LabeledContent("ライセンス", value: license) }
                     if let compatibility = preview.manifest.compatibility { LabeledContent("互換性", value: compatibility) }
-                    if preview.replacesExisting { Text("同名Skillを置換します。有効状態は維持されます。").foregroundStyle(.orange) }
                 }
                 Section("能力と危険性") {
-                    LabeledContent("スクリプト", value: preview.hasScripts ? "あり（端末では実行しません）" : "なし")
+                    LabeledContent("スクリプト", value: preview.hasScripts ? "あり" : "なし")
                     LabeledContent("allowed-tools", value: preview.manifest.allowedTools.isEmpty ? "なし" : preview.manifest.allowedTools.joined(separator: ", "))
-                    Text("allowed-toolsは表示情報であり、権限を自動付与しません。")
-                        .font(.caption).foregroundStyle(.secondary)
                 }
                 if !preview.externalURLs.isEmpty {
                     Section("外部URLらしき記述") {
@@ -39,8 +36,6 @@ struct AgentSkillInstallReview: View {
                 }
                 Section {
                     Toggle("内容を確認し、このSkillを信頼します", isOn: $trusted)
-                } footer: {
-                    Text("Skillの指示と資料は外部モデルへ送信される場合があります。ローカルでスクリプトは実行しません。")
                 }
             }
             .navigationTitle("Agent Skillを確認")

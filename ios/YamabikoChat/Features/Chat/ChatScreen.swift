@@ -523,8 +523,7 @@ struct ChatScreen: View {
                 if viewModel.timelineStore.orderedIDs.isEmpty {
                     ChatEmptyState(
                         title: emptyStateTitle,
-                        systemImage: emptyStateSystemImage,
-                        description: emptyStateDescription
+                        systemImage: emptyStateSystemImage
                     )
                 }
             }
@@ -719,12 +718,6 @@ struct ChatScreen: View {
 
     private var emptyStateSystemImage: String {
         viewModel.isSecretConversation ? "lock.shield" : "bubble.left.and.bubble.right"
-    }
-
-    private var emptyStateDescription: String {
-        viewModel.isSecretConversation
-            ? L10n.text("このチャットは別の会話を開くと破棄されます。")
-            : L10n.text("メッセージを入力して会話を開始してください。")
     }
 
     private var isComposerExpanded: Bool {

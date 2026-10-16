@@ -4,7 +4,6 @@ import UIKit
 struct ChatEmptyState: View {
     let title: String
     let systemImage: String
-    let description: String
 
     var body: some View {
         VStack(spacing: 14) {
@@ -15,11 +14,6 @@ struct ChatEmptyState: View {
                 .background(Color(uiColor: .secondarySystemBackground), in: Circle())
             Text(title)
                 .font(.title3.weight(.semibold))
-            Text(description)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 320)
         }
         .padding(32)
         .accessibilityElement(children: .combine)

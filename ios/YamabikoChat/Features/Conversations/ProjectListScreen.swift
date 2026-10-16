@@ -107,12 +107,6 @@ struct ProjectListScreen: View {
             Button(L10n.text("キャンセル"), role: .cancel) {
                 pendingProjectDeletion = nil
             }
-        } message: {
-            if let pending = pendingProjectDeletion {
-                Text(L10n.format("「%@」には %d 件の会話があります。削除方法を選択してください。", pending.title, pending.conversationCount))
-            } else {
-                Text(L10n.text("削除方法を選択してください。"))
-            }
         }
     }
 

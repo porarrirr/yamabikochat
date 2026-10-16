@@ -89,6 +89,7 @@ final class SettingsViewModel: ObservableObject {
     ) {
         guard self.repository == nil else { return }
         self.repository = repository
+        codexModels = repository.cachedChatGPTModels()
         self.credentialStore = credentialStore
         self.modelsDevCatalogRepository = modelsDevCatalogRepository
         self.skillRepository = skillRepository
@@ -137,6 +138,7 @@ final class SettingsViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
                 self?.codexAuthState = $0
+                self?.codexModels = repository.cachedChatGPTModels()
                 self?.codexAccountIdInput = $0.accountId ?? ""
                 self?.codexEmailInput = $0.email ?? ""
                 self?.codexPlanTypeInput = $0.planType ?? ""
@@ -223,11 +225,10 @@ final class SettingsViewModel: ObservableObject {
         let task = Task {
             async let modelsDevRefresh: CatalogLoadState? = modelsDevCatalogRepository?.load()
             async let openRouterRefresh: Void = refreshOpenRouterModels(force: false)
-            // Resolve account models against the newly refreshed contracts, rather
-            // than racing discovery against the previous models.dev cache.
-            _ = await modelsDevRefresh
-            await refreshCodexModels()
-            _ = await openRouterRefresh
+            // Account discovery handles its own contract load. Cached account
+            // models must not wait for an unrelated catalog network refresh.
+            async let codexRefresh: Void = refreshCodexModels()
+            _ = await (modelsDevRefresh, openRouterRefresh, codexRefresh)
         }
         modelCatalogPrefetchTask = task
         await task.value
@@ -236,6 +237,7 @@ final class SettingsViewModel: ObservableObject {
 
     func refreshCodexModels(forceRefresh: Bool = false) async {
         guard let repository else { return }
+        codexModels = repository.cachedChatGPTModels()
         let fetchID = UUID()
         activeCodexModelsFetchID = fetchID
         codexModelsLoading = true
@@ -251,7 +253,7 @@ final class SettingsViewModel: ObservableObject {
             // Account changes invalidate an in-flight catalog result.
         } catch {
             guard activeCodexModelsFetchID == fetchID else { return }
-            codexModels = []
+            codexModels = repository.cachedChatGPTModels()
             codexModelsError = error.localizedDescription
             errorMessage = error.localizedDescription
             DiagnosticsLogger.log("ChatGPT account model catalog unavailable", category: .network, error: error)

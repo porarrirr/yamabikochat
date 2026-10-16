@@ -127,8 +127,6 @@ struct SettingsScreen: View {
                         .padding(.vertical, 4)
                     }
                 }
-            } footer: {
-                Text("詳細は各項目で設定できます")
             }
         }
     }
@@ -256,16 +254,6 @@ private struct SettingsDetailScreen: View {
                 )
                 .accessibilityIdentifier("settings-genui-toggle")
 
-                if !LLMProvider(rawOrDefault: viewModel.settings.apiProvider).supportsClientTools(model: viewModel.settings.defaultModel) {
-                    Text(L10n.text("現在のプロバイダーではこのツールは使用されません。"))
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                }
-                if isGeminiProvider {
-                    Text(L10n.text("Geminiツールとクライアント側Web検索・ローカルPython実行・GenUIは同時に有効化できません。"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
             }
 
             if isOpenCodeGoProvider {
@@ -350,8 +338,6 @@ private struct SettingsDetailScreen: View {
             } label: {
                 Label("グローバルプリセット管理", systemImage: "switch.2")
             }
-        } footer: {
-            Text("チャットのプリセット一覧に表示するグローバル設定を、プロバイダーごとに管理します。")
         }
     }
 
@@ -362,8 +348,6 @@ private struct SettingsDetailScreen: View {
             }
         } header: {
             Text(L10n.text("チャットスタッツ"))
-        } footer: {
-            Text(L10n.text("入力欄の上に表示する項目を選択します。計測は非表示中も継続します。"))
         }
     }
 
@@ -418,14 +402,11 @@ private struct SettingsDetailScreen: View {
                 if viewModel.installedAgentSkills.isEmpty {
                     ContentUnavailableView(
                         "インストール済みSkillはありません",
-                        systemImage: "puzzlepiece.extension",
-                        description: Text("ZIPまたはフォルダから追加できます。")
+                        systemImage: "puzzlepiece.extension"
                     )
                 }
             } header: {
                 Text("Agent Skills")
-            } footer: {
-                Text("端末内のZIPまたはフォルダを選択してインストールします。")
             }
 
             if !viewModel.installedAgentSkills.isEmpty {
@@ -436,18 +417,6 @@ private struct SettingsDetailScreen: View {
                 }
             }
 
-            if !viewModel.installedAgentSkills.isEmpty {
-                Section {
-                    Label {
-                        Text("Pi AgentにはSkillの指示とUTF-8資料だけを提供します。同梱スクリプトは実行しません。")
-                    } icon: {
-                        Image(systemName: "checkmark.shield")
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-            }
         }
     }
 
@@ -523,9 +492,6 @@ private struct SettingsDetailScreen: View {
                 }
             }
 
-            Text("iOSでは表示モード（自動/ライト/ダーク）とアクセントカラーを反映します。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -560,10 +526,6 @@ private struct SettingsDetailScreen: View {
     private var geminiRotationSection: some View {
         Group {
             Section("Gemini APIキー一覧（ローテーション）") {
-                Text("複数キーを登録すると、レート制限や認証エラー時に自動で次のキー/モデルへ切り替えます。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
                 TextField("キー名", text: $viewModel.geminiKeySlotNameInput)
                 SecureField("APIキー", text: $viewModel.geminiKeySlotValueInput)
                 Button("キーを追加") {
@@ -610,12 +572,6 @@ private struct SettingsDetailScreen: View {
                     }
                 }
 
-                if viewModel.geminiRotationModels.isEmpty {
-                    Text("未設定の場合は現在選択中のモデルのみを使用します（既存動作と同じ）。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
                 switch viewModel.modelsDevCatalogState.availability {
                 case .loading:
                     ProgressView("models.devからモデル一覧を読み込み中...")
@@ -655,14 +611,14 @@ private struct SettingsDetailScreen: View {
                 Text("Anthropic Messages").tag("anthropic-messages")
                 Text("OpenAI Chat Completions").tag("openai-completions")
                 Text("OpenAI Responses").tag("openai-responses")
+                Text("Gemini (Google Generative AI)").tag("google-generative-ai")
+                Text("Mistral Native").tag("mistral-conversations")
             }
             .onChange(of: viewModel.customEndpointDraft.apiProtocol) { _, api in
                 if api != "anthropic-messages" { viewModel.customEndpointDraft.thinkingBudget = nil }
             }
             TextField("Base URL", text: $viewModel.customEndpointDraft.baseURL)
                 .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-            Text("APIのベースURLを指定してください（OpenAI系では通常 /v1 まで）。")
-                .font(.caption).foregroundStyle(.secondary)
             TextField("モデルID", text: $viewModel.customEndpointDraft.modelId)
                 .textInputAutocapitalization(.never).autocorrectionDisabled()
             LabeledContent("コンテキスト上限") {
@@ -673,8 +629,6 @@ private struct SettingsDetailScreen: View {
                 TextField("tokens", value: $viewModel.customEndpointDraft.maxTokens, format: .number)
                     .keyboardType(.numberPad).multilineTextAlignment(.trailing)
             }
-            Text("上限と対応機能はモデルの仕様に合わせて設定してください。")
-                .font(.caption).foregroundStyle(.secondary)
             Toggle("画像入力に対応", isOn: $viewModel.customEndpointDraft.vision)
             Toggle("ツール呼び出しに対応", isOn: $viewModel.customEndpointDraft.toolCall)
             Toggle("Reasoningに対応", isOn: $viewModel.customEndpointDraft.reasoning)
@@ -702,10 +656,6 @@ private struct SettingsDetailScreen: View {
                 TextField("省略可・0〜2", value: $viewModel.customEndpointDraft.temperature, format: .number)
                     .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
             }
-            if viewModel.customEndpointDraft.apiProtocol == "anthropic-messages", viewModel.customEndpointDraft.reasoningEffort != "off" {
-                Text("Anthropicのthinking使用時はtemperatureが省略されます。")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
             if viewModel.customEndpointDraft.apiProtocol == "openai-completions" {
                 Picker("出力上限のパラメーター", selection: $viewModel.customEndpointDraft.maxTokensField) {
                     Text("max_completion_tokens").tag("max_completion_tokens")
@@ -714,7 +664,7 @@ private struct SettingsDetailScreen: View {
                 Toggle("storeパラメーターに対応", isOn: $viewModel.customEndpointDraft.supportsStore)
                 Toggle("ストリーム内のusageに対応", isOn: $viewModel.customEndpointDraft.supportsUsageInStreaming)
             }
-            if viewModel.customEndpointDraft.apiProtocol != "anthropic-messages" {
+            if ["openai-completions", "openai-responses"].contains(viewModel.customEndpointDraft.apiProtocol) {
                 Toggle("developerロールに対応", isOn: $viewModel.customEndpointDraft.supportsDeveloperRole)
             }
             Button("プリセット追加/更新") { viewModel.addOrUpdateOpenAICompatPreset() }
@@ -722,8 +672,6 @@ private struct SettingsDetailScreen: View {
             if let name = viewModel.settings.selectedOpenAICompatPreset, !name.isEmpty {
                 SecureField("選択中のプリセットのAPIキー", text: $viewModel.openAICompatApiKeyInput)
                 Button("APIキーを保存") { viewModel.saveSelectedOpenAICompatApiKey() }
-                Text("キー不要のローカルサーバーでは任意のダミーキーを入力してください。")
-                    .font(.caption).foregroundStyle(.secondary)
                 Button("選択中のプリセットを削除", role: .destructive) { viewModel.removeOpenAICompatPreset(name: name) }
             }
         }
@@ -736,12 +684,6 @@ private struct SettingsDetailScreen: View {
 
     private var openRouterSection: some View {
         Section("OpenRouterモデル / ルーティング") {
-            if currentProviderKey != "OPENROUTER" {
-                Text("OpenRouterを利用する場合に設定します。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             HStack {
                 Button("取得") {
                     Task { await viewModel.refreshOpenRouterModels(force: false) }
@@ -781,12 +723,6 @@ private struct SettingsDetailScreen: View {
                     }
                 ))
                 .disabled(capabilities.mandatory)
-
-                if capabilities.mandatory {
-                    Text("このモデルではReasoningを無効にできません。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
 
                 Picker("Reasoning mode", selection: Binding(
                     get: {
@@ -849,9 +785,6 @@ private struct SettingsDetailScreen: View {
                 ))
                 .disabled(!viewModel.settings.openRouterThinkingEnabled)
 
-                Text("Reasoning tokens are billed as output tokens.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             } else {
                 Text("このモデルはReasoning effort選択に対応していません。")
                     .font(.caption2)
@@ -978,9 +911,6 @@ private struct SettingsDetailScreen: View {
                 set: { viewModel.settings.requireParameters = $0 }
             ))
 
-            Text("`provider` payload is sent only for OpenRouter requests.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -989,10 +919,6 @@ private struct SettingsDetailScreen: View {
             Text("Base URL: \(AppConstants.defaultAlibabaCodingPlanBaseURL.absoluteString)")
                 .font(.caption)
                 .textSelection(.enabled)
-
-            Text("Coding Plan 専用キーは `sk-sp-` で始まります。iOS版は Anthropic 互換の `/v1/messages` を固定 URL で使います。MCP は remote HTTPS server のみ対応し、Claude Code の `npx`/stdio MCP は iOS アプリ内では利用できません。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
 
             Toggle("Remote MCP を有効化", isOn: Binding(
                 get: { viewModel.settings.alibabaMCPEnabled },
@@ -1032,9 +958,6 @@ private struct SettingsDetailScreen: View {
                 }
                 .buttonStyle(.bordered)
 
-                Text("例: Firecrawl の hosted MCP は `\(AppConstants.firecrawlRemoteMCPURLTemplate)` 形式です。ツール名を空欄にするとサーバーが公開する全ツールを許可し、指定するとそのツールだけ有効化します。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -1135,9 +1058,6 @@ private struct SettingsDetailScreen: View {
                 .font(.caption)
                 .textSelection(.enabled)
 
-            Text("Cline dashboard の Settings > API Keys で発行したキーを保存してください。すべてのモデルは `/chat/completions` に送信します。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -1291,9 +1211,6 @@ private struct SettingsDetailScreen: View {
                     }
                     .disabled(!viewModel.settings.superGrokReasoningEnabled)
 
-                    Text("pi-grok の OAuth 経路で SuperGrok / X Premium+ サブスクリプションに接続します。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -1327,13 +1244,6 @@ private struct SettingsDetailScreen: View {
                         }
                     }
                     Spacer(minLength: 0)
-                }
-
-                if !viewModel.superGrokAuthState.isLoggedIn {
-                    Text("アカウントを接続して、SuperGrok / X Premium+ のサブスクリプションを利用します。")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Button {
@@ -1452,11 +1362,6 @@ private struct SettingsDetailScreen: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                } else if !viewModel.codexAuthState.planUsageEnabled {
-                    Text("ChatGPTアカウントを接続して、このアプリでプランを利用できます。")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Button {
@@ -1540,8 +1445,6 @@ private struct SettingsDetailScreen: View {
         Group {
             if currentProviderKey == "OPENAI_COMPAT" {
                 Text("Model: \(viewModel.settings.defaultModel)")
-                Text("モデルはカスタムエンドポイントのプリセットで設定します。")
-                    .font(.caption).foregroundStyle(.secondary)
             } else if currentProviderKey == "SARASHINA" {
                 Picker("Model", selection: Binding(get: { viewModel.settings.defaultModel }, set: { viewModel.setDefaultModel($0) })) {
                     ForEach(["sarashina3-mini", "sarashina3-nano", "sarashina3-guard"], id: \.self) { Text($0).tag($0) }
@@ -1549,8 +1452,6 @@ private struct SettingsDetailScreen: View {
                         Text(viewModel.settings.defaultModel).tag(viewModel.settings.defaultModel).disabled(true)
                     }
                 }
-                Text("テキスト入力専用・最大出力8,000トークン。guardは安全性判定用です。")
-                    .font(.caption).foregroundStyle(.secondary)
                 Link("Sarashina API ドキュメント", destination: URL(string: "https://docs.sarashina.ai/")!)
             } else if currentProviderKey == "OPENROUTER" {
                 OpenRouterModelPickerField(
@@ -1650,24 +1551,12 @@ private struct SettingsDetailScreen: View {
                     Text("モデル一覧を取得できませんでした: \(error)")
                         .font(.caption2)
                         .foregroundStyle(.red)
-                } else if !viewModel.codexModels.contains(where: { $0.id == viewModel.settings.defaultModel }) {
-                    Text(viewModel.codexAuthState.planUsageEnabled
-                         ? "この保存済みモデルは現在のアカウントの一覧にありません。モデルを選択してください。"
-                         : "ChatGPTに接続し、プラン利用を許可するとモデル一覧を取得できます。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
 
                 Button("モデル一覧を更新") {
                     Task { await viewModel.refreshCodexModels(forceRefresh: true) }
                 }
                 .disabled(viewModel.codexModelsLoading || viewModel.isCodexAuthActionRunning || !viewModel.codexAuthState.planUsageEnabled)
-
-                if let preset = CodexModelCatalog.findPreset(viewModel.settings.defaultModel, in: viewModel.codexModels) {
-                    Text(preset.description)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
 
                 TextField("Custom Model ID", text: Binding(
                     get: { viewModel.settings.defaultModel },
@@ -1711,12 +1600,6 @@ private struct SettingsDetailScreen: View {
                     }
                 }
 
-                if let model = SuperGrokModelCatalog.model(for: viewModel.settings.defaultModel) {
-                    Text(model.description)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
                 TextField("Model", text: Binding(
                     get: { viewModel.settings.defaultModel },
                     set: { viewModel.setDefaultModel($0) }
@@ -1731,19 +1614,10 @@ private struct SettingsDetailScreen: View {
                     }
                 }
 
-                if let model = OpenCodeGoModelCatalog.model(for: viewModel.settings.defaultModel) {
-                    Text(model.description)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
                 TextField("Model", text: Binding(
                     get: { viewModel.settings.defaultModel },
                     set: { viewModel.setDefaultModel($0) }
                 ))
-                Text("未掲載モデルは endpoint を安全に判定できないため、実行時に明示エラーで停止します。新しい Go モデルを使う場合は catalog 更新が必要です。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             } else if isClinePassProvider {
                 Picker("Cline Pass Model", selection: Binding(
                     get: { viewModel.settings.defaultModel },
@@ -1752,12 +1626,6 @@ private struct SettingsDetailScreen: View {
                     ForEach(clinePassModelOptions) { model in
                         Text(model.displayName).tag(model.id)
                     }
-                }
-
-                if let model = ClinePassModelCatalog.model(for: viewModel.settings.defaultModel) {
-                    Text(model.description)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
 
                 TextField("Model", text: Binding(
@@ -1773,9 +1641,6 @@ private struct SettingsDetailScreen: View {
                         Text(model).tag(model)
                     }
                 }
-                Text("Coding Plan 専用 endpoint で利用可能なモデルだけを表示しています。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             } else if isAppleIntelligenceProvider {
                 AppleIntelligenceModelPicker(model: Binding(
                     get: { viewModel.settings.defaultModel },
@@ -1852,8 +1717,6 @@ private struct SettingsDetailScreen: View {
             }
         } header: {
             Text("診断ログ")
-        } footer: {
-            Text("Pi Runtimeとアプリ状態は端末内へ自動保存されます。問題が起きた後もアプリを削除せず、ここから「共有」で送信してください。XcodeやMacへの接続は不要です。")
         }
         .sheet(isPresented: $showDiagnosticsSheet) {
             NavigationStack {
@@ -2368,8 +2231,7 @@ private struct GlobalProviderPresetManagementScreen: View {
                 if presets.isEmpty {
                     ContentUnavailableView(
                         "グローバルプリセットがありません",
-                        systemImage: "slider.horizontal.3",
-                        description: Text("接続設定でプロバイダーとモデルを設定すると、ここから表示を管理できます。")
+                        systemImage: "slider.horizontal.3"
                     )
                 } else {
                     ForEach(presets, id: \.apiProvider) { preset in
@@ -2387,8 +2249,6 @@ private struct GlobalProviderPresetManagementScreen: View {
                 }
             } header: {
                 Text("チャットに表示")
-            } footer: {
-                Text("オンにしたプロバイダーのグローバル設定が、チャットのプリセット一覧に表示されます。")
             }
         }
         .navigationTitle("グローバルプリセット管理")
@@ -2501,8 +2361,6 @@ private struct AgentSkillDetailScreen: View {
                 Button("キャンセル", role: .cancel) {
                     pendingAgentSkillDeletionName = nil
                 }
-            } message: { skillName in
-                Text("$\(skillName) を完全に削除します。この操作は取り消せません。")
             }
         }
         .onChange(of: viewModel.installedAgentSkills) { _, skills in

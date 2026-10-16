@@ -243,8 +243,6 @@ struct RootView: View {
             } else {
                 ContentUnavailableView {
                     Label(L10n.text("会話を始めましょう"), systemImage: "bubble.left.and.bubble.right")
-                } description: {
-                    Text(L10n.text("既存の会話を選ぶか、新しいチャットを作成してください。"))
                 } actions: {
                     Button {
                         createConversationFromEmptyDetail()

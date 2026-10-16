@@ -207,9 +207,10 @@ enum PCCSDK {
     @MainActor
     static func execute(_ request: PCCNativeRequest, runID: String, requestID: String,
                         using model: some LanguageModel,
-                        store: PCCSessionStore = .shared,
+                        store: PCCSessionStore? = nil,
                         executeTool: @escaping @Sendable (ToolCall) async throws -> ToolResult,
                         send: @escaping @Sendable (PCCNativeEvent) async throws -> Void) async throws {
+        let store = store ?? .shared
         let reasoning: ContextOptions.ReasoningLevel
         switch request.reasoningLevel {
         case "light": reasoning = .light

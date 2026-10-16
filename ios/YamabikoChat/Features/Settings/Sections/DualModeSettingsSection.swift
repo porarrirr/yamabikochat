@@ -31,14 +31,8 @@ struct DualModeSettingsSection: View {
                     set: { viewModel.setDualModeEnabled($0) }
                 ))
 
-                Text(L10n.text("デュアルモードで2つのモデル応答を同時比較します。"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
             } header: {
                 Text(L10n.text("デュアルモード"))
-            } footer: {
-                Text(L10n.text("Fusion・デュアル・自動会話は同時に有効化できません。"))
             }
 
             if viewModel.settings.isDualModeEnabled {

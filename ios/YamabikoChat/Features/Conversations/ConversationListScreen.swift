@@ -94,8 +94,6 @@ struct ConversationListScreen: View {
                 viewModel.deleteSelectedConversations()
             }
             Button(L10n.text("キャンセル"), role: .cancel) {}
-        } message: {
-            Text(L10n.format("選択した %d 件の会話を完全に削除します。この操作は取り消せません。", viewModel.selectedConversationIds.count))
         }
         .confirmationDialog(
             L10n.text("この会話を削除しますか？"),

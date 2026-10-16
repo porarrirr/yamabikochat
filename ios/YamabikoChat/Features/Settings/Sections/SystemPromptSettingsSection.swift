@@ -82,8 +82,6 @@ struct SystemPromptSettingsSection: View {
                 } footer: {
                     if let message = viewModel.systemPromptPresetValidationMessage {
                         Text(message).foregroundStyle(.red)
-                    } else {
-                        Text("変更は自動で保存されます。")
                     }
                 }
 
@@ -107,8 +105,7 @@ struct SystemPromptSettingsSection: View {
                     NavigationStack {
                         List {
                             if viewModel.systemPromptPresets.isEmpty {
-                                ContentUnavailableView("プリセットはまだありません", systemImage: "square.stack",
-                                                       description: Text("名前や本文を入力すると自動保存され、ここから選べます。"))
+                                ContentUnavailableView("プリセットはまだありません", systemImage: "square.stack")
                             } else {
                                 Section {
                                     ForEach(viewModel.systemPromptPresets) { preset in
@@ -147,8 +144,6 @@ struct SystemPromptSettingsSection: View {
                         .confirmationDialog("編集中の内容を置き換えますか？", isPresented: selectionConfirmation,
                                             titleVisibility: .visible) {
                             replacePromptButton
-                        } message: {
-                            Text("プリセットに保存していない本文と名前の変更は失われます。")
                         }
                     }
                 }
@@ -157,14 +152,10 @@ struct SystemPromptSettingsSection: View {
                     set: { if !$0 { pendingSelection = nil } }
                 ), titleVisibility: .visible) {
                     replacePromptButton
-                } message: {
-                    Text("プリセットに保存していない本文と名前の変更は失われます。")
                 }
                 .alert("選択中のプリセットを削除しますか？", isPresented: $confirmsDeletion) {
                     Button("削除", role: .destructive) { viewModel.removeSelectedSystemPromptPreset() }
                     Button("キャンセル", role: .cancel) {}
-                } message: {
-                    Text("プリセット「\(selectedPreset?.name ?? "")」を削除し、編集中の本文と名前を空にします。")
                 }
         } header: {
             Text("AIへの指示")

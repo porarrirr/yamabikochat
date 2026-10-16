@@ -18,47 +18,15 @@ struct ProjectInstructionsSheet: View {
         _instructions = State(initialValue: initialInstructions ?? "")
     }
 
-    private var placeholderText: String {
-        L10n.text("例:「スペイン語で回答してください。最新の JavaScript ドキュメントを参照してください。回答は短く、的確にしてください。」")
-    }
-
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
-                // Header description
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(L10n.text("YamabikoChat に対して、このプロジェクトにおいて、あるトピックに集中するように依頼するか、回答に特定の形式を使用するように依頼します。"))
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(.secondary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Divider()
-                        .opacity(0.4)
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
-
-                // Text input area
-                ZStack(alignment: .topLeading) {
-                    if instructions.isEmpty {
-                        Text(placeholderText)
-                            .font(.system(size: 15))
-                            .foregroundStyle(Color.secondary.opacity(0.7))
-                            .lineSpacing(4)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 8)
-                            .allowsHitTesting(false)
-                    }
-
-                    TextEditor(text: $instructions)
-                        .font(.system(size: 15))
-                        .lineSpacing(4)
-                        .scrollContentBackground(.hidden)
-                        .padding(.horizontal, 20)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+                TextEditor(text: $instructions)
+                    .font(.system(size: 15))
+                    .lineSpacing(4)
+                    .scrollContentBackground(.hidden)
+                    .padding(.horizontal, 20)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 Spacer()
 

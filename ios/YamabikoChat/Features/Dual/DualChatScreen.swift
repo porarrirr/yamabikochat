@@ -5,10 +5,6 @@ struct DualChatScreen: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("デュアルモードで2つのモデル応答を同時比較します。")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
             Button("現在の入力をデュアル送信") {
                 if !viewModel.settings.isDualModeEnabled {
                     viewModel.toggleDualMode()

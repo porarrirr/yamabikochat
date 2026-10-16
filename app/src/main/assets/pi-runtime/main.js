@@ -186354,12 +186354,16 @@ init_dist();
 init_openai_completions();
 init_openai_responses();
 init_anthropic_messages();
+init_google_generative_ai();
+init_mistral_conversations();
 import { createHash as createHash4 } from "node:crypto";
 var CUSTOM_PROVIDER = "yamabiko-custom";
 var apis = {
   "openai-completions": { stream, streamSimple },
   "openai-responses": { stream: stream5, streamSimple: streamSimple4 },
-  "anthropic-messages": { stream: stream3, streamSimple: streamSimple2 }
+  "anthropic-messages": { stream: stream3, streamSimple: streamSimple2 },
+  "google-generative-ai": { stream: stream6, streamSimple: streamSimple5 },
+  "mistral-conversations": { stream: stream8, streamSimple: streamSimple7 }
 };
 var efforts = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 function customProviderResolution(config, models) {

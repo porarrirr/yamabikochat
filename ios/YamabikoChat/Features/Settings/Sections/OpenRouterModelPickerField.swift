@@ -75,8 +75,7 @@ private struct OpenRouterModelListView: View {
             if filteredModels.isEmpty && !isLoading {
                 ContentUnavailableView(
                     L10n.text("モデルが見つかりません"),
-                    systemImage: "magnifyingglass",
-                    description: Text(L10n.text("検索条件を変えるか、一覧を更新してください。"))
+                    systemImage: "magnifyingglass"
                 )
             } else {
                 List(filteredModels) { item in

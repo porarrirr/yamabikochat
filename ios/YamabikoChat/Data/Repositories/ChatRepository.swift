@@ -1984,7 +1984,13 @@ final class ChatRepository {
         await codexAuthRepository.refreshIfNeeded(force: force)
     }
 
+    func cachedChatGPTModels() -> [PiCodexModel] {
+        codexAuthRepository.cachedModels()
+    }
+
     func chatGPTModels(forceRefresh: Bool = false) async throws -> [PiCodexModel] {
+        if !forceRefresh, let cached = codexAuthRepository.freshCachedModels() { return cached }
+        guard codexAuthRepository.hasAuthToken() else { return [] }
         _ = await modelsDevCatalogRepository?.load(forceRefresh: forceRefresh)
         let openAIProvider = modelsDevCatalogRepository?.provider(for: .modelsDev("openai"))
         if openAIProvider == nil {

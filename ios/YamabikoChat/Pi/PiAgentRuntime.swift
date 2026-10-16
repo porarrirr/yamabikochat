@@ -691,9 +691,9 @@ actor PiAgentRuntime {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 #if DEBUG
-                await self.registerActiveRun(runID)
+                self.registerActiveRun(runID)
                 defer {
-                    Task { await self.unregisterActiveRun(runID) }
+                    Task { self.unregisterActiveRun(runID) }
                 }
                 #endif
                 var metrics = PiConversationMetricsCollector(context: metricsContext)

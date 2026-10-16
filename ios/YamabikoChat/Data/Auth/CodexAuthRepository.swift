@@ -25,7 +25,15 @@ final class CodexAuthRepository {
         var registrations: [String: JSONValue] = [:]
     }
 
+    private struct CatalogCache: Codable {
+        var accountID: String
+        var fetchedAt: Date
+        var models: [PiCodexModel]
+    }
+
     private enum Constants {
+        static let catalogKey = "pi_chatgpt_catalog_v1"
+        static let catalogTTL: TimeInterval = 5 * 60
         static let accountsKey = "pi_chatgpt_accounts_v1"
         static let hostKey = "pi_chatgpt_host_v1"
         static let legacyCredentialKey = "pi_oauth_openai_codex_v1"
@@ -33,7 +41,7 @@ final class CodexAuthRepository {
 
     private let authLock = NSRecursiveLock()
     private var authGeneration = 0
-    private var catalogCache: [PiCodexModel]?
+    private var catalogCache: CatalogCache?
     private var catalogRequestID = UUID()
     private var signingOut = false
     private var pendingResolution: (id: UUID, generation: Int, credential: String, task: Task<PiOAuthResolution, Error>)?
@@ -65,6 +73,12 @@ final class CodexAuthRepository {
         self.catalogHandler = catalogHandler
         self.revokeHandler = revokeHandler
         subject = CurrentValueSubject(Self.readState(credentialStore: credentialStore))
+        if subject.value.isLoggedIn, subject.value.planUsageEnabled,
+           let json = try? credentialStore.readSecret(key: Constants.catalogKey),
+           let cache = try? JSONDecoder().decode(CatalogCache.self, from: Data(json.utf8)),
+           cache.accountID == subject.value.accountId {
+            catalogCache = cache
+        }
         if subject.value.requiresReauthentication {
             DiagnosticsLogger.log("Legacy Codex credential requires official ChatGPT authorization", category: .auth)
         }
@@ -143,7 +157,7 @@ final class CodexAuthRepository {
             let (generation, host, registration) = try authLock.withLock {
                 guard !signingOut else { throw CancellationError() }
                 authGeneration += 1
-                catalogCache = nil
+                clearCatalogCache()
                 let accounts = try readAccounts()
                 let selected = accounts.selectedClientID.flatMap { accounts.registrations[$0] }
                 let json = try selected.map { try PiAgentRuntime.credentialJSONString($0) }
@@ -175,7 +189,7 @@ final class CodexAuthRepository {
             let (generation, credential) = try authLock.withLock {
                 let credential = try credentialJSON()
                 authGeneration += 1
-                catalogCache = nil
+                clearCatalogCache()
                 signingOut = true
                 return (authGeneration, credential)
             }
@@ -240,7 +254,24 @@ final class CodexAuthRepository {
     /// Last account catalog successfully fetched for the current auth generation.
     /// Used for reasoning-effort options and shortcut model lists without a network call.
     func cachedModels() -> [PiCodexModel] {
-        authLock.withLock { catalogCache ?? [] }
+        authLock.withLock { catalogCache?.models ?? [] }
+    }
+
+    /// Skip all catalog/auth network work while the account snapshot is fresh.
+    func freshCachedModels() -> [PiCodexModel]? {
+        authLock.withLock {
+            guard !signingOut, currentState().isLoggedIn, currentState().planUsageEnabled,
+                  let cache = catalogCache,
+                  cache.accountID == currentState().accountId,
+                  (0 ..< Constants.catalogTTL).contains(Date().timeIntervalSince(cache.fetchedAt)) else { return nil }
+            return cache.models
+        }
+    }
+
+    private func clearCatalogCache() {
+        catalogCache = nil
+        do { try credentialStore.deleteSecret(key: Constants.catalogKey) }
+        catch { DiagnosticsLogger.log("ChatGPT model cache removal failed", category: .network, error: error) }
     }
 
     func models(contracts: [String: PiCatalogModelContract]) async throws -> [PiCodexModel] {
@@ -255,7 +286,14 @@ final class CodexAuthRepository {
         let models = try await catalogHandler(PiAgentRuntime.credentialJSONString(resolution.credential), contracts)
         return try authLock.withLock {
             guard generation == authGeneration, requestID == catalogRequestID else { throw CancellationError() }
-            catalogCache = models
+            guard let accountID = currentState().accountId else { throw CancellationError() }
+            let cache = CatalogCache(accountID: accountID, fetchedAt: Date(), models: models)
+            catalogCache = cache
+            do {
+                try credentialStore.saveSecret(String(decoding: JSONEncoder().encode(cache), as: UTF8.self), key: Constants.catalogKey)
+            } catch {
+                DiagnosticsLogger.log("ChatGPT model cache persistence failed", category: .network, error: error)
+            }
             return models
         }
     }

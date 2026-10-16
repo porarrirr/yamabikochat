@@ -3,12 +3,17 @@ import { createProvider } from "@earendil-works/pi-ai";
 import { stream as completionsStream, streamSimple as completionsSimple } from "@earendil-works/pi-ai/api/openai-completions";
 import { stream as responsesStream, streamSimple as responsesSimple } from "@earendil-works/pi-ai/api/openai-responses";
 import { stream as anthropicStream, streamSimple as anthropicSimple } from "@earendil-works/pi-ai/api/anthropic-messages";
+import { stream as geminiStream, streamSimple as geminiSimple } from "@earendil-works/pi-ai/api/google-generative-ai";
+
+import { stream as mistralStream, streamSimple as mistralSimple } from "@earendil-works/pi-ai/api/mistral-conversations";
 
 export const CUSTOM_PROVIDER = "yamabiko-custom";
 const apis = {
   "openai-completions": { stream: completionsStream, streamSimple: completionsSimple },
   "openai-responses": { stream: responsesStream, streamSimple: responsesSimple },
-  "anthropic-messages": { stream: anthropicStream, streamSimple: anthropicSimple }
+  "anthropic-messages": { stream: anthropicStream, streamSimple: anthropicSimple },
+  "google-generative-ai": { stream: geminiStream, streamSimple: geminiSimple },
+  "mistral-conversations": { stream: mistralStream, streamSimple: mistralSimple }
 };
 const efforts = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 

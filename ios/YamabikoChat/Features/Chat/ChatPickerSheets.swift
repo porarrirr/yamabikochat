@@ -98,13 +98,8 @@ struct ChatModePickerSheet: View {
                             HStack(spacing: 13) {
                                 Image(systemName: mode.systemImage)
                                     .frame(width: 28)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(mode.title)
-                                        .font(.body.weight(.medium))
-                                    Text(description(for: mode))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
+                                Text(mode.title)
+                                    .font(.body.weight(.medium))
                                 Spacer()
                                 if mode == activeMode {
                                     Image(systemName: "checkmark")
@@ -116,8 +111,6 @@ struct ChatModePickerSheet: View {
                         }
                         .buttonStyle(.plain)
                     }
-                } footer: {
-                    Text(L10n.text("モードは互いに排他的です。変更は次の送信から適用されます。"))
                 }
             }
             .navigationTitle(L10n.text("会話モード"))
@@ -130,14 +123,5 @@ struct ChatModePickerSheet: View {
         }
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
-    }
-
-    private func description(for mode: ChatMode) -> String {
-        switch mode {
-        case .standard: L10n.text("1つのモデルと自然に会話します")
-        case .dual: L10n.text("2つのモデルの回答を比較します")
-        case .fusion: L10n.text("複数の回答を評価して1つに統合します")
-        case .autoConversation: L10n.text("2つのモデルが交互に会話します")
-        }
     }
 }
