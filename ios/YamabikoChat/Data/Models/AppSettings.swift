@@ -636,19 +636,11 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             }
         }
 
-        func remapDualAutoProvider(_ provider: String) -> String {
-            let normalized = remap(provider)
-            if normalized == "APPLE_INTELLIGENCE" {
-                return "GEMINI"
-            }
-            return normalized
-        }
-
         apiProvider = remap(apiProvider)
-        dualProviderA = remapDualAutoProvider(dualProviderA)
-        dualProviderB = remapDualAutoProvider(dualProviderB)
-        autoProviderA = remapDualAutoProvider(autoProviderA)
-        autoProviderB = remapDualAutoProvider(autoProviderB)
+        dualProviderA = remap(dualProviderA)
+        dualProviderB = remap(dualProviderB)
+        autoProviderA = remap(autoProviderA)
+        autoProviderB = remap(autoProviderB)
 
         let models = providerModelMap()
         var remappedModels: [String: String] = [:]
@@ -837,7 +829,19 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             providerDefaultModelsJSON = json
         }
 
-        let isPCCActive = (apiProvider.uppercased() == "APPLE_INTELLIGENCE" && defaultModel == AppleIntelligenceModelCatalog.pccModel) ||
+        let fusionPreset = decodeFusionCustomPreset()
+        let fusionModels = (fusionPreset?.panelModels ?? []) + [fusionPreset?.judgeModel, fusionPreset?.synthesizerModel].compactMap { $0 }
+        let fusionUsesPCC = fusionModels.contains {
+            $0.provider.caseInsensitiveCompare("APPLE_INTELLIGENCE") == .orderedSame &&
+                $0.modelId == AppleIntelligenceModelCatalog.pccModel
+        }
+        let sideModels = [(dualProviderA, dualModelA), (dualProviderB, dualModelB),
+                          (autoProviderA, autoModelA), (autoProviderB, autoModelB)]
+        let sideUsesPCC = sideModels.contains { provider, model in
+            provider.caseInsensitiveCompare("APPLE_INTELLIGENCE") == .orderedSame &&
+                model == AppleIntelligenceModelCatalog.pccModel
+        }
+        let isPCCActive = sideUsesPCC || fusionUsesPCC || (apiProvider.uppercased() == "APPLE_INTELLIGENCE" && defaultModel == AppleIntelligenceModelCatalog.pccModel) ||
             models["APPLE_INTELLIGENCE"] == AppleIntelligenceModelCatalog.pccModel
         let isOnDeviceActive = apiProvider.uppercased() == "APPLE_INTELLIGENCE" && defaultModel == AppleIntelligenceModelCatalog.displayModel
 

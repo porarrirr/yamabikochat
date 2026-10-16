@@ -23,6 +23,53 @@ private final class DualTestCredentialStore: SecureCredentialStore {
 }
 
 final class ChatRepositoryDualTests: XCTestCase {
+    func testPCCRunsOnBothDualSidesThroughPi() async throws {
+        let runtime = Self.responseRuntime()
+        let fixture = try makeFixture(runtime: runtime) { settings in
+            settings.dualProviderA = "APPLE_INTELLIGENCE"
+            settings.dualProviderB = "APPLE_INTELLIGENCE"
+            settings.dualModelA = AppleIntelligenceModelCatalog.pccModel
+            settings.dualModelB = AppleIntelligenceModelCatalog.pccModel
+            settings.pccReasoningLevel = "deep"
+            settings.isDualModeEnabled = true
+        }
+        let conversationID = try fixture.repository.createConversation(title: "PCC Dual")
+        let result = try await fixture.repository.sendDualMessage(conversationId: conversationID, text: "Hello")
+        XCTAssertTrue(result.modelAText.contains("response-"))
+        XCTAssertTrue(result.modelBText.contains("response-"))
+        XCTAssertEqual(runtime.calls.count, 2)
+        for call in runtime.calls {
+            XCTAssertEqual(call.configuration.provider, "apple-pcc")
+            XCTAssertEqual(call.configuration.model, AppleIntelligenceModelCatalog.pccModel)
+            XCTAssertEqual(call.configuration.thinkingLevel, "high")
+            XCTAssertNil(call.configuration.apiKey)
+        }
+    }
+
+    func testPCCAlternatesInAutoConversationThroughPi() async throws {
+        let runtime = Self.responseRuntime()
+        let fixture = try makeFixture(runtime: runtime) { settings in
+            settings.autoProviderA = "APPLE_INTELLIGENCE"
+            settings.autoProviderB = "APPLE_INTELLIGENCE"
+            settings.autoModelA = AppleIntelligenceModelCatalog.pccModel
+            settings.autoModelB = AppleIntelligenceModelCatalog.pccModel
+            settings.pccReasoningLevel = "light"
+            settings.autoMaxTurns = 2
+            settings.isAutoConversationEnabled = true
+        }
+        let conversationID = try fixture.repository.createConversation(title: "PCC Auto")
+        let autoID = try await fixture.repository.runAutoConversation(conversationId: conversationID, initialMessage: "Hello") { _, _, _ in }
+        XCTAssertEqual(try fixture.repository.autoConversation(id: autoID)?.status, .ended)
+        XCTAssertEqual(runtime.calls.count, 2)
+        XCTAssertEqual(Set(runtime.calls.compactMap { $0.request.metadata["promptCacheKey"] }).count, 2)
+        for call in runtime.calls {
+            XCTAssertEqual(call.configuration.provider, "apple-pcc")
+            XCTAssertEqual(call.configuration.model, AppleIntelligenceModelCatalog.pccModel)
+            XCTAssertEqual(call.configuration.thinkingLevel, "low")
+            XCTAssertNil(call.configuration.apiKey)
+        }
+    }
+
     func testSendDualMessageStoresUserAndModelRowsSeparately() async throws {
         let runtime = Self.responseRuntime()
         let fixture = try makeFixture(runtime: runtime) { settings in

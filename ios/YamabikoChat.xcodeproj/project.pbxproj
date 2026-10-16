@@ -92,6 +92,7 @@
 		42B1B372E647BD23FA2CEA43 /* StrReplaceEditorToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9178993F37A8DA121B60998F /* StrReplaceEditorToolTests.swift */; };
 		43D903EB1D4F069EAD86E633 /* ChatPresentationArchitectureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBFED0CDEA2C632554419530 /* ChatPresentationArchitectureTests.swift */; };
 		444CCF031175308BFE7C7A0E /* ChatWorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4436C8CBC7C959103C988542 /* ChatWorkspaceStore.swift */; };
+		46088AB60CFF9962B044D0DF /* ModelSlotForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91F0301E1F6F8B619ACE0D94 /* ModelSlotForm.swift */; };
 		462026B74A52B7004D1904E0 /* AutoConversationTrigger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16BB3545343C24FCACEF4EE7 /* AutoConversationTrigger.swift */; };
 		46480822411C11B4D869E2D7 /* AskUserQuestionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 982C2AC2672831194061A41F /* AskUserQuestionCard.swift */; };
 		493CB5E5A87943A6E57770E0 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = B035B29CBD761489AE1F2C66 /* ZIPFoundation */; };
@@ -189,7 +190,6 @@
 		922866C08D7F9507A748D15E /* ChatRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81BEFD60BAA4BF4DA1A9286B /* ChatRepository.swift */; };
 		92699432734BDE131D4B138C /* ConversationDrawer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05700AA7E8DA4E3FC33F07B /* ConversationDrawer.swift */; };
 		92F3FF4AEE8C134A7DC83453 /* OpenRouterRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8090A935C0BB2117BC04547F /* OpenRouterRoutingTests.swift */; };
-		936E785E91BD6F30140A482A /* FusionModelSlotForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92AD8EA4D8A79FAA26B52BE9 /* FusionModelSlotForm.swift */; };
 		93BBDD235676F6ADED81AD75 /* lottie-light.js in Resources */ = {isa = PBXBuildFile; fileRef = D9BBFB9640224552D9061787 /* lottie-light.js */; };
 		9621F9E7E3AD0FA8C8261E37 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7CB427210D89DB2E91F4D299 /* PrivacyInfo.xcprivacy */; };
 		962D63DC04F87D3F8083C055 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */; };
@@ -602,9 +602,9 @@
 		8F78E25D8F74B8F031620DD9 /* AutoConversationTriggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversationTriggerTests.swift; sourceTree = "<group>"; };
 		903D911B87492EC0CA257EC5 /* ShortcutModelOptionsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutModelOptionsProvider.swift; sourceTree = "<group>"; };
 		9178993F37A8DA121B60998F /* StrReplaceEditorToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrReplaceEditorToolTests.swift; sourceTree = "<group>"; };
+		91F0301E1F6F8B619ACE0D94 /* ModelSlotForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelSlotForm.swift; sourceTree = "<group>"; };
 		9232E21606568B977401E39A /* ConversationStatsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStatsTests.swift; sourceTree = "<group>"; };
 		9289A5E87008C89F9D936F2A /* SearchEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchEngine.swift; sourceTree = "<group>"; };
-		92AD8EA4D8A79FAA26B52BE9 /* FusionModelSlotForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionModelSlotForm.swift; sourceTree = "<group>"; };
 		92B9CB80FD13964B0BC82FBD /* ConversationWorkspacePath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationWorkspacePath.swift; sourceTree = "<group>"; };
 		93B24D334792F81938E47527 /* ProjectWorkspaceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspaceStoreTests.swift; sourceTree = "<group>"; };
 		95871625A1540CBAA5128A70 /* quickjs.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = quickjs.c; sourceTree = "<group>"; };
@@ -772,8 +772,8 @@
 				6116B1ECB916D417EE404728 /* DualAutoModelSideForm.swift */,
 				59A2630B4697497BBF8955FB /* DualModeOverridesForm.swift */,
 				4896B18C01C7F5988DF13828 /* DualModeSettingsSection.swift */,
-				92AD8EA4D8A79FAA26B52BE9 /* FusionModelSlotForm.swift */,
 				8D859CCB049B009414F17CDF /* FusionModeSettingsSection.swift */,
+				91F0301E1F6F8B619ACE0D94 /* ModelSlotForm.swift */,
 				E9EB908ED95DE4E138D7A19F /* OpenRouterModelPickerField.swift */,
 				E0C20905CC5713AC2AF34AFF /* PCCStatusView.swift */,
 				652A626C556E53B0EB120BFD /* SettingsFormHelpers.swift */,
@@ -1949,7 +1949,6 @@
 				8D7DEC742B1C461DD8469A44 /* FusionJudgeParser.swift in Sources */,
 				FE885E027AF3F3D2CC499BAE /* FusionMessageSummary.swift in Sources */,
 				32F463C0B0EC07720ADFD314 /* FusionModeSettingsSection.swift in Sources */,
-				936E785E91BD6F30140A482A /* FusionModelSlotForm.swift in Sources */,
 				FF318330D50F4CAE535C0466 /* FusionOrchestrator.swift in Sources */,
 				5A7693FE453861B697D3969D /* FusionPanelRunner.swift in Sources */,
 				DA65E68D418F45D007039F53 /* FusionPresetLoader.swift in Sources */,
@@ -1994,6 +1993,7 @@
 				9BD931169E39B228157F7725 /* MathMarkdownView.swift in Sources */,
 				CD45864AEF7F44B6F37E9E1C /* MermaidDiagramView.swift in Sources */,
 				4AF8DCF064E32B3DD82E1D65 /* ModelPreset.swift in Sources */,
+				46088AB60CFF9962B044D0DF /* ModelSlotForm.swift in Sources */,
 				ECDE193C2F8AA008090274F3 /* ModelsDevCatalog.swift in Sources */,
 				F96F8931673091505236216B /* ModelsDevCatalogRepository.swift in Sources */,
 				BCB0B1BBCA065DA7F2856BCC /* NativeMarkdownView.swift in Sources */,

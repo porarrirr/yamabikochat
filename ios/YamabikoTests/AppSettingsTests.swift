@@ -323,6 +323,49 @@ final class AppSettingsTests: XCTestCase {
         }
     }
 
+    func testFusionPCCReasoningSurvivesWithOnDevicePrimaryModel() throws {
+        for role in [FusionPhase.panel, .judge, .synthesizer] {
+            var settings = AppSettings()
+            settings.apiProvider = "APPLE_INTELLIGENCE"
+            settings.defaultModel = AppleIntelligenceModelCatalog.displayModel
+            settings.pccReasoningLevel = "deep"
+            var preset = AppSettings.defaultFusionCustomPreset()
+            let model = PanelModelConfig(modelId: AppleIntelligenceModelCatalog.pccModel, provider: "APPLE_INTELLIGENCE")
+            switch role {
+            case .panel: preset.panelModels[0] = model
+            case .judge: preset.judgeModel = model
+            case .synthesizer: preset.synthesizerModel = model
+            }
+            settings.fusionCustomPresetJSON = settings.encodeFusionCustomPreset(preset)
+            XCTAssertEqual(settings.normalizedForPersistence().pccReasoningLevel, "deep", "\(role)")
+        }
+    }
+
+    func testDualAndAutoPCCReasoningSurvivesWithOnDevicePrimaryModel() {
+        for side in 0..<4 {
+            var settings = AppSettings()
+            settings.apiProvider = "APPLE_INTELLIGENCE"
+            settings.defaultModel = AppleIntelligenceModelCatalog.displayModel
+            settings.pccReasoningLevel = "light"
+            switch side {
+            case 0:
+                settings.dualProviderA = "APPLE_INTELLIGENCE"
+                settings.dualModelA = AppleIntelligenceModelCatalog.pccModel
+            case 1:
+                settings.dualProviderB = "APPLE_INTELLIGENCE"
+                settings.dualModelB = AppleIntelligenceModelCatalog.pccModel
+            case 2:
+                settings.autoProviderA = "APPLE_INTELLIGENCE"
+                settings.autoModelA = AppleIntelligenceModelCatalog.pccModel
+            default:
+                settings.autoProviderB = "APPLE_INTELLIGENCE"
+                settings.autoModelB = AppleIntelligenceModelCatalog.pccModel
+            }
+            XCTAssertEqual(settings.normalizedForPersistence().pccReasoningLevel, "light")
+        }
+        XCTAssertTrue(ProviderCatalog.dualAutoConversationOptions.contains { $0.key == "APPLE_INTELLIGENCE" })
+    }
+
     func testCurrentModelUsesProviderMapFallback() {
         var settings = AppSettings()
         settings.apiProvider = "OPENAI"
@@ -559,7 +602,7 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(presets.map(\.model), ["claude-sonnet-4-5"])
     }
 
-    func testRemapRemovedProvidersMigratesAppleIntelligenceFromDualAutoProviders() {
+    func testPersistencePreservesAppleIntelligenceInDualAutoProviders() {
         var settings = AppSettings()
         settings.dualProviderA = "APPLE_INTELLIGENCE"
         settings.dualProviderB = "apple_intelligence"
@@ -568,9 +611,9 @@ final class AppSettingsTests: XCTestCase {
 
         let normalized = settings.normalizedForPersistence()
 
-        XCTAssertEqual(normalized.dualProviderA, "GEMINI")
-        XCTAssertEqual(normalized.dualProviderB, "GEMINI")
-        XCTAssertEqual(normalized.autoProviderA, "GEMINI")
+        XCTAssertEqual(normalized.dualProviderA, "APPLE_INTELLIGENCE")
+        XCTAssertEqual(normalized.dualProviderB, "APPLE_INTELLIGENCE")
+        XCTAssertEqual(normalized.autoProviderA, "APPLE_INTELLIGENCE")
         XCTAssertEqual(normalized.autoProviderB, "OPENROUTER")
     }
 

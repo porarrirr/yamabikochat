@@ -24,6 +24,44 @@ final class FusionServiceTests: XCTestCase {
         )
     }
 
+    func testPCCExecutesEveryFusionRoleThroughPi() async throws {
+        let dbQueue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(dbQueue)
+        let repository = SettingsRepository(dbQueue: dbQueue)
+        var settings = AppSettings()
+        settings.pccReasoningLevel = "deep"
+        var preset = AppSettings.defaultFusionCustomPreset()
+        let model = PanelModelConfig(modelId: AppleIntelligenceModelCatalog.pccModel, provider: "APPLE_INTELLIGENCE")
+        preset.panelModels = [model]
+        preset.judgeModel = model
+        preset.synthesizerModel = model
+        settings.fusionCustomPresetJSON = settings.encodeFusionCustomPreset(preset)
+        try repository.save(settings)
+        let credentials = InMemoryCredentialStore()
+        let pi = PiStreamSpy { request, _ in
+            let text = request.metadata["fusionPhase"] == "judge"
+                ? #"{"consensus":[],"contradictions":[],"unique_insights":[],"coverage_gaps":[],"suspected_errors":[],"strongest_answer_parts":[],"recommended_final_position":"Answer","confidence":"high"}"#
+                : "Answer"
+            return [.completed(ProviderResponse(text: text))]
+        }
+        let service = FusionService(
+            settingsRepository: repository,
+            providerGateway: ProviderGateway(settingsRepository: repository, credentialStore: credentials, piStream: pi.stream),
+            pricingRepository: FusionNoopPricingRepository(),
+            traceStore: FusionTraceStore(dbQueue: dbQueue),
+            requestSettingsResolver: ProviderRequestSettingsResolver(modelService: OpenRouterModelService(credentialStore: credentials))
+        )
+        let result = try await service.runFusion(userPrompt: "Hello")
+        XCTAssertEqual(result.finalAnswer, "Answer")
+        XCTAssertEqual(pi.calls.map { $0.request.metadata["fusionPhase"] }, ["panel", "judge", "synthesizer"])
+        for call in pi.calls {
+            XCTAssertEqual(call.configuration.provider, "apple-pcc")
+            XCTAssertEqual(call.configuration.model, AppleIntelligenceModelCatalog.pccModel)
+            XCTAssertEqual(call.configuration.thinkingLevel, "high")
+            XCTAssertNil(call.configuration.apiKey)
+        }
+    }
+
     func testPanelMessagesDoesNotDuplicateMatchingUserTurn() async throws {
         let service = makeService()
         let history = [

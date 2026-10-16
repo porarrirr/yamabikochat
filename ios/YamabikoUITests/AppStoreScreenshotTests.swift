@@ -35,6 +35,40 @@ final class AppStoreScreenshotTests: XCTestCase {
         }
     }
 
+    func testFusionAppleIntelligenceModelPicker() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-AppStoreScreenshotDemo", "-ScreenshotScene", "list",
+            "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"
+        ]
+        app.launch()
+        XCTAssertTrue(openSettings(app: app))
+        XCTAssertTrue(openSettingsCategory(app: app, subtitle: "プロンプト・モード", title: "会話"))
+        let enabled = app.switches["fusion-mode-enabled"]
+        for _ in 0..<20 {
+            if enabled.exists && enabled.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(enabled.isHittable)
+        if enabled.value as? String == "0" {
+            enabled.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        }
+        let provider = app.buttons["provider-picker-field"].firstMatch
+        for _ in 0..<10 {
+            if provider.exists && provider.isHittable { break }
+            app.swipeUp()
+        }
+        provider.tap()
+        let apple = app.buttons["provider-row-APPLE_INTELLIGENCE"]
+        XCTAssertTrue(apple.waitForExistence(timeout: 5))
+        apple.tap()
+        let onDevice = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apple Intelligence（端末内）")).firstMatch
+        XCTAssertTrue(onDevice.waitForExistence(timeout: 5))
+        onDevice.tap()
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Private Cloud Compute")).firstMatch.waitForExistence(timeout: 5))
+        capture("fusion-apple-model-picker", app: app)
+    }
+
     func testFusionPanelDeletionFromVisibleHeader() {
         let app = XCUIApplication()
         app.launchArguments = [

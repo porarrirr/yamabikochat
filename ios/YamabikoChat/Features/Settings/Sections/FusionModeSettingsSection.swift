@@ -32,13 +32,16 @@ struct FusionModeSettingsSection: View {
                 }
 
                 Section(L10n.text("モデルを一括設定")) {
-                    FusionModelSlotForm(
+                    ModelSlotForm(
                         providerTitleKey: "Provider",
                         provider: $bulkProvider,
                         modelTitleKey: "Model",
                         model: $bulkModel,
                         providerPresets: chatVisibleProviderPresets,
                         catalogProviders: viewModel.modelsDevCatalogState.providers,
+                        pccReasoningLevel: $viewModel.settings.pccReasoningLevel,
+                        codexModels: viewModel.codexModels,
+                        initialModel: viewModel.initialModelForSlot,
                         onProviderPresetSelected: { preset in
                             bulkProvider = preset.apiProvider
                             bulkModel = preset.model
@@ -77,13 +80,16 @@ struct FusionModeSettingsSection: View {
     private var modelSections: some View {
         ForEach(Array(viewModel.fusionCustomPreset.panelModels.enumerated()), id: \.element.id) { index, panel in
             Section {
-                FusionModelSlotForm(
+                ModelSlotForm(
                     providerTitleKey: "Provider",
                     provider: panelProviderBinding(at: index, fallback: panel.provider),
                     modelTitleKey: "Model",
                     model: panelModelBinding(at: index, fallback: panel.modelId),
                     providerPresets: chatVisibleProviderPresets,
                     catalogProviders: viewModel.modelsDevCatalogState.providers,
+                    pccReasoningLevel: $viewModel.settings.pccReasoningLevel,
+                    codexModels: viewModel.codexModels,
+                    initialModel: viewModel.initialModelForSlot,
                     onProviderPresetSelected: { preset in
                         viewModel.updateFusionPanelModel(
                             at: index,
@@ -125,13 +131,16 @@ struct FusionModeSettingsSection: View {
         }
 
         Section(L10n.text("Judge")) {
-            FusionModelSlotForm(
+            ModelSlotForm(
                 providerTitleKey: "Provider",
                 provider: judgeProviderBinding,
                 modelTitleKey: "Model",
                 model: judgeModelBinding,
                 providerPresets: chatVisibleProviderPresets,
                 catalogProviders: viewModel.modelsDevCatalogState.providers,
+                pccReasoningLevel: $viewModel.settings.pccReasoningLevel,
+                codexModels: viewModel.codexModels,
+                initialModel: viewModel.initialModelForSlot,
                 onProviderPresetSelected: { preset in
                     viewModel.updateFusionJudgeModel(provider: preset.apiProvider, modelId: preset.model)
                 },
@@ -144,13 +153,16 @@ struct FusionModeSettingsSection: View {
         }
 
         Section(L10n.text("Synthesizer")) {
-            FusionModelSlotForm(
+            ModelSlotForm(
                 providerTitleKey: "Provider",
                 provider: synthesizerProviderBinding,
                 modelTitleKey: "Model",
                 model: synthesizerModelBinding,
                 providerPresets: chatVisibleProviderPresets,
                 catalogProviders: viewModel.modelsDevCatalogState.providers,
+                pccReasoningLevel: $viewModel.settings.pccReasoningLevel,
+                codexModels: viewModel.codexModels,
+                initialModel: viewModel.initialModelForSlot,
                 onProviderPresetSelected: { preset in
                     viewModel.updateFusionSynthesizerModel(provider: preset.apiProvider, modelId: preset.model)
                 },

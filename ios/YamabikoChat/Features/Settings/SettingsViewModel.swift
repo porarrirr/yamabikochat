@@ -985,6 +985,16 @@ final class SettingsViewModel: ObservableObject {
         )
     }
 
+    func initialModelForSlot(for provider: String) -> String {
+        if provider.caseInsensitiveCompare("OPENAI_COMPAT") == .orderedSame {
+            return settings.openAICompatPresets().first {
+                $0.name.caseInsensitiveCompare(settings.selectedOpenAICompatPreset ?? "") == .orderedSame
+            }?.modelId ?? ""
+        }
+        if ProviderReference(persistedID: provider).isModelsDev { return "" }
+        return settings.providerModelMap()[provider.uppercased()] ?? ProviderCatalog.defaultModel(for: provider)
+    }
+
     func updateFusionPanelModel(at index: Int, provider: String, modelId: String) {
         guard index >= 0 else { return }
         var preset = fusionCustomPreset

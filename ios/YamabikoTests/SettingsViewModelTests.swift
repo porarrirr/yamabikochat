@@ -334,6 +334,42 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testFusionAppleModelsPersistForEveryRole() throws {
+        let fixture = try makeFixture()
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.setFusionModeEnabled(true)
+        for model in AppleIntelligenceModelCatalog.supportedModels {
+            viewModel.applyFusionModelToAllSlots(provider: "APPLE_INTELLIGENCE", modelId: model)
+            viewModel.flushPendingSettingsSave()
+            let saved = try XCTUnwrap(fixture.repository.loadSettings().decodeFusionCustomPreset())
+            for slot in saved.panelModels + [saved.judgeModel, saved.synthesizerModel] {
+                XCTAssertEqual(slot.provider, "APPLE_INTELLIGENCE")
+                XCTAssertEqual(slot.modelId, model)
+            }
+        }
+    }
+
+    @MainActor
+    func testFusionProviderChangeUsesOwnSavedModelOrDefault() {
+        let viewModel = SettingsViewModel()
+        viewModel.settings.apiProvider = "GEMINI"
+        viewModel.settings.defaultModel = "gemini-2.5-flash"
+        viewModel.settings.providerDefaultModelsJSON = #"{"APPLE_INTELLIGENCE":"PrivateCloudComputeLanguageModel","SUPERGROK":"grok-4.3"}"#
+        XCTAssertEqual(viewModel.initialModelForSlot(for: "APPLE_INTELLIGENCE"), AppleIntelligenceModelCatalog.pccModel)
+        XCTAssertEqual(viewModel.initialModelForSlot(for: "SUPERGROK"), "grok-4.3")
+        XCTAssertEqual(viewModel.initialModelForSlot(for: "CODEX_AUTH"), CodexModelCatalog.defaultModel())
+        XCTAssertEqual(viewModel.initialModelForSlot(for: "MODELS_DEV:openai"), "")
+
+        var endpoint = OpenAICompatPreset(name: "Local", baseURL: "https://example.com/v1")
+        endpoint.apiProtocol = "openai-responses"
+        endpoint.modelId = "private-model"
+        viewModel.settings.openAICompatPresetsJSON = String(decoding: try! JSONEncoder().encode([endpoint]), as: UTF8.self)
+        viewModel.settings.selectedOpenAICompatPreset = "Local"
+        XCTAssertEqual(viewModel.initialModelForSlot(for: "OPENAI_COMPAT"), "private-model")
+    }
+
+    @MainActor
     func testGeminiRotationCatalogProviderUsesModelsDevGoogleModels() throws {
         let providers = try ModelsDevCatalogRepository.parseCatalog(Data(Self.modelsDevGeminiFixture.utf8))
         let viewModel = SettingsViewModel()

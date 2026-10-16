@@ -43,10 +43,8 @@ enum ProviderCatalog {
         ProviderDisplay(key: "SARASHINA", title: "Sarashina")
     ]
 
-    /// Providers available in dual mode and auto conversation settings (Apple Intelligence excluded).
-    static let dualAutoConversationOptions: [ProviderDisplay] = options.filter {
-        $0.key != "APPLE_INTELLIGENCE"
-    }
+    /// All built-in providers can be configured in dual mode and auto conversation.
+    static let dualAutoConversationOptions = options
 
     static func displayName(for provider: String) -> String {
         let normalized = provider.uppercased()

@@ -50,7 +50,10 @@ struct DualModeSettingsSection: View {
                         openRouterModelsLoading: viewModel.openRouterModelsLoading,
                         openRouterModelsError: viewModel.openRouterModelsError,
                         onRefreshOpenRouterModels: { Task { await viewModel.refreshOpenRouterModels(force: false) } },
-                        onProviderPresetSelected: applyProviderPresetToDualA
+                        onProviderPresetSelected: applyProviderPresetToDualA,
+                        pccReasoningLevel: $viewModel.settings.pccReasoningLevel,
+                        codexModels: viewModel.codexModels,
+                        initialModel: viewModel.initialModelForSlot
                     )
                 }
 
@@ -68,7 +71,10 @@ struct DualModeSettingsSection: View {
                         openRouterModelsLoading: viewModel.openRouterModelsLoading,
                         openRouterModelsError: viewModel.openRouterModelsError,
                         onRefreshOpenRouterModels: { Task { await viewModel.refreshOpenRouterModels(force: false) } },
-                        onProviderPresetSelected: applyProviderPresetToDualB
+                        onProviderPresetSelected: applyProviderPresetToDualB,
+                        pccReasoningLevel: $viewModel.settings.pccReasoningLevel,
+                        codexModels: viewModel.codexModels,
+                        initialModel: viewModel.initialModelForSlot
                     )
                 }
 

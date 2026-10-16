@@ -1,12 +1,15 @@
 import SwiftUI
 
-struct FusionModelSlotForm: View {
+struct ModelSlotForm: View {
     let providerTitleKey: String
     @Binding var provider: String
     let modelTitleKey: String
     @Binding var model: String
     var providerPresets: [ModelPreset] = []
     var catalogProviders: [CatalogProvider] = []
+    @Binding var pccReasoningLevel: String?
+    var codexModels: [PiCodexModel] = []
+    var initialModel: (String) -> String = ProviderCatalog.defaultModel
     var onProviderPresetSelected: (ModelPreset) -> Void = { _ in }
     var openRouterModels: [SimpleModel] = []
     var openRouterModelsLoading: Bool = false
@@ -15,7 +18,7 @@ struct FusionModelSlotForm: View {
     var onProviderChanged: (String) -> Void = { _ in }
 
     private var availableProviderPresets: [ModelPreset] {
-        let supportedProviders = Set(ProviderCatalog.dualAutoConversationOptions.map(\.key))
+        let supportedProviders = Set(ProviderCatalog.options.map(\.key))
         return providerPresets.filter {
             supportedProviders.contains($0.apiProvider.uppercased()) || ProviderReference(persistedID: $0.apiProvider).isModelsDev
         }
@@ -59,9 +62,7 @@ struct FusionModelSlotForm: View {
                     let changed = provider.caseInsensitiveCompare(newValue) != .orderedSame
                     provider = newValue
                     if changed {
-                        model = ProviderReference(persistedID: newValue).isModelsDev
-                            ? ""
-                            : ProviderCatalog.defaultModel(for: newValue)
+                        model = initialModel(newValue)
                     }
                     onProviderChanged(newValue)
                 }
@@ -79,8 +80,34 @@ struct FusionModelSlotForm: View {
                 error: openRouterModelsError,
                 onRefresh: onRefreshOpenRouterModels
             )
-        } else if let modelIDs = ProviderCatalog.constrainedModelIDs(for: provider) {
+        } else if provider.caseInsensitiveCompare("APPLE_INTELLIGENCE") == .orderedSame {
+            AppleIntelligenceModelPicker(model: $model)
+            if model == AppleIntelligenceModelCatalog.pccModel {
+                Picker("PCC reasoning", selection: Binding(
+                    get: { pccReasoningLevel ?? AppleIntelligenceModelCatalog.defaultPCCReasoningLevel },
+                    set: { pccReasoningLevel = $0 }
+                )) {
+                    ForEach(AppleIntelligenceModelCatalog.pccReasoningLevels, id: \.self) { level in
+                        Text(level.capitalized).tag(level)
+                    }
+                }
+            }
+        } else if provider.caseInsensitiveCompare("CODEX_AUTH") == .orderedSame {
             Picker(L10n.text(modelTitleKey), selection: $model) {
+                if !codexModels.contains(where: { $0.id == model }) {
+                    Text(model).tag(model).disabled(true)
+                }
+                ForEach(CodexModelCatalog.visiblePresets(from: codexModels)) { preset in
+                    Text(preset.isSupported ? preset.displayName : "\(preset.displayName) · \(preset.unsupportedReason ?? "unsupported")")
+                        .tag(preset.model)
+                        .disabled(!preset.isSupported)
+                }
+            }
+        } else if let modelIDs = modelOptions {
+            Picker(L10n.text(modelTitleKey), selection: $model) {
+                if !modelIDs.contains(model) {
+                    Text(model).tag(model).disabled(true)
+                }
                 ForEach(modelIDs, id: \.self) { modelID in
                     Text(modelID).tag(modelID)
                 }
@@ -90,6 +117,13 @@ struct FusionModelSlotForm: View {
         } else {
             TextField(L10n.text(modelTitleKey), text: $model)
         }
+    }
+
+    private var modelOptions: [String]? {
+        if provider.caseInsensitiveCompare("SUPERGROK") == .orderedSame {
+            return SuperGrokModelCatalog.supportedModels.map(\.id)
+        }
+        return ProviderCatalog.constrainedModelIDs(for: provider)
     }
 
     private var catalogProvider: CatalogProvider? {

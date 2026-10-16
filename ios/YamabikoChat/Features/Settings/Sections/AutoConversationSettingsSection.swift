@@ -46,7 +46,10 @@ struct AutoConversationSettingsSection: View {
                         openRouterModelsError: viewModel.openRouterModelsError,
                         onRefreshOpenRouterModels: { Task { await viewModel.refreshOpenRouterModels(force: false) } },
                         onProviderPresetSelected: applyProviderPresetToAutoA,
-                        systemPromptLineLimit: 2 ... 6
+                        systemPromptLineLimit: 2 ... 6,
+                        pccReasoningLevel: $viewModel.settings.pccReasoningLevel,
+                        codexModels: viewModel.codexModels,
+                        initialModel: viewModel.initialModelForSlot
                     )
                 }
 
@@ -65,7 +68,10 @@ struct AutoConversationSettingsSection: View {
                         openRouterModelsError: viewModel.openRouterModelsError,
                         onRefreshOpenRouterModels: { Task { await viewModel.refreshOpenRouterModels(force: false) } },
                         onProviderPresetSelected: applyProviderPresetToAutoB,
-                        systemPromptLineLimit: 2 ... 6
+                        systemPromptLineLimit: 2 ... 6,
+                        pccReasoningLevel: $viewModel.settings.pccReasoningLevel,
+                        codexModels: viewModel.codexModels,
+                        initialModel: viewModel.initialModelForSlot
                     )
                 }
 
