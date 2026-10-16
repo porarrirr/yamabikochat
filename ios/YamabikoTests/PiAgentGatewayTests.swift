@@ -542,8 +542,68 @@ final class PiAgentGatewayTests: XCTestCase {
             headers["HTTP-Referer"],
             "https://apps.apple.com/jp/app/yamabikochat-ai%E3%83%81%E3%83%A3%E3%83%83%E3%83%88/id6771687018"
         )
-        XCTAssertEqual(headers["X-OpenRouter-Title"], "YamabikoChat iOS")
-        XCTAssertEqual(headers["X-Title"], "YamabikoChat iOS")
+        XCTAssertEqual(headers["X-OpenRouter-Title"], "yamabikochat")
+        XCTAssertEqual(headers["X-Title"], "yamabikochat")
+    }
+
+    func testModelsDevAttributionHeadersAreScopedToOpenRouter() async throws {
+        for providerID in ["openrouter", "openai"] {
+            let database = try DatabaseQueue()
+            try AppDatabase.migrator.migrate(database)
+            let credentials = PiGatewayCredentialStore()
+            let envKey = providerID == "openrouter" ? "OPENROUTER_API_KEY" : "OPENAI_API_KEY"
+            try credentials.saveSecret("test-key", key: "models_dev_\(providerID)_\(envKey)")
+            let cacheURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("models-dev-attribution-\(UUID().uuidString).json")
+            defer { try? FileManager.default.removeItem(at: cacheURL) }
+            let model = CatalogModel(
+                id: "openai/gpt-4o-mini",
+                name: "GPT-4o mini",
+                reasoningOptions: [],
+                inputModalities: ["text"],
+                outputModalities: ["text"],
+                limits: CatalogLimits(context: 128_000, input: nil, output: 16_384),
+                cost: CatalogCost(
+                    inputPerMillion: nil, outputPerMillion: nil, reasoningPerMillion: nil,
+                    cacheReadPerMillion: nil, cacheWritePerMillion: nil
+                )
+            )
+            let provider = CatalogProvider(
+                id: providerID,
+                name: providerID,
+                npm: providerID == "openrouter" ? "@openrouter/ai-sdk-provider" : "@ai-sdk/openai",
+                env: [envKey],
+                models: [model]
+            )
+            try JSONEncoder().encode([provider]).write(to: cacheURL)
+            let suiteName = "PiAgentGatewayTests.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+            defer { defaults.removePersistentDomain(forName: suiteName) }
+            let catalog = ModelsDevCatalogRepository(defaults: defaults, cacheURL: cacheURL)
+            let pi = PiStreamSpy()
+            let gateway = ProviderGateway(
+                settingsRepository: SettingsRepository(dbQueue: database),
+                credentialStore: credentials,
+                modelsDevCatalogRepository: catalog,
+                piStream: pi.stream
+            )
+
+            _ = try await gateway.stream(
+                request: ProviderRequest(
+                    model: model.id,
+                    messages: [ProviderRequestMessage(role: "user", content: "hello")]
+                ),
+                providerID: "MODELS_DEV:\(providerID.uppercased())"
+            )
+
+            let configuration = try XCTUnwrap(pi.calls.first?.configuration)
+            XCTAssertEqual(configuration.provider, providerID)
+            XCTAssertEqual(configuration.env[envKey], "test-key")
+            XCTAssertEqual(
+                configuration.headers,
+                providerID == "openrouter" ? ProviderGateway.openRouterAttributionHeaders : [:]
+            )
+        }
     }
 
     func testOpenRouterPassesOfficialDynamicModelContractToPi() async throws {

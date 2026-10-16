@@ -13,8 +13,8 @@ typealias PiAgentStream = @Sendable (
 final class ProviderGateway {
     static let openRouterAttributionHeaders = [
         "HTTP-Referer": "https://apps.apple.com/jp/app/yamabikochat-ai%E3%83%81%E3%83%A3%E3%83%83%E3%83%88/id6771687018",
-        "X-OpenRouter-Title": "YamabikoChat iOS",
-        "X-Title": "YamabikoChat iOS"
+        "X-OpenRouter-Title": "yamabikochat",
+        "X-Title": "yamabikochat"
     ]
 
     private let settingsRepository: SettingsRepository
@@ -892,7 +892,8 @@ final class ProviderGateway {
             provider: providerID,
             model: normalizedModel,
             apiKey: nil,
-            headers: [:],
+            headers: providerID.caseInsensitiveCompare("openrouter") == .orderedSame
+                ? Self.openRouterAttributionHeaders : [:],
             env: env,
             catalogContract: PiCatalogModelContract(
                 providerName: catalog.name,
