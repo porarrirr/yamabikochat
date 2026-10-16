@@ -272,6 +272,51 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testFusionPanelRemovalPreservesRemainingModelsAndPersists() throws {
+        let fixture = try makeFixture()
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.setFusionModeEnabled(true)
+        let original = viewModel.fusionCustomPreset
+
+        viewModel.removeFusionPanel(at: 1)
+        viewModel.flushPendingSettingsSave()
+
+        var expected = original
+        expected.panelModels.remove(at: 1)
+        XCTAssertEqual(viewModel.fusionCustomPreset, AppSettings.normalizedFusionPresetDefinition(expected))
+        XCTAssertEqual(try fixture.repository.loadSettings().decodeFusionCustomPreset(), viewModel.fusionCustomPreset)
+    }
+
+    @MainActor
+    func testFusionPanelsEnforceLimitsAndAssignNewIdentityWhenAdded() {
+        let viewModel = SettingsViewModel()
+        viewModel.ensureFusionCustomPresetInitialized()
+        let original = viewModel.fusionCustomPreset
+        viewModel.addFusionPanel()
+        XCTAssertEqual(viewModel.fusionCustomPreset, original)
+        viewModel.removeFusionPanel(at: -1)
+        viewModel.removeFusionPanel(at: original.panelModels.count)
+        XCTAssertEqual(viewModel.fusionCustomPreset, original)
+
+        while viewModel.fusionCustomPreset.panelModels.count > 1 {
+            viewModel.removeFusionPanel(at: 0)
+        }
+        let single = viewModel.fusionCustomPreset
+        viewModel.removeFusionPanel(at: 0)
+        XCTAssertEqual(viewModel.fusionCustomPreset, single)
+
+        viewModel.addFusionPanel()
+        let added = viewModel.fusionCustomPreset
+        XCTAssertEqual(added.panelModels.count, 2)
+        XCTAssertEqual(added.panelModels.first, single.panelModels.first)
+        XCTAssertNotEqual(added.panelModels[0].id, added.panelModels[1].id)
+        XCTAssertEqual(added.panelModels[0].modelId, added.panelModels[1].modelId)
+        XCTAssertEqual(added.judgeModel, single.judgeModel)
+        XCTAssertEqual(added.synthesizerModel, single.synthesizerModel)
+    }
+
+    @MainActor
     func testApplyFusionModelToAllSlotsUpdatesEveryExecutionRole() {
         let viewModel = SettingsViewModel()
         viewModel.ensureFusionCustomPresetInitialized()

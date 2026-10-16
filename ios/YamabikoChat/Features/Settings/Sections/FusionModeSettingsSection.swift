@@ -2,7 +2,7 @@ import SwiftUI
 
 struct FusionModeSettingsSection: View {
     @ObservedObject var viewModel: SettingsViewModel
-    @State private var panelPendingDeletion: PanelModelConfig?
+    let onRequestPanelDeletion: (PanelModelConfig) -> Void
     @State private var bulkProvider = ""
     @State private var bulkModel = ""
 
@@ -17,6 +17,7 @@ struct FusionModeSettingsSection: View {
                     get: { viewModel.settings.isFusionModeEnabled },
                     set: { viewModel.setFusionModeEnabled($0) }
                 ))
+                .accessibilityIdentifier("fusion-mode-enabled")
 
             } header: {
                 Text(L10n.text("Fusion モード"))
@@ -102,11 +103,13 @@ struct FusionModeSettingsSection: View {
                     Spacer()
                     if viewModel.fusionCustomPreset.panelModels.count > 1 {
                         Button(role: .destructive) {
-                            panelPendingDeletion = panel
+                            onRequestPanelDeletion(panel)
                         } label: {
                             Image(systemName: "trash")
                         }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel(L10n.format("Panel %d", index + 1) + " " + L10n.text("削除"))
+                        .accessibilityIdentifier("fusion-delete-panel-\(index + 1)")
                     }
                 }
             }
@@ -117,6 +120,7 @@ struct FusionModeSettingsSection: View {
                 Button(L10n.text("パネルを追加")) {
                     viewModel.addFusionPanel()
                 }
+                .accessibilityIdentifier("fusion-add-panel")
             }
         }
 
@@ -156,23 +160,6 @@ struct FusionModeSettingsSection: View {
                 onRefreshOpenRouterModels: refreshOpenRouterModels,
                 onProviderChanged: handleProviderChanged
             )
-        }
-        .alert(
-            L10n.text("このパネルを削除しますか？"),
-            isPresented: Binding(
-                get: { panelPendingDeletion != nil },
-                set: { if !$0 { panelPendingDeletion = nil } }
-            ),
-            presenting: panelPendingDeletion
-        ) { panel in
-            Button(L10n.text("削除"), role: .destructive) {
-                guard let index = viewModel.fusionCustomPreset.panelModels.firstIndex(where: { $0.id == panel.id }) else { return }
-                viewModel.removeFusionPanel(at: index)
-                panelPendingDeletion = nil
-            }
-            Button(L10n.text("キャンセル"), role: .cancel) {
-                panelPendingDeletion = nil
-            }
         }
 
     }

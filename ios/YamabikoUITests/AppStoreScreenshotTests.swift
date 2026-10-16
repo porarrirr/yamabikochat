@@ -35,6 +35,50 @@ final class AppStoreScreenshotTests: XCTestCase {
         }
     }
 
+    func testFusionPanelDeletionFromVisibleHeader() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-AppStoreScreenshotDemo", "-ScreenshotScene", "list",
+            "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"
+        ]
+        app.launch()
+        XCTAssertTrue(openSettings(app: app))
+        XCTAssertTrue(openSettingsCategory(app: app, subtitle: "プロンプト・モード", title: "会話"))
+
+        func reveal(_ element: XCUIElement) {
+            for _ in 0..<20 {
+                if element.exists && element.isHittable { return }
+                app.swipeUp()
+            }
+            XCTFail("Fusion control was not reachable: \(element)")
+        }
+
+        let enabled = app.switches["fusion-mode-enabled"]
+        reveal(enabled)
+        if enabled.value as? String == "0" {
+            enabled.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        }
+        let delete = app.buttons["fusion-delete-panel-1"]
+        reveal(delete)
+        delete.tap()
+        let confirmation = app.alerts["このパネルを削除しますか？"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        confirmation.buttons["キャンセル"].tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(delete.exists)
+        delete.tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        confirmation.buttons["削除"].tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))
+
+        // A successful deletion frees a slot, so the add button becomes available.
+        let add = app.buttons["fusion-add-panel"]
+        reveal(add)
+        XCTAssertTrue(add.isHittable)
+        add.tap()
+        XCTAssertTrue(add.waitForNonExistence(timeout: 5))
+    }
+
     func testSystemPromptEditorAndPresetFlow() {
         let app = XCUIApplication()
         app.launchArguments = [
