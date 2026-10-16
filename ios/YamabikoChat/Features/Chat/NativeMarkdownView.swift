@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import CryptoKit
 import Markdown
 import SwiftUI
@@ -52,6 +53,15 @@ enum NativeMarkdownBlock: Identifiable, Equatable, Sendable {
 }
 
 enum NativeMarkdownParser {
+    // NSRegularExpression is immutable and safe to reuse across parser tasks.
+    private static let bareURLRegex = try! NSRegularExpression(
+        pattern: #"https?://[^\s<>\[\]{}\"']+"#,
+        options: .caseInsensitive
+    )
+    private static let inlineMathRegex = try! NSRegularExpression(
+        pattern: #"(?<!\\)\$(?!\s)(?:\\.|[^\n$])+(?<!\s)(?<!\\)\$(?![A-Za-z0-9])"#
+    )
+
     static func parse(
         _ source: String,
         rendersMath: Bool = true,
@@ -186,9 +196,9 @@ enum NativeMarkdownParser {
     }
 
     private static func containsMath(_ value: String) -> Bool {
-        let inlinePattern = #"(?<!\\)\$(?!\s)(?:\\.|[^\n$])+(?<!\s)(?<!\\)\$(?![A-Za-z0-9])"#
+        guard value.utf8.contains(0x24) || value.utf8.contains(0x5C) else { return false }
         return hasOrderedPair(opening: "$$", closing: "$$", in: value)
-            || value.range(of: inlinePattern, options: .regularExpression) != nil
+            || inlineMathRegex.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) != nil
             || hasOrderedPair(opening: "\\[", closing: "\\]", in: value)
             || hasOrderedPair(opening: "\\(", closing: "\\)", in: value)
     }
@@ -263,13 +273,14 @@ enum NativeMarkdownParser {
     /// Markdown parsers preserve a model-emitted bare URL as ordinary text. Keep
     /// the original destination while presenting a compact, readable link label.
     private static func linkifiedText(_ source: String) -> AttributedString {
+        // Most Markdown text nodes are short ordinary words. Avoid Foundation
+        // bridging and a regular-expression search when no URL is possible.
+        guard source.utf8.contains(0x3A) else { return AttributedString(source) }
         var result = AttributedString()
         var remaining = source[...]
 
-        while let match = remaining.range(
-            of: #"https?://[^\s<>\[\]{}\"']+"#,
-            options: [.regularExpression, .caseInsensitive]
-        ) {
+        for resultMatch in bareURLRegex.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
+            guard let match = Range(resultMatch.range, in: source) else { continue }
             result.append(AttributedString(String(remaining[..<match.lowerBound])))
 
             let matchedText = String(remaining[match])
@@ -347,32 +358,38 @@ private actor NativeMarkdownBlockCache {
 
 @MainActor
 final class NativeMarkdownIncrementalParser {
-    private var stablePrefix = ""
     private var stablePrefixUTF8Count = 0
     private var stableBlocks: [NativeMarkdownBlock] = []
     private var lastSource: String?
     private var lastBlocks: [NativeMarkdownBlock] = []
+    private var needsDocumentContext = false
 
     #if DEBUG
     private(set) var parsedUTF8ByteCount = 0
     #endif
 
     func streamingBlocks(for source: String) -> [NativeMarkdownBlock] {
+        var appendedUTF8Offset = 0
         if let lastSource {
-            if source.utf8.count == lastSource.utf8.count,
-               source.utf8.elementsEqual(lastSource.utf8) { return lastBlocks }
             // A replacement can join a new list to an earlier confirmed list,
             // even when the confirmed prefix itself is unchanged. Only appends
             // may reuse it. Compare bytes so normalized Unicode cannot shift IDs.
-            if !source.utf8.starts(with: lastSource.utf8) { reset() }
+            if Self.hasExactUTF8Prefix(lastSource, in: source) {
+                appendedUTF8Offset = lastSource.utf8.count
+                if source.utf8.count == appendedUTF8Offset { return lastBlocks }
+            } else {
+                reset()
+            }
         }
 
         // Reference definitions can change links in any earlier paragraph. Keep
         // those documents in one parse context, including incomplete definitions.
         // This conservative check also covers image and escaped bracket syntax.
-        let needsDocumentContext = source.utf8.contains(0x5B)
+        // An append cannot remove an earlier bracket. Inspect only the new bytes
+        // instead of rescanning the entire answer on every presentation frame.
+        let appendedStart = source.utf8.index(source.utf8.startIndex, offsetBy: appendedUTF8Offset)
+        needsDocumentContext = needsDocumentContext || source.utf8[appendedStart...].contains(0x5B)
         if needsDocumentContext {
-            stablePrefix = ""
             stablePrefixUTF8Count = 0
             stableBlocks = []
         }
@@ -401,19 +418,33 @@ final class NativeMarkdownIncrementalParser {
                 guard let offset = Int(block.id.dropFirst("block-".count)) else { return false }
                 return offset < absoluteBoundary
             })
-            let prefixEnd = source.utf8.index(source.utf8.startIndex, offsetBy: absoluteBoundary)
-            stablePrefix = String(source[..<prefixEnd])
             stablePrefixUTF8Count = absoluteBoundary
         }
         return lastBlocks
     }
 
     func reset() {
-        stablePrefix = ""
         stablePrefixUTF8Count = 0
         stableBlocks = []
         lastSource = nil
         lastBlocks = []
+        needsDocumentContext = false
+    }
+
+    private static func hasExactUTF8Prefix(_ prefix: String, in source: String) -> Bool {
+        // String.hasPrefix uses Unicode equivalence, but block IDs use byte
+        // offsets. Compare contiguous UTF-8 buffers without per-byte Swift
+        // collection traversal; retain the collection path for bridged strings.
+        if let comparison = source.utf8.withContiguousStorageIfAvailable({ bytes in
+            prefix.utf8.withContiguousStorageIfAvailable { prefixBytes in
+                guard prefixBytes.count <= bytes.count else { return false }
+                guard !prefixBytes.isEmpty else { return true }
+                return memcmp(bytes.baseAddress!, prefixBytes.baseAddress!, prefixBytes.count) == 0
+            }
+        }), let matches = comparison {
+            return matches
+        }
+        return source.utf8.starts(with: prefix.utf8)
     }
 
     private static func tailBoundary(in document: Markdown.Document, source: String, retainingBlocks: Int) -> Int? {

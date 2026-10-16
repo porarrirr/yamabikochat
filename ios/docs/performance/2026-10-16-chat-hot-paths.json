@@ -1,0 +1,132 @@
+{
+  "baselineCommit": "9468a96",
+  "unit": "seconds",
+  "metric": "com.apple.XCTPerformanceMetric_WallClockTime",
+  "source": "XCTest successful test-case measurement lines; test-session result collection did not finish",
+  "samples": {
+    "before": {
+      "testFindingEmptyConversationPerformance": [
+        0.004688,
+        0.004375,
+        0.004319,
+        0.004499,
+        0.004582,
+        0.004301,
+        0.004263,
+        0.004285,
+        0.004279,
+        0.004284
+      ],
+      "testLongResponseStreamingPerformance": [
+        0.011634,
+        0.011309,
+        0.011146,
+        0.011281,
+        0.011255,
+        0.011227,
+        0.011502,
+        0.011294,
+        0.011283,
+        0.011472
+      ],
+      "testMarkdownDocumentPerformance": [
+        0.031125,
+        0.026091,
+        0.025425,
+        0.026189,
+        0.026411,
+        0.026131,
+        0.026324,
+        0.025612,
+        0.02563,
+        0.025863
+      ],
+      "testMessageSummaryHistoryPerformance": [
+        0.006079,
+        0.005923,
+        0.006213,
+        0.006558,
+        0.005685,
+        0.005509,
+        0.005835,
+        0.005922,
+        0.006,
+        0.005764
+      ],
+      "testProviderHistoryPerformance": [
+        0.006345,
+        0.006361,
+        0.005968,
+        0.005812,
+        0.006013,
+        0.00597,
+        0.005895,
+        0.005967,
+        0.006072,
+        0.005921
+      ]
+    },
+    "after": {
+      "testFindingEmptyConversationPerformance": [
+        0.000476,
+        0.000284,
+        0.000251,
+        0.000229,
+        0.000211,
+        0.000207,
+        0.000207,
+        0.000203,
+        0.000203,
+        0.000209
+      ],
+      "testLongResponseStreamingPerformance": [
+        0.018356,
+        0.007723,
+        0.007593,
+        0.007603,
+        0.007544,
+        0.007593,
+        0.007507,
+        0.007534,
+        0.007606,
+        0.007621
+      ],
+      "testMarkdownDocumentPerformance": [
+        0.016674,
+        0.012568,
+        0.012633,
+        0.012309,
+        0.012386,
+        0.01246,
+        0.012446,
+        0.012505,
+        0.012461,
+        0.012511
+      ],
+      "testMessageSummaryHistoryPerformance": [
+        0.004814,
+        0.002533,
+        0.002825,
+        0.002766,
+        0.002727,
+        0.002635,
+        0.002505,
+        0.002442,
+        0.002396,
+        0.002492
+      ],
+      "testProviderHistoryPerformance": [
+        0.003744,
+        0.003089,
+        0.003041,
+        0.002875,
+        0.002896,
+        0.002821,
+        0.0028,
+        0.002912,
+        0.002853,
+        0.002829
+      ]
+    }
+  }
+}

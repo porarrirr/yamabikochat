@@ -515,27 +515,17 @@ final class ConversationRepository: @unchecked Sendable {
 
     func fetchLatestEmptyConversation(title: String, projectId: Int64? = nil) throws -> Conversation? {
         try dbQueue.read { db in
-            try Conversation
-                .filter(Column("title") == title)
-                .order(Column("updatedAtMs").desc)
-                .fetchAll(db)
-                .first { conversation in
-                    guard conversation.projectId == projectId, conversation.pendingInitialMessage == nil else { return false }
-                    let chatCount = try? Int.fetchOne(
-                        db,
-                        sql: "SELECT COUNT(*) FROM chat_messages WHERE conversationId = ?",
-                        arguments: [conversation.id ?? 0]
-                    )
-                    if (chatCount ?? 0) > 0 {
-                        return false
-                    }
-                    let dualCount = try? Int.fetchOne(
-                        db,
-                        sql: "SELECT COUNT(*) FROM dual_chat_messages WHERE conversationId = ?",
-                        arguments: [conversation.id ?? 0]
-                    )
-                    return (dualCount ?? 0) == 0
-                }
+            // EXISTS stops at the first indexed message and avoids decoding every
+            // candidate conversation or issuing one COUNT query per candidate.
+            try Conversation.fetchOne(db, sql: """
+                SELECT c.* FROM conversations c
+                WHERE c.title = ? AND c.projectId IS ?
+                  AND c.pendingInitialMessage IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM chat_messages m WHERE m.conversationId = c.id)
+                  AND NOT EXISTS (SELECT 1 FROM dual_chat_messages d WHERE d.conversationId = c.id)
+                ORDER BY c.updatedAtMs DESC
+                LIMIT 1
+                """, arguments: [title, projectId])
         }
     }
 
@@ -630,15 +620,16 @@ final class ConversationRepository: @unchecked Sendable {
 
     func observeFullMessages(conversationId: Int64) -> AnyPublisher<[FullChatMessage], Never> {
         ValueObservation.tracking { db -> [FullChatMessage] in
+            let secret = try self.isSecret(db: db, conversationID: conversationId)
             let messages = try ChatMessage
                 .filter(Column("conversationId") == conversationId)
                 .order(Column("createdAtMs").asc)
                 .fetchAll(db)
-                .map { try self.revealed($0, conversationID: conversationId, db: db) }
+                .map { try self.revealed($0, conversationID: conversationId, isSecret: secret) }
 
             let messageIds = messages.compactMap(\.id)
             let variantsByMessageID = try self.fetchVariantsByBaseMessageIDs(db: db, messageIds: messageIds)
-                .mapValues { variants in try variants.map { try self.revealed($0, conversationID: conversationId, db: db) } }
+                .mapValues { variants in try variants.map { try self.revealed($0, conversationID: conversationId, isSecret: secret) } }
 
             let thinkingRows: [ChatMessageThinking]
             if messageIds.isEmpty {
@@ -649,7 +640,7 @@ final class ConversationRepository: @unchecked Sendable {
                     .fetchAll(db)
             }
             let thinkingByMessageID = try Dictionary(uniqueKeysWithValues: thinkingRows.map {
-                ($0.messageId, try self.reveal($0.thinkingStream, db: db, conversationID: conversationId))
+                ($0.messageId, try secret ? self.secretVault.open($0.thinkingStream, conversationID: conversationId) : $0.thinkingStream)
             })
             let variantIds = variantsByMessageID.values.flatMap { $0 }.compactMap(\.id)
             let activityRows: [ChatMessageToolActivity]
@@ -732,11 +723,12 @@ final class ConversationRepository: @unchecked Sendable {
 
     func fetchMessages(conversationId: Int64) throws -> [ChatMessage] {
         try dbQueue.read { db in
-            try ChatMessage
+            let secret = try isSecret(db: db, conversationID: conversationId)
+            return try ChatMessage
                 .filter(Column("conversationId") == conversationId)
                 .order(Column("createdAtMs").asc)
                 .fetchAll(db)
-                .map { try revealed($0, conversationID: conversationId, db: db) }
+                .map { try revealed($0, conversationID: conversationId, isSecret: secret) }
         }
     }
 
@@ -1293,14 +1285,15 @@ final class ConversationRepository: @unchecked Sendable {
 
     func fetchProviderHistory(conversationId: Int64) throws -> [ProviderHistoryMessage] {
         try dbQueue.read { db in
+            let secret = try isSecret(db: db, conversationID: conversationId)
             let messages = try ChatMessage
                 .filter(Column("conversationId") == conversationId)
                 .order(Column("createdAtMs").asc)
                 .fetchAll(db)
-                .map { try revealed($0, conversationID: conversationId, db: db) }
+                .map { try revealed($0, conversationID: conversationId, isSecret: secret) }
             let messageIds = messages.compactMap(\.id)
             let variantsByMessageID = try fetchVariantsByBaseMessageIDs(db: db, messageIds: messageIds)
-                .mapValues { variants in try variants.map { try revealed($0, conversationID: conversationId, db: db) } }
+                .mapValues { variants in try variants.map { try revealed($0, conversationID: conversationId, isSecret: secret) } }
             let thinkingRows: [ChatMessageThinking]
             if messageIds.isEmpty {
                 thinkingRows = []
@@ -1310,7 +1303,7 @@ final class ConversationRepository: @unchecked Sendable {
                     .fetchAll(db)
             }
             let thinkingByMessageID = try Dictionary(uniqueKeysWithValues: thinkingRows.map {
-                ($0.messageId, try reveal($0.thinkingStream, db: db, conversationID: conversationId))
+                ($0.messageId, try secret ? secretVault.open($0.thinkingStream, conversationID: conversationId) : $0.thinkingStream)
             })
             let variantIds = variantsByMessageID.values.flatMap { $0 }.compactMap(\.id)
             let activityRows = messageIds.isEmpty ? [] : try ChatMessageToolActivity
@@ -1388,21 +1381,23 @@ final class ConversationRepository: @unchecked Sendable {
 
     func fetchDualMessages(conversationId: Int64) throws -> [DualChatMessage] {
         try dbQueue.read { db in
-            try DualChatMessage
+            let secret = try isSecret(db: db, conversationID: conversationId)
+            return try DualChatMessage
                 .filter(Column("conversationId") == conversationId)
                 .order(Column("createdAtMs").asc, Column("id").asc)
                 .fetchAll(db)
-                .map { try revealed($0, conversationID: conversationId, db: db) }
+                .map { try revealed($0, conversationID: conversationId, isSecret: secret) }
         }
     }
 
     func observeDualMessages(conversationId: Int64) -> AnyPublisher<[DualChatMessage], Never> {
         ValueObservation.tracking { db in
-            try DualChatMessage
+            let secret = try self.isSecret(db: db, conversationID: conversationId)
+            return try DualChatMessage
                 .filter(Column("conversationId") == conversationId)
                 .order(Column("createdAtMs").asc, Column("id").asc)
                 .fetchAll(db)
-                .map { try self.revealed($0, conversationID: conversationId, db: db) }
+                .map { try self.revealed($0, conversationID: conversationId, isSecret: secret) }
         }
         .publisher(in: dbQueue)
         .replaceError(with: [])
@@ -1861,14 +1856,15 @@ final class ConversationRepository: @unchecked Sendable {
     }
 
     private func fetchMessageSummaries(db: Database, conversationId: Int64) throws -> [ChatMessageSummary] {
+        let secret = try isSecret(db: db, conversationID: conversationId)
         let messages = try ChatMessage
             .filter(Column("conversationId") == conversationId)
             .order(Column("createdAtMs").asc)
             .fetchAll(db)
-            .map { try revealed($0, conversationID: conversationId, db: db) }
+            .map { try revealed($0, conversationID: conversationId, isSecret: secret) }
 
         let variantsByMessageID = try fetchVariantsByBaseMessageIDs(db: db, messageIds: messages.compactMap(\.id))
-            .mapValues { variants in try variants.map { try revealed($0, conversationID: conversationId, db: db) } }
+            .mapValues { variants in try variants.map { try revealed($0, conversationID: conversationId, isSecret: secret) } }
         return messages.compactMap { message in
             guard let id = message.id else { return nil }
             let resolved = resolveMessageContent(message: message, variantsByMessageID: variantsByMessageID)
@@ -1991,7 +1987,13 @@ final class ConversationRepository: @unchecked Sendable {
     }
 
     private func revealed(_ message: ChatMessage, conversationID: Int64, db: Database) throws -> ChatMessage {
-        guard try isSecret(db: db, conversationID: conversationID) else { return message }
+        try revealed(message, conversationID: conversationID, isSecret: isSecret(db: db, conversationID: conversationID))
+    }
+
+    // Batch readers resolve this flag once inside their database transaction.
+    // Never cache it across reads: secret mode and observation regions can change.
+    private func revealed(_ message: ChatMessage, conversationID: Int64, isSecret: Bool) throws -> ChatMessage {
+        guard isSecret else { return message }
         var clear = message
         clear.text = try secretVault.open(message.text, conversationID: conversationID)
         clear.attachmentsJSON = try secretVault.open(message.attachmentsJSON, conversationID: conversationID)
@@ -2008,7 +2010,11 @@ final class ConversationRepository: @unchecked Sendable {
     }
 
     private func revealed(_ variant: ChatMessageVariant, conversationID: Int64, db: Database) throws -> ChatMessageVariant {
-        guard try isSecret(db: db, conversationID: conversationID) else { return variant }
+        try revealed(variant, conversationID: conversationID, isSecret: isSecret(db: db, conversationID: conversationID))
+    }
+
+    private func revealed(_ variant: ChatMessageVariant, conversationID: Int64, isSecret: Bool) throws -> ChatMessageVariant {
+        guard isSecret else { return variant }
         var clear = variant
         clear.text = try secretVault.open(variant.text, conversationID: conversationID)
         clear.attachmentsJSON = try secretVault.open(variant.attachmentsJSON, conversationID: conversationID)
@@ -2031,7 +2037,11 @@ final class ConversationRepository: @unchecked Sendable {
     }
 
     private func revealed(_ message: DualChatMessage, conversationID: Int64, db: Database) throws -> DualChatMessage {
-        guard try isSecret(db: db, conversationID: conversationID) else { return message }
+        try revealed(message, conversationID: conversationID, isSecret: isSecret(db: db, conversationID: conversationID))
+    }
+
+    private func revealed(_ message: DualChatMessage, conversationID: Int64, isSecret: Bool) throws -> DualChatMessage {
+        guard isSecret else { return message }
         var clear = message
         clear.userText = try secretVault.open(message.userText, conversationID: conversationID)
         clear.modelAText = try secretVault.open(message.modelAText, conversationID: conversationID)
