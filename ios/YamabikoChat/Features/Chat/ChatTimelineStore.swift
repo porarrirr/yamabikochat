@@ -18,6 +18,8 @@ final class ChatTimelineRowStore: ObservableObject, Identifiable {
     @Published private(set) var item: ChatTimelineItem
     @Published private(set) var streamingPresentation: StreamingPresentation?
     private let markdownParser = NativeMarkdownIncrementalParser()
+    private var renderedResponseText: String?
+    private var renderedMarkdownBlocks: [NativeMarkdownBlock] = []
     // Keep interaction state with the message rather than a recycled hosting cell.
     private var genUIStates: [String: GenUIState] = [:]
     @Published private(set) var genUILayoutRevision = 0
@@ -64,6 +66,8 @@ final class ChatTimelineRowStore: ObservableObject, Identifiable {
         guard streamingSnapshot != snapshot else { return }
         guard let snapshot else {
             markdownParser.reset()
+            renderedResponseText = nil
+            renderedMarkdownBlocks = []
             streamingPresentation = nil
             return
         }
@@ -75,16 +79,18 @@ final class ChatTimelineRowStore: ObservableObject, Identifiable {
         } else {
             responseText = ""
         }
-        let artifacts = ChatArtifactPresentation.items(
-            from: responseText,
-            isStreaming: !snapshot.isFinal
-        )
-        let markdownSource = ExtractedFenceRemover.remove(
-            from: responseText,
-            ranges: artifacts.map { ($0.startIndex, $0.endIndex) }
-        )
-        let blocks = markdownParser.streamingBlocks(for: markdownSource)
-        streamingPresentation = StreamingPresentation(snapshot: snapshot, markdownBlocks: blocks)
+        // Thinking and tool events often leave a long answer unchanged. Reuse
+        // its fence extraction as well as its parsed Markdown until text changes.
+        // Completion still reparses because an unfinished fence can become visible.
+        if renderedResponseText != responseText || streamingSnapshot?.isFinal != snapshot.isFinal {
+            let artifacts = ChatArtifactPresentation.items(from: responseText, isStreaming: !snapshot.isFinal)
+            let markdownSource = ExtractedFenceRemover.remove(
+                from: responseText, ranges: artifacts.map { ($0.startIndex, $0.endIndex) }
+            )
+            renderedMarkdownBlocks = markdownParser.streamingBlocks(for: markdownSource)
+            renderedResponseText = responseText
+        }
+        streamingPresentation = StreamingPresentation(snapshot: snapshot, markdownBlocks: renderedMarkdownBlocks)
         if snapshot.isFinal {
             markdownParser.reset()
         }

@@ -83,6 +83,31 @@ class YamabikoRuntimeTests(unittest.TestCase):
         self.assertEqual(result["artifacts"][0]["relpath"], "chart.svg")
         self.assertEqual((root / "workspace" / "chart.svg").read_text(), "<svg/>")
 
+    def test_scan_prunes_hidden_trees_and_does_not_follow_directory_symlinks(self):
+        root = Path(tempfile.mkdtemp(prefix="yamabiko-scan-test-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        for directory in ["visible", ".cache", "__pycache__", "visible/.hidden"]:
+            (root / directory).mkdir(parents=True, exist_ok=True)
+            (root / directory / "data.txt").write_text("data")
+        (root / "linked-directory").symlink_to(root / "visible", target_is_directory=True)
+        (root / "linked-file.txt").symlink_to(root / "visible/data.txt")
+        snapshot = yamabiko_runtime._snapshot_files(root)
+        self.assertEqual(set(snapshot), {"visible/data.txt", "linked-file.txt"})
+
+    def test_unchanged_files_are_not_exported_and_updated_outputs_are_deduplicated(self):
+        root = Path(tempfile.mkdtemp(prefix="yamabiko-scan-test-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        outputs = root / "outputs"
+        outputs.mkdir()
+        (root / "input.csv").write_text("input")
+        (outputs / "chart.txt").write_text("old")
+        roots = (("outputs", outputs), ("workspace", root))
+        before = {name: yamabiko_runtime._snapshot_files(path) for name, path in roots}
+        (outputs / "chart.txt").write_text("updated chart")
+        artifacts = yamabiko_runtime._artifacts(roots, before)
+        self.assertEqual([(a["root"], a["relpath"], a["size"]) for a in artifacts],
+                         [("outputs", "chart.txt", 13)])
+
 
 if __name__ == "__main__":
     unittest.main()

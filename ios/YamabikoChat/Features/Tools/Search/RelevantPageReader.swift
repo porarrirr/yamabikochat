@@ -65,8 +65,9 @@ enum PageParagraphExtractor {
         // dates, authors, definitions or caveats and must not be discarded as chrome.
         for tag in ["main", "article"] {
             guard let regex = try? NSRegularExpression(pattern: "(?is)<" + tag + #"\b[^>]*>(.*?)</"# + tag + #"\s*>"#) else { continue }
-            let roots = regex.matches(in: sanitized, range: NSRange(sanitized.startIndex..., in: sanitized)).compactMap { match in
-                Range(match.range(at: 1), in: sanitized).map { String(sanitized[$0]) }
+            let source = sanitized as NSString
+            let roots = regex.matches(in: sanitized, range: NSRange(location: 0, length: source.length)).map { match in
+                source.substring(with: match.range(at: 1))
             }
             if !roots.isEmpty { content = roots.joined(separator: "\n"); hasContentRoot = true; break }
         }
@@ -84,31 +85,30 @@ enum PageParagraphExtractor {
 
         var heading: String?
         var paragraphs: [PageParagraph] = []
-        for match in regex.matches(in: visibleHTML, range: NSRange(visibleHTML.startIndex..., in: visibleHTML)) {
-            if let leafRange = Range(match.range(at: 3), in: visibleHTML) {
-                let text = normalizedText(String(visibleHTML[leafRange]))
+        // ICU reports UTF-16 offsets. Bridging once avoids repeatedly walking
+        // a Unicode document from its beginning to convert each match to String.Index.
+        let source = visibleHTML as NSString
+        for match in regex.matches(in: visibleHTML, range: NSRange(location: 0, length: source.length)) {
+            if match.range(at: 3).location != NSNotFound {
+                let text = normalizedText(source.substring(with: match.range(at: 3)))
                 if !text.isEmpty {
                     paragraphs.append(PageParagraph(index: paragraphs.count, heading: heading, text: text))
                 }
                 continue
             }
-            guard let tagRange = Range(match.range(at: 1), in: visibleHTML),
-                  let contentRange = Range(match.range(at: 2), in: visibleHTML)
-            else {
-                continue
-            }
-            let tag = visibleHTML[tagRange].lowercased()
-            let text = normalizedText(String(visibleHTML[contentRange]))
+            let tag = source.substring(with: match.range(at: 1)).lowercased()
+            let content = source.substring(with: match.range(at: 2))
+            let text = normalizedText(content)
             guard !text.isEmpty else { continue }
             if tag.hasPrefix("h") {
                 heading = text
             } else if tag == "table" {
-                for row in tableRows(String(visibleHTML[contentRange])) {
+                for row in tableRows(content) {
                     paragraphs.append(PageParagraph(index: paragraphs.count, heading: heading, text: row, isTableRow: true))
                 }
             } else {
                 let body = tag == "pre" ? HTMLTextExtractor.decodeEntities(replacingMatches(
-                    in: String(visibleHTML[contentRange]), pattern: #"(?s)<[^>]+>"#, with: ""
+                    in: content, pattern: #"(?s)<[^>]+>"#, with: ""
                 )) : text
                 paragraphs.append(PageParagraph(index: paragraphs.count, heading: heading, text: body))
             }
@@ -255,13 +255,17 @@ enum PageParagraphExtractor {
     }
 
     private static func normalizedText(_ htmlFragment: String) -> String {
-        let withSpaces = replacingMatches(in: htmlFragment, pattern: #"(?s)<[^>]+>"#, with: " ")
+        let withSpaces = inlineTagRegex.stringByReplacingMatches(in: htmlFragment,
+            range: NSRange(location: 0, length: (htmlFragment as NSString).length), withTemplate: " ")
         return collapseWhitespace(HTMLTextExtractor.decodeEntities(withSpaces))
     }
 
+    private static let inlineTagRegex = try! NSRegularExpression(pattern: #"(?s)<[^>]+>"#)
+    private static let whitespaceRegex = try! NSRegularExpression(pattern: #"\s+"#)
+
     private static func collapseWhitespace(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        whitespaceRegex.stringByReplacingMatches(in: value,
+            range: NSRange(location: 0, length: (value as NSString).length), withTemplate: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

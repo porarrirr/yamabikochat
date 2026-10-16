@@ -32,39 +32,32 @@ enum HTMLTextExtractor {
     }
 
     static func decodeEntities(_ input: String) -> String {
-        var result = input
-        let named = [
-            "&amp;": "&",
-            "&lt;": "<",
-            "&gt;": ">",
-            "&quot;": "\"",
-            "&#39;": "'",
-            "&apos;": "'",
-            "&nbsp;": " "
-        ]
-        for (entity, value) in named {
-            result = result.replacingOccurrences(of: entity, with: value, options: .caseInsensitive)
+        guard input.contains("&") else { return input }
+        let original = input as NSString
+        let namedDecoded = NSMutableString(string: input)
+        for match in namedEntityRegex.matches(in: input, range: NSRange(location: 0, length: original.length)).reversed() {
+            let entity = original.substring(with: match.range).lowercased()
+            if let value = namedEntities[entity] { namedDecoded.replaceCharacters(in: match.range, with: value) }
         }
-
-        guard let regex = try? NSRegularExpression(pattern: #"&#(x[0-9a-fA-F]+|[0-9]+);"#) else {
-            return result
-        }
-        let matches = regex.matches(in: result, range: NSRange(result.startIndex..., in: result)).reversed()
+        let result = namedDecoded as String
+        guard result.contains("&#") else { return result }
+        let source = result as NSString
+        let decoded = NSMutableString(string: result)
+        let matches = numericEntityRegex.matches(in: result, range: NSRange(location: 0, length: source.length)).reversed()
         for match in matches {
-            guard let range = Range(match.range(at: 0), in: result),
-                  let valueRange = Range(match.range(at: 1), in: result)
-            else {
-                continue
-            }
-            let raw = String(result[valueRange])
+            let raw = source.substring(with: match.range(at: 1))
             let scalarValue = raw.lowercased().hasPrefix("x")
                 ? UInt32(raw.dropFirst(), radix: 16)
                 : UInt32(raw, radix: 10)
             guard let scalarValue, let scalar = UnicodeScalar(scalarValue) else { continue }
-            result.replaceSubrange(range, with: String(Character(scalar)))
+            decoded.replaceCharacters(in: match.range, with: String(scalar))
         }
-        return result
+        return decoded as String
     }
+
+    private static let numericEntityRegex = try! NSRegularExpression(pattern: #"&#(x[0-9a-fA-F]+|[0-9]+);"#)
+    private static let namedEntityRegex = try! NSRegularExpression(pattern: #"&(?:amp|lt|gt|quot|apos|nbsp|#39);"#, options: .caseInsensitive)
+    private static let namedEntities = ["&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'", "&apos;": "'", "&nbsp;": " "]
 
     private static func replacingMatches(in input: String, pattern: String, with replacement: String) -> String {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return input }

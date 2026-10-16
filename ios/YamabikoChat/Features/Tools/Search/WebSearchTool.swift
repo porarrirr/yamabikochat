@@ -72,21 +72,23 @@ struct WebSearchTool: LocalToolExecutor {
             let goal = (arguments["goal"] as? String)?.trimmedNonEmpty
             let pages: [ToolResult]
             if let goal {
-                pages = await withTaskGroup(of: (Int, ToolResult).self) { group in
+                pages = await withTaskGroup(of: ToolResult.self) { group in
                     for (index, result) in results.prefix(2).enumerated() {
                         group.addTask {
                             let arguments: [String: Any] = ["url": result.url, "goal": goal, "max_characters": 3000]
                             let json = (try? JSONSerialization.data(withJSONObject: arguments)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
                             let pageCall = ToolCall(id: "\(call.id)-source-\(index)", name: FetchUrlTool.name,
                                                     argumentsJSON: json, providerMetadata: nil)
-                            do { return (index, try await reader.execute(call: pageCall)) }
-                            catch { return (index, ToolResult(callId: pageCall.id, name: pageCall.name,
-                                                             content: LocalToolRegistry.errorContent(error.localizedDescription), isError: true)) }
+                            do { return try await reader.execute(call: pageCall) }
+                            catch { return ToolResult(callId: pageCall.id, name: pageCall.name,
+                                                      content: LocalToolRegistry.errorContent(error.localizedDescription), isError: true) }
                         }
                     }
-                    var collected: [(Int, ToolResult)] = []
-                    for await item in group { collected.append(item) }
-                    return collected.sorted { $0.0 < $1.0 }.map(\.1)
+                    // Reassemble by the request identity carried through the
+                    // reader, independent of concurrent completion order.
+                    var collected: [String: ToolResult] = [:]
+                    for await item in group { collected[item.callId] = item }
+                    return (0..<min(2, results.count)).compactMap { collected["\(call.id)-source-\($0)"] }
                 }
                 try Task.checkCancellation()
             } else { pages = [] }

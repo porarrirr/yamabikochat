@@ -181118,6 +181118,66 @@ function genuiPreviewFromAgentEvent(event) {
   if (!block.arguments || typeof block.arguments !== "object" || Array.isArray(block.arguments)) return null;
   return { type: "genui_preview", toolCallId: block.id, name: block.name, arguments: block.arguments };
 }
+function createGenuiPreviewPublisher(send2, {
+  intervalMs = 100,
+  now = () => performance.now(),
+  schedule = (callback, delay2) => setTimeout(callback, delay2),
+  cancel = (timer) => clearTimeout(timer)
+} = {}) {
+  const pending2 = /* @__PURE__ */ new Map();
+  const lastSent = /* @__PURE__ */ new Map();
+  let timer = null;
+  let disposed = false;
+  function emit(id, preview) {
+    pending2.delete(id);
+    lastSent.set(id, now());
+    send2(preview);
+  }
+  function flush(id) {
+    if (disposed) return;
+    if (id !== void 0) {
+      if (pending2.has(id)) emit(id, pending2.get(id));
+    } else {
+      for (const [key, preview] of pending2) emit(key, preview);
+    }
+    if (!pending2.size && timer !== null) {
+      cancel(timer);
+      timer = null;
+    }
+  }
+  return {
+    accept(event) {
+      if (disposed) return;
+      const preview = genuiPreviewFromAgentEvent(event);
+      if (!preview) return;
+      const id = preview.toolCallId;
+      if (event.assistantMessageEvent.type === "toolcall_end") {
+        emit(id, preview);
+        lastSent.delete(id);
+        if (!pending2.size && timer !== null) {
+          cancel(timer);
+          timer = null;
+        }
+      } else if (!lastSent.has(id) || now() - lastSent.get(id) >= intervalMs) {
+        emit(id, preview);
+      } else {
+        pending2.set(id, preview);
+        if (timer === null) timer = schedule(() => {
+          timer = null;
+          flush();
+        }, Math.max(0, intervalMs - (now() - lastSent.get(id))));
+      }
+    },
+    flush,
+    dispose() {
+      disposed = true;
+      if (timer !== null) cancel(timer);
+      timer = null;
+      pending2.clear();
+      lastSent.clear();
+    }
+  };
+}
 
 // src/event-recording.js
 function exportableAgentEvent(event, sanitize) {
@@ -187616,6 +187676,9 @@ async function runAgent(envelope, res) {
   const runAssistants = [];
   const recorder = createEventRecorder(exportableProviderPayload, () => report("event_recording_limit", "Diagnostic event recording reached the 64 KiB limit"), 64 * 1024);
   const events = recorder.events;
+  const previews = createGenuiPreviewPublisher((preview) => {
+    if (!res.writableEnded && !res.destroyed) send(res, { ...preview, timeMs: Date.now() });
+  });
   agent.subscribe((event) => {
     recorder.record(event);
     if (event.type === "turn_start") {
@@ -187624,8 +187687,7 @@ async function runAgent(envelope, res) {
       send(res, { type: "llm_start", stepId: activeStep, timeMs: Date.now() });
     } else if (event.type === "message_update") {
       const update = event.assistantMessageEvent;
-      const preview = genuiPreviewFromAgentEvent(event);
-      if (preview) send(res, { ...preview, timeMs: Date.now() });
+      previews.accept(event);
       if (update.type === "text_delta") {
         if (event.message?.provider === PCC_PROVIDER) {
           const text = event.message.content?.find((part) => part.type === "text")?.text;
@@ -187636,6 +187698,7 @@ async function runAgent(envelope, res) {
       }
       if (update.type === "thinking_delta") send(res, { type: "reasoning_delta", delta: update.delta });
     } else if (event.type === "message_end" && event.message?.role === "assistant") {
+      previews.flush();
       runAssistants.push(event.message);
       send(res, {
         type: "llm_end",
@@ -187646,6 +187709,7 @@ async function runAgent(envelope, res) {
       });
       activeStep = null;
     } else if (event.type === "tool_execution_start") {
+      previews.flush(event.toolCallId);
       send(res, { type: "tool_start", toolCallId: event.toolCallId, name: event.toolName, timeMs: Date.now() });
     } else if (event.type === "tool_execution_end") {
       send(res, { type: "tool_end", toolCallId: event.toolCallId, name: event.toolName, timeMs: Date.now(), succeeded: !event.isError });
@@ -187703,6 +187767,7 @@ async function runAgent(envelope, res) {
     });
     throw error;
   } finally {
+    previews.dispose();
     res.off("close", abortDisconnectedRun);
     res.off("error", abortDisconnectedRun);
     clearInterval(heartbeat);

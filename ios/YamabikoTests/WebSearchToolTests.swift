@@ -491,7 +491,8 @@ final class WebSearchToolTests: XCTestCase {
         let pages = try XCTUnwrap(object["pages"] as? [[String: Any]])
         XCTAssertEqual(pages.count, 2)
         XCTAssertTrue(result.content.contains("two years"))
-        XCTAssertEqual(pages[0]["source"] as? String, "https://example.com/policy")
+        XCTAssertEqual(pages[0]["source"] as? String, "https://example.com/policy", result.content)
+        XCTAssertEqual(pages[1]["source"] as? String, "https://example.com/terms", result.content)
     }
 
     func testSearchKeepsOtherEvidenceWhenOneTopSourceFails() async throws {

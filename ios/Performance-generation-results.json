@@ -1,0 +1,229 @@
+{
+  "date": "2026-10-17",
+  "baselineCommit": "649c3fc9401366394aba293e6115e5ed1cf86be9",
+  "environment": {
+    "device": "iPhone 18 Pro Simulator",
+    "os": "iOS 27.0",
+    "xcode": "27.0 (27A266a)",
+    "configuration": "Debug, SWIFT_OPTIMIZATION_LEVEL=-O",
+    "parallelTesting": false
+  },
+  "method": "Elapsed wall time; median of 10 samples, same fixture and optimization flags. Provider/network time is excluded from fixed workloads. Initial simulator was shared with other app tests; dedicated simulator used for final live and regression validation.",
+  "workloads": {
+    "before": {
+      "testThinkingAndToolUpdatesWithLongAnswerPerformance": {
+        "samplesMs": [
+          147.425,
+          136.39299999999997,
+          136.965,
+          133.281,
+          130.936,
+          133.115,
+          143.54,
+          134.09199999999998,
+          132.853,
+          130.98000000000002
+        ],
+        "medianMs": 133.6865
+      },
+      "testWebArticleExtractionPerformance": {
+        "samplesMs": [
+          45.269,
+          15.14,
+          12.956000000000001,
+          11.802999999999999,
+          11.013,
+          10.462000000000002,
+          10.319,
+          10.705,
+          10.699,
+          10.564
+        ],
+        "medianMs": 10.859
+      },
+      "python_workspace_cells": {
+        "samplesMs": [
+          62.107167,
+          59.566875,
+          73.080292,
+          57.629125,
+          56.724875,
+          54.708792,
+          60.434917,
+          54.979875,
+          55.050875,
+          54.408083
+        ],
+        "medianMs": 57.177
+      }
+    },
+    "final": {
+      "testThinkingAndToolUpdatesWithLongAnswerPerformance": {
+        "samplesMs": [
+          10.536999999999999,
+          9.859,
+          8.392999999999999,
+          8.498000000000001,
+          8.235,
+          8.232,
+          9.479,
+          9.117999999999999,
+          8.447,
+          8.351
+        ],
+        "medianMs": 8.4725
+      },
+      "testWebArticleExtractionPerformance": {
+        "samplesMs": [
+          6.5,
+          5.837,
+          5.829,
+          6.0280000000000005,
+          6.355,
+          7.242,
+          5.991,
+          5.77,
+          5.7330000000000005,
+          5.686
+        ],
+        "medianMs": 5.914
+      },
+      "python_workspace_cells": {
+        "samplesMs": [
+          12.844083,
+          12.880834,
+          12.198583,
+          12.45075,
+          13.237292,
+          12.386875,
+          12.080708,
+          14.754583,
+          13.92975,
+          12.390125
+        ],
+        "medianMs": 12.647416499999999
+      }
+    },
+    "verifiedDedicatedSimulator": {
+      "testThinkingAndToolUpdatesWithLongAnswerPerformance": {
+        "samplesMs": [
+          7.986999999999999,
+          7.882,
+          7.816999999999999,
+          7.742,
+          7.729,
+          7.667,
+          7.7860000000000005,
+          7.675999999999999,
+          7.795,
+          7.799
+        ],
+        "medianMs": 7.7905
+      },
+      "testWebArticleExtractionPerformance": {
+        "samplesMs": [
+          6.912,
+          5.871,
+          6.012,
+          7.237,
+          6.245,
+          5.989000000000001,
+          5.989000000000001,
+          6.123,
+          6.115,
+          5.963
+        ],
+        "medianMs": 6.0634999999999994
+      },
+      "python_workspace_cells": {
+        "samplesMs": [
+          15.442333,
+          16.183333,
+          13.670333,
+          12.860083,
+          14.134791,
+          14.788417,
+          13.937458,
+          14.193042,
+          16.125708,
+          14.216209
+        ],
+        "medianMs": 14.204625499999999
+      },
+      "genui_validation_uncoalesced": {
+        "samplesMs": [
+          1332.433834,
+          1218.715,
+          1189.7335,
+          1186.178667,
+          1207.117834
+        ],
+        "medianMs": 1207.117834
+      },
+      "genui_validation_coalesced": {
+        "samplesMs": [
+          246.410667,
+          242.04675,
+          235.746334,
+          239.411292,
+          238.612875
+        ],
+        "medianMs": 239.411292
+      }
+    }
+  },
+  "genuiBridge": {
+    "workload": "400 GenUI argument deltas, 50/s, serialize + decode",
+    "before": {
+      "medianMs": 3.2274170000000026,
+      "bytes": 1227252,
+      "snapshots": 400
+    },
+    "after": {
+      "medianMs": 0.5130829999999946,
+      "bytes": 249127,
+      "snapshots": 81
+    },
+    "reductionPercent": 84.10236421261973
+  },
+  "liveRuns": [
+    "LIVE_TEXT provider=openrouter model=cohere/north-mini-code:free total_ms=9900.788542 first_delta_ms=5387.94825 deltas=180",
+    "LIVE_TOOL python_execute elapsed_ms=5821.545208",
+    "LIVE_TOOL fetch_url elapsed_ms=9335.196083",
+    "LIVE_TOOL genui elapsed_ms=10605.9785",
+    "LIVE_RESULT provider=openrouter model=cohere/north-mini-code:free total_ms=12715.938583 first_delta_ms=11178.166667 text_characters=419 previews=5 tools=[\"python_execute\", \"fetch_url\", \"genui\"]",
+    "LIVE_TEXT provider=google model=gemini-2.5-flash-lite total_ms=3436.347209 first_delta_ms=2856.38375 deltas=5",
+    "LIVE_TOOL python_execute elapsed_ms=1869.1218330000002",
+    "LIVE_TOOL fetch_url elapsed_ms=2093.936791",
+    "LIVE_TOOL genui elapsed_ms=2103.705833",
+    "LIVE_RESULT provider=google model=gemini-2.5-flash-lite total_ms=3283.5035 first_delta_ms=-1.0 text_characters=0 previews=2 tools=[\"python_execute\", \"fetch_url\", \"genui\"]"
+  ],
+  "validation": {
+    "iosUnitTests": {
+      "passed": 159,
+      "failed": 0
+    },
+    "webSourceOrderRepeat": {
+      "passed": 30,
+      "failed": 0,
+      "beforeFixFailed": 3,
+      "beforeFixIterations": 10
+    },
+    "piRuntimeTests": {
+      "passed": 93,
+      "failed": 0
+    },
+    "pythonHarnessTests": {
+      "passed": 10,
+      "failed": 0
+    },
+    "liveProviderTests": {
+      "passed": 4,
+      "failed": 0
+    },
+    "iosUITests": {
+      "passed": 1,
+      "failed": 0
+    }
+  }
+}

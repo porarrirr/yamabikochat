@@ -263,19 +263,28 @@ def _configure_matplotlib_fonts() -> None:
     matplotlib.rcParams["axes.unicode_minus"] = False
 
 
-def _is_visible_generated_file(path: Path, root: Path) -> bool:
-    relative = path.relative_to(root)
-    return path.is_file() and not any(
-        part.startswith(".") or part == "__pycache__" for part in relative.parts
-    )
+def _visible_files(root: Path):
+    """One stat per visible file; prune caches before descending into them.
+
+    Like Path.rglob, do not recurse through directory symlinks. os.scandir is
+    still subject to the existing workspace audit hook.
+    """
+    pending = [(str(root), "")]
+    while pending:
+        directory, prefix = pending.pop()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                if entry.name.startswith(".") or entry.name == "__pycache__":
+                    continue
+                relative = prefix + entry.name
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append((entry.path, relative + "/"))
+                elif entry.is_file():
+                    yield relative, entry.stat()
 
 
 def _snapshot_files(root: Path) -> dict[str, tuple[int, int]]:
-    return {
-        str(path.relative_to(root)): (path.stat().st_mtime_ns, path.stat().st_size)
-        for path in root.rglob("*")
-        if _is_visible_generated_file(path, root)
-    }
+    return {relative: (stat.st_mtime_ns, stat.st_size) for relative, stat in _visible_files(root)}
 
 
 def _save_open_figures(outputs: Path) -> None:
@@ -341,17 +350,14 @@ def _artifacts(
     values: list[dict[str, Any]] = []
     seen_paths: set[Path] = set()
     for root_name, root in roots:
-        for path in sorted(root.rglob("*")):
-            if not _is_visible_generated_file(path, root):
+        for relpath, stat in sorted(_visible_files(root)):
+            if before[root_name].get(relpath) == (stat.st_mtime_ns, stat.st_size):
                 continue
+            path = root / relpath
             resolved_path = path.resolve(strict=False)
             if resolved_path in seen_paths:
                 continue
             seen_paths.add(resolved_path)
-            relpath = str(path.relative_to(root))
-            stat = path.stat()
-            if before[root_name].get(relpath) == (stat.st_mtime_ns, stat.st_size):
-                continue
             mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
             values.append({
                 "name": path.name,
