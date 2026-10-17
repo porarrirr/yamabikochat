@@ -8,7 +8,7 @@ enum AppleIntelligenceModelCatalog {
     static let defaultPCCReasoningLevel = "moderate"
 
     static func displayName(_ model: String) -> String {
-        model == pccModel ? "Apple Intelligence — Private Cloud Compute" : model
+        model == pccModel ? "Private Cloud Compute" : model
     }
 
     static func piThinkingLevel(forPCCReasoningLevel level: String) -> String? {

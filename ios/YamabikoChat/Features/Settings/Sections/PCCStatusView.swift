@@ -93,7 +93,7 @@ struct AppleIntelligenceModelPicker: View {
     var body: some View {
         Picker("Model", selection: $model) {
             Text("Apple Intelligence (On-device)").tag(AppleIntelligenceModelCatalog.displayModel)
-            Text("Apple Intelligence — Private Cloud Compute")
+            Text(AppleIntelligenceModelCatalog.displayName(AppleIntelligenceModelCatalog.pccModel))
                 .tag(AppleIntelligenceModelCatalog.pccModel)
                 .disabled(!status.capability.available)
             if !AppleIntelligenceModelCatalog.supportedModels.contains(model) {
