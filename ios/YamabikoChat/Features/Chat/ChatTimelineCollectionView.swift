@@ -1206,6 +1206,9 @@ private struct ChatMessageRow: View {
     private var toolSteps: [ToolActivityStep] {
         streamingSnapshot?.toolActivity?.steps ?? message.displayToolActivity?.steps ?? []
     }
+    private var isToolRunning: Bool {
+        toolSteps.contains { $0.status == .running }
+    }
     private var rotationNotices: [ProviderRotationNotice] {
         streamingSnapshot?.toolActivity?.rotationNotices
             ?? message.displayToolActivity?.rotationNotices
@@ -1219,9 +1222,6 @@ private struct ChatMessageRow: View {
     }
 
     private var generationStatus: String {
-        if toolSteps.contains(where: { $0.status == .running }) {
-            return L10n.text("ツールを実行中…")
-        }
         if thinkingText != nil {
             return L10n.text("思考中…")
         }
@@ -1344,7 +1344,9 @@ private struct ChatMessageRow: View {
                         }
                     }
 
-                    if isStreaming, responseText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if isStreaming,
+                       responseText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                       !isToolRunning {
                         HStack(spacing: 10) {
                             ProgressView()
                                 .controlSize(.small)
