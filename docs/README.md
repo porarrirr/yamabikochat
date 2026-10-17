@@ -14,10 +14,10 @@ Static pages for App Store Connect and in-app legal links.
 
 ## Publish with GitHub Pages
 
-1. Push this `docs/` folder to GitHub (`ios` branch or `main`).
+1. Push this `docs/` folder to GitHub (`ios` branch).
 2. Repository **Settings → Pages**
 3. Source: **Deploy from a branch**
-4. Branch: the branch you use (e.g. `ios`) / folder: **`/docs`**
+4. Branch: `ios` / folder: **`/docs`**
 5. Save and wait for the site URL (typically `https://porarrirr.github.io/yamabikochat/`)
 
 ## URLs to register

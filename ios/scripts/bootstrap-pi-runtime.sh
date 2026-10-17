@@ -56,7 +56,6 @@ build_arguments=(
   --input node_modules
   --input "$cache_tool"
   --output bundle/main.js
-  --output "$ios_dir/../app/src/main/assets/pi-runtime/main.js"
   --value "$(node --version)"
 )
 if python3 "$cache_tool" check "$build_stamp" "${build_arguments[@]}"; then

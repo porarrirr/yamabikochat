@@ -7,28 +7,6 @@ Pi's schema dependency so the bundle uses one schema implementation. `src/main.j
 is the only JavaScript entry point and exposes an authenticated loopback NDJSON
 bridge used by `PiAgentRuntime.swift`.
 
-Android uses the same bundle through `PiAgentRuntime.kt` and NodeMobile 24.18.0-0.
-Its JNA 5.19.1 Android AAR provides the native dispatcher, including 16 KB page-size
-support. The APK also ships the official NDK r27 `libc++_shared.so` dependency,
-restored from a pinned Google source revision with per-ABI SHA-256 checks.
-APK ABIs are restricted to the three supplied NodeMobile architectures.
-The JNA binding calls Android's exported `node::Start(int, char**)` symbol from
-the pinned NodeMobile headers; the iOS-only `node_start` wrapper is not assumed.
-The network security configuration allows HTTP only for Pi's `127.0.0.1` bridge;
-remote requests retain the existing HTTPS requirement. JNA and `NodeLibrary` are
-preserved in both release and diagnostic R8 configurations.
-Android startup is process-owned and completes even if the first caller is
-cancelled, so another model lookup cannot start Node a second time.
-
-Run `../../scripts/bootstrap-pi-runtime-android.sh` to restore Android binaries and
-rebuild from the shared lockfile. `./gradlew :app:connectedDebugAndroidTest` from
-the repository root verifies native startup, bundled script extraction, built-in
-protocol resolution and all OpenCode Go routes without provider requests.
-Repeat with `-PyamabikoTestBuildType=diagnostic :app:connectedDiagnosticAndroidTest`
-to exercise the same bridge in an R8-minified APK. The diagnostic profile retains
-runtime dependencies and public APIs used by the separate instrumentation APK;
-R8 can still optimize the bridge implementations and private application code.
-
 `pi-coding-agent` is pinned to 1.0.2 as a build dependency to satisfy `pi-grok`'s
 peer dependency without installing a second, older Pi dependency tree. The CLI
 is not imported into the mobile bundle. `pi-grok` remains at its audited commit.

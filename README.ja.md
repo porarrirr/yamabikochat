@@ -2,7 +2,9 @@
 
 [English](README.md) | 日本語
 
-複数のLLMプロバイダーを切り替え、通常のチャット、2モデルの比較、モデル同士の自動会話を行えるAndroid・iOS向けネイティブAIチャットアプリです。
+複数のLLMプロバイダーを切り替え、通常のチャット、2モデルの比較、モデル同士の自動会話を行えるiPhone・iPad向けネイティブAIチャットアプリです。
+
+開発・保守対象はiOS版のみです。Android版の開発は終了しました。過去の実装はGit履歴に残っています。既定の開発ブランチは `ios` です。
 
 ## 主な機能
 
@@ -25,18 +27,9 @@
 
 YamabikoChatは、Gemini、OpenRouter、OpenAI、Z.ai、MiniMax、OpenCode Go、xAI/SuperGrok、各種互換APIなど、ユーザーが設定した接続先を利用します。プロンプト、リクエストに含める会話履歴、選択した添付ファイルは、そのプロバイダーへ送信されます。カスタム接続先や追加ツールのデータ取扱いは、それぞれの運営者の規約に従います。
 
-API認証情報は、AndroidではKeystoreを利用する暗号化設定、iOSではKeychainに保存します。機密情報を扱う前に、送信先のプロバイダー、ベースURL、有効なツールを確認してください。
+API認証情報はiOSのKeychainに保存します。機密情報を扱う前に、送信先のプロバイダー、ベースURL、有効なツールを確認してください。
 
 ## ビルド
-
-Android:
-
-```bash
-./gradlew assembleDebug
-./gradlew test
-```
-
-iOS:
 
 ```bash
 cd ios
@@ -50,13 +43,11 @@ open YamabikoChat.xcodeproj
 
 | 場所 | 用途 |
 |---|---|
-| `app/` | Androidアプリとテスト |
 | [ios/](ios/README.md) | iOSアプリ、テスト、ビルドツール |
 | [ios/docs/](ios/docs/README.md) | 開発メモとデザイン検証資料 |
-| `scripts/` | 共通ランタイムの準備とプロバイダー契約の検証 |
+| `scripts/` | プロバイダー契約の検証 |
 | [docs/](docs/README.md) | 公開サイト、規約、サポートページ |
 | `third_party/` | 第三者ソフトウェアの契約・ライセンス資料 |
-| `gradle/` | Androidの依存設定とラッパー |
 
 ローカルの参照用リポジトリは `.local/reference-repos/` にまとめます（Git管理対象外）。
 ビルドキャッシュや復元された依存ライブラリは、ビルドツールが必要とする配置を保ちます。

@@ -13,14 +13,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_URL = (
     "https://raw.githubusercontent.com/anomalyco/opencode/"
-    "dev/packages/web/src/content/docs/go.mdx"
+    "dev/services/www/src/docs/content/console/go.mdx"
 )
 MODELS_DEV_URL = "https://models.dev/api.json"
 SWIFT_CATALOG = ROOT / "ios/YamabikoChat/Shared/OpenCodeGoModelCatalog.swift"
-KOTLIN_CATALOG = (
-    ROOT
-    / "app/src/main/java/com/porarri/yamabikochat/data/remote/ProviderCatalog.kt"
-)
 PI_RUNTIME = ROOT / "ios/PiRuntime/src/main.js"
 
 ENDPOINT_TO_ROUTE = {
@@ -74,22 +70,6 @@ def swift_routes(source: str) -> dict[str, str]:
             source,
         )
     )
-
-
-def kotlin_routes(source: str) -> dict[str, str]:
-    raw = dict(
-        re.findall(
-            r'OpenCodeGoModel\("([^"]+)", "[^"]+", '
-            r'OpenCodeGoEndpointKind\.([A-Z_]+)\)',
-            source,
-        )
-    )
-    names = {
-        "CHAT_COMPLETIONS": "chatCompletions",
-        "RESPONSES": "responses",
-        "MESSAGES": "messages",
-    }
-    return {model_id: names[route] for model_id, route in raw.items()}
 
 
 def pi_routes(source: str) -> dict[str, str]:
@@ -164,7 +144,6 @@ def main() -> int:
 
     platforms = {
         "iOS": swift_routes(SWIFT_CATALOG.read_text()),
-        "Android": kotlin_routes(KOTLIN_CATALOG.read_text()),
         "Pi": pi_routes(PI_RUNTIME.read_text()),
     }
     failed = False
@@ -188,7 +167,7 @@ def main() -> int:
             file=sys.stderr,
         )
 
-    print(f"OpenCode Go contract verified for {len(expected)} models on iOS, Android, and Pi.")
+    print(f"OpenCode Go contract verified for {len(expected)} models on iOS and Pi.")
     return 0
 
 

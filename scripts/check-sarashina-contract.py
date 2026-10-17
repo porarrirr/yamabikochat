@@ -36,6 +36,6 @@ assert re.search(r"Sarashina3 mini.*?128k", models, re.S)
 assert re.search(r"Sarashina3 nano.*?128k", models, re.S)
 assert re.search(r"Sarashina3 guard.*?64k", models, re.S)
 root = Path(__file__).resolve().parents[1]
-for path in ("ios/YamabikoChat/Shared/ProviderDisplay.swift", "app/src/main/java/com/porarri/yamabikochat/data/remote/ProviderCatalog.kt"):
+for path in ("ios/YamabikoChat/Shared/ProviderDisplay.swift",):
     assert "sarashina3-mini" in (root / path).read_text(), f"Sarashina native mapping missing: {path}"
 print("Sarashina official contract matches Pi and native mappings")

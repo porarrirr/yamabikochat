@@ -1,11 +1,11 @@
-# iOS Port (YamabikoChat)
+# YamabikoChat for iOS
 
 This directory contains the native iOS implementation for YamabikoChat.
 
 Development notes and design QA evidence are indexed in [docs/README.md](docs/README.md).
 
 ## Requirements
-- macOS with Xcode 16+
+- macOS with Xcode 27.0 (see `app-store-build.env`)
 - XcodeGen (`brew install xcodegen`)
 - Node.js 24
 

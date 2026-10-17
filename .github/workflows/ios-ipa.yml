@@ -9,7 +9,7 @@ on:
         default: ""
         type: string
   push:
-    branches: [ main, master, ios ]
+    branches: [ ios ]
     paths:
       - "ios/**"
       - ".github/workflows/ios-ipa.yml"

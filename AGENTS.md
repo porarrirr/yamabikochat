@@ -1,30 +1,24 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `app/` is the Android module (Jetpack Compose + data layer). Main code lives in `app/src/main/java/com/porarri/yamabikochat/` with `ui/`, `data/`, and `utils/` packages.
-- Android resources are under `app/src/main/res/`; shared web assets (MathJax) are in `app/src/main/assets/`.
-- Android tests: `app/src/test/` (unit/Robolectric) and `app/src/androidTest/` (instrumented).
-- `ios/` contains the SwiftUI iOS port plus share extension and tests (`YamabikoChat/`, `YamabikoShareExtension/`, `YamabikoTests/`).
-- Build configuration: `build.gradle.kts`, `app/build.gradle.kts`, versions in `gradle/libs.versions.toml`, iOS project spec in `ios/project.yml`.
+- YamabikoChat is maintained exclusively for iOS and iPadOS. Android development has ended; its implementation remains in Git history.
+- `ios/YamabikoChat/` contains the SwiftUI app, `ios/YamabikoShareExtension/` the share extension, and `ios/YamabikoTests/` the unit tests.
+- `ios/PiRuntime/` contains the Pi Agents runtime and JavaScript tests; `ios/GenUIRuntimeTests/` contains DOM tests.
+- `ios/project.yml` is the Xcode project source of truth. `docs/` contains the public website; `scripts/` contains upstream contract checks.
 
 ## Build, Test, and Development Commands
-- `./gradlew assembleDebug`: build Android debug APK.
-- `./gradlew test`: run Android unit tests.
-- `./gradlew connectedAndroidTest`: run device/emulator tests.
-- `./gradlew lint`: run Android lint checks.
-- `./gradlew assembleRelease`: build release APK (requires `YAMABIKO_*` signing values).
-- `cd ios && xcodegen generate`: generate Xcode project.
-- `cd ios && xcodebuild -project YamabikoChat.xcodeproj -scheme YamabikoChat -destination 'platform=iOS Simulator,name=iPhone 18 Pro,OS=27.0' build`: validate iOS build from CLI.
+- `cd ios && ./bootstrap.sh`: restore dependencies, build Pi, and generate the Xcode project.
+- `cd ios && xcodegen generate`: regenerate the Xcode project after structural changes.
+- `cd ios && xcodebuild -project YamabikoChat.xcodeproj -scheme YamabikoChat -destination 'platform=iOS Simulator,name=iPhone 18 Pro,OS=27.0' CODE_SIGNING_ALLOWED=NO test`: build and test iOS.
+- `npm test --prefix ios/PiRuntime`: run Pi runtime tests.
+- `npm ci --prefix ios/GenUIRuntimeTests --ignore-scripts && npm test --prefix ios/GenUIRuntimeTests`: run GenUI DOM tests.
+- `npm run check:contracts --prefix ios/PiRuntime`: check upstream provider contracts.
+- `python3 -m unittest ios/PythonTests/test_yamabiko_runtime.py`: run embedded Python tests.
 
-## Coding Style & Naming Conventions
-- Kotlin/Swift: 4-space indentation, keep files focused, and prefer small view models/repositories.
-- Naming: classes/composables/types in PascalCase, methods/variables in camelCase, constants in UPPER_SNAKE_CASE.
-- Package/module names stay lowercase (`com.porarri.yamabikochat`); Android resources use `lowercase_underscore`.
-
-## Testing Guidelines
-- Android uses JUnit4, MockK, Coroutines Test, and Espresso/Compose test libs.
-- Test files follow `*Test.kt` naming and mirror source package structure.
-- Add unit tests for new business/data logic; use instrumented tests only for Android framework/UI behavior.
+## Coding Style & Testing Guidelines
+- Swift: 4-space indentation, focused files, and small view models/repositories.
+- Types use PascalCase; methods and variables use camelCase.
+- Add unit tests under `ios/YamabikoTests/` for new business/data logic. Select validation according to affected behavior.
 
 ## Commit & Pull Request Guidelines
 - Current history mixes imperative summaries, Conventional Commit prefixes (`feat(...)`, `fix:`), and occasional emoji/Japanese titles. Keep messages short, specific, and consistent within a PR.
@@ -33,13 +27,13 @@
 - Canonical sync target for this workspace is `porarrirr/yamabikochat` on branch `ios`. Use this target when synchronization is requested.
 
 ## Security & Configuration Tips
-- Never commit secrets or keystores. Use `local.properties.example` as the template for local config.
-- Keep signing credentials (`YAMABIKO_KEY_ALIAS`, `YAMABIKO_KEY_PASSWORD`, `YAMABIKO_STORE_PASSWORD`) local/CI-secret only.
+- Never commit secrets, signing certificates, provisioning profiles, or API keys.
+- Keep Apple signing and App Store Connect credentials local or in CI secrets; use the manual TestFlight workflow for signed distribution.
 
 ## Pi Agents Standard Path
 - Treat the standard Pi Agents execution path as the single source of truth for AI execution, API communication, token usage, and context management.
 - Do not create, extend, or use custom paths that bypass, replace, or reimplement Pi Agents.
-- Pi Runtime exclusively owns provider/model resolution. Native iOS and Android code must pass model identity and explicit user configuration, not select a wire API or synthesize a Pi model.
+- Pi Runtime exclusively owns provider/model resolution. Native iOS code must pass model identity and explicit user configuration, not select a wire API or synthesize a Pi model.
 - Execute only an exact Pi built-in model or a separately verified official contract registered on an existing Pi provider. Otherwise return a typed unsupported reason and stop that model execution. During development, investigation, diagnostics, and tests may continue; implementing an alternative execution path still requires explicit user approval.
 - Do not retry through another protocol, endpoint, provider, or model after resolution or stream failure.
 - If the standard path cannot satisfy a requirement, stop before implementing an alternative and report the reason and required change to the user.
@@ -53,12 +47,12 @@
 - Do not synthesize missing URLs, protocols, capabilities, limits, or provider termination fields such as `finish_reason`.
 - Keep unsupported catalog models visible but disabled with the exact resolver reason. Never replace a saved unsupported model automatically.
 - A user-defined compatibility provider is allowed only through Pi's compatibility/provider APIs and only when the user explicitly supplies both protocol and base URL; catalog metadata is not user authorization to infer either value.
-- When models.dev cannot express a provider's documented per-model routing, use a separately maintained authoritative provider contract only for the missing fields. Add an automated drift check against the upstream contract and keep iOS and Android mappings identical.
+- When models.dev cannot express a provider's documented per-model routing, use a separately maintained authoritative provider contract only for the missing fields. Add an automated drift check against the upstream contract and keep iOS and Pi mappings identical.
 - For provider, catalog, or resolver changes, add or update and run tests for every affected executable provider identity, including built-in IDs and `MODELS_DEV:*` IDs, and every affected protocol kind. Validate all providers when shared resolution changes. For other changes, select validation according to the affected behavior.
 
 ## iOS Development Best Practices
 - Keep iOS implementation under `ios/YamabikoChat/` and treat `ios/project.yml` as the source of truth; regenerate the Xcode project with `xcodegen` after structural file changes.
-- Preserve Android parity for provider labels/order, default model presets, auth behavior, and settings semantics unless explicitly requested otherwise.
+- Preserve existing iOS provider labels/order, model presets, auth behavior, and settings semantics unless explicitly requested otherwise.
 - Use SwiftUI state boundaries clearly: `View` for rendering, `ViewModel` for UI logic, and repository layer for persistence/network/auth; avoid putting side effects directly in views.
 - For conversation/navigation flows, prefer selection-based navigation (`NavigationLink`/`selection`) so behavior is stable on both iPhone (compact) and iPad/macOS split views.
 - Enforce dual-mode vs auto-conversation exclusivity in both UI toggles and persistence normalization to prevent invalid saved states.

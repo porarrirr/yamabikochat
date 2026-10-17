@@ -4,26 +4,22 @@ on:
   pull_request:
     paths:
       - "ios/**"
-      - "app/src/main/java/com/porarri/yamabikochat/data/remote/ProviderCatalog.kt"
-      - "app/src/main/assets/pi-runtime/**"
-      - "scripts/bootstrap-pi-runtime-android.sh"
-      - "scripts/check-opencode-go-contract.py"
-      - "scripts/check-pcc-contract.py"
+      - "scripts/check-*.py"
+      - "third_party/**"
+      - "THIRD_PARTY_NOTICES.md"
       - ".github/workflows/ios-ci.yml"
   push:
-    branches: [ main, master, ios ]
+    branches: [ ios ]
     paths:
       - "ios/**"
-      - "app/src/main/java/com/porarri/yamabikochat/data/remote/ProviderCatalog.kt"
-      - "app/src/main/assets/pi-runtime/**"
-      - "scripts/bootstrap-pi-runtime-android.sh"
-      - "scripts/check-opencode-go-contract.py"
-      - "scripts/check-pcc-contract.py"
+      - "scripts/check-*.py"
+      - "third_party/**"
+      - "THIRD_PARTY_NOTICES.md"
       - ".github/workflows/ios-ci.yml"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build_test:
@@ -71,11 +67,10 @@ jobs:
           cd ios
           ./bootstrap.sh
 
-      - name: Verify OpenCode Go API contract and Pi bundle
+      - name: Verify provider contracts and Pi bundle
         run: |
-          python3 scripts/check-opencode-go-contract.py
-          python3 scripts/check-pcc-contract.py
-          git diff --exit-code -- ios/PiRuntime/bundle/main.js app/src/main/assets/pi-runtime/main.js
+          npm run check:contracts --prefix ios/PiRuntime
+          git diff --exit-code -- ios/PiRuntime/bundle/main.js
           (cd ios/PiRuntime && npm test)
           python3 -m unittest ios/PythonTests/test_yamabiko_runtime.py
           for test_script in ios/scripts/test-*.sh; do
@@ -88,7 +83,7 @@ jobs:
           xcodebuild \
             -project YamabikoChat.xcodeproj \
             -scheme YamabikoChat \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination 'platform=iOS Simulator,name=iPhone 18 Pro,OS=27.0' \
             CODE_SIGNING_ALLOWED=NO \
             ASSETCATALOG_COMPILER_APPICON_NAME= \
             test

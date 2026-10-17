@@ -6,7 +6,7 @@ This file lists third-party software that is bundled, restored at build time, or
 
 Production npm packages pulled in by the Pi Agent runtime are listed in [third_party/npm-licenses.md](third_party/npm-licenses.md).
 
-## Shared / vendored
+## Runtime and vendored assets
 
 | Component | Version / pin | SPDX | Use | Source |
 | --- | --- | --- | --- | --- |
@@ -16,40 +16,13 @@ Production npm packages pulled in by the Pi Agent runtime are listed in [third_p
 | `@earendil-works/pi-ai` | 1.0.2 | MIT | Pi Agent runtime | https://www.npmjs.com/package/@earendil-works/pi-ai |
 | `pi-grok` | 0.10.1 (`8b304e65c088f84ccb932959d97739245fe47d97`) | MIT | SuperGrok / xAI helper | https://github.com/stnly/pi-grok |
 | `typebox` | 1.3.27 | MIT | Pi runtime schemas | https://www.npmjs.com/package/typebox |
-| NodeMobile / nodejs-mobile | 24.18.0-0 | Node.js composite (see file) | Embedded Node.js (`libnode.so` / XCFramework) | https://github.com/gmaclennan/nodejs-mobile (Node.js terms: https://github.com/JaneaSystems/nodejs-mobile) |
+| NodeMobile / nodejs-mobile | 24.18.0-0 | Node.js composite (see file) | Embedded Node.js (XCFramework) | https://github.com/gmaclennan/nodejs-mobile (Node.js terms: https://github.com/JaneaSystems/nodejs-mobile) |
 
 `markdown-renderer.js` in the MathJax resource folders is original YamabikoChat code (MIT).
 
 MathJax 3 does not ship a `NOTICE` file. Its Apache-2.0 license text is also bundled next to the MathJax assets.
 
 Mermaid's MIT license text is bundled next to the Mermaid browser asset.
-
-## Android libraries
-
-AndroidX, Jetpack Compose, Material, Kotlin, kotlinx libraries, and Google desugar libraries used by this app are licensed under Apache-2.0.
-
-Named non-AndroidX dependencies:
-
-| Component | Version | SPDX | Source |
-| --- | --- | --- | --- |
-| Markwon (`io.noties.markwon:*`) | 4.6.2 | Apache-2.0 | https://github.com/noties/Markwon |
-| AndroidSVG | 1.4 | Apache-2.0 | https://github.com/BigBadaboom/androidsvg |
-| SnakeYAML Engine | 3.0.1 | Apache-2.0 | https://bitbucket.org/snakeyaml/snakeyaml-engine |
-| Retrofit | 2.9.0 | Apache-2.0 | https://github.com/square/retrofit |
-| OkHttp | 4.12.0 | Apache-2.0 | https://github.com/square/okhttp |
-| Gson (via Retrofit converter) | (Retrofit 2.9.0) | Apache-2.0 | https://github.com/google/gson |
-| retrofit2-kotlinx-serialization-converter | 1.0.0 | Apache-2.0 | https://github.com/JakeWharton/retrofit2-kotlinx-serialization-converter |
-| JNA | 5.19.1 (Android AAR) | Apache-2.0 (elected; dual-licensed Apache-2.0 OR LGPL-2.1+) | https://github.com/java-native-access/jna |
-| Android libc++ shared runtime | NDK r27, Google revision `77eba0d553f8f58557f99fa98f327eb5f46e0c8c` | Apache-2.0 WITH LLVM-exception and legacy notices | https://android.googlesource.com/toolchain/prebuilts/ndk/r27/ |
-
-Android bundles `libc++_shared.so` for NodeMobile. The bootstrap verifies the
-official Google binaries against per-ABI SHA-256 checksums. License terms are
-preserved in [third_party/android-libcxx/LICENSE.txt](third_party/android-libcxx/LICENSE.txt)
-and included in the Android in-app license viewer.
-
-JNA is dual-licensed. YamabikoChat uses JNA under **Apache License 2.0**, not LGPL.
-
-Release APKs exclude duplicate `META-INF/AL2.0` and `META-INF/LGPL2.1` files to avoid merge conflicts. License notices for those libraries are provided here and in the in-app open-source licenses screen instead.
 
 ## iOS libraries
 
