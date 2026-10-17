@@ -4,6 +4,69 @@ import XCTest
 
 final class ChatPerformancePolicyTests: XCTestCase {
     @MainActor
+    func testInlineCitationsAndImagesReuseConfirmedMarkdown() {
+        let parser = NativeMarkdownIncrementalParser()
+        let prefix = (1...40).map { "本文\($0) [出典](https://example.com/\($0)) と ![図](https://example.com/image.png)。\n\n" }.joined()
+        var fullParseBytes = 0
+        for frame in 1...30 {
+            let source = prefix + String(repeating: "追記。", count: frame)
+            fullParseBytes += source.utf8.count
+            XCTAssertEqual(parser.streamingBlocks(for: source), NativeMarkdownParser.parse(source, rendersMath: false))
+        }
+        XCTAssertLessThan(parser.parsedUTF8ByteCount, fullParseBytes / 10)
+    }
+
+    @MainActor
+    func testLateReferenceDefinitionsUpdateEarlierLinksAtEveryBoundary() {
+        let prefix = "導入 [参照][source] と [source]、![画像][source]。\n\n中間の段落。\n\n次の段落。\n\n"
+        let definitions = [
+            "[source]: https://example.com \"出典\"",
+            "[source]:\n  <https://example.com>\n  \"出典\"",
+            "> [source]: https://example.com",
+            "- [source]: https://example.com",
+            "[other]: https://example.org\n\n[source]: https://example.com",
+            "[sour\\]ce]: https://example.com",
+            "[source]: https://example.com\r\n\r\n末尾。"
+        ]
+        for definition in definitions {
+            let parser = NativeMarkdownIncrementalParser()
+            var source = prefix
+            _ = parser.streamingBlocks(for: source)
+            for character in definition {
+                source.append(character)
+                XCTAssertEqual(parser.streamingBlocks(for: source), NativeMarkdownParser.parse(source, rendersMath: false), source)
+            }
+            // Replacements must clear both the full-document flag and the
+            // cross-delta closing-label state, including byte-distinct Unicode.
+            for replacement in ["[source]", "別の本文：é\n\n続き。", "別の本文：e\u{301}\n\n続き。", prefix] {
+                XCTAssertEqual(parser.streamingBlocks(for: replacement), NativeMarkdownParser.parse(replacement, rendersMath: false))
+            }
+        }
+    }
+
+    @MainActor
+    func testStreamingLinksArraysAndSplitReferenceMarkersMatchFullParse() {
+        let fixtures = [
+            "[出典](https://example.com)\n\n次。\n\n末尾。",
+            "[まだ未定義]\n\n次。\n\n末尾。\n\n[まだ未定義]: https://example.com",
+            "![図](https://example.com/a.png)\n\n次。\n\n末尾。",
+            "[foo][bar]\n\n次。\n\n末尾。\n\n[bar]: /url",
+            "[source] と [other]\n\n次。\n\n末尾。\n\n[source]: /a\n\n[other]: /b",
+            "```python\nitems = [1, 2, 3]\nresult = items[0:2]\n```\n\n次。\n\n末尾。",
+            "| 列 | 出典 |\n| --- | --- |\n| 値 | [source] |\n\n次。\n\n末尾。\n\n[source]: /url",
+            "[a\\]b]\n\n次。\n\n末尾。\n\n[a\\]b]: /url"
+        ]
+        for fixture in fixtures {
+            let parser = NativeMarkdownIncrementalParser()
+            var partial = ""
+            for character in fixture {
+                partial.append(character)
+                XCTAssertEqual(parser.streamingBlocks(for: partial), NativeMarkdownParser.parse(partial, rendersMath: false), partial)
+            }
+        }
+    }
+
+    @MainActor
     func testLongResponseStreamingParsePerformance() {
         let prefix = String(repeating: "## 見出し\n\n本文には **強調** と `code` を含みます。\n\n", count: 100)
         let frames = (1...30).map { prefix + String(repeating: "追記する本文。", count: $0) }

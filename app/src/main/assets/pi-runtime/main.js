@@ -63458,7 +63458,7 @@ var require_dist3 = __commonJS({
     };
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Agent = void 0;
-    var net = __importStar(__require("net"));
+    var net2 = __importStar(__require("net"));
     var http4 = __importStar(__require("http"));
     var https_1 = __require("https");
     __exportStar(require_helpers(), exports);
@@ -63498,7 +63498,7 @@ var require_dist3 = __commonJS({
         if (!this.sockets[name]) {
           this.sockets[name] = [];
         }
-        const fakeSocket = new net.Socket({ writable: false });
+        const fakeSocket = new net2.Socket({ writable: false });
         this.sockets[name].push(fakeSocket);
         this.totalSocketCount++;
         return fakeSocket;
@@ -63710,7 +63710,7 @@ var require_dist4 = __commonJS({
     };
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.HttpsProxyAgent = void 0;
-    var net = __importStar(__require("net"));
+    var net2 = __importStar(__require("net"));
     var tls = __importStar(__require("tls"));
     var assert_1 = __importDefault(__require("assert"));
     var debug_1 = __importDefault(require_src());
@@ -63719,7 +63719,7 @@ var require_dist4 = __commonJS({
     var parse_proxy_response_1 = require_parse_proxy_response();
     var debug = (0, debug_1.default)("https-proxy-agent");
     var setServernameFromNonIpHost = (options) => {
-      if (options.servername === void 0 && options.host && !net.isIP(options.host)) {
+      if (options.servername === void 0 && options.host && !net2.isIP(options.host)) {
         return {
           ...options,
           servername: options.host
@@ -63759,10 +63759,10 @@ var require_dist4 = __commonJS({
           socket = tls.connect(setServernameFromNonIpHost(this.connectOpts));
         } else {
           debug("Creating `net.Socket`: %o", this.connectOpts);
-          socket = net.connect(this.connectOpts);
+          socket = net2.connect(this.connectOpts);
         }
         const headers = typeof this.proxyHeaders === "function" ? this.proxyHeaders() : { ...this.proxyHeaders };
-        const host = net.isIPv6(opts.host) ? `[${opts.host}]` : opts.host;
+        const host = net2.isIPv6(opts.host) ? `[${opts.host}]` : opts.host;
         let payload = `CONNECT ${host}:${opts.port} HTTP/1.1\r
 `;
         if (proxy.username || proxy.password) {
@@ -63795,7 +63795,7 @@ var require_dist4 = __commonJS({
           return socket;
         }
         socket.destroy();
-        const fakeSocket = new net.Socket({ writable: false });
+        const fakeSocket = new net2.Socket({ writable: false });
         fakeSocket.readable = true;
         req.once("socket", (s2) => {
           debug("Replaying proxy buffer for failed request");
@@ -82741,7 +82741,7 @@ var require_websocket = __commonJS({
     var EventEmitter = __require("events");
     var https2 = __require("https");
     var http4 = __require("http");
-    var net = __require("net");
+    var net2 = __require("net");
     var tls = __require("tls");
     var { randomBytes: randomBytes5, createHash: createHash5 } = __require("crypto");
     var { Duplex, Readable: Readable2 } = __require("stream");
@@ -83485,12 +83485,12 @@ var require_websocket = __commonJS({
     }
     function netConnect(options) {
       options.path = options.socketPath;
-      return net.connect(options);
+      return net2.connect(options);
     }
     function tlsConnect(options) {
       options.path = void 0;
       if (!options.servername && options.servername !== "") {
-        options.servername = net.isIP(options.host) ? "" : options.host;
+        options.servername = net2.isIP(options.host) ? "" : options.host;
       }
       return tls.connect(options);
     }
@@ -140108,7 +140108,7 @@ var require_util3 = __commonJS({
     var { kDestroyed, kBodyUsed, kListeners, kBody } = require_symbols();
     var { IncomingMessage } = __require("node:http");
     var stream12 = __require("node:stream");
-    var net = __require("node:net");
+    var net2 = __require("node:net");
     var { stringify: stringify3 } = __require("node:querystring");
     var { EventEmitter: EE, addAbortListener: addAbortListenerNative } = __require("node:events");
     var timers = require_timers();
@@ -140247,7 +140247,7 @@ var require_util3 = __commonJS({
       }
       assert(typeof host === "string");
       const servername = getHostname(host);
-      if (net.isIP(servername)) {
+      if (net2.isIP(servername)) {
         return "";
       }
       return servername;
@@ -141870,7 +141870,7 @@ var require_dispatcher_base = __commonJS({
 var require_connect = __commonJS({
   "node_modules/undici/lib/core/connect.js"(exports, module) {
     "use strict";
-    var net = __require("node:net");
+    var net2 = __require("node:net");
     var assert = __require("node:assert");
     var util2 = require_util3();
     var { InvalidArgumentError, ConnectTimeoutError } = require_errors2();
@@ -141961,7 +141961,7 @@ var require_connect = __commonJS({
             port: port2,
             host: hostname
           };
-          const family = net.isIP(hostname);
+          const family = net2.isIP(hostname);
           if (family !== 0 && servername && servername !== hostname) {
             connectOptions.host = servername;
             connectOptions.lookup = (_hostname, lookupOptions, cb) => {
@@ -141972,7 +141972,7 @@ var require_connect = __commonJS({
               }
             };
           }
-          socket = net.connect(connectOptions);
+          socket = net2.connect(connectOptions);
           if (useH2c === true) {
             socket.alpnProtocol = "h2";
           }
@@ -148191,7 +148191,7 @@ var require_client = __commonJS({
   "node_modules/undici/lib/dispatcher/client.js"(exports, module) {
     "use strict";
     var assert = __require("node:assert");
-    var net = __require("node:net");
+    var net2 = __require("node:net");
     var http4 = __require("node:http");
     var util2 = require_util3();
     var { ClientStats } = require_stats();
@@ -148361,7 +148361,7 @@ var require_client = __commonJS({
         if (maxRequestsPerClient != null && (!Number.isInteger(maxRequestsPerClient) || maxRequestsPerClient < 0)) {
           throw new InvalidArgumentError("maxRequestsPerClient must be a positive number");
         }
-        if (localAddress != null && (typeof localAddress !== "string" || net.isIP(localAddress) === 0)) {
+        if (localAddress != null && (typeof localAddress !== "string" || net2.isIP(localAddress) === 0)) {
           throw new InvalidArgumentError("localAddress must be valid string IP address");
         }
         if (maxResponseSize != null && (!Number.isInteger(maxResponseSize) || maxResponseSize < -1)) {
@@ -148579,7 +148579,7 @@ var require_client = __commonJS({
         const idx = hostname.indexOf("]");
         assert(idx !== -1);
         const ip = hostname.substring(1, idx);
-        assert(net.isIPv6(ip));
+        assert(net2.isIPv6(ip));
         hostname = ip;
       }
       client[kConnecting] = true;
@@ -149673,10 +149673,10 @@ var require_socks5_utils = __commonJS({
   "node_modules/undici/lib/core/socks5-utils.js"(exports, module) {
     "use strict";
     var { Buffer: Buffer4 } = __require("node:buffer");
-    var net = __require("node:net");
+    var net2 = __require("node:net");
     var { InvalidArgumentError } = require_errors2();
     function parseAddress(address) {
-      if (net.isIPv4(address)) {
+      if (net2.isIPv4(address)) {
         const parts = address.split(".").map(Number);
         return {
           type: 1,
@@ -149684,7 +149684,7 @@ var require_socks5_utils = __commonJS({
           buffer: Buffer4.from(parts)
         };
       }
-      if (net.isIPv6(address)) {
+      if (net2.isIPv6(address)) {
         return {
           type: 4,
           // IPv6
@@ -149707,7 +149707,7 @@ var require_socks5_utils = __commonJS({
       if (address.includes(".")) {
         const lastColonIndex = address.lastIndexOf(":");
         const ipv4Part = address.slice(lastColonIndex + 1);
-        if (net.isIPv4(ipv4Part)) {
+        if (net2.isIPv4(ipv4Part)) {
           const octets = ipv4Part.split(".").map(Number);
           const high = (octets[0] << 8 | octets[1]).toString(16);
           const low = (octets[2] << 8 | octets[3]).toString(16);
@@ -181215,6 +181215,7 @@ import http3 from "node:http";
 
 // src/runtime-lifecycle.js
 import fs from "node:fs";
+import net from "node:net";
 import readline from "node:readline";
 import { once } from "node:events";
 function createRuntimeListener({ createServer: createServer6, port: port2, log }) {
@@ -181284,7 +181285,10 @@ function installRuntimeLifecycle(options) {
     throw new Error("Invalid runtime lifecycle pipe descriptors");
   }
   const commands = readline.createInterface({
-    input: fs.createReadStream(null, { fd: commandFD, autoClose: false }),
+    // A native pipe must use libuv's event-loop pipe handle. A filesystem
+    // ReadStream holds a threadpool worker in read() for the entire idle period,
+    // starving other work and blocking libuv cleanup when XCTest exits.
+    input: new net.Socket({ fd: commandFD, readable: true, writable: false }),
     crlfDelay: Infinity
   });
   commands.on("line", (line) => {

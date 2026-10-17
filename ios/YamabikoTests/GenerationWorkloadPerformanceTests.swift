@@ -5,6 +5,27 @@ import XCTest
 /// Keep the same fixtures and optimization level for both measurements.
 final class GenerationWorkloadPerformanceTests: XCTestCase {
     @MainActor
+    func testLinkedChatAnswerStreamingPerformance() {
+        // A typical sourced answer: short sections, inline citations and a code
+        // example, arriving in 180 presentation frames (about 6 seconds at 30Hz).
+        let source = (1...16).map { index in
+            "## 手順\(index)\n\n日本語の **説明** と [出典\(index)](https://example.com/docs/\(index))。計算結果を確認してから次に進みます。\n\n"
+        }.joined() + "```python\nvalues = [12, 18, 30]\nprint(sum(values))\n```\n\n合計は **60** です。"
+        let characters = Array(source)
+        let frames = (1...180).map { String(characters.prefix((characters.count * $0 + 179) / 180)) }
+        let item = ChatTimelineItem.message(FullChatMessage(
+            id: 1, message: ChatMessage(id: 1, conversationId: 1, role: "model", text: ""),
+            thinkingStream: nil, variants: []))
+        measure {
+            let row = ChatTimelineRowStore(item: item)
+            for frame in frames {
+                row.apply(snapshot: ChatStreamingSnapshot(targetId: 1, text: frame, thinking: "", isFinal: false))
+            }
+            XCTAssertEqual(row.streamingMarkdownBlocks, NativeMarkdownParser.parse(source, rendersMath: false))
+        }
+    }
+
+    @MainActor
     func testCachedAnswerRefreshesForCompletionReplacementAndNextStream() {
         let row = ChatTimelineRowStore(item: .message(FullChatMessage(
             id: 1, message: ChatMessage(id: 1, conversationId: 1, role: "model", text: ""),

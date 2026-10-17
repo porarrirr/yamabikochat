@@ -374,8 +374,7 @@ enum ChatResponseContentPresentation {
 
 enum ChatArtifactPresentation {
     static func items(from text: String, isStreaming: Bool) -> [ChatArtifactPresentationItem] {
-        let isChatError = UserFacingErrorFormatter.looksLikeChatError(text)
-        guard !isStreaming, !isChatError else { return [] }
+        guard !isStreaming, !UserFacingErrorFormatter.looksLikeChatError(text) else { return [] }
 
         let svg = SvgCodeExtractor.extract(from: text).map {
             ChatArtifactPresentationItem(

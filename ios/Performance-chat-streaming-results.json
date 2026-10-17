@@ -1,0 +1,269 @@
+{
+  "date": "2026-10-17",
+  "baselineCommit": "1649ab20a19de0f188c9756ab6b75d21ea3f26d6",
+  "environment": {
+    "device": "iPhone 18 Pro Simulator (dedicated yamabiko-generation-performance)",
+    "os": "iOS 27.0 (24A434)",
+    "xcode": "27.0 (27A266a)",
+    "configuration": "Debug, SWIFT_OPTIMIZATION_LEVEL=-O, arm64",
+    "parallelTesting": false
+  },
+  "method": "Fixed identical workloads. Wall time; median of all 10 samples, including the first. GenUI validation uses 5 alternating paired samples. Provider and network time are excluded from fixed workloads and separately recorded in liveRuns. Timeline measurements cover row preparation, not UIKit/GPU rendering or actor scheduling delay.",
+  "workloads": {
+    "before": {
+      "testLinkedChatAnswerStreamingPerformance": {
+        "samplesMs": [
+          108.887,
+          101.945,
+          101.441,
+          101.726,
+          101.99900000000001,
+          101.52799999999999,
+          100.443,
+          100.443,
+          100.902,
+          100.44200000000001
+        ],
+        "medianMs": 101.4845
+      },
+      "testThinkingAndToolUpdatesWithLongAnswerPerformance": {
+        "samplesMs": [
+          8.167,
+          8.62,
+          7.794,
+          7.8759999999999994,
+          7.978000000000001,
+          7.637,
+          7.927999999999999,
+          7.714,
+          7.586,
+          7.571
+        ],
+        "medianMs": 7.834999999999999
+      },
+      "testWebArticleExtractionPerformance": {
+        "samplesMs": [
+          7.8549999999999995,
+          5.789,
+          5.77,
+          5.801,
+          5.871,
+          5.798,
+          5.817,
+          5.78,
+          5.742,
+          5.744
+        ],
+        "medianMs": 5.7935
+      },
+      "genui_validation_uncoalesced": {
+        "samplesMs": [
+          1244.927125,
+          1344.392958,
+          1211.119625,
+          1218.6267090000001,
+          1177.602875
+        ],
+        "medianMs": 1218.6267090000001
+      },
+      "genui_validation_coalesced": {
+        "samplesMs": [
+          262.744625,
+          248.130375,
+          242.314333,
+          229.732834,
+          239.665709
+        ],
+        "medianMs": 242.314333
+      },
+      "python_workspace_cells": {
+        "samplesMs": [
+          16.598375,
+          17.308875,
+          19.41925,
+          14.769042,
+          18.860666,
+          18.790583,
+          18.048125,
+          15.094833,
+          19.11525,
+          14.996958
+        ],
+        "medianMs": 17.6785
+      }
+    },
+    "after": {
+      "testLinkedChatAnswerStreamingPerformance": {
+        "samplesMs": [
+          20.268,
+          10.352,
+          10.319,
+          10.378,
+          10.42,
+          10.325000000000001,
+          10.328000000000001,
+          10.477,
+          10.766,
+          10.697
+        ],
+        "medianMs": 10.399000000000001
+      },
+      "testThinkingAndToolUpdatesWithLongAnswerPerformance": {
+        "samplesMs": [
+          16.136999999999997,
+          6.961,
+          7.097,
+          6.477,
+          7.197,
+          6.495,
+          7.095,
+          6.361999999999999,
+          6.388,
+          6.321000000000001
+        ],
+        "medianMs": 6.728
+      },
+      "testWebArticleExtractionPerformance": {
+        "samplesMs": [
+          14.693,
+          6.154,
+          5.906,
+          5.774,
+          5.718,
+          5.741,
+          5.704,
+          5.726,
+          5.893,
+          5.784
+        ],
+        "medianMs": 5.779
+      },
+      "genui_validation_uncoalesced": {
+        "samplesMs": [
+          1045.565375,
+          1039.853416,
+          1030.822459,
+          1100.445584,
+          1087.753666
+        ],
+        "medianMs": 1045.565375
+      },
+      "genui_validation_coalesced": {
+        "samplesMs": [
+          212.02075,
+          206.206958,
+          213.8795,
+          214.129083,
+          222.1465
+        ],
+        "medianMs": 213.8795
+      },
+      "python_workspace_cells": {
+        "samplesMs": [
+          13.480417,
+          12.145166,
+          12.205458,
+          12.19825,
+          12.454291,
+          12.230292,
+          12.437875,
+          14.209625,
+          12.223791,
+          12.953083
+        ],
+        "medianMs": 12.3340835
+      }
+    }
+  },
+  "primaryComparison": {
+    "workload": "testLinkedChatAnswerStreamingPerformance",
+    "beforeMedianMs": 101.4845,
+    "afterMedianMs": 10.399000000000001,
+    "reductionPercent": 89.75311500771053
+  },
+  "genuiBridgeVerification": {
+    "workload": "400 GenUI argument deltas, 50/s, serialize + decode",
+    "before": {
+      "medianMs": 2.109916999999996,
+      "bytes": 1227252,
+      "snapshots": 400
+    },
+    "after": {
+      "medianMs": 0.4422090000000054,
+      "bytes": 249127,
+      "snapshots": 81
+    },
+    "reductionPercent": 79.04140305045145
+  },
+  "liveRuns": [
+    {
+      "provider": "openrouter",
+      "model": "cohere/north-mini-code:free",
+      "events": [
+        "LIVE_TEXT provider=openrouter model=cohere/north-mini-code:free turn=1 total_ms=4578.441833 first_delta_ms=1406.113292 deltas=285",
+        "LIVE_PRESENTATION provider=openrouter scenario=text-turn-1 updates=287 total_ms=112.04171 p95_ms=1.070416 max_ms=3.991166",
+        "LIVE_TEXT provider=openrouter model=cohere/north-mini-code:free turn=2 total_ms=1060.182375 first_delta_ms=584.933959 deltas=86",
+        "LIVE_PRESENTATION provider=openrouter scenario=text-turn-2 updates=88 total_ms=34.434712000000005 p95_ms=0.727125 max_ms=1.040625",
+        "LIVE_TOOL python_execute elapsed_ms=1717.9236660000001",
+        "LIVE_TOOL fetch_url elapsed_ms=3291.685291",
+        "LIVE_TOOL genui elapsed_ms=4518.522625",
+        "LIVE_RESULT provider=openrouter model=cohere/north-mini-code:free total_ms=6369.637208 first_delta_ms=5707.818541 text_characters=151 previews=3 tools=[\"python_execute\", \"fetch_url\", \"genui\"]",
+        "LIVE_PRESENTATION provider=openrouter scenario=tools updates=77 total_ms=12.656872999999996 p95_ms=0.299083 max_ms=3.523125"
+      ]
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-2.5-flash-lite",
+      "events": [
+        "LIVE_TEXT provider=google model=gemini-2.5-flash-lite turn=1 total_ms=3765.232125 first_delta_ms=2490.659083 deltas=9",
+        "LIVE_PRESENTATION provider=google scenario=text-turn-1 updates=11 total_ms=8.34008 p95_ms=3.505916 max_ms=3.505916",
+        "LIVE_TEXT provider=google model=gemini-2.5-flash-lite turn=2 total_ms=1453.078041 first_delta_ms=969.715333 deltas=5",
+        "LIVE_PRESENTATION provider=google scenario=text-turn-2 updates=7 total_ms=1.7453750000000001 p95_ms=0.821458 max_ms=0.821458",
+        "LIVE_TOOL python_execute elapsed_ms=1957.497959",
+        "LIVE_TOOL fetch_url elapsed_ms=2342.195584",
+        "LIVE_TOOL genui elapsed_ms=2353.961917",
+        "LIVE_RESULT provider=google model=gemini-2.5-flash-lite total_ms=3236.569334 first_delta_ms=-1.0 text_characters=0 previews=2 tools=[\"python_execute\", \"fetch_url\", \"genui\"]",
+        "LIVE_PRESENTATION provider=google scenario=tools updates=11 total_ms=4.651125 p95_ms=2.743917 max_ms=2.743917"
+      ]
+    }
+  ],
+  "runtimePipeRegression": {
+    "originalReader": "With UV_THREADPOOL_SIZE=1, idle lifecycle pipe blocks filesystem work and times out after 3000ms. Reproduced using an isolated copy of the original reader.",
+    "optimizedReader": "Filesystem work completes while the lifecycle pipe remains open and idle. Native simulator test processes exit normally without manual termination.",
+    "modelExecution": "Uses the same standard Pi Agents path; no provider, model resolution, endpoint, protocol or failover changes."
+  },
+  "validation": {
+    "iosUnitTests": {
+      "passed": 236,
+      "failed": 0
+    },
+    "piRuntimeTests": {
+      "passed": 94,
+      "failed": 0
+    },
+    "genuiRuntimeTests": {
+      "passed": 57,
+      "failed": 0
+    },
+    "pythonHarnessTests": {
+      "passed": 10,
+      "failed": 0
+    },
+    "liveProviderTests": {
+      "passed": 4,
+      "failed": 0
+    },
+    "iosBuildForTesting": "succeeded",
+    "iosUITests": {
+      "passed": 1,
+      "failed": 0,
+      "scenario": "GenUI input change, learning-card flip, dark mode"
+    }
+  },
+  "limitations": [
+    "No claim of 70% end-to-end generation latency improvement.",
+    "Simulator results do not establish physical-device FPS, battery, or thermal improvements.",
+    "Live scenarios are single observations per provider after the final change; provider latency and model-selected tool calls vary.",
+    "The final Gemini tool scenario returned a valid GenUI document with no final explanatory text. Text streaming and the follow-up turn were verified separately."
+  ]
+}

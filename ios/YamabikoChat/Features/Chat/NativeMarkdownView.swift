@@ -363,6 +363,7 @@ final class NativeMarkdownIncrementalParser {
     private var lastSource: String?
     private var lastBlocks: [NativeMarkdownBlock] = []
     private var needsDocumentContext = false
+    private var awaitingReferenceColon = false
 
     #if DEBUG
     private(set) var parsedUTF8ByteCount = 0
@@ -382,13 +383,24 @@ final class NativeMarkdownIncrementalParser {
             }
         }
 
-        // Reference definitions can change links in any earlier paragraph. Keep
-        // those documents in one parse context, including incomplete definitions.
-        // This conservative check also covers image and escaped bracket syntax.
-        // An append cannot remove an earlier bracket. Inspect only the new bytes
-        // instead of rescanning the entire answer on every presentation frame.
+        // Only a reference DEFINITION can change links in confirmed paragraphs.
+        // Inline citations, images and array syntax do not require a full parse.
+        // Detect a closing label followed by ':' conservatively (even in code),
+        // retaining the state across deltas. When a late definition arrives,
+        // discard the confirmed prefix before parsing so earlier links resolve.
         let appendedStart = source.utf8.index(source.utf8.startIndex, offsetBy: appendedUTF8Offset)
-        needsDocumentContext = needsDocumentContext || source.utf8[appendedStart...].contains(0x5B)
+        if !needsDocumentContext {
+            for byte in source.utf8[appendedStart...] {
+                if byte == 0x3A, awaitingReferenceColon {
+                    needsDocumentContext = true
+                    break
+                }
+                if byte == 0x5D { awaitingReferenceColon = true }
+                else if byte != 0x20 && byte != 0x09 && byte != 0x0A && byte != 0x0D {
+                    awaitingReferenceColon = false
+                }
+            }
+        }
         if needsDocumentContext {
             stablePrefixUTF8Count = 0
             stableBlocks = []
@@ -429,6 +441,7 @@ final class NativeMarkdownIncrementalParser {
         lastSource = nil
         lastBlocks = []
         needsDocumentContext = false
+        awaitingReferenceColon = false
     }
 
     private static func hasExactUTF8Prefix(_ prefix: String, in source: String) -> Bool {

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import net from "node:net";
 import readline from "node:readline";
 import { once } from "node:events";
 
@@ -73,7 +74,10 @@ export function installRuntimeLifecycle(options) {
     throw new Error("Invalid runtime lifecycle pipe descriptors");
   }
   const commands = readline.createInterface({
-    input: fs.createReadStream(null, { fd: commandFD, autoClose: false }),
+    // A native pipe must use libuv's event-loop pipe handle. A filesystem
+    // ReadStream holds a threadpool worker in read() for the entire idle period,
+    // starving other work and blocking libuv cleanup when XCTest exits.
+    input: new net.Socket({ fd: commandFD, readable: true, writable: false }),
     crlfDelay: Infinity
   });
   commands.on("line", (line) => {

@@ -112,3 +112,35 @@ test("native pipe drives bundled runtime through repeated suspension with unchan
     await assert.rejects(get(port), { code: "ECONNREFUSED" });
   }
 });
+
+test("idle native lifecycle pipe leaves the libuv worker available for file work", async (t) => {
+  const port = await availablePort();
+  const source = new URL("../src/runtime-lifecycle.js", import.meta.url).href;
+  const script = `
+    import http from 'node:http';
+    import { readFile } from 'node:fs/promises';
+    import { installRuntimeLifecycle } from ${JSON.stringify(source)};
+    installRuntimeLifecycle({ port: ${port}, commandFD: 3, acknowledgementFD: 4, log() {},
+      createServer: () => http.createServer(async (_req, res) => {
+        try { await readFile(new URL(${JSON.stringify(source)})); res.end('file work completed'); }
+        catch (error) { res.writeHead(500); res.end(error.message); }
+      })
+    });
+  `;
+  const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
+    env: { ...process.env, UV_THREADPOOL_SIZE: "1" },
+    stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"]
+  });
+  let errors = "";
+  child.stderr.on("data", chunk => { errors += chunk; });
+  const acknowledgements = readline.createInterface({ input: child.stdio[4] });
+  t.after(() => { acknowledgements.close(); child.kill(); });
+  const ready = once(acknowledgements, "line", { signal: AbortSignal.timeout(5000) });
+  child.stdio[3].write("resume:1\n");
+  assert.deepEqual(await ready, ["1"], errors);
+  // Keep the command pipe open with no new command. Filesystem work must still
+  // complete with only one libuv worker; the old blocking pipe read starved it.
+  const response = await fetch(`http://127.0.0.1:${port}`, { signal: AbortSignal.timeout(3000) });
+  assert.equal(response.status, 200, errors);
+  assert.equal(await response.text(), "file work completed");
+});
