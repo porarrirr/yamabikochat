@@ -1218,6 +1218,16 @@ private struct ChatMessageRow: View {
         ChatResponseContentPresentation.segments(from: responseText, artifacts: artifacts)
     }
 
+    private var generationStatus: String {
+        if toolSteps.contains(where: { $0.status == .running }) {
+            return L10n.text("ツールを実行中…")
+        }
+        if thinkingText != nil {
+            return L10n.text("思考中…")
+        }
+        return L10n.text("応答を待っています…")
+    }
+
     var body: some View {
         Group {
             if isUser {
@@ -1332,6 +1342,19 @@ private struct ChatMessageRow: View {
                                 artifactView(artifact)
                             }
                         }
+                    }
+
+                    if isStreaming, responseText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text(generationStatus)
+                                .font(.subheadline)
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 8)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("chat-response-progress")
                     }
 
                     if let fusionTrace, !isStreaming {

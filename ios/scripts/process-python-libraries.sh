@@ -31,6 +31,10 @@ cache_arguments=(
   --input "$PROJECT_DIR/scripts/align-python-framework-minimum-os.sh"
   --input "$cache_tool"
 )
+if [[ "$CONFIGURATION" == "Debug" ]]; then
+  # Local incremental builds only: Release continues to read every byte.
+  cache_arguments+=(--reuse-file-digests)
+fi
 for setting in EFFECTIVE_PLATFORM_NAME ARCHS CONFIGURATION SDKROOT SDK_VERSION \
   XCODE_VERSION_ACTUAL IPHONEOS_DEPLOYMENT_TARGET PRODUCT_BUNDLE_IDENTIFIER \
   EXPANDED_CODE_SIGN_IDENTITY EXPANDED_CODE_SIGN_IDENTITY_NAME OTHER_CODE_SIGN_FLAGS \

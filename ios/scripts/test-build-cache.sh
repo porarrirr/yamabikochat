@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 script_directory="$(cd "$(dirname "$0")" && pwd)"
-python3 - "$script_directory" <<'PY'
+for cache_mode in strict reuse; do
+python3 - "$script_directory" "$cache_mode" <<'PY'
 import os
 from pathlib import Path
+import runpy
 import subprocess
 import sys
 import tempfile
+from unittest.mock import patch
 
 cache = Path(sys.argv[1]) / "build-cache.py"
 with tempfile.TemporaryDirectory() as directory:
@@ -21,6 +24,8 @@ with tempfile.TemporaryDirectory() as directory:
     product.write_text("product")
     stamp = root / "stamp.json"
     arguments = [str(stamp), "--input", str(source), "--output", str(output), "--value", "sdk=27"]
+    if sys.argv[2] == "reuse":
+        arguments += ["--reuse-file-digests"]
 
     def run(action, extra=()):
         return subprocess.run([sys.executable, str(cache), action, *arguments, *extra], check=False).returncode
@@ -38,7 +43,9 @@ with tempfile.TemporaryDirectory() as directory:
     os.utime(module, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
     assert run("check") == 1
     assert run("save") == 0
+    product_stat = product.stat()
     product.write_text("corrupt")
+    os.utime(product, ns=(product_stat.st_atime_ns, product_stat.st_mtime_ns))
     assert run("check") == 1
     assert run("save") == 0
     product.unlink()
@@ -64,5 +71,21 @@ with tempfile.TemporaryDirectory() as directory:
     assert run("check") == 1
     arguments += ["--input", str(root / "missing")]
     assert run("save") == 1
+
+    fingerprint = runpy.run_path(str(cache))["fingerprint"]
+    files = {}
+    expected = fingerprint([source], current_files=files)
+    # A warm check must avoid opening unchanged file contents.
+    with patch.object(Path, "open", side_effect=AssertionError("Unexpected content read")):
+        assert fingerprint([source], previous_files=files) == expected
+    # Strict checks always read contents, even with a warm metadata cache.
+    with patch.object(Path, "open", side_effect=AssertionError("Strict content read")):
+        try:
+            fingerprint([source])
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError("Strict check reused file metadata")
 print("Build cache invalidation tests passed")
 PY
+done

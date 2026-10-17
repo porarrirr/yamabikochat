@@ -394,6 +394,66 @@ final class ChatRepositorySyncTests: XCTestCase {
         XCTAssertEqual(totals.totalCostUsd, 0.42, accuracy: 0.000_001)
     }
 
+    func testWaitingSnapshotArrivesBeforeProviderStartsAndCompletes() async throws {
+        for streamingEnabled in [true, false] {
+            let snapshots = WaitingSnapshotCollector()
+            let runtime = PiStreamSpy { _, _ in
+                XCTAssertEqual(snapshots.values.count, 1)
+                XCTAssertEqual(snapshots.values.first?.text, "")
+                XCTAssertEqual(snapshots.values.first?.isFinal, false)
+                return [.textDelta("answer"), .completed(ProviderResponse(text: "answer"))]
+            }
+            let fixture = try makeFixture(runtime: runtime) { settings in
+                settings.apiProvider = "OPENROUTER"
+                settings.defaultModel = "openai/gpt-4o-mini"
+                settings.providerDefaultModelsJSON = #"{"OPENROUTER":"openai/gpt-4o-mini"}"#
+                settings.isStreamingEnabled = streamingEnabled
+            }
+            try fixture.credentials.setCredential("openrouter-key", for: .openRouter)
+            let conversationID = try fixture.repository.createConversation(title: "New Chat")
+            let result = try await fixture.repository.sendMessage(
+                conversationId: conversationID,
+                text: "hello",
+                attachments: [],
+                onStreamingSnapshot: { snapshots.append($0) }
+            )
+            XCTAssertEqual(snapshots.values.first?.targetId, result.assistantMessageId)
+            XCTAssertEqual(snapshots.values.last?.isFinal, true)
+            XCTAssertEqual(snapshots.values.last?.text, "answer")
+        }
+    }
+
+    func testWaitingSnapshotEndsWhenProviderFailsToStart() async throws {
+        for streamingEnabled in [true, false] {
+            let snapshots = WaitingSnapshotCollector()
+            let runtime = PiStreamSpy { _, _ in
+                XCTAssertEqual(snapshots.values.first?.isFinal, false)
+                throw ProviderClientError.parseFailure("connection failed")
+            }
+            let fixture = try makeFixture(runtime: runtime) { settings in
+                settings.apiProvider = "OPENROUTER"
+                settings.defaultModel = "openai/gpt-4o-mini"
+                settings.providerDefaultModelsJSON = #"{"OPENROUTER":"openai/gpt-4o-mini"}"#
+                settings.isStreamingEnabled = streamingEnabled
+            }
+            try fixture.credentials.setCredential("openrouter-key", for: .openRouter)
+            let conversationID = try fixture.repository.createConversation(title: "New Chat")
+            do {
+                _ = try await fixture.repository.sendMessage(
+                    conversationId: conversationID,
+                    text: "hello",
+                    attachments: [],
+                    onStreamingSnapshot: { snapshots.append($0) }
+                )
+                XCTFail("Expected connection failure")
+            } catch {
+                XCTAssertEqual(snapshots.values.last?.isFinal, true)
+                XCTAssertTrue(UserFacingErrorFormatter.looksLikeChatError(snapshots.values.last?.text ?? ""))
+            }
+        }
+    }
+
+
     func testOpenCodeGoNormalStreamUsesSinglePiRun() async throws {
         let runtime = PiStreamSpy { _, _ in
             [
@@ -481,5 +541,18 @@ final class ChatRepositorySyncTests: XCTestCase {
     private static func decodeAttachments(_ rawValue: String) -> [String] {
         guard let data = rawValue.data(using: .utf8) else { return [] }
         return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+    }
+}
+
+private final class WaitingSnapshotCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [ChatStreamingSnapshot] = []
+
+    func append(_ snapshot: ChatStreamingSnapshot) {
+        lock.withLock { storage.append(snapshot) }
+    }
+
+    var values: [ChatStreamingSnapshot] {
+        lock.withLock { storage }
     }
 }

@@ -802,6 +802,19 @@ struct ChatScreen: View {
                 .padding(.horizontal, 10)
             }
 
+            if viewModel.isSending, viewModel.fusionProgress == nil, viewModel.fusionAnalyzingStatus == nil {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.mini)
+                    Text(L10n.text("生成中・停止ボタンで中断できます"))
+                        .font(.caption)
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("chat-generation-status")
+            }
+
             if let fusionProgress = viewModel.fusionProgress {
                 FusionProgressView(snapshot: fusionProgress)
             } else if let fusionStatus = viewModel.fusionAnalyzingStatus {

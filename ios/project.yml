@@ -21,6 +21,20 @@ settings:
   SWIFT_VERSION: 5.10
   MARKETING_VERSION: 1.0.0
   CURRENT_PROJECT_VERSION: 7
+aggregateTargets:
+  YamabikoBuildMetadata:
+    buildScripts:
+      - name: Prepare shared build versions
+        script: scripts/prepare-build-info.sh
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/scripts/prepare-build-info.sh
+          - $(SRCROOT)/scripts/set-build-version.sh
+          - $(SRCROOT)/YamabikoChat/App/Resources/Info.plist
+          - $(SRCROOT)/YamabikoShareExtension/Info.plist
+        outputFiles:
+          - $(BUILD_DIR)/YamabikoBuildMetadata/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/App-Info.plist
+          - $(BUILD_DIR)/YamabikoBuildMetadata/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/ShareExtension-Info.plist
 targets:
   YamabikoChat:
     type: application
@@ -31,15 +45,18 @@ targets:
         excludes:
           - Extensions
           - Python/Resources
+          - App/Resources/Info.plist
       - path: PiRuntime/bundle/main.js
         buildPhase: resources
       - path: YamabikoChat/Python/Resources/yamabiko_runtime.py
         buildPhase: resources
     resources:
       - path: YamabikoChat/App/Resources
+        excludes:
+          - Info.plist
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.porarri.yamabikochat.ios
-      INFOPLIST_FILE: YamabikoChat/App/Resources/Info.plist
+      INFOPLIST_FILE: $(BUILD_DIR)/YamabikoBuildMetadata/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/App-Info.plist
       DEVELOPMENT_LANGUAGE: en
       CODE_SIGN_ENTITLEMENTS: YamabikoChat/App/Resources/YamabikoChat.entitlements
       CODE_SIGN_STYLE: Automatic
@@ -54,6 +71,7 @@ targets:
         - "$(SRCROOT)/YamabikoChat/Features/Tools/GenUI/NativeCEL/quickjs"
       EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
     dependencies:
+      - target: YamabikoBuildMetadata
       - package: GRDB
       - package: Yams
       - package: ZIPFoundation
@@ -67,14 +85,28 @@ targets:
     preBuildScripts:
       - name: Copy legal notices
         script: scripts/copy-legal-notices.sh
-        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/scripts/copy-legal-notices.sh
+          - $(SRCROOT)/../LICENSE
+          - $(SRCROOT)/../THIRD_PARTY_NOTICES.md
+          - $(SRCROOT)/../third_party/nodejs-mobile/LICENSE
+          - $(SRCROOT)/../third_party/npm-licenses.md
+          - $(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses
+          - $(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notonastaliqurdu.txt
+          - $(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notosansarabic.txt
+          - $(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notosansbengali.txt
+          - $(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notosansdevanagari.txt
+          - $(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notosansjp.txt
+          - $(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notosanssc.txt
+        outputFiles:
+          - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/LICENSE.txt
+          - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/THIRD_PARTY_NOTICES.md
+          - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/NODEJS_LICENSE.txt
+          - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/npm-licenses.md
+          - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/NOTO_FONTS_LICENSES.txt
     postCompileScripts:
       - name: Process Python libraries
         script: scripts/process-python-libraries.sh
-        basedOnDependencyAnalysis: false
-    postBuildScripts:
-      - name: Set build-time version
-        script: scripts/set-build-version.sh read
         basedOnDependencyAnalysis: false
   YamabikoShareExtension:
     type: app-extension
@@ -82,6 +114,8 @@ targets:
     deploymentTarget: 17.0
     sources:
       - path: YamabikoShareExtension
+        excludes:
+          - Info.plist
       - path: YamabikoChat/Shared
         includes:
           - AppConstants.swift
@@ -96,15 +130,13 @@ targets:
       - path: YamabikoShareExtension/zh-Hans.lproj
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.porarri.yamabikochat.ios.share
-      INFOPLIST_FILE: YamabikoShareExtension/Info.plist
+      INFOPLIST_FILE: $(BUILD_DIR)/YamabikoBuildMetadata/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/ShareExtension-Info.plist
       CODE_SIGN_ENTITLEMENTS: YamabikoShareExtension/YamabikoShareExtension.entitlements
       CODE_SIGN_STYLE: Automatic
       DEVELOPMENT_TEAM: 77V64TWCFD
       APPLICATION_EXTENSION_API_ONLY: YES
-    postBuildScripts:
-      - name: Set build-time version
-        script: scripts/set-build-version.sh write
-        basedOnDependencyAnalysis: false
+    dependencies:
+      - target: YamabikoBuildMetadata
   YamabikoTests:
     type: bundle.unit-test
     platform: iOS

@@ -595,3 +595,9 @@
 
 "GenUI（インタラクティブUI）" = "GenUI (interface interactive)";
 "Geminiツールとクライアント側Web検索・ローカルPython実行・GenUIは同時に有効化できません。" = "Les outils Gemini ne peuvent pas être activés en même temps que la recherche Web côté client, Python local ou GenUI.";
+
+/* Chat generation progress */
+"応答を待っています…" = "En attente d’une réponse…";
+"生成中・停止ボタンで中断できます" = "Génération · Touchez Arrêter pour annuler";
+"ツールを実行中…" = "Exécution des outils…";
+"思考中…" = "Réflexion en cours…";

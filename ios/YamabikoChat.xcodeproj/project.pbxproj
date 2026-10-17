@@ -6,6 +6,22 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXAggregateTarget section */
+		A8A9083C98DC38207FBD6D6C /* YamabikoBuildMetadata */ = {
+			isa = PBXAggregateTarget;
+			buildConfigurationList = BF95600D69E3FC5DD8B4E06E /* Build configuration list for PBXAggregateTarget "YamabikoBuildMetadata" */;
+			buildPhases = (
+				433E96A106EF0E3418710A38 /* Prepare shared build versions */,
+			);
+			dependencies = (
+			);
+			name = YamabikoBuildMetadata;
+			packageProductDependencies = (
+			);
+			productName = YamabikoBuildMetadata;
+		};
+/* End PBXAggregateTarget section */
+
 /* Begin PBXBuildFile section */
 		0059E7825461EE27D25050CE /* ClinePassModelCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAFDD85248048C3957F322E9 /* ClinePassModelCatalogTests.swift */; };
 		03532725DD2B55909FB526E9 /* ChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEE1F7C1D36E90F3AC5C8C74 /* ChatScreen.swift */; };
@@ -345,12 +361,26 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		305779E9F91C3B5315FC0D6A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 74EC9AC2FED264F13D5283FF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A8A9083C98DC38207FBD6D6C;
+			remoteInfo = YamabikoBuildMetadata;
+		};
 		65D0B85F6D39DEF1FD0AB9A6 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 74EC9AC2FED264F13D5283FF /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 8902EC7AC6F4A0CE2556BA5E;
 			remoteInfo = YamabikoChat;
+		};
+		7D1AD23DC32194920E916432 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 74EC9AC2FED264F13D5283FF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A8A9083C98DC38207FBD6D6C;
+			remoteInfo = YamabikoBuildMetadata;
 		};
 		94F6A2F0177D37222ECB6B82 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -503,7 +533,6 @@
 		47940928BCA24ACBA0867772 /* ConversationListViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListViewModelTests.swift; sourceTree = "<group>"; };
 		481CA1A12D0312351DABD396 /* ChatMessageThinking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageThinking.swift; sourceTree = "<group>"; };
 		4896B18C01C7F5988DF13828 /* DualModeSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualModeSettingsSection.swift; sourceTree = "<group>"; };
-		4A4A275C5AEA3B4900440F13 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		4AD5BFFA938AB90157FB5E3F /* BackgroundTaskGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundTaskGuard.swift; sourceTree = "<group>"; };
 		4B52DE6355353E52D1B7576D /* AppSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsTests.swift; sourceTree = "<group>"; };
 		4C3E31EC64A965F4851AE80A /* OpenRouterModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterModelTests.swift; sourceTree = "<group>"; };
@@ -562,7 +591,6 @@
 		7077367178B8D0B29308F183 /* ModelsDevCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsDevCatalogTests.swift; sourceTree = "<group>"; };
 		71DC31B6287DA4F2579AD285 /* RunAndSaveYamabikoModelIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunAndSaveYamabikoModelIntent.swift; sourceTree = "<group>"; };
 		71E38ECB6FCC39AB8BABE949 /* RecentPhotoLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentPhotoLibrary.swift; sourceTree = "<group>"; };
-		734FF62164855B98A15ECE62 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		73CDE4D52940A2094E3D289B /* ProviderStreamEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderStreamEventTests.swift; sourceTree = "<group>"; };
 		73FDBC095F0EFC6358C60DC3 /* DuckDuckGoHTMLEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuckDuckGoHTMLEngine.swift; sourceTree = "<group>"; };
 		74634042F6B9EDD034B7F7A3 /* ChatErrorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatErrorViews.swift; sourceTree = "<group>"; };
@@ -913,7 +941,6 @@
 			isa = PBXGroup;
 			children = (
 				2559F5CDE33F1C6606E7C9D0 /* Assets.xcassets */,
-				734FF62164855B98A15ECE62 /* Info.plist */,
 				FDFB9E3E80818460DA5CDA5A /* PrivacyInfo.xcprivacy */,
 				8A8AAD9C976A025E68725D68 /* YamabikoChat.entitlements */,
 				5D0C50BBE1903E52FE38E397 /* genui */,
@@ -1139,7 +1166,6 @@
 		9B051ED65D3F969F44C66D30 /* YamabikoShareExtension */ = {
 			isa = PBXGroup;
 			children = (
-				4A4A275C5AEA3B4900440F13 /* Info.plist */,
 				7CB427210D89DB2E91F4D299 /* PrivacyInfo.xcprivacy */,
 				318066D32E1B6D4FC5C655AD /* ShareExtensionItemLoader.swift */,
 				5581D0A0748802A7F82685FC /* ShareExtensionStrings.swift */,
@@ -1539,11 +1565,11 @@
 				3BCE835AB20804B68F2E52B2 /* Frameworks */,
 				0C36FB9B5070980568CD2F2D /* Embed Foundation Extensions */,
 				92C35E807F78E1DCFFEB34D6 /* Embed Frameworks */,
-				5C713D9F3A7E66A6C621949D /* Set build-time version */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				2B1448FBEBD087F6052497E2 /* PBXTargetDependency */,
 				12A281E2162EF747957914BC /* PBXTargetDependency */,
 			);
 			name = YamabikoChat;
@@ -1563,11 +1589,11 @@
 			buildPhases = (
 				29481B9788D9648575EFD4A8 /* Sources */,
 				E5BC591AAF3BFD376B3724A9 /* Resources */,
-				ACFBF6EED8FCE02D4D0D2712 /* Set build-time version */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				8C8925E7C87B67F057871AB7 /* PBXTargetDependency */,
 			);
 			name = YamabikoShareExtension;
 			packageProductDependencies = (
@@ -1644,6 +1670,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				A8A9083C98DC38207FBD6D6C /* YamabikoBuildMetadata */,
 				8902EC7AC6F4A0CE2556BA5E /* YamabikoChat */,
 				A0482E078852897EA805FB9B /* YamabikoShareExtension */,
 				23541159A695777175C2A5A4 /* YamabikoTests */,
@@ -1722,24 +1749,40 @@
 		};
 		09CBC926CE89485964094EBD /* Copy legal notices */ = {
 			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"$(SRCROOT)/scripts/copy-legal-notices.sh",
+				"$(SRCROOT)/../LICENSE",
+				"$(SRCROOT)/../THIRD_PARTY_NOTICES.md",
+				"$(SRCROOT)/../third_party/nodejs-mobile/LICENSE",
+				"$(SRCROOT)/../third_party/npm-licenses.md",
+				"$(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses",
+				"$(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notonastaliqurdu.txt",
+				"$(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notosansarabic.txt",
+				"$(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notosansbengali.txt",
+				"$(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notosansdevanagari.txt",
+				"$(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notosansjp.txt",
+				"$(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notosanssc.txt",
 			);
 			name = "Copy legal notices";
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/LICENSE.txt",
+				"$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/THIRD_PARTY_NOTICES.md",
+				"$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/NODEJS_LICENSE.txt",
+				"$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/npm-licenses.md",
+				"$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/NOTO_FONTS_LICENSES.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "scripts/copy-legal-notices.sh";
 		};
-		5C713D9F3A7E66A6C621949D /* Set build-time version */ = {
+		433E96A106EF0E3418710A38 /* Prepare shared build versions */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -1748,34 +1791,21 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"$(SRCROOT)/scripts/prepare-build-info.sh",
+				"$(SRCROOT)/scripts/set-build-version.sh",
+				"$(SRCROOT)/YamabikoChat/App/Resources/Info.plist",
+				"$(SRCROOT)/YamabikoShareExtension/Info.plist",
 			);
-			name = "Set build-time version";
+			name = "Prepare shared build versions";
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(BUILD_DIR)/YamabikoBuildMetadata/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/App-Info.plist",
+				"$(BUILD_DIR)/YamabikoBuildMetadata/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/ShareExtension-Info.plist",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "scripts/set-build-version.sh read";
-		};
-		ACFBF6EED8FCE02D4D0D2712 /* Set build-time version */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Set build-time version";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "scripts/set-build-version.sh write";
+			shellScript = "scripts/prepare-build-info.sh";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -2118,10 +2148,20 @@
 			target = A0482E078852897EA805FB9B /* YamabikoShareExtension */;
 			targetProxy = FF7A4648CBC79E41B650C78D /* PBXContainerItemProxy */;
 		};
+		2B1448FBEBD087F6052497E2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A8A9083C98DC38207FBD6D6C /* YamabikoBuildMetadata */;
+			targetProxy = 7D1AD23DC32194920E916432 /* PBXContainerItemProxy */;
+		};
 		650F87474FDC5F99A76BA115 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 8902EC7AC6F4A0CE2556BA5E /* YamabikoChat */;
 			targetProxy = 65D0B85F6D39DEF1FD0AB9A6 /* PBXContainerItemProxy */;
+		};
+		8C8925E7C87B67F057871AB7 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A8A9083C98DC38207FBD6D6C /* YamabikoBuildMetadata */;
+			targetProxy = 305779E9F91C3B5315FC0D6A /* PBXContainerItemProxy */;
 		};
 		9EE36695410FF58BB941ACDE /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -2170,6 +2210,12 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		1175F749FC90C8C0400247F4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Debug;
+		};
 		36150C4E471BB78C2B35E9E0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2242,7 +2288,7 @@
 				CODE_SIGN_ENTITLEMENTS = YamabikoShareExtension/YamabikoShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 77V64TWCFD;
-				INFOPLIST_FILE = YamabikoShareExtension/Info.plist;
+				INFOPLIST_FILE = "$(BUILD_DIR)/YamabikoBuildMetadata/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/ShareExtension-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2262,7 +2308,7 @@
 				CODE_SIGN_ENTITLEMENTS = YamabikoShareExtension/YamabikoShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 77V64TWCFD;
-				INFOPLIST_FILE = YamabikoShareExtension/Info.plist;
+				INFOPLIST_FILE = "$(BUILD_DIR)/YamabikoBuildMetadata/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/ShareExtension-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2296,7 +2342,7 @@
 					"$(BUILT_PRODUCTS_DIR)/Python.framework/Headers",
 					"$(SRCROOT)/YamabikoChat/Features/Tools/GenUI/NativeCEL/quickjs",
 				);
-				INFOPLIST_FILE = YamabikoChat/App/Resources/Info.plist;
+				INFOPLIST_FILE = "$(BUILD_DIR)/YamabikoBuildMetadata/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/App-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2385,6 +2431,12 @@
 			};
 			name = Release;
 		};
+		CFF7506FC3011F0B04610A2D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Release;
+		};
 		DBC97E1FA6D6EF0EE6BE15CF /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2464,7 +2516,7 @@
 					"$(BUILT_PRODUCTS_DIR)/Python.framework/Headers",
 					"$(SRCROOT)/YamabikoChat/Features/Tools/GenUI/NativeCEL/quickjs",
 				);
-				INFOPLIST_FILE = YamabikoChat/App/Resources/Info.plist;
+				INFOPLIST_FILE = "$(BUILD_DIR)/YamabikoBuildMetadata/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/App-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2512,6 +2564,15 @@
 			buildConfigurations = (
 				7B0FA77E768B864766B5819D /* Debug */,
 				7F38724227B350F585F93DBD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		BF95600D69E3FC5DD8B4E06E /* Build configuration list for PBXAggregateTarget "YamabikoBuildMetadata" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1175F749FC90C8C0400247F4 /* Debug */,
+				CFF7506FC3011F0B04610A2D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

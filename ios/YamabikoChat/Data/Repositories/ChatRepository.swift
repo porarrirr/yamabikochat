@@ -1150,15 +1150,31 @@ final class ChatRepository {
         onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)?,
         onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)?
     ) async throws -> ProviderResponse {
+        // Mark the row as active before awaiting connection/auth or the first
+        // provider event, including when streaming is disabled.
+        let target = ChatStreamSessionTarget(conversations: conversations, kind: persistenceKind)
+        onStreamingSnapshot?(ChatStreamingSnapshot(
+            targetId: target.snapshotMessageId,
+            text: "",
+            thinking: "",
+            toolActivity: nil,
+            isFinal: false
+        ))
         if streamEnabled {
             let stream: AsyncThrowingStream<ProviderStreamEvent, Error>
             do {
                 stream = try await providers.stream(request: request, providerID: provider)
             } catch {
                 if persistResults {
-                    let target = ChatStreamSessionTarget(conversations: conversations, kind: persistenceKind)
                     try? target.writeErrorPlaceholder(error)
                 }
+                onStreamingSnapshot?(ChatStreamingSnapshot(
+                    targetId: target.snapshotMessageId,
+                    text: UserFacingErrorFormatter.placeholder(for: error),
+                    thinking: "",
+                    toolActivity: nil,
+                    isFinal: true
+                ))
                 throw error
             }
             let session = try await ChatStreamSession.run(
@@ -1184,11 +1200,29 @@ final class ChatRepository {
             return response
         }
 
-        let response = try await providers.generate(request: request, providerID: provider)
-        if persistResults {
-            try persistProviderResponse(response, kind: persistenceKind)
+        do {
+            let response = try await providers.generate(request: request, providerID: provider)
+            if persistResults {
+                try persistProviderResponse(response, kind: persistenceKind)
+            }
+            onStreamingSnapshot?(ChatStreamingSnapshot(
+                targetId: target.snapshotMessageId,
+                text: response.text,
+                thinking: response.reasoningSummary ?? "",
+                toolActivity: response.toolActivity,
+                isFinal: true
+            ))
+            return response
+        } catch {
+            onStreamingSnapshot?(ChatStreamingSnapshot(
+                targetId: target.snapshotMessageId,
+                text: UserFacingErrorFormatter.placeholder(for: error),
+                thinking: "",
+                toolActivity: nil,
+                isFinal: true
+            ))
+            throw error
         }
-        return response
     }
 
     private func persistProviderResponse(

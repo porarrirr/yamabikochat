@@ -23,10 +23,39 @@ deleting `Vendor/*cache.json` and `Vendor/PythonSitePackages/.*-cache.json`
 forces preparation on the next bootstrap.
 
 The Python build phase checks input and product hashes on every build, then
-reuses unchanged packaging. SDK, architecture, deployment target, and signing
+reuses unchanged packaging. Debug builds reuse individual file hashes when
+device, inode, size, permissions, nanosecond modification time and change time
+match; file additions, deletions and same-size edits with restored modification
+times still invalidate the cache. Release builds always read all file contents.
+SDK, architecture, deployment target, and signing
 settings participate in the cache key. Its stamp lives in Xcode's target
 temporary directory, so a clean build repackages Python. Release builds reuse
 existing framework dSYMs only when their UUIDs match the binaries.
+
+Xcode's `YamabikoBuildMetadata` dependency generates the app and share extension
+Info.plist inputs together before processing or embedding. Both use the same
+build timestamp; unchanged versions preserve the generated files' timestamps.
+Source Info.plist files remain the templates. Legal notices declare their inputs
+and outputs so Xcode skips unchanged copies.
+
+To measure local incremental builds, run the same command twice after the first
+successful build (without cleaning DerivedData):
+
+```bash
+cd ios
+xcodebuild -project YamabikoChat.xcodeproj -scheme YamabikoChat \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro,OS=27.0' \
+  -showBuildTimingSummary build
+```
+
+Measured on 2026-10-17 with Xcode 27.0, iPhone 18 Pro Simulator and signing
+disabled: two unchanged builds averaged 4.74 seconds before and 3.14 seconds
+after these changes (34% less wall time). Each configuration was warmed first,
+using the same dedicated DerivedData directory; clean builds and the initial
+cache migration are excluded. Clean and Release build times were not compared.
+
+See Apple's [incremental build guidance](https://developer.apple.com/documentation/xcode/improving-the-speed-of-incremental-builds)
+for script dependency declarations.
 
 ## Targets
 - `YamabikoChat`: iOS app (SwiftUI)

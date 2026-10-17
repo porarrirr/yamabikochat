@@ -66,4 +66,15 @@ test ! -f "$TARGET_TEMP_DIR/python-packaging-cache.json"
 printf 'font\n' > "$fonts/test.ttf"
 "$phase" > "$root/recover.log"
 [[ "$(wc -l < "$PACKAGING_LOG" | tr -d ' ')" == 14 ]]
+# Release must not reuse file metadata to validate packaged contents.
+export CONFIGURATION=Release
+"$phase" > "$root/release.log"
+[[ "$(wc -l < "$PACKAGING_LOG" | tr -d ' ')" == 16 ]]
+python3 - "$TARGET_TEMP_DIR/python-packaging-cache.json" <<'PY'
+import json
+import sys
+assert "files" not in json.load(open(sys.argv[1]))
+PY
+"$phase" > "$root/release-reuse.log"
+[[ "$(wc -l < "$PACKAGING_LOG" | tr -d ' ')" == 16 ]]
 echo "Python packaging cache integration tests passed"
