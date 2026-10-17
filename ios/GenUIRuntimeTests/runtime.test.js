@@ -1,4 +1,4 @@
-/* Run with node --test ios/GenUIRuntimeTests/runtime.test.js; no npm install. */
+/* Run npm ci --prefix ios/GenUIRuntimeTests, then node --test ios/GenUIRuntimeTests/runtime.test.js. */
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -10,46 +10,36 @@ const referenceAssets = ['reference-components.js','reference-tokens.js','refere
 for (const asset of referenceAssets) require(path.join(path.dirname(runtimePath), asset));
 const api = require(runtimePath);
 
-class Element {
-    constructor(tag) {
-        this.tagName = tag.toUpperCase(); this.children = []; this.dataset = {};
-        this.attributes = {}; this.listeners = {}; this._text = '';
-        this.style = {setProperty(key, value) {this[key] = value;}};
-        this.classList = {add() {}};
-    }
-    set textContent(value) {this._text = String(value); this.children = [];}
-    get textContent() {return this._text + this.children.map(c => c.textContent ?? String(c)).join('');}
-    append(...children) {children.forEach(child=>{if(child&&typeof child==='object')child.parentElement=this;this.children.push(child);});}
-    replaceWith(replacement) {const parent=this.parentElement;const index=parent.children.indexOf(this);parent.children[index]=replacement;replacement.parentElement=parent;}
-    replaceChildren(...children) {this._text = ''; this.children = children;}
-    setAttribute(key, value) {this.attributes[key] = String(value);}
-    addEventListener(type, handler) {(this.listeners[type] ||= []).push(handler);}
-    fire(type, isTrusted = false) {(this.listeners[type] || []).forEach(fn => fn({isTrusted, preventDefault() {}}));}
-    querySelectorAll(selector) {
-        const tags = selector.split(',').map(s => s.toUpperCase());
-        return this.children.flatMap(c => c instanceof Element ? [...(tags.includes(c.tagName) ? [c] : []), ...c.querySelectorAll(selector)] : []);
-    }
-    getBoundingClientRect() {return {x:0, y:0, width:320, height:180};}
-}
-
-function mount(config, width = 320, saved = {}) {
-    const root = new Element('main'), html = new Element('html'), messages = [], tasks = [];
-    html.scrollHeight = 300;
-    const documentListeners={};
-    const document = {
-        addEventListener(type,listener){(documentListeners[type] ||= []).push(listener);},
-        fire(type,target){(documentListeners[type]||[]).forEach(listener=>listener({type,target,isTrusted:true}));},
-        readyState:'complete', body:root, documentElement:html,
-        getElementById() {return root;},
-        createElement:tag => new Element(tag), createElementNS:(_, tag) => new Element(tag),
-        createTextNode:text => ({textContent:String(text)}), createDocumentFragment:() => new Element('fragment')
+// Use a DOM implementation so tests exercise the same reconciliation branch as WebKit.
+const {parseHTML} = require('linkedom');
+function mount(config, width = 320, saved = {}, setup = () => {}) {
+    const {document, window} = parseHTML('<!doctype html><html><head></head><body><main id="root"></main></body></html>');
+    const root = document.getElementById('root'), messages = [], tasks = [];
+    Object.defineProperty(document, 'readyState', {value:'complete'});
+    // Layout and trusted native input events have no implementation in a Node DOM.
+    window.Element.prototype.getBoundingClientRect = () => ({x:0,y:0,left:0,top:0,right:320,bottom:180,width:320,height:180});
+    window.Element.prototype.fire = function(type, isTrusted = false, props = {}) {
+        const event = new window.Event(type, {bubbles:true});
+        Object.defineProperty(event, 'isTrusted', {value:isTrusted});
+        Object.assign(event, props);
+        this.dispatchEvent(event);
     };
-    const context = {document, __GENUI_DOCUMENT__:config, __GENUI_SAVED_STATE__:saved, innerWidth:width, URL, atob, btoa, TextDecoder, Uint8Array,
+    document.fire = (type,target,props) => target.fire(type,true,props);
+    for (const key of ['min','max','step']) Object.defineProperty(window.HTMLInputElement.prototype,key,{
+        configurable:true,get(){return this.getAttribute(key)||'';},set(value){this.setAttribute(key,String(value));}
+    });
+    Object.defineProperty(window.HTMLSelectElement.prototype,'value',{
+        configurable:true,
+        get(){return this.querySelector('option[selected]')?.value ?? this.querySelector('option')?.value ?? '';},
+        set(value){for(const option of this.querySelectorAll('option'))option.selected=option.value===String(value);}
+    });
+    const context = {document, Element:window.Element, __GENUI_DOCUMENT__:config, __GENUI_SAVED_STATE__:saved, innerWidth:width, URL, atob, btoa, TextDecoder, Uint8Array,
         webkit:{messageHandlers:{genui:{postMessage(value) {messages.push(value);}}}},
         addEventListener() {}, requestAnimationFrame:fn => fn(),
         ResizeObserver:class {observe() {}}, queueMicrotask:fn => tasks.push(fn),
         Date, setInterval:() => 1, clearInterval() {}, setTimeout:fn => tasks.push(fn), clearTimeout() {}};
     context.window = context;
+    setup(context);
     for (const asset of referenceAssets) vm.runInNewContext(fs.readFileSync(path.join(path.dirname(runtimePath),asset),'utf8'), context);
     vm.runInNewContext(fs.readFileSync(runtimePath, 'utf8'), context);
     return {root, messages, context, flush() {let limit=50; while(tasks.length && limit--) tasks.shift()(); assert.ok(limit>0, 'bounded render queue');}};
@@ -180,11 +170,11 @@ test('charts render negative bars and numeric scatter positions from supplied da
     const bar = mount({ui:api.h('Chart', {content:{chartType:'bar', data:[{x:'a', value:-3},{x:'b', value:4}]}})});
     const marks = bar.root.querySelectorAll('rect');
     assert.equal(marks.length, 2);
-    assert.ok(marks.every(mark => Number(mark.attributes.height)>0));
+    assert.ok(marks.every(mark => Number(mark.getAttribute('height'))>0));
     const scatter = mount({ui:api.h('Chart', {content:{chartType:'scatter', xKey:'x', data:[{x:0,value:1},{x:1,value:2},{x:100,value:3}]}})});
     const circles = scatter.root.querySelectorAll('circle');
     assert.equal(circles.length, 3);
-    const xs = circles.map(c => Number(c.attributes.cx));
+    const xs = circles.map(c => Number(c.getAttribute('cx')));
     assert.ok(xs[1]-xs[0] < (xs[2]-xs[1])/10, 'scatter must preserve numeric x spacing');
 });
 
@@ -223,7 +213,7 @@ test('range pointer drag retains the input node while shared content updates', (
     assert.equal(app.root.querySelectorAll('input')[1],slider);
     assert.ok(app.root.textContent.includes('Amount 55'));
     app.context.document.fire('pointerup',slider);app.flush();
-    assert.notEqual(app.root.querySelectorAll('input')[1],slider,'drag ends and normal reconciliation resumes');
+    assert.equal(app.root.querySelectorAll('input')[1],slider,'the same range also survives release');
 });
 
 test('JavaScript arithmetic Math functions and custom calculations use the code renderer', () => {
@@ -241,7 +231,7 @@ test('JavaScript arithmetic Math functions and custom calculations use the code 
             DIL.h('button', {label: 'Double', onClick: () => setPrincipal(p => p * 2)}));
     `;
     const app = mount({code});
-    const numbers = () => JSON.parse(app.root.children[0].children[0].children[0].textContent);
+    const numbers = () => JSON.parse(app.root.children[0].children[0].textContent);
     assert.ok(Math.abs(numbers()[0] - 1610.464869) < 0.00001);
     assert.deepEqual(numbers().slice(1, 7), [23, 2, 4, 3, 5, 8]);
     assert.ok(Math.abs(numbers()[7] - 121) < 0.00001);
@@ -260,7 +250,7 @@ test('large code trees and local snapshots are not truncated to the previous lim
     let ui = api.h('text', {}, 'Deep leaf');
     for (let i = 0; i < 64; i++) ui = api.h('col', {}, ui);
     const tree = mount({ui:api.h('col', {}, ui, ...Array.from({length:1024}, (_, i) => api.h('text', {}, String(i))))});
-    assert.equal(tree.root.children[0].children[0].children.length, 1025);
+    assert.equal(tree.root.children[0].children.length, 1025);
     assert.ok(tree.root.textContent.includes('Deep leaf'));
     assert.equal(tree.messages.some(m => m.type === 'error'), false);
 });
@@ -269,7 +259,7 @@ test('mobile layouts retain authored spacing and dimensions while preserving inp
     const app = mount({state:{count:0}, ui:api.h('col', {gap:40,padding:24,height:900,minHeight:800,justify:'between'},
         api.h('row', {gap:24}, api.h('label', {}, '50円玉'), api.h('input', {inputType:'number',bind:'count'}), api.h('text', {}, '{{count}}枚')),
         api.h('spacer', {minSize:200}), api.h('Link', {title:'参照',url:'https://example.com'}))});
-    const column = app.root.children[0].children[0];
+    const column = app.root.children[0];
     assert.equal(column.style.gap, '160px');
     assert.equal(column.style.padding, '96px');
     assert.equal(column.style.height, '900px');
@@ -285,9 +275,9 @@ test('mobile layouts retain authored spacing and dimensions while preserving inp
 
 test('desktop authored layout and mobile media or explicit scrolling sizes remain available', () => {
     const ui=api.h('col',{height:900,gap:24},api.h('box',{height:240,scrollable:true}),api.h('AsyncImage',{src:'https://example.com/image.png',height:180}));
-    const desktop=mount({ui},1024).root.children[0].children[0];
+    const desktop=mount({ui},1024).root.children[0];
     assert.equal(desktop.style.height,'900px');assert.equal(desktop.style.gap,'96px');
-    const mobile=mount({ui}).root.children[0].children[0];
+    const mobile=mount({ui}).root.children[0];
     assert.equal(mobile.children[0].style.height,'240px');
     assert.equal(mobile.children[1].style.height,'180px');
 });
@@ -296,8 +286,11 @@ test('neutral interactive panels derive paired metrics from shared slider state'
     const app=mount({title:'比較',code:"const [n,setN]=DIL.useState(4); return DIL.h('card',{},DIL.h('slider',{name:'規模',min:1,max:10,value:n,onChange:setN,marks:[{value:1,label:'小'},{value:10,label:'大'}]}),DIL.h('grid',{columns:2},DIL.h('card',{variant:'metric'},DIL.h('caption',{},'合計'),DIL.h('text',{},n*3)),DIL.h('card',{variant:'metric'},DIL.h('caption',{},'差分'),DIL.h('text',{},n-1))));"});
     assert.ok(app.root.textContent.includes('小大'));
     const slider=app.root.querySelectorAll('input')[0];
-    assert.equal(slider.style['--range-progress'],'33.33333333333333%');
+    const fill = slider.parentElement.children[0].children[0];
+    assert.equal(fill.className, 'genui-slider-fill');
+    assert.equal(fill.style.transform, 'scaleX(0.3333333333333333)');
     slider.value='7';slider.fire('input',true);app.flush();
+    assert.equal(app.root.querySelectorAll('input')[0].parentElement.children[0].children[0].style.transform, 'scaleX(0.6666666666666666)');
     assert.ok(app.root.textContent.includes('合計21'));
     assert.ok(app.root.textContent.includes('差分6'));
     assert.equal(app.messages.some(m=>m.type==='issueNewTurn'||m.type==='error'),false);
@@ -307,8 +300,8 @@ test('icons use bundled stroke geometry and preserve unknown-name fallback', () 
     for(const name of ['arrow-down','refresh','cpu','layers','check']) {
         const app=mount({ui:api.h('icon',{name,size:28,color:'secondary'})});
         const svg=app.root.querySelectorAll('svg')[0];
-        assert.equal(svg.attributes.viewBox,'0 0 24 24');
-        assert.ok(JSON.stringify(svg.attributes).length > 0);
+        assert.equal(svg.getAttribute('viewBox'),'0 0 24 24');
+        assert.ok(svg.attributes.length > 0);
         assert.ok(svg.children.length > 0);
     }
     const unknown=mount({ui:api.h('icon',{name:'unknown'})});assert.equal(unknown.root.textContent,'');assert.ok(unknown.messages.some(message=>message.type==='warning' && message.message.includes('unknown')));
@@ -353,7 +346,7 @@ test('actual flow fixture updates probability, clears stale samples and resets l
     assert.equal(app.root.querySelectorAll('li').length,4);
     assert.ok(app.root.textContent.includes('6.25%'));
     assert.ok(app.root.textContent.includes('16回'));
-    for(const icon of app.root.querySelectorAll('svg')) assert.equal(icon.attributes.viewBox,'0 0 24 24');
+    for(const icon of app.root.querySelectorAll('svg')) assert.equal(icon.getAttribute('viewBox'),'0 0 24 24');
     app.root.querySelectorAll('button')[0].fire('click',true);app.flush();
     assert.ok(app.root.textContent.includes('今回の試行：')||app.root.textContent.includes('4096回で打ち切り'));
     const slider=app.root.querySelectorAll('input')[0];slider.value='8';slider.fire('input',true);app.flush();
@@ -368,7 +361,7 @@ test('actual flow fixture updates probability, clears stale samples and resets l
 test('decorative button icons do not pollute the accessible operation name', () => {
     const app=mount({ui:api.h('button',{},api.h('icon',{name:'refresh'}),'Reset')});
     const button=app.root.querySelectorAll('button')[0];
-    assert.equal(button.children[0].attributes['aria-hidden'],'true');
+    assert.equal(button.children[0].getAttribute('aria-hidden'),'true');
     assert.equal(button.textContent,'Reset');
 });
 
@@ -404,13 +397,13 @@ test('widget aliases resolve through element aliases including pie and image ali
 test('flashcard retains both faces and changes accessibility and saved flip state', () => {
     const app=mount({ui:api.h('flashcard-flip',{front:api.h('text',{},'Question'),back:api.h('text',{},'Answer')})});
     const card=()=>app.root.querySelectorAll('div').find(el=>el.className==='genui-flashcard-flip');
-    assert.ok(card().attributes['aria-label'].includes('Question'));
-    assert.equal(card().children[0].children[1].attributes['aria-hidden'],'true');
+    assert.ok(card().getAttribute('aria-label').includes('Question'));
+    assert.equal(card().children[0].children[1].getAttribute('aria-hidden'),'true');
     card().fire('click',true);app.flush();
-    assert.equal(card().attributes['aria-pressed'],'true');
-    assert.equal(card().children[0].children[0].attributes['aria-hidden'],'true');
-    assert.equal(card().children[0].children[1].attributes['aria-hidden'],'false');
-    app.context.GenUIRuntime.reset();app.flush();assert.equal(card().attributes['aria-pressed'],'false');
+    assert.equal(card().getAttribute('aria-pressed'),'true');
+    assert.equal(card().children[0].children[0].getAttribute('aria-hidden'),'true');
+    assert.equal(card().children[0].children[1].getAttribute('aria-hidden'),'false');
+    app.context.GenUIRuntime.reset();app.flush();assert.equal(card().getAttribute('aria-pressed'),'false');
 });
 
 test('Markdown creates semantic nodes and treats HTML and unsafe links as data', () => {
@@ -481,7 +474,7 @@ test('chart flags, missing samples and explicit Recharts nodes preserve their co
     assert.equal(app.root.querySelectorAll('polyline').length,2,'missing point splits the line');
     assert.equal(app.root.querySelectorAll('line').length,0,'omitted grid is hidden');
     assert.equal(app.root.querySelectorAll('circle').length,2);
-    const mark=app.root.querySelectorAll('circle')[0];assert.equal(mark.attributes.tabindex,'0');mark.fire('click',true);
+    const mark=app.root.querySelectorAll('circle')[0];assert.equal(mark.getAttribute('tabindex'),'0');mark.fire('click',true);
     assert.ok(app.root.textContent.includes('A · Values: 1'));
     for(const bad of [-1,null,'unknown']){
         const invalid=mount({ui:api.h('chart',{alt:'Supplied alternative',content:{chartType:'pie',data:[{name:'A',value:bad},{name:'B',value:2}]}})});
@@ -549,7 +542,7 @@ test('original DigitalTimerWidget renders supplied state and supports pause and 
 
 test('original spacing, palettes, typography and SVGs replace mobile caps and fallback glyphs', () => {
     const app=mount({ui:api.h('col',{gap:20,padding:{x:8,y:2},height:420,justify:'between'},api.h('title',{size:'2xl'},'Heading'),api.h('icon',{name:'reload'}))});
-    const col=app.root.children[0].children[0];
+    const col=app.root.children[0];
     assert.equal(col.style.gap,'80px');assert.equal(col.style.paddingLeft,'32px');
     assert.equal(col.style.height,'420px');assert.equal(col.style.justifyContent,'space-between');
     assert.equal(col.children[0].style.fontSize,'28px');
@@ -582,8 +575,8 @@ test('recovered donut chart contract uses row colors and supplied numeric series
     const app=mount({ui:api.h('pie-chart',{size:244,data:[{label:'A',amount:3,fill:'#123456'},{label:'B',amount:7,fill:'#654321'}],series:[{dataKey:'amount'}],xAxis:'label',innerRadius:'49%'})});
     assert.equal(app.messages.some(message=>message.type==='warning'||message.type==='error'),false);
     const paths=app.root.querySelectorAll('path');assert.equal(paths.length,2);
-    assert.equal(paths[0].attributes.fill,'#123456');
-    assert.equal((paths[0].attributes.d.match(/ A/g)||[]).length,2);
+    assert.equal(paths[0].getAttribute('fill'),'#123456');
+    assert.equal((paths[0].getAttribute('d').match(/ A/g)||[]).length,2);
 });
 
 
@@ -591,7 +584,7 @@ test('incremental document updates preserve edited bindings and canonical widget
     const original={state:{n:1},ui:api.h('input',{bind:'n',inputType:'number'})};
     const app=mount(original);const input=app.root.querySelectorAll('input')[0];input.value='7';input.fire('input',true);app.flush();
     app.context.GenUIRuntime.updateDocument({state:{n:2,extra:9},ui:api.h('col',{},api.h('input',{bind:'n',inputType:'number'}),api.h('text',{},'{{extra}}'))});
-    app.flush();assert.equal(app.root.querySelectorAll('input')[0].value,7);assert.ok(app.root.textContent.includes('9'));
+    app.flush();assert.equal(app.root.querySelectorAll('input')[0].value,'7');assert.ok(app.root.textContent.includes('9'));
     assert.equal(app.context.GenUIRuntime.getSnapshot().bindings.n,7);
 });
 
@@ -631,10 +624,10 @@ test('worktree GenUI diagram renders SVG and keeps worktree edits independent', 
     const swift = fs.readFileSync(path.join(__dirname, '../YamabikoChat/Features/Tools/GenUI/GenUITool.swift'), 'utf8');
     const code = swift.match(/static let worktreeDiagramExample = #"""\n([\s\S]*?)\n    """#/)[1];
     const app = mount({code}, 320);
-    const button = label => app.root.querySelectorAll('button').find(b => (b.attributes['aria-label'] || b.textContent) === label);
+    const button = label => app.root.querySelectorAll('button').find(b => (b.getAttribute('aria-label') || b.textContent) === label);
     const click = label => {assert.ok(button(label), label); button(label).fire('click', true); app.flush();};
-    assert.equal(app.root.querySelectorAll('svg')[0].attributes.viewBox, '0 0 300 60');
-    assert.ok(app.root.querySelectorAll('path').some(p => p.attributes.d === 'M150 0 V20 M50 55 V20 H250 V55 M150 20 V55'));
+    assert.equal(app.root.querySelectorAll('svg')[0].getAttribute('viewBox'), '0 0 300 60');
+    assert.ok(app.root.querySelectorAll('path').some(p => p.getAttribute('d') === 'M150 0 V20 M50 55 V20 H250 V55 M150 20 V55'));
     click('ファイルを編集（デモ）');
     assert.ok(button('project/ · main · 変更あり'));
     click('project-feature/ · feature/login · 変更なし');
@@ -646,14 +639,14 @@ test('worktree GenUI diagram renders SVG and keeps worktree edits independent', 
     assert.ok(button('project-feature/ · feature/login · 変更なし'));
     assert.ok(button('project/ · main · 変更あり'));
     app.root.querySelectorAll('input').find(i => i.value === 'normal').fire('change', true); app.flush();
-    assert.equal(app.root.querySelectorAll('path')[0].attributes.d, 'M150 0 V55');
+    assert.equal(app.root.querySelectorAll('path')[0].getAttribute('d'), 'M150 0 V55');
     assert.equal(app.root.querySelectorAll('select').length, 1);
     app.root.querySelectorAll('input').find(i => i.value === 'worktree').fire('change', true); app.flush();
     assert.ok(button('project/ · main · 変更あり'));
     assert.equal(app.messages.some(m => ['error','issueNewTurn','openUrl'].includes(m.type)), false);
     const saved = app.context.GenUIRuntime.getSnapshot();
     const restored = mount({code}, 768, saved);
-    assert.ok(restored.root.querySelectorAll('button').some(b => b.attributes['aria-label'] === 'project/ · main · 変更あり'));
+    assert.ok(restored.root.querySelectorAll('button').some(b => b.getAttribute('aria-label') === 'project/ · main · 変更あり'));
 });
 
 
@@ -689,18 +682,18 @@ test('advertised powers calculation recomputes result and multiplication includi
 test('plain text line breaks survive across text primitives, bindings and whitespace overrides', () => {
     for (const type of ['text','title','caption','label']) {
         const app=mount({state:{flow:'① 入力\n↓\n② 確認'},ui:api.h(type,{value:'{{flow}}'})});
-        const element=app.root.children[0].children[0];
+        const element=app.root.children[0];
         assert.equal(element.textContent,'① 入力\n↓\n② 確認',type);
         assert.equal(element.style.whiteSpace,'pre-line',type);
     }
     for (const [props,whiteSpace] of [[{preserveWhitespace:true},'pre-wrap'],[{preserveWhitespace:false},'normal'],[{truncate:true},'nowrap']]) {
         const app=mount({ui:api.h('text',props,'one\ntwo')});
-        assert.equal(app.root.children[0].children[0].style.whiteSpace,whiteSpace);
+        assert.equal(app.root.children[0].style.whiteSpace,whiteSpace);
     }
     const markdown=mount({ui:api.h('markdown',{},'one\ntwo')});
-    assert.equal(markdown.root.children[0].children[0].style.whiteSpace,undefined);
+    assert.equal(markdown.root.children[0].style.whiteSpace,undefined);
     const compatible=mount({ui:api.h('text',{},'**one**\ntwo')});
-    assert.equal(compatible.root.children[0].children[0].style.whiteSpace,undefined);
+    assert.equal(compatible.root.children[0].style.whiteSpace,undefined);
 });
 
 
@@ -712,4 +705,77 @@ test('recovered checklist retains line breaks in supplied item text', () => {
     assert.ok(label,'original component must render the supplied text through the shared primitive');
     assert.equal(label.style.whiteSpace,'pre-line');
     assert.equal(app.messages.some(message=>message.type==='error'),false);
+});
+
+test('keyed DOM reconciliation retains and reorders actual input nodes', () => {
+    const app=mount({code:"const [reversed,setReversed]=DIL.useState(false);return DIL.h('col',{},...(reversed?['b','a']:['a','b']).map(id=>DIL.h('input',{key:id,id,value:id})),DIL.h('button',{label:'Reorder',onClick:()=>setReversed(!reversed)}));"});
+    assert.equal(app.root.nodeType,1);
+    const [a,b]=app.root.querySelectorAll('input');
+    app.root.querySelector('button').fire('click',true);app.flush();
+    assert.equal(app.root.querySelectorAll('input')[0],b);
+    assert.equal(app.root.querySelectorAll('input')[1],a);
+    assert.equal(a.isConnected,true);
+});
+
+test('Lottie mounts every replacement in the live DOM and preserves unchanged playback', () => {
+    const mounts=[],destroyed=[];
+    const app=mount({code:"const [n,setN]=DIL.useState(0),[count,setCount]=DIL.useState(0);return DIL.h('col',{},DIL.h('lottie',{data:{w:100,h:100,version:n}}),DIL.h('button',{label:'Change',onClick:()=>setN(n+1)}),DIL.h('button',{label:'Counter '+count,onClick:()=>setCount(count+1)}));"},320,{},context=>{
+        context.lottie={loadAnimation({container,animationData}){
+            const version=animationData.version;
+            mounts.push(container.isConnected);
+            const svg=container.ownerDocument.createElementNS('http://www.w3.org/2000/svg','svg');
+            svg.setAttribute('data-version',String(version));container.append(svg);
+            return {addEventListener(){},setSpeed(){},destroy(){destroyed.push(version);svg.remove();}};
+        }};
+    });
+    const original=app.root.querySelector('.genui-lottie svg');
+    app.root.querySelectorAll('button')[1].fire('click',true);app.flush();
+    assert.equal(app.root.querySelector('.genui-lottie svg'),original);
+    for(let index=0;index<2;index++){app.root.querySelectorAll('button')[0].fire('click',true);app.flush();}
+    assert.deepEqual(mounts,[true,true,true]);
+    assert.deepEqual(destroyed,[0,1]);
+    assert.equal(app.root.querySelector('.genui-lottie svg').getAttribute('data-version'),'2');
+});
+
+test('animation updates cancel the old motion and animate the retained live element', t => {
+    const mounts=[],ends=[];let cancelled=0,prototype,previous;
+    const app=mount({code:"const [n,setN]=DIL.useState(0);return DIL.h('col',{},DIL.h('animate',{enter:{opacity:n===0?0.5:1}},DIL.h('text',{},'Motion')),DIL.h('button',{label:'Change',onClick:()=>setN(n+1)}));"},320,{},context=>{
+        prototype=context.Element.prototype;previous=prototype.animate;
+        prototype.animate=function(frames){mounts.push(this.isConnected);ends.push(frames[1].opacity);return{cancel(){cancelled++;}};};
+    });
+    t.after(()=>{if(previous)prototype.animate=previous;else delete prototype.animate;});
+    const element=app.root.querySelector('.genui-animate');
+    app.root.querySelector('button').fire('click',true);app.flush();
+    assert.equal(app.root.querySelector('.genui-animate'),element);
+    assert.deepEqual(mounts,[true,true]);assert.deepEqual(ends,[0.5,1]);assert.equal(cancelled,1);
+    app.context.GenUIRuntime.updateDocument({ui:api.h('text',{},'Removed')});app.flush();
+    assert.equal(cancelled,2);
+});
+
+test('swipe completion survives intermediate state renders and ignores cancelled gestures', () => {
+    const app=mount({code:"const [progress,setProgress]=DIL.useState(0),[swipes,setSwipes]=DIL.useState(0);return DIL.h('col',{},DIL.h('flashcard-flip',{front:DIL.h('text',{},'Front'),back:DIL.h('text',{},'Back'),onSwipeProgress:setProgress,onSwipeRight:()=>setSwipes(n=>n+1)}),DIL.h('text',{},'swipes='+swipes+';progress='+progress));"});
+    const card=app.root.querySelector('.genui-flashcard-flip');
+    const send=(type,x)=>{card.fire(type,true,{clientX:x,pointerId:1});app.flush();};
+    send('pointerdown',0);send('pointermove',100);send('pointermove',200);send('pointerup',200);
+    assert.ok(app.root.textContent.includes('swipes=1;progress=0'));
+    assert.equal(app.root.querySelector('.genui-flashcard-flip'),card);
+    send('pointerdown',0);send('pointermove',100);send('pointercancel',100);send('pointerup',200);
+    assert.ok(app.root.textContent.includes('swipes=1;progress=0'));
+});
+
+test('unchanged formulas keep their typeset DOM while changed formulas alone are re-typeset', async () => {
+    const sources=[],cleared=[];
+    const app=mount({code:"const [n,setN]=DIL.useState(0),[count,setCount]=DIL.useState(0);return DIL.h('col',{},DIL.h('math',{value:'x^'+n}),DIL.h('button',{label:'Counter '+count,onClick:()=>setCount(count+1)}),DIL.h('button',{label:'Formula',onClick:()=>setN(n+1)}));"},320,{},context=>{
+        context.MathJax={typesetClear(targets){cleared.push(...targets);},typesetPromise(targets){
+            for(const target of targets){sources.push(target.textContent);const span=target.ownerDocument.createElement('span');span.className='typeset';span.textContent=target.textContent;target.replaceChildren(span);}
+            return Promise.resolve();
+        }};
+    });
+    const settle=async()=>{app.flush();await new Promise(setImmediate);app.flush();};
+    await settle();const original=app.root.querySelector('.typeset');
+    app.root.querySelectorAll('button')[0].fire('click',true);await settle();
+    assert.equal(sources.length,1);assert.equal(app.root.querySelector('.typeset'),original);
+    app.root.querySelectorAll('button')[1].fire('click',true);await settle();
+    assert.equal(sources.length,2);assert.ok(sources[1].includes('x^1'));assert.equal(cleared.length,1);
+    assert.notEqual(app.root.querySelector('.typeset'),original);
 });

@@ -6,6 +6,195 @@ import WebKit
 
 final class GenUIRichDocumentTests: XCTestCase {
     @MainActor
+    func testLottieUpdatesStayMountedAndUseCurrentCallbacks() async throws {
+        let result = try await runRichRuntimeScript(#"""
+        const mounts=[], destroyed=[], speeds=[];
+        let complete;
+        window.lottie={loadAnimation(options){
+            const version=options.animationData.version;
+            mounts.push(options.container.isConnected);
+            const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+            svg.setAttribute('data-version',version); options.container.append(svg);
+            return {destroy(){destroyed.push(version);svg.remove();},
+                addEventListener(type,callback){if(type==='complete')complete=callback;},
+                setSpeed(value){speeds.push(value);}};
+        }};
+        await show(`const [n,setN]=DIL.useState(0),[speed,setSpeed]=DIL.useState(1),[done,setDone]=DIL.useState(-1);
+            return DIL.h('col',{},DIL.h('lottie',{data:{w:100,h:100,version:n},speed,onComplete:()=>setDone(speed)}),
+                DIL.h('button',{label:'Change',onClick:()=>setN(n+1)}),
+                DIL.h('button',{label:'Speed',onClick:()=>setSpeed(speed+1)}),DIL.h('text',{},'done='+done));`);
+        for(let index=0;index<2;index++){document.querySelectorAll('button')[0].click();await wait();}
+        document.querySelectorAll('button')[1].click();await wait();
+        complete();await wait();
+        return {mounts,destroyed,speed:speeds.at(-1),visible:document.querySelector('.genui-lottie svg')?.getAttribute('data-version'),text:document.getElementById('root').textContent};
+        """#)
+        XCTAssertEqual(result["mounts"] as? [Bool], [true, true, true])
+        XCTAssertEqual(result["destroyed"] as? [Int], [0, 1])
+        XCTAssertEqual(result["visible"] as? String, "2")
+        XCTAssertEqual(result["speed"] as? Int, 2)
+        XCTAssertTrue((result["text"] as? String)?.contains("done=2") == true)
+    }
+
+    @MainActor
+    func testAnimationChangesRestartOnTheLiveElementAndCancelOnRemoval() async throws {
+        let result = try await runRichRuntimeScript(#"""
+        const mounts=[],ends=[];let cancellations=0;
+        Element.prototype.animate=function(frames){mounts.push(this.isConnected);ends.push(frames[1].opacity);return{cancel(){cancellations++;}};};
+        await show(`const [n,setN]=DIL.useState(0),[count,setCount]=DIL.useState(0),[hidden,setHidden]=DIL.useState(false);
+            return DIL.h('col',{},hidden?DIL.h('text',{},'Removed'):DIL.h('animate',{initial:{opacity:0},enter:{opacity:n===0?0.5:1}},DIL.h('text',{},'Animation')),
+                DIL.h('button',{label:'Change',onClick:()=>setN(n+1)}),
+                DIL.h('button',{label:'Counter '+count,onClick:()=>setCount(count+1)}),
+                DIL.h('button',{label:'Remove',onClick:()=>setHidden(true)}));`);
+        document.querySelectorAll('button')[0].click();await wait();
+        document.querySelectorAll('button')[1].click();await wait();
+        const afterCounter=mounts.length;
+        document.querySelectorAll('button')[2].click();await wait();
+        return {mounts,ends,cancellations,afterCounter};
+        """#)
+        XCTAssertEqual(result["mounts"] as? [Bool], [true, true])
+        XCTAssertEqual(result["ends"] as? [Double], [0.5, 1])
+        XCTAssertEqual(result["afterCounter"] as? Int, 2)
+        XCTAssertEqual(result["cancellations"] as? Int, 2)
+    }
+
+    @MainActor
+    func testAnimationEnabledAfterInitialRenderUsesTheLiveElement() async throws {
+        let result = try await runRichRuntimeScript(#"""
+        const mounts=[];
+        Element.prototype.animate=function(){mounts.push(this.isConnected);return{cancel(){}};};
+        await show(`const [enabled,setEnabled]=DIL.useState(false);return DIL.h('col',{},
+            DIL.h('animate',{preventInitialTransition:!enabled},DIL.h('text',{},'Animation')),
+            DIL.h('button',{label:'Enable',onClick:()=>setEnabled(true)}));`);
+        const initial=mounts.length;
+        document.querySelector('button').click();await wait();
+        return {initial,mounts};
+        """#)
+        XCTAssertEqual(result["initial"] as? Int, 0)
+        XCTAssertEqual(result["mounts"] as? [Bool], [true])
+    }
+
+    @MainActor
+    func testFlashcardSwipeSurvivesProgressUpdatesAndCancellation() async throws {
+        let result = try await runRichRuntimeScript(#"""
+        await show(`const [progress,setProgress]=DIL.useState(0),[swipes,setSwipes]=DIL.useState(0);
+            return DIL.h('col',{},DIL.h('flashcard-flip',{front:DIL.h('text',{},'Front'),back:DIL.h('text',{},'Back'),
+                onSwipeProgress:setProgress,onSwipeRight:()=>setSwipes(n=>n+1)}),DIL.h('text',{},'swipes='+swipes+';progress='+progress));`);
+        const card=document.querySelector('.genui-flashcard-flip');card.setPointerCapture=()=>{};
+        const send=(type,x,id=1)=>card.dispatchEvent(new PointerEvent(type,{bubbles:true,clientX:x,pointerId:id}));
+        send('pointerdown',0);send('pointermove',100);await wait();
+        send('pointermove',200);await wait();send('pointerup',200);await wait();
+        const completed=document.getElementById('root').textContent;
+        send('pointerdown',0);send('pointermove',100);await wait();send('pointercancel',100);await wait();
+        send('pointerup',200);await wait();
+        return {same:card===document.querySelector('.genui-flashcard-flip'),completed,cancelled:document.getElementById('root').textContent};
+        """#)
+        XCTAssertEqual(result["same"] as? Bool, true)
+        XCTAssertTrue((result["completed"] as? String)?.contains("swipes=1;progress=0") == true)
+        XCTAssertTrue((result["cancelled"] as? String)?.contains("swipes=1;progress=0") == true)
+    }
+
+    @MainActor
+    func testMathPreservesUnchangedOutputAndSerializesTheLatestFormula() async throws {
+        let result = try await runRichRuntimeScript(#"""
+        const releases=[],rawSources=[];let active=0,maxActive=0,clears=0;
+        window.MathJax={typesetClear(){clears++;},typesetPromise(targets){
+            const sources=targets.map(target=>target.textContent);rawSources.push(sources[0]);
+            active++;maxActive=Math.max(maxActive,active);
+            return new Promise(resolve=>releases.push(()=>{
+                targets.forEach((target,index)=>{const span=document.createElement('span');span.className='typeset-result';span.textContent=sources[index];target.replaceChildren(span);});
+                active--;resolve();
+            }));
+        }};
+        await show(`const [n,setN]=DIL.useState(0),[count,setCount]=DIL.useState(0);return DIL.h('col',{},
+            DIL.h('math',{value:'x^'+n}),DIL.h('button',{label:'Counter '+count,onClick:()=>setCount(count+1)}),
+            DIL.h('button',{label:'Formula',onClick:()=>setN(n+1)}));`);
+        releases.shift()();await wait();
+        const formula=document.querySelector('.typeset-result');
+        document.querySelectorAll('button')[0].click();await wait();
+        const same=formula===document.querySelector('.typeset-result'),afterCounter=rawSources.length;
+        document.querySelectorAll('button')[1].click();await wait();
+        document.querySelectorAll('button')[1].click();await wait();
+        const whilePending=rawSources.length;
+        releases.shift()();await wait();releases.shift()();await wait();
+        return {same,afterCounter,whilePending,rawSources,maxActive,clears,final:document.querySelector('.genui-math').textContent};
+        """#)
+        XCTAssertEqual(result["same"] as? Bool, true)
+        XCTAssertEqual(result["afterCounter"] as? Int, 1)
+        XCTAssertEqual(result["whilePending"] as? Int, 2)
+        XCTAssertEqual(result["maxActive"] as? Int, 1)
+        let sources = try XCTUnwrap(result["rawSources"] as? [String])
+        XCTAssertEqual(sources.count, 3)
+        for (index, source) in sources.enumerated() { XCTAssertTrue(source.contains("x^\(index)")) }
+        XCTAssertTrue((result["final"] as? String)?.contains("x^2") == true)
+        XCTAssertGreaterThanOrEqual(result["clears"] as? Int ?? 0, 2)
+    }
+
+    @MainActor
+    func testBundledMathJaxKeepsTheFormulaMountedAcrossUnrelatedUpdates() async throws {
+        let result = try await runRichRuntimeScript(#"""
+        await window.MathJax.startup.promise;
+        await show(`const [n,setN]=DIL.useState(0);return DIL.h('col',{},DIL.h('math',{value:'x^2'}),
+            DIL.h('button',{label:'Counter '+n,onClick:()=>setN(n+1)}));`);
+        for(let attempt=0;attempt<100 && !document.querySelector('mjx-container');attempt++)await wait(50);
+        const formula=document.querySelector('mjx-container');
+        document.querySelector('button').click();await wait(200);
+        return {rendered:!!formula,same:formula===document.querySelector('mjx-container'),connected:formula?.isConnected};
+        """#, withMathJax: true)
+        XCTAssertEqual(result["rendered"] as? Bool, true)
+        XCTAssertEqual(result["same"] as? Bool, true)
+        XCTAssertEqual(result["connected"] as? Bool, true)
+    }
+
+    @MainActor
+    func testBundledLottieReplacesItsVisibleSVGWhenAnimationDataChanges() async throws {
+        let result = try await runRichRuntimeScript(#"""
+        await show(`const [n,setN]=DIL.useState(0);return DIL.h('col',{},
+            DIL.h('lottie',{data:{v:'5.7.4',fr:30,ip:0,op:30,w:100,h:100,nm:'Animation '+n,ddd:0,assets:[],layers:[]}}),
+            DIL.h('button',{label:'Change',onClick:()=>setN(n+1)}));`);
+        for(let attempt=0;attempt<100 && !document.querySelector('.genui-lottie svg');attempt++)await wait(50);
+        const first=document.querySelector('.genui-lottie svg');
+        document.querySelector('button').click();await wait(100);
+        const second=document.querySelector('.genui-lottie svg');
+        return {initial:!!first,count:document.querySelectorAll('.genui-lottie svg').length,changed:first!==second,connected:second?.isConnected};
+        """#)
+        XCTAssertEqual(result["initial"] as? Bool, true)
+        XCTAssertEqual(result["count"] as? Int, 1)
+        XCTAssertEqual(result["changed"] as? Bool, true)
+        XCTAssertEqual(result["connected"] as? Bool, true)
+    }
+
+    @MainActor
+    private func runRichRuntimeScript(_ script: String, withMathJax: Bool = false) async throws -> [String: Any] {
+        let document = GenUIDocument(title: "Rendering regression", ui: GenUINode(type: "text", children: [.string("Ready")]))
+        let html = try XCTUnwrap(GenUIRichWebView.Coordinator.html(document: document, snapshot: nil, dark: false))
+        let rendered = expectation(description: "Runtime ready")
+        let recorder = GenUIRenderRecorder(expectation: rendered)
+        let configuration = WKWebViewConfiguration()
+        configuration.userContentController.add(recorder, name: "genui")
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 800), configuration: configuration)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let window = UIWindow(windowScene: scene)
+        let controller = UIViewController()
+        controller.view = webView
+        window.rootViewController = controller
+        window.isHidden = false
+        defer {
+            window.isHidden = true
+            configuration.userContentController.removeScriptMessageHandler(forName: "genui")
+        }
+        let baseURL = withMathJax ? MathMarkdownResourceResolver.mathJaxScriptURL(in: .main)?.deletingLastPathComponent() : nil
+        webView.loadHTMLString(html, baseURL: baseURL)
+        await fulfillment(of: [rendered], timeout: 15)
+        let prelude = """
+        const wait=(ms=30)=>new Promise(resolve=>setTimeout(resolve,ms));
+        async function show(code){window.GenUIRuntime.updateDocument({title:'Regression',code});window.GenUIRuntime.reset();await wait();}
+        """
+        let result = try await webView.callAsyncJavaScript(prelude + script, arguments: [:], in: nil, contentWorld: .page)
+        XCTAssertNil(recorder.error)
+        return try XCTUnwrap(result as? [String: Any])
+    }
+
+    @MainActor
     func testRestorationSnapshotsDoNotInvalidateTheSwiftUIHost() {
         let state = GenUIState(document: GenUIDocument(title: "Powers", code: GenUITool.powersExample))
         var updates = 0
@@ -45,8 +234,24 @@ final class GenUIRichDocumentTests: XCTestCase {
         let result = try await webView.callAsyncJavaScript("""
         const root = document.getElementById('root');
         const sliders = Array.from(root.querySelectorAll('input[type=range]'));
+        const fills = Array.from(root.querySelectorAll('.genui-slider-fill'));
         const card = root.querySelector('.genui-card');
         let removed = 0;
+        const fillErrors = [];
+        function checkFill(slider, index, value) {
+            const fill = slider.parentElement.querySelector('.genui-slider-fill');
+            if (!fill || fill !== fills[index]) { fillErrors.push('Fill was replaced'); return; }
+            const fraction = (value - Number(slider.min)) / (Number(slider.max) - Number(slider.min));
+            const expectedWidth = slider.getBoundingClientRect().width * fraction;
+            if (Math.abs(fill.getBoundingClientRect().width - expectedWidth) > 1)
+                fillErrors.push('Fill width did not match the thumb: ' + value);
+            const track = fill.parentElement;
+            if (Math.abs(track.getBoundingClientRect().height - 5) > 0.1 ||
+                Math.abs(fill.getBoundingClientRect().height - 5) > 0.1)
+                fillErrors.push('Track height: ' + JSON.stringify({track:track.getBoundingClientRect(),
+                    fill:fill.getBoundingClientRect(), height:getComputedStyle(track).height,
+                    variable:getComputedStyle(slider.parentElement).getPropertyValue('--slider-track-height')}));
+        }
         const observer = new MutationObserver(records => {
             for (const record of records) removed += record.removedNodes.length;
         });
@@ -57,16 +262,23 @@ final class GenUIRichDocumentTests: XCTestCase {
             for (const value of values) {
                 slider.value = String(value);
                 slider.dispatchEvent(new Event('input',{bubbles:true}));
-                await new Promise(requestAnimationFrame);
+                checkFill(slider, index, value);
+                for (let frame = 0; frame < 3; frame++) {
+                    await new Promise(requestAnimationFrame);
+                    checkFill(slider, index, value);
+                }
             }
             slider.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));
             await new Promise(requestAnimationFrame);
         }
         observer.disconnect();
-        return {removed, same:sliders.every((slider,index) => slider === root.querySelectorAll('input[type=range]')[index]),
+        return {removed, fillErrors, fillCount:fills.length,
+            same:sliders.every((slider,index) => slider === root.querySelectorAll('input[type=range]')[index]),
             card:card === root.querySelector('.genui-card'), text:card.textContent};
         """, arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
         XCTAssertEqual(result?["removed"] as? Int, 0)
+        XCTAssertEqual(result?["fillCount"] as? Int, 2)
+        XCTAssertEqual(result?["fillErrors"] as? [String], [])
         XCTAssertEqual(result?["same"] as? Bool, true)
         XCTAssertEqual(result?["card"] as? Bool, true)
         XCTAssertTrue((result?["text"] as? String)?.contains("pow(2, 3) = 8") == true)

@@ -649,6 +649,45 @@
         (element.__genuiListeners ||= []).push([type, handler]);
         element.addEventListener(type, handler);
     }
+    const liveElements = new WeakMap(), swipeStates = new WeakMap();
+    const liveElement = (element) => liveElements.get(element) || element;
+    const pendingMath = new Set();
+    let typesettingMath = false;
+    function markMath(element, source) {
+        element.__mathSource = source;
+        effects.push(() => {
+            const target = liveElement(element);
+            if (target.__typesetSource !== source) pendingMath.add(target);
+        });
+    }
+    function typesetPendingMath() {
+        const math = global.MathJax;
+        if (typesettingMath || !pendingMath.size) return;
+        const targets = Array.from(pendingMath).filter(element => element.isConnected && element.__mathSource != null);
+        pendingMath.clear();
+        if (!targets.length) return;
+        for (const target of targets) {
+            if (target.__mathTemplate) {
+                math?.typesetClear?.([target]);
+                for (const child of Array.from(target.childNodes)) disposeElement(child);
+                target.replaceChildren(...Array.from(target.__mathTemplate.childNodes));
+                delete target.__mathTemplate;
+            }
+        }
+        if (!math?.typesetPromise) return;
+        typesettingMath = true;
+        const sources = targets.map(element => element.__mathSource);
+        targets.forEach((element, index) => { element.__typesetSource = sources[index]; });
+        Promise.resolve().then(() => math.typesetPromise(targets)).then(reportLayout).catch(error => {
+            targets.forEach((element, index) => {
+                if (element.__typesetSource === sources[index]) delete element.__typesetSource;
+            });
+            bridge({type:'warning', path:'math', message:String(error.message || error)});
+        }).finally(() => {
+            typesettingMath = false;
+            typesetPendingMath();
+        });
+    }
     function forwardReference(authored, live) {
         for (const key of [
             'value',
@@ -710,6 +749,7 @@
             return live;
         }
         if (live.nodeType !== 1) return authored;
+        liveElements.set(authored, live);
         for (const attr of Array.from(live.attributes))
             if (!authored.hasAttribute(attr.name)) live.removeAttribute(attr.name);
         for (const attr of Array.from(authored.attributes))
@@ -721,15 +761,30 @@
                 ? [live.selectionStart, live.selectionEnd]
                 : null;
         const nextValue = authored.value;
-        if (live.__motionKey === authored.__motionKey) authored.__motion = live.__motion;
+        if (live.__motionKey !== authored.__motionKey) {
+            live.__motion?.cancel?.();
+            live.__motion = null;
+        }
         live.__motionKey = authored.__motionKey;
         if (live.__animation && live.__animationKey === authored.__animationKey) {
             authored.__animation = live.__animation;
         } else {
             live.__animation?.destroy();
             live.__animation = null;
-            reconcileChildren(live, authored);
+            const sameMath = authored.__mathSource != null && live.__mathSource === authored.__mathSource;
+            if (authored.__mathSource != null && !sameMath) {
+                // Wait for any active typeset before replacing its input. Keep
+                // the authored children untouched so their listeners stay valid.
+                live.__mathTemplate = authored;
+                delete live.__typesetSource;
+            } else if (!sameMath) {
+                if (live.__mathSource != null) global.MathJax?.typesetClear?.([live]);
+                delete live.__mathTemplate;
+                delete live.__typesetSource;
+                reconcileChildren(live, authored);
+            }
         }
+        live.__mathSource = authored.__mathSource;
         live.__animationKey = authored.__animationKey;
         for (const key of ['checked', 'disabled', 'required', 'open'])
             if (key in authored && live[key] !== authored[key]) live[key] = authored[key];
@@ -755,6 +810,9 @@
         return live;
     }
     function disposeElement(element) {
+        pendingMath.delete(element);
+        if (element.__mathSource != null) global.MathJax?.typesetClear?.([element]);
+        swipeStates.delete(element);
         element.__animation?.destroy();
         element.__motion?.cancel?.();
         const motion = flashcardMotions.get(element.dataset?.nodePath);
@@ -1242,6 +1300,7 @@
     function markdown(source, plain = false) {
         const container = document.createElement('div');
         container.className = 'genui-markdown';
+        if (/\$|\\\(|\\\[/.test(source)) markMath(container, JSON.stringify([source, plain]));
         if (global.markdownit) {
             const parser = global.markdownit({ html: false, linkify: true, breaks: false });
             const stack = [container];
@@ -1611,10 +1670,11 @@
                 if (transform.length) result.transform = transform.join(' ');
                 return result;
             };
-            el.__motionKey = JSON.stringify([p.initial, p.enter, p.name, p.key]);
+            el.__motionKey = JSON.stringify([p.initial, p.enter, p.name, p.key, p.duration, p.delay, p.preventInitialTransition]);
             el.__motion = null;
             effects.push(() => {
-                if (el.__motion) return;
+                const target = liveElement(el);
+                if (target.__motion) return;
                 if (
                     global.matchMedia?.('(prefers-reduced-motion: reduce)').matches ||
                     p.preventInitialTransition
@@ -1628,7 +1688,7 @@
                     easing: p.enter?.timingFunction || 'ease',
                     fill: 'both',
                 };
-                if (el.animate) el.__motion = el.animate([initial, enter], options);
+                if (target.animate) target.__motion = target.animate([initial, enter], options);
             });
             return el;
         }
@@ -1718,26 +1778,35 @@
                     }
                 });
             }
-            let dragStart;
             listen(el, 'pointerdown', (event) => {
                 if (!p.disabled) {
-                    dragStart = event.clientX;
-                    el.setPointerCapture?.(event.pointerId);
+                    const target = liveElement(el);
+                    swipeStates.set(target, {startX:event.clientX, pointerId:event.pointerId});
+                    target.setPointerCapture?.(event.pointerId);
                 }
             });
             listen(el, 'pointermove', (event) => {
-                if (dragStart != null) {
+                const target = liveElement(el), drag = swipeStates.get(target);
+                if (drag && drag.pointerId === event.pointerId) {
                     const progress =
-                        (event.clientX - dragStart) / Math.max(1, el.getBoundingClientRect().width);
+                        (event.clientX - drag.startX) / Math.max(1, target.getBoundingClientRect().width);
                     action(p.onSwipeProgress, progress, event);
                 }
             });
             listen(el, 'pointerup', (event) => {
-                if (dragStart == null) return;
-                const delta = event.clientX - dragStart;
-                dragStart = null;
+                const target = liveElement(el), drag = swipeStates.get(target);
+                if (!drag || drag.pointerId !== event.pointerId) return;
+                const delta = event.clientX - drag.startX;
+                swipeStates.delete(target);
+                if (target.hasPointerCapture?.(event.pointerId)) target.releasePointerCapture(event.pointerId);
                 if (Math.abs(delta) > 60)
                     action(delta < 0 ? p.onSwipeLeft : p.onSwipeRight, null, event);
+                action(p.onSwipeProgress, 0, event);
+            });
+            listen(el, 'pointercancel', (event) => {
+                const target = liveElement(el), drag = swipeStates.get(target);
+                if (drag?.pointerId !== event.pointerId) return;
+                swipeStates.delete(target);
                 action(p.onSwipeProgress, 0, event);
             });
             return el;
@@ -1782,9 +1851,14 @@
             if (data?.w > 0 && data?.h > 0) el.style.aspectRatio = `${data.w} / ${data.h}`;
             // Mount only once the reconciled element is in the live document.
             effects.push(() => {
-                if (el.__animation) return;
+                const target = liveElement(el);
+                target.__lottieProps = p;
+                if (target.__animation) {
+                    target.__animation.setSpeed(p.speed ?? 1);
+                    return;
+                }
                 const animation = global.lottie.loadAnimation({
-                    container: el,
+                    container: target,
                     renderer: 'svg',
                     loop: p.loop ?? true,
                     autoplay:
@@ -1792,12 +1866,12 @@
                         !global.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
                     ...(data ? { animationData: clone(data) } : { path: url }),
                 });
-                el.__animation = animation;
+                target.__animation = animation;
                 animation.addEventListener('data_failed', () =>
                     missing(el, p.fallback || 'Animation could not be loaded'),
                 );
                 if (p.speed != null) animation.setSpeed(p.speed);
-                animation.addEventListener('complete', () => action(p.onComplete, null, null));
+                animation.addEventListener('complete', () => action(target.__lottieProps.onComplete, null, null));
                 animation.addEventListener('DOMLoaded', () => {
                     if (animation.animationData?.w > 0)
                         el.style.aspectRatio = `${animation.animationData.w} / ${animation.animationData.h}`;
@@ -1985,7 +2059,7 @@
         let el = document.createElement(tags[type] || 'div');
         el.className = `genui-${type}`;
         el.dataset.nodePath = path;
-        style(el, p, type);
+        if (type !== 'slider') style(el, p, type);
         if (!names.includes(type)) return missing(el, `Unsupported component: ${String(type)}`);
         const extension = extendedElement(type, p, children, path, el, originalType);
         if (extension) {
@@ -2020,6 +2094,7 @@
                     ? '\\[' + source + '\\]'
                     : '\\(' + source + '\\)'
                 : source;
+            markMath(el, el.textContent);
             el.classList.add(p.block ? 'math-block' : 'math-inline');
             if (!global.MathJax) el.title = 'Math source (typesetting engine unavailable)';
             return el;
@@ -2380,15 +2455,30 @@
             el.disabled = !!p.disabled;
             el.required = !!p.required;
             el.value = p.value ?? p.defaultValue ?? '';
+            let sliderControl;
             if (type === 'slider') {
+                // Keep the changing fill outside WebKit's native range track.
+                // Repainting a gradient in that pseudo-element can flash while
+                // WebKit is also updating the native thumb during a drag.
+                sliderControl = document.createElement('div');
+                sliderControl.className = 'genui-slider-control';
+                sliderControl.dataset.nodePath = path;
+                if (p.sliderStyle) sliderControl.dataset.sliderStyle = String(p.sliderStyle);
+                style(sliderControl, p, type);
+                el.dataset.nodePath = `${path}.input`;
+                const track = document.createElement('div');
+                track.className = 'genui-slider-track';
+                track.setAttribute('aria-hidden', 'true');
+                const fill = document.createElement('div');
+                fill.className = 'genui-slider-fill';
+                track.append(fill);
+                sliderControl.append(track, el);
                 const progress = () => {
                     const min = Number(p.min ?? 0),
                         max = Number(p.max ?? 100),
                         value = Number(el.value);
-                    el.style.setProperty(
-                        '--range-progress',
-                        `${max > min ? Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100)) : 0}%`,
-                    );
+                    const fraction = max > min ? Math.max(0, Math.min(1, (value - min) / (max - min))) : 0;
+                    fill.style.transform = `scaleX(${fraction})`;
                 };
                 progress();
                 listen(el, 'input', progress);
@@ -2451,7 +2541,7 @@
                     label.textContent = m.label ?? String(m.value ?? m);
                     labels.append(label);
                 });
-                wrap.append(el, list, labels);
+                wrap.append(sliderControl, list, labels);
                 return wrap;
             }
             if (type === 'date-picker' && p.clearable) {
@@ -2473,7 +2563,7 @@
                 wrapper.append(el, clear);
                 return wrapper;
             }
-            return el;
+            return sliderControl || el;
         }
         if (type === 'checkbox') {
             const input = document.createElement('input');
@@ -2727,6 +2817,9 @@
                 child.setAttribute('aria-hidden', 'true');
             el.append(child);
         });
+        if (['text', 'title', 'caption', 'label'].includes(type) &&
+            children.every(child => typeof child !== 'object') && /\$|\\\(|\\\[/.test(el.textContent))
+            markMath(el, el.textContent);
         if (type === 'carousel' && p.showArrows) {
             const wrap = document.createElement('div'),
                 controls = document.createElement('div');
@@ -3230,19 +3323,7 @@
             const content = node(ui || codeOutput || h('text', {}, 'No UI content'));
             const fragment = document.createDocumentFragment();
             fragment.append(content);
-            if (draggingInput && !root.nodeType) {
-                const replacement = Array.from(fragment.querySelectorAll('input')).find(
-                    (input) => input.dataset.nodePath === draggingInput.dataset.nodePath,
-                );
-                if (replacement) {
-                    for (const key of ['disabled', 'min', 'max', 'step'])
-                        draggingInput[key] = replacement[key];
-                    draggingInput.__genuiBindingProps = replacement.__genuiBindingProps;
-                    replacement.replaceWith(draggingInput);
-                } else draggingInput = null;
-            }
-            if (root.nodeType) reconcileChildren(root, fragment);
-            else root.replaceChildren(fragment);
+            reconcileChildren(root, fragment);
             current = null;
             root.querySelectorAll('input,textarea,select').forEach((e, i) => {
                 e.dataset.focusPath = e.dataset.nodePath || String(i);
@@ -3264,9 +3345,7 @@
                 }
             });
             effects.splice(0).forEach((fn) => fn());
-            global.MathJax?.typesetPromise?.([root])
-                .then(reportLayout)
-                .catch(() => {});
+            typesetPendingMath();
             bridge({ type: 'state', state: getSnapshot() });
             reportLayout();
         } catch (e) {

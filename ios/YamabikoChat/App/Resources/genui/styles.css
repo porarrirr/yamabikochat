@@ -385,7 +385,34 @@ input[type='radio'] {
     border-color: var(--info);
     background: color-mix(in srgb, var(--info) 6%, var(--surface));
 }
+.genui-slider-control {
+    position: relative;
+    display: grid;
+    align-items: center;
+    width: 100%;
+    min-height: 44px;
+    --slider-track-height: 5px;
+}
+.genui-slider-track {
+    position: absolute;
+    inset-inline: 0;
+    top: calc(50% - var(--slider-track-height) / 2);
+    height: var(--slider-track-height);
+    border-radius: 999px;
+    background: var(--border);
+    pointer-events: none;
+}
+.genui-slider-fill {
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    transform-origin: left center;
+    will-change: transform;
+}
 .genui-slider {
+    position: relative;
+    z-index: 1;
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
@@ -393,32 +420,27 @@ input[type='radio'] {
     background: transparent;
     padding: 0;
     margin: 0;
-    --range-progress: 0%;
 }
 .genui-slider::-webkit-slider-runnable-track {
-    height: 5px;
+    height: var(--slider-track-height);
     border-radius: 999px;
-    background: linear-gradient(
-        to right,
-        var(--accent) var(--range-progress),
-        var(--border) var(--range-progress)
-    );
+    background: transparent;
 }
 .genui-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 28px;
     height: 28px;
-    margin-top: -11.5px;
+    margin-top: calc((var(--slider-track-height) - 28px) / 2);
     border-radius: 50%;
     background: var(--surface);
     border: 1px solid var(--border);
     box-shadow: 0 2px 7px #0002;
 }
-.genui-slider[data-slider-style='thin']::-webkit-slider-runnable-track {
-    height: 3px;
+.genui-slider-control[data-slider-style='thin'] {
+    --slider-track-height: 3px;
 }
-.genui-slider[data-slider-style='thick']::-webkit-slider-runnable-track {
-    height: 8px;
+.genui-slider-control[data-slider-style='thick'] {
+    --slider-track-height: 8px;
 }
 .genui-slider-labels {
     display: flex;

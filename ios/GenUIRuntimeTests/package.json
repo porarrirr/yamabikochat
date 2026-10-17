@@ -1,0 +1,10 @@
+{
+  "name": "yamabiko-genui-runtime-tests",
+  "private": true,
+  "scripts": {
+    "test": "node --test runtime.test.js"
+  },
+  "devDependencies": {
+    "linkedom": "0.18.12"
+  }
+}
