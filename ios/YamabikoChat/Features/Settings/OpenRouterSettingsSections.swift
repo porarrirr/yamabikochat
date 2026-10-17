@@ -5,55 +5,11 @@ struct OpenRouterSettingsSections: View {
     @ObservedObject var viewModel: SettingsViewModel
 
     var body: some View {
-        modelSection
         reasoningSection
         routingSection
         limitsSection
         endpointsSection
         quantizationSection
-    }
-
-    private var modelSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 4) {
-                Label("OpenRouter", systemImage: "network")
-                    .font(.subheadline.weight(.semibold))
-                Text(viewModel.settings.defaultModel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.vertical, 4)
-            Group {
-                Button {
-                    Task { await viewModel.refreshOpenRouterModels(force: false) }
-                } label: {
-                    Label("モデル一覧を取得", systemImage: "arrow.down.circle")
-                }
-                .disabled(viewModel.openRouterModelsLoading)
-
-                Button {
-                    Task { await viewModel.refreshOpenRouterModels(force: true) }
-                } label: {
-                    Label("キャッシュを使わず更新", systemImage: "arrow.clockwise")
-                }
-                .disabled(viewModel.openRouterModelsLoading)
-            }
-
-            if viewModel.openRouterModelsLoading {
-                ProgressView("読み込み中...")
-            }
-
-            if let err = viewModel.openRouterModelsError, !err.isEmpty {
-                Text(err)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-        } header: {
-            Text("OpenRouter · モデル一覧")
-        }
     }
 
     private var reasoningSection: some View {

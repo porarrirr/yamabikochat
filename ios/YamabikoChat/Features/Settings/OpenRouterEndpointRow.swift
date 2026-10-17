@@ -6,9 +6,9 @@ struct OpenRouterEndpointRow: View {
     @ScaledMetric(relativeTo: .caption) private var priceColumnWidth = 80.0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 6) {
             Toggle(isOn: $isSelected) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(endpoint.providerName)
                         .font(.body.weight(.medium))
                     Text(verbatim: endpoint.tag)
@@ -39,18 +39,18 @@ struct OpenRouterEndpointRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: priceColumnWidth), alignment: .leading)], alignment: .leading, spacing: 8) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: priceColumnWidth), alignment: .leading)], alignment: .leading, spacing: 6) {
                     price("入力", value: endpoint.promptPricePerMillion)
                     price("キャッシュ入力", value: endpoint.cachedInputPricePerMillion)
                     price("出力", value: endpoint.completionPricePerMillion)
                 }
             }
         }
-        .padding(.vertical, 6)
+        .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
     }
 
     private func price(_ title: String, value: Double?) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 1) {
             Text(L10n.text(title))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
