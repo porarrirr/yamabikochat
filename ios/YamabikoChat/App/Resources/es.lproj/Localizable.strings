@@ -604,3 +604,30 @@
 "生成中・停止ボタンで中断できます" = "Generando · Toca Detener para cancelar";
 "ツールを実行中…" = "Ejecutando herramientas…";
 "思考中…" = "Pensando…";
+
+/* OpenRouter settings */
+"OpenRouter · モデル一覧" = "OpenRouter · Modelos";
+"モデル一覧を取得" = "Obtener modelos";
+"キャッシュを使わず更新" = "Actualizar sin caché";
+"推論を有効にする" = "Activar razonamiento";
+"推論トークン上限" = "Límite de tokens de razonamiento";
+"0 = 自動" = "0 = Automático";
+"接続先の優先基準" = "Prioridad de endpoints";
+"生成速度" = "Velocidad de generación";
+"応答の速さ" = "Latencia de respuesta";
+"選択できる接続先の上限" = "Límite de endpoints";
+"ルーティング" = "Enrutamiento";
+"優先する接続先" = "Endpoints preferidos";
+"%d selected" = "%d seleccionados";
+"量子化" = "Cuantización";
+"価格上限" = "Límite de precio";
+"上限なし" = "Sin límite";
+"USD / 100万トークン · 0で上限なし" = "USD / 1 M tokens · 0 sin límite";
+"価格上限（USD / 100万トークン、0は上限なし）" = "Límite de precio (USD por millón de tokens, 0 sin límite)";
+"価格・リクエスト条件" = "Precio y requisitos";
+"トークン数で指定" = "Por presupuesto de tokens";
+"USD / 100万トークン" = "USD / 1 M tokens";
+"キャッシュ入力" = "Entrada en caché";
+
+/* OpenRouter settings */
+"推論の強さ" = "Intensidad del razonamiento";

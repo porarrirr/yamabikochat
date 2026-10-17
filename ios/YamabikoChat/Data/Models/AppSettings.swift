@@ -305,7 +305,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
 
         openRouterThinkingEnabled = false
         openRouterThinkingBudget = 0
-        openRouterReasoningMode = "auto"
+        openRouterReasoningMode = "effort"
         openRouterReasoningEffort = ""
         openRouterReasoningExclude = false
         openRouterGoogleSearchEnabled = false
