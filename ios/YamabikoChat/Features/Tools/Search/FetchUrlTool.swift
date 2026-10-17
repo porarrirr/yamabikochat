@@ -456,28 +456,62 @@ private actor WebPageResponseCache {
         let usedWebKit: Bool
     }
     private var entries: [String: Entry] = [:]
-    private var pending: [String: Task<Entry, Error>] = [:]
+    private struct Pending {
+        let id: UUID
+        var task: Task<Void, Never>?
+        var waiters: [UUID: (CheckedContinuation<(Entry, Bool), Error>, Bool)]
+    }
+    private var pending: [String: Pending] = [:]
     private let lifetimeMs: Int64 = 60_000
 
     func response(for url: URL, load: @escaping @Sendable () async throws -> (Data, HTTPURLResponse)) async throws -> (Entry, Bool) {
+        try Task.checkCancellation()
         if let cached = value(for: url) { return (cached, true) }
         let cacheKey = key(url)
-        if let pending = pending[cacheKey] { return (try await pending.value, true) }
-        let task = Task {
-            let (data, response) = try await load()
-            return Entry(data: data, response: response, fetchedAtMs: Int64(Date().timeIntervalSince1970 * 1000))
-        }
-        pending[cacheKey] = task
-        do {
-            let entry = try await task.value
-            pending.removeValue(forKey: cacheKey)
-            if (200 ... 299).contains(entry.response.statusCode), entry.data.count <= FetchUrlTool.maxResponseBytes {
-                store(data: entry.data, response: entry.response, url: url, fetchedAtMs: entry.fetchedAtMs)
+        let waiterID = UUID()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                if pending[cacheKey] != nil {
+                    pending[cacheKey]?.waiters[waiterID] = (continuation, true)
+                    return
+                }
+                let requestID = UUID()
+                pending[cacheKey] = Pending(id: requestID, waiters: [waiterID: (continuation, false)])
+                let task = Task {
+                    let result: Result<Entry, Error>
+                    do {
+                        let (data, response) = try await load()
+                        try Task.checkCancellation()
+                        result = .success(Entry(data: data, response: response,
+                            fetchedAtMs: Int64(Date().timeIntervalSince1970 * 1000)))
+                    } catch { result = .failure(error) }
+                    self.finishResponse(result, for: url, requestID: requestID)
+                }
+                pending[cacheKey]?.task = task
             }
-            return (entry, false)
-        } catch {
-            pending.removeValue(forKey: cacheKey)
-            throw error
+        } onCancel: {
+            Task { await self.cancelWaiter(waiterID, key: cacheKey) }
+        }
+    }
+
+    private func cancelWaiter(_ id: UUID, key: String) {
+        guard let waiter = pending[key]?.waiters.removeValue(forKey: id) else { return }
+        waiter.0.resume(throwing: CancellationError())
+        if pending[key]?.waiters.isEmpty == true {
+            pending.removeValue(forKey: key)?.task?.cancel()
+        }
+    }
+
+    private func finishResponse(_ result: Result<Entry, Error>, for url: URL, requestID: UUID) {
+        let cacheKey = key(url)
+        guard pending[cacheKey]?.id == requestID,
+              let request = pending.removeValue(forKey: cacheKey) else { return }
+        if case let .success(entry) = result,
+           (200...299).contains(entry.response.statusCode), entry.data.count <= FetchUrlTool.maxResponseBytes {
+            store(data: entry.data, response: entry.response, url: url, fetchedAtMs: entry.fetchedAtMs)
+        }
+        for (continuation, shared) in request.waiters.values {
+            continuation.resume(with: result.map { ($0, shared) })
         }
     }
 

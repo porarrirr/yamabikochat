@@ -2,7 +2,7 @@ import Foundation
 
 struct DuckDuckGoHTMLEngine: SearchEngine {
     static let resultLimit = 8
-    static let requestTimeout: TimeInterval = 15
+    static let requestTimeout: TimeInterval = 4
 
     private let httpClient: any WebToolHTTPClient
 
@@ -32,6 +32,7 @@ struct DuckDuckGoHTMLEngine: SearchEngine {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
+            try Task.checkCancellation()
             DiagnosticsLogger.log(
                 "DuckDuckGo HTML search failed; trying Lite",
                 level: .warning,
@@ -127,7 +128,8 @@ struct DuckDuckGoHTMLEngine: SearchEngine {
                     title: title,
                     snippet: snippet,
                     url: decodedURL,
-                    publishedAt: extractPublishedDate(from: snippet)
+                    publishedAt: extractPublishedDate(from: snippet),
+                    searchEngines: ["duckduckgo"]
                 )
             )
             if results.count >= min(max(1, maxResults), resultLimit) {

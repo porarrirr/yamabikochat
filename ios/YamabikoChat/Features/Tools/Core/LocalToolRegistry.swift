@@ -81,7 +81,7 @@ private actor WebResearchSession {
     func begin(_ call: ToolCall) -> ToolResult? {
         guard let key = fingerprint(call) else { return nil }
         if let previous = calls[key] {
-            if let arguments = try? ToolArguments.object(from: call.argumentsJSON), arguments["recover_cached"] as? Bool == true {
+            if completed[key]?.isError == false || (try? ToolArguments.object(from: call.argumentsJSON))?["recover_cached"] as? Bool == true {
                 if var recovered = completed[key] {
                     recovered.callId = call.id
                     if var object = try? JSONSerialization.jsonObject(with: Data(recovered.content.utf8)) as? [String: Any] {
@@ -189,6 +189,7 @@ private actor WebResearchSession {
             }
             return "search:" + normalized + ":" + normalizedText(arguments["goal"] as? String ?? "")
                 + ":" + String(ToolArguments.int(arguments["max_results"]) ?? 8)
+                + ":read_sources=" + String(arguments["read_sources"] as? Bool ?? false)
         }
         if call.name == FetchUrlTool.name, let url = arguments["url"] as? String {
             return "read:" + urlKey(url) + ":" + normalizedText(arguments["goal"] as? String ?? "")

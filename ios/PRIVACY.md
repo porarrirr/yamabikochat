@@ -14,6 +14,7 @@ YamabikoChat is a bring-your-own-key (BYOK) chat client. This policy describes h
 
 - When you send a message, your prompt, selected model settings, and attachments are sent only to the provider you selected for that conversation (for example OpenAI, Google Gemini, OpenRouter, or a custom API endpoint you configure).
 - Optional tools (remote MCP, search, code execution, and similar features) are disabled by default. When enabled, related requests are sent to the provider or HTTPS endpoint you configure.
+- On iOS, enabled client web search sends search queries to Bing and, for Japanese searches, Yahoo! JAPAN; DuckDuckGo is used if those searches are unavailable. Reading a source sends a request to that source website. No search API key or account is required.
 - The Share Extension stores shared text or a URL in the app group so the main app can open a draft conversation.
 
 ## What the app does not do

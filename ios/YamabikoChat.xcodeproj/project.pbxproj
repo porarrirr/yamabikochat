@@ -67,6 +67,7 @@
 		2047307AD517545330CE89E6 /* SecretConversationVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA8145755EAE89BCB6B545C5 /* SecretConversationVault.swift */; };
 		2189F4D4097CE74B7387FD35 /* SiriConversationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E360E7ED7C45B26FB3706004 /* SiriConversationTests.swift */; };
 		23EDCEE4A45503E5C672C366 /* TokenUsageRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF98E65F9A6271C2C6396E89 /* TokenUsageRecord.swift */; };
+		2543F64F4EDA66E93F6AC8C0 /* FederatedSearchEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 944E73CD39D23DE72C98C98D /* FederatedSearchEngine.swift */; };
 		254CF84CEA71BEF991539659 /* GeminiModelUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AFADAD85FDF09DED54072D8 /* GeminiModelUtils.swift */; };
 		254FF92D5B7B868325DA453D /* ChatPerformancePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87AC5E59B00D42C02D6EBAC3 /* ChatPerformancePolicyTests.swift */; };
 		25AF44B124AE3BD58E908555 /* PythonRuntimeBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = C4219577430D7AC54D404BD6 /* PythonRuntimeBridge.m */; };
@@ -642,6 +643,7 @@
 		9289A5E87008C89F9D936F2A /* SearchEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchEngine.swift; sourceTree = "<group>"; };
 		92B9CB80FD13964B0BC82FBD /* ConversationWorkspacePath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationWorkspacePath.swift; sourceTree = "<group>"; };
 		93B24D334792F81938E47527 /* ProjectWorkspaceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspaceStoreTests.swift; sourceTree = "<group>"; };
+		944E73CD39D23DE72C98C98D /* FederatedSearchEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FederatedSearchEngine.swift; sourceTree = "<group>"; };
 		95871625A1540CBAA5128A70 /* quickjs.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = quickjs.c; sourceTree = "<group>"; };
 		9600617D4FF5ED968548327B /* AskUserQuestionToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskUserQuestionToolTests.swift; sourceTree = "<group>"; };
 		961BCEE0B9725B362F606EA0 /* MathMarkdownViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathMarkdownViewTests.swift; sourceTree = "<group>"; };
@@ -1453,6 +1455,7 @@
 			isa = PBXGroup;
 			children = (
 				73FDBC095F0EFC6358C60DC3 /* DuckDuckGoHTMLEngine.swift */,
+				944E73CD39D23DE72C98C98D /* FederatedSearchEngine.swift */,
 				AE12C7F3EC38F862ED83E620 /* FetchUrlTool.swift */,
 				EFA8FC2F705B5D8D61A79B26 /* HTMLTextExtractor.swift */,
 				E64092198F686EF08BC626FC /* RelevantPageReader.swift */,
@@ -1993,6 +1996,7 @@
 				1B328A998EDC00F0006847E0 /* DualModeSettingsSection.swift in Sources */,
 				20001ADF98A6F3994E7CA279 /* DuckDuckGoHTMLEngine.swift in Sources */,
 				9880DB8288477117138EAD91 /* EditProjectSheet.swift in Sources */,
+				2543F64F4EDA66E93F6AC8C0 /* FederatedSearchEngine.swift in Sources */,
 				675B831CC0D122711E3DD7F6 /* FetchUrlTool.swift in Sources */,
 				F433C294C36D3EE17D2A09BA /* FusionDetailSheet.swift in Sources */,
 				3B9C7C3D5ACAB1D2B894E255 /* FusionExtensions.swift in Sources */,

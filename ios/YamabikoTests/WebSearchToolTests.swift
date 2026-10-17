@@ -132,7 +132,192 @@ private struct BinaryWebToolHTTPClient: WebToolHTTPClient {
     }
 }
 
+private actor SlowSearchEngine: SearchEngine {
+    private(set) var cancelled = false
+    func search(query: String, locale: Locale, maxResults: Int) async throws -> [SearchResult] {
+        do { try await Task.sleep(for: .seconds(30)); return [] }
+        catch { cancelled = true; throw error }
+    }
+}
+
+private actor DelayedWebToolHTTPClient: WebToolHTTPClient {
+    let delay: Duration
+    private(set) var calls = 0
+    private(set) var cancellations = 0
+    init(delay: Duration = .seconds(30)) { self.delay = delay }
+    func get(url: URL, timeout: TimeInterval) async throws -> (Data, HTTPURLResponse) {
+        calls += 1
+        if url.path.contains("slow") {
+            do { try await Task.sleep(for: delay) }
+            catch { cancellations += 1; throw error }
+        }
+        return (Data("<p>Warranty repairs last two years.</p>".utf8),
+            HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/html"])!)
+    }
+}
+
 final class WebSearchToolTests: XCTestCase {
+    func testYahooParserUsesOnlyOrganicCardsAndKeepsSnippetWithItsSource() {
+        let html = """
+        <div class="Ad"><section><a href="https://ads.example.com"><h3>広告</h3></a></section></div>
+        <div class="AnswerGenerativeAI"><section><h3>AI回答</h3></section></div>
+        <div class="sw-Card Algo Algo-Default"><section>
+          <a href="https://example.com/kyoto?a=1&amp;b=2"><cite>example.com</cite>
+            <h3 class="sw-Card__titleMain"><span>京都の<strong>紅葉</strong></span></h3></a>
+          <p class="sw-Card__summary">京都の紅葉スポット &amp; 見頃。</p>
+        </section></div>
+        <div class="sw-Card Algo Algo-Default"><section>
+          <a href="https://example.org/autumn"><h3>秋の京都</h3></a><p>別の出典。</p>
+        </section></div>
+        """
+        let hits = PublicHTMLSearchEngine.parse(html: html, provider: .yahooJapan)
+        XCTAssertEqual(hits.count, 2)
+        XCTAssertEqual(hits[0].url, "https://example.com/kyoto?a=1&b=2")
+        XCTAssertTrue(hits[0].title.contains("紅葉"))
+        XCTAssertEqual(hits[0].snippet, "京都の紅葉スポット & 見頃。")
+        XCTAssertEqual(hits[1].snippet, "別の出典。")
+        XCTAssertNil(hits[0].publishedAt)
+        XCTAssertEqual(hits[0].searchEngines, ["yahoo_japan"])
+        XCTAssertTrue(PublicHTMLSearchEngine.parse(html: "<h3>アクセス制限</h3>", provider: .yahooJapan).isEmpty)
+    }
+
+    func testBingParserDecodesDestinationAndExcludesAds() {
+        let target = "https://example.com/page?a=1&b=2"
+        let encoded = Data(target.utf8).base64EncodedString().replacingOccurrences(of: "=", with: "")
+        let html = """
+        <li class="b_ad"><h2><a href="https://ads.example.com">Ad</a></h2></li>
+        <li data-id="1" class="b_algo"><h2><a href="https://www.bing.com/ck/a?u=a1\(encoded)&amp;ntb=1">Source</a></h2>
+          <div><p>A source snippet.</p></div></li>
+        """
+        let hits = PublicHTMLSearchEngine.parse(html: html, provider: .bing)
+        XCTAssertEqual(hits.count, 1)
+        XCTAssertEqual(hits.first?.url, target)
+        XCTAssertEqual(hits.first?.snippet, "A source snippet.")
+        XCTAssertNil(PublicHTMLSearchEngine.destination("javascript:alert(1)", provider: .bing))
+        XCTAssertNil(PublicHTMLSearchEngine.destination("https://www.bing.com/ck/a?u=broken", provider: .bing))
+    }
+
+    func testBingMobileHeadingOutsideAnchorRetainsCorrectURL() {
+        let hits = PublicHTMLSearchEngine.parse(html: """
+        <li class="b_algo"><div class="b_tpcn"><a href="https://example.com">Site navigation</a></div>
+          <div class="b_algoheader"><a href="https://example.com/article"><h2>京都 紅葉</h2></a></div>
+          <div class="b_caption"><p>見頃の情報</p></div></li>
+        """, provider: .bing)
+        XCTAssertEqual(hits.first?.url, "https://example.com/article")
+        XCTAssertEqual(hits.first?.snippet, "見頃の情報")
+    }
+
+    func testSearchMergeDeduplicatesTrackingWithoutCollapsingDifferentResources() {
+        let batches = [
+            [SearchResult(title: "京都 紅葉", snippet: "", url: "https://example.com/article?id=1&utm_source=yahoo", searchEngines: ["yahoo_japan"])],
+            [SearchResult(title: "京都 紅葉", snippet: "見頃の情報", url: "https://example.com/article?id=1", searchEngines: ["bing"]),
+             SearchResult(title: "別の記事", snippet: "", url: "https://example.com/article?id=2")]
+        ]
+        let hits = FederatedSearchEngine.merge(batches, query: "京都 紅葉", japanese: true, maxResults: 8)
+        XCTAssertEqual(hits.count, 2)
+        XCTAssertEqual(hits[0].url, "https://example.com/article?id=1")
+        XCTAssertEqual(hits[0].snippet, "見頃の情報")
+        XCTAssertEqual(hits[0].searchEngines, ["bing", "yahoo_japan"])
+        XCTAssertNotEqual(FederatedSearchEngine.canonicalURL("https://example.com/#/a"),
+                          FederatedSearchEngine.canonicalURL("https://example.com/#/b"))
+    }
+
+    func testFederatedSearchKeepsBingResultsWhenYahooIsRestricted() async throws {
+        let restricted = PublicHTMLSearchEngine(provider: .yahooJapan, httpClient: FailingWebToolHTTPClient(statusCode: 403))
+        let fallback = ScriptedSearchEngine(results: [])
+        let expected = SearchResult(title: "京都 紅葉", snippet: "見頃", url: "https://example.com/autumn")
+        let engine = FederatedSearchEngine(japaneseEngine: restricted,
+            globalEngine: StaticSearchEngine(results: [expected]), fallback: fallback)
+        let results = try await engine.search(query: "京都 紅葉", locale: Locale(identifier: "en_US"), maxResults: 8)
+        XCTAssertEqual(results, [expected])
+        let fallbackCalls = await fallback.calls
+        XCTAssertEqual(fallbackCalls, 0)
+    }
+
+    func testFederatedSearchFallsBackOnlyWhenPrimaryEnginesHaveNoResults() async throws {
+        let fallback = ScriptedSearchEngine(results: [SearchResult(title: "Source", snippet: "", url: "https://example.com")])
+        let engine = FederatedSearchEngine(japaneseEngine: StaticSearchEngine(results: []),
+            globalEngine: StaticSearchEngine(results: []), fallback: fallback)
+        let results = try await engine.search(query: "検索", locale: Locale(identifier: "ja_JP"), maxResults: 1)
+        XCTAssertEqual(results.count, 1)
+        let calls = await fallback.calls
+        XCTAssertEqual(calls, 1)
+    }
+
+    func testFederatedSearchDeadlineRetainsCompletedResultsAndCancelsSlowProvider() async throws {
+        let slow = SlowSearchEngine()
+        let fallback = ScriptedSearchEngine(results: [])
+        let engine = FederatedSearchEngine(japaneseEngine: slow,
+            globalEngine: StaticSearchEngine(results: [SearchResult(title: "Source", snippet: "", url: "https://example.com")]),
+            fallback: fallback, budget: .milliseconds(40))
+        let results = try await engine.search(query: "検索", locale: Locale(identifier: "ja_JP"), maxResults: 8)
+        XCTAssertEqual(results.count, 1)
+        let cancelled = await slow.cancelled
+        XCTAssertTrue(cancelled)
+        let fallbackCalls = await fallback.calls
+        XCTAssertEqual(fallbackCalls, 0)
+    }
+
+    func testFederatedSearchPropagatesCancellation() async throws {
+        let slow = SlowSearchEngine()
+        let engine = FederatedSearchEngine(japaneseEngine: slow, globalEngine: slow)
+        let task = Task { try await engine.search(query: "検索", locale: Locale(identifier: "ja_JP"), maxResults: 8) }
+        task.cancel()
+        do { _ = try await task.value; XCTFail("Expected cancellation") }
+        catch is CancellationError { }
+    }
+
+    func testSearchGoalDoesNotAutomaticallyFetchPages() async throws {
+        let http = RecordingWebToolHTTPClient()
+        let tool = WebSearchTool(engine: StaticSearchEngine(results: [
+            SearchResult(title: "Source", snippet: "Summary", url: "https://example.com")
+        ]), reader: FetchUrlTool(httpClient: http))
+        let result = try await tool.execute(call: ToolCall(id: "fast", name: WebSearchTool.name,
+            argumentsJSON: #"{"query":"test","goal":"needed evidence"}"#, providerMetadata: nil))
+        let requests = await http.requestedURLs
+        XCTAssertTrue(requests.isEmpty)
+        XCTAssertFalse(result.isError)
+        XCTAssertTrue(result.content.contains("Summary"))
+    }
+
+    func testSourceReadingDeadlineKeepsCompletedPageWithCorrectAttribution() async throws {
+        let http = DelayedWebToolHTTPClient()
+        let tool = WebSearchTool(engine: StaticSearchEngine(results: [
+            SearchResult(title: "Slow", snippet: "", url: "https://example.com/slow"),
+            SearchResult(title: "Fast", snippet: "", url: "https://example.com/fast")
+        ]), reader: FetchUrlTool(httpClient: http), sourceReadBudget: .milliseconds(200))
+        let result = try await tool.execute(call: ToolCall(id: "budget", name: WebSearchTool.name,
+            argumentsJSON: #"{"query":"warranty","goal":"warranty repairs","read_sources":true}"#, providerMetadata: nil))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.content.utf8)) as? [String: Any])
+        let pages = try XCTUnwrap(object["pages"] as? [[String: Any]])
+        XCTAssertEqual(pages.count, 1)
+        XCTAssertEqual(pages.first?["source"] as? String, "https://example.com/fast")
+        XCTAssertEqual(object["source_reading_status"] as? String, "deadline_reached")
+        XCTAssertTrue(result.content.contains("two years"))
+        XCTAssertFalse(result.isError)
+    }
+
+    func testCancelledFetchWaiterDoesNotCancelAnotherReaderOfSameURL() async throws {
+        let http = DelayedWebToolHTTPClient(delay: .milliseconds(200))
+        let reader = FetchUrlTool(httpClient: http)
+        func call(_ id: String) -> ToolCall {
+            ToolCall(id: id, name: FetchUrlTool.name,
+                argumentsJSON: #"{"url":"https://example.com/slow","goal":"warranty"}"#, providerMetadata: nil)
+        }
+        let first = Task { try await reader.execute(call: call("first")) }
+        let second = Task { try await reader.execute(call: call("second")) }
+        try await Task.sleep(for: .milliseconds(50))
+        first.cancel()
+        do { _ = try await first.value; XCTFail("Expected cancellation") }
+        catch is CancellationError { }
+        let result = try await second.value
+        XCTAssertFalse(result.isError)
+        let calls = await http.calls
+        let cancellations = await http.cancellations
+        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(cancellations, 0)
+    }
+
     func testSearchGuidanceAllowsEvidenceDrivenProgressAndTransientRetries() {
         let description = WebSearchTool().definition.description
         XCTAssertTrue(description.contains("Stable explanations and transformations of user-supplied content usually do not need search"))
@@ -174,7 +359,8 @@ final class WebSearchToolTests: XCTestCase {
             SearchResult(
                 title: "Lite Result",
                 snippet: "Lite snippet text",
-                url: "https://example.org/page"
+                url: "https://example.org/page",
+                searchEngines: ["duckduckgo"]
             )
         ])
     }
@@ -486,7 +672,7 @@ final class WebSearchToolTests: XCTestCase {
             SearchResult(title: "Other", snippet: "Other", url: "https://example.com/other")
         ]), reader: reader)
         let result = try await tool.execute(call: ToolCall(id: "one-round", name: WebSearchTool.name,
-            argumentsJSON: #"{"query":"product warranty","goal":"warranty repairs duration"}"#, providerMetadata: nil))
+            argumentsJSON: #"{"query":"product warranty","goal":"warranty repairs duration","read_sources":true}"#, providerMetadata: nil))
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.content.utf8)) as? [String: Any])
         let pages = try XCTUnwrap(object["pages"] as? [[String: Any]])
         XCTAssertEqual(pages.count, 2)
@@ -501,7 +687,7 @@ final class WebSearchToolTests: XCTestCase {
             SearchResult(title: "Guide", snippet: "", url: "https://example.com/guide")
         ]), reader: FetchUrlTool(httpClient: URLRoutingWebToolHTTPClient()))
         let result = try await tool.execute(call: ToolCall(id: "partial", name: WebSearchTool.name,
-            argumentsJSON: #"{"query":"guide","goal":"Odette party"}"#, providerMetadata: nil))
+            argumentsJSON: #"{"query":"guide","goal":"Odette party","read_sources":true}"#, providerMetadata: nil))
         XCTAssertFalse(result.isError)
         XCTAssertTrue(result.content.contains("Odette recommended party details"))
         XCTAssertTrue(result.content.contains("failure"))
@@ -516,7 +702,7 @@ final class WebSearchToolTests: XCTestCase {
         }
         _ = await session.execute(call: call("first", "cache ttl"))
         let repeated = await session.execute(call: call("second", "ttl cache"))
-        XCTAssertTrue(repeated.content.contains("duplicate_request"))
+        XCTAssertTrue(repeated.content.contains("cached_evidence_recovered"))
         XCTAssertTrue(repeated.content.contains("first"))
         let initialCount = await engine.calls
         XCTAssertEqual(initialCount, 1)

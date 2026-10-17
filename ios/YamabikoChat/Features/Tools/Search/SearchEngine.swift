@@ -6,6 +6,7 @@ struct SearchResult: Codable, Sendable, Equatable {
     var snippet: String
     var url: String
     var publishedAt: String? = nil
+    var searchEngines: [String] = []
 }
 
 protocol SearchEngine: Sendable {

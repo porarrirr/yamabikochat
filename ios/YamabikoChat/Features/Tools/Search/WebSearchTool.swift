@@ -6,7 +6,7 @@ struct WebSearchTool: LocalToolExecutor {
     let definition = ToolDefinition(
         name: name,
         description: """
-        Search the public web and return up to 8 result titles, snippets, and URLs. Use when the user requests research or source verification, or when answering requires current information or checking uncertain facts. Stable explanations and transformations of user-supplied content usually do not need search. Supply goal for factual research: up to two top results are also read concurrently and their source passages are returned in the same call. Omit goal when discovering URLs or terminology. Inspect source content, dates, entities, and contradictions; snippets alone are not verification. Reuse passages already returned instead of automatically fetching those pages again. Use fetch_url for missing details or other original sources. Preserve facts already found and investigate specific unresolved gaps. Avoid redundant successful queries and cosmetic rewording. After a transient error, retry only when there is a reasonable prospect of success; do not loop on persistent failures. Continue while there is a useful route to missing evidence, and report unresolved gaps when further investigation is unlikely to help.
+        Search the public web and return up to 8 result titles, snippets, and URLs. Use when the user requests research or source verification, or when answering requires current information or checking uncertain facts. Stable explanations and transformations of user-supplied content usually do not need search. Search uses public pages without API keys. Japanese queries prioritize Japanese results. By default return search results promptly; goal alone does not fetch pages. Set read_sources=true with goal only when original source passages are needed immediately; at most two pages are read within a five-second budget. Use fetch_url for any missing source passages. Inspect source content, dates, entities, and contradictions; snippets alone are not verification. Reuse passages already returned instead of automatically fetching those pages again. Use fetch_url for missing details or other original sources. Preserve facts already found and investigate specific unresolved gaps. Avoid redundant successful queries and cosmetic rewording. After a transient error, retry only when there is a reasonable prospect of success; do not loop on persistent failures. Continue while there is a useful route to missing evidence, and report unresolved gaps when further investigation is unlikely to help.
         """,
         parametersJSON: """
         {
@@ -22,7 +22,11 @@ struct WebSearchTool: LocalToolExecutor {
             },
             "goal": {
               "type": "string",
-              "description": "The evidence needed for the answer. When supplied, read the top two search results concurrently and return their source passages in this same call."
+              "description": "The evidence needed for the answer; used for passage selection only when read_sources is true."
+            },
+            "read_sources": {
+              "type": "boolean", "default": false,
+              "description": "Read up to two original sources with goal, within a five-second budget. Default false for fast search results. Missing pages can be read using fetch_url."
             },
             "max_results": {
               "type": "integer",
@@ -41,19 +45,23 @@ struct WebSearchTool: LocalToolExecutor {
     private let reader: FetchUrlTool
     private let engine: any SearchEngine
     private let locale: Locale
+    private let sourceReadBudget: Duration
 
     init(
-        engine: any SearchEngine = DuckDuckGoHTMLEngine(),
+        engine: any SearchEngine = FederatedSearchEngine(),
         locale: Locale = .current,
-        reader: FetchUrlTool = FetchUrlTool()
+        reader: FetchUrlTool = FetchUrlTool(),
+        sourceReadBudget: Duration = .seconds(5)
     ) {
         self.reader = reader
         self.engine = engine
         self.locale = locale
+        self.sourceReadBudget = sourceReadBudget
     }
 
     func execute(call: ToolCall) async throws -> ToolResult {
         do {
+            let started = Date()
             let arguments = try ToolArguments.object(from: call.argumentsJSON)
             guard let query = (arguments["query"] as? String)?.trimmedNonEmpty else {
                 throw ProviderClientError.parseFailure("web_search requires a non-empty query")
@@ -66,50 +74,63 @@ struct WebSearchTool: LocalToolExecutor {
             if let cached { allResults = cached }
             else {
                 allResults = try await engine.search(query: query, locale: locale, maxResults: DuckDuckGoHTMLEngine.resultLimit)
-                await searchCache.store(allResults, for: cacheKey)
+                try Task.checkCancellation()
+                if !allResults.isEmpty { await searchCache.store(allResults, for: cacheKey) }
             }
             let results = Array(allResults.prefix(limit))
             let goal = (arguments["goal"] as? String)?.trimmedNonEmpty
-            let pages: [ToolResult]
-            if let goal {
-                pages = await withTaskGroup(of: ToolResult.self) { group in
+            let searchMilliseconds = Int(Date().timeIntervalSince(started) * 1000)
+            let pages: [(Int, ToolResult)]
+            if let goal, arguments["read_sources"] as? Bool == true, !results.isEmpty {
+                pages = await withTaskGroup(of: (Int, ToolResult)?.self) { group in
+                    group.addTask { try? await Task.sleep(for: sourceReadBudget); return nil }
                     for (index, result) in results.prefix(2).enumerated() {
                         group.addTask {
                             let arguments: [String: Any] = ["url": result.url, "goal": goal, "max_characters": 3000]
                             let json = (try? JSONSerialization.data(withJSONObject: arguments)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
                             let pageCall = ToolCall(id: "\(call.id)-source-\(index)", name: FetchUrlTool.name,
                                                     argumentsJSON: json, providerMetadata: nil)
-                            do { return try await reader.execute(call: pageCall) }
-                            catch { return ToolResult(callId: pageCall.id, name: pageCall.name,
-                                                      content: LocalToolRegistry.errorContent(error.localizedDescription), isError: true) }
+                            do { return (index, try await reader.execute(call: pageCall)) }
+                            catch { return (index, ToolResult(callId: pageCall.id, name: pageCall.name,
+                                                      content: LocalToolRegistry.errorContent(error.localizedDescription), isError: true)) }
                         }
                     }
-                    // Reassemble by the request identity carried through the
-                    // reader, independent of concurrent completion order.
-                    var collected: [String: ToolResult] = [:]
-                    for await item in group { collected[item.callId] = item }
-                    return (0..<min(2, results.count)).compactMap { collected["\(call.id)-source-\($0)"] }
+                    var collected: [(Int, ToolResult)] = []
+                    while let event = await group.next() {
+                        guard let item = event else { break }
+                        collected.append(item)
+                        if collected.count == min(2, results.count) { break }
+                    }
+                    group.cancelAll()
+                    return collected.sorted { $0.0 < $1.0 }
                 }
                 try Task.checkCancellation()
             } else { pages = [] }
             var object: [String: Any] = [
                 "query": query,
                 "search_cache_hit": cached != nil,
+                "search_elapsed_ms": searchMilliseconds,
+                "page_fetch_elapsed_ms": max(0, Int(Date().timeIntervalSince(started) * 1000) - searchMilliseconds),
                 "results": results.map { result -> [String: Any] in
                     [
                         "title": result.title,
                         "snippet": result.snippet,
                         "url": result.url,
-                        "published_at": result.publishedAt ?? NSNull()
+                        "published_at": result.publishedAt ?? NSNull(),
+                        "search_engines": result.searchEngines
                     ]
                 }
             ]
             if goal != nil {
-                object["pages"] = pages.enumerated().map { index, page -> [String: Any] in
+                object["pages"] = pages.map { index, page -> [String: Any] in
                     let payload = (try? JSONSerialization.jsonObject(with: Data(page.content.utf8))) ?? page.content
                     return ["source": page.provenance?.url ?? results[index].url, "status": page.status.rawValue, "document": payload]
                 }
-                object["next_action"] = "Evaluate the returned evidence now. Answer supported facts; read a specific unresolved document section or source link before another search."
+                let readingRequested = arguments["read_sources"] as? Bool == true
+                object["source_reading_requested"] = readingRequested
+                object["source_reading_status"] = !readingRequested ? "not_requested"
+                    : pages.count < min(2, results.count) ? "deadline_reached" : "finished"
+                object["next_action"] = "Inspect original sources with fetch_url if supporting passages are missing. Search snippets are not verified page content. Reuse any source passages already returned."
             }
             let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
             let content = String(decoding: data, as: UTF8.self)
@@ -120,7 +141,10 @@ struct WebSearchTool: LocalToolExecutor {
                 category: .network,
                 metadata: [
                     "query": query,
-                    "result_count": String(results.count)
+                    "result_count": String(results.count),
+                    "search_ms": String(searchMilliseconds),
+                    "total_ms": String(Int(Date().timeIntervalSince(started) * 1000)),
+                    "cache_hit": String(cached != nil)
                 ]
             )
             return ToolResult(
