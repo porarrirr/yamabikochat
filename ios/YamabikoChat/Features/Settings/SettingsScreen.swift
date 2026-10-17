@@ -952,9 +952,6 @@ private struct SettingsDetailScreen: View {
                         .disabled(!supportsThinking)
                     }
 
-                    Text(GeminiModelUtils.getThinkingDescription(model: model))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
 
                 Section("Gemini Tools") {
