@@ -4,6 +4,51 @@ import XCTest
 
 final class ChatPerformancePolicyTests: XCTestCase {
     @MainActor
+    func testStreamingListRowsMatchFullParseAcrossContextChanges() {
+        let fixtures = [
+            "1. 日本語 **強調** [資料](https://example.com)\n2. `code` と e\u{301} 👨‍👩‍👧‍👦\n3. 続き\n",
+            "- [資料][ref]\n- [ref] と ![図][image]\n\n[ref]: https://example.com\n[image]: https://example.com/image.png",
+            "- 一段目\n  - 子 **項目**\n  - 次\n- 末尾\n\n別の段落",
+            "> - 引用 **項目**\n> - 続き [資料](https://example.com)\n\n別の段落",
+            "- 第一段落\n\n  第二段落\n\n- 次の項目\n",
+            "- same\n- same\n- **same**\n- same  \n  continued\n",
+            "- [x] complete\n- [ ] pending\n- heading\n  ---\n- done",
+            "1. *one\n2. two*\n3. [reference]\n\n[reference]: /url",
+            "- one\n- two\n- three\n- four\n\n  continuation\n\n  > quote\n\n- five\n  ```swift\n  let x = 1\n  ```\n- six",
+            "- one\n- two\n- three\n- four\n  -----\n\nparagraph\n\n- later\n- last",
+            "> 1. one\n> 2. two\n> 3. **three**\n> 4. four\n>\n>    continuation\n>\n> 5. five",
+            "# Heading\n\nIntro\n\n3. three\n9. four\n4. five\n7. six\n\nAfter\n\nEnd",
+            "- one\n- two\n- three\n\n+ four\n+ five\n+ six\n\n1. seven\n2. eight\n3. nine"
+        ]
+        let parser = NativeMarkdownIncrementalParser()
+        for fixture in fixtures {
+            var source = ""
+            for character in fixture {
+                source.append(character)
+                XCTAssertEqual(parser.streamingBlocks(for: source), NativeMarkdownParser.parse(source, rendersMath: false), source)
+            }
+            for replacement in ["- e\u{301}\n- tail", "- é\n- tail", "- *different*\n- tail", fixture] {
+                XCTAssertEqual(parser.streamingBlocks(for: replacement), NativeMarkdownParser.parse(replacement, rendersMath: false))
+            }
+            parser.reset()
+        }
+    }
+
+    @MainActor
+    func testGrowingListOnlyParsesTrailingItems() {
+        let source = (1...80).map { "\($0). 日本語の **項目** と [資料](https://example.com/\($0))\n" }.joined()
+        let characters = Array(source)
+        let parser = NativeMarkdownIncrementalParser()
+        var fullParseBytes = 0
+        for frame in 1...180 {
+            let partial = String(characters.prefix((characters.count * frame + 179) / 180))
+            fullParseBytes += partial.utf8.count
+            XCTAssertEqual(parser.streamingBlocks(for: partial), NativeMarkdownParser.parse(partial, rendersMath: false))
+        }
+        XCTAssertLessThan(parser.parsedUTF8ByteCount, fullParseBytes / 5)
+    }
+
+    @MainActor
     func testInlineCitationsAndImagesReuseConfirmedMarkdown() {
         let parser = NativeMarkdownIncrementalParser()
         let prefix = (1...40).map { "本文\($0) [出典](https://example.com/\($0)) と ![図](https://example.com/image.png)。\n\n" }.joined()

@@ -360,6 +360,7 @@ private actor NativeMarkdownBlockCache {
 final class NativeMarkdownIncrementalParser {
     private var stablePrefixUTF8Count = 0
     private var stableBlocks: [NativeMarkdownBlock] = []
+    private var partialList: NativeMarkdownBlock?
     private var lastSource: String?
     private var lastBlocks: [NativeMarkdownBlock] = []
     private var needsDocumentContext = false
@@ -404,6 +405,7 @@ final class NativeMarkdownIncrementalParser {
         if needsDocumentContext {
             stablePrefixUTF8Count = 0
             stableBlocks = []
+            partialList = nil
         }
         let tailStart = source.utf8.index(source.utf8.startIndex, offsetBy: stablePrefixUTF8Count)
         let tail = String(source[tailStart...])
@@ -411,12 +413,21 @@ final class NativeMarkdownIncrementalParser {
         parsedUTF8ByteCount += tail.utf8.count
         #endif
         let document = Document(parsing: tail)
-        let tailBlocks = NativeMarkdownParser.blocks(
+        var tailBlocks = NativeMarkdownParser.blocks(
             in: document,
             source: tail,
             rendersMath: false,
             baseUTF8Offset: stablePrefixUTF8Count
         )
+        if let partialList {
+            guard case let .list(id, ordered, start, confirmedRows) = partialList,
+                  case let .list(_, tailOrdered, _, rows) = tailBlocks.first,
+                  ordered == tailOrdered else {
+                reset()
+                return streamingBlocks(for: source)
+            }
+            tailBlocks[0] = .list(id: id, ordered: ordered, start: start, rows: confirmedRows + rows)
+        }
         lastSource = source
         lastBlocks = stableBlocks + tailBlocks
 
@@ -431,6 +442,17 @@ final class NativeMarkdownIncrementalParser {
                 return offset < absoluteBoundary
             })
             stablePrefixUTF8Count = absoluteBoundary
+            partialList = nil
+        } else if !needsDocumentContext,
+                  let boundary = Self.listTailBoundary(in: document, source: tail),
+                  case let .list(id, ordered, start, rows) = tailBlocks.last {
+            // A normal bulleted/numbered answer is one growing Markdown block.
+            // Keep its last TWO items in the parse tail, just as we retain two
+            // blocks above. Earlier single-paragraph items cannot be changed by
+            // appends; reference definitions and replacements invalidate them.
+            stableBlocks.append(contentsOf: tailBlocks.dropLast())
+            partialList = .list(id: id, ordered: ordered, start: start, rows: Array(rows.dropLast(2)))
+            stablePrefixUTF8Count += boundary
         }
         return lastBlocks
     }
@@ -438,6 +460,7 @@ final class NativeMarkdownIncrementalParser {
     func reset() {
         stablePrefixUTF8Count = 0
         stableBlocks = []
+        partialList = nil
         lastSource = nil
         lastBlocks = []
         needsDocumentContext = false
@@ -465,6 +488,22 @@ final class NativeMarkdownIncrementalParser {
               let block = document.child(at: document.childCount - retainingBlocks),
               let location = block.range?.lowerBound
         else { return nil }
+        let offsets = NativeMarkdownParser.SourceOffsetMap(source: source, baseUTF8Offset: 0)
+        guard offsets.lineStartUTF8Offsets.indices.contains(location.line - 1) else { return nil }
+        let boundary = offsets.lineStartUTF8Offsets[location.line - 1]
+        return boundary > 0 ? boundary : nil
+    }
+
+    private static func listTailBoundary(in document: Markdown.Document, source: String) -> Int? {
+        guard document.childCount > 0, let list = document.child(at: document.childCount - 1),
+              list is OrderedList || list is UnorderedList,
+              list.childCount > 2 else { return nil }
+        // Complex items retain the full parser's context. Only advance past
+        // simple rows, keeping nested content/fences/continuations in the tail.
+        for item in list.children.prefix(list.childCount - 2) {
+            guard item.childCount == 1, item.child(at: 0) is Paragraph else { return nil }
+        }
+        guard let location = list.child(at: list.childCount - 2)?.range?.lowerBound else { return nil }
         let offsets = NativeMarkdownParser.SourceOffsetMap(source: source, baseUTF8Offset: 0)
         guard offsets.lineStartUTF8Offsets.indices.contains(location.line - 1) else { return nil }
         let boundary = offsets.lineStartUTF8Offsets[location.line - 1]

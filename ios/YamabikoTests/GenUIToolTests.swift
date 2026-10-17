@@ -2,6 +2,70 @@ import XCTest
 @testable import YamabikoChat
 
 final class GenUIToolTests: XCTestCase {
+    func testNativeEnvelopeRequiresOnlyOneStringAndPreservesNestedDocumentValues() throws {
+        for arguments in [#"{"document":null}"#, #"{"document":true}"#, #"{"document":12}"#,
+                          #"{"document":{}}"#, #"{"document":[]}"#,
+                          #"{"document":"{}","extra":null}"#] {
+            XCTAssertThrowsError(try GenUITool.document(from: arguments))
+            XCTAssertThrowsError(try GenUITool.previewDocument(from: arguments))
+        }
+        let json = #"{"title":"日本語","code":"return state;","state":{"text":"1","number":1,"bool":true,"empty":null,"nested":[{"value":"👨‍👩‍👧‍👦"}]}}"#
+        let envelope = String(decoding: try JSONEncoder().encode(["document": json]), as: UTF8.self)
+        let direct = try GenUITool.document(from: json)
+        XCTAssertEqual(try GenUITool.document(from: envelope), direct)
+        XCTAssertEqual(try GenUITool.previewDocument(from: envelope), direct)
+        XCTAssertEqual(try GenUITool.previewDocument(from: json), direct)
+        XCTAssertEqual(direct.state?["text"], .string("1"))
+        XCTAssertEqual(direct.state?["number"], .number(1))
+        XCTAssertEqual(direct.state?["bool"], .bool(true))
+        XCTAssertEqual(direct.state?["empty"], .null)
+    }
+
+    func testCodePreviewStillEnforcesCompleteDocumentValidation() throws {
+        for arguments in [
+            #"{"title":" ","code":"return 60;"}"#,
+            #"{"title":"Demo","code":"return 60;","ui":{"type":"text"}}"#,
+            #"{"title":"Demo","code":"return 60;","resources":{"bad":{"url":"http://example.com"}}}"#,
+            #"{"title":"Demo","code":"return ("}"#
+        ] {
+            XCTAssertThrowsError(try GenUITool.document(from: arguments))
+            XCTAssertThrowsError(try GenUITool.previewDocument(from: arguments))
+        }
+    }
+
+    func testCodeValidationOnlyCompilesAndDoesNotLeakExceptionsOrGlobals() throws {
+        // Executing either body would hang or poison the next validation.
+        try GenUICodeValidator.validate("while (true) {}")
+        try GenUICodeValidator.validate("globalThis.Function = null; throw new Error('must not run');")
+        try GenUICodeValidator.validate("return DIL.h('text', {}, '\"日本語\\n👨‍👩‍👧‍👦');")
+        for _ in 0..<10 {
+            XCTAssertThrowsError(try GenUICodeValidator.validate("return DIL.h("))
+            XCTAssertNoThrow(try GenUICodeValidator.validate("return 60;"))
+        }
+        // Source containing script delimiters must remain a function body value.
+        XCTAssertThrowsError(try GenUICodeValidator.validate("}); globalThis.Function = null; //"))
+        XCTAssertNoThrow(try GenUICodeValidator.validate("return state;"))
+    }
+
+    func testConcurrentCodeValidationKeepsEachCallsExceptionIsolated() async {
+        let failures = await withTaskGroup(of: Bool.self, returning: [Bool].self) { group in
+            for index in 0..<100 {
+                group.addTask {
+                    do {
+                        try GenUICodeValidator.validate(index.isMultiple(of: 2) ? "return \(index);" : "return (")
+                        return !index.isMultiple(of: 2)
+                    } catch {
+                        return index.isMultiple(of: 2)
+                    }
+                }
+            }
+            var failures: [Bool] = []
+            for await failed in group { failures.append(failed) }
+            return failures
+        }
+        XCTAssertFalse(failures.contains(true))
+    }
+
     func testCompactDefinitionDoesNotEmbedTheCatalogAndStillValidatesUnknownNodes() throws {
         let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(GenUITool.definition.parametersJSON.utf8)) as? [String: Any])
         let properties = try XCTUnwrap(schema["properties"] as? [String: Any])

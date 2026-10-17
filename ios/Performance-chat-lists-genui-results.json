@@ -1,0 +1,341 @@
+{
+  "date": "2026-10-17",
+  "baselineCommit": "039006db57de81d71fb4e75777911599ab32872e",
+  "environment": {
+    "device": "iPhone 18 Pro Simulator",
+    "runtime": "iOS 27.0 (24A434)",
+    "xcode": "27.0 (27A266a)",
+    "architecture": "arm64",
+    "configuration": "Debug, SWIFT_OPTIMIZATION_LEVEL=-O",
+    "parallelTesting": false
+  },
+  "method": {
+    "unit": "milliseconds",
+    "summary": "Median of all samples, including first sample",
+    "reduction": "100 * (1 - afterMedianMs / beforeMedianMs)",
+    "markdownBaseline": "HEAD NativeMarkdownView.swift rebuilt in the same validation session; GenUI changes do not participate in these Markdown-only controls",
+    "genuiBaseline": "Initial current-branch baseline; both sides already coalesce native previews to 10 Hz",
+    "scope": "Native preparation/validation only. Excludes network/provider waits, actor queueing and UIKit/GPU drawing",
+    "liveScope": "Single real Pi Agent session per scenario, using embedded NodeMobile and native tools. No statistical claim about end-to-end speedup"
+  },
+  "metrics": {
+    "listAnswer180Frames": {
+      "beforeMs": [
+        178.517,
+        168.104,
+        164.878,
+        166.433,
+        164.772,
+        163.469,
+        159.591,
+        161.31,
+        164.32,
+        166.001
+      ],
+      "afterMs": [
+        25.35,
+        22.376,
+        22.31,
+        22.138,
+        21.413999999999998,
+        21.497,
+        21.749000000000002,
+        21.38,
+        21.803,
+        21.631
+      ],
+      "beforeMedianMs": 164.825,
+      "afterMedianMs": 21.776000000000003,
+      "reductionPercent": 86.78841195207038
+    },
+    "linkedParagraphAnswer180Frames": {
+      "beforeMs": [
+        18.227,
+        10.479000000000001,
+        14.475999999999999,
+        10.234,
+        10.295,
+        10.158999999999999,
+        10.134,
+        10.138,
+        10.18,
+        10.145
+      ],
+      "afterMs": [
+        11.979999999999999,
+        10.434000000000001,
+        10.357999999999999,
+        10.283000000000001,
+        10.218,
+        10.040000000000001,
+        9.934,
+        10.043,
+        9.793,
+        9.911
+      ],
+      "beforeMedianMs": 10.207,
+      "afterMedianMs": 10.1305,
+      "reductionPercent": 0.7494856471049416
+    },
+    "thinkingAndTool120Updates": {
+      "beforeMs": [
+        6.563000000000001,
+        6.741,
+        6.5329999999999995,
+        6.307,
+        6.25,
+        6.22,
+        6.146000000000001,
+        6.0920000000000005,
+        6.777,
+        6.442
+      ],
+      "afterMs": [
+        6.112,
+        5.856,
+        5.936999999999999,
+        5.7780000000000005,
+        5.781,
+        5.78,
+        5.789,
+        5.714,
+        5.904999999999999,
+        6.113
+      ],
+      "beforeMedianMs": 6.3745,
+      "afterMedianMs": 5.8225,
+      "reductionPercent": 8.659502706094601
+    },
+    "chatWithCodePreview180Frames": {
+      "beforeMs": [
+        282.116625,
+        188.575791,
+        181.08375,
+        179.772125,
+        168.706958,
+        177.732833,
+        175.6525,
+        177.268042,
+        174.674958,
+        162.53625
+      ],
+      "afterMs": [
+        22.441042,
+        18.544917,
+        10.089459,
+        9.820834,
+        9.814916,
+        9.757291,
+        9.746834,
+        9.764458,
+        9.719791,
+        9.71275
+      ],
+      "beforeMedianMs": 177.5004375,
+      "afterMedianMs": 9.789687,
+      "reductionPercent": 94.48469697433845
+    },
+    "genui81Previews": {
+      "beforeMs": [
+        213.095875,
+        211.586084,
+        210.573042,
+        211.90325,
+        219.29025
+      ],
+      "afterMs": [
+        1.783375,
+        1.747625,
+        1.838875,
+        1.856292,
+        1.817542
+      ],
+      "beforeMedianMs": 211.90325,
+      "afterMedianMs": 1.817542,
+      "reductionPercent": 99.14227743085583
+    },
+    "python300FileWorkspaceControl": {
+      "beforeMs": [
+        15.006792,
+        18.049125,
+        12.983,
+        12.283667,
+        12.707208,
+        14.578375,
+        15.213667,
+        14.630625,
+        11.897333,
+        11.868291
+      ],
+      "afterMs": [
+        12.709792,
+        12.837625,
+        12.946291,
+        13.35425,
+        13.038125,
+        13.93625,
+        12.952917,
+        13.057041,
+        12.878917,
+        12.078625
+      ],
+      "beforeMedianMs": 13.780687499999999,
+      "afterMedianMs": 12.949604,
+      "reductionPercent": 6.030784022930624
+    },
+    "web160ParagraphArticleControl": {
+      "beforeMs": [
+        6.84,
+        5.843,
+        5.746,
+        5.739,
+        5.728,
+        5.734,
+        5.675999999999999,
+        5.689,
+        5.697,
+        5.7
+      ],
+      "afterMs": [
+        6.084,
+        5.747999999999999,
+        5.731,
+        5.726,
+        5.742,
+        5.8100000000000005,
+        5.923,
+        5.634,
+        5.455,
+        5.446999999999999
+      ],
+      "beforeMedianMs": 5.731,
+      "afterMedianMs": 5.7364999999999995,
+      "reductionPercent": -0.09596928982724684
+    }
+  },
+  "live": {
+    "openrouter": {
+      "textTurns": [
+        {
+          "turn": 1,
+          "totalMs": 14338.880583,
+          "firstDeltaMs": 5144.566042,
+          "deltas": 196
+        },
+        {
+          "turn": 2,
+          "totalMs": 2653.63225,
+          "firstDeltaMs": 1139.283083,
+          "deltas": 101
+        }
+      ],
+      "presentation": [
+        {
+          "scenario": "text-turn-1",
+          "updates": 198,
+          "totalMs": 88.38654099999998,
+          "p95Ms": 0.883417,
+          "maxMs": 3.148708
+        },
+        {
+          "scenario": "text-turn-2",
+          "updates": 103,
+          "totalMs": 30.447542,
+          "p95Ms": 0.556167,
+          "maxMs": 0.916625
+        },
+        {
+          "scenario": "tools",
+          "updates": 91,
+          "totalMs": 35.080750000000016,
+          "p95Ms": 0.780166,
+          "maxMs": 9.827
+        }
+      ],
+      "executors": [
+        {
+          "tool": "python_execute",
+          "durationMs": 360.026583
+        },
+        {
+          "tool": "fetch_url",
+          "durationMs": 267.954083
+        },
+        {
+          "tool": "genui",
+          "durationMs": 0.235916
+        }
+      ],
+      "model": "cohere/north-mini-code:free",
+      "toolScenario": {
+        "status": "passed",
+        "totalMs": 6259.085084,
+        "textCharacters": 199,
+        "previews": 5,
+        "tools": [
+          "python_execute",
+          "fetch_url",
+          "genui"
+        ]
+      }
+    },
+    "google": {
+      "textTurns": [
+        {
+          "turn": 1,
+          "totalMs": 2907.134417,
+          "firstDeltaMs": 1558.851167,
+          "deltas": 9
+        },
+        {
+          "turn": 2,
+          "totalMs": 1598.256333,
+          "firstDeltaMs": 779.800167,
+          "deltas": 5
+        }
+      ],
+      "presentation": [
+        {
+          "scenario": "text-turn-1",
+          "updates": 11,
+          "totalMs": 12.767001,
+          "p95Ms": 6.25825,
+          "maxMs": 6.25825
+        },
+        {
+          "scenario": "text-turn-2",
+          "updates": 7,
+          "totalMs": 1.00954,
+          "p95Ms": 0.244208,
+          "maxMs": 0.244208
+        }
+      ],
+      "executors": [],
+      "model": "gemini-2.5-flash-lite",
+      "toolScenario": {
+        "status": "blocked_by_provider_quota",
+        "httpStatus": 429,
+        "code": "RESOURCE_EXHAUSTED",
+        "dailyFreeTierRequestLimit": 20,
+        "executedTools": 0,
+        "retried": false
+      }
+    }
+  },
+  "validation": {
+    "iosUnitTests": 310,
+    "iosUnitFailures": 0,
+    "piRuntimeTests": 94,
+    "piRuntimeFailures": 0,
+    "genuiUITests": 1,
+    "genuiUIFailures": 0,
+    "liveOptInGuardSkippedTests": 2,
+    "geminiToolScenario": "Not completed: provider free-tier daily quota; no fallback or retry",
+    "sourceCredentialMatches": 0
+  },
+  "sources": [
+    "https://openrouter.ai/api/v1/models",
+    "https://ai.google.dev/gemini-api/docs/pricing#gemini-2.5-flash-lite",
+    "https://developer.apple.com/documentation/javascriptcore/jsvirtualmachine"
+  ]
+}

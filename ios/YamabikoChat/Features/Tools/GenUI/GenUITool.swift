@@ -652,12 +652,32 @@ struct GenUITool: LocalToolExecutor {
     }
 
     static func document(from arguments: String) throws -> GenUIDocument {
+        try document(from: arguments, isPreview: false)
+    }
+
+    static func previewDocument(from arguments: String) throws -> GenUIDocument {
+        try document(from: arguments, isPreview: true)
+    }
+
+    private static func document(from arguments: String, isPreview: Bool) throws -> GenUIDocument {
         let raw: String
-        if let fields = try? JSONDecoder().decode([String: JSONValue].self, from: Data(arguments.utf8)),
+        let fields = try? JSONSerialization.jsonObject(with: Data(arguments.utf8)) as? [String: Any]
+        var documentFields = fields
+        // Inspect only the optional native-model envelope. Recursively decoding
+        // every UI/state value here repeats the real document decoder's work on
+        // every preview, including multiple failed scalar type probes per value.
+        if let fields,
            let wrapped = fields["document"] {
-            guard fields.count == 1, case .string(let json) = wrapped else { throw GenUIError.invalid("document envelope requires a single JSON string") }
+            guard fields.count == 1, let json = wrapped as? String else { throw GenUIError.invalid("document envelope requires a single JSON string") }
             raw = json
+            if isPreview { documentFields = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] }
         } else { raw = arguments }
+        // Most code deltas are syntactically incomplete. Reject them before
+        // decoding the whole document; a visible preview still passes ALL normal
+        // document checks below, and execution always uses the regular path.
+        if isPreview, let code = documentFields?["code"] as? String {
+            try GenUICodeValidator.validate(code)
+        }
         return try GenUIDocument.validated(from: raw)
     }
 

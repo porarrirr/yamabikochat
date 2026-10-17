@@ -5,6 +5,75 @@ import XCTest
 /// Keep the same fixtures and optimization level for both measurements.
 final class GenerationWorkloadPerformanceTests: XCTestCase {
     @MainActor
+    func testListAnswerStreamingPerformance() {
+        let source = (1...32).map { index in
+            "\(index). 日本語の **手順\(index)** と `code` を確認します。[資料](https://example.com/\(index)) を参照してください。\n"
+        }.joined()
+        let characters = Array(source)
+        let frames = (1...180).map { String(characters.prefix((characters.count * $0 + 179) / 180)) }
+        let item = ChatTimelineItem.message(FullChatMessage(id: 1,
+            message: ChatMessage(id: 1, conversationId: 1, role: "model", text: ""), thinkingStream: nil, variants: []))
+        measure {
+            let row = ChatTimelineRowStore(item: item)
+            for frame in frames {
+                row.apply(snapshot: ChatStreamingSnapshot(targetId: 1, text: frame, thinking: "", isFinal: false))
+            }
+            XCTAssertEqual(row.streamingMarkdownBlocks, NativeMarkdownParser.parse(source, rendersMath: false))
+        }
+    }
+
+    @MainActor
+    func testChatWithGeneratedCodePreviewPerformance() throws {
+        // Already-coalesced native events, at the production 10 Hz preview rate.
+        // Text, thinking, Python/Web status and growing GenUI code share one row.
+        let answer = (1...12).map { "## 結果\($0)\n\n日本語の **説明** と [資料](https://example.com)。\n\n" }.joined()
+        let code = "const values = [12, 18, 30];\nreturn DIL.h('col', {}, [" +
+            (1...24).map { "DIL.h('text', {}, '項目\($0)：合計60')" }.joined(separator: ",\n") + "]);"
+        let textCharacters = Array(answer), codeCharacters = Array(code)
+        let frames = try (1...180).map { index -> (String, ToolActivityEvent?) in
+            let text = String(textCharacters.prefix((textCharacters.count * index + 179) / 180))
+            guard index.isMultiple(of: 3) || index == 1 else { return (text, nil) }
+            let partial = String(codeCharacters.prefix((codeCharacters.count * index + 179) / 180))
+            let data = try JSONSerialization.data(withJSONObject: ["title": "計算結果", "code": partial])
+            return (text, ToolActivityEvent(phase: .generating,
+                call: ToolCall(id: "genui", name: GenUITool.name, argumentsJSON: String(decoding: data, as: UTF8.self)),
+                createdAtMs: Int64(index * 33)))
+        }
+        let statuses = [
+            ToolActivityEvent(phase: .finished, call: ToolCall(id: "python", name: PythonExecuteTool.name,
+                argumentsJSON: #"{"code":"sum([12,18,30])"}"#),
+                result: ToolResult(callId: "python", name: PythonExecuteTool.name,
+                    content: #"{"status":"ok","result_repr":"60","duration_ms":12}"#), createdAtMs: 0),
+            ToolActivityEvent(phase: .finished, call: ToolCall(id: "web", name: FetchUrlTool.name,
+                argumentsJSON: #"{"url":"https://example.com","goal":"資料"}"#),
+                result: ToolResult(callId: "web", name: FetchUrlTool.name,
+                    content: #"{"results":[{"text":"Example Domain"}]}"#), createdAtMs: 1)
+        ]
+        var samples: [Double] = []
+        for _ in 0..<10 {
+            let row = ChatTimelineRowStore(item: .message(FullChatMessage(id: 1,
+                message: ChatMessage(id: 1, conversationId: 1, role: "model", text: ""), thinkingStream: nil, variants: [])))
+            var activity = ToolActivityPayload()
+            let start = ContinuousClock.now
+            for status in statuses { activity.apply(status) }
+            for frame in frames {
+                autoreleasepool {
+                    if let event = frame.1 { activity.apply(event) }
+                    row.apply(snapshot: ChatStreamingSnapshot(targetId: 1, text: frame.0,
+                        thinking: "計算と出典を確認しています。", toolActivity: activity, isFinal: false))
+                }
+                XCTAssertEqual(row.streamingSnapshot?.targetId, 1)
+            }
+            let duration = start.duration(to: .now).components
+            samples.append(Double(duration.seconds) * 1000 + Double(duration.attoseconds) / 1e15)
+            XCTAssertEqual(row.streamingMarkdownBlocks, NativeMarkdownParser.parse(answer, rendersMath: false))
+            XCTAssertEqual(activity.steps.last?.genUIDocument?.code, code)
+            XCTAssertEqual(activity.steps.prefix(2).map(\.status), [.completed, .completed])
+        }
+        print("WORKLOAD chat_generated_code_preview_ms \(samples)")
+    }
+
+    @MainActor
     func testLinkedChatAnswerStreamingPerformance() {
         // A typical sourced answer: short sections, inline citations and a code
         // example, arriving in 180 presentation frames (about 6 seconds at 30Hz).

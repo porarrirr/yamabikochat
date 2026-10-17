@@ -81,3 +81,41 @@ APIキーは一時ループバックエンドポイントからメモリ内で�
 最終検証はiOSユニット236件、Piランタイム94件、GenUI JavaScript57件、Pythonハーネス10件、両プロバイダーのライブテスト計4件が成功。GenUI画面操作1件も成功し、入力変更・学習カードの反転・ダークモードを確認した。iOSテスト用ビルドも成功した。最初のシミュレーター起動失敗とパイプ待機による終了停止を調査後、最終コードで再実行し、Xcodeの正常終了まで確認した。
 
 追加の固定負荷と回帰テストは、上記のXcodeコマンドに `-only-testing:YamabikoTests/ChatPerformancePolicyTests` を加えて再現できる。Piの待機パイプの回帰検証は `cd ios/PiRuntime && npm test` に含まれる。
+
+## 追加改善: 箇条書きとGenUIコード（基準 `039006d`）
+
+先行改善を含む `039006d` を基準に追加で測定・改善した。今回も、**通信・モデル生成・UIKit/GPU描画を含むアプリ全体の70%短縮を証明したものではない。** iPhone 18 Pro Simulator / iOS 27.0、Xcode 27.0、Debug + `SWIFT_OPTIMIZATION_LEVEL=-O`、並列テスト無効。全サンプルを含む中央値で比較した。生データとライブ結果は [Performance-chat-lists-genui-results.json](Performance-chat-lists-genui-results.json)。
+
+- リンク・強調・コードを含む32項目の日本語箇条書き、180回の実際の行表示準備: **164.83ms → 21.78ms、86.8%削減**。Markdown実装だけを変更前に戻してビルドした対照群と、最終コードを同じ条件で測定した。各10サンプル。
+- 本文180フレーム、思考、Python/Webの完了状態、GenUIコードの生成途中プレビュー61件を同じ行に適用: **177.50ms → 9.79ms、94.5%削減**。この固定リプレイにはPythonの計算・HTTP通信そのものは含まない。各10サンプル。
+- すでに毎秒10回へまとめているGenUIプレビュー81件のネイティブ検証: **211.90ms → 1.82ms、99.1%削減**。変更前後で同じ81件を処理し、最終文書が一致することを確認した。各5サンプル。先行する400件→81件の転送削減を今回の改善に重複計上していない。
+
+箇条書きは、末尾2項目を再解析し、確定済みの項目を再利用する。複雑な項目は解析範囲を進めず、後から届く参照定義や本文の差し替えでは状態を破棄する。全文解析との比較で、項目の続き、番号、引用、入れ子、コードフェンス、参照リンク、Unicode、別のリストへの移行を検証した。生成完了時の処理も維持した。
+
+GenUIの構文検証は、専用のJavaScriptCoreコンテキストとコンパイル関数を再利用する。構文エラーをJavaScript内で文字列に変換し、Swiftへ例外を繰り返し渡すコストを避ける。ロックで同時呼び出しを直列化し、生成コード自体は実行しない。引数の再帰的な二重デコードを省き、構文が未完成のプレビューは文書全体のデコード前に棄却する。表示する文書・実際のツール実行には従来の文書検証をすべて通す。100件の同時検証と、不正な構文後の正常な検証、コードが実行されないことを確認した。JavaScriptCoreのスレッド仕様は [Appleの公式文書](https://developer.apple.com/documentation/javascriptcore/jsvirtualmachine) を確認した。
+
+通常のリンク付き段落の対照測定は10.21ms → 10.13ms / 180更新で、追加の速度低下は見られなかった。思考・ツール更新120件は6.38ms → 5.82ms。Pythonの300ファイルのワークスペースは13.78ms → 12.95ms、Web記事抽出は5.73ms → 5.74msだった。Python/Webの実装は今回変更しておらず、これらを新たな70%改善とは扱わない。各測定にはばらつきがあるため、初回を含む全サンプルを生データに残した。
+
+### 今回の実API測定
+
+埋め込みNodeMobileのPi Agents標準経路を使用した。無料モデルの情報は [OpenRouterモデル一覧](https://openrouter.ai/api/v1/models) と [Gemini公式料金表](https://ai.google.dev/gemini-api/docs/pricing#gemini-2.5-flash-lite) を確認した。OpenRouterは最大単価0、プロバイダーフォールバック無効を指定し、課金設定は変更していない。
+
+- OpenRouter `cohere/north-mini-code:free`: 通常チャットは最初の本文差分5.14秒・完了14.34秒、履歴を引き継ぐ追加質問は1.14秒・2.65秒。Python計算、`https://example.com` のWeb取得、GenUIコード生成の一式は6.26秒で完了した。ネイティブの各ツール実行はPython 360.03ms（初回インタープリター準備を含む）、Web 267.95ms（通信を含む）、GenUI 0.24ms。計算結果60と有効なGenUIコードを確認した。本文の表示準備p95は初回0.88ms・追加質問0.56ms、ツールシナリオ0.78ms。
+- Gemini `gemini-2.5-flash-lite`: 通常チャットは最初の本文差分1.56秒・完了2.91秒、追加質問は0.78秒・1.60秒。表示準備p95は6.26ms・0.24ms。ツールシナリオはプロバイダーの無料枠の日次上限20件に達し、429 `RESOURCE_EXHAUSTED` で停止した。ツールは実行されておらず、このシナリオは未検証。別モデル・別経路への切り替えや再試行は行っていない。
+
+ライブ値は各シナリオ1回で、ネットワーク・モデルの待ち時間の改善率を示さない。Geminiの失敗時に、未作成の一時フォルダの削除エラーがテスト結果で本来のエラーを隠したため、存在確認後に後片付けするようテストを修正した。追加のAPI呼び出しはせず、通常実行ではライブテスト2件がスキップされることを再確認した。
+
+関連iOSユニット310件、最終のストリーミング回帰32件、Piランタイム94件、GenUI画面操作1件が成功した。画面操作では入力変更・カード反転・ダークモードを確認した。iOSビルドとXcodeの正常終了も確認した。APIキーは一時ループバックサーバーからメモリ内で渡し、変更ファイル・実行ログ・テスト設定29ファイルにキーの一致がないことを確認した。サーバーは停止済み。
+
+固定負荷と回帰検証は次のコマンドで再現できる（実APIは通常スキップ）。
+
+```sh
+cd ios
+xcodebuild -project YamabikoChat.xcodeproj -scheme YamabikoChat \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro,OS=27.0' \
+  -parallel-testing-enabled NO -collect-test-diagnostics never \
+  -only-testing:YamabikoTests/GenerationWorkloadPerformanceTests \
+  -only-testing:YamabikoTests/ChatPerformancePolicyTests \
+  -only-testing:YamabikoTests/GenUIToolTests \
+  SWIFT_OPTIMIZATION_LEVEL=-O CODE_SIGNING_ALLOWED=NO test
+```

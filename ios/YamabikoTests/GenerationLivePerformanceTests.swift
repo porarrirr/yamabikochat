@@ -67,19 +67,26 @@ final class GenerationLivePerformanceTests: XCTestCase {
     func testFreeModelToolsAndStreaming() async throws {
         let config = try await configuration()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("live-generation-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: root) }
+        // A provider can fail before Python creates its workspace. Do not let a
+        // missing-directory cleanup error obscure the original provider error.
+        defer {
+            if FileManager.default.fileExists(atPath: root.path) {
+                try? FileManager.default.removeItem(at: root)
+            }
+        }
         let sessions = PythonSessionStore(rootOverride: root)
         let worker = PythonWorker(sessions: sessions, memoryLimitBytes: 4_000_000_000)
-        let registry = LocalToolRegistry(executors: [
+        let executors: [any LocalToolExecutor] = [
             PythonExecuteTool(worker: worker, sessions: sessions,
                 attachments: AttachmentRepository(generatedFilesRootOverride: root.appendingPathComponent("exports"))),
             WebSearchTool(), FetchUrlTool(), GenUITool()
-        ])
+        ]
+        let registry = LocalToolRegistry(executors: executors.map { TimedExecutor(base: $0) })
         let request = ProviderRequest(model: config.model, messages: [ProviderRequestMessage(role: "user", content: """
             次の3つのツールを各1回使ってください。
             1. python_execute で sum([12, 18, 30]) を計算。
             2. fetch_url で https://example.com を読み、goal は "Example Domain"。
-            3. genui で title:"計算結果", ui:{type:"col",children:[{type:"text",children:["合計60"]}]} を作成。
+            3. genui で title:"計算結果", code:"return DIL.h('col', {}, [DIL.h('text', {}, '合計60')]);" を作成。ui や components は指定不要です。
             最後に日本語で計算結果と参照URLを短く説明してください。追加の検索やツール再実行は不要です。
             """)], tools: registry.definitions.map(\.providerTool),
             provider: config.provider == "openrouter" ? ProviderRoutingConfig(allowFallbacks: false,
@@ -104,6 +111,10 @@ final class GenerationLivePerformanceTests: XCTestCase {
                 if activity.phase == .generating { previews += 1 }
                 if activity.phase == .finished {
                     XCTAssertFalse(activity.result?.isError ?? true, "Tool failed: \(activity.call.name)")
+                    if activity.call.name == PythonExecuteTool.name, let result = activity.result {
+                        let fields = try JSONSerialization.jsonObject(with: Data(result.content.utf8)) as? [String: Any]
+                        XCTAssertEqual(fields?["result_repr"] as? String, "60")
+                    }
                     completedTools.append(activity.call.name)
                     print("LIVE_TOOL \(activity.call.name) elapsed_ms=\(elapsed)")
                 }
@@ -117,9 +128,24 @@ final class GenerationLivePerformanceTests: XCTestCase {
         }
         XCTAssertTrue(completed)
         XCTAssertEqual(Set(completedTools), Set([PythonExecuteTool.name, FetchUrlTool.name, GenUITool.name]))
-        XCTAssertNotNil(presentation.toolActivity.steps.first { $0.toolName == GenUITool.name }?.genUIDocument)
+        XCTAssertNotNil(presentation.toolActivity.steps.first { $0.toolName == GenUITool.name }?.genUIDocument?.code)
         presentation.report(provider: config.provider, scenario: "tools")
         await worker.resetSession(sessionID: "live-performance")
+    }
+
+    private struct TimedExecutor: LocalToolExecutor {
+        let base: any LocalToolExecutor
+        var definition: ToolDefinition { base.definition }
+
+        func execute(call: ToolCall) async throws -> ToolResult {
+            let start = ContinuousClock.now
+            defer {
+                let duration = start.duration(to: .now).components
+                let ms = Double(duration.seconds) * 1000 + Double(duration.attoseconds) / 1e15
+                print("LIVE_EXECUTOR tool=\(call.name) duration_ms=\(ms)")
+            }
+            return try await base.execute(call: call)
+        }
     }
 
     /// Times the real main-actor timeline preparation for incoming Pi events.

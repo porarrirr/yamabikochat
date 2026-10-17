@@ -302,7 +302,7 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
             genUIDocument: isGenUI
                 ? (event.phase == .finished
                    ? (result?.isError == false ? result.flatMap { try? GenUIDocument.validated(from: $0.content) } : nil)
-                   : try? GenUITool.document(from: event.call.argumentsJSON)) : nil
+                   : try? GenUITool.previewDocument(from: event.call.argumentsJSON)) : nil
         )
     }
 
