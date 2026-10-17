@@ -1114,11 +1114,15 @@
                 referenceTokens.controlMetrics?.[defaultSize];
             if (metrics) {
                 s.fontSize = size(metrics.fontSize);
-                s.minHeight = size(metrics.height);
-                if (type !== 'textarea') s.height = size(metrics.height);
-                const radiusValue = metrics.textInput.borderRadius;
-                s.borderRadius = radius(p.radius ?? radiusValue);
-                s.padding = `0 ${metrics.textInput.gutter}px`;
+                // Segmented controls include a heading and a scrollable option row.
+                // A single-line input height clips that composite layout.
+                if (type !== 'segmented-control') {
+                    s.minHeight = size(metrics.height);
+                    if (type !== 'textarea') s.height = size(metrics.height);
+                    const radiusValue = metrics.textInput.borderRadius;
+                    s.borderRadius = radius(p.radius ?? radiusValue);
+                    s.padding = `0 ${metrics.textInput.gutter}px`;
+                }
             }
             if (type === 'button') {
                 const gutters = {
@@ -2622,10 +2626,22 @@
             return el;
         }
         if (type === 'segmented-control' || type === 'radio-group') {
+            const segmented = type === 'segmented-control';
+            let optionContainer = el;
+            if (segmented) {
+                el.setAttribute('role', 'radiogroup');
+                if (p.label) el.setAttribute('aria-label', p.label);
+            }
             if (p.label) {
-                const label = document.createElement('legend');
+                const label = document.createElement(segmented ? 'div' : 'legend');
+                if (segmented) label.className = 'genui-segmented-label';
                 label.textContent = p.label;
                 el.append(label);
+            }
+            if (segmented) {
+                optionContainer = document.createElement('div');
+                optionContainer.className = 'genui-segmented-options';
+                el.append(optionContainer);
             }
             let options =
                 p.options ||
@@ -2651,7 +2667,7 @@
                 input.disabled = !!(p.disabled || o.disabled);
                 bind(input, p, 'change', () => o.value);
                 label.append(input, document.createTextNode(o.label ?? o.value));
-                el.append(label);
+                optionContainer.append(label);
             });
             return el;
         }

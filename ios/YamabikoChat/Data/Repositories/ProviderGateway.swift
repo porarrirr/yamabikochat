@@ -12,7 +12,9 @@ typealias PiAgentStream = @Sendable (
 /// Pi model and executed by the bundled `pi-agent-core` runtime.
 final class ProviderGateway {
     static let openRouterAttributionHeaders = [
-        "HTTP-Referer": "https://apps.apple.com/jp/app/yamabikochat-ai%E3%83%81%E3%83%A3%E3%83%83%E3%83%88/id6771687018",
+        // OpenRouter can group attribution by origin. The shared apps.apple.com
+        // origin can identify another iOS app even when our title is supplied.
+        "HTTP-Referer": AppConstants.marketingURL.absoluteString,
         "X-OpenRouter-Title": "yamabikochat",
         "X-Title": "yamabikochat"
     ]

@@ -540,7 +540,7 @@ final class PiAgentGatewayTests: XCTestCase {
         let headers = try XCTUnwrap(pi.calls.first?.configuration.headers)
         XCTAssertEqual(
             headers["HTTP-Referer"],
-            "https://apps.apple.com/jp/app/yamabikochat-ai%E3%83%81%E3%83%A3%E3%83%83%E3%83%88/id6771687018"
+            "https://porarrirr.github.io/yamabikochat/"
         )
         XCTAssertEqual(headers["X-OpenRouter-Title"], "yamabikochat")
         XCTAssertEqual(headers["X-Title"], "yamabikochat")
@@ -603,6 +603,11 @@ final class PiAgentGatewayTests: XCTestCase {
                 configuration.headers,
                 providerID == "openrouter" ? ProviderGateway.openRouterAttributionHeaders : [:]
             )
+            if providerID == "openrouter" {
+                XCTAssertEqual(configuration.headers["HTTP-Referer"], "https://porarrirr.github.io/yamabikochat/")
+                XCTAssertEqual(configuration.headers["X-OpenRouter-Title"], "yamabikochat")
+                XCTAssertEqual(configuration.headers["X-Title"], "yamabikochat")
+            }
         }
     }
 

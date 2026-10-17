@@ -57,6 +57,15 @@ and `Show`/`Show.Else`. Properties prefixed with `$` evaluate CEL with the
 original native CEL resolver and scope, rather than an independently invented
 expression language.
 
+Hook state and document state are independent. An object `setState` action writes
+`state.volume`; it cannot update the `volume` returned by `DIL.useState`, even if
+their names match. In code, connect a controlled input with `value: volume,
+onChange: setVolume`, then compute its explanation/result from `volume`. With
+document bindings, initialize `state.volume`, use `bind:"volume"`, and read
+`state.volume` or `{{volume}}`. Syntax validation cannot establish that these
+connections work. Verify each selection changes its dependent content. Existing
+saved code needs a corrected document; new instructions do not rewrite it.
+
 ## Explanatory UI quality
 
 Choose a visual structure for the concept: connected list stages or SVG for a

@@ -577,10 +577,10 @@ struct GenUITool: LocalToolExecutor {
     )
     // This core is fixed. Retrieved template/alias details are appended only as tool results.
     static let usageGuide = """
-        Use basic elements directly for ordinary layouts. Search genui_reference(componentName:"*",query:...), then read the exact template/alias name for contracts. Reuse history. Templates: props:{__state:verifiedData}; no backend fetching/actions. Never invent data or success.
-        code returns DIL.h(type,props,...children), __dil.jsx or DIL.render. DIL hooks: useState/useEffect/useMemo/useRef/useTheme/useBreakpoint. State must be JSON. Calculations: JavaScript/Math.pow. No imports, JSX, remote scripts; AI uses Pi.
-        bind:"key", {{key}}, {{object.field}} read state. onChange:{type:"setState",key:"key",value:"$value"} writes it. External actions/new turns require gestures. Each:items/of,itemName,indexName. Scope:values. Show:when,Show.Else. $-props:CEL, e.g. "$value":"price * quantity".
-        Process:list {connector:true,marker:"none"} with separate list-item {label,description}. Comparison:grid {minChildWidth:160}. Text retains newlines; preserveWhitespace:true retains spaces. Text sizes use sm/md/lg/xl. Spacing:4px/unit; gap:2 default. Padding/margin:numbers,CSS lengths,{x,y,top,right,bottom,left}. Colors:tokens or {light,dark}. Avoid repeated headings/padding. markdown {text}:prose/code. Chart.content:explicit chartType/data keys. Media:HTTPS; Lottie:animationData; YouTube:videoId. MapWidgetV2:supplied places; AppBlock:inline content.
+        Use basic elements directly for ordinary layouts. Templates/aliases: search genui_reference(componentName:"*",query:...), read exact name. props:{__state:verifiedData}; no backend actions. Never invent data/success.
+        code returns DIL.h(type,props,...children), __dil.jsx or DIL.render. Hooks:useState/useEffect/useMemo/useRef/useTheme/useBreakpoint. State:JSON. Math:JavaScript/Math.pow. No imports/JSX/remote scripts; AI:Pi.
+        Hooks:const [m,setM]=DIL.useState(...); value:m,onChange:setM; derive content from m. Object setState NEVER updates hooks. Document state:state:{m:...}; bind:"m"/{{m}} or state.m; onChange:{type:"setState",key:"m",value:"$value"}. External actions:gestures. Each:items/of,itemName,indexName. Scope:values. Show:when,Show.Else. $-props:CEL, e.g. "$value":"price * quantity".
+        Process:list {connector:true,marker:"none"} with separate list-item {label,description}. Comparison:grid {minChildWidth:160}. Text retains newlines; preserveWhitespace:true retains spaces. Text sizes use sm/md/lg/xl. Spacing:4px/unit; gap:2 default. Padding/margin:numbers/CSS/edge objects. Colors:tokens or {light,dark}. markdown {text}:prose/code. Chart.content:explicit chartType/data keys. Media:HTTPS. MapWidgetV2:supplied places.
         """
     // Concrete examples teach visual structure and meaningful local state together.
     static let interactiveDiagramExample = #"""
@@ -589,6 +589,7 @@ struct GenUITool: LocalToolExecutor {
     const stages=[['アプリ','ログイン情報を入力'],['認証サーバー','本人確認を行う'],['アプリ','発行されたトークンを受け取る'],['API','トークンを検証し、権限に応じて応答']];
     return h('col',{gap:3},
       h('title',{size:'lg'},'認証の流れ'),
+      h('segmented-control',{label:'ステップ',value:step,onChange:setStep,options:stages.map(([label],value)=>({label,value}))}),
       h('list',{connector:true,marker:'none'},...stages.map(([label,description],i)=>
         h('list-item',{key:String(i),label:(i+1)+'. '+label,description,variant:i===step?'success':'outline'}))),
       h('text',{strong:true},'現在：'+stages[step][1]),

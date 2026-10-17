@@ -104,6 +104,32 @@ test('local binding updates shared text without submitting a model turn', () => 
     assert.equal(app.messages.some(m => m.type === 'issueNewTurn'), false);
 });
 
+test('labeled segmented controls keep independent selections across renders and restoration', () => {
+    const config = {state:{auth:'oauth', environment:'dev'}, ui:api.h('col', {},
+        api.h('segmented-control', {label:'認証方式', bind:'auth', options:[
+            {value:'oauth', label:'OAuth/OIDC'}, {value:'jwt', label:'JWT'}, {value:'key', label:'APIキー'}]}),
+        api.h('segmented-control', {label:'環境', bind:'environment', options:[
+            {value:'dev', label:'開発'}, {value:'prod', label:'本番'}]}),
+        api.h('text', {}, '{{auth}} / {{environment}}'))};
+    const app = mount(config);
+    const auth = () => app.root.querySelector('[role="radiogroup"][aria-label="認証方式"]');
+    assert.equal(auth().querySelector('.genui-segmented-label').textContent, '認証方式');
+    assert.equal(auth().querySelector('legend'), null);
+    assert.equal(auth().querySelector('.genui-segmented-options').children.length, 3);
+    auth().querySelector('input[value="jwt"]').fire('change', true);
+    app.flush();
+    app.root.querySelector('input[value="prod"]').fire('change', true);
+    app.flush();
+    assert.ok(app.root.textContent.includes('jwt / prod'));
+    assert.equal(auth().querySelector('input[value="jwt"]').checked, true);
+    assert.equal(auth().querySelector('input[value="oauth"]').checked, false);
+    const saved = JSON.parse(JSON.stringify(app.context.GenUIRuntime.getSnapshot()));
+    const restored = mount(config, 320, saved);
+    assert.equal(restored.root.querySelector('input[value="jwt"]').checked, true);
+    assert.equal(restored.root.querySelector('input[value="prod"]').checked, true);
+    assert.equal(app.messages.some(message => message.type === 'issueNewTurn'), false);
+});
+
 test('range drag reconciles the latest value once per display frame', () => {
     const app = mount({state:{amount:5}, ui:api.h('col', {},
         api.h('slider', {bind:'amount', min:0, max:100}), api.h('text', {}, 'Amount {{amount}}'))});
@@ -662,6 +688,61 @@ test('advertised authentication diagram keeps all stages visible and advances lo
     for (let i=0;i<3;i++) {app.root.querySelectorAll('button')[0].fire('click', true);app.flush();}
     assert.ok(app.root.textContent.includes('現在：ログイン情報を入力'));
     assert.equal(app.messages.some(m => ['error','issueNewTurn','openUrl'].includes(m.type)), false);
+});
+
+test('advertised selection example updates the explanation and survives restoration', () => {
+    const swift = fs.readFileSync(path.join(__dirname, '../YamabikoChat/Features/Tools/GenUI/GenUITool.swift'), 'utf8');
+    const code = swift.match(/static let interactiveDiagramExample = #"""\n([\s\S]*?)\n    """#/)[1];
+    const app = mount({code});
+    assert.ok(app.root.textContent.includes('現在：ログイン情報を入力'));
+    app.root.querySelector('input[value="1"]').fire('change', true);
+    app.flush();
+    assert.ok(app.root.textContent.includes('現在：本人確認を行う'));
+    assert.ok(!app.root.textContent.includes('現在：ログイン情報を入力'));
+    const saved = JSON.parse(JSON.stringify(app.context.GenUIRuntime.getSnapshot()));
+    assert.ok(mount({code}, 320, saved).root.textContent.includes('現在：本人確認を行う'));
+});
+
+test('diagnosed authentication settings switch every explanation and environment independently', () => {
+    const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/authentication-settings.json'), 'utf8'));
+    const app = mount(config);
+    const change = value => {app.root.querySelector(`input[value="${value}"]`).fire('change', true); app.flush();};
+    const options = [
+        ['jwt', 'JWTを使った自前認証', '鍵管理', '許可したアルゴリズムのみ受け入れ'],
+        ['apikey', 'APIキー（限定用途）', '発行', 'レート制限、監査ログ、ローテーション'],
+        ['oauth', 'OAuth 2.0 / OpenID Connect', '認可サーバー', 'Authorization Code + PKCE'],
+    ];
+    for (const environment of ['prod','dev']) {
+        change(environment);
+        for (const [value, title, step, detail] of options) {
+            change(value);
+            const card = app.root.querySelector('.genui-card');
+            assert.ok(card.textContent.includes(title));
+            assert.ok(card.textContent.includes(step));
+            assert.ok(card.textContent.includes(detail));
+            assert.ok(card.textContent.includes(environment === 'prod' ? '本番環境の注意' : '開発環境'));
+            assert.equal(card.querySelectorAll('li').length, 3);
+            assert.equal(app.root.querySelector(`input[value="${value}"]`).checked, true);
+        }
+    }
+    change('jwt'); change('prod');
+    const saved = JSON.parse(JSON.stringify(app.context.GenUIRuntime.getSnapshot()));
+    const restored = mount(config, 320, saved);
+    assert.ok(restored.root.querySelector('.genui-card').textContent.includes('JWTを使った自前認証'));
+    assert.ok(restored.root.querySelector('.genui-card').textContent.includes('本番環境の注意'));
+    assert.equal(app.messages.some(m => ['error','issueNewTurn','openUrl'].includes(m.type)), false);
+
+    // Reproduce the exported bug: an object action writes document bindings,
+    // while the explanation continues reading the unchanged hook value.
+    const broken = {...config, code:config.code
+        .replace('onChange:setMode', "onChange:{type:'setState',key:'mode',value:'$value'}")
+        .replace('onChange:setEnv', "onChange:{type:'setState',key:'env',value:'$value'}")};
+    const original = mount(broken);
+    original.root.querySelector('input[value="jwt"]').fire('change', true); original.flush();
+    assert.ok(original.root.querySelector('.genui-card').textContent.includes('OAuth 2.0 / OpenID Connect'));
+    const snapshot = JSON.parse(JSON.stringify(original.context.GenUIRuntime.getSnapshot()));
+    assert.equal(snapshot.bindings.mode, 'jwt');
+    assert.deepEqual(snapshot.hooks, ['oauth','dev']);
 });
 
 test('advertised powers calculation recomputes result and multiplication including zero exponent', () => {

@@ -120,8 +120,25 @@ li + li {
 .cta-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.75rem;
   margin: 1.5rem 0;
+}
+
+.app-store-badge {
+  display: inline-flex;
+}
+
+.app-store-badge img {
+  display: block;
+  height: 48px;
+  width: auto;
+}
+
+.app-store-badge:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 8px;
 }
 
 .button {
