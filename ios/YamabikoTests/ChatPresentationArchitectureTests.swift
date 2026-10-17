@@ -4,6 +4,83 @@ import SwiftUI
 @testable import YamabikoChat
 
 final class ChatPresentationArchitectureTests: XCTestCase {
+    func testFinalMarkdownPresentationCacheRequiresExactSourceAndMathSetting() {
+        let cache = NativeMarkdownPresentationCache()
+        let source = "## Original\n\nText"
+        let blocks = NativeMarkdownParser.parse(source)
+        cache.insert(blocks, for: source, rendersMath: true)
+
+        XCTAssertEqual(cache.blocks(for: source, rendersMath: true), blocks)
+        XCTAssertNil(cache.blocks(for: "## Replacement\n\nText", rendersMath: true))
+        XCTAssertNil(cache.blocks(for: source, rendersMath: false))
+        for index in 0..<8 {
+            cache.insert([], for: "Variant \(index)", rendersMath: true)
+        }
+        XCTAssertNil(cache.blocks(for: source, rendersMath: true), "Retained variants must be bounded")
+    }
+
+    @MainActor
+    func testRecreatedCompletedMarkdownUsesFinalPresentationWithoutAnotherParse() async {
+        let source = "## Completed heading\n\nA **formatted** response."
+        let cache = NativeMarkdownPresentationCache()
+        cache.insert(NativeMarkdownParser.parse(source), for: source, rendersMath: true)
+        var finalParseCount = 0
+        let host = UIHostingController(rootView: NativeMarkdownView(
+            markdownText: source,
+            onFinalParse: { finalParseCount += 1 }
+        ).environment(\.markdownPresentationCache, cache))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        host.view.layoutIfNeeded()
+
+        let text = selectableTextViews(in: host.view).map { $0.text ?? "" }.joined()
+        XCTAssertTrue(text.contains("Completed heading"))
+        XCTAssertFalse(text.contains("##"), "A revisited answer must render its final presentation immediately")
+        XCTAssertFalse(text.contains("**"))
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(finalParseCount, 0, "Scrolling back must not restart the final parse and height transition")
+    }
+
+    @MainActor
+    func testRapidCompletedHistoryScrollingKeepsReusedCellsOnTheirOwnMessage() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: (1...40).map { index in
+            timelineMessage(id: Int64(index), text:
+                "## MessageMarker\(index)End\n\n" + String(repeating: "日本語の **整形済み回答**。 ", count: index % 5 + 1)
+            )
+        })
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collection = try XCTUnwrap(findCollectionView(in: controller.view))
+        controller.scrollViewWillBeginDragging(collection)
+        for fraction in [0.0, 0.8, 0.2, 1.0, 0.4, 0.0, 0.7, 0.1] {
+            collection.setContentOffset(CGPoint(x: 0, y: maximumContentOffset(in: collection) * fraction), animated: false)
+            controller.scrollViewDidScroll(collection)
+            collection.layoutIfNeeded()
+            await Task.yield()
+            collection.layoutIfNeeded()
+            for indexPath in collection.indexPathsForVisibleItems {
+                let cell = try XCTUnwrap(collection.cellForItem(at: indexPath))
+                let text = selectableTextViews(in: cell).map { $0.text ?? "" }.joined()
+                XCTAssertTrue(text.contains("MessageMarker\(indexPath.item + 1)End"), "Reused cell contains a different answer: \(text)")
+                XCTAssertTrue(cell.clipsToBounds)
+                XCTAssertTrue(cell.contentView.clipsToBounds)
+            }
+        }
+        controller.scrollViewDidEndDragging(collection, willDecelerate: false)
+        await settleTimeline(controller)
+        let frames = collection.indexPathsForVisibleItems.sorted().compactMap {
+            collection.cellForItem(at: $0)?.frame
+        }
+        for (previous, next) in zip(frames, frames.dropFirst()) {
+            XCTAssertLessThanOrEqual(previous.maxY, next.minY)
+        }
+    }
+
     func testDualSideBySideLayoutFitsBothPanesInsidePhoneWidth() {
         let widths = DualSplitLayoutMetrics.paneWidths(
             totalWidth: 358,

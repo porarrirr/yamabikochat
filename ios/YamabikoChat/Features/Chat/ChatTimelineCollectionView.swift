@@ -170,6 +170,8 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                         self?.remeasureRow(rowID: id)
                     }
                 )
+                .id(row.id)
+                .environment(\.markdownPresentationCache, row.markdownPresentationCache)
             }
             .margins(.all, 0)
             cell.requestContentHeightMeasurement()
@@ -358,6 +360,12 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private func applyPendingRowReconfigurationsIfNeeded() {
         isReconfiguringRows = true
         defer { isReconfiguringRows = false }
+        // A presentation-only height callback does not need a copy of the
+        // entire conversation's diffable snapshot during scrolling.
+        guard !pendingReconfiguredRowIDs.isEmpty else {
+            completePendingRowMeasurement()
+            return
+        }
         var snapshot = dataSource.snapshot()
         let availableIDs = Set(snapshot.itemIdentifiers)
         let reconfiguredIDs = pendingReconfiguredRowIDs.filter(availableIDs.contains)
@@ -371,9 +379,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                 self?.completePendingRowMeasurement()
             }
         } else {
-            DispatchQueue.main.async { [weak self] in
-                self?.completePendingRowMeasurement()
-            }
+            completePendingRowMeasurement()
         }
     }
 
@@ -952,6 +958,18 @@ final class ChatTimelineCollectionCell: UICollectionViewCell {
     private var lastMeasuredWidth: CGFloat?
     private var needsContentHeightMeasurement = true
 
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        // An asynchronous Markdown/WebKit size update must never paint over a
+        // neighboring message before the layout commits the new row height.
+        clipsToBounds = true
+        contentView.clipsToBounds = true
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
     #if DEBUG
     private(set) var contentHeightMeasurementCount = 0
     #endif
@@ -974,6 +992,8 @@ final class ChatTimelineCollectionCell: UICollectionViewCell {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        // UIHostingConfiguration can replace/reset the content view on reuse.
+        contentView.clipsToBounds = true
         let widthChanged = lastMeasuredWidth.map {
             abs($0 - bounds.width) > TailFollowPolicy.offsetTolerance
         } ?? true

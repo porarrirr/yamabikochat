@@ -511,6 +511,43 @@ final class NativeMarkdownIncrementalParser {
     }
 }
 
+// The timeline row owns this cache, so recycling a hosting cell does not discard
+// the final presentation or require a raw-text sizing pass on every revisit.
+final class NativeMarkdownPresentationCache {
+    private struct Key: Hashable {
+        let source: String
+        let rendersMath: Bool
+    }
+
+    private var entries: [Key: [NativeMarkdownBlock]] = [:]
+    private var order: [Key] = []
+
+    func blocks(for source: String, rendersMath: Bool) -> [NativeMarkdownBlock]? {
+        entries[Key(source: source, rendersMath: rendersMath)]
+    }
+
+    func insert(_ blocks: [NativeMarkdownBlock], for source: String, rendersMath: Bool) {
+        let key = Key(source: source, rendersMath: rendersMath)
+        order.removeAll { $0 == key }
+        order.append(key)
+        entries[key] = blocks
+        if order.count > 8 {
+            entries.removeValue(forKey: order.removeFirst())
+        }
+    }
+}
+
+private struct MarkdownPresentationCacheKey: EnvironmentKey {
+    static let defaultValue: NativeMarkdownPresentationCache? = nil
+}
+
+extension EnvironmentValues {
+    var markdownPresentationCache: NativeMarkdownPresentationCache? {
+        get { self[MarkdownPresentationCacheKey.self] }
+        set { self[MarkdownPresentationCacheKey.self] = newValue }
+    }
+}
+
 struct NativeMarkdownView: View {
     let markdownText: String
     var isStreaming = false
@@ -522,6 +559,7 @@ struct NativeMarkdownView: View {
     @State private var blocks: [NativeMarkdownBlock] = []
     @State private var parsedRequest: ParseRequest?
     @State private var incrementalParser = NativeMarkdownIncrementalParser()
+    @Environment(\.markdownPresentationCache) private var presentationCache
 
     private struct ParseRequest: Hashable {
         let source: String
@@ -539,10 +577,16 @@ struct NativeMarkdownView: View {
 
     var body: some View {
         let hasCompletedFinalParse = !isStreaming && parsedRequest == parseRequest
-        let renderedBlocks = hasCompletedFinalParse ? blocks : (preparsedBlocks ?? blocks)
+        let cachedBlocks = isStreaming ? nil : presentationCache?.blocks(
+            for: markdownText, rendersMath: mathRenderingEnabled
+        )
+        // State can outlive a content replacement. Never draw another source's
+        // blocks while the new source is waiting for its asynchronous parse.
+        let currentBlocks = parsedRequest == parseRequest ? blocks : []
+        let renderedBlocks = hasCompletedFinalParse ? blocks : (cachedBlocks ?? preparsedBlocks ?? currentBlocks)
         VStack(alignment: .leading, spacing: 12) {
             if NativeMarkdownPresentationPolicy.showsInitialRawText(
-                hasParsedRequest: preparsedBlocks != nil || parsedRequest != nil,
+                hasParsedRequest: cachedBlocks != nil || preparsedBlocks != nil || parsedRequest == parseRequest,
                 hasRenderedBlocks: !renderedBlocks.isEmpty,
                 sourceIsEmpty: markdownText.isEmpty
             ) {
@@ -571,6 +615,10 @@ struct NativeMarkdownView: View {
         .task(id: parseRequest) {
             let request = parseRequest
             guard parsedRequest != request else { return }
+            if !request.isStreaming,
+               presentationCache?.blocks(for: request.source, rendersMath: request.mathRenderingEnabled) != nil {
+                return
+            }
             // Streaming blocks are already published atomically with the snapshot.
             // Do not mirror them into @State: that second mutation schedules another
             // hosting-cell layout pass for the same frame and visibly bumps paragraphs.
@@ -587,6 +635,9 @@ struct NativeMarkdownView: View {
                 incrementalParser.reset()
             }
             guard !Task.isCancelled, request == parseRequest else { return }
+            if !request.isStreaming {
+                presentationCache?.insert(result, for: source, rendersMath: request.mathRenderingEnabled)
+            }
             var transaction = Transaction()
             transaction.animation = nil
             withTransaction(transaction) {

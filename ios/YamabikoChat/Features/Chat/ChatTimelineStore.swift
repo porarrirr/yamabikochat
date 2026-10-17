@@ -15,6 +15,7 @@ final class ChatTimelineRowStore: ObservableObject, Identifiable {
     }
 
     let id: String
+    let markdownPresentationCache = NativeMarkdownPresentationCache()
     @Published private(set) var item: ChatTimelineItem
     @Published private(set) var streamingPresentation: StreamingPresentation?
     private let markdownParser = NativeMarkdownIncrementalParser()
