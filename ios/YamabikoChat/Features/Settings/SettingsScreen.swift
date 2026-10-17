@@ -874,11 +874,6 @@ private struct SettingsDetailScreen: View {
                     }
                     .disabled(!viewModel.settings.codexReasoningEnabled)
 
-                    Toggle("Prompt Cache", isOn: Binding(
-                        get: { viewModel.settings.codexPromptCacheEnabled },
-                        set: { viewModel.settings.codexPromptCacheEnabled = $0 }
-                    ))
-
                     Picker("Reasoning Summary", selection: Binding(
                         get: { viewModel.settings.codexReasoningSummary.ifBlank("auto") },
                         set: { viewModel.settings.codexReasoningSummary = $0 }
@@ -889,6 +884,11 @@ private struct SettingsDetailScreen: View {
                         Text("none").tag("none")
                     }
                     .disabled(!viewModel.settings.codexReasoningEnabled)
+
+                    Toggle("Prompt Cache", isOn: Binding(
+                        get: { viewModel.settings.codexPromptCacheEnabled },
+                        set: { viewModel.settings.codexPromptCacheEnabled = $0 }
+                    ))
 
                     Toggle("Assume model supports summaries", isOn: Binding(
                         get: { viewModel.settings.codexSupportsReasoningSummaries },
