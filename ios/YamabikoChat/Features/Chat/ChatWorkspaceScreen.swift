@@ -65,9 +65,6 @@ struct ChatWorkspaceScreen: View {
         .onChange(of: appState.shareImportDraft) { _, _ in
             applyShareImportDraftIfNeeded()
         }
-        .onDisappear {
-            viewModel.cancelActiveRun()
-        }
         .sheet(item: $exportedArchive) { item in
             ConversationExportShareSheet(url: item.url)
         }

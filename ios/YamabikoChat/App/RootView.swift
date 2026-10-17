@@ -44,6 +44,7 @@ struct RootView: View {
 
     @StateObject private var listViewModel = ConversationListViewModel()
     @StateObject private var settingsStore = SettingsViewModelStore()
+    @StateObject private var chatViewModelStore = ChatViewModelStore()
     @State private var isSettingsPresented = false
     @State private var screenshotSettingsTab: SettingsScreen.SettingsTab?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -116,6 +117,9 @@ struct RootView: View {
             } else {
                 withAnimation(.easeOut(duration: 0.25), revealSidebar)
             }
+        }
+        .onChange(of: listViewModel.conversations.map(\.id)) { previousIDs, ids in
+            chatViewModelStore.removeConversations(ids: Set(previousIDs).subtracting(ids))
         }
         .onChange(of: listViewModel.filteredConversations.map(\.id)) { _, ids in
             guard !AppStoreScreenshotRouting.isEnabled else { return }
@@ -233,6 +237,7 @@ struct RootView: View {
             if let conversationID = appState.selectedConversationID {
                 ConversationDetailHost(
                     conversationID: conversationID,
+                    viewModelStore: chatViewModelStore,
                     onSelectConversation: { id in selectConversation(id: id) }
                 )
                 .id(conversationID)
@@ -486,11 +491,12 @@ private struct ConversationDetailHost: View {
 
     init(
         conversationID: Int64,
+        viewModelStore: ChatViewModelStore,
         onSelectConversation: @escaping (Int64) -> Void
     ) {
         self.conversationID = conversationID
         self.onSelectConversation = onSelectConversation
-        _viewModel = StateObject(wrappedValue: ChatViewModel(conversationID: conversationID))
+        _viewModel = StateObject(wrappedValue: viewModelStore.viewModel(conversationID: conversationID))
     }
 
     var body: some View {
@@ -507,7 +513,7 @@ private struct ConversationDetailHost: View {
                 }
             }
             .onDisappear {
-                viewModel.discardSecretDataFromMemory()
+                viewModel.handleWorkspaceDisappearance()
             }
     }
 }

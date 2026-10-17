@@ -383,6 +383,12 @@ final class ChatViewModel: ObservableObject {
         timelineStore.clearAll()
     }
 
+    func handleWorkspaceDisappearance() {
+        // Ordinary runs belong to the conversation, not the visible screen.
+        // Secret conversations still discard their data when leaving the screen.
+        discardSecretDataFromMemory()
+    }
+
     func toggleSpeechRecognition() {
         if isSpeechRecording {
             stopSpeechRecognition()
@@ -436,8 +442,7 @@ final class ChatViewModel: ObservableObject {
         let runID = UUID()
         activeSendID = runID
 
-        activeSendTask = Task { [weak self] in
-            guard let self else { return }
+        activeSendTask = Task { [self] in
             defer {
                 if self.activeSendID == runID {
                     self.clearStreamingState()
@@ -641,8 +646,7 @@ final class ChatViewModel: ObservableObject {
         let runSettings = settings
         let runID = UUID()
         activeSendID = runID
-        activeSendTask = Task { [weak self] in
-            guard let self else { return }
+        activeSendTask = Task { [self] in
             defer {
                 if self.activeSendID == runID {
                     self.clearStreamingState()
