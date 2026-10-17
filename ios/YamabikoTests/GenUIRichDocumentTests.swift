@@ -1,8 +1,78 @@
+import Combine
+import UIKit
 import XCTest
 import WebKit
 @testable import YamabikoChat
 
 final class GenUIRichDocumentTests: XCTestCase {
+    @MainActor
+    func testRestorationSnapshotsDoNotInvalidateTheSwiftUIHost() {
+        let state = GenUIState(document: GenUIDocument(title: "Powers", code: GenUITool.powersExample))
+        var updates = 0
+        let observation = state.objectWillChange.sink { updates += 1 }
+        for value in 1...20 {
+            state.richSnapshot = ["hooks": .array([.number(Double(value)), .number(3)])]
+        }
+        XCTAssertEqual(updates, 0)
+        XCTAssertEqual(state.richSnapshot?["hooks"], .array([.number(20), .number(3)]))
+        state.richHeight = 400
+        XCTAssertEqual(updates, 1, "Actual layout changes must still update the host")
+        withExtendedLifetime(observation) {}
+    }
+
+    @MainActor
+    func testPowerSlidersKeepControlsAndContentMountedDuringDrag() async throws {
+        let document = GenUIDocument(title: "Powers", code: GenUITool.powersExample)
+        let html = try XCTUnwrap(GenUIRichWebView.Coordinator.html(document: document, snapshot: nil, dark: false))
+        let rendered = expectation(description: "Power sliders rendered")
+        let recorder = GenUIRenderRecorder(expectation: rendered)
+        let configuration = WKWebViewConfiguration()
+        configuration.userContentController.add(recorder, name: "genui")
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 800), configuration: configuration)
+        // WebKit only delivers display frames to an onscreen view.
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let window = UIWindow(windowScene: scene)
+        let controller = UIViewController()
+        controller.view = webView
+        window.rootViewController = controller
+        window.isHidden = false
+        defer {
+            window.isHidden = true
+            configuration.userContentController.removeScriptMessageHandler(forName: "genui")
+        }
+        webView.loadHTMLString(html, baseURL: nil)
+        await fulfillment(of: [rendered], timeout: 15)
+        let result = try await webView.callAsyncJavaScript("""
+        const root = document.getElementById('root');
+        const sliders = Array.from(root.querySelectorAll('input[type=range]'));
+        const card = root.querySelector('.genui-card');
+        let removed = 0;
+        const observer = new MutationObserver(records => {
+            for (const record of records) removed += record.removedNodes.length;
+        });
+        observer.observe(root, {childList:true, subtree:true});
+        for (const [index, values] of [[0,[3,4,5,2]], [1,[4,5,0,3]]]) {
+            const slider = sliders[index];
+            slider.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
+            for (const value of values) {
+                slider.value = String(value);
+                slider.dispatchEvent(new Event('input',{bubbles:true}));
+                await new Promise(requestAnimationFrame);
+            }
+            slider.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));
+            await new Promise(requestAnimationFrame);
+        }
+        observer.disconnect();
+        return {removed, same:sliders.every((slider,index) => slider === root.querySelectorAll('input[type=range]')[index]),
+            card:card === root.querySelector('.genui-card'), text:card.textContent};
+        """, arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
+        XCTAssertEqual(result?["removed"] as? Int, 0)
+        XCTAssertEqual(result?["same"] as? Bool, true)
+        XCTAssertEqual(result?["card"] as? Bool, true)
+        XCTAssertTrue((result?["text"] as? String)?.contains("pow(2, 3) = 8") == true)
+        XCTAssertNil(recorder.error)
+    }
+
     @MainActor
     func testScopedDarkThemeUsesTheRecoveredForegroundPalette() async throws {
         let document = GenUIDocument(title: "Theme", ui: GenUINode(type: "card", props: ["theme": .string("dark")], children: [.node(GenUINode(type: "title", children: [.string("Read")]))]))

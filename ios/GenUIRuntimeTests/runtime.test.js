@@ -114,6 +114,32 @@ test('local binding updates shared text without submitting a model turn', () => 
     assert.equal(app.messages.some(m => m.type === 'issueNewTurn'), false);
 });
 
+test('range drag reconciles the latest value once per display frame', () => {
+    const app = mount({state:{amount:5}, ui:api.h('col', {},
+        api.h('slider', {bind:'amount', min:0, max:100}), api.h('text', {}, 'Amount {{amount}}'))});
+    const frames = [];
+    app.context.requestAnimationFrame = callback => frames.push(callback);
+    const slider = app.root.querySelectorAll('input')[0];
+    app.context.document.fire('pointerdown', slider);
+    const snapshotsBefore = app.messages.filter(message => message.type === 'state').length;
+    for (const value of [15, 25, 35]) {
+        slider.value = String(value);
+        slider.fire('input', true);
+        app.flush();
+    }
+    assert.equal(frames.length, 1, 'input events share the next display frame');
+    assert.equal(app.messages.filter(message => message.type === 'state').length, snapshotsBefore);
+    frames.shift()();
+    assert.ok(app.root.textContent.includes('Amount 35'));
+    assert.equal(app.root.querySelectorAll('input')[0], slider);
+    assert.equal(app.messages.filter(message => message.type === 'state').length, snapshotsBefore + 1);
+    // A release before the pending frame must still render its final value.
+    slider.value = '45'; slider.fire('input', true); app.flush();
+    app.context.document.fire('pointerup', slider); app.flush();
+    while (frames.length) frames.shift()();
+    assert.ok(app.root.textContent.includes('Amount 45'));
+});
+
 test('maps render inline without an open button or presentation action', () => {
     const props = {title:'Tokyo', points:[{lat:35.6, lng:139.7, name:'Stop'}]};
     const app = mount({ui:api.h('MapWidgetV2', props)});

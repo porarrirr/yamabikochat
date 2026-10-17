@@ -3,6 +3,31 @@ import XCTest
 final class GenUIRichUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
+    func testPowerSlidersUpdateThroughoutRepeatedDrags() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppStoreScreenshotDemo", "-GenUIRichFixture", "-GenUIPowersFixture", "-ScreenshotScene", "chat", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        app.launch()
+        let base = app.sliders["底"].firstMatch
+        let exponent = app.sliders["指数"].firstMatch
+        XCTAssertTrue(base.waitForExistence(timeout: 20))
+        reveal(base, in: app)
+        for index in 0..<3 {
+            base.coordinate(withNormalizedOffset: CGVector(dx: index == 0 ? 0.25 : 0.05, dy: 0.5))
+                .press(forDuration: 0.05, thenDragTo: base.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)))
+            XCTAssertTrue(app.staticTexts["pow(5, 3) = 125"].firstMatch.waitForExistence(timeout: 5))
+            base.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+                .press(forDuration: 0.05, thenDragTo: base.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)))
+            XCTAssertTrue(app.staticTexts["pow(1, 3) = 1"].firstMatch.waitForExistence(timeout: 5))
+        }
+        reveal(exponent, in: app)
+        exponent.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: exponent.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)))
+        XCTAssertTrue(app.staticTexts["pow(1, 0) = 1"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(base.exists && exponent.exists)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "GenUI error")).firstMatch.exists)
+        capture("genui-powers-after-repeated-drags")
+    }
+
     func testExplanatoryDiagramsAndSavedLineBreaks() {
         let app = XCUIApplication()
         let base = ["-AppStoreScreenshotDemo", "-GenUIRichFixture", "-ScreenshotScene", "chat", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]

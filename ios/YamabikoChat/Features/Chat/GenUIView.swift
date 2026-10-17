@@ -7,7 +7,9 @@ final class GenUIState: ObservableObject {
     @Published var values: [String: Double]
     @Published var texts: [String: String]
     @Published var numberDrafts: [String: String]
-    @Published var richSnapshot: [String: JSONValue]?
+    // WebKit owns interactive rendering. Keep its restoration snapshot without
+    // invalidating the SwiftUI host on every slider input event.
+    var richSnapshot: [String: JSONValue]?
     @Published var richHeight: CGFloat = 60 {
         didSet { if abs(richHeight - oldValue) > 1 { onLayoutChange?() } }
     }

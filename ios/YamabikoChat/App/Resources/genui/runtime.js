@@ -792,8 +792,14 @@
         if (!scheduled) {
             scheduled = true;
             queueMicrotask(() => {
-                scheduled = false;
-                render();
+                const update = () => {
+                    scheduled = false;
+                    render();
+                };
+                // Native range inputs can emit several events per display frame.
+                // Keep the thumb responsive and reconcile the latest state once.
+                if (draggingInput) requestAnimationFrame(update);
+                else update();
             });
         }
     }
