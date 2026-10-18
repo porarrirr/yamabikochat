@@ -521,12 +521,16 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         cell.requestContentHeightMeasurement()
 
         cell.layoutIfNeeded()
+        let attributes = UICollectionViewLayoutAttributes(forCellWith: IndexPath(item: 0, section: 0))
+        attributes.frame = cell.frame
+        let originalHeight = cell.preferredLayoutAttributesFitting(attributes).frame.height
         let measurementCount = cell.contentHeightMeasurementCount
         XCTAssertGreaterThan(measurementCount, 0)
 
         for _ in 0..<20 {
             cell.setNeedsLayout()
             cell.layoutIfNeeded()
+            XCTAssertEqual(cell.preferredLayoutAttributesFitting(attributes).frame.height, originalHeight)
         }
 
         XCTAssertEqual(
@@ -534,6 +538,12 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             measurementCount,
             "A scroll-driven layout pass must not synchronously remeasure unchanged message content"
         )
+        let narrower = attributes.copy() as! UICollectionViewLayoutAttributes
+        narrower.size.width = 177
+        XCTAssertGreaterThan(cell.preferredLayoutAttributesFitting(narrower).frame.height, originalHeight)
+        cell.contentConfiguration = UIHostingConfiguration { Text("Short replacement") }.margins(.all, 0)
+        cell.requestContentHeightMeasurement()
+        XCTAssertLessThan(cell.preferredLayoutAttributesFitting(attributes).frame.height, originalHeight)
     }
 
     @MainActor

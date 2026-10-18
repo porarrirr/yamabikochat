@@ -4,6 +4,113 @@ import XCTest
 
 final class ChatPerformancePolicyTests: XCTestCase {
     @MainActor
+    func testThinkingTranscriptUpdatesPublishLatestStateWithoutRemeasuringTheAnswer() {
+        let store = ChatTimelineStore()
+        store.update(messages: [FullChatMessage(id: 1,
+            message: ChatMessage(id: 1, conversationId: 1, role: "model", text: ""), thinkingStream: nil, variants: [])])
+        var changes: [ChatTimelineRowChangeKind] = []
+        store.onRowContentDidChange = { _, kind in changes.append(kind) }
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(targetId: 1, text: "Answer", thinking: "First thought", isFinal: false))
+        for index in 0..<50 {
+            store.applyStreamingSnapshot(ChatStreamingSnapshot(targetId: 1, text: "Answer", thinking: "Thought \(index)", isFinal: false))
+        }
+        XCTAssertEqual(changes, [.streamUpdate])
+        XCTAssertEqual(store.row(id: "m-1")?.streamingSnapshot?.thinking, "Thought 49")
+        for (text, thinking) in [("Answer", " "), ("Answer", "More thinking"), ("Longer answer", "More thinking")] {
+            store.applyStreamingSnapshot(ChatStreamingSnapshot(targetId: 1, text: text, thinking: thinking, isFinal: false))
+        }
+        XCTAssertEqual(changes.count, 4, "Button visibility and answer changes must be measured")
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(targetId: 1, text: "Longer answer", thinking: "More thinking", isFinal: true))
+        XCTAssertEqual(changes.last, .completion)
+        XCTAssertEqual(changes.count, 5)
+    }
+
+    @MainActor
+    func testThinkingButtonVisibilityUsesTheSameUnicodeTrimmingAsTheRenderedRow() {
+        let store = ChatTimelineStore()
+        store.update(messages: [FullChatMessage(id: 1,
+            message: ChatMessage(id: 1, conversationId: 1, role: "model", text: ""), thinkingStream: nil, variants: [])])
+        var changes = 0
+        store.onRowContentDidChange = { _, _ in changes += 1 }
+        var expectedChanges = 0
+        var previousPresence: Bool?
+        for thinking in ["", "\u{200B}", " \u{0301}", "\u{200B}", "text", "\u{200B}", "\u{0085}", " \u{0301}"] {
+            let presence = thinking.trimmedNonEmpty != nil
+            if previousPresence != presence { expectedChanges += 1 }
+            store.applyStreamingSnapshot(ChatStreamingSnapshot(targetId: 1, text: "Answer", thinking: thinking, isFinal: false))
+            XCTAssertEqual(changes, expectedChanges, "Thinking button must be remeasured exactly when its visibility changes")
+            XCTAssertEqual(store.row(id: "m-1")?.streamingSnapshot?.thinking, thinking)
+            previousPresence = presence
+        }
+    }
+
+    @MainActor
+    func testAttributedSuffixEditsPreservePrefixSelectionAndInvalidateSizeCache() {
+        let view = SelectableChatTextView()
+        view.isScrollEnabled = false
+        let prefix = "👨‍👩‍👧‍👦 e\u{301}\n"
+        let font = UIFont.systemFont(ofSize: 17)
+        let original = NSMutableAttributedString(string: prefix, attributes: [.font: font, .foregroundColor: UIColor.systemRed])
+        original.append(NSAttributedString(string: "old", attributes: [.font: font]))
+        view.attributedText = original
+        view.selectedRange = NSRange(location: 0, length: (prefix as NSString).length - 1)
+        let selection = view.selectedRange
+        let size = view.measuredSize(for: 300)
+        let initialCount = view.textMeasurementCount
+        let suffix = NSAttributedString(string: String(repeating: "new line\n", count: 30), attributes: [.font: font, .link: URL(string: "https://example.com")!])
+        view.replaceAttributedSuffix(from: (prefix as NSString).length, with: suffix)
+        XCTAssertEqual(view.text, prefix + suffix.string)
+        XCTAssertEqual(view.selectedRange, selection)
+        XCTAssertEqual(view.textStorage.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? UIColor, .systemRed)
+        XCTAssertNotNil(view.textStorage.attribute(.link, at: (prefix as NSString).length, effectiveRange: nil))
+        XCTAssertGreaterThan(view.measuredSize(for: 300).height, size.height)
+        XCTAssertEqual(view.textMeasurementCount, initialCount + 1)
+        view.replaceAttributedSuffix(from: (prefix as NSString).length, with: suffix)
+        _ = view.measuredSize(for: 300)
+        XCTAssertEqual(view.textMeasurementCount, initialCount + 1, "Identical suffix must reuse the measured size")
+        view.replaceAttributedSuffix(from: (prefix as NSString).length, with: NSAttributedString(string: ""))
+        XCTAssertEqual(view.text, prefix)
+        XCTAssertEqual(view.selectedRange, selection)
+        XCTAssertLessThan(view.measuredSize(for: 300).height, size.height + 1)
+    }
+
+    @MainActor
+    func testIncrementalListTextStorageMatchesFreshRenderingAcrossAppendRemovalAndFormatting() async throws {
+        let host = UIHostingController(rootView: NativeMarkdownView(markdownText: ""))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        let referenceWindow = UIWindow(frame: window.frame)
+        defer { window.isHidden = true; referenceWindow.isHidden = true }
+        let prefix = "1. **太字** と [リンク](https://example.com) 👨‍👩‍👧‍👦\n2. e\u{301} `code`\n"
+        for source in [prefix, prefix + "3. 追加", prefix + "3. 追加の文章\n4. *斜体*", prefix,
+                       "1. changed\n2. other", "> 引用\n> 次の行", "# 見出し\n\n本文",
+                       "#\n\n本文", "#\n\n本文\n\n##\n\n末尾", "#\n\n本文\n\n##\n\n末尾の追加", "", prefix] {
+            let blocks = NativeMarkdownParser.parse(source, rendersMath: false)
+            host.rootView = NativeMarkdownView(markdownText: source, isStreaming: true, preparsedBlocks: blocks)
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+            let fresh = UIHostingController(rootView: NativeMarkdownView(markdownText: source, isStreaming: true, preparsedBlocks: blocks))
+            // UIKit representables materialize only after their host is in a
+            // window. Compare two live trees, retaining only the streamed one.
+            referenceWindow.rootViewController = fresh
+            referenceWindow.isHidden = false
+            try await Task.sleep(for: .milliseconds(30))
+            host.view.layoutIfNeeded()
+            fresh.view.layoutIfNeeded()
+            let actual = textViews(in: host.view).map { $0.attributedText ?? NSAttributedString(string: "") }
+            let expected = textViews(in: fresh.view).map { $0.attributedText ?? NSAttributedString(string: "") }
+            XCTAssertEqual(actual, expected, source)
+        }
+    }
+
+    @MainActor
+    private func textViews(in view: UIView) -> [SelectableChatTextView] {
+        if let text = view as? SelectableChatTextView { return [text] }
+        return view.subviews.flatMap { textViews(in: $0) }
+    }
+
+    @MainActor
     func testStreamingListRowsMatchFullParseAcrossContextChanges() {
         let fixtures = [
             "1. 日本語 **強調** [資料](https://example.com)\n2. `code` と e\u{301} 👨‍👩‍👧‍👦\n3. 続き\n",

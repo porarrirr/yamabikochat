@@ -142,9 +142,25 @@ final class ChatTimelineStore: ObservableObject {
             : snapshot
         guard row.streamingSnapshot != presentedSnapshot else { return }
         let changeKind: ChatTimelineRowChangeKind = snapshot.isFinal ? .completion : .streamUpdate
-        onRowContentWillChange?(rowID, changeKind)
+        // The timeline displays a thinking button, not the thinking transcript.
+        // Keep its action's latest text observable without rebuilding/measuring
+        // the hosting cell when only that hidden transcript changes. Presence
+        // transitions, tool changes, answer changes and completion still resize.
+        let changesOnlyThinkingContents = presentedSnapshot.map { next in
+            row.streamingSnapshot.map { previous in
+                !previous.isFinal && !next.isFinal
+                    && previous.text == next.text
+                    && previous.toolActivity == next.toolActivity
+                    && previous.thinking.unicodeScalars.contains(where: {
+                        !CharacterSet.whitespacesAndNewlines.contains($0)
+                    }) == next.thinking.unicodeScalars.contains(where: {
+                        !CharacterSet.whitespacesAndNewlines.contains($0)
+                    })
+            } ?? false
+        } ?? false
+        if !changesOnlyThinkingContents { onRowContentWillChange?(rowID, changeKind) }
         row.apply(snapshot: presentedSnapshot)
-        onRowContentDidChange?(rowID, changeKind)
+        if !changesOnlyThinkingContents { onRowContentDidChange?(rowID, changeKind) }
     }
 
     func clearTransientStreamingSnapshots() {

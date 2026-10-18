@@ -1,0 +1,3134 @@
+{
+  "measurement_date": "2026-10-18",
+  "target": {
+    "cpu_gpu_reduction_percent": 80,
+    "whole_application_target_achieved": false
+  },
+  "metadata": {
+    "baseline_revision": "1d25c374c8496a46911a71c822d7d4bd5df45341",
+    "xcode": "Xcode 27.0\nBuild version 27A266a",
+    "os": "ProductName:\t\tmacOS\nProductVersion:\t\t27.0.1\nBuildVersion:\t\t26A434",
+    "hardware": "hw.memsize: 25769803776\nhw.ncpu: 8\nmachdep.cpu.brand_string: Apple M2",
+    "configuration": "Debug",
+    "optimization": "-O",
+    "parallel_testing": false,
+    "harness_sha256": "b30abf4188c615968a46db85a48798f6a87376926c607c90de92f2606b710d82",
+    "device": "20705736-EF0A-4657-BD21-48E13607AB75",
+    "simulator": "iPhone 18 Pro, iOS 27.0 (24A434)",
+    "rendering_viewport_points": [
+      402,
+      874
+    ],
+    "locale": "ja_JP",
+    "appearance": "light",
+    "content_size": "medium",
+    "candidate_build_log": "build-candidate-final.log",
+    "source_sha256": {
+      "ios/YamabikoChat/Features/Chat/ChatTimelineCollectionView.swift": "7777e8819e7085d70d6bc31ed0da6ebd866d0ec9fd15e86448780a62b19b9630",
+      "ios/YamabikoChat/Features/Chat/ChatTimelineStore.swift": "dfaa52f736751c029645880fa56e7f9003f1617dbc1779a8f2111ed437b29625",
+      "ios/YamabikoChat/Features/Chat/NativeMarkdownView.swift": "0dc2c257263e127f37bc99779c8cfc146eca3898ab6fea7c06dfbbdea1ffa1a2",
+      "ios/YamabikoUITests/AppInteractionPerformanceTests.swift": "7673be9a6fc5c90262edfeaffeaf507741a42d9d7868624a4079c46ffe71dbd0"
+    },
+    "ui_candidate_build_log": "build-candidate-ui-2.log",
+    "ui_baseline_build_log": "build-baseline-ui-2.log",
+    "baseline_source_sha256": {
+      "ios/YamabikoChat/Features/Chat/ChatTimelineCollectionView.swift": "d6bd1eeabc877cb1400505b1473ce29595c29a294e0a7fba2d8a0612b0744eef",
+      "ios/YamabikoChat/Features/Chat/ChatTimelineStore.swift": "1134f035c9e8a19ca09d4893bdfbb68e1a618b6ba182ec7b85325990554aff18",
+      "ios/YamabikoChat/Features/Chat/NativeMarkdownView.swift": "68ae00ff31c31b6eee258c0b99474778292dd54ac1d2abbf97c2db8cfaf8aea0"
+    },
+    "verification_source_sha256": {
+      "ios/YamabikoTests/ChatRenderingPerformanceTests.swift": "b30abf4188c615968a46db85a48798f6a87376926c607c90de92f2606b710d82",
+      "ios/YamabikoUITests/AppInteractionPerformanceTests.swift": "7673be9a6fc5c90262edfeaffeaf507741a42d9d7868624a4079c46ffe71dbd0",
+      "ios/scripts/benchmark-rendering.py": "98c3b8fe5c483555f2f1b95a2c11c3ec334d97a0c95111ab6dbac9543d5dd7a8",
+      "ios/scripts/summarize-rendering-trace.py": "41a213faf6aaa5dccd939230389026c372342044e2003b56679ba2c1b0d90573"
+    }
+  },
+  "aggregation": "Median of all three samples in each successful reset-app-data run, including the first sample; reduction = 100 * (1 - after / before). No profiler timings included in the comparison.",
+  "limitations": [
+    "Debug -O iPhone simulator measurements on a shared Mac; no device or Release measurements.",
+    "Rendering replay measures application user + system CPU time, excluding separate WebKit/rendering processes and networking/Pi/tool execution.",
+    "UI CPU metrics measure the application during scripted gestures; clock time includes automation waits.",
+    "Small samples and overlapping ranges; no statistical significance claim for small differences.",
+    "All screens, iPad, accessibility sizes, voice input, real API streaming, energy use, and end-to-end performance are not fully verified."
+  ],
+  "rendering_comparison": [
+    {
+      "workload": "prose",
+      "before": {
+        "cpu_seconds": 1.2065120000000036,
+        "wall_seconds": 4.281925,
+        "response_height": 2451,
+        "visible_cell_measurements": 484
+      },
+      "after": {
+        "cpu_seconds": 1.142866999999999,
+        "wall_seconds": 4.279791083,
+        "response_height": 2451,
+        "visible_cell_measurements": 122
+      },
+      "cpu_reduction_percent": 5.27512366225984
+    },
+    {
+      "workload": "list",
+      "before": {
+        "cpu_seconds": 6.755902,
+        "wall_seconds": 7.350308667,
+        "response_height": 3499,
+        "visible_cell_measurements": 484
+      },
+      "after": {
+        "cpu_seconds": 2.95965,
+        "wall_seconds": 4.411302292,
+        "response_height": 3499,
+        "visible_cell_measurements": 122
+      },
+      "cpu_reduction_percent": 56.19163806698202
+    },
+    {
+      "workload": "thinking",
+      "before": {
+        "cpu_seconds": 1.553223000000001,
+        "wall_seconds": 4.292194375,
+        "response_height": 2451,
+        "visible_cell_measurements": 482
+      },
+      "after": {
+        "cpu_seconds": 1.0244040000000005,
+        "wall_seconds": 4.292129208,
+        "response_height": 2451,
+        "visible_cell_measurements": 4
+      },
+      "cpu_reduction_percent": 34.04655995951644
+    },
+    {
+      "workload": "scroll",
+      "before": {
+        "cpu_seconds": 3.4370169999999973,
+        "wall_seconds": 4.263132333,
+        "response_height": 2451,
+        "visible_cell_measurements": 1
+      },
+      "after": {
+        "cpu_seconds": 2.5863080000000025,
+        "wall_seconds": 4.256313833,
+        "response_height": 2451,
+        "visible_cell_measurements": 1
+      },
+      "cpu_reduction_percent": 24.751375975155064
+    },
+    {
+      "workload": "idle",
+      "before": {
+        "cpu_seconds": 0.2741490000000013,
+        "wall_seconds": 4.265033625,
+        "response_height": 2451,
+        "visible_cell_measurements": 3
+      },
+      "after": {
+        "cpu_seconds": 0.2304940000000002,
+        "wall_seconds": 4.25952575,
+        "response_height": 2451,
+        "visible_cell_measurements": 3
+      },
+      "cpu_reduction_percent": 15.923822446917878
+    }
+  ],
+  "ui_comparison": [
+    {
+      "test": "AppInteractionPerformanceTests/testScrollDrawerAndComposerCPU()",
+      "before": {
+        "CPU Cycles (ios)": {
+          "median": 9658404.246,
+          "unit": "kC"
+        },
+        "Absolute Memory Physical (ios)": {
+          "median": 160849.12,
+          "unit": "kB"
+        },
+        "Clock Monotonic Time": {
+          "median": 23.064416176,
+          "unit": "s"
+        },
+        "CPU Instructions Retired (ios)": {
+          "median": 18738369.289,
+          "unit": "kI"
+        },
+        "Memory Physical (ios)": {
+          "median": 344.064,
+          "unit": "kB"
+        },
+        "Memory Peak Physical (ios)": {
+          "median": 161946.848,
+          "unit": "kB"
+        },
+        "CPU Time (ios)": {
+          "median": 3.8441237150000003,
+          "unit": "s"
+        }
+      },
+      "after": {
+        "CPU Cycles (ios)": {
+          "median": 9480743.521,
+          "unit": "kC"
+        },
+        "Absolute Memory Physical (ios)": {
+          "median": 162618.544,
+          "unit": "kB"
+        },
+        "Clock Monotonic Time": {
+          "median": 22.975640393000003,
+          "unit": "s"
+        },
+        "CPU Instructions Retired (ios)": {
+          "median": 18564059.923,
+          "unit": "kI"
+        },
+        "Memory Physical (ios)": {
+          "median": 294.912,
+          "unit": "kB"
+        },
+        "Memory Peak Physical (ios)": {
+          "median": 163617.968,
+          "unit": "kB"
+        },
+        "CPU Time (ios)": {
+          "median": 3.698844438,
+          "unit": "s"
+        }
+      },
+      "cpu_reduction_percent": 3.7792560222011495
+    },
+    {
+      "test": "AppInteractionPerformanceTests/testSettingsNavigationAndScrollingCPU()",
+      "before": {
+        "CPU Cycles (ios)": {
+          "median": 5341159.748,
+          "unit": "kC"
+        },
+        "Absolute Memory Physical (ios)": {
+          "median": 55577.192,
+          "unit": "kB"
+        },
+        "Clock Monotonic Time": {
+          "median": 11.339144090000001,
+          "unit": "s"
+        },
+        "CPU Instructions Retired (ios)": {
+          "median": 11914635.43,
+          "unit": "kI"
+        },
+        "Memory Physical (ios)": {
+          "median": -229.376,
+          "unit": "kB"
+        },
+        "Memory Peak Physical (ios)": {
+          "median": 55872.104,
+          "unit": "kB"
+        },
+        "CPU Time (ios)": {
+          "median": 2.151938833,
+          "unit": "s"
+        }
+      },
+      "after": {
+        "CPU Cycles (ios)": {
+          "median": 5226289.173,
+          "unit": "kC"
+        },
+        "Absolute Memory Physical (ios)": {
+          "median": 55478.888,
+          "unit": "kB"
+        },
+        "Clock Monotonic Time": {
+          "median": 11.379099,
+          "unit": "s"
+        },
+        "CPU Instructions Retired (ios)": {
+          "median": 11879576.138,
+          "unit": "kI"
+        },
+        "Memory Physical (ios)": {
+          "median": -245.76,
+          "unit": "kB"
+        },
+        "Memory Peak Physical (ios)": {
+          "median": 55741.032,
+          "unit": "kB"
+        },
+        "CPU Time (ios)": {
+          "median": 2.097221545,
+          "unit": "s"
+        }
+      },
+      "cpu_reduction_percent": 2.542697178976927
+    }
+  ],
+  "adopted_runs": {
+    "before-render-clean": {
+      "metrics": {
+        "exit_code": 0,
+        "device": "20705736-EF0A-4657-BD21-48E13607AB75",
+        "products": "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/baseline-derived/Build/Products",
+        "locale": "ja_JP",
+        "languages": [
+          "ja"
+        ],
+        "appearance": "light",
+        "content_size": "medium",
+        "reset_app_data": true,
+        "profiled": false,
+        "trace": null,
+        "samples": [
+          {
+            "content_height": 16825,
+            "cpu_seconds": 1.1598060000000006,
+            "response_height": 2451,
+            "sample": 0,
+            "visible_cell_measurements": 484,
+            "wall_seconds": 4.27763775,
+            "workload": "prose"
+          },
+          {
+            "content_height": 17873,
+            "cpu_seconds": 6.755902,
+            "response_height": 3499,
+            "sample": 0,
+            "visible_cell_measurements": 484,
+            "wall_seconds": 7.350308667,
+            "workload": "list"
+          },
+          {
+            "content_height": 17183,
+            "cpu_seconds": 1.553223000000001,
+            "response_height": 2451,
+            "sample": 0,
+            "visible_cell_measurements": 482,
+            "wall_seconds": 4.298547458,
+            "workload": "thinking"
+          },
+          {
+            "content_height": 20320,
+            "cpu_seconds": 3.3553159999999984,
+            "response_height": 2451,
+            "sample": 0,
+            "visible_cell_measurements": 1,
+            "wall_seconds": 4.256537792,
+            "workload": "scroll"
+          },
+          {
+            "content_height": 16856,
+            "cpu_seconds": 0.2741490000000013,
+            "response_height": 2451,
+            "sample": 0,
+            "visible_cell_measurements": 3,
+            "wall_seconds": 4.265033625,
+            "workload": "idle"
+          },
+          {
+            "content_height": 16825,
+            "cpu_seconds": 1.2065120000000036,
+            "response_height": 2451,
+            "sample": 1,
+            "visible_cell_measurements": 484,
+            "wall_seconds": 4.282575042,
+            "workload": "prose"
+          },
+          {
+            "content_height": 17873,
+            "cpu_seconds": 7.098488999999997,
+            "response_height": 3499,
+            "sample": 1,
+            "visible_cell_measurements": 484,
+            "wall_seconds": 7.686728917,
+            "workload": "list"
+          },
+          {
+            "content_height": 17183,
+            "cpu_seconds": 1.5477960000000017,
+            "response_height": 2451,
+            "sample": 1,
+            "visible_cell_measurements": 482,
+            "wall_seconds": 4.290077417,
+            "workload": "thinking"
+          },
+          {
+            "content_height": 20320,
+            "cpu_seconds": 3.4370169999999973,
+            "response_height": 2451,
+            "sample": 1,
+            "visible_cell_measurements": 1,
+            "wall_seconds": 4.263132333,
+            "workload": "scroll"
+          },
+          {
+            "content_height": 16856,
+            "cpu_seconds": 0.260114999999999,
+            "response_height": 2451,
+            "sample": 1,
+            "visible_cell_measurements": 3,
+            "wall_seconds": 4.25794575,
+            "workload": "idle"
+          },
+          {
+            "content_height": 16825,
+            "cpu_seconds": 1.386883999999995,
+            "response_height": 2451,
+            "sample": 2,
+            "visible_cell_measurements": 483,
+            "wall_seconds": 4.281925,
+            "workload": "prose"
+          },
+          {
+            "content_height": 17873,
+            "cpu_seconds": 6.664251,
+            "response_height": 3499,
+            "sample": 2,
+            "visible_cell_measurements": 484,
+            "wall_seconds": 7.25155475,
+            "workload": "list"
+          },
+          {
+            "content_height": 17183,
+            "cpu_seconds": 1.6183610000000002,
+            "response_height": 2451,
+            "sample": 2,
+            "visible_cell_measurements": 482,
+            "wall_seconds": 4.292194375,
+            "workload": "thinking"
+          },
+          {
+            "content_height": 20320,
+            "cpu_seconds": 3.986453999999995,
+            "response_height": 2451,
+            "sample": 2,
+            "visible_cell_measurements": 1,
+            "wall_seconds": 4.349685917,
+            "workload": "scroll"
+          },
+          {
+            "content_height": 16856,
+            "cpu_seconds": 0.2794309999999953,
+            "response_height": 2451,
+            "sample": 2,
+            "visible_cell_measurements": 3,
+            "wall_seconds": 4.2662246249999995,
+            "workload": "idle"
+          }
+        ],
+        "median_cpu_seconds": {
+          "idle": 0.2741490000000013,
+          "list": 6.755902,
+          "prose": 1.2065120000000036,
+          "scroll": 3.4370169999999973,
+          "thinking": 1.553223000000001
+        }
+      },
+      "command": [
+        "xcodebuild",
+        "-xctestrun",
+        "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/baseline-derived/Build/Products/RenderingBenchmark.xctestrun",
+        "-destination",
+        "platform=iOS Simulator,id=20705736-EF0A-4657-BD21-48E13607AB75",
+        "-parallel-testing-enabled",
+        "NO",
+        "-collect-test-diagnostics",
+        "never",
+        "-only-testing:YamabikoTests/ChatRenderingPerformanceTests",
+        "-test-timeouts-enabled",
+        "YES",
+        "-default-test-execution-time-allowance",
+        "240",
+        "-maximum-test-execution-time-allowance",
+        "360",
+        "-resultBundlePath",
+        "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/before-render-clean/result.xcresult",
+        "test-without-building"
+      ],
+      "log_sha256": "d4778441e4161687c83bd02c3f57bc3bb596c4d49f63177ca528e0b57e52f6c0"
+    },
+    "after-render-clean-2": {
+      "metrics": {
+        "exit_code": 0,
+        "device": "20705736-EF0A-4657-BD21-48E13607AB75",
+        "products": "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/candidate-derived/Build/Products",
+        "locale": "ja_JP",
+        "languages": [
+          "ja"
+        ],
+        "appearance": "light",
+        "content_size": "medium",
+        "reset_app_data": true,
+        "profiled": false,
+        "trace": null,
+        "samples": [
+          {
+            "content_height": 16825,
+            "cpu_seconds": 0.8478029999999999,
+            "response_height": 2451,
+            "sample": 0,
+            "visible_cell_measurements": 122,
+            "wall_seconds": 4.275005166,
+            "workload": "prose"
+          },
+          {
+            "content_height": 17873,
+            "cpu_seconds": 3.013699000000001,
+            "response_height": 3499,
+            "sample": 0,
+            "visible_cell_measurements": 122,
+            "wall_seconds": 4.4190455,
+            "workload": "list"
+          },
+          {
+            "content_height": 17183,
+            "cpu_seconds": 1.0244040000000005,
+            "response_height": 2451,
+            "sample": 0,
+            "visible_cell_measurements": 4,
+            "wall_seconds": 4.292129208,
+            "workload": "thinking"
+          },
+          {
+            "content_height": 20320,
+            "cpu_seconds": 2.6291449999999994,
+            "response_height": 2451,
+            "sample": 0,
+            "visible_cell_measurements": 1,
+            "wall_seconds": 4.260922541,
+            "workload": "scroll"
+          },
+          {
+            "content_height": 16825,
+            "cpu_seconds": 0.22921199999999864,
+            "response_height": 2451,
+            "sample": 0,
+            "visible_cell_measurements": 3,
+            "wall_seconds": 4.257871708,
+            "workload": "idle"
+          },
+          {
+            "content_height": 16825,
+            "cpu_seconds": 1.2381130000000002,
+            "response_height": 2451,
+            "sample": 1,
+            "visible_cell_measurements": 122,
+            "wall_seconds": 4.279791083,
+            "workload": "prose"
+          },
+          {
+            "content_height": 17873,
+            "cpu_seconds": 2.947058,
+            "response_height": 3499,
+            "sample": 1,
+            "visible_cell_measurements": 122,
+            "wall_seconds": 4.391623,
+            "workload": "list"
+          },
+          {
+            "content_height": 17183,
+            "cpu_seconds": 1.108471999999999,
+            "response_height": 2451,
+            "sample": 1,
+            "visible_cell_measurements": 4,
+            "wall_seconds": 4.30134325,
+            "workload": "thinking"
+          },
+          {
+            "content_height": 20320,
+            "cpu_seconds": 2.574088999999997,
+            "response_height": 2451,
+            "sample": 1,
+            "visible_cell_measurements": 1,
+            "wall_seconds": 4.256313833,
+            "workload": "scroll"
+          },
+          {
+            "content_height": 16856,
+            "cpu_seconds": 0.26023700000000005,
+            "response_height": 2451,
+            "sample": 1,
+            "visible_cell_measurements": 3,
+            "wall_seconds": 4.260849542,
+            "workload": "idle"
+          },
+          {
+            "content_height": 16825,
+            "cpu_seconds": 1.142866999999999,
+            "response_height": 2451,
+            "sample": 2,
+            "visible_cell_measurements": 122,
+            "wall_seconds": 4.282523625,
+            "workload": "prose"
+          },
+          {
+            "content_height": 17873,
+            "cpu_seconds": 2.95965,
+            "response_height": 3499,
+            "sample": 2,
+            "visible_cell_measurements": 122,
+            "wall_seconds": 4.411302292,
+            "workload": "list"
+          },
+          {
+            "content_height": 17183,
+            "cpu_seconds": 0.971194999999998,
+            "response_height": 2451,
+            "sample": 2,
+            "visible_cell_measurements": 4,
+            "wall_seconds": 4.282873791,
+            "workload": "thinking"
+          },
+          {
+            "content_height": 20320,
+            "cpu_seconds": 2.5863080000000025,
+            "response_height": 2451,
+            "sample": 2,
+            "visible_cell_measurements": 1,
+            "wall_seconds": 4.2547445,
+            "workload": "scroll"
+          },
+          {
+            "content_height": 16856,
+            "cpu_seconds": 0.2304940000000002,
+            "response_height": 2451,
+            "sample": 2,
+            "visible_cell_measurements": 3,
+            "wall_seconds": 4.25952575,
+            "workload": "idle"
+          }
+        ],
+        "median_cpu_seconds": {
+          "idle": 0.2304940000000002,
+          "list": 2.95965,
+          "prose": 1.142866999999999,
+          "scroll": 2.5863080000000025,
+          "thinking": 1.0244040000000005
+        }
+      },
+      "command": [
+        "xcodebuild",
+        "-xctestrun",
+        "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/candidate-derived/Build/Products/RenderingBenchmark.xctestrun",
+        "-destination",
+        "platform=iOS Simulator,id=20705736-EF0A-4657-BD21-48E13607AB75",
+        "-parallel-testing-enabled",
+        "NO",
+        "-collect-test-diagnostics",
+        "never",
+        "-only-testing:YamabikoTests/ChatRenderingPerformanceTests",
+        "-test-timeouts-enabled",
+        "YES",
+        "-default-test-execution-time-allowance",
+        "240",
+        "-maximum-test-execution-time-allowance",
+        "360",
+        "-resultBundlePath",
+        "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/after-render-clean-2/result.xcresult",
+        "test-without-building"
+      ],
+      "log_sha256": "f5c3fda6efc86f63e4d2418658d99bf7af9e1a82dc8c0a07a1c2cca8cb939c5b"
+    },
+    "before-ui-clean": {
+      "metrics": {
+        "exit_code": 0,
+        "device": "20705736-EF0A-4657-BD21-48E13607AB75",
+        "products": "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/baseline-derived/Build/Products",
+        "locale": "ja_JP",
+        "languages": [
+          "ja"
+        ],
+        "appearance": "light",
+        "content_size": "medium",
+        "reset_app_data": true,
+        "profiled": false,
+        "trace": null,
+        "samples": [],
+        "median_cpu_seconds": {},
+        "xctest_metrics": [
+          {
+            "testIdentifier": "AppInteractionPerformanceTests/testScrollDrawerAndComposerCPU()",
+            "testIdentifierURL": "test://com.apple.xcode/YamabikoChat/YamabikoUITests/AppInteractionPerformanceTests/testScrollDrawerAndComposerCPU",
+            "testRuns": [
+              {
+                "device": {
+                  "deviceId": "20705736-EF0A-4657-BD21-48E13607AB75",
+                  "deviceName": "yamabiko-app-performance-20261018"
+                },
+                "metrics": [
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "CPU Cycles (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_CPU-com.porarri.yamabikochat.ios.cycles",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      14462341.135,
+                      9181738.869,
+                      9658404.246
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kC"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Absolute Memory Physical (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_Memory-com.porarri.yamabikochat.ios.physical_absolute",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      160636.128,
+                      160849.12,
+                      161193.184
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kB"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Clock Monotonic Time",
+                    "identifier": "com.apple.dt.XCTMetric_Clock.time.monotonic",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      23.230998643000003,
+                      22.498940691,
+                      23.064416176
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "s"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "CPU Instructions Retired (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_CPU-com.porarri.yamabikochat.ios.instructions_retired",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      28436583.316,
+                      17947058.462,
+                      18738369.289
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kI"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Memory Physical (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_Memory-com.porarri.yamabikochat.ios.physical",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      4964.352,
+                      212.992,
+                      344.064
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kB"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Memory Peak Physical (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_Memory-com.porarri.yamabikochat.ios.physical_peak",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      161209.568,
+                      161946.848,
+                      162110.688
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kB"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "CPU Time (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_CPU-com.porarri.yamabikochat.ios.time",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      5.014361008000001,
+                      3.7045641430000003,
+                      3.8441237150000003
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "s"
+                  }
+                ],
+                "testPlanConfiguration": {
+                  "configurationId": "1",
+                  "configurationName": "Test Scheme Action"
+                }
+              }
+            ]
+          },
+          {
+            "testIdentifier": "AppInteractionPerformanceTests/testSettingsNavigationAndScrollingCPU()",
+            "testIdentifierURL": "test://com.apple.xcode/YamabikoChat/YamabikoUITests/AppInteractionPerformanceTests/testSettingsNavigationAndScrollingCPU",
+            "testRuns": [
+              {
+                "device": {
+                  "deviceId": "20705736-EF0A-4657-BD21-48E13607AB75",
+                  "deviceName": "yamabiko-app-performance-20261018"
+                },
+                "metrics": [
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "CPU Cycles (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_CPU-com.porarri.yamabikochat.ios.cycles",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      5341159.748,
+                      5379207.263,
+                      5270225.167
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kC"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Absolute Memory Physical (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_Memory-com.porarri.yamabikochat.ios.physical_absolute",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      55806.568,
+                      55577.192,
+                      55495.272
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kB"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Clock Monotonic Time",
+                    "identifier": "com.apple.dt.XCTMetric_Clock.time.monotonic",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      11.363721499,
+                      11.333402819000002,
+                      11.339144090000001
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "s"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "CPU Instructions Retired (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_CPU-com.porarri.yamabikochat.ios.instructions_retired",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      11974820.381,
+                      11905811.671,
+                      11914635.43
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kI"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Memory Physical (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_Memory-com.porarri.yamabikochat.ios.physical",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      -704.512,
+                      -229.376,
+                      -81.92
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kB"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Memory Peak Physical (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_Memory-com.porarri.yamabikochat.ios.physical_peak",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      56511.08,
+                      55872.104,
+                      55642.728
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kB"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "CPU Time (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_CPU-com.porarri.yamabikochat.ios.time",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      2.151938833,
+                      2.157981577,
+                      2.071790639
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "s"
+                  }
+                ],
+                "testPlanConfiguration": {
+                  "configurationId": "1",
+                  "configurationName": "Test Scheme Action"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "command": [
+        "xcodebuild",
+        "-xctestrun",
+        "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/baseline-derived/Build/Products/RenderingBenchmark.xctestrun",
+        "-destination",
+        "platform=iOS Simulator,id=20705736-EF0A-4657-BD21-48E13607AB75",
+        "-parallel-testing-enabled",
+        "NO",
+        "-collect-test-diagnostics",
+        "never",
+        "-only-testing:YamabikoUITests/AppInteractionPerformanceTests",
+        "-test-timeouts-enabled",
+        "YES",
+        "-default-test-execution-time-allowance",
+        "240",
+        "-maximum-test-execution-time-allowance",
+        "360",
+        "-resultBundlePath",
+        "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/before-ui-clean/result.xcresult",
+        "test-without-building"
+      ],
+      "log_sha256": "fe5a88a9eb25348f8bdee39ada79ec95b4d21493f988e3f7d848de6a9198371d"
+    },
+    "after-ui-clean": {
+      "metrics": {
+        "exit_code": 0,
+        "device": "20705736-EF0A-4657-BD21-48E13607AB75",
+        "products": "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/candidate-derived/Build/Products",
+        "locale": "ja_JP",
+        "languages": [
+          "ja"
+        ],
+        "appearance": "light",
+        "content_size": "medium",
+        "reset_app_data": true,
+        "profiled": false,
+        "trace": null,
+        "samples": [],
+        "median_cpu_seconds": {},
+        "xctest_metrics": [
+          {
+            "testIdentifier": "AppInteractionPerformanceTests/testScrollDrawerAndComposerCPU()",
+            "testIdentifierURL": "test://com.apple.xcode/YamabikoChat/YamabikoUITests/AppInteractionPerformanceTests/testScrollDrawerAndComposerCPU",
+            "testRuns": [
+              {
+                "device": {
+                  "deviceId": "20705736-EF0A-4657-BD21-48E13607AB75",
+                  "deviceName": "yamabiko-app-performance-20261018"
+                },
+                "metrics": [
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "CPU Cycles (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_CPU-com.porarri.yamabikochat.ios.cycles",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      7738409.051,
+                      10343920.161,
+                      9480743.521
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kC"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Absolute Memory Physical (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_Memory-com.porarri.yamabikochat.ios.physical_absolute",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      157293.744,
+                      162618.544,
+                      162913.456
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kB"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Clock Monotonic Time",
+                    "identifier": "com.apple.dt.XCTMetric_Clock.time.monotonic",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      22.962565206,
+                      23.339589931000003,
+                      22.975640393000003
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "s"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "CPU Instructions Retired (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_CPU-com.porarri.yamabikochat.ios.instructions_retired",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      15362604.073,
+                      19996177.114,
+                      18564059.923
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kI"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Memory Physical (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_Memory-com.porarri.yamabikochat.ios.physical",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      147.456,
+                      5324.8,
+                      294.912
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kB"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Memory Peak Physical (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_Memory-com.porarri.yamabikochat.ios.physical_peak",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      157572.272,
+                      163962.032,
+                      163617.968
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kB"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "CPU Time (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_CPU-com.porarri.yamabikochat.ios.time",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      2.950759627,
+                      3.9201431270000002,
+                      3.698844438
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "s"
+                  }
+                ],
+                "testPlanConfiguration": {
+                  "configurationId": "1",
+                  "configurationName": "Test Scheme Action"
+                }
+              }
+            ]
+          },
+          {
+            "testIdentifier": "AppInteractionPerformanceTests/testSettingsNavigationAndScrollingCPU()",
+            "testIdentifierURL": "test://com.apple.xcode/YamabikoChat/YamabikoUITests/AppInteractionPerformanceTests/testSettingsNavigationAndScrollingCPU",
+            "testRuns": [
+              {
+                "device": {
+                  "deviceId": "20705736-EF0A-4657-BD21-48E13607AB75",
+                  "deviceName": "yamabiko-app-performance-20261018"
+                },
+                "metrics": [
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "CPU Cycles (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_CPU-com.porarri.yamabikochat.ios.cycles",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      5355545.752,
+                      5199499.787,
+                      5226289.173
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kC"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Absolute Memory Physical (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_Memory-com.porarri.yamabikochat.ios.physical_absolute",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      55724.648,
+                      55478.888,
+                      55396.968
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kB"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Clock Monotonic Time",
+                    "identifier": "com.apple.dt.XCTMetric_Clock.time.monotonic",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      11.362988747000001,
+                      11.379099,
+                      11.381115872
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "s"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "CPU Instructions Retired (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_CPU-com.porarri.yamabikochat.ios.instructions_retired",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      11946993.397,
+                      11866931.146,
+                      11879576.138
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kI"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Memory Physical (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_Memory-com.porarri.yamabikochat.ios.physical",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      -819.2,
+                      -245.76,
+                      -81.92
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kB"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "Memory Peak Physical (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_Memory-com.porarri.yamabikochat.ios.physical_peak",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      56543.848,
+                      55741.032,
+                      55528.04
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "kB"
+                  },
+                  {
+                    "baselineAverage": 0,
+                    "baselineName": "",
+                    "displayName": "CPU Time (ios)",
+                    "identifier": "com.apple.dt.XCTMetric_CPU-com.porarri.yamabikochat.ios.time",
+                    "maxPercentRegression": 10,
+                    "maxPercentRelativeStandardDeviation": 10,
+                    "maxRegression": 0,
+                    "maxStandardDeviation": 10,
+                    "measurements": [
+                      2.0987925830000003,
+                      2.041064624,
+                      2.097221545
+                    ],
+                    "polarity": "prefers smaller",
+                    "unitOfMeasurement": "s"
+                  }
+                ],
+                "testPlanConfiguration": {
+                  "configurationId": "1",
+                  "configurationName": "Test Scheme Action"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "command": [
+        "xcodebuild",
+        "-xctestrun",
+        "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/candidate-derived/Build/Products/RenderingBenchmark.xctestrun",
+        "-destination",
+        "platform=iOS Simulator,id=20705736-EF0A-4657-BD21-48E13607AB75",
+        "-parallel-testing-enabled",
+        "NO",
+        "-collect-test-diagnostics",
+        "never",
+        "-only-testing:YamabikoUITests/AppInteractionPerformanceTests",
+        "-test-timeouts-enabled",
+        "YES",
+        "-default-test-execution-time-allowance",
+        "240",
+        "-maximum-test-execution-time-allowance",
+        "360",
+        "-resultBundlePath",
+        "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/after-ui-clean/result.xcresult",
+        "test-without-building"
+      ],
+      "log_sha256": "cfe4563e0b138f83f73df7ba4524a7471a3b63eb2fb6e14fcba8cf09d99e5493"
+    }
+  },
+  "profiles": {
+    "baseline-cpu-profile-2": {
+      "samples": 11517,
+      "sampled_seconds": 11.517,
+      "main_thread_sampled_seconds": 11.389,
+      "note": "Statistical CPU samples, not elapsed time. Inclusive symbols overlap; do not add percentages.",
+      "relevant_inclusive": [
+        {
+          "symbol": "@objc ChatTimelineCollectionCell.preferredLayoutAttributesFitting(_:)",
+          "sampled_seconds": 5.364,
+          "percent": 46.574628809585825
+        },
+        {
+          "symbol": "ChatTimelineCollectionCell.preferredLayoutAttributesFitting(_:)",
+          "sampled_seconds": 5.361,
+          "percent": 46.54858035946861
+        },
+        {
+          "symbol": "ChatTimelineStore.applyStreamingSnapshot(_:)",
+          "sampled_seconds": 3.015,
+          "percent": 26.178692367804118
+        },
+        {
+          "symbol": "SelectableChatText.sizeThatFits(_:uiView:context:)",
+          "sampled_seconds": 1.518,
+          "percent": 13.18051575931232
+        },
+        {
+          "symbol": "protocol witness for UIViewRepresentable.sizeThatFits(_:uiView:context:) in conformance SelectableChatText",
+          "sampled_seconds": 1.518,
+          "percent": 13.18051575931232
+        },
+        {
+          "symbol": "SelectableChatTextView.measuredSize(for:)",
+          "sampled_seconds": 1.517,
+          "percent": 13.171832942606581
+        },
+        {
+          "symbol": "SelectableChatText.updateUIView(_:context:)",
+          "sampled_seconds": 1.276,
+          "percent": 11.0792741165234
+        },
+        {
+          "symbol": "specialized SelectableChatText.makeUIView(context:)",
+          "sampled_seconds": 1.024,
+          "percent": 8.891204306677086
+        },
+        {
+          "symbol": "SelectableChatTextView.attributedText.setter",
+          "sampled_seconds": 0.976,
+          "percent": 8.474429104801597
+        },
+        {
+          "symbol": "@objc SelectableChatTextView.init(frame:textContainer:)",
+          "sampled_seconds": 0.764,
+          "percent": 6.633671963184858
+        },
+        {
+          "symbol": "SelectableChatTextView.init(frame:textContainer:)",
+          "sampled_seconds": 0.763,
+          "percent": 6.624989146479118
+        },
+        {
+          "symbol": "ChatTimelineCollectionCell.measuredContentHeight(for:)",
+          "sampled_seconds": 0.555,
+          "percent": 4.818963271685335
+        },
+        {
+          "symbol": "SelectableChatText.renderedText()",
+          "sampled_seconds": 0.264,
+          "percent": 2.292263610315186
+        },
+        {
+          "symbol": "specialized SelectableChatText.renderedText()",
+          "sampled_seconds": 0.26,
+          "percent": 2.257532343492229
+        },
+        {
+          "symbol": "specialized static SelectableChatText.Fragment.__derived_struct_equals(_:_:)",
+          "sampled_seconds": 0.21,
+          "percent": 1.8233915082052619
+        },
+        {
+          "symbol": "SelectableChatText.init(blocks:)",
+          "sampled_seconds": 0.098,
+          "percent": 0.8509160371624556
+        },
+        {
+          "symbol": "specialized SelectableChatText.init(blocks:)",
+          "sampled_seconds": 0.096,
+          "percent": 0.8335504037509769
+        },
+        {
+          "symbol": "SelectableChatText.applyBaseStyle(to:range:style:weight:quoteDepth:)",
+          "sampled_seconds": 0.092,
+          "percent": 0.7988191369280195
+        },
+        {
+          "symbol": "closure #1 in SelectableChatText.init(blocks:)",
+          "sampled_seconds": 0.091,
+          "percent": 0.7901363202222801
+        },
+        {
+          "symbol": "static SelectableChatText.fragments(for:quoteDepth:)",
+          "sampled_seconds": 0.089,
+          "percent": 0.7727706868108014
+        },
+        {
+          "symbol": "static SelectableChatText.fragment(text:style:weight:quoteDepth:marker:)",
+          "sampled_seconds": 0.088,
+          "percent": 0.7640878701050621
+        },
+        {
+          "symbol": "@objc ChatTimelineCollectionCell.layoutSubviews()",
+          "sampled_seconds": 0.018,
+          "percent": 0.15629070070330814
+        },
+        {
+          "symbol": "ChatTimelineCollectionCell.layoutSubviews()",
+          "sampled_seconds": 0.018,
+          "percent": 0.15629070070330814
+        },
+        {
+          "symbol": "thunk for @callee_guaranteed (@unowned Int, @in_guaranteed AttributedString) -> (@out SelectableChatText.Fragment)",
+          "sampled_seconds": 0.016,
+          "percent": 0.13892506729182946
+        },
+        {
+          "symbol": "closure #2 in static SelectableChatText.fragments(for:quoteDepth:)",
+          "sampled_seconds": 0.016,
+          "percent": 0.13892506729182946
+        },
+        {
+          "symbol": "@objc ChatTimelineCollectionCell.prepareForReuse()",
+          "sampled_seconds": 0.014,
+          "percent": 0.12155943388035077
+        },
+        {
+          "symbol": "ChatTimelineCollectionCell.prepareForReuse()",
+          "sampled_seconds": 0.014,
+          "percent": 0.12155943388035077
+        },
+        {
+          "symbol": "SelectableChatTextView.attributedText.getter",
+          "sampled_seconds": 0.011,
+          "percent": 0.09551098376313276
+        },
+        {
+          "symbol": "protocol witness for static Equatable.== infix(_:_:) in conformance SelectableChatText.Fragment",
+          "sampled_seconds": 0.01,
+          "percent": 0.08682816705739342
+        },
+        {
+          "symbol": "static SelectableChatText.Fragment.__derived_struct_equals(_:_:)",
+          "sampled_seconds": 0.01,
+          "percent": 0.08682816705739342
+        },
+        {
+          "symbol": "SelectableChatText.Coordinator.needsTextUpdate(fragments:dynamicTypeSize:)",
+          "sampled_seconds": 0.01,
+          "percent": 0.08682816705739342
+        },
+        {
+          "symbol": "destroy for SelectableChatText.Fragment",
+          "sampled_seconds": 0.007,
+          "percent": 0.060779716940175386
+        },
+        {
+          "symbol": "destroy for SelectableChatText",
+          "sampled_seconds": 0.007,
+          "percent": 0.060779716940175386
+        },
+        {
+          "symbol": "closure #1 in SelectableChatText.applyBaseStyle(to:range:style:weight:quoteDepth:)",
+          "sampled_seconds": 0.003,
+          "percent": 0.026048450117218028
+        },
+        {
+          "symbol": "partial apply for closure #1 in SelectableChatText.applyBaseStyle(to:range:style:weight:quoteDepth:)",
+          "sampled_seconds": 0.003,
+          "percent": 0.026048450117218028
+        },
+        {
+          "symbol": "ChatTimelineStore.deinit",
+          "sampled_seconds": 0.002,
+          "percent": 0.017365633411478683
+        },
+        {
+          "symbol": "initializeWithCopy for SelectableChatText.Fragment",
+          "sampled_seconds": 0.001,
+          "percent": 0.008682816705739341
+        },
+        {
+          "symbol": "closure #1 in ChatTimelineCollectionCell.layoutSubviews()",
+          "sampled_seconds": 0.001,
+          "percent": 0.008682816705739341
+        },
+        {
+          "symbol": "protocol witness for static UIViewRepresentable._modifyBridgedViewInputs(_:) in conformance SelectableChatText",
+          "sampled_seconds": 0.001,
+          "percent": 0.008682816705739341
+        },
+        {
+          "symbol": "closure #2 in ChatTimelineStore.clearTransientStreamingSnapshots()",
+          "sampled_seconds": 0.001,
+          "percent": 0.008682816705739341
+        },
+        {
+          "symbol": "ChatTimelineStore.clearTransientStreamingSnapshots()",
+          "sampled_seconds": 0.001,
+          "percent": 0.008682816705739341
+        },
+        {
+          "symbol": "ChatTimelineCollectionCell.init(frame:)",
+          "sampled_seconds": 0.001,
+          "percent": 0.008682816705739341
+        },
+        {
+          "symbol": "@objc ChatTimelineCollectionCell.init(frame:)",
+          "sampled_seconds": 0.001,
+          "percent": 0.008682816705739341
+        },
+        {
+          "symbol": "@objc SelectableChatText.Coordinator.__ivar_destroyer",
+          "sampled_seconds": 0.001,
+          "percent": 0.008682816705739341
+        }
+      ],
+      "top_inclusive": [
+        {
+          "symbol": "+[UIView(Animation) performWithoutAnimation:]",
+          "sampled_seconds": 8.132,
+          "percent": 70.60866545107233
+        },
+        {
+          "symbol": "specialized ChatRenderingPerformanceTests.testRenderingWorkloads()",
+          "sampled_seconds": 7.497,
+          "percent": 65.09507684292785
+        },
+        {
+          "symbol": "completeTaskWithClosure(swift::AsyncContext*, swift::SwiftError*)",
+          "sampled_seconds": 7.496,
+          "percent": 65.08639402622211
+        },
+        {
+          "symbol": "specialized thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)",
+          "sampled_seconds": 7.496,
+          "percent": 65.08639402622211
+        },
+        {
+          "symbol": "@objc closure #1 in ChatRenderingPerformanceTests.testRenderingWorkloads()",
+          "sampled_seconds": 7.465,
+          "percent": 64.8172267083442
+        },
+        {
+          "symbol": "partial apply for @objc closure #1 in ChatRenderingPerformanceTests.testRenderingWorkloads()",
+          "sampled_seconds": 7.464,
+          "percent": 64.80854389163845
+        },
+        {
+          "symbol": "thunk for @escaping @callee_guaranteed @Sendable @async () -> ()",
+          "sampled_seconds": 7.462,
+          "percent": 64.79117825822696
+        },
+        {
+          "symbol": "partial apply for thunk for @escaping @callee_guaranteed @Sendable @async () -> ()",
+          "sampled_seconds": 7.461,
+          "percent": 64.78249544152122
+        },
+        {
+          "symbol": "thunk for @escaping @isolated(any) @callee_guaranteed @async () -> ()",
+          "sampled_seconds": 7.459,
+          "percent": 64.76512980810976
+        },
+        {
+          "symbol": "partial apply for thunk for @escaping @isolated(any) @callee_guaranteed @async () -> ()",
+          "sampled_seconds": 7.458,
+          "percent": 64.75644699140402
+        },
+        {
+          "symbol": "partial apply for specialized thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)",
+          "sampled_seconds": 7.454,
+          "percent": 64.72171572458106
+        },
+        {
+          "symbol": "ViewGraphRootValueUpdater._updateViewGraph<A>(body:)",
+          "sampled_seconds": 6.614,
+          "percent": 57.42814969176001
+        },
+        {
+          "symbol": "<deduplicated_symbol>",
+          "sampled_seconds": 6.446,
+          "percent": 55.9694364851958
+        },
+        {
+          "symbol": "_dispatch_client_callout",
+          "sampled_seconds": 6.412,
+          "percent": 55.67422071720066
+        },
+        {
+          "symbol": "ViewGraphRootValueUpdater._sizeThatFits(_:)",
+          "sampled_seconds": 6.228,
+          "percent": 54.07658244334462
+        },
+        {
+          "symbol": "closure #1 in ViewGraphRootValueUpdater._sizeThatFits(_:)",
+          "sampled_seconds": 6.187,
+          "percent": 53.720586958409314
+        },
+        {
+          "symbol": "-[UIView(Hierarchy) layoutBelowIfNeeded]",
+          "sampled_seconds": 6.08,
+          "percent": 52.7915255708952
+        },
+        {
+          "symbol": "CA::Layer::update_if_needed_(CA::Transaction*, CA::LayerUpdateReason)",
+          "sampled_seconds": 6.078,
+          "percent": 52.774159937483724
+        },
+        {
+          "symbol": "CA::Layer::perform_update_(CA::Layer*, CALayer*, unsigned int, CA::LayerUpdateReason, CA::Transaction*)",
+          "sampled_seconds": 6.078,
+          "percent": 52.774159937483724
+        },
+        {
+          "symbol": "-[CALayer layoutSublayers]",
+          "sampled_seconds": 6.008,
+          "percent": 52.16636276808197
+        },
+        {
+          "symbol": "-[UIView(CALayerDelegate) layoutSublayersOfLayer:]",
+          "sampled_seconds": 6.002,
+          "percent": 52.11426586784753
+        },
+        {
+          "symbol": "0x1c53de748",
+          "sampled_seconds": 5.969,
+          "percent": 51.82773291655813
+        },
+        {
+          "symbol": "0x1c53de298",
+          "sampled_seconds": 5.966,
+          "percent": 51.80168446644091
+        },
+        {
+          "symbol": "-[UICollectionView _updateVisibleCellsNow:]",
+          "sampled_seconds": 5.961,
+          "percent": 51.75827038291222
+        },
+        {
+          "symbol": "-[NSTextLayoutManager enumerateTextLayoutFragmentsFromLocation:options:usingBlock:]",
+          "sampled_seconds": 5.416,
+          "percent": 47.02613527828427
+        },
+        {
+          "symbol": "@objc ChatTimelineCollectionCell.preferredLayoutAttributesFitting(_:)",
+          "sampled_seconds": 5.364,
+          "percent": 46.574628809585825
+        },
+        {
+          "symbol": "ChatTimelineCollectionCell.preferredLayoutAttributesFitting(_:)",
+          "sampled_seconds": 5.361,
+          "percent": 46.54858035946861
+        },
+        {
+          "symbol": "@objc UIHostingContentView.systemLayoutSizeFitting(_:withHorizontalFittingPriority:verticalFittingPriority:)",
+          "sampled_seconds": 5.345,
+          "percent": 46.40965529217678
+        },
+        {
+          "symbol": "UIHostingContentView.systemLayoutSizeFitting(_:withHorizontalFittingPriority:verticalFittingPriority:)",
+          "sampled_seconds": 5.344,
+          "percent": 46.40097247547104
+        },
+        {
+          "symbol": "-[NSTextContentStorage enumerateTextElementsFromLocation:options:usingBlock:]",
+          "sampled_seconds": 5.243,
+          "percent": 45.524007988191364
+        }
+      ],
+      "top_own": [
+        {
+          "symbol": "objc_msgSend",
+          "sampled_seconds": 0.611,
+          "percent": 5.305201007206738
+        },
+        {
+          "symbol": "pthread_setspecific",
+          "sampled_seconds": 0.402,
+          "percent": 3.490492315707215
+        },
+        {
+          "symbol": "pthread_getspecific",
+          "sampled_seconds": 0.196,
+          "percent": 1.7018320743249111
+        },
+        {
+          "symbol": "<deduplicated_symbol>",
+          "sampled_seconds": 0.196,
+          "percent": 1.7018320743249111
+        },
+        {
+          "symbol": "DYLD-STUB$$pthread_getspecific",
+          "sampled_seconds": 0.161,
+          "percent": 1.397933489624034
+        },
+        {
+          "symbol": "DYLD-STUB$$pthread_setspecific",
+          "sampled_seconds": 0.148,
+          "percent": 1.2850568724494227
+        },
+        {
+          "symbol": "AutoreleasePoolPage::add(objc_object*)",
+          "sampled_seconds": 0.133,
+          "percent": 1.1548146218633326
+        },
+        {
+          "symbol": "objc_release",
+          "sampled_seconds": 0.132,
+          "percent": 1.146131805157593
+        },
+        {
+          "symbol": "_xzm_free_tc",
+          "sampled_seconds": 0.124,
+          "percent": 1.0766692715116783
+        },
+        {
+          "symbol": "_platform_memmove",
+          "sampled_seconds": 0.12,
+          "percent": 1.041938004688721
+        },
+        {
+          "symbol": "_xzm_malloc_tc",
+          "sampled_seconds": 0.106,
+          "percent": 0.9203785708083702
+        },
+        {
+          "symbol": "weak_entry_for_referent",
+          "sampled_seconds": 0.101,
+          "percent": 0.8769644872796736
+        },
+        {
+          "symbol": "_platform_memset",
+          "sampled_seconds": 0.094,
+          "percent": 0.8161847703394981
+        },
+        {
+          "symbol": "objc_retain",
+          "sampled_seconds": 0.091,
+          "percent": 0.7901363202222801
+        },
+        {
+          "symbol": "swift::MetadataCacheKey::operator==(swift::MetadataCacheKey const&) const",
+          "sampled_seconds": 0.082,
+          "percent": 0.711990969870626
+        },
+        {
+          "symbol": "os_unfair_lock_lock_with_options",
+          "sampled_seconds": 0.075,
+          "percent": 0.6512112529304506
+        },
+        {
+          "symbol": "objc_autorelease",
+          "sampled_seconds": 0.074,
+          "percent": 0.6425284362247113
+        },
+        {
+          "symbol": "__CFStringHash",
+          "sampled_seconds": 0.074,
+          "percent": 0.6425284362247113
+        },
+        {
+          "symbol": "id2data(objc_object*, SyncKind, usage)",
+          "sampled_seconds": 0.07,
+          "percent": 0.6077971694017539
+        },
+        {
+          "symbol": "os_unfair_lock_unlock",
+          "sampled_seconds": 0.069,
+          "percent": 0.5991143526960145
+        }
+      ],
+      "recording_log": "Starting recording with the Time Profiler template. Attaching to: YamabikoChat (29658). Time limit: 25.0 s\nCtrl-C to stop the recording\nReached specified time limit, ending recording...\nRun issues were detected (trace is still ready to be viewed):\n* [Warning] This configuration of instruments creates 1 table without a known input source.\n\n\t* [Warning] Recovery Suggestion: This could be due to a missing package, or an error in a package under development.\n\nRecording completed. Saving output file...\nOutput file saved as: cpu.trace\n"
+    },
+    "after-cpu-profile": {
+      "samples": 8422,
+      "sampled_seconds": 8.422,
+      "start_seconds": 0,
+      "end_seconds": null,
+      "main_thread_sampled_seconds": 8.239,
+      "note": "Statistical CPU samples, not elapsed time. Inclusive symbols overlap; do not add percentages.",
+      "relevant_inclusive": [
+        {
+          "symbol": "@objc ChatTimelineCollectionCell.preferredLayoutAttributesFitting(_:)",
+          "sampled_seconds": 2.903,
+          "percent": 34.46924720968891
+        },
+        {
+          "symbol": "ChatTimelineCollectionCell.preferredLayoutAttributesFitting(_:)",
+          "sampled_seconds": 2.902,
+          "percent": 34.45737354547613
+        },
+        {
+          "symbol": "ChatTimelineStore.applyStreamingSnapshot(_:)",
+          "sampled_seconds": 1.693,
+          "percent": 20.102113512229874
+        },
+        {
+          "symbol": "ChatTimelineCollectionCell.measuredContentHeight(for:)",
+          "sampled_seconds": 1.394,
+          "percent": 16.551887912609832
+        },
+        {
+          "symbol": "protocol witness for UIViewRepresentable.sizeThatFits(_:uiView:context:) in conformance SelectableChatText",
+          "sampled_seconds": 1.122,
+          "percent": 13.322251246734742
+        },
+        {
+          "symbol": "SelectableChatText.sizeThatFits(_:uiView:context:)",
+          "sampled_seconds": 1.122,
+          "percent": 13.322251246734742
+        },
+        {
+          "symbol": "SelectableChatTextView.measuredSize(for:)",
+          "sampled_seconds": 1.12,
+          "percent": 13.29850391830919
+        },
+        {
+          "symbol": "specialized SelectableChatText.makeUIView(context:)",
+          "sampled_seconds": 0.973,
+          "percent": 11.553075279031109
+        },
+        {
+          "symbol": "@objc SelectableChatTextView.init(frame:textContainer:)",
+          "sampled_seconds": 0.741,
+          "percent": 8.798385181667062
+        },
+        {
+          "symbol": "SelectableChatTextView.init(frame:textContainer:)",
+          "sampled_seconds": 0.741,
+          "percent": 8.798385181667062
+        },
+        {
+          "symbol": "SelectableChatText.updateUIView(_:context:)",
+          "sampled_seconds": 0.39,
+          "percent": 4.630729042982665
+        },
+        {
+          "symbol": "specialized SelectableChatText.Coordinator.updateText(in:fragments:dynamicTypeSize:render:)",
+          "sampled_seconds": 0.385,
+          "percent": 4.571360721918785
+        },
+        {
+          "symbol": "implicit closure #2 in implicit closure #1 in SelectableChatText.updateUIView(_:context:)",
+          "sampled_seconds": 0.139,
+          "percent": 1.6504393255758725
+        },
+        {
+          "symbol": "specialized implicit closure #2 in implicit closure #1 in SelectableChatText.updateUIView(_:context:)",
+          "sampled_seconds": 0.139,
+          "percent": 1.6504393255758725
+        },
+        {
+          "symbol": "SelectableChatText.renderedText(_:)",
+          "sampled_seconds": 0.139,
+          "percent": 1.6504393255758725
+        },
+        {
+          "symbol": "specialized SelectableChatText.renderedText(_:)",
+          "sampled_seconds": 0.136,
+          "percent": 1.6148183329375443
+        },
+        {
+          "symbol": "SelectableChatTextView.replaceAttributedSuffix(from:with:)",
+          "sampled_seconds": 0.117,
+          "percent": 1.3892187128947993
+        },
+        {
+          "symbol": "static SelectableChatText.Fragment.__derived_struct_equals(_:_:)",
+          "sampled_seconds": 0.073,
+          "percent": 0.8667774875326526
+        },
+        {
+          "symbol": "thunk for @callee_guaranteed (@unowned Int, @in_guaranteed SelectableChatText.Fragment) -> (@unowned Int)",
+          "sampled_seconds": 0.052,
+          "percent": 0.6174305390643553
+        },
+        {
+          "symbol": "closure #3 in SelectableChatText.Coordinator.updateText(in:fragments:dynamicTypeSize:render:)",
+          "sampled_seconds": 0.052,
+          "percent": 0.6174305390643553
+        },
+        {
+          "symbol": "SelectableChatText.applyBaseStyle(to:range:style:weight:quoteDepth:)",
+          "sampled_seconds": 0.04,
+          "percent": 0.47494656851104256
+        },
+        {
+          "symbol": "closure #1 in SelectableChatText.init(blocks:)",
+          "sampled_seconds": 0.034,
+          "percent": 0.40370458323438607
+        },
+        {
+          "symbol": "SelectableChatText.init(blocks:)",
+          "sampled_seconds": 0.034,
+          "percent": 0.40370458323438607
+        },
+        {
+          "symbol": "specialized SelectableChatText.init(blocks:)",
+          "sampled_seconds": 0.034,
+          "percent": 0.40370458323438607
+        },
+        {
+          "symbol": "static SelectableChatText.fragment(text:style:weight:quoteDepth:marker:)",
+          "sampled_seconds": 0.033,
+          "percent": 0.39183091902161005
+        },
+        {
+          "symbol": "static SelectableChatText.fragments(for:quoteDepth:)",
+          "sampled_seconds": 0.033,
+          "percent": 0.39183091902161005
+        },
+        {
+          "symbol": "specialized static SelectableChatText.Fragment.__derived_struct_equals(_:_:)",
+          "sampled_seconds": 0.029,
+          "percent": 0.34433626217050584
+        },
+        {
+          "symbol": "closure #2 in static SelectableChatText.fragments(for:quoteDepth:)",
+          "sampled_seconds": 0.028,
+          "percent": 0.33246259795772976
+        },
+        {
+          "symbol": "thunk for @callee_guaranteed (@unowned Int, @in_guaranteed AttributedString) -> (@out SelectableChatText.Fragment)",
+          "sampled_seconds": 0.028,
+          "percent": 0.33246259795772976
+        },
+        {
+          "symbol": "@objc ChatTimelineCollectionCell.layoutSubviews()",
+          "sampled_seconds": 0.019,
+          "percent": 0.2255996200427452
+        },
+        {
+          "symbol": "ChatTimelineCollectionCell.layoutSubviews()",
+          "sampled_seconds": 0.018,
+          "percent": 0.21372595582996914
+        },
+        {
+          "symbol": "@objc ChatTimelineCollectionCell.prepareForReuse()",
+          "sampled_seconds": 0.015,
+          "percent": 0.17810496319164093
+        },
+        {
+          "symbol": "ChatTimelineCollectionCell.prepareForReuse()",
+          "sampled_seconds": 0.015,
+          "percent": 0.17810496319164093
+        },
+        {
+          "symbol": "protocol witness for static Equatable.== infix(_:_:) in conformance SelectableChatText.Fragment",
+          "sampled_seconds": 0.013,
+          "percent": 0.15435763476608882
+        },
+        {
+          "symbol": "destroy for SelectableChatText",
+          "sampled_seconds": 0.005,
+          "percent": 0.05936832106388032
+        },
+        {
+          "symbol": "destroy for SelectableChatText.Fragment",
+          "sampled_seconds": 0.004,
+          "percent": 0.04749465685110425
+        },
+        {
+          "symbol": "@objc ChatTimelineCollectionCell.init(frame:)",
+          "sampled_seconds": 0.003,
+          "percent": 0.03562099263832819
+        },
+        {
+          "symbol": "ChatTimelineCollectionCell.init(frame:)",
+          "sampled_seconds": 0.003,
+          "percent": 0.03562099263832819
+        },
+        {
+          "symbol": "closure #1 in SelectableChatText.applyBaseStyle(to:range:style:weight:quoteDepth:)",
+          "sampled_seconds": 0.002,
+          "percent": 0.023747328425552126
+        },
+        {
+          "symbol": "partial apply for closure #1 in SelectableChatText.applyBaseStyle(to:range:style:weight:quoteDepth:)",
+          "sampled_seconds": 0.002,
+          "percent": 0.023747328425552126
+        },
+        {
+          "symbol": "ChatTimelineStore.deinit",
+          "sampled_seconds": 0.002,
+          "percent": 0.023747328425552126
+        },
+        {
+          "symbol": "ChatTimelineStore.rebuild()",
+          "sampled_seconds": 0.002,
+          "percent": 0.023747328425552126
+        },
+        {
+          "symbol": "closure #1 in ChatTimelineStore.applyStreamingSnapshot(_:)",
+          "sampled_seconds": 0.001,
+          "percent": 0.011873664212776063
+        },
+        {
+          "symbol": "ChatTimelineStore.row(id:)",
+          "sampled_seconds": 0.001,
+          "percent": 0.011873664212776063
+        },
+        {
+          "symbol": "outlined init with take of ModifiedContent<ModifiedContent<VStack<_ConditionalContent<SelectableChatText, ForEach<[NativeMarkdownRenderGroup], String, _ConditionalContent<EquatableView<NativeMarkdownSelectableGroup>, NativeMarkdownBlockView>>>>, _FlexFrameLayout>, _FixedSizeLayout>",
+          "sampled_seconds": 0.001,
+          "percent": 0.011873664212776063
+        },
+        {
+          "symbol": "ChatTimelineCollectionCell.requestContentHeightMeasurement()",
+          "sampled_seconds": 0.001,
+          "percent": 0.011873664212776063
+        },
+        {
+          "symbol": "lazy protocol witness table accessor for type VStack<_ConditionalContent<SelectableChatText, ForEach<[NativeMarkdownRenderGroup], String, _ConditionalContent<EquatableView<NativeMarkdownSelectableGroup>, NativeMarkdownBlockView>>>> and conformance VStack<A>",
+          "sampled_seconds": 0.001,
+          "percent": 0.011873664212776063
+        }
+      ],
+      "top_inclusive": [
+        {
+          "symbol": "specialized ChatRenderingPerformanceTests.testRenderingWorkloads()",
+          "sampled_seconds": 6.31,
+          "percent": 74.92282118261696
+        },
+        {
+          "symbol": "completeTaskWithClosure(swift::AsyncContext*, swift::SwiftError*)",
+          "sampled_seconds": 6.306,
+          "percent": 74.87532652576586
+        },
+        {
+          "symbol": "specialized thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)",
+          "sampled_seconds": 6.303,
+          "percent": 74.83970553312751
+        },
+        {
+          "symbol": "@objc closure #1 in ChatRenderingPerformanceTests.testRenderingWorkloads()",
+          "sampled_seconds": 6.277,
+          "percent": 74.53099026359534
+        },
+        {
+          "symbol": "partial apply for @objc closure #1 in ChatRenderingPerformanceTests.testRenderingWorkloads()",
+          "sampled_seconds": 6.275,
+          "percent": 74.5072429351698
+        },
+        {
+          "symbol": "thunk for @escaping @callee_guaranteed @Sendable @async () -> ()",
+          "sampled_seconds": 6.274,
+          "percent": 74.49536927095701
+        },
+        {
+          "symbol": "partial apply for thunk for @escaping @callee_guaranteed @Sendable @async () -> ()",
+          "sampled_seconds": 6.273,
+          "percent": 74.48349560674424
+        },
+        {
+          "symbol": "thunk for @escaping @isolated(any) @callee_guaranteed @async () -> ()",
+          "sampled_seconds": 6.271,
+          "percent": 74.4597482783187
+        },
+        {
+          "symbol": "partial apply for thunk for @escaping @isolated(any) @callee_guaranteed @async () -> ()",
+          "sampled_seconds": 6.269,
+          "percent": 74.43600094989313
+        },
+        {
+          "symbol": "partial apply for specialized thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)",
+          "sampled_seconds": 6.266,
+          "percent": 74.40037995725481
+        },
+        {
+          "symbol": "CA::Layer::update_if_needed_(CA::Transaction*, CA::LayerUpdateReason)",
+          "sampled_seconds": 5.116,
+          "percent": 60.74566611256233
+        },
+        {
+          "symbol": "-[UIView(Hierarchy) layoutBelowIfNeeded]",
+          "sampled_seconds": 5.114,
+          "percent": 60.72191878413678
+        },
+        {
+          "symbol": "CA::Layer::perform_update_(CA::Layer*, CALayer*, unsigned int, CA::LayerUpdateReason, CA::Transaction*)",
+          "sampled_seconds": 5.111,
+          "percent": 60.686297791498454
+        },
+        {
+          "symbol": "-[CALayer layoutSublayers]",
+          "sampled_seconds": 5.028,
+          "percent": 59.700783661838045
+        },
+        {
+          "symbol": "-[UIView(CALayerDelegate) layoutSublayersOfLayer:]",
+          "sampled_seconds": 5.024,
+          "percent": 59.653289004986945
+        },
+        {
+          "symbol": "0x1c53de298",
+          "sampled_seconds": 5.003,
+          "percent": 59.403942056518645
+        },
+        {
+          "symbol": "0x1c53de748",
+          "sampled_seconds": 5.003,
+          "percent": 59.403942056518645
+        },
+        {
+          "symbol": "+[UIView(Animation) performWithoutAnimation:]",
+          "sampled_seconds": 4.774,
+          "percent": 56.68487295179292
+        },
+        {
+          "symbol": "ViewGraphRootValueUpdater._updateViewGraph<A>(body:)",
+          "sampled_seconds": 4.203,
+          "percent": 49.90501068629779
+        },
+        {
+          "symbol": "<deduplicated_symbol>",
+          "sampled_seconds": 4.182,
+          "percent": 49.65566373782949
+        },
+        {
+          "symbol": "-[UICollectionView _updateVisibleCellsNow:]",
+          "sampled_seconds": 4.047,
+          "percent": 48.052719069104725
+        },
+        {
+          "symbol": "ViewGraphRootValueUpdater._sizeThatFits(_:)",
+          "sampled_seconds": 3.579,
+          "percent": 42.49584421752553
+        },
+        {
+          "symbol": "closure #1 in ViewGraphRootValueUpdater._sizeThatFits(_:)",
+          "sampled_seconds": 3.566,
+          "percent": 42.341486582759444
+        },
+        {
+          "symbol": "_dispatch_client_callout",
+          "sampled_seconds": 3.132,
+          "percent": 37.18831631441463
+        },
+        {
+          "symbol": "-[NSTextLayoutManager enumerateTextLayoutFragmentsFromLocation:options:usingBlock:]",
+          "sampled_seconds": 3.122,
+          "percent": 37.06957967228687
+        },
+        {
+          "symbol": "-[UICollectionView _checkForPreferredAttributesInView:originalAttributes:]",
+          "sampled_seconds": 3.041,
+          "percent": 36.10781287105201
+        },
+        {
+          "symbol": "-[UICollectionReusableView _preferredLayoutAttributesFittingAttributes:isAnimatingExistingView:]",
+          "sampled_seconds": 3.03,
+          "percent": 35.97720256471147
+        },
+        {
+          "symbol": "AG::Graph::UpdateStack::update()",
+          "sampled_seconds": 3.016,
+          "percent": 35.810971265732604
+        },
+        {
+          "symbol": "-[__NSSingleObjectArrayI enumerateObjectsWithOptions:usingBlock:]",
+          "sampled_seconds": 3.001,
+          "percent": 35.63286630254097
+        },
+        {
+          "symbol": "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__",
+          "sampled_seconds": 2.976,
+          "percent": 35.33602469722156
+        }
+      ],
+      "top_own": [
+        {
+          "symbol": "objc_msgSend",
+          "sampled_seconds": 0.443,
+          "percent": 5.260033246259796
+        },
+        {
+          "symbol": "pthread_setspecific",
+          "sampled_seconds": 0.328,
+          "percent": 3.8945618617905486
+        },
+        {
+          "symbol": "<deduplicated_symbol>",
+          "sampled_seconds": 0.144,
+          "percent": 1.7098076466397532
+        },
+        {
+          "symbol": "DYLD-STUB$$pthread_setspecific",
+          "sampled_seconds": 0.127,
+          "percent": 1.50795535502256
+        },
+        {
+          "symbol": "DYLD-STUB$$pthread_getspecific",
+          "sampled_seconds": 0.12,
+          "percent": 1.4248397055331274
+        },
+        {
+          "symbol": "AutoreleasePoolPage::add(objc_object*)",
+          "sampled_seconds": 0.096,
+          "percent": 1.1398717644265022
+        },
+        {
+          "symbol": "pthread_getspecific",
+          "sampled_seconds": 0.096,
+          "percent": 1.1398717644265022
+        },
+        {
+          "symbol": "_xzm_malloc_tc",
+          "sampled_seconds": 0.09,
+          "percent": 1.0686297791498456
+        },
+        {
+          "symbol": "objc_release",
+          "sampled_seconds": 0.088,
+          "percent": 1.0448824507242935
+        },
+        {
+          "symbol": "weak_entry_for_referent",
+          "sampled_seconds": 0.086,
+          "percent": 1.0211351222987415
+        },
+        {
+          "symbol": "_platform_memmove",
+          "sampled_seconds": 0.08,
+          "percent": 0.9498931370220851
+        },
+        {
+          "symbol": "start_wqthread",
+          "sampled_seconds": 0.079,
+          "percent": 0.9380194728093089
+        },
+        {
+          "symbol": "_xzm_free_tc",
+          "sampled_seconds": 0.077,
+          "percent": 0.9142721443837568
+        },
+        {
+          "symbol": "_swift_stdlib_getScalarBitArrayIdx",
+          "sampled_seconds": 0.07,
+          "percent": 0.8311564948943244
+        },
+        {
+          "symbol": "objc_retain",
+          "sampled_seconds": 0.066,
+          "percent": 0.7836618380432201
+        },
+        {
+          "symbol": "objc_autorelease",
+          "sampled_seconds": 0.065,
+          "percent": 0.7717881738304441
+        },
+        {
+          "symbol": "_platform_memset",
+          "sampled_seconds": 0.061,
+          "percent": 0.7242935169793397
+        },
+        {
+          "symbol": "swift::MetadataCacheKey::operator==(swift::MetadataCacheKey const&) const",
+          "sampled_seconds": 0.058,
+          "percent": 0.6886725243410117
+        },
+        {
+          "symbol": "swift_release",
+          "sampled_seconds": 0.053,
+          "percent": 0.6293042032771313
+        },
+        {
+          "symbol": "id2data(objc_object*, SyncKind, usage)",
+          "sampled_seconds": 0.049,
+          "percent": 0.581809546426027
+        }
+      ],
+      "recording_log": "Starting recording with the Time Profiler template. Attaching to: YamabikoChat (33518). Time limit: 25.0 s\nCtrl-C to stop the recording\nReached specified time limit, ending recording...\nRun issues were detected (trace is still ready to be viewed):\n* [Warning] This configuration of instruments creates 1 table without a known input source.\n\n\t* [Warning] Recovery Suggestion: This could be due to a missing package, or an error in a package under development.\n\nRecording completed. Saving output file...\nOutput file saved as: cpu.trace\n"
+    },
+    "after-ui-cpu-profile": {
+      "samples": 7447,
+      "sampled_seconds": 7.447,
+      "start_seconds": 0,
+      "end_seconds": null,
+      "main_thread_sampled_seconds": 3.578,
+      "note": "Statistical CPU samples, not elapsed time. Inclusive symbols overlap; do not add percentages.",
+      "relevant_inclusive": [
+        {
+          "symbol": "ChatTimelineCollectionCell.preferredLayoutAttributesFitting(_:)",
+          "sampled_seconds": 0.51,
+          "percent": 6.848395326977307
+        },
+        {
+          "symbol": "@objc ChatTimelineCollectionCell.preferredLayoutAttributesFitting(_:)",
+          "sampled_seconds": 0.51,
+          "percent": 6.848395326977307
+        },
+        {
+          "symbol": "protocol witness for UIViewRepresentable.sizeThatFits(_:uiView:context:) in conformance SelectableChatText",
+          "sampled_seconds": 0.133,
+          "percent": 1.785954075466631
+        },
+        {
+          "symbol": "SelectableChatTextView.measuredSize(for:)",
+          "sampled_seconds": 0.133,
+          "percent": 1.785954075466631
+        },
+        {
+          "symbol": "SelectableChatText.sizeThatFits(_:uiView:context:)",
+          "sampled_seconds": 0.133,
+          "percent": 1.785954075466631
+        },
+        {
+          "symbol": "SelectableChatText.updateUIView(_:context:)",
+          "sampled_seconds": 0.096,
+          "percent": 1.289109708607493
+        },
+        {
+          "symbol": "specialized SelectableChatText.Coordinator.updateText(in:fragments:dynamicTypeSize:render:)",
+          "sampled_seconds": 0.096,
+          "percent": 1.289109708607493
+        },
+        {
+          "symbol": "SelectableChatText.renderedText(_:)",
+          "sampled_seconds": 0.092,
+          "percent": 1.2353968040821808
+        },
+        {
+          "symbol": "specialized implicit closure #2 in implicit closure #1 in SelectableChatText.updateUIView(_:context:)",
+          "sampled_seconds": 0.092,
+          "percent": 1.2353968040821808
+        },
+        {
+          "symbol": "implicit closure #2 in implicit closure #1 in SelectableChatText.updateUIView(_:context:)",
+          "sampled_seconds": 0.092,
+          "percent": 1.2353968040821808
+        },
+        {
+          "symbol": "specialized SelectableChatText.renderedText(_:)",
+          "sampled_seconds": 0.092,
+          "percent": 1.2353968040821808
+        },
+        {
+          "symbol": "ChatTimelineCollectionCell.measuredContentHeight(for:)",
+          "sampled_seconds": 0.015,
+          "percent": 0.20142339196992076
+        },
+        {
+          "symbol": "specialized SelectableChatText.makeUIView(context:)",
+          "sampled_seconds": 0.014,
+          "percent": 0.18799516583859274
+        },
+        {
+          "symbol": "SelectableChatTextView.init(frame:textContainer:)",
+          "sampled_seconds": 0.011,
+          "percent": 0.14771048744460857
+        },
+        {
+          "symbol": "@objc SelectableChatTextView.init(frame:textContainer:)",
+          "sampled_seconds": 0.011,
+          "percent": 0.14771048744460857
+        },
+        {
+          "symbol": "ChatTimelineStore.orderedIDs.getter",
+          "sampled_seconds": 0.006,
+          "percent": 0.08056935678796831
+        },
+        {
+          "symbol": "@objc SelectableChatTextView.attributedText.getter",
+          "sampled_seconds": 0.006,
+          "percent": 0.08056935678796831
+        },
+        {
+          "symbol": "SelectableChatTextView.attributedText.getter",
+          "sampled_seconds": 0.006,
+          "percent": 0.08056935678796831
+        },
+        {
+          "symbol": "ChatTimelineStore.rebuild()",
+          "sampled_seconds": 0.003,
+          "percent": 0.040284678393984155
+        },
+        {
+          "symbol": "thunk for @callee_guaranteed (@unowned Int, @in_guaranteed SelectableChatText.Fragment) -> (@unowned Int)",
+          "sampled_seconds": 0.003,
+          "percent": 0.040284678393984155
+        },
+        {
+          "symbol": "closure #3 in SelectableChatText.Coordinator.updateText(in:fragments:dynamicTypeSize:render:)",
+          "sampled_seconds": 0.003,
+          "percent": 0.040284678393984155
+        },
+        {
+          "symbol": "ChatTimelineCollectionCell.init(frame:)",
+          "sampled_seconds": 0.002,
+          "percent": 0.0268564522626561
+        },
+        {
+          "symbol": "@objc ChatTimelineCollectionCell.init(frame:)",
+          "sampled_seconds": 0.002,
+          "percent": 0.0268564522626561
+        },
+        {
+          "symbol": "SelectableChatText.applyBaseStyle(to:range:style:weight:quoteDepth:)",
+          "sampled_seconds": 0.001,
+          "percent": 0.01342822613132805
+        },
+        {
+          "symbol": "SelectableChatTextView.replaceAttributedSuffix(from:with:)",
+          "sampled_seconds": 0.001,
+          "percent": 0.01342822613132805
+        }
+      ],
+      "top_inclusive": [
+        {
+          "symbol": "<deduplicated_symbol>",
+          "sampled_seconds": 3.777,
+          "percent": 50.71841009802605
+        },
+        {
+          "symbol": "_dispatch_client_callout",
+          "sampled_seconds": 3.728,
+          "percent": 50.06042701759098
+        },
+        {
+          "symbol": "_CFRunLoopRunSpecificWithOptions",
+          "sampled_seconds": 3.467,
+          "percent": 46.55565999731435
+        },
+        {
+          "symbol": "__CFRunLoopRun",
+          "sampled_seconds": 3.46,
+          "percent": 46.46166241439506
+        },
+        {
+          "symbol": "UIApplicationMain",
+          "sampled_seconds": 3.448,
+          "percent": 46.30052370081913
+        },
+        {
+          "symbol": "GSEventRunModal",
+          "sampled_seconds": 3.448,
+          "percent": 46.30052370081913
+        },
+        {
+          "symbol": "runApp<A>(_:)",
+          "sampled_seconds": 3.447,
+          "percent": 46.287095474687796
+        },
+        {
+          "symbol": "closure #1 in KitRendererCommon(_:)",
+          "sampled_seconds": 3.447,
+          "percent": 46.287095474687796
+        },
+        {
+          "symbol": "static App.main()",
+          "sampled_seconds": 3.446,
+          "percent": 46.273667248556464
+        },
+        {
+          "symbol": "static YamabikoChatApp.$main()",
+          "sampled_seconds": 3.445,
+          "percent": 46.26023902242514
+        },
+        {
+          "symbol": "main",
+          "sampled_seconds": 3.445,
+          "percent": 46.26023902242514
+        },
+        {
+          "symbol": "start_sim",
+          "sampled_seconds": 3.444,
+          "percent": 46.24681079629381
+        },
+        {
+          "symbol": "start",
+          "sampled_seconds": 3.444,
+          "percent": 46.24681079629381
+        },
+        {
+          "symbol": "swift_conformsToProtocolMaybeInstantiateSuperclasses(swift::TargetMetadata<swift::InProcess> const*, swift::TargetProtocolDescriptor<swift::InProcess> const*, bool)",
+          "sampled_seconds": 2.891,
+          "percent": 38.8210017456694
+        },
+        {
+          "symbol": "start_wqthread",
+          "sampled_seconds": 2.891,
+          "percent": 38.8210017456694
+        },
+        {
+          "symbol": "_pthread_wqthread",
+          "sampled_seconds": 2.863,
+          "percent": 38.44501141399221
+        },
+        {
+          "symbol": "AG::LayoutDescriptor::make_layout(AG::swift::metadata const*, AGComparisonMode, AG::LayoutDescriptor::HeapMode)",
+          "sampled_seconds": 2.029,
+          "percent": 27.245870820464617
+        },
+        {
+          "symbol": "swift_conformsToProtocol",
+          "sampled_seconds": 2.029,
+          "percent": 27.245870820464617
+        },
+        {
+          "symbol": "AG::LayoutDescriptor::Builder::should_visit_fields(AG::swift::metadata const*, bool)",
+          "sampled_seconds": 2.022,
+          "percent": 27.15187323754532
+        },
+        {
+          "symbol": "_dispatch_worker_thread2",
+          "sampled_seconds": 1.938,
+          "percent": 26.023902242513763
+        },
+        {
+          "symbol": "_dispatch_root_queue_drain",
+          "sampled_seconds": 1.938,
+          "percent": 26.023902242513763
+        },
+        {
+          "symbol": "UC::DriverCore::continueProcessing()",
+          "sampled_seconds": 1.929,
+          "percent": 25.903048207331814
+        },
+        {
+          "symbol": "schedulerStepScheduledMainSectionContinue",
+          "sampled_seconds": 1.915,
+          "percent": 25.71505304149322
+        },
+        {
+          "symbol": "AG::(anonymous namespace)::TypeDescriptorCache::drain_queue(void*)",
+          "sampled_seconds": 1.914,
+          "percent": 25.70162481536189
+        },
+        {
+          "symbol": "_UIUpdateSequenceRunNext",
+          "sampled_seconds": 1.899,
+          "percent": 25.50020142339197
+        },
+        {
+          "symbol": "AG::swift::metadata::visit(AG::swift::metadata_visitor&) const",
+          "sampled_seconds": 1.841,
+          "percent": 24.721364307774945
+        },
+        {
+          "symbol": "AG::LayoutDescriptor::Builder::visit_element(AG::swift::metadata const*, AG::swift::metadata::ref_kind, unsigned long, unsigned long)",
+          "sampled_seconds": 1.655,
+          "percent": 22.223714247347925
+        },
+        {
+          "symbol": "AG::swift::metadata_visitor::visit_field(AG::swift::metadata const*, AG::swift::field_record const&, unsigned long, unsigned long)",
+          "sampled_seconds": 1.65,
+          "percent": 22.156573116691288
+        },
+        {
+          "symbol": "AG::(anonymous namespace)::TypeDescriptorCache::fetch(AG::swift::metadata const*, unsigned int, AG::LayoutDescriptor::HeapMode, int)",
+          "sampled_seconds": 1.649,
+          "percent": 22.143144890559956
+        },
+        {
+          "symbol": "CA::Layer::update_if_needed_(CA::Transaction*, CA::LayerUpdateReason)",
+          "sampled_seconds": 1.465,
+          "percent": 19.672351282395596
+        }
+      ],
+      "top_own": [
+        {
+          "symbol": "swift_conformsToProtocolMaybeInstantiateSuperclasses(swift::TargetMetadata<swift::InProcess> const*, swift::TargetProtocolDescriptor<swift::InProcess> const*, bool)",
+          "sampled_seconds": 2.562,
+          "percent": 34.40311534846247
+        },
+        {
+          "symbol": "mach_o::Header::forEachLoadCommand(void (mach_o::Header::LoadCommandInfo const&, bool&) block_pointer, mach_o::Error*) const",
+          "sampled_seconds": 0.262,
+          "percent": 3.518195246407949
+        },
+        {
+          "symbol": "objc_msgSend",
+          "sampled_seconds": 0.138,
+          "percent": 1.853095206123271
+        },
+        {
+          "symbol": "mach_msg2_trap",
+          "sampled_seconds": 0.124,
+          "percent": 1.6651000402846783
+        },
+        {
+          "symbol": "_swift_class_getSuperclass",
+          "sampled_seconds": 0.107,
+          "percent": 1.4368201960521017
+        },
+        {
+          "symbol": "mach_o::Header::SegmentInfo mach_o::Header::parse_segment_command<true>(mach_o::Header::LoadCommandInfo const&, unsigned short, void (mach_o::Header::SegmentInfo const&, mach_o::Header::SectionInfo const&) block_pointer, mach_o::Error*) const",
+          "sampled_seconds": 0.107,
+          "percent": 1.4368201960521017
+        },
+        {
+          "symbol": "mach_o::Header::stringFromOffsetInLoadCommand(mach_o::Header::LoadCommandInfo const&, unsigned int, mach_o::Error*) const",
+          "sampled_seconds": 0.097,
+          "percent": 1.302537934738821
+        },
+        {
+          "symbol": "getContextDescriptor(swift::TargetMetadata<swift::InProcess> const*)",
+          "sampled_seconds": 0.083,
+          "percent": 1.1145427689002283
+        },
+        {
+          "symbol": "<deduplicated_symbol>",
+          "sampled_seconds": 0.083,
+          "percent": 1.1145427689002283
+        },
+        {
+          "symbol": "getSuperclassForMaybeIncompleteMetadata(swift::TargetMetadata<swift::InProcess> const*, std::__1::optional<swift::MetadataState>, bool)",
+          "sampled_seconds": 0.075,
+          "percent": 1.007116959849604
+        },
+        {
+          "symbol": "swift::equalContexts(swift::TargetContextDescriptor<swift::InProcess> const*, swift::TargetContextDescriptor<swift::InProcess> const*)",
+          "sampled_seconds": 0.071,
+          "percent": 0.9534040553242917
+        },
+        {
+          "symbol": "pthread_setspecific",
+          "sampled_seconds": 0.065,
+          "percent": 0.8728346985363233
+        },
+        {
+          "symbol": "invocation function for block in mach_o::Header::forEachSegment(void (mach_o::Header::SegmentInfo const&, bool&) block_pointer) const",
+          "sampled_seconds": 0.063,
+          "percent": 0.8459782462736672
+        },
+        {
+          "symbol": "_platform_memmove",
+          "sampled_seconds": 0.051,
+          "percent": 0.6848395326977307
+        },
+        {
+          "symbol": "getMethodNoSuper_nolock(objc_class*, objc_selector*)",
+          "sampled_seconds": 0.05,
+          "percent": 0.6714113065664026
+        },
+        {
+          "symbol": "__open",
+          "sampled_seconds": 0.047,
+          "percent": 0.6311266281724184
+        },
+        {
+          "symbol": "pwrite",
+          "sampled_seconds": 0.046,
+          "percent": 0.6176984020410904
+        },
+        {
+          "symbol": "madvise",
+          "sampled_seconds": 0.045,
+          "percent": 0.6042701759097624
+        },
+        {
+          "symbol": "mach_o::UnsafeHeader::forEachLoadCommand(void (load_command const*, bool&) block_pointer) const",
+          "sampled_seconds": 0.045,
+          "percent": 0.6042701759097624
+        },
+        {
+          "symbol": "__work_interval_ctl",
+          "sampled_seconds": 0.043,
+          "percent": 0.5774137236471062
+        }
+      ],
+      "recording_log": "Starting recording with the Time Profiler template. Attaching to: YamabikoChat (43941). Time limit: 25.0 s\nCtrl-C to stop the recording\nReached specified time limit, ending recording...\nRun issues were detected (trace is still ready to be viewed):\n* [Warning] This configuration of instruments creates 1 table without a known input source.\n\n\t* [Warning] Recovery Suggestion: This could be due to a missing package, or an error in a package under development.\n\nRecording completed. Saving output file...\nOutput file saved as: cpu.trace\n"
+    }
+  },
+  "validation": {
+    "ios_unit": {
+      "result": "Passed",
+      "totalTestCount": 1000,
+      "passedTests": 993,
+      "skippedTests": 7,
+      "failedTests": 0
+    },
+    "excluded_preexisting_tests_reproduced_on_baseline": [
+      "PCCNativeToolsTests/testAllLocalToolSchemasCompileWithTheAppleSDK()",
+      "GenUIReferenceToolTests/testGuidePreservesRuntimeContractsWithoutDumpingTheCatalog()",
+      "ModelsDevCatalogTests/testOnlyDedicatedProvidersRemainBuiltIn()",
+      "ChatPresentationArchitectureTests/testToolSummaryAndAnswerNeverMoveTogetherDuringStreamingUpdates()"
+    ],
+    "runtime_warnings": [
+      {
+        "issueType": "Runtime Warning",
+        "message": "Modifying state during view update, this will cause undefined behavior.",
+        "sourceURL": "file:///Users/porari/kaihatu/ios/yamabikochat/ios/YamabikoChat/Features/Chat/HtmlPreviewBrowser.swift"
+      },
+      {
+        "issueType": "Runtime Warning",
+        "message": "Modifying state during view update, this will cause undefined behavior.",
+        "sourceURL": "file:///Users/porari/kaihatu/ios/yamabikochat/ios/YamabikoChat/Features/Chat/MermaidDiagramView.swift"
+      },
+      {
+        "issueType": "Runtime Warning",
+        "message": "    AVAudioSession_iOS.mm:978   This method can lead to UI unresponsiveness if called on the main thread. Consider using the asynchronous activate/deactivate API instead for calls from the main thread.",
+        "sourceURL": "file:///Users/porari/kaihatu/ios/yamabikochat/ios/YamabikoChat/Utils/SpeechRecognitionService.swift"
+      },
+      {
+        "issueType": "Runtime Warning",
+        "message": "    AVAudioSession_iOS.mm:978   This method can lead to UI unresponsiveness if called on the main thread. Consider using the asynchronous activate/deactivate API instead for calls from the main thread.",
+        "sourceURL": "file:///Users/porari/kaihatu/ios/yamabikochat/ios/YamabikoChat/Utils/SpeechRecognitionService.swift"
+      }
+    ],
+    "unit_command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild",
+      "-xctestrun",
+      "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/candidate-derived/Build/Products/YamabikoChat_iphonesimulator27.0-arm64.xctestrun",
+      "-destination",
+      "platform=iOS Simulator,id=20705736-EF0A-4657-BD21-48E13607AB75",
+      "-parallel-testing-enabled",
+      "NO",
+      "-collect-test-diagnostics",
+      "never",
+      "-test-timeouts-enabled",
+      "YES",
+      "-default-test-execution-time-allowance",
+      "60",
+      "-maximum-test-execution-time-allowance",
+      "90",
+      "-only-testing:YamabikoTests",
+      "-skip-testing:YamabikoTests/ChatPresentationArchitectureTests/testToolSummaryAndAnswerNeverMoveTogetherDuringStreamingUpdates",
+      "-skip-testing:YamabikoTests/GenUIReferenceToolTests/testGuidePreservesRuntimeContractsWithoutDumpingTheCatalog",
+      "-skip-testing:YamabikoTests/ModelsDevCatalogTests/testOnlyDedicatedProvidersRemainBuiltIn",
+      "-skip-testing:YamabikoTests/PCCNativeToolsTests/testAllLocalToolSchemasCompileWithTheAppleSDK",
+      "-resultBundlePath",
+      "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/unit-final-verified.xcresult",
+      "test-without-building"
+    ],
+    "unit_log_sha256": "23f4087198ce683de5813d0b451add7fcefec54d2681441c9056c9c5d7a7d950",
+    "other_commands": [
+      "npm test --prefix ios/PiRuntime",
+      "npm ci --prefix ios/GenUIRuntimeTests --ignore-scripts && npm test --prefix ios/GenUIRuntimeTests",
+      "python3 -m unittest ios/PythonTests/test_yamabiko_runtime.py"
+    ],
+    "ui_tests_each_side": {
+      "passed": 2,
+      "failed": 0
+    },
+    "pi_runtime": {
+      "passed": 94,
+      "failed": 0
+    },
+    "genui_dom": {
+      "passed": 66,
+      "failed": 0
+    },
+    "python_harness": {
+      "passed": 10,
+      "failed": 0
+    }
+  },
+  "metal_diagnostics": {
+    "before": {
+      "exit_code": 0,
+      "device": "20705736-EF0A-4657-BD21-48E13607AB75",
+      "products": "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/baseline-derived/Build/Products",
+      "locale": "ja_JP",
+      "languages": [
+        "ja"
+      ],
+      "appearance": "light",
+      "content_size": "medium",
+      "reset_app_data": true,
+      "profiled": true,
+      "trace": {
+        "pid": 49506,
+        "command": [
+          "xcrun",
+          "xctrace",
+          "record",
+          "--template",
+          "Metal System Trace",
+          "--attach",
+          "49506",
+          "--device",
+          "20705736-EF0A-4657-BD21-48E13607AB75",
+          "--time-limit",
+          "25s",
+          "--output",
+          "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/before-metal-clean-2/metal.trace",
+          "--no-prompt"
+        ],
+        "exit_code": 0
+      },
+      "samples": [
+        {
+          "content_height": 16825,
+          "cpu_seconds": 2.357424,
+          "response_height": 2451,
+          "sample": 0,
+          "visible_cell_measurements": 484,
+          "wall_seconds": 4.283662333,
+          "workload": "prose"
+        },
+        {
+          "content_height": 17873,
+          "cpu_seconds": 7.662172,
+          "response_height": 3499,
+          "sample": 0,
+          "visible_cell_measurements": 484,
+          "wall_seconds": 8.2031585,
+          "workload": "list"
+        },
+        {
+          "content_height": 17183,
+          "cpu_seconds": 1.4383440000000007,
+          "response_height": 2451,
+          "sample": 0,
+          "visible_cell_measurements": 482,
+          "wall_seconds": 4.295479666,
+          "workload": "thinking"
+        },
+        {
+          "content_height": 20320,
+          "cpu_seconds": 4.524881000000001,
+          "response_height": 2451,
+          "sample": 0,
+          "visible_cell_measurements": 1,
+          "wall_seconds": 4.78887575,
+          "workload": "scroll"
+        },
+        {
+          "content_height": 16856,
+          "cpu_seconds": 0.36804799999999815,
+          "response_height": 2451,
+          "sample": 0,
+          "visible_cell_measurements": 3,
+          "wall_seconds": 4.265797875,
+          "workload": "idle"
+        },
+        {
+          "content_height": 16825,
+          "cpu_seconds": 1.3063230000000026,
+          "response_height": 2451,
+          "sample": 1,
+          "visible_cell_measurements": 483,
+          "wall_seconds": 4.280765416,
+          "workload": "prose"
+        },
+        {
+          "content_height": 17873,
+          "cpu_seconds": 8.713851000000002,
+          "response_height": 3499,
+          "sample": 1,
+          "visible_cell_measurements": 484,
+          "wall_seconds": 9.19012175,
+          "workload": "list"
+        },
+        {
+          "content_height": 17183,
+          "cpu_seconds": 1.551160000000003,
+          "response_height": 2451,
+          "sample": 1,
+          "visible_cell_measurements": 482,
+          "wall_seconds": 4.295146708,
+          "workload": "thinking"
+        },
+        {
+          "content_height": 20320,
+          "cpu_seconds": 3.4939430000000016,
+          "response_height": 2451,
+          "sample": 1,
+          "visible_cell_measurements": 1,
+          "wall_seconds": 4.268991542,
+          "workload": "scroll"
+        },
+        {
+          "content_height": 16856,
+          "cpu_seconds": 0.276678000000004,
+          "response_height": 2451,
+          "sample": 1,
+          "visible_cell_measurements": 3,
+          "wall_seconds": 4.259564291,
+          "workload": "idle"
+        },
+        {
+          "content_height": 16825,
+          "cpu_seconds": 1.186717999999999,
+          "response_height": 2451,
+          "sample": 2,
+          "visible_cell_measurements": 483,
+          "wall_seconds": 4.273457792,
+          "workload": "prose"
+        },
+        {
+          "content_height": 17873,
+          "cpu_seconds": 6.847228999999999,
+          "response_height": 3499,
+          "sample": 2,
+          "visible_cell_measurements": 484,
+          "wall_seconds": 7.455503166,
+          "workload": "list"
+        },
+        {
+          "content_height": 17183,
+          "cpu_seconds": 1.4110580000000041,
+          "response_height": 2451,
+          "sample": 2,
+          "visible_cell_measurements": 482,
+          "wall_seconds": 4.279092875,
+          "workload": "thinking"
+        },
+        {
+          "content_height": 20320,
+          "cpu_seconds": 3.5463570000000004,
+          "response_height": 2451,
+          "sample": 2,
+          "visible_cell_measurements": 1,
+          "wall_seconds": 4.266716708,
+          "workload": "scroll"
+        },
+        {
+          "content_height": 16856,
+          "cpu_seconds": 0.2352640000000008,
+          "response_height": 2451,
+          "sample": 2,
+          "visible_cell_measurements": 3,
+          "wall_seconds": 4.2642155,
+          "workload": "idle"
+        }
+      ],
+      "median_cpu_seconds": {
+        "idle": 0.276678000000004,
+        "list": 7.662172,
+        "prose": 1.3063230000000026,
+        "scroll": 3.5463570000000004,
+        "thinking": 1.4383440000000007
+      },
+      "recording_log": "Starting recording with the Metal System Trace template. Attaching to: YamabikoChat (49506). Time limit: 25.0 s\nCtrl-C to stop the recording\nReached specified time limit, ending recording...\nRun issues were detected (trace is still ready to be viewed):\n* [Warning] This configuration of instruments creates 1 table without a known input source.\n\n\t* [Warning] Recovery Suggestion: This could be due to a missing package, or an error in a package under development.\n\nRecording completed. Saving output file...\nOutput file saved as: metal.trace\n",
+      "metal-gpu-intervals": {
+        "row_count": 17428,
+        "xml_sha256": "c68ad25522f9838ff75c7e6d2a54c275a5fc6a386f9cfa48f127e3f3848fe8c5"
+      },
+      "gpu-counter-value": {
+        "row_count": 0,
+        "xml_sha256": "d844af1dcb22205b4e8585c673b7d36d0c3d0941a54d6ff38936a421293c829a"
+      },
+      "metal-gpu-counter-intervals": {
+        "row_count": 0,
+        "xml_sha256": "495161ffd4de1bb87399f692601fcbeb0145b6181ab223ed502c99d3e0f1d6fd"
+      },
+      "displayed-surfaces-interval": {
+        "row_count": 400,
+        "xml_sha256": "fdc2d6f3ec5a94d9f5c61884fc971ae7c8ff9bd474b92b194f0b97e6882756ae"
+      },
+      "gpu_interval_process_row_counts": {
+        "T3 Code (Nightly) Helper (899)": 12880,
+        "SimMetalHost (GaienPerformance:  (49140)": 2064,
+        "SimMetalHost (GaienPerformance:  (49139)": 1426,
+        "WindowServer (417)": 1034,
+        "SimRenderServer (49138)": 7,
+        "TouchBarServer (521)": 6,
+        "SimMetalHost (yamabiko-app-perfo (42875)": 6,
+        "ControlCenter (707)": 2,
+        "(none)": 2,
+        "SimRenderServer (42871)": 1
+      }
+    },
+    "after": {
+      "exit_code": 0,
+      "device": "20705736-EF0A-4657-BD21-48E13607AB75",
+      "products": "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/candidate-derived/Build/Products",
+      "locale": "ja_JP",
+      "languages": [
+        "ja"
+      ],
+      "appearance": "light",
+      "content_size": "medium",
+      "reset_app_data": true,
+      "profiled": true,
+      "trace": {
+        "pid": 50068,
+        "command": [
+          "xcrun",
+          "xctrace",
+          "record",
+          "--template",
+          "Metal System Trace",
+          "--attach",
+          "50068",
+          "--device",
+          "20705736-EF0A-4657-BD21-48E13607AB75",
+          "--time-limit",
+          "25s",
+          "--output",
+          "/Users/porari/kaihatu/ios/yamabikochat/.build/performance-20261018/after-metal-clean-2/metal.trace",
+          "--no-prompt"
+        ],
+        "exit_code": 0
+      },
+      "samples": [
+        {
+          "content_height": 16825,
+          "cpu_seconds": 1.2575310000000002,
+          "response_height": 2451,
+          "sample": 0,
+          "visible_cell_measurements": 122,
+          "wall_seconds": 4.271236833,
+          "workload": "prose"
+        },
+        {
+          "content_height": 17873,
+          "cpu_seconds": 3.3185660000000006,
+          "response_height": 3499,
+          "sample": 0,
+          "visible_cell_measurements": 122,
+          "wall_seconds": 4.652975625,
+          "workload": "list"
+        },
+        {
+          "content_height": 17183,
+          "cpu_seconds": 0.9579620000000002,
+          "response_height": 2451,
+          "sample": 0,
+          "visible_cell_measurements": 4,
+          "wall_seconds": 4.285717458,
+          "workload": "thinking"
+        },
+        {
+          "content_height": 20320,
+          "cpu_seconds": 2.9445390000000007,
+          "response_height": 2451,
+          "sample": 0,
+          "visible_cell_measurements": 1,
+          "wall_seconds": 4.267687917,
+          "workload": "scroll"
+        },
+        {
+          "content_height": 16825,
+          "cpu_seconds": 0.2354390000000013,
+          "response_height": 2451,
+          "sample": 0,
+          "visible_cell_measurements": 3,
+          "wall_seconds": 4.253682542,
+          "workload": "idle"
+        },
+        {
+          "content_height": 16825,
+          "cpu_seconds": 1.2626939999999998,
+          "response_height": 2451,
+          "sample": 1,
+          "visible_cell_measurements": 122,
+          "wall_seconds": 4.281118292,
+          "workload": "prose"
+        },
+        {
+          "content_height": 17873,
+          "cpu_seconds": 3.244532999999999,
+          "response_height": 3499,
+          "sample": 1,
+          "visible_cell_measurements": 122,
+          "wall_seconds": 4.585038334,
+          "workload": "list"
+        },
+        {
+          "content_height": 17183,
+          "cpu_seconds": 1.0058190000000025,
+          "response_height": 2451,
+          "sample": 1,
+          "visible_cell_measurements": 4,
+          "wall_seconds": 4.292281625,
+          "workload": "thinking"
+        },
+        {
+          "content_height": 20320,
+          "cpu_seconds": 3.2308200000000014,
+          "response_height": 2451,
+          "sample": 1,
+          "visible_cell_measurements": 1,
+          "wall_seconds": 4.268575209,
+          "workload": "scroll"
+        },
+        {
+          "content_height": 16856,
+          "cpu_seconds": 0.2970039999999976,
+          "response_height": 2451,
+          "sample": 1,
+          "visible_cell_measurements": 3,
+          "wall_seconds": 4.26738725,
+          "workload": "idle"
+        },
+        {
+          "content_height": 16825,
+          "cpu_seconds": 1.142672000000001,
+          "response_height": 2451,
+          "sample": 2,
+          "visible_cell_measurements": 122,
+          "wall_seconds": 4.271233084,
+          "workload": "prose"
+        },
+        {
+          "content_height": 17873,
+          "cpu_seconds": 3.191745000000001,
+          "response_height": 3499,
+          "sample": 2,
+          "visible_cell_measurements": 122,
+          "wall_seconds": 4.512791292,
+          "workload": "list"
+        },
+        {
+          "content_height": 17183,
+          "cpu_seconds": 0.9125340000000008,
+          "response_height": 2451,
+          "sample": 2,
+          "visible_cell_measurements": 4,
+          "wall_seconds": 4.288657625,
+          "workload": "thinking"
+        },
+        {
+          "content_height": 20320,
+          "cpu_seconds": 3.0142690000000023,
+          "response_height": 2451,
+          "sample": 2,
+          "visible_cell_measurements": 1,
+          "wall_seconds": 4.266116708,
+          "workload": "scroll"
+        },
+        {
+          "content_height": 16856,
+          "cpu_seconds": 0.2556319999999985,
+          "response_height": 2451,
+          "sample": 2,
+          "visible_cell_measurements": 3,
+          "wall_seconds": 4.268898958,
+          "workload": "idle"
+        }
+      ],
+      "median_cpu_seconds": {
+        "idle": 0.2556319999999985,
+        "list": 3.244532999999999,
+        "prose": 1.2575310000000002,
+        "scroll": 3.0142690000000023,
+        "thinking": 0.9579620000000002
+      },
+      "recording_log": "Starting recording with the Metal System Trace template. Attaching to: YamabikoChat (50068). Time limit: 25.0 s\nCtrl-C to stop the recording\nReached specified time limit, ending recording...\nRun issues were detected (trace is still ready to be viewed):\n* [Warning] This configuration of instruments creates 1 table without a known input source.\n\n\t* [Warning] Recovery Suggestion: This could be due to a missing package, or an error in a package under development.\n\nRecording completed. Saving output file...\nOutput file saved as: metal.trace\n",
+      "metal-gpu-intervals": {
+        "row_count": 18142,
+        "xml_sha256": "5b7b57f047942f3ef78380f3ae6377eda503fa9826f5b81b75c0ecd4ba829092"
+      },
+      "gpu-counter-value": {
+        "row_count": 0,
+        "xml_sha256": "50c7169ecdca79b34da01c16dc910e74727cd32793e5dca9e877f0154c5617ae"
+      },
+      "metal-gpu-counter-intervals": {
+        "row_count": 0,
+        "xml_sha256": "495161ffd4de1bb87399f692601fcbeb0145b6181ab223ed502c99d3e0f1d6fd"
+      },
+      "displayed-surfaces-interval": {
+        "row_count": 408,
+        "xml_sha256": "2a63b3a54f481af89c0f1a93c09c768deba09e57ff29acd0abc765b564b0fe02"
+      },
+      "gpu_interval_process_row_counts": {
+        "T3 Code (Nightly) Helper (899)": 17074,
+        "WindowServer (417)": 1056,
+        "SimMetalHost (yamabiko-app-perfo (42875)": 6,
+        "SimMetalHost (GaienPerformance: (49140)": 4,
+        "SimRenderServer (42871)": 1,
+        "SimRenderServer (49138)": 1
+      }
+    }
+  },
+  "gpu_conclusion": "Both diagnostic recordings succeeded, but GPU counters were empty and no GPU intervals were directly attributed to YamabikoChat. Events include host applications and simulator rendering services. Application-only GPU time and GPU reduction percentage are unverified; zero direct rows does not imply zero GPU use."
+}

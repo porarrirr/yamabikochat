@@ -598,7 +598,7 @@ struct NativeMarkdownView: View {
                 )) { group in
                     switch group {
                     case let .selectableText(_, blocks):
-                        SelectableChatText(blocks: blocks)
+                        NativeMarkdownSelectableGroup(blocks: blocks).equatable()
                     case let .standalone(block):
                         NativeMarkdownBlockView(
                             block: block,
@@ -653,6 +653,17 @@ struct NativeMarkdownView: View {
         .transaction { transaction in
             transaction.animation = nil
         }
+    }
+}
+
+/// Confirmed blocks do not need to rebuild their fragments when another block
+/// (or the message's thinking/tool state) changes. Environment changes still
+/// reach the text representable, including Dynamic Type and selection actions.
+private struct NativeMarkdownSelectableGroup: View, Equatable {
+    let blocks: [NativeMarkdownBlock]
+
+    var body: some View {
+        SelectableChatText(blocks: blocks)
     }
 }
 
@@ -907,6 +918,24 @@ final class SelectableChatTextView: UITextView {
         }
     }
 
+    func replaceAttributedSuffix(from offset: Int, with suffix: NSAttributedString) {
+        let range = NSRange(location: offset, length: textStorage.length - offset)
+        guard !textStorage.attributedSubstring(from: range).isEqual(to: suffix) else { return }
+        let selection = selectedRange
+        textStorage.beginEditing()
+        textStorage.replaceCharacters(in: range, with: suffix)
+        textStorage.endEditing()
+        // Editing textStorage preserves TextKit's unchanged prefix, but bypasses
+        // the attributedText setter and its width-measurement invalidation.
+        measuredSizes.removeAll(keepingCapacity: true)
+        #if DEBUG
+        attributedTextUpdateCount += 1
+        #endif
+        if NSMaxRange(selection) <= textStorage.length { selectedRange = selection }
+        invalidateIntrinsicContentSize()
+        setNeedsDisplay()
+    }
+
     func measuredSize(for width: CGFloat) -> CGSize {
         if measuredContentSizeCategory != traitCollection.preferredContentSizeCategory {
             measuredSizes.removeAll(keepingCapacity: true)
@@ -1006,18 +1035,12 @@ private struct SelectableChatText: UIViewRepresentable {
 
     func updateUIView(_ textView: SelectableChatTextView, context: Context) {
         context.coordinator.onAskChatWithSelection = onAskChatWithSelection
-        guard context.coordinator.needsTextUpdate(
+        context.coordinator.updateText(
+            in: textView,
             fragments: fragments,
-            dynamicTypeSize: context.environment.dynamicTypeSize
-        ) else { return }
-        let rendered = renderedText()
-        if textView.attributedText != rendered {
-            let selectedRange = textView.selectedRange
-            textView.attributedText = rendered
-            if NSMaxRange(selectedRange) <= rendered.length {
-                textView.selectedRange = selectedRange
-            }
-        }
+            dynamicTypeSize: context.environment.dynamicTypeSize,
+            render: renderedText
+        )
     }
 
     func sizeThatFits(
@@ -1029,7 +1052,7 @@ private struct SelectableChatText: UIViewRepresentable {
         return uiView.measuredSize(for: width)
     }
 
-    private func renderedText() -> NSAttributedString {
+    private func renderedText(_ fragments: [Fragment]) -> NSAttributedString {
         let rendered = NSMutableAttributedString()
         for (index, fragment) in fragments.enumerated() {
             let start = rendered.length
@@ -1164,12 +1187,38 @@ private struct SelectableChatText: UIViewRepresentable {
         var onAskChatWithSelection: (String) -> Void
         private var renderedFragments: [Fragment]?
         private var renderedDynamicTypeSize: DynamicTypeSize?
+        private var renderedFragmentLengths: [Int] = []
 
-        fileprivate func needsTextUpdate(fragments: [Fragment], dynamicTypeSize: DynamicTypeSize) -> Bool {
-            guard renderedFragments != fragments || renderedDynamicTypeSize != dynamicTypeSize else { return false }
+        fileprivate func updateText(
+            in textView: SelectableChatTextView,
+            fragments: [Fragment],
+            dynamicTypeSize: DynamicTypeSize,
+            render: ([Fragment]) -> NSAttributedString
+        ) {
+            guard renderedFragments != fragments || renderedDynamicTypeSize != dynamicTypeSize else { return }
+            var retainedCount = 0
+            if renderedDynamicTypeSize == dynamicTypeSize, let previous = renderedFragments,
+               previous.allSatisfy({ !$0.text.characters.isEmpty }),
+               fragments.allSatisfy({ !$0.text.characters.isEmpty }) {
+                // Retain complete fragments and their separators. The old/new
+                // last fragment may gain/lose a newline when rows are appended
+                // or removed, so include it in the replacement suffix.
+                // Empty headings can omit a leading separator. Render those
+                // uncommon groups in full so offsets retain that behavior.
+                let limit = max(0, min(previous.count, fragments.count) - 1)
+                while retainedCount < limit, previous[retainedCount] == fragments[retainedCount] {
+                    retainedCount += 1
+                }
+            }
+            let offset = renderedFragmentLengths.prefix(retainedCount).reduce(0, +)
+            let suffix = Array(fragments.dropFirst(retainedCount))
+            textView.replaceAttributedSuffix(from: offset, with: render(suffix))
+            renderedFragmentLengths = Array(renderedFragmentLengths.prefix(retainedCount))
+                + suffix.enumerated().map { index, fragment in
+                    NSAttributedString(fragment.text).length + (index < suffix.count - 1 ? 1 : 0)
+                }
             renderedFragments = fragments
             renderedDynamicTypeSize = dynamicTypeSize
-            return true
         }
 
         init(onAskChatWithSelection: @escaping (String) -> Void) {
