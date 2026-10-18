@@ -291,24 +291,18 @@ test('reported benchmark chart retains all eight scores and explicit labels', ()
     assert.equal(app.root.querySelectorAll('.genui-unavailable').length, 0);
 });
 
-test('reported benchmark chart sends its series and string axes to native rendering', () => {
+test('reported benchmark chart uses readable horizontal groups before native rendering', () => {
     const requests = [];
     mount({ui:api.h('chart',benchmarkChartProps)},390,{},context=>{
         context.DOMParser=class {};
         context.prompt=prompt=>{requests.push(JSON.parse(prompt.slice('__genuiChart:'.length)));return '{"error":"Native failure"}';};
     });
-    assert.equal(requests.length,1);
-    const model=requests[0].viewModel;
-    assert.equal(model.xKey,'benchmark');
-    assert.equal(model.xAxis,'benchmark');
-    assert.equal(model.yAxis,'score');
-    assert.deepEqual(model.series,benchmarkChartProps.series.map(s=>({...s,type:'bar'})));
-    assert.deepEqual(model.data,benchmarkChartProps.content.data);
+    assert.equal(requests.length,0, 'crowded category ticks must not reach the vertical renderer');
 });
 
 test('chart failures expose and log the cause even when alternative text is supplied', () => {
     for (const native of [false,true]) {
-        const app=mount({ui:api.h('chart',native?benchmarkChartProps:{
+        const app=mount({ui:api.h('chart',native?{alt:benchmarkChartProps.alt,content:cpuChart}:{
             alt:'Benchmark comparison',content:{chartType:'bar',data:[{label:'A',score:'unknown'}]}
         })},390,{},context=>{
             if(native){context.DOMParser=class {};context.prompt=()=>'{"error":"Native failure"}';}
@@ -320,6 +314,43 @@ test('chart failures expose and log the cause even when alternative text is supp
             message.message===`Chart unavailable: ${reason}`&&typeof message.path==='string'));
         assert.equal(app.root.querySelectorAll('svg').length,0);
     }
+});
+
+test('crowded bars wrap full labels and share a scale and series colors on narrow screens', () => {
+    for (const width of [320,390,768]) {
+        const data=Array.from({length:8},(_,i)=>({
+            label:`Cinebench R23 シングル Core i5-12450H benchmark category ${i}`,score:(i+1)*100
+        }));
+        const app=mount({ui:api.h('chart',{content:{chartType:'bar',xKey:'label',data},showValues:true})},width);
+        const svg=app.root.querySelector('svg'),bars=app.root.querySelectorAll('rect');
+        assert.equal(bars.length,8);
+        assert.equal(new Set(bars.map(bar=>bar.getAttribute('fill'))).size,1,'one series has one color');
+        const labels=app.root.querySelectorAll('[data-chart-category]');
+        assert.equal(labels.length,8);
+        for(let i=0;i<8;i++){
+            assert.equal(labels[i].textContent,data[i].label);
+            const lastLabelY=Number(labels[i].getAttribute('y'))+(labels[i].children.length-1)*18;
+            assert.ok(Number(bars[i].getAttribute('y'))>lastLabelY);
+            if(i)assert.ok(Number(labels[i].getAttribute('y'))>Number(bars[i-1].getAttribute('y'))+16);
+        }
+        assert.ok(Number(bars[7].getAttribute('width'))>Number(bars[0].getAttribute('width'))*7.9);
+        assert.equal(svg.classList.contains('genui-horizontal-bars'),true);
+        assert.equal(/NaN|Infinity/.test(svg.outerHTML),false);
+    }
+});
+
+test('horizontal grouped bars retain missing samples, negatives and explicit colors', () => {
+    const app=mount({ui:api.h('chart',{content:{chartType:'bar',xKey:'category',data:[
+        {category:'Very long category label that must wrap on a phone',a:-3,b:6},
+        {category:'Another very long category label on a phone',a:0,b:null}
+    ],series:[{dataKey:'a',color:'#123456'},{dataKey:'b',color:'#654321'}]}})});
+    const bars=app.root.querySelectorAll('rect');
+    assert.equal(bars.length,3);
+    assert.ok(bars.every(bar=>Number(bar.getAttribute('width'))>=0));
+    assert.equal(bars[0].getAttribute('fill'),'#123456');
+    assert.equal(bars[1].getAttribute('fill'),'#654321');
+    assert.ok(Number(bars[0].getAttribute('x'))<Number(bars[1].getAttribute('x')));
+    assert.ok(app.root.textContent.includes('—'));
 });
 
 test('outer series and axis configuration reach the iOS native chart bridge', () => {

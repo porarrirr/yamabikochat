@@ -202,7 +202,7 @@ final class GenUIRichDocumentTests: XCTestCase {
     }
 
     @MainActor
-    func testBenchmarkChartWithOuterSeriesAndStringAxesRendersNatively() async throws {
+    func testBenchmarkChartWithOuterSeriesAndStringAxesUsesReadableRows() async throws {
         let result = try await runRichRuntimeScript(#"""
         const originalPrompt=window.prompt,nativeResponses=[];
         window.prompt=message=>{
@@ -223,17 +223,61 @@ final class GenUIRichDocumentTests: XCTestCase {
         }}});
         await wait(100);
         const svg=document.querySelector('#root svg[role="img"]');
-        return {svg:!!svg,labels:svg?.textContent||'',marks:svg?.querySelectorAll('rect').length||0,
+        return {svg:!!svg,horizontal:svg?.classList.contains('genui-horizontal-bars'),
+            labels:document.getElementById('root').textContent,marks:svg?.querySelectorAll('rect').length||0,
             unavailable:document.querySelectorAll('.genui-unavailable').length,
             nativeErrors:nativeResponses.filter(response=>response.error).map(response=>response.error)};
         """#, withNativeCharts: true)
         XCTAssertEqual(result["nativeErrors"] as? [String], [])
+        XCTAssertEqual(result["horizontal"] as? Bool, true)
         XCTAssertEqual(result["svg"] as? Bool, true)
         XCTAssertEqual(result["unavailable"] as? Int, 0)
         XCTAssertEqual(result["marks"] as? Int, 8)
         let labels = try XCTUnwrap(result["labels"] as? String)
         for label in ["Cinebench R23 シングル", "Geekbench 6 マルチ", "i5-12450H", "M2"] {
             XCTAssertTrue(labels.contains(label), labels)
+        }
+    }
+
+    @MainActor
+    func testLongBarCategoriesDoNotOverlapOnNarrowScreens() async throws {
+        let result = try await runRichRuntimeScript(#"""
+        const results=[];
+        for(const width of [288,358,700])for(const theme of ['light','dark']){
+            document.getElementById('root').style.width=width+'px';
+            window.GenUIRuntime.setTheme(theme);
+            const data=Array.from({length:8},(_,index)=>({
+                label:['Cinebench R23 シングル','Cinebench R23 マルチ','Geekbench 6 シングル','Geekbench 6 マルチ'][Math.floor(index/2)]+' · '+(index%2?'Apple M2':'Core i5-12450H'),
+                score:[1650,1600,8000,8150,2300,2600,7750,9500][index]
+            }));
+            window.GenUIRuntime.updateDocument({title:'Benchmarks',ui:{type:'chart',props:{
+                content:{chartType:'bar',xKey:'label',series:[{dataKey:'score'}],data},showValues:true
+            }}});
+            await wait(100);
+            const svg=document.querySelector('#root svg'),bars=Array.from(svg.querySelectorAll('rect')),
+                labels=Array.from(svg.querySelectorAll('[data-chart-category]'));
+            results.push({id:width+'/'+theme,marks:bars.length,
+                sameColor:new Set(bars.map(bar=>getComputedStyle(bar).fill)).size===1,
+                labels:labels.length===8&&labels.every((label,index)=>label.getAttribute('aria-label')===data[index].label),
+                noOverlap:labels.every((label,index)=>{
+                    const bounds=label.getBBox(),bar=bars[index].getBBox();
+                    return bounds.x>=0&&bounds.x+bounds.width<=width&&bounds.y+bounds.height<bar.y&&
+                        (!index||bounds.y>bars[index-1].getBBox().y+bars[index-1].getBBox().height);
+                }),
+                values:[1650,1600,8000,8150,2300,2600,7750,9500].every(value=>svg.textContent.includes(value.toLocaleString())),
+                invalidGeometry:/NaN|Infinity/.test(svg.outerHTML)});
+        }
+        return {results};
+        """#, withNativeCharts: true)
+        let results = try XCTUnwrap(result["results"] as? [[String: Any]])
+        XCTAssertEqual(results.count, 6)
+        for item in results {
+            let name = item["id"] as? String ?? "Unknown"
+            XCTAssertEqual(item["marks"] as? Int, 8, name)
+            for key in ["sameColor", "labels", "noOverlap", "values"] {
+                XCTAssertEqual(item[key] as? Bool, true, "\(name): \(key)")
+            }
+            XCTAssertEqual(item["invalidGeometry"] as? Bool, false, name)
         }
     }
 

@@ -3004,9 +3004,17 @@
             el.style.width = size(options.size || c.size);
             el.style.maxWidth = '100%';
         }
+        // Long category names need a reading row, rather than competing for a
+        // narrow tick slot. Keep the supplied categories/series and one shared scale.
+        const textWidth = (text) => Array.from(String(text)).reduce((sum, char) =>
+            sum + (/[^\u0000-\u00ff]/u.test(char) ? 13 : char === ' ' ? 4 : 7), 0);
+        const categoryLabels = c.data.map((row, index) => String(row[c.xKey || 'x'] ?? index + 1));
+        const horizontalBars = c.chartType === 'bar' &&
+            series.every((s) => !s.type || s.type === 'bar') &&
+            categoryLabels.some((label) => textWidth(label) > (width - 64) / c.data.length - 12);
         // The recovered renderer treats scatter as bars and missing samples as zero.
         // Use the existing local SVG renderer for these data contracts on iOS too.
-        const nativeSupportsData = c.chartType !== 'scatter' &&
+        const nativeSupportsData = !horizontalBars && c.chartType !== 'scatter' &&
             rows.every((row) => row.every((value) => value !== null));
         if (global.DOMParser && global.prompt && nativeSupportsData) {
             const viewModel = {
@@ -3139,6 +3147,72 @@
                 }
                 if (c.showLegend !== false) legendItem(`${label} · ${format(value)}`, pieColor);
                 angle = next;
+            });
+        } else if (horizontalBars) {
+            svg.classList.add('genui-horizontal-bars');
+            const nums = rows.flat().filter((value) => value !== null);
+            const min = c.yAxisMin ?? Math.min(0, ...nums),
+                max = c.yAxisMax ?? Math.max(1, ...nums), range = max - min;
+            if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(range) || range <= 0)
+                return fail('invalid axis range');
+            const valueWidth = Math.min(width * 0.4,
+                Math.max(...rows.flatMap(row => row.map((value, i) => textWidth(format(value, series[i])))))) + 12;
+            const left = 12, right = width - 12 - valueWidth;
+            const x = value => left + (Math.max(min, Math.min(max, value)) - min) / range * (right - left);
+            const zero = x(Math.max(min, Math.min(max, 0)));
+            const wrap = text => {
+                const lines = []; let line = '';
+                for (const char of Array.from(text)) {
+                    if (line && textWidth(line + char) > width - 24) {
+                        const space = line.lastIndexOf(' ');
+                        if (space > line.length / 2) {
+                            lines.push(line.slice(0, space + 1)); line = line.slice(space + 1);
+                        } else { lines.push(line); line = ''; }
+                    }
+                    line += char;
+                }
+                if (line) lines.push(line);
+                return lines;
+            };
+            let cursor = 8;
+            categoryLabels.forEach((label, index) => {
+                if (c.showXAxis !== false) {
+                    const labelNode = add('text', {x:left, y:cursor + 14, 'font-size':13,
+                        fill:'var(--text)', 'aria-label':label, 'data-chart-category':String(index)});
+                    for (const [lineIndex, line] of wrap(label).entries()) {
+                        const span = document.createElementNS(SVG_NS, 'tspan');
+                        span.setAttribute('x', String(left)); span.setAttribute('dy', lineIndex ? '18' : '0');
+                        span.textContent = line; labelNode.append(span); cursor += 18;
+                    }
+                    cursor += 8;
+                }
+                series.forEach((s, seriesIndex) => {
+                    const value = rows[index][seriesIndex], y = cursor;
+                    if (c.showGrid !== false)
+                        add('line', {x1:left, x2:right, y1:y+8, y2:y+8,
+                            stroke:'var(--border)', 'stroke-width':1});
+                    if (value !== null) {
+                        const mark = add('rect', {x:Math.min(x(value),zero), y,
+                            width:Math.abs(x(value)-zero), height:16, rx:3, fill:colors[seriesIndex]});
+                        interactive(mark, `${label} · ${s.label || s.name || s.dataKey}: ${format(value,s)}`);
+                        listen(mark, 'pointerenter', event => action(options.onHover, {index,data:c.data[index]},event));
+                        listen(mark, 'pointerleave', event => action(options.onHover, {index:null,data:null},event));
+                    }
+                    if (c.showValues !== false)
+                        add('text', {x:width-12,y:y+13,'text-anchor':'end','font-size':12,
+                            fill:'var(--text)'},format(value,s));
+                    cursor += 24;
+                });
+                cursor += 16;
+            });
+            svg.setAttribute('viewBox', `0 0 ${width} ${cursor}`);
+            if (c.showLegend !== false)
+                series.forEach((s,index) => legendItem(s.label || s.name || s.dataKey,colors[index]));
+            effects.push(() => {
+                const actual = el.getBoundingClientRect().width, key = el.dataset.nodePath;
+                if (actual > 0 && Math.abs((chartWidths.get(key) || width) - actual) > 1) {
+                    chartWidths.set(key,actual); queueRender();
+                }
             });
         } else {
             const nums = rows.flat().filter((value) => value !== null);

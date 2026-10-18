@@ -116,7 +116,9 @@ Rich charts use explicit type and supplied data. The actual iOS host calls the
 original `renderChartSvg` / `renderPieChartSvg` exports in native QuickJS;
 color/layout/XML dependencies are bundled with them. The existing local SVG
 renderer handles scatter plots and missing samples on iOS because the recovered
-renderer renders scatter as bars and converts missing samples to zero. It also
+renderer renders scatter as bars and converts missing samples to zero. Crowded
+bar categories use local horizontal rows with full wrapped labels, a shared scale,
+visible values, and consistent series colors. Short categories retain vertical bars. It also
 runs in the dependency-free browser test harness. Pie values must be finite and
 nonnegative with a positive total before either renderer is called. Do not infer
 chart type from IDs or titles. Pointer hover integration is adapted to WebKit.
