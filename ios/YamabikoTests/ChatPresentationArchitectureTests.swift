@@ -462,6 +462,32 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         }
     }
 
+    func testTouchingAutoFollowingTimelineDoesNotRestorePreviousGestureOffset() {
+        XCTAssertEqual(
+            TailFollowPolicy.offsetDuringUserInteraction(
+                current: 2400,
+                lastUserDriven: 600,
+                hasActiveDrag: false
+            ),
+            2400,
+            "Touch-down before dragging must preserve the current auto-follow position"
+        )
+    }
+
+    func testActiveDragAndDecelerationPreserveFingerOffsetDuringMeasurement() {
+        for fingerOffset: CGFloat in [2380, -45] {
+            XCTAssertEqual(
+                TailFollowPolicy.offsetDuringUserInteraction(
+                    current: 1200,
+                    lastUserDriven: fingerOffset,
+                    hasActiveDrag: true
+                ),
+                fingerOffset,
+                "Layout changes must preserve the active gesture, including rubber banding"
+            )
+        }
+    }
+
     func testTailFollowPolicyRestoresAnchorWithoutOverscrolling() {
         XCTAssertTrue(TailFollowPolicy.isNearTail(distance: 96))
         XCTAssertFalse(TailFollowPolicy.isNearTail(distance: 96.1))

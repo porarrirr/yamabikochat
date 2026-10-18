@@ -503,7 +503,11 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                 // A live drag can be outside the content bounds (rubber banding).
                 // Clamping it here snaps the viewport away from the finger.
                 let preservedOffsetY = isUserScrolling
-                    ? (lastUserDrivenOffsetY ?? measurementOffsetY)
+                    ? TailFollowPolicy.offsetDuringUserInteraction(
+                        current: measurementOffsetY,
+                        lastUserDriven: lastUserDrivenOffsetY,
+                        hasActiveDrag: isUserScrollInProgress
+                    )
                     : clampedOffset(measurementOffsetY)
                 if TailFollowPolicy.shouldAdjustOffset(
                     current: collectionView.contentOffset.y,
@@ -685,7 +689,8 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         // Layout and inset changes also invoke this delegate. They must not
         // replace the last finger-driven position during a measurement pass.
-        guard isUserScrolling, !isCompletingRowMeasurement, !isReconfiguringRows else { return }
+        // Touch-down alone (isTracking) has not started a user-driven scroll.
+        guard isUserScrollInProgress, !isCompletingRowMeasurement, !isReconfiguringRows else { return }
         lastUserDrivenOffsetY = scrollView.contentOffset.y
         if isAtTail {
             followState = .followingTail
@@ -699,11 +704,13 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
         guard !decelerate else { return }
         isUserScrollInProgress = false
+        lastUserDrivenOffsetY = nil
         settleFollowState()
     }
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         isUserScrollInProgress = false
+        lastUserDrivenOffsetY = nil
         settleFollowState()
     }
 

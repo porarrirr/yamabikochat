@@ -196,6 +196,17 @@ enum TailFollowPolicy {
     static let defaultThreshold: CGFloat = 96
     static let offsetTolerance: CGFloat = 0.5
 
+    static func offsetDuringUserInteraction(
+        current: CGFloat,
+        lastUserDriven: CGFloat?,
+        hasActiveDrag: Bool
+    ) -> CGFloat {
+        // isTracking becomes true on touch-down, before willBeginDragging.
+        // Auto-follow may have moved far beyond the previous gesture since then.
+        // Only an active drag/deceleration owns a saved finger-driven offset.
+        hasActiveDrag ? (lastUserDriven ?? current) : current
+    }
+
     static func isNearTail(distance: CGFloat, threshold: CGFloat = defaultThreshold) -> Bool {
         distance <= threshold
     }
