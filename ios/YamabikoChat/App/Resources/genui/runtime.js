@@ -2921,6 +2921,11 @@
         let c;
         try {
             c = {
+                ...Object.fromEntries(
+                    Object.entries(options).filter(([key]) =>
+                        ['data', 'series', 'xAxis', 'yAxis'].includes(key),
+                    ),
+                ),
                 ...normalizeChart(content),
                 ...Object.fromEntries(
                     Object.entries(options).filter(([key]) => key.startsWith('show')),
@@ -2934,19 +2939,51 @@
         if (!['bar', 'line', 'area', 'scatter', 'pie'].includes(c.chartType))
             return fail('unsupported chart type');
         if (!Array.isArray(c.data) || !c.data.length) return fail('no chart data');
+        if (c.data.some((row) => !row || typeof row !== 'object' || Array.isArray(row)))
+            return fail('chart data requires rows');
         const numeric = (value) =>
             typeof value === 'number' && Number.isFinite(value)
                 ? value
                 : typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))
                   ? Number(value)
                   : null;
+        const keys = [...new Set(c.data.flatMap((row) => Object.keys(row)))];
+        // Keep explicit keys and the conventional x/value schema. Otherwise use the
+        // supplied table's numeric columns and its single unambiguous label column.
+        const labels = keys.filter((key) =>
+            c.data.some((row) => typeof row[key] === 'string' && row[key].trim() !== '') &&
+            c.data.every((row) => row[key] == null ||
+                (typeof row[key] === 'string' && numeric(row[key]) === null)),
+        );
+        c.xKey = c.xKey || (typeof c.xAxis === 'string' ? c.xAxis : c.xAxis?.dataKey) ||
+            c.nameKey || (keys.includes('x') ? 'x' : labels.length === 1 ? labels[0] : undefined);
+        if (c.chartType === 'pie') c.nameKey = c.nameKey || c.xKey;
+        const valueKeys = c.valueKey
+            ? [c.valueKey]
+            : keys.includes('value')
+              ? ['value']
+              : keys.filter((key) => key !== c.xKey &&
+                  c.data.some((row) => numeric(row[key]) !== null));
         const series = c.series?.length
             ? c.series
-            : [{ dataKey: c.valueKey || 'value', label: c.valueKey || 'Value' }];
+            : valueKeys.map((dataKey) => ({
+                  dataKey, label: dataKey === 'value' && !c.valueKey ? 'Value' : dataKey,
+              }));
+        if (c.chartType === 'pie' && series.length !== 1)
+            return fail('pie requires one numeric series');
         if (series.some((s) => !s.dataKey)) return fail('series requires dataKey');
         const rows = c.data.map((row) => series.map((s) => numeric(row[s.dataKey])));
         if (!rows.some((row) => row.some((value) => value !== null)))
             return fail('no numeric values');
+        let pieValues, pieTotal;
+        if (c.chartType === 'pie') {
+            pieValues = c.data.map((row) => numeric(row[c.valueKey || series[0].dataKey]));
+            if (pieValues.some((value) => value === null || value < 0))
+                return fail('pie values must be finite and nonnegative');
+            pieTotal = pieValues.reduce((sum, value) => sum + value, 0);
+            if (!Number.isFinite(pieTotal) || pieTotal <= 0)
+                return fail('pie total must be finite and positive');
+        }
         const colors = series.map(
             (s, index) => color(s.color) || `var(--chart-${(index % 6) + 1})`,
         );
@@ -2963,7 +3000,11 @@
             el.style.width = size(options.size || c.size);
             el.style.maxWidth = '100%';
         }
-        if (global.DOMParser && global.prompt) {
+        // The recovered renderer treats scatter as bars and missing samples as zero.
+        // Use the existing local SVG renderer for these data contracts on iOS too.
+        const nativeSupportsData = c.chartType !== 'scatter' &&
+            rows.every((row) => row.every((value) => value !== null));
+        if (global.DOMParser && global.prompt && nativeSupportsData) {
             const viewModel = {
                 ...c,
                 theme: renderTheme,
@@ -3053,12 +3094,7 @@
             );
         };
         if (c.chartType === 'pie') {
-            const values = c.data.map((row) => numeric(row[c.valueKey || series[0].dataKey]));
-            if (values.some((value) => value === null || value < 0))
-                return fail('pie values must be finite and nonnegative');
-            const total = values.reduce((sum, value) => sum + value, 0);
-            if (!Number.isFinite(total) || total <= 0)
-                return fail('pie total must be finite and positive');
+            const values = pieValues, total = pieTotal;
             const cx = width / 2,
                 cy = height / 2,
                 radius = Math.min(width, height) / 2 - 16;

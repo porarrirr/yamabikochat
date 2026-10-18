@@ -114,9 +114,16 @@ add/replace/remove/append batches for declarative trees.
 
 Rich charts use explicit type and supplied data. The actual iOS host calls the
 original `renderChartSvg` / `renderPieChartSvg` exports in native QuickJS;
-color/layout/XML dependencies are bundled with them. A compatible local chart
-fallback remains for the dependency-free browser test harness. Do not infer
+color/layout/XML dependencies are bundled with them. The existing local SVG
+renderer handles scatter plots and missing samples on iOS because the recovered
+renderer renders scatter as bars and converts missing samples to zero. It also
+runs in the dependency-free browser test harness. Pie values must be finite and
+nonnegative with a positive total before either renderer is called. Do not infer
 chart type from IDs or titles. Pointer hover integration is adapted to WebKit.
+Explicit series and axis keys take precedence. Without series, the conventional
+`value` column remains the default; otherwise numeric columns become series and
+a single text column supplies category labels. Missing samples stay missing.
+For ambiguous tables, supply `series:[{dataKey:"score"}]` and `xAxis:"label"`.
 
 Markdown uses bundled markdown-it and safe DOM construction; raw HTML is
 disabled. MathJax renders math. Lottie uses the bundled SVG player. Supplied

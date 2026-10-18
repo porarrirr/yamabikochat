@@ -164,7 +164,161 @@ final class GenUIRichDocumentTests: XCTestCase {
     }
 
     @MainActor
-    private func runRichRuntimeScript(_ script: String, withMathJax: Bool = false) async throws -> [String: Any] {
+    func testCPUComparisonChartRendersThroughNativeQuickJSInWebKit() async throws {
+        let result = try await runRichRuntimeScript(#"""
+        const originalPrompt=window.prompt;
+        const nativeResponses=[];
+        window.prompt=(message)=>{
+            const response=originalPrompt(message);
+            if(message.startsWith('__genuiChart:'))nativeResponses.push(JSON.parse(response||'{}'));
+            return response;
+        };
+        // Payload from the reported diagnostic: named numeric columns, no series/xKey.
+        window.GenUIRuntime.updateDocument({title:'CPU比較',ui:{type:'chart',props:{
+            chartType:'bar',height:280,showLegend:true,showValues:true,
+            alt:'Cinebench R23のシングルコアとマルチコアの概算比較',
+            content:{chartType:'bar',data:[
+                {CPU:'Core i5-12450H','Single-core':1600,'Multi-core':9000},
+                {CPU:'Apple M2','Single-core':1600,'Multi-core':8500}
+            ]}
+        }}});
+        await wait(100);
+        const svg=document.querySelector('#root svg[role="img"]');
+        return {svgCount:document.querySelectorAll('#root svg[role="img"]').length,
+            labels:svg?.textContent||'',marks:svg?.querySelectorAll('rect,path').length||0,
+            unavailable:document.querySelectorAll('.genui-unavailable').length,
+            nativeSVG:nativeResponses.some(response=>typeof response.svg==='string'),
+            nativeErrors:nativeResponses.filter(response=>response.error).map(response=>response.error)};
+        """#, withNativeCharts: true)
+        XCTAssertEqual(result["svgCount"] as? Int, 1)
+        XCTAssertEqual(result["unavailable"] as? Int, 0)
+        XCTAssertEqual(result["nativeSVG"] as? Bool, true)
+        XCTAssertEqual(result["nativeErrors"] as? [String], [])
+        XCTAssertGreaterThanOrEqual(result["marks"] as? Int ?? 0, 4)
+        let labels = try XCTUnwrap(result["labels"] as? String)
+        for label in ["Core i5-12450H", "Apple M2", "Single-core", "Multi-core"] {
+            XCTAssertTrue(labels.contains(label), labels)
+        }
+    }
+
+    @MainActor
+    func testAllChartTypesRenderInWebKitInBothThemes() async throws {
+        let result = try await runRichRuntimeScript(#"""
+        const originalPrompt=window.prompt,nativeCalls=[];
+        window.prompt=(message)=>{
+            const response=originalPrompt(message);
+            if(message.startsWith('__genuiChart:'))nativeCalls.push({
+                request:JSON.parse(message.slice('__genuiChart:'.length)),response:JSON.parse(response||'{}')
+            });
+            return response;
+        };
+        const cases=[];
+        for(const chartType of ['bar','line','area','scatter','pie']){
+            for(const schema of ['conventional','inferred','explicit']){
+                const x=chartType==='scatter'?[0,1,100]:['A','B','C'];
+                const data=x.map((label,index)=>schema==='conventional'
+                    ?{x:label,value:[3,5,4][index]}
+                    :{category:label,score:[3,5,4][index]});
+                const content={chartType,data};
+                if(schema==='explicit')Object.assign(content,{xKey:'category',nameKey:'category',
+                    series:[{dataKey:'score',label:'Score',color:'#123456'}]});
+                const props={content};
+                // Numeric scatter coordinates require an explicit axis key.
+                if(chartType==='scatter'&&schema==='inferred')props.xAxis='category';
+                cases.push({id:chartType+'/'+schema,ui:{type:'Chart',props},chartType,
+                    dataKey:schema==='conventional'?'value':'score'});
+            }
+        }
+        cases.push({id:'donut/alias',chartType:'pie',dataKey:'amount',ui:{type:'pie-chart',props:{
+            size:244,innerRadius:'49%',xAxis:'label',series:[{dataKey:'amount'}],
+            data:[{label:'A',amount:3,fill:'#123456'},{label:'B',amount:7,fill:'#654321'}]
+        }}});
+        const results=[];
+        for(const theme of ['light','dark']){
+            window.GenUIRuntime.setTheme(theme);
+            for(const item of cases){
+                const start=nativeCalls.length;
+                window.GenUIRuntime.updateDocument({title:item.id,ui:item.ui});
+                await wait(60);
+                const svg=document.querySelector('#root svg[role="img"]'),calls=nativeCalls.slice(start);
+                const circles=Array.from(svg?.querySelectorAll('circle')||[]);
+                const xs=circles.map(circle=>Number(circle.getAttribute('cx')));
+                results.push({id:theme+'/'+item.id,
+                    svg:!!svg,marks:svg?.querySelectorAll('rect,path,circle,polyline,polygon').length||0,
+                    unavailable:document.querySelectorAll('.genui-unavailable').length,
+                    invalidGeometry:/NaN|Infinity/.test(svg?.outerHTML||''),
+                    renderer:item.chartType==='scatter'?calls.length===0:
+                        calls.length>0&&calls.every(call=>typeof call.response.svg==='string'&&!call.response.error),
+                    contract:calls.every(call=>call.request.viewModel.theme===theme&&
+                        call.request.viewModel.series.length===1&&call.request.viewModel.series[0].dataKey===item.dataKey),
+                    scatterSpacing:item.chartType!=='scatter'||(xs.length===3&&xs[1]-xs[0]<(xs[2]-xs[1])/10),
+                    typeGeometry:item.chartType==='bar'?svg?.querySelectorAll('rect').length===3:
+                        ['line','area'].includes(item.chartType)?svg?.querySelectorAll('path').length>=(item.chartType==='area'?2:1)&&svg?.querySelectorAll('rect').length===0:
+                        item.chartType==='pie'?svg?.querySelectorAll('path').length>=2:true,
+                    rowColors:item.id!=='donut/alias'||['#123456','#654321'].every(color=>svg?.outerHTML.includes(color))
+                });
+            }
+        }
+        return {results};
+        """#, withNativeCharts: true)
+        let cases = try XCTUnwrap(result["results"] as? [[String: Any]])
+        XCTAssertEqual(cases.count, 32)
+        for item in cases {
+            let name = try XCTUnwrap(item["id"] as? String)
+            for key in ["svg", "renderer", "contract", "scatterSpacing", "rowColors", "typeGeometry"] {
+                XCTAssertEqual(item[key] as? Bool, true, "\(name): \(key)")
+            }
+            XCTAssertEqual(item["unavailable"] as? Int, 0, name)
+            XCTAssertEqual(item["invalidGeometry"] as? Bool, false, name)
+            XCTAssertGreaterThan(item["marks"] as? Int ?? 0, 0, name)
+        }
+    }
+
+    @MainActor
+    func testChartMissingSamplesNegativeBarsAndInvalidPiesInWebKit() async throws {
+        let result = try await runRichRuntimeScript(#"""
+        const originalPrompt=window.prompt;let nativeCalls=0;
+        window.prompt=(message)=>{if(message.startsWith('__genuiChart:'))nativeCalls++;return originalPrompt(message);};
+        const results=[];
+        for(const theme of ['light','dark']){
+            window.GenUIRuntime.setTheme(theme);
+            for(const chartType of ['bar','line','area']){
+                const start=nativeCalls;
+                const data=chartType==='bar'?[{x:'A',value:-3},{x:'B',value:5}]:
+                    [{x:'A',value:1},{x:'B',value:null},{x:'C',value:3}];
+                window.GenUIRuntime.updateDocument({title:chartType,ui:{type:'Chart',props:{content:{chartType,data}}}});
+                await wait(60);
+                const svg=document.querySelector('#root svg[role="img"]');
+                const bars=Array.from(svg?.querySelectorAll('rect')||[]);
+                const valid=chartType==='bar'?nativeCalls>start&&bars.length===2&&
+                    bars.every(bar=>Number(bar.getAttribute('height'))>0)&&Number(bars[0].getAttribute('y'))>Number(bars[1].getAttribute('y')):
+                    nativeCalls===start&&svg?.querySelectorAll('polyline').length===2&&
+                    svg?.querySelectorAll('circle').length===2&&
+                    (chartType!=='area'||svg?.querySelectorAll('polygon').length===2)&&
+                    document.querySelectorAll('table td')[1]?.textContent==='—';
+                results.push({id:theme+'/'+chartType,valid:!!valid});
+            }
+            for(const [index,values] of [[-1,2],[null,2],['unknown',2],[0,0]].entries()){
+                const start=nativeCalls;
+                window.GenUIRuntime.updateDocument({title:'Invalid',ui:{type:'Chart',props:{alt:'Invalid scores',
+                    content:{chartType:'pie',data:values.map((value,i)=>({name:String(i),value}))}}}});
+                await wait(60);
+                results.push({id:theme+'/invalid-pie/'+index,valid:nativeCalls===start&&
+                    document.querySelectorAll('#root svg').length===0&&
+                    document.querySelector('.genui-unavailable')?.textContent==='Invalid scores'});
+            }
+        }
+        return {results};
+        """#, withNativeCharts: true)
+        let cases = try XCTUnwrap(result["results"] as? [[String: Any]])
+        XCTAssertEqual(cases.count, 14)
+        for item in cases {
+            XCTAssertEqual(item["valid"] as? Bool, true, item["id"] as? String ?? "Unknown case")
+        }
+    }
+
+    @MainActor
+    private func runRichRuntimeScript(_ script: String, withMathJax: Bool = false, withNativeCharts: Bool = false) async throws -> [String: Any] {
         let document = GenUIDocument(title: "Rendering regression", ui: GenUINode(type: "text", children: [.string("Ready")]))
         let html = try XCTUnwrap(GenUIRichWebView.Coordinator.html(document: document, snapshot: nil, dark: false))
         let rendered = expectation(description: "Runtime ready")
@@ -172,6 +326,7 @@ final class GenUIRichDocumentTests: XCTestCase {
         let configuration = WKWebViewConfiguration()
         configuration.userContentController.add(recorder, name: "genui")
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 800), configuration: configuration)
+        if withNativeCharts { webView.uiDelegate = recorder }
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
         let window = UIWindow(windowScene: scene)
         let controller = UIViewController()
@@ -190,6 +345,13 @@ final class GenUIRichDocumentTests: XCTestCase {
         async function show(code){window.GenUIRuntime.updateDocument({title:'Regression',code});window.GenUIRuntime.reset();await wait();}
         """
         let result = try await webView.callAsyncJavaScript(prelude + script, arguments: [:], in: nil, contentWorld: .page)
+        if withNativeCharts {
+            let image = try await webView.takeSnapshot(configuration: nil)
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "GenUI native chart"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
         XCTAssertNil(recorder.error)
         return try XCTUnwrap(result as? [String: Any])
     }
@@ -576,12 +738,17 @@ final class GenUIRichDocumentTests: XCTestCase {
 }
 
 @MainActor
-private final class GenUIRenderRecorder: NSObject, WKScriptMessageHandler {
+private final class GenUIRenderRecorder: NSObject, WKScriptMessageHandler, WKUIDelegate {
     var expectation: XCTestExpectation?
     var snapshot: [String: JSONValue]?
     var error: String?
 
     init(expectation: XCTestExpectation) { self.expectation = expectation }
+
+    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?) -> Void) {
+        guard frame.isMainFrame, prompt.hasPrefix("__genuiChart:") else { completionHandler(nil); return }
+        completionHandler(GenUICELRuntime.evaluate(String(prompt.dropFirst("__genuiChart:".count))))
+    }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any] else { return }

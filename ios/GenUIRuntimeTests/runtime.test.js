@@ -204,6 +204,123 @@ test('charts render negative bars and numeric scatter positions from supplied da
     assert.ok(xs[1]-xs[0] < (xs[2]-xs[1])/10, 'scatter must preserve numeric x spacing');
 });
 
+// Chart payload from the CPU comparison diagnostic export (no explicit series/x key).
+const cpuChart = {
+    chartType:'bar',
+    data:[
+        {CPU:'Core i5-12450H', 'Single-core':1600, 'Multi-core':9000},
+        {CPU:'Apple M2', 'Single-core':1600, 'Multi-core':8500}
+    ]
+};
+
+test('CPU comparison chart infers both supplied score columns and CPU labels', () => {
+    const app = mount({ui:api.h('chart', {
+        chartType:'bar', content:cpuChart, height:280, showLegend:true, showValues:true,
+        alt:'Cinebench R23のシングルコアとマルチコアの概算比較'
+    })});
+    const bars = app.root.querySelectorAll('rect');
+    assert.equal(bars.length, 4);
+    assert.ok(bars.every(bar => Number(bar.getAttribute('height')) > 0));
+    assert.deepEqual(Array.from(app.root.querySelectorAll('table tr'), row => row.textContent), [
+        'CPUSingle-coreMulti-core', 'Core i5-12450H1,6009,000', 'Apple M21,6008,500'
+    ]);
+    assert.equal(app.root.querySelectorAll('.genui-unavailable').length, 0);
+});
+
+test('inferred chart columns include later samples and retain missing values', () => {
+    const app = mount({ui:api.h('chart', {content:{chartType:'line', data:[
+        {label:'A', score:null}, {label:'B', score:'12', extra:3}, {label:'C', score:15}
+    ]}})});
+    assert.equal(app.root.querySelectorAll('circle').length, 3);
+    assert.deepEqual(Array.from(app.root.querySelectorAll('table tr'), row => row.textContent), [
+        'labelscoreextra', 'A——', 'B123', 'C15—'
+    ]);
+});
+
+test('explicit chart keys and conventional value columns take precedence over inference', () => {
+    const explicit = mount({ui:api.h('chart', {content:{...cpuChart, xKey:'CPU', series:[{dataKey:'Multi-core', label:'Multi'}]}})});
+    assert.equal(explicit.root.querySelectorAll('rect').length, 2);
+    assert.equal(explicit.root.querySelector('table tr').textContent, 'CPUMulti');
+    const conventional = mount({ui:api.h('chart', {content:{chartType:'bar', data:[{x:1,value:4,other:8},{x:2,value:5,other:9}]}})});
+    assert.equal(conventional.root.querySelectorAll('rect').length, 2);
+    const invalid = mount({ui:api.h('chart', {content:{...cpuChart, valueKey:'missing'}})});
+    assert.equal(invalid.root.querySelectorAll('svg').length, 0, 'never replace an explicit missing key');
+});
+
+test('chart inference excludes numeric axes and rejects ambiguous pie data or malformed rows', () => {
+    const scatter = mount({ui:api.h('Chart', {xAxis:'time', content:{chartType:'scatter', data:[
+        {time:0,score:3}, {time:100,score:5}
+    ]}})});
+    assert.equal(scatter.root.querySelectorAll('circle').length, 2);
+    assert.equal(scatter.root.querySelector('table tr').textContent, 'timescore');
+    const pie = mount({ui:api.h('Chart', {content:{chartType:'pie', data:[{CPU:'A',score:3},{CPU:'B',score:5}]}})});
+    assert.equal(pie.root.querySelectorAll('path').length, 2);
+    for (const content of [
+        {...cpuChart, chartType:'pie'},
+        {chartType:'bar',data:[null]},
+        {chartType:'bar',data:[{label:'A',score:'unknown'}]}
+    ]) {
+        const app = mount({ui:api.h('Chart', {content})});
+        assert.equal(app.root.querySelectorAll('svg').length, 0);
+        assert.equal(app.root.querySelectorAll('.genui-unavailable').length, 1);
+        assert.equal(app.messages.some(message => message.type === 'error'), false);
+    }
+});
+
+test('outer series and axis configuration reach the iOS native chart bridge', () => {
+    const requests = [];
+    const app = mount({ui:api.h('chart', {
+        content:cpuChart, xAxis:{dataKey:'CPU'}, series:[{dataKey:'Multi-core', label:'Multi'}]
+    })}, 390, {}, context => {
+        context.DOMParser = class {};
+        context.prompt = prompt => {requests.push(JSON.parse(prompt.slice('__genuiChart:'.length))); return '{"error":"Native bridge reached"}';};
+    });
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].viewModel.xAxis.dataKey, 'CPU');
+    assert.equal(requests[0].viewModel.xKey, 'CPU');
+    assert.deepEqual(requests[0].viewModel.series, [{dataKey:'Multi-core', label:'Multi', type:'bar'}]);
+    assert.ok(app.root.textContent.includes('Native bridge reached'));
+});
+
+test('iOS scatter and missing samples use SVG points and gaps without native coercion', () => {
+    for (const chartType of ['scatter','line','area']) {
+        let nativeCalls = 0;
+        const app = mount({ui:api.h('Chart', {content:{chartType, data:chartType==='scatter'
+            ? [{x:0,value:1},{x:1,value:2},{x:100,value:3}]
+            : [{x:'A',value:1},{x:'B',value:null},{x:'C',value:3}]
+        }})}, 390, {}, context => {
+            context.DOMParser = class {};
+            context.prompt = () => {nativeCalls++; return '{"error":"Unexpected native coercion"}';};
+        });
+        assert.equal(nativeCalls, 0, chartType);
+        assert.equal(app.root.querySelectorAll('svg').length, 1, chartType);
+        if (chartType === 'scatter') {
+            const xs = Array.from(app.root.querySelectorAll('circle'), circle => Number(circle.getAttribute('cx')));
+            assert.equal(xs.length, 3);
+            assert.ok(xs[1]-xs[0] < (xs[2]-xs[1])/10);
+            assert.equal(app.root.querySelectorAll('rect').length, 0);
+        } else {
+            assert.equal(app.root.querySelectorAll('polyline').length, 2, chartType);
+            assert.equal(app.root.querySelectorAll('circle').length, 2, chartType);
+            if (chartType === 'area') assert.equal(app.root.querySelectorAll('polygon').length, 2);
+            assert.equal(app.root.querySelectorAll('table td')[1].textContent, '—');
+        }
+    }
+});
+
+test('invalid pie values are rejected before the iOS native renderer can discard them', () => {
+    for (const values of [[-1,2],[null,2],['unknown',2],[0,0]]) {
+        let nativeCalls = 0;
+        const app = mount({ui:api.h('Chart', {alt:'Invalid scores',content:{chartType:'pie',data:values.map((value,i)=>({name:String(i),value}))}})}, 390, {}, context => {
+            context.DOMParser = class {};
+            context.prompt = () => {nativeCalls++; return '{}';};
+        });
+        assert.equal(nativeCalls, 0);
+        assert.equal(app.root.textContent, 'Invalid scores');
+        assert.equal(app.root.querySelectorAll('svg').length, 0);
+    }
+});
+
 test('resetState resets both local bindings and useState hooks', () => {
     const app = mount({state:{name:'initial'}, code:"const [n,setN]=DIL.useState(3); return DIL.h('col',{},DIL.h('text',{},String(n)),DIL.h('button',{label:'Increment',onClick:()=>setN(n+1)}),DIL.h('button',{label:'Reset',onClick:{type:'resetState'}}));"});
     app.root.querySelectorAll('button')[0].fire('click', true); app.flush();
