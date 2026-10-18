@@ -124,6 +124,9 @@ Explicit series and axis keys take precedence. Without series, the conventional
 `value` column remains the default; otherwise numeric columns become series and
 a single text column supplies category labels. Missing samples stay missing.
 For ambiguous tables, supply `series:[{dataKey:"score"}]` and `xAxis:"label"`.
+`series`, `xAxis`, and `yAxis` may also be supplied on the chart props alongside
+`content`; explicit fields inside `content` take precedence. Failed charts retain
+alternative text, display the rendering reason, and send a warning to Diagnostics.
 
 Markdown uses bundled markdown-it and safe DOM construction; raw HTML is
 disabled. MathJax renders math. Lottie uses the bundled SVG player. Supplied

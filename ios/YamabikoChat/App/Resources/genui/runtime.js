@@ -2919,6 +2919,12 @@
     }
     function chart(content, el, options = {}) {
         let c;
+        const fail = (reason) => {
+            const message = `Chart unavailable: ${reason}`;
+            bridge({ type: 'warning', path: el.dataset.nodePath, message });
+            const alt = options.alt || c?.alt;
+            return missing(el, alt ? `${alt}\n${message}` : message);
+        };
         try {
             c = {
                 ...Object.fromEntries(
@@ -2932,10 +2938,8 @@
                 ),
             };
         } catch (error) {
-            return missing(el, options.alt || `Chart unavailable: ${error.message}`);
+            return fail(error.message);
         }
-        const fail = (reason) =>
-            missing(el, options.alt || c.alt || `Chart unavailable: ${reason}`);
         if (!['bar', 'line', 'area', 'scatter', 'pie'].includes(c.chartType))
             return fail('unsupported chart type');
         if (!Array.isArray(c.data) || !c.data.length) return fail('no chart data');

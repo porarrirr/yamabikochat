@@ -267,6 +267,61 @@ test('chart inference excludes numeric axes and rejects ambiguous pie data or ma
     }
 });
 
+// Exact chart shape in the 2026-10-18 diagnostic: data in content, options outside.
+const benchmarkChartProps = {
+    chartType:'bar', alt:'Core i5-12450HとApple M2のベンチマーク概算比較',
+    content:{chartType:'bar',data:[
+        {benchmark:'Cinebench R23 シングル','i5-12450H':1650,M2:1600},
+        {benchmark:'Cinebench R23 マルチ','i5-12450H':8000,M2:8150},
+        {benchmark:'Geekbench 6 シングル','i5-12450H':2300,M2:2600},
+        {benchmark:'Geekbench 6 マルチ','i5-12450H':7750,M2:9500}
+    ]},
+    series:[{dataKey:'i5-12450H',name:'i5-12450H'},{dataKey:'M2',name:'M2'}],
+    xAxis:'benchmark',yAxis:'score',showLegend:true,showGrid:true,showValues:true
+};
+
+test('reported benchmark chart retains all eight scores and explicit labels', () => {
+    const app = mount({ui:api.h('chart',benchmarkChartProps)});
+    assert.equal(app.root.querySelectorAll('rect').length, 8);
+    assert.deepEqual(Array.from(app.root.querySelectorAll('table tr'), row => row.textContent), [
+        'benchmarki5-12450HM2',
+        'Cinebench R23 シングル1,6501,600', 'Cinebench R23 マルチ8,0008,150',
+        'Geekbench 6 シングル2,3002,600', 'Geekbench 6 マルチ7,7509,500'
+    ]);
+    assert.equal(app.root.querySelectorAll('.genui-unavailable').length, 0);
+});
+
+test('reported benchmark chart sends its series and string axes to native rendering', () => {
+    const requests = [];
+    mount({ui:api.h('chart',benchmarkChartProps)},390,{},context=>{
+        context.DOMParser=class {};
+        context.prompt=prompt=>{requests.push(JSON.parse(prompt.slice('__genuiChart:'.length)));return '{"error":"Native failure"}';};
+    });
+    assert.equal(requests.length,1);
+    const model=requests[0].viewModel;
+    assert.equal(model.xKey,'benchmark');
+    assert.equal(model.xAxis,'benchmark');
+    assert.equal(model.yAxis,'score');
+    assert.deepEqual(model.series,benchmarkChartProps.series.map(s=>({...s,type:'bar'})));
+    assert.deepEqual(model.data,benchmarkChartProps.content.data);
+});
+
+test('chart failures expose and log the cause even when alternative text is supplied', () => {
+    for (const native of [false,true]) {
+        const app=mount({ui:api.h('chart',native?benchmarkChartProps:{
+            alt:'Benchmark comparison',content:{chartType:'bar',data:[{label:'A',score:'unknown'}]}
+        })},390,{},context=>{
+            if(native){context.DOMParser=class {};context.prompt=()=>'{"error":"Native failure"}';}
+        });
+        const reason=native?'Native failure':'no numeric values';
+        assert.ok(app.root.textContent.includes(native?benchmarkChartProps.alt:'Benchmark comparison'));
+        assert.ok(app.root.textContent.includes(`Chart unavailable: ${reason}`));
+        assert.ok(app.messages.some(message=>message.type==='warning'&&
+            message.message===`Chart unavailable: ${reason}`&&typeof message.path==='string'));
+        assert.equal(app.root.querySelectorAll('svg').length,0);
+    }
+});
+
 test('outer series and axis configuration reach the iOS native chart bridge', () => {
     const requests = [];
     const app = mount({ui:api.h('chart', {
@@ -316,7 +371,7 @@ test('invalid pie values are rejected before the iOS native renderer can discard
             context.prompt = () => {nativeCalls++; return '{}';};
         });
         assert.equal(nativeCalls, 0);
-        assert.equal(app.root.textContent, 'Invalid scores');
+        assert.ok(app.root.textContent.startsWith('Invalid scores\nChart unavailable: pie '));
         assert.equal(app.root.querySelectorAll('svg').length, 0);
     }
 });
@@ -621,7 +676,7 @@ test('chart flags, missing samples and explicit Recharts nodes preserve their co
     assert.ok(app.root.textContent.includes('A · Values: 1'));
     for(const bad of [-1,null,'unknown']){
         const invalid=mount({ui:api.h('chart',{alt:'Supplied alternative',content:{chartType:'pie',data:[{name:'A',value:bad},{name:'B',value:2}]}})});
-        assert.equal(invalid.root.textContent,'Supplied alternative');
+        assert.equal(invalid.root.textContent,'Supplied alternative\nChart unavailable: pie values must be finite and nonnegative');
         assert.equal(invalid.root.querySelectorAll('svg').length,0);
     }
 });

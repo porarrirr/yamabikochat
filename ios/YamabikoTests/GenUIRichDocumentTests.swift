@@ -202,6 +202,42 @@ final class GenUIRichDocumentTests: XCTestCase {
     }
 
     @MainActor
+    func testBenchmarkChartWithOuterSeriesAndStringAxesRendersNatively() async throws {
+        let result = try await runRichRuntimeScript(#"""
+        const originalPrompt=window.prompt,nativeResponses=[];
+        window.prompt=message=>{
+            const response=originalPrompt(message);
+            if(message.startsWith('__genuiChart:'))nativeResponses.push(JSON.parse(response||'{}'));
+            return response;
+        };
+        window.GenUIRuntime.updateDocument({title:'CPUベンチマーク比較',ui:{type:'chart',props:{
+            chartType:'bar',alt:'Core i5-12450HとApple M2のベンチマーク概算比較',
+            content:{chartType:'bar',data:[
+                {benchmark:'Cinebench R23 シングル','i5-12450H':1650,M2:1600},
+                {benchmark:'Cinebench R23 マルチ','i5-12450H':8000,M2:8150},
+                {benchmark:'Geekbench 6 シングル','i5-12450H':2300,M2:2600},
+                {benchmark:'Geekbench 6 マルチ','i5-12450H':7750,M2:9500}
+            ]},
+            series:[{dataKey:'i5-12450H',name:'i5-12450H'},{dataKey:'M2',name:'M2'}],
+            xAxis:'benchmark',yAxis:'score',showGrid:true,showLegend:true,showValues:true
+        }}});
+        await wait(100);
+        const svg=document.querySelector('#root svg[role="img"]');
+        return {svg:!!svg,labels:svg?.textContent||'',marks:svg?.querySelectorAll('rect').length||0,
+            unavailable:document.querySelectorAll('.genui-unavailable').length,
+            nativeErrors:nativeResponses.filter(response=>response.error).map(response=>response.error)};
+        """#, withNativeCharts: true)
+        XCTAssertEqual(result["nativeErrors"] as? [String], [])
+        XCTAssertEqual(result["svg"] as? Bool, true)
+        XCTAssertEqual(result["unavailable"] as? Int, 0)
+        XCTAssertEqual(result["marks"] as? Int, 8)
+        let labels = try XCTUnwrap(result["labels"] as? String)
+        for label in ["Cinebench R23 シングル", "Geekbench 6 マルチ", "i5-12450H", "M2"] {
+            XCTAssertTrue(labels.contains(label), labels)
+        }
+    }
+
+    @MainActor
     func testAllChartTypesRenderInWebKitInBothThemes() async throws {
         let result = try await runRichRuntimeScript(#"""
         const originalPrompt=window.prompt,nativeCalls=[];
@@ -305,7 +341,7 @@ final class GenUIRichDocumentTests: XCTestCase {
                 await wait(60);
                 results.push({id:theme+'/invalid-pie/'+index,valid:nativeCalls===start&&
                     document.querySelectorAll('#root svg').length===0&&
-                    document.querySelector('.genui-unavailable')?.textContent==='Invalid scores'});
+                    document.querySelector('.genui-unavailable')?.textContent.startsWith('Invalid scores\nChart unavailable: pie ')});
             }
         }
         return {results};
