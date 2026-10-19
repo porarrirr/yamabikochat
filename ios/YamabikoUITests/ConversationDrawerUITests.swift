@@ -5,6 +5,39 @@ final class ConversationDrawerUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testRelaunchOpensNewChatWhileForegroundKeepsCurrentConversation() {
+        let app = launchConversation()
+        let message = app.textViews.matching(identifier: "selectable-chat-text").firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 10))
+
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(message.waitForExistence(timeout: 10))
+
+        app.terminate()
+        app.launchArguments = ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["chat-history-button"].waitForExistence(timeout: 20))
+        let composer = app.descendants(matching: .any).matching(identifier: "chat-composer").firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 10))
+        XCTAssertFalse(message.exists)
+        XCTAssertFalse(app.buttons["conversation-drawer-dismiss"].exists)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "New chat after relaunch"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        app.buttons["chat-history-button"].tap()
+        let previousConversation = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Text Selection Fixture")
+        ).firstMatch
+        XCTAssertTrue(previousConversation.waitForExistence(timeout: 5))
+        previousConversation.tap()
+        XCTAssertTrue(message.waitForExistence(timeout: 10))
+    }
+
     func testHeaderButtonOpensSlidingListAndBackdropClosesItRepeatedly() {
         let app = launchConversation()
         let headerButton = app.buttons["chat-history-button"]

@@ -32,6 +32,10 @@ final class ShareImportFlowTests: XCTestCase {
         XCTAssertEqual(draft.text, "shared from Safari")
         XCTAssertEqual(appState.selectedConversationID, draft.conversationID)
 
+        XCTAssertFalse(try appState.initializeConversationSelectionIfNeeded(repository: repository))
+        XCTAssertEqual(appState.selectedConversationID, draft.conversationID)
+        XCTAssertEqual(appState.shareImportDraft, draft)
+
         let conversation = try repository.conversation(id: draft.conversationID)
         XCTAssertNotNil(conversation)
 

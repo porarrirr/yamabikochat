@@ -24,6 +24,68 @@ private final class ConversationListTestCredentialStore: SecureCredentialStore {
 
 @MainActor
 final class ConversationListViewModelTests: XCTestCase {
+    func testColdLaunchSelectsEmptyNewChatInsteadOfExistingHistory() throws {
+        let repository = try makeFixture()
+        let historyID = try repository.createConversation(title: "Previous conversation")
+        let appState = AppState()
+
+        XCTAssertTrue(try appState.initializeConversationSelectionIfNeeded(repository: repository))
+
+        let selectedID = try XCTUnwrap(appState.selectedConversationID)
+        XCTAssertNotEqual(selectedID, historyID)
+        XCTAssertEqual(try repository.conversation(id: selectedID)?.title, "New Chat")
+        XCTAssertNotNil(try repository.conversation(id: historyID))
+
+        let resolution = ConversationListSelectionResolver.resolve(
+            visibleConversationIDs: [historyID],
+            selectedConversationID: selectedID,
+            selectedConversationExists: true,
+            keepSidebarAfterSecretDiscard: false
+        )
+        XCTAssertEqual(resolution, .keepCurrentSelection)
+    }
+
+    func testLaunchReusesExistingEmptyNewChat() throws {
+        let repository = try makeFixture()
+        let emptyID = try repository.ensureInitialConversation()
+        _ = try repository.createConversation(title: "Latest conversation")
+        let appState = AppState()
+
+        XCTAssertTrue(try appState.initializeConversationSelectionIfNeeded(repository: repository))
+
+        XCTAssertEqual(appState.selectedConversationID, emptyID)
+    }
+
+    func testForegroundKeepsSelectionButNewAppStateOpensNewChat() throws {
+        let repository = try makeFixture()
+        let historyID = try repository.createConversation(title: "Previous conversation")
+        let appState = AppState()
+        try appState.initializeConversationSelectionIfNeeded(repository: repository)
+        appState.selectedConversationID = historyID
+
+        XCTAssertFalse(try appState.initializeConversationSelectionIfNeeded(repository: repository))
+        XCTAssertEqual(appState.selectedConversationID, historyID)
+
+        appState.selectedConversationID = nil
+        XCTAssertFalse(try appState.initializeConversationSelectionIfNeeded(repository: repository))
+        XCTAssertNil(appState.selectedConversationID)
+
+        let relaunchedState = AppState()
+        XCTAssertTrue(try relaunchedState.initializeConversationSelectionIfNeeded(repository: repository))
+        XCTAssertNotNil(relaunchedState.selectedConversationID)
+        XCTAssertNotEqual(relaunchedState.selectedConversationID, historyID)
+    }
+
+    func testLaunchPreservesExplicitNavigationSelection() throws {
+        let repository = try makeFixture()
+        let linkedID = try repository.createConversation(title: "Linked conversation")
+        let appState = AppState()
+        appState.selectedConversationID = linkedID
+
+        XCTAssertFalse(try appState.initializeConversationSelectionIfNeeded(repository: repository))
+        XCTAssertEqual(appState.selectedConversationID, linkedID)
+    }
+
     func testRootNavigationUsesCompactColumnOnlyInCompactSizeClass() {
         XCTAssertTrue(
             RootNavigationPresentationPolicy.usesCompactColumnNavigation(horizontalSizeClass: .compact)

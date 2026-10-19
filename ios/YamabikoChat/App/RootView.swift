@@ -313,11 +313,12 @@ struct RootView: View {
     @MainActor
     private func applyScreenshotRoutingIfNeeded() async {
         guard let launch = AppStoreScreenshotRouting.launchConfiguration() else {
-            if appState.selectedConversationID == nil {
-                appState.selectedConversationID = listViewModel.conversations.first?.id
-                if appState.selectedConversationID != nil {
+            do {
+                if try appState.initializeConversationSelectionIfNeeded(repository: container.chatRepository) {
                     setPreferredCompactColumn(.detail)
                 }
+            } catch {
+                DiagnosticsLogger.log("Initialize launch conversation failed", category: .chat, error: error)
             }
             return
         }

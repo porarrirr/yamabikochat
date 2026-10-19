@@ -12,6 +12,20 @@ final class AppState: ObservableObject {
     @Published private var shareImportDrafts: [Int64: String] = [:]
     @Published var isConversationHistoryPresented = false
     @Published private(set) var conversationSidebarRevealGeneration = 0
+    private var hasInitializedConversationSelection = false
+
+    @discardableResult
+    func initializeConversationSelectionIfNeeded(repository: ChatRepository) throws -> Bool {
+        guard !hasInitializedConversationSelection else { return false }
+        // Share imports and Siri links may have already selected their destination.
+        guard selectedConversationID == nil else {
+            hasInitializedConversationSelection = true
+            return false
+        }
+        selectedConversationID = try repository.createConversation()
+        hasInitializedConversationSelection = true
+        return true
+    }
 
     var shareImportDraft: ShareImportDraft? {
         guard let conversationID = selectedConversationID,
