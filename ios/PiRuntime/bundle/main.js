@@ -185880,59 +185880,110 @@ var CHATGPT_CALLBACK_HTML = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="light dark">
+  <meta name="color-scheme" content="dark">
   <meta name="referrer" content="no-referrer">
   <title>\u30D6\u30E9\u30A6\u30B6\u8A8D\u8A3C\u5B8C\u4E86 \xB7 YamabikoChat</title>
   <style>
-    :root { color-scheme: light dark; --bg: #f3f6f2; --card: #fff; --text: #1b332b; --muted: #586b61; --line: #dce6dd; --accent: #23634d; --soft: #eaf4ec; }
+    /* Visual emphasis: navy / charcoal / light gray / lime = 5 : 2.5 : 1.25 : 1.25. */
+    :root { color-scheme: dark; --navy: #131A34; --charcoal: #2F2F2F; --gray: #F5F5F5; --lime: #ADFF00; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; min-height: 100svh; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); display: grid; place-items: center; background: radial-gradient(ellipse at 50% 0%, var(--soft), transparent 65%), var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
-    main { width: 100%; max-width: 420px; }
-    .brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 28px; font-size: 17px; font-weight: 650; letter-spacing: -.3px; }
-    .brand svg { width: 28px; height: 28px; color: var(--accent); }
-    .card { padding: 36px 26px 28px; border: 1px solid var(--line); border-radius: 28px; background: var(--card); box-shadow: 0 18px 60px #143a2710; text-align: center; }
-    .check { display: grid; place-items: center; width: 76px; height: 76px; margin: 0 auto 24px; border: 1px solid var(--line); border-radius: 50%; background: var(--soft); color: var(--accent); }
-    .check svg { width: 34px; height: 34px; }
-    .eyebrow { margin: 0 0 12px; color: var(--accent); font-size: 12px; font-weight: 650; letter-spacing: 2px; }
-    h1 { margin: 0; font-size: clamp(23px, 6vw, 28px); line-height: 1.5; letter-spacing: -.7px; }
-    .description { margin: 16px 0 26px; color: var(--muted); font-size: 15px; line-height: 1.9; }
-    .return-link { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; margin-bottom: 24px; padding: 14px 16px; border-radius: 16px; background: var(--accent); color: var(--card); font-size: 15px; font-weight: 650; line-height: 1.5; text-decoration: none; }
-    .return-link:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+    body { margin: 0; min-height: 100vh; min-height: 100svh; padding: max(28px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); background: var(--navy); color: var(--gray); font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
+    .shell { max-width: 1040px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-bottom: 24px; border-bottom: 1px solid rgb(245 245 245 / 20%); }
+    .brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 650; letter-spacing: -.4px; }
+    .brand svg { width: 30px; height: 30px; color: var(--lime); }
+    .header-label { color: rgb(245 245 245 / 65%); font-size: 10px; letter-spacing: 2px; }
+    .hero { display: grid; grid-template-columns: 1.35fr 1fr; align-items: center; gap: 48px; padding: 64px 0 56px; }
+    .eyebrow { display: flex; align-items: center; gap: 9px; margin: 0 0 24px; color: var(--lime); font-size: 11px; font-weight: 700; letter-spacing: 2px; }
+    .eyebrow::before { content: ""; width: 7px; height: 7px; background: var(--lime); border-radius: 50%; }
+    h1 { margin: 0; font-size: clamp(32px, 4.5vw, 52px); font-weight: 700; line-height: 1.4; letter-spacing: -1.8px; }
+    h1 span { color: var(--lime); }
+    .return-link { display: flex; align-items: center; justify-content: space-between; gap: 20px; width: 100%; max-width: 350px; margin-top: 28px; min-height: 60px; padding: 16px 20px; border: 1px solid var(--lime); border-radius: 4px; background: var(--lime); color: var(--navy); font-size: 14px; font-weight: 700; text-decoration: none; line-height: 1.5; }
+    .return-link span { font-size: 24px; line-height: 1; }
+    .return-link:hover { background: var(--gray); border-color: var(--gray); }
+    .return-link:focus-visible { outline: 3px solid var(--gray); outline-offset: 5px; }
     .return-link:active { opacity: .8; }
-    .next { padding: 20px; border-radius: 18px; background: var(--soft); text-align: left; }
-    h2 { margin: 0 0 14px; font-size: 14px; }
-    ol { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; counter-reset: step; }
-    li { display: flex; align-items: flex-start; gap: 10px; color: var(--muted); font-size: 14px; line-height: 1.7; counter-increment: step; }
-    li::before { content: counter(step); display: grid; place-items: center; flex: 0 0 23px; height: 23px; margin-top: 1px; border: 1px solid var(--line); border-radius: 50%; color: var(--accent); font-size: 12px; font-weight: 650; }
-    .note { margin: 22px 0 0; color: var(--muted); font-size: 12px; line-height: 1.8; }
-    footer { margin-top: 24px; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.8; }
-    @media (prefers-color-scheme: dark) { :root { --bg: #101b16; --card: #19271f; --text: #e5efe8; --muted: #a9bdb0; --line: #32493b; --accent: #99d4b3; --soft: #213a2c; } }
-    @media (max-width: 350px) { body { padding-left: 16px; padding-right: 16px; } .card { padding: 28px 20px 24px; } .next { padding: 16px; } }
+    .visual { position: relative; display: grid; place-items: center; aspect-ratio: 1; overflow: hidden; border: 1px solid rgb(245 245 245 / 16%); border-radius: 50%; background: repeating-linear-gradient(0deg, transparent 0 39px, rgb(245 245 245 / 5%) 39px 40px), repeating-linear-gradient(90deg, transparent 0 39px, rgb(245 245 245 / 5%) 39px 40px); }
+    .visual::before { content: ""; position: absolute; inset: 10%; border: 1px dashed rgb(173 255 0 / 45%); border-radius: 50%; }
+    .visual::after { content: ""; position: absolute; width: 9px; height: 9px; right: 13%; top: 24%; border-radius: 50%; background: var(--lime); box-shadow: 0 0 0 6px rgb(173 255 0 / 10%); }
+    .check { display: grid; place-items: center; width: 53%; aspect-ratio: 1; border-radius: 50%; background: var(--lime); color: var(--navy); box-shadow: 0 0 0 12px rgb(173 255 0 / 7%); }
+    .check svg { width: 48%; height: 48%; }
+    .visual-label { position: absolute; bottom: 14%; font-size: 9px; letter-spacing: 2px; color: var(--gray); }
+    .next { display: grid; grid-template-columns: .85fr 1.8fr; background: var(--charcoal); border-radius: 8px; overflow: hidden; }
+    .next-heading { display: flex; flex-direction: column; justify-content: space-between; gap: 20px; padding: 28px; }
+    .section-label { margin: 0; color: var(--lime); font-size: 10px; letter-spacing: 2px; font-weight: 700; }
+    h2 { margin: 0; font-size: 21px; line-height: 1.6; letter-spacing: -.5px; }
+    ol { display: grid; grid-template-columns: 1fr 1fr; margin: 0; padding: 0; list-style: none; background: var(--gray); color: var(--navy); color-scheme: light; }
+    li { padding: 28px 24px; }
+    li + li { border-left: 1px solid rgb(19 26 52 / 15%); }
+    .step { display: block; margin-bottom: 20px; font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+    h3 { margin: 0 0 10px; font-size: 15px; line-height: 1.5; }
+    li p { margin: 0; color: var(--charcoal); font-size: 12px; line-height: 1.9; }
+    footer { display: flex; justify-content: space-between; gap: 20px; padding-top: 24px; color: rgb(245 245 245 / 65%); font-size: 11px; line-height: 1.8; }
+    footer p { margin: 0; }
+    @media (max-width: 700px) {
+      .hero { gap: 20px; padding: 40px 0; grid-template-columns: 1fr; }
+      .hero-copy { position: relative; }
+      .eyebrow { margin-bottom: 20px; font-size: 10px; }
+      h1 { font-size: clamp(30px, 7vw, 44px); letter-spacing: -1px; }
+      .visual { grid-row: 1; width: 144px; justify-self: end; margin: 0 0 -72px; }
+      .visual-label { display: none; }
+      .check { box-shadow: 0 0 0 6px rgb(173 255 0 / 7%); }
+      .hero-copy { padding-top: 12px; }
+      .eyebrow { max-width: calc(100% - 150px); min-height: 40px; line-height: 1.8; }
+      .return-link { max-width: none; }
+      .next { grid-template-columns: 1fr; }
+      .next-heading { flex-direction: row; align-items: center; padding: 20px; }
+      h2 { font-size: 17px; }
+      li { padding: 22px 18px; }
+      .step { margin-bottom: 14px; }
+      footer { flex-direction: column; gap: 6px; padding-top: 20px; }
+      .header-label { font-size: 9px; letter-spacing: 1px; }
+    }
+    @media (max-width: 350px) {
+      body { padding-left: 16px; padding-right: 16px; }
+      .header-label { display: none; }
+      .visual { width: 112px; margin-bottom: -62px; }
+      .eyebrow { max-width: calc(100% - 118px); }
+      .next-heading { padding: 18px; }
+      li { padding: 20px 14px; }
+    }
   </style>
 </head>
 <body>
-  <main>
-    <div class="brand">
-      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m3 25 10-18 5 9 3-5 8 14H3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m9 14 4 3 4-3" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-      YamabikoChat
-    </div>
-    <section class="card" aria-labelledby="title">
-      <div class="check"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m7 16 6 6L25 10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-      <p class="eyebrow">CHATGPT SIGN IN</p>
-      <h1 id="title">\u30D6\u30E9\u30A6\u30B6\u3067\u306E\u8A8D\u8A3C\u304C<br>\u5B8C\u4E86\u3057\u307E\u3057\u305F</h1>
-      <p class="description">\u3042\u3068\u5C11\u3057\u3067\u6E96\u5099\u304C\u6574\u3044\u307E\u3059\u3002<br>YamabikoChat\u306B\u623B\u3063\u3066\u3001<br>\u63A5\u7D9A\u7D50\u679C\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002</p>
-      <!-- APP_RETURN_LINK -->
-      <div class="next">
-        <h2>\u30A2\u30D7\u30EA\u306B\u623B\u3063\u3066\u7D9A\u3051\u308B</h2>
-        <ol>
-          <li>\u30A2\u30D7\u30EA\u5207\u308A\u66FF\u3048\u3001\u307E\u305F\u306F\u753B\u9762\u5DE6\u4E0A\u306E\u300CYamabikoChat\u300D\u304B\u3089\u623B\u308A\u307E\u3059\u3002</li>
-          <li>\u30A2\u30D7\u30EA\u306E\u8A2D\u5B9A\u753B\u9762\u3067\u3001ChatGPT\u306E\u63A5\u7D9A\u72B6\u614B\u3092\u78BA\u8A8D\u3057\u307E\u3059\u3002</li>
-        </ol>
+  <div class="shell">
+    <header>
+      <div class="brand">
+        <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m3 25 10-18 5 9 3-5 8 14H3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m9 14 4 3 4-3" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        YamabikoChat
       </div>
-      <p class="note">\u63A5\u7D9A\u304C\u78BA\u8A8D\u3067\u304D\u305F\u3089\u3001<br>\u3053\u306E\u30BF\u30D6\u306F\u9589\u3058\u3066\u304B\u307E\u3044\u307E\u305B\u3093\u3002</p>
-    </section>
-    <footer>\u3042\u306A\u305F\u306E\u4F1A\u8A71\u3092\u3001\u3053\u3053\u304B\u3089\u3002</footer>
-  </main>
+      <span class="header-label">CHATGPT SIGN IN</span>
+    </header>
+    <main>
+      <section class="hero" aria-labelledby="title">
+        <div class="hero-copy">
+          <p class="eyebrow">BROWSER AUTH COMPLETE</p>
+          <h1 id="title">\u8A8D\u8A3C\u304C\u5B8C\u4E86\u3002<br><span>\u4F1A\u8A71\u306E\u3064\u3065\u304D\u3078\u3002</span></h1>
+          <!-- APP_RETURN_LINK -->
+        </div>
+        <div class="visual" aria-hidden="true">
+          <div class="check"><svg viewBox="0 0 64 64" fill="none"><path d="m16 32 11 11 23-23" stroke="currentColor" stroke-width="5" stroke-linecap="square" stroke-linejoin="miter"/></svg></div>
+          <span class="visual-label">AUTH / COMPLETE</span>
+        </div>
+      </section>
+      <section class="next" aria-labelledby="next-title">
+        <div class="next-heading">
+          <p class="section-label">NEXT STEP</p>
+          <h2 id="next-title">\u3042\u3068\u5C11\u3057\u3067\u3001<br>\u6E96\u5099\u5B8C\u4E86\u3002</h2>
+        </div>
+        <ol>
+          <li><span class="step" aria-hidden="true">01 / RETURN</span><h3>\u30A2\u30D7\u30EA\u306B\u623B\u308B</h3><p>\u30A2\u30D7\u30EA\u5207\u308A\u66FF\u3048\u3001\u307E\u305F\u306F\u753B\u9762\u5DE6\u4E0A\u306E\u300CYamabikoChat\u300D\u304B\u3089\u623B\u308A\u307E\u3059\u3002</p></li>
+          <li><span class="step" aria-hidden="true">02 / CHECK</span><h3>\u63A5\u7D9A\u3092\u78BA\u8A8D\u3059\u308B</h3><p>\u30A2\u30D7\u30EA\u306E\u8A2D\u5B9A\u753B\u9762\u3067\u3001ChatGPT\u306E\u63A5\u7D9A\u72B6\u614B\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002</p></li>
+        </ol>
+      </section>
+    </main>
+    <footer><p>\u63A5\u7D9A\u304C\u78BA\u8A8D\u3067\u304D\u305F\u3089\u3001\u3053\u306E\u30BF\u30D6\u306F\u9589\u3058\u3066\u304B\u307E\u3044\u307E\u305B\u3093\u3002</p><p>\u3042\u306A\u305F\u306E\u4F1A\u8A71\u3092\u3001\u3053\u3053\u304B\u3089\u3002</p></footer>
+  </div>
 </body>
 </html>`;
 function chatGPTCallbackHTML(userAgent = "") {
