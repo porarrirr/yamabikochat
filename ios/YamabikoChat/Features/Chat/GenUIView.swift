@@ -10,6 +10,9 @@ final class GenUIState: ObservableObject {
     // WebKit owns interactive rendering. Keep its restoration snapshot without
     // invalidating the SwiftUI host on every slider input event.
     var richSnapshot: [String: JSONValue]?
+    let renderCacheID = UUID()
+    // Visible hosts own their renderer. Only a bounded shared cache keeps offscreen ones.
+    weak var richRenderer: GenUIRichWebView.Coordinator?
     @Published var richHeight: CGFloat = 60 {
         didSet { if abs(richHeight - oldValue) > 1 { onLayoutChange?() } }
     }

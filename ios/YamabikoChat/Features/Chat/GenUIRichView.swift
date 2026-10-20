@@ -197,6 +197,144 @@ enum GenUIHostPolicy {
     }
 }
 
+/// Heavy WebKit instances are kept only for the two most recently detached
+/// canvases. Older rows use a byte-budgeted still image while their DOM restores.
+@MainActor
+final class GenUIRenderCache: NSObject {
+    static let shared = GenUIRenderCache()
+
+    struct Preview {
+        let image: UIImage
+        let document: GenUIDocument
+        let dark: Bool
+        let width: CGFloat
+
+        var byteCount: Int {
+            guard let image = image.cgImage else { return 0 }
+            return image.bytesPerRow * image.height
+        }
+    }
+
+    private let rendererLimit: Int
+    private let previewByteLimit: Int
+    private var renderers: [(UUID, GenUIRichWebView.Coordinator)] = []
+    private var previews: [(UUID, Preview)] = []
+    private(set) var previewBytes = 0
+    private var captureToken: UUID?
+    private(set) var generation = 0
+    var rendererCount: Int { renderers.count }
+
+    init(rendererLimit: Int = 2, previewByteLimit: Int = 12 * 1024 * 1024) {
+        self.rendererLimit = max(0, rendererLimit)
+        self.previewByteLimit = max(0, previewByteLimit)
+        super.init()
+        NotificationCenter.default.addObserver(self, selector: #selector(removeAll),
+                                               name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+    }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    func takeRenderer(for id: UUID) -> GenUIRichWebView.Coordinator? {
+        guard let index = renderers.firstIndex(where: { $0.0 == id }) else { return nil }
+        return renderers.remove(at: index).1
+    }
+
+    func retainRenderer(_ renderer: GenUIRichWebView.Coordinator, for id: UUID) {
+        renderers.removeAll { $0.0 == id }
+        renderers.append((id, renderer))
+        while renderers.count > rendererLimit { renderers.removeFirst() }
+    }
+
+    func preview(for id: UUID) -> Preview? {
+        guard let index = previews.firstIndex(where: { $0.0 == id }) else { return nil }
+        let entry = previews.remove(at: index)
+        previews.append(entry)
+        return entry.1
+    }
+
+    func storePreview(_ preview: Preview, for id: UUID) {
+        if let index = previews.firstIndex(where: { $0.0 == id }) {
+            previewBytes -= previews.remove(at: index).1.byteCount
+        }
+        let cost = preview.byteCount
+        guard cost > 0, cost <= previewByteLimit else { return }
+        while previewBytes + cost > previewByteLimit || previews.count >= 24 {
+            previewBytes -= previews.removeFirst().1.byteCount
+        }
+        previews.append((id, preview))
+        previewBytes += cost
+    }
+
+    func beginPreviewCapture() -> UUID? {
+        guard captureToken == nil else { return nil }
+        let token = UUID()
+        captureToken = token
+        return token
+    }
+
+    @discardableResult
+    func endPreviewCapture(_ token: UUID) -> Bool {
+        guard captureToken == token else { return false }
+        captureToken = nil
+        return true
+    }
+
+    @objc func removeAll() {
+        generation += 1
+        renderers.removeAll()
+        previews.removeAll()
+        previewBytes = 0
+    }
+}
+
+final class GenUIRichCanvas: UIView {
+    let webView: WKWebView
+    private let preview = UIImageView()
+    private var previewRevision = 0
+    var onLayout: (() -> Void)?
+
+    init(webView: WKWebView) {
+        self.webView = webView
+        super.init(frame: .zero)
+        addSubview(webView)
+        preview.contentMode = .scaleToFill
+        preview.isUserInteractionEnabled = false
+        preview.isAccessibilityElement = false
+        addSubview(preview)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        webView.frame = bounds
+        preview.frame = bounds
+        onLayout?()
+    }
+
+    var isShowingPreview: Bool { !preview.isHidden }
+
+    func showPreview(_ image: UIImage?) {
+        previewRevision += 1
+        preview.layer.removeAllAnimations()
+        preview.image = image
+        preview.alpha = 1
+        preview.isHidden = image == nil
+    }
+
+    func revealContent() {
+        guard !preview.isHidden else { return }
+        let revision = previewRevision
+        UIView.animate(withDuration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.12, animations: {
+            self.preview.alpha = 0
+        }, completion: { _ in
+            guard self.previewRevision == revision else { return }
+            self.preview.image = nil
+            self.preview.isHidden = true
+        })
+    }
+}
+
 struct GenUIRichWebView: UIViewRepresentable {
     let document: GenUIDocument
     let state: GenUIState
@@ -205,49 +343,38 @@ struct GenUIRichWebView: UIViewRepresentable {
     let onStatus: (String?) -> Void
     let onAction: ([String: Any]) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
-
-    func makeUIView(context: Context) -> WKWebView {
-        let configuration = YamabikoWebKitSupport.makeConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        configuration.userContentController.add(context.coordinator, name: "genui")
-        let gestureWorld = WKContentWorld.world(name: "GenUIHostGestures")
-        configuration.userContentController.add(context.coordinator, contentWorld: gestureWorld, name: "genuiGesture")
-        configuration.userContentController.addUserScript(WKUserScript(source: """
-            ['click','change','input','submit','keydown'].forEach(type => document.addEventListener(type, event => {
-                if (event.isTrusted) window.webkit.messageHandlers.genuiGesture.postMessage('trusted');
-            }, true));
-            """, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: gestureWorld))
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.isOpaque = false
-        webView.backgroundColor = .clear
-        webView.scrollView.backgroundColor = .clear
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.bounces = false
-        webView.scrollView.keyboardDismissMode = .interactive
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.navigationDelegate = context.coordinator
-        webView.uiDelegate = context.coordinator
-        return webView
+    func makeCoordinator() -> Coordinator {
+        let cached = GenUIRenderCache.shared.takeRenderer(for: state.renderCacheID)
+        let coordinator = state.richRenderer ?? cached ?? Coordinator(parent: self)
+        state.richRenderer = coordinator
+        coordinator.parent = self
+        return coordinator
     }
 
-    func updateUIView(_ webView: WKWebView, context: Context) {
+    func makeUIView(context: Context) -> GenUIRichCanvas {
+        context.coordinator.makeCanvas()
+    }
+
+    func updateUIView(_ canvas: GenUIRichCanvas, context: Context) {
         context.coordinator.parent = self
-        context.coordinator.load(in: webView)
-        webView.scrollView.isScrollEnabled = false
+        context.coordinator.load(in: canvas.webView)
+        canvas.webView.scrollView.isScrollEnabled = false
     }
 
-    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "genui")
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "genuiGesture", contentWorld: .world(name: "GenUIHostGestures"))
-        coordinator.removeMaps()
-        webView.navigationDelegate = nil
-        webView.uiDelegate = nil
-        webView.stopLoading()
+    static func dismantleUIView(_ canvas: GenUIRichCanvas, coordinator: Coordinator) {
+        coordinator.detach()
     }
 
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
-        var parent: GenUIRichWebView
+        // Release the SwiftUI host and its action closures while offscreen. The
+        // cache must never retain the host's action closures or conversation.
+        var parent: GenUIRichWebView?
+        private(set) var webView: WKWebView?
+        private weak var state: GenUIState?
+        private weak var canvas: GenUIRichCanvas?
+        private var previewTask: DispatchWorkItem?
+        private var isRestoring = false
+        private var previewCaptureInFlight = false
         private var loadedDocument: GenUIDocument?
         private var ready = false
         private var lastTheme: Bool?
@@ -269,7 +396,151 @@ struct GenUIRichWebView: UIViewRepresentable {
             }
         }
 
-        init(parent: GenUIRichWebView) { self.parent = parent }
+        init(parent: GenUIRichWebView) {
+            self.parent = parent
+            state = parent.state
+        }
+
+        deinit {
+            // Embedded players have their own WebKit message handlers.
+            videoHosts.values.forEach { $0.remove() }
+        }
+
+        // WKUserContentController retains message handlers. Forward weakly so
+        // the retained WebView and coordinator can both die with the row.
+        private final class MessageHandler: NSObject, WKScriptMessageHandler {
+            weak var target: Coordinator?
+
+            init(target: Coordinator) { self.target = target }
+
+            func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+                target?.userContentController(controller, didReceive: message)
+            }
+        }
+
+        func makeCanvas() -> GenUIRichCanvas {
+            let canvas = GenUIRichCanvas(webView: makeWebView())
+            canvas.showPreview(nil)
+            self.canvas = canvas
+            canvas.onLayout = { [weak self] in
+                self?.restorePreviewIfNeeded()
+                if self?.ready == true && self?.isRestoring == true { self?.schedulePreviewCapture() }
+            }
+            return canvas
+        }
+
+        private func restorePreviewIfNeeded() {
+            guard isRestoring, let canvas else { return }
+            guard let state, let parent,
+                  let preview = GenUIRenderCache.shared.preview(for: state.renderCacheID),
+                  preview.document == parent.document, preview.dark == parent.dark,
+                  abs(preview.width - canvas.bounds.width) < 1 else {
+                canvas.showPreview(nil)
+                return
+            }
+            canvas.showPreview(preview.image)
+        }
+
+        // Debounce interactive changes; never snapshot on each scroll/slider frame.
+        private func schedulePreviewCapture() {
+            previewTask?.cancel()
+            guard parent != nil else { return }
+            let task = DispatchWorkItem { [weak self] in self?.capturePreview() }
+            previewTask = task
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: task)
+        }
+
+        private func capturePreview() {
+            guard !previewCaptureInFlight, let webView, let parent, let state, ready,
+                  webView.bounds.width > 0, webView.bounds.height > 0 else { return }
+            let cache = GenUIRenderCache.shared
+            guard let token = cache.beginPreviewCapture() else { schedulePreviewCapture(); return }
+            previewCaptureInFlight = true
+            let generation = cache.generation
+            let document = parent.document
+            let dark = parent.dark
+            let id = state.renderCacheID
+            let width = webView.bounds.width
+            let configuration = WKSnapshotConfiguration()
+            configuration.rect = webView.bounds
+            // Keep raster work bounded even for a very tall generated document.
+            let scale = webView.traitCollection.displayScale
+            configuration.snapshotWidth = NSNumber(value: Double(min(width * scale, sqrt(600_000 * width / webView.bounds.height)) / max(scale, 1)))
+            // WebKit can suspend a snapshot when a canvas leaves its window.
+            // Do not let that hold up other rows or leave a stale image covering UI.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                guard cache.endPreviewCapture(token), let self, self.loadedDocument == document else { return }
+                self.isRestoring = false
+                self.canvas?.revealContent()
+            }
+            webView.takeSnapshot(with: configuration) { [weak self] image, _ in
+                self?.previewCaptureInFlight = false
+                guard cache.endPreviewCapture(token), let self, self.loadedDocument == document else { return }
+                if let image, generation == cache.generation {
+                    cache.storePreview(.init(image: image, document: document, dark: dark, width: width), for: id)
+                }
+                self.isRestoring = false
+                self.canvas?.revealContent()
+            }
+        }
+
+        func makeWebView() -> WKWebView {
+            if let webView { return webView }
+            let configuration = YamabikoWebKitSupport.makeConfiguration()
+            configuration.websiteDataStore = .nonPersistent()
+            let handler = MessageHandler(target: self)
+            configuration.userContentController.add(handler, name: "genui")
+            let gestureWorld = WKContentWorld.world(name: "GenUIHostGestures")
+            configuration.userContentController.add(handler, contentWorld: gestureWorld, name: "genuiGesture")
+            configuration.userContentController.addUserScript(WKUserScript(source: """
+                ['click','change','input','submit','keydown'].forEach(type => document.addEventListener(type, event => {
+                    if (event.isTrusted) window.webkit.messageHandlers.genuiGesture.postMessage('trusted');
+                }, true));
+                """, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: gestureWorld))
+            let webView = WKWebView(frame: .zero, configuration: configuration)
+            webView.accessibilityIdentifier = "genui-rich-canvas"
+            webView.isOpaque = false
+            webView.backgroundColor = .clear
+            webView.scrollView.backgroundColor = .clear
+            webView.scrollView.isScrollEnabled = false
+            webView.scrollView.bounces = false
+            webView.scrollView.keyboardDismissMode = .interactive
+            webView.scrollView.contentInsetAdjustmentBehavior = .never
+            webView.navigationDelegate = self
+            webView.uiDelegate = self
+            self.webView = webView
+            return webView
+        }
+
+        func detach() {
+            previewTask?.cancel()
+            canvas?.onLayout = nil
+            canvas?.showPreview(nil)
+            canvas = nil
+            parent = nil
+            lastPhysicalTouch = .distantPast
+            actionConsumed = true
+            webView?.endEditing(true)
+            for player in videoHosts.values {
+                player.webView.evaluateJavaScript("if (typeof player !== 'undefined') player?.pauseVideo?.();", completionHandler: nil)
+            }
+            // Preserve native map views too, but release the old cell controller.
+            for host in mapHosts.values {
+                host.controller.willMove(toParent: nil)
+                host.controller.removeFromParent()
+            }
+            if let state { GenUIRenderCache.shared.retainRenderer(self, for: state.renderCacheID) }
+        }
+
+        private func attachMapControllers(in webView: WKWebView) {
+            var responder: UIResponder? = webView
+            while let current = responder, !(current is UIViewController) { responder = current.next }
+            guard let controller = responder as? UIViewController else { return }
+            for host in mapHosts.values where host.controller.parent == nil {
+                controller.addChild(host.controller)
+                host.controller.didMove(toParent: controller)
+            }
+        }
 
         func removeMaps() {
             mapHosts.values.forEach { $0.remove() }
@@ -310,7 +581,7 @@ struct GenUIRichWebView: UIViewRepresentable {
                     mapHosts[id] = MapHost(props: props, controller: controller, container: container)
                 }
                 guard let host = mapHosts[id] else { continue }
-                host.controller.overrideUserInterfaceStyle = parent.dark ? .dark : .light
+                host.controller.overrideUserInterfaceStyle = (parent?.dark ?? lastTheme ?? false) ? .dark : .light
                 let visible = frame.intersection(clip)
                 host.container.isHidden = visible.isNull || visible.isEmpty
                 if !host.container.isHidden {
@@ -320,6 +591,7 @@ struct GenUIRichWebView: UIViewRepresentable {
                 }
             }
             for id in Set(mapHosts.keys).subtracting(retained) { mapHosts.removeValue(forKey: id)?.remove() }
+            attachMapControllers(in: webView)
         }
 
         private func updateVideos(_ videos: [[String: Any]], in webView: WKWebView) {
@@ -342,7 +614,10 @@ struct GenUIRichWebView: UIViewRepresentable {
         }
 
         func load(in webView: WKWebView) {
+            guard let parent else { return }
+            attachMapControllers(in: webView)
             guard loadedDocument != parent.document else {
+                if ready && isRestoring { schedulePreviewCapture() }
                 if lastTheme != parent.dark {
                     lastTheme = parent.dark
                     webView.evaluateJavaScript("window.GenUIRuntime?.setTheme('\(parent.dark ? "dark" : "light")')", completionHandler: nil)
@@ -362,8 +637,10 @@ struct GenUIRichWebView: UIViewRepresentable {
                 }
             }
             ready = false
+            isRestoring = true
+            restorePreviewIfNeeded()
             guard let html = Self.html(document: parent.document, snapshot: parent.state.richSnapshot, dark: parent.dark) else {
-                DispatchQueue.main.async { [weak self] in self?.parent.onStatus(L10n.text("GenUIの表示リソースを読み込めません")) }
+                DispatchQueue.main.async { [weak self] in self?.parent?.onStatus(L10n.text("GenUIの表示リソースを読み込めません")) }
                 return
             }
             removeMaps()
@@ -385,15 +662,16 @@ struct GenUIRichWebView: UIViewRepresentable {
             switch type {
             case "height":
                 ready = true
-                if loadedDocument != parent.document, let webView = message.webView { load(in: webView) }
+                if let parent, loadedDocument != parent.document, let webView = message.webView { load(in: webView) }
                 guard let number = object["height"] as? NSNumber, number.doubleValue.isFinite else { return }
                 // The conversation owns vertical scrolling. Fit the complete document
                 // so diagrams and controls stay in the same reading flow.
                 let height = max(CGFloat(number.doubleValue), 60)
                 DispatchQueue.main.async { [weak self, weak webView = message.webView] in
-                    guard let self else { return }
-                    if abs(self.parent.height - height) > 1 { self.parent.height = height }
+                    guard let state = self?.state else { return }
+                    if abs(state.richHeight - height) > 1 { state.richHeight = height }
                     webView?.scrollView.isScrollEnabled = false
+                    self?.schedulePreviewCapture()
                 }
             case "videos":
                 guard let videos = object["videos"] as? [[String: Any]] else { return }
@@ -408,7 +686,7 @@ struct GenUIRichWebView: UIViewRepresentable {
                     let label = reason.hasPrefix("reference-server-required:")
                         ? L10n.text("参考元のサービスが必要な操作です")
                         : L10n.text("このクライアント操作は未対応です")
-                    self?.parent.onStatus(label + " (" + reason + ")")
+                    self?.parent?.onStatus(label + " (" + reason + ")")
                 }
             case "maps":
                 guard let maps = object["maps"] as? [[String: Any]] else { return }
@@ -418,7 +696,10 @@ struct GenUIRichWebView: UIViewRepresentable {
                 }
             case "state":
                 guard let state = object["state"].flatMap(GenUIHostPolicy.snapshot) else { return }
-                DispatchQueue.main.async { [weak self] in self?.parent.state.richSnapshot = state }
+                DispatchQueue.main.async { [weak self] in
+                    self?.state?.richSnapshot = state
+                    self?.schedulePreviewCapture()
+                }
             case "warning":
                 let reason = String((object["message"] as? String ?? "GenUI section failed").prefix(500))
                 DiagnosticsLogger.log("GenUI section rendering failed", category: .app,
@@ -426,7 +707,7 @@ struct GenUIRichWebView: UIViewRepresentable {
             case "error":
                 let text = String((object["message"] as? String ?? "GenUI rendering failed").prefix(500))
                 DiagnosticsLogger.log("GenUI rendering failed", category: .app, metadata: ["reason": text])
-                DispatchQueue.main.async { [weak self] in self?.parent.onStatus(text) }
+                DispatchQueue.main.async { [weak self] in self?.parent?.onStatus(text) }
             case "referenceEvent":
                 DiagnosticsLogger.log("GenUI reference event", category: .app, metadata: ["event": String(describing: object["event"] ?? "")])
             default:
@@ -436,7 +717,7 @@ struct GenUIRichWebView: UIViewRepresentable {
                     return
                 }
                 actionConsumed = true
-                DispatchQueue.main.async { [weak self] in self?.parent.onAction(object) }
+                DispatchQueue.main.async { [weak self] in self?.parent?.onAction(object) }
             }
         }
 
@@ -460,7 +741,11 @@ struct GenUIRichWebView: UIViewRepresentable {
         }
 
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-            parent.onStatus(L10n.text("GenUIの表示処理が停止しました。会話を開き直してください"))
+            // A suspended WebKit process may be reclaimed while offscreen.
+            // Reload through the same renderer on its next attachment.
+            loadedDocument = nil
+            ready = false
+            if parent != nil { load(in: webView) }
             DiagnosticsLogger.log("GenUI WebKit process terminated", category: .app)
         }
 
