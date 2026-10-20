@@ -92,7 +92,7 @@ h1, h2, h3, p { text-wrap: pretty; }
 .footer-links { display: flex; flex-wrap: wrap; gap: 8px 19px; }
 .footer-links a { color: #CFD1DC; text-decoration: none; }
 .footer-links a:hover { color: var(--lime); }
-.footer-note { margin: 15px 0 0; }
+.footer-note { margin-block: 15px 0; }
 .subpage-hero { padding: 55px 0 37px; border-bottom: 1px solid var(--line); }
 .subpage-hero h1 { margin: 0; font-size: clamp(33px, 5vw, 54px); line-height: 1.25; letter-spacing: -.055em; }
 .subpage-hero p { max-width: 690px; margin: 14px 0 0; color: var(--muted); font-size: 13px; }
@@ -122,7 +122,10 @@ h1, h2, h3, p { text-wrap: pretty; }
 .issue-actions { display: grid; gap: 9px; margin-top: 21px; }
 .issue-button { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 48px; padding: 11px 14px; border-radius: 4px; background: var(--lime); color: var(--navy); text-decoration: none; font-size: 12px; font-weight: 750; }
 .issue-button.secondary { border: 1px solid var(--line); background: transparent; color: var(--gray); }
+.issue-button:hover { background: var(--gray); color: var(--navy); }
+.issue-button.secondary:hover { border-color: var(--lime); background: transparent; color: var(--lime); }
 .issue-button span { font-size: 18px; }
+.support-grid + .support-card { margin-top: 14px; }
 .support-list { display: grid; gap: 1px; margin: 19px 0 0; padding: 0; list-style: none; background: var(--line); border: 1px solid var(--line); }
 .support-list li { padding: 13px 14px; background: var(--navy); color: #DFE0E5; font-size: 11px; line-height: 1.75; }
 .faq-list { display: grid; gap: 9px; }
