@@ -15,6 +15,40 @@ final class AppStoreScreenshotTests: XCTestCase {
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
     }
 
+    func testAMOLEDSurfacesAndLightAppearance() {
+        let app = XCUIApplication()
+        for appearance in ["dark", "light"] {
+            app.launchArguments = [
+                "-AppStoreScreenshotDemo", "-ScreenshotScene", "list",
+                "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"
+            ] + (appearance == "dark" ? ["-GenUIDarkFixture"] : [])
+            app.launch()
+            XCTAssertTrue(openSettings(app: app))
+            capture("amoled-\(appearance)-settings-index", app: app)
+
+            for (subtitle, title) in [
+                ("API・モデル", "接続"),
+                ("プロンプト・モード", "会話"),
+                ("テーマ・プリセット・数式", "表示"),
+                ("使用状況・診断", "管理")
+            ] {
+                XCTAssertTrue(openSettingsCategory(app: app, subtitle: subtitle, title: title))
+                capture("amoled-\(appearance)-settings-\(title)", app: app)
+                XCTAssertTrue(returnToSettingsIndex(app: app))
+            }
+            closeSettings(app: app)
+            capture("amoled-\(appearance)-conversation-list", app: app)
+            app.terminate()
+            // Route directly so the capture does not depend on sidebar selection state.
+            let sceneIndex = app.launchArguments.firstIndex(of: "-ScreenshotScene")! + 1
+            app.launchArguments[sceneIndex] = "chat"
+            app.launch()
+            XCTAssertTrue(app.buttons["chat-model-button"].waitForExistence(timeout: 10))
+            capture("amoled-\(appearance)-chat", app: app)
+            app.terminate()
+        }
+    }
+
     func testSettingsConnectionNavigationCanBeRepeated() {
         let app = XCUIApplication()
         app.launchArguments = [

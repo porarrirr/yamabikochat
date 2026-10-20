@@ -2,7 +2,7 @@ import SwiftUI
 
 struct OpenSourceLicensesView: View {
     var body: some View {
-        List {
+        AMOLEDList {
             ForEach(LegalDocument.allCases) { document in
                 NavigationLink(document.title) {
                     LegalDocumentView(document: document)
@@ -147,7 +147,7 @@ private struct LegalMarkdownDocumentView: View {
                             .padding(12)
                             .background(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(Color(.secondarySystemBackground))
+                                    .fill(Color(.amoledSecondarySystemBackground))
                             )
                     }
                 }
@@ -218,7 +218,7 @@ private struct LegalTableRowCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+                .fill(Color(.amoledSecondarySystemBackground))
         )
     }
 

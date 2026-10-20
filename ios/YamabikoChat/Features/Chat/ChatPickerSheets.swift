@@ -18,7 +18,7 @@ struct ChatModelPickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            AMOLEDList {
                 if presets.isEmpty {
                     ContentUnavailableView.search(text: searchQuery)
                 } else {
@@ -88,7 +88,7 @@ struct ChatModePickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            AMOLEDList {
                 Section {
                     ForEach(ChatMode.allCases) { mode in
                         Button {

@@ -58,7 +58,7 @@ struct GenUIRichView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         // The document owns its card hierarchy; avoid a second enclosing panel.
-        .background(Color(uiColor: .systemBackground))
+        .background(Color(uiColor: .amoledSystemBackground))
         .sheet(item: $imagePresentation) { GenUIImagePresentationView(presentation: $0) }
         .sheet(item: $sharePresentation) { GenUISharePresentationView(items: $0.items) }
         .sheet(item: $videoPresentation) { GenUIVideoPresentationView(presentation: $0) }

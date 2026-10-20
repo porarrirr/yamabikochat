@@ -854,7 +854,7 @@ private struct NativeCodeBlock: View {
                     .padding(12)
             }
         }
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(Color(uiColor: .amoledSecondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }

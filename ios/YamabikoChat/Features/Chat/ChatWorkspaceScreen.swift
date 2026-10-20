@@ -98,7 +98,7 @@ struct ChatWorkspaceScreen: View {
     }
 
     private var workspaceBackground: Color {
-        Color(uiColor: .systemBackground)
+        Color(uiColor: .amoledSystemBackground)
     }
 
     private var currentProvider: String {
@@ -202,7 +202,7 @@ struct ChatWorkspaceScreen: View {
         .padding(.bottom, 7)
         .background(
             Rectangle()
-                .fill(Color(uiColor: .systemBackground).opacity(0.98))
+                .fill(Color(uiColor: .amoledSystemBackground).opacity(0.98))
                 .overlay(alignment: .bottom) {
                     Divider()
                         .opacity(0.18)

@@ -56,7 +56,7 @@ struct ConversationListScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .toolbar(.hidden, for: .navigationBar)
-        .background(Color(uiColor: .systemBackground))
+        .background(Color(uiColor: .amoledSystemBackground))
         .onAppear {
             if AppStoreScreenshotRouting.launchConfiguration()?.scene == .project,
                navigationState == .conversations {
@@ -79,7 +79,7 @@ struct ConversationListScreen: View {
                     .accessibilityLabel(Text(L10n.text("エラーを閉じる")))
                 }
                 .padding(.horizontal, 12)
-                .background(.regularMaterial)
+                .background(AMOLEDMaterial(material: .regularMaterial))
                 .accessibilityElement(children: .combine)
             }
         }
@@ -122,7 +122,7 @@ struct ConversationListScreen: View {
         VStack(spacing: 0) {
             topHeader
 
-            List {
+            AMOLEDList {
                 if !viewModel.isSelectionMode {
                     Section {
                         drawerActionRow(
@@ -177,7 +177,7 @@ struct ConversationListScreen: View {
                         } header: {
                             Text(group.title)
                                 .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color(uiColor: .amoledSecondaryLabel))
                                 .textCase(nil)
                                 .padding(.leading, -4)
                         }
@@ -250,7 +250,12 @@ struct ConversationListScreen: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
 
-            TextField(L10n.text("会話を検索"), text: $viewModel.searchQuery)
+            TextField(
+                L10n.text("会話を検索"),
+                text: $viewModel.searchQuery,
+                prompt: Text(L10n.text("会話を検索"))
+                    .foregroundStyle(Color(uiColor: .amoledPlaceholderText))
+            )
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
 
@@ -268,7 +273,7 @@ struct ConversationListScreen: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 42)
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(Color(uiColor: .amoledSecondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityIdentifier("conversation-search-field")
     }
@@ -284,14 +289,14 @@ struct ConversationListScreen: View {
                     .frame(minHeight: 44)
                     .background(
                         Capsule()
-                            .fill(Color(uiColor: .secondarySystemFill))
+                            .fill(Color(uiColor: .amoledSecondarySystemFill))
                     )
             } else {
                 Image(systemName: "checkmark.circle")
                     .frame(width: 44, height: 44)
                     .background(
                         Circle()
-                            .fill(Color(uiColor: .secondarySystemFill))
+                            .fill(Color(uiColor: .amoledSecondarySystemFill))
                     )
             }
         }
@@ -313,14 +318,14 @@ struct ConversationListScreen: View {
                     .frame(minHeight: 44)
                     .background(
                         Capsule()
-                            .fill(Color(uiColor: .secondarySystemFill))
+                            .fill(Color(uiColor: .amoledSecondarySystemFill))
                     )
             } else {
                 Image(systemName: "square.and.pencil")
                     .frame(width: 44, height: 44)
                     .background(
                         Circle()
-                            .fill(Color(uiColor: .secondarySystemFill))
+                            .fill(Color(uiColor: .amoledSecondarySystemFill))
                     )
             }
         }
@@ -387,7 +392,7 @@ struct ConversationListScreen: View {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color(uiColor: .amoledTertiaryLabel))
             }
             .padding(.horizontal, 16)
             .frame(minHeight: 52)
@@ -396,7 +401,7 @@ struct ConversationListScreen: View {
         .buttonStyle(.plain)
         .accessibilityLabel(Text("設定"))
         .accessibilityIdentifier("open-settings")
-        .background(Color(uiColor: .systemBackground))
+        .background(Color(uiColor: .amoledSystemBackground))
     }
 
     // MARK: - Selection Action Bar
@@ -435,7 +440,7 @@ struct ConversationListScreen: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Color(uiColor: .systemBackground))
+        .background(Color(uiColor: .amoledSystemBackground))
     }
 
     // MARK: - Drawer Action Row
@@ -469,13 +474,13 @@ struct ConversationListScreen: View {
                         .padding(.vertical, 2)
                         .background(
                             Capsule()
-                                .fill(Color(uiColor: .secondarySystemFill))
+                                .fill(Color(uiColor: .amoledSecondarySystemFill))
                         )
                 }
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color(uiColor: .amoledTertiaryLabel))
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 10)
@@ -601,7 +606,7 @@ struct ConversationListScreen: View {
 
     private func rowBackgroundColor(for id: Int64) -> Color {
         guard selection == id else { return Color.clear }
-        return Color(uiColor: .secondarySystemFill)
+        return Color(uiColor: .amoledSecondarySystemFill)
     }
 
     private func createConversation(secret: Bool) {
@@ -636,7 +641,7 @@ struct CreateProjectSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            AMOLEDForm {
                 Section(L10n.text("プロジェクト名")) {
                     TextField(L10n.text("例: iOS移植"), text: $title)
                 }

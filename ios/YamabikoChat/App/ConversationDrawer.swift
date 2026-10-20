@@ -101,14 +101,14 @@ final class ConversationDrawerController<Sidebar: View, Detail: View>: UIViewCon
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = .amoledSystemBackground
         view.clipsToBounds = true
         addChild(sidebarHost)
         view.addSubview(sidebarHost.view)
         sidebarHost.didMove(toParent: self)
 
         view.addSubview(detailCard)
-        detailCard.backgroundColor = .systemBackground
+        detailCard.backgroundColor = .amoledSystemBackground
         detailCard.layer.cornerCurve = .continuous
         detailCard.clipsToBounds = true
         addChild(detailHost)

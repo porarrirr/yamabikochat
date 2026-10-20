@@ -14,7 +14,7 @@ enum MermaidHTMLBuilder {
         allowsZoom: Bool
     ) -> String {
         let theme = colorScheme == .dark ? "dark" : "default"
-        let background = colorScheme == .dark ? "#1C1C1E" : "#FFFFFF"
+        let background = colorScheme == .dark ? "#000000" : "#FFFFFF"
         let foreground = colorScheme == .dark ? "#F2F2F7" : "#1C1C1E"
         let viewport = allowsZoom
             ? "width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes"
@@ -293,7 +293,7 @@ struct MermaidDiagramView: View {
 
                     if !expanded, measuredHeight > inlineMaximumHeight {
                         LinearGradient(
-                            colors: [.clear, Color(uiColor: .secondarySystemBackground)],
+                            colors: [.clear, Color(uiColor: .amoledSecondarySystemBackground)],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -311,7 +311,7 @@ struct MermaidDiagramView: View {
                 }
             }
         }
-        .background(Color(uiColor: expanded ? .systemBackground : .secondarySystemBackground))
+        .background(Color(uiColor: expanded ? .amoledSystemBackground : .amoledSecondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: expanded ? 0 : 12, style: .continuous))
     }
 }

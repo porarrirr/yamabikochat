@@ -37,7 +37,7 @@ struct EditProjectSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            AMOLEDForm {
                 Section(L10n.text("プロジェクト名")) {
                     TextField(L10n.text("例: iOS移植"), text: $title)
                 }

@@ -314,7 +314,7 @@ struct ChatComposerTextView: UIViewRepresentable {
             keyboardDismissMode = .interactive
             placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
             placeholderLabel.font = .systemFont(ofSize: 16)
-            placeholderLabel.textColor = .placeholderText
+            placeholderLabel.textColor = .amoledPlaceholderText
             addSubview(placeholderLabel)
             NSLayoutConstraint.activate([
                 placeholderLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -542,7 +542,7 @@ struct ChatScreen: View {
                         .foregroundStyle(.primary)
                         .frame(minWidth: 44, minHeight: 44)
                         .padding(.horizontal, unreadCount > 0 ? 8 : 0)
-                        .background(.regularMaterial, in: Capsule())
+                        .background(AMOLEDMaterial(material: .regularMaterial), in: Capsule())
                         .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
                     }
                     .buttonStyle(.plain)
@@ -866,7 +866,7 @@ struct ChatScreen: View {
                         }
                     }
                 }
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .background(AMOLEDMaterial(material: .regularMaterial), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .stroke(Color(uiColor: .separator).opacity(0.24), lineWidth: 1)
@@ -949,7 +949,7 @@ struct ChatScreen: View {
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(Color(uiColor: .amoledSecondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: isComposerExpanded ? 22 : 26, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: isComposerExpanded ? 22 : 26, style: .continuous)
@@ -1123,7 +1123,7 @@ struct ChatScreen: View {
 
             Rectangle()
                 .fill(Color.black.opacity(0.12))
-                .background(.ultraThinMaterial)
+                .background(AMOLEDMaterial(material: .ultraThinMaterial))
                 .mask {
                     LinearGradient(
                         colors: [.clear, .black.opacity(0.92), .black],
@@ -1190,11 +1190,11 @@ struct ChatScreen: View {
                 if viewModel.isSending {
                     Image(systemName: "stop.fill")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color(uiColor: .systemBackground))
+                        .foregroundStyle(Color(uiColor: .amoledSystemBackground))
                 } else {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(Color(uiColor: .systemBackground))
+                        .foregroundStyle(Color(uiColor: .amoledSystemBackground))
                 }
             }
         }
@@ -1499,7 +1499,7 @@ private struct ChatDiscreteReasoningEffortSlider: View {
 
             ZStack(alignment: .leading) {
                 Capsule(style: .continuous)
-                    .fill(Color(uiColor: .tertiarySystemFill))
+                    .fill(Color(uiColor: .amoledTertiarySystemFill))
 
                 Capsule(style: .continuous)
                     .fill(Color.primary)
@@ -1512,7 +1512,7 @@ private struct ChatDiscreteReasoningEffortSlider: View {
                     let optionFraction = fraction(index: index)
                     Circle()
                         .fill(optionFraction <= visualFraction
-                            ? Color(uiColor: .systemBackground).opacity(0.42)
+                            ? Color(uiColor: .amoledSystemBackground).opacity(0.42)
                             : Color(uiColor: .secondaryLabel).opacity(0.5))
                         .frame(width: 8, height: 8)
                         .position(
@@ -1526,7 +1526,7 @@ private struct ChatDiscreteReasoningEffortSlider: View {
                 }
 
                 Circle()
-                    .fill(Color(uiColor: .systemBackground))
+                    .fill(Color(uiColor: .amoledSystemBackground))
                     .frame(width: thumbDiameter, height: thumbDiameter)
                     .overlay {
                         Circle()
@@ -1796,7 +1796,7 @@ struct MessageAttachmentList: View {
                             .lineLimit(1)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 8)
-                            .background(Color(uiColor: .secondarySystemBackground))
+                            .background(Color(uiColor: .amoledSecondarySystemBackground))
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
@@ -1975,7 +1975,7 @@ private func attachmentHeader(
 private extension View {
     func generatedAttachmentCardStyle() -> some View {
         padding(10)
-            .background(Color(uiColor: .secondarySystemBackground))
+            .background(Color(uiColor: .amoledSecondarySystemBackground))
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -2081,7 +2081,7 @@ private struct ChatStatsLine: View {
                 ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
                     if index > 0 {
                         Text("|")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color(uiColor: .amoledTertiaryLabel))
                     }
                     Text(group)
                 }
@@ -2100,19 +2100,19 @@ private struct ChatStatsLine: View {
 }
 
 extension Color {
-    static let chatScreenBackground = Color(uiColor: .systemBackground)
-    static let chatInputBackground = Color(uiColor: .systemBackground)
-    static let chatInputCardBackground = Color(uiColor: .secondarySystemBackground)
-    static let chatInputChipBackground = Color(uiColor: .tertiarySystemFill)
-    static let chatUserBubble = Color(uiColor: .secondarySystemFill)
+    static let chatScreenBackground = Color(uiColor: .amoledSystemBackground)
+    static let chatInputBackground = Color(uiColor: .amoledSystemBackground)
+    static let chatInputCardBackground = Color(uiColor: .amoledSecondarySystemBackground)
+    static let chatInputChipBackground = Color(uiColor: .amoledTertiarySystemFill)
+    static let chatUserBubble = Color(uiColor: .amoledSecondarySystemFill)
     static let chatUserText = Color(uiColor: .label)
     static let chatAccent = Color(uiColor: .systemBlue)
     static let chatOrange = Color(red: 235 / 255, green: 94 / 255, blue: 40 / 255)
-    static let chatDualCard = Color(uiColor: .secondarySystemBackground)
+    static let chatDualCard = Color(uiColor: .amoledSecondarySystemBackground)
     static let chatComposerText = Color(uiColor: .label)
-    static let chatComposerIcon = Color(uiColor: .secondaryLabel)
-    static let chatAssistantBubble = Color(uiColor: .systemBackground)
-    static let chatAssistantMark = Color(uiColor: .secondaryLabel)
-    static let chatBubbleBorder = Color(uiColor: .separator)
+    static let chatComposerIcon = Color(uiColor: .amoledSecondaryLabel)
+    static let chatAssistantBubble = Color(uiColor: .amoledSystemBackground)
+    static let chatAssistantMark = Color(uiColor: .amoledSecondaryLabel)
+    static let chatBubbleBorder = Color(uiColor: .amoledSeparator)
     static let chatSendDisabled = Color(uiColor: .systemGray4)
 }

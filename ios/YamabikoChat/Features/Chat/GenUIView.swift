@@ -91,7 +91,7 @@ struct GenUIView: View {
                     ForEach(document.inputs, id: \.id) { input in inputView(input) }
                 }
                 .padding(compact ? 10 : 16)
-                .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color.amoledSubtleSurface(lightOpacity: 0.035), in: RoundedRectangle(cornerRadius: 12))
             } else {
                 ForEach(document.components.filter { $0.id != primaryComponent?.id }, id: \.id) { component in
                     if component.id == firstChart?.id || document.components.count == 1 {
@@ -109,7 +109,7 @@ struct GenUIView: View {
         }
         .padding(.vertical, compact ? 12 : 16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(uiColor: .systemBackground))
+        .background(Color(uiColor: .amoledSystemBackground))
         .tint(.primary)
     }
 
@@ -191,7 +191,7 @@ struct GenUIView: View {
             ForEach(input.options ?? [], id: \.value) { option in Text(option.label).tag(option.value) }
         }
         .pickerStyle(.menu).frame(minHeight: 44)
-        .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
+        .background(Color.amoledSubtleSurface(lightOpacity: 0.045), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func numberEditor(_ input: GenUIInput) -> some View {
@@ -204,7 +204,7 @@ struct GenUIView: View {
             .multilineTextAlignment(.trailing).frame(minWidth: 80, maxWidth: 140)
             if let unit = input.unit { Text(unit).font(.subheadline).foregroundStyle(.secondary) }
         }.padding(.horizontal, 8).frame(minHeight: 44)
-            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
+            .background(Color.amoledSubtleSurface(lightOpacity: 0.045), in: RoundedRectangle(cornerRadius: 8))
     }
 
     @ViewBuilder private func componentView(_ component: GenUIComponent, showsTitle: Bool = true) -> some View {
@@ -232,7 +232,7 @@ struct GenUIView: View {
                                     .font(.caption)
                             }
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(compact ? 10 : 14)
-                            .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
+                            .background(Color.amoledSubtleSurface(lightOpacity: 0.04), in: RoundedRectangle(cornerRadius: 14))
                     }
                 }
             default:
@@ -255,10 +255,10 @@ struct GenUIView: View {
                     GridRow { ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
                         Text(render(cell)).font(.subheadline).monospacedDigit().padding(.vertical, compact ? 8 : 12)
                             .frame(minWidth: 80, alignment: .leading)
-                    } }.background(index.isMultiple(of: 2) ? Color.primary.opacity(0.025) : .clear)
+                    } }.background(index.isMultiple(of: 2) ? Color.amoledSubtleSurface(lightOpacity: 0.025) : .clear)
                 }
             }.padding(.horizontal, 12)
-        }.background(.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 12))
+        }.background(Color.amoledSubtleSurface(lightOpacity: 0.025), in: RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder

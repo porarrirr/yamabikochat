@@ -64,7 +64,7 @@ struct ProjectDetailScreen: View {
 
             bottomInputBar
         }
-        .background(Color(uiColor: .systemBackground).ignoresSafeArea())
+        .background(Color(uiColor: .amoledSystemBackground).ignoresSafeArea())
         .onAppear {
             viewModel.loadProjectWorkspaceFiles(projectId: projectId)
         }
@@ -158,7 +158,7 @@ struct ProjectDetailScreen: View {
                     .frame(width: 44, height: 44)
                     .background(
                         Circle()
-                            .fill(Color(uiColor: .secondarySystemFill))
+                            .fill(Color(uiColor: .amoledSecondarySystemFill))
                     )
             }
             .buttonStyle(.plain)
@@ -204,7 +204,7 @@ struct ProjectDetailScreen: View {
                     .frame(width: 44, height: 44)
                     .background(
                         Circle()
-                            .fill(Color(uiColor: .secondarySystemFill))
+                            .fill(Color(uiColor: .amoledSecondarySystemFill))
                     )
             }
             .buttonStyle(.plain)
@@ -239,7 +239,7 @@ struct ProjectDetailScreen: View {
                         .frame(height: 42)
                         .background(
                             Capsule(style: .continuous)
-                                .fill(selectedTab == tab ? Color(uiColor: .secondarySystemFill) : .clear)
+                                .fill(selectedTab == tab ? Color(uiColor: .amoledSecondarySystemFill) : .clear)
                         )
                 }
                 .buttonStyle(.plain)
@@ -262,7 +262,7 @@ struct ProjectDetailScreen: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 28, height: 28)
-                    .background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 8))
+                    .background(Color(uiColor: .amoledTertiarySystemFill), in: RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L10n.text("プロジェクトの指示"))
                         .font(.subheadline.weight(.semibold))
@@ -274,11 +274,11 @@ struct ProjectDetailScreen: View {
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color(uiColor: .amoledTertiaryLabel))
                     .padding(.top, 7)
             }
             .padding(13)
-            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(Color(uiColor: .amoledSecondarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -399,7 +399,7 @@ struct ProjectDetailScreen: View {
         .overlay {
             if viewModel.isImportingProjectFiles {
                 ZStack {
-                    Color(uiColor: .systemBackground).opacity(0.75)
+                    Color(uiColor: .amoledSystemBackground).opacity(0.75)
                     ProgressView(L10n.text("ファイルを追加中…"))
                 }
             }
@@ -412,7 +412,7 @@ struct ProjectDetailScreen: View {
         } label: {
             Text(L10n.text("追加"))
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color(uiColor: .systemBackground))
+                .foregroundStyle(Color(uiColor: .amoledSystemBackground))
                 .padding(.horizontal, 26)
                 .frame(height: 46)
                 .background(Color.primary, in: Capsule(style: .continuous))
@@ -525,12 +525,12 @@ struct ProjectDetailScreen: View {
             .padding(.vertical, 8)
             .background(
                 Capsule()
-                    .fill(Color(uiColor: .secondarySystemFill))
+                    .fill(Color(uiColor: .amoledSecondarySystemFill))
             )
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
         }
-        .background(Color(uiColor: .systemBackground))
+        .background(Color(uiColor: .amoledSystemBackground))
     }
 
     private func submitMessage() {

@@ -44,7 +44,7 @@ struct SystemPromptSettingsSection: View {
                             Spacer(minLength: 0)
                             Image(systemName: "chevron.right")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(Color(uiColor: .amoledTertiaryLabel))
                         }
                     }
                     .accessibilityIdentifier("system-prompt-presets")
@@ -103,7 +103,7 @@ struct SystemPromptSettingsSection: View {
                 .accessibilityIdentifier("system-prompt-enabled")
                 .sheet(isPresented: $showsPresetPicker) {
                     NavigationStack {
-                        List {
+                        AMOLEDList {
                             if viewModel.systemPromptPresets.isEmpty {
                                 ContentUnavailableView("プリセットはまだありません", systemImage: "square.stack")
                             } else {

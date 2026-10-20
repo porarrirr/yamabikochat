@@ -14,27 +14,29 @@ struct DualChatScreen: View {
             .buttonStyle(.borderedProminent)
             .disabled(viewModel.inputText.isEmpty || viewModel.isSending)
 
-            List(viewModel.dualMessages) { message in
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("ユーザー")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(message.userText)
-                        .font(.body)
+            AMOLEDList {
+                ForEach(viewModel.dualMessages) { message in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("ユーザー")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(message.userText)
+                            .font(.body)
 
-                    Divider()
-                    Text("A (\(message.modelAName))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(message.modelAText)
+                        Divider()
+                        Text("A (\(message.modelAName))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(message.modelAText)
 
-                    Divider()
-                    Text("B (\(message.modelBName))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(message.modelBText)
+                        Divider()
+                        Text("B (\(message.modelBName))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(message.modelBText)
+                    }
+                    .padding(.vertical, 6)
                 }
-                .padding(.vertical, 6)
             }
         }
         .padding()

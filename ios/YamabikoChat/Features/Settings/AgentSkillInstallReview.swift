@@ -8,7 +8,7 @@ struct AgentSkillInstallReview: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            AMOLEDForm {
                 Section("Skill") {
                     LabeledContent("名前", value: preview.manifest.name)
                     Text(preview.manifest.description)

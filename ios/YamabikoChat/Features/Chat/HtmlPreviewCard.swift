@@ -86,11 +86,11 @@ struct HtmlPreviewCard: View {
                 .textSelection(.enabled)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(uiColor: .secondarySystemBackground))
+                .background(Color(uiColor: .amoledSecondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .padding(12)
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(Color(uiColor: .amoledSecondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)

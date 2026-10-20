@@ -78,7 +78,7 @@ private struct AskUserQuestionFlow: View {
 
             footer
         }
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(Color(uiColor: .amoledSecondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -200,7 +200,7 @@ private struct AskUserQuestionFlow: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
-            .background(selected ? Color(uiColor: .tertiarySystemFill) : Color.clear)
+            .background(selected ? Color(uiColor: .amoledTertiarySystemFill) : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .contentShape(Rectangle())
         }
@@ -232,7 +232,7 @@ private struct AskUserQuestionFlow: View {
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(.secondary)
                 .frame(width: 40, height: 40)
-                .background(Color(uiColor: .tertiarySystemFill))
+                .background(Color(uiColor: .amoledTertiarySystemFill))
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             if rendersEditableField {
                 TextField(
@@ -254,7 +254,7 @@ private struct AskUserQuestionFlow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(!draft.custom.isEmpty || customFieldFocused ? Color(uiColor: .tertiarySystemFill) : Color.clear)
+        .background(!draft.custom.isEmpty || customFieldFocused ? Color(uiColor: .amoledTertiarySystemFill) : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 

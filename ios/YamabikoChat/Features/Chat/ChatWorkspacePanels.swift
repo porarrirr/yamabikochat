@@ -11,7 +11,7 @@ struct ChatEmptyState: View {
                 .font(.system(size: 28, weight: .medium))
                 .foregroundStyle(.secondary)
                 .frame(width: 56, height: 56)
-                .background(Color(uiColor: .secondarySystemBackground), in: Circle())
+                .background(Color(uiColor: .amoledSecondarySystemBackground), in: Circle())
             Text(title)
                 .font(.title3.weight(.semibold))
         }
@@ -79,7 +79,7 @@ private struct ChatRunInspector: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            AMOLEDList {
                 ForEach(steps) { step in
                     Section {
                         VStack(alignment: .leading, spacing: 10) {
@@ -106,7 +106,7 @@ private struct ChatRunInspector: View {
                                     .textSelection(.enabled)
                                     .padding(10)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                                    .background(Color(uiColor: .amoledSecondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
                             }
                             if let error = step.errorMessage?.trimmedNonEmpty {
                                 Text(error)

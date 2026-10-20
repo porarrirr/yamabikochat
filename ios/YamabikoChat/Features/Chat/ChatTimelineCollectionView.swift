@@ -109,14 +109,14 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = .amoledSystemBackground
 
         let layout = ChatTimelineLayout()
 
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.accessibilityIdentifier = "chat-timeline"
         collectionView.translatesAutoresizingMaskIntoConstraints = false
-        collectionView.backgroundColor = .systemBackground
+        collectionView.backgroundColor = .amoledSystemBackground
         collectionView.alwaysBounceVertical = true
         collectionView.keyboardDismissMode = .interactive
         collectionView.delegate = self
@@ -1306,7 +1306,7 @@ private struct ChatMessageRow: View {
                                 .textSelection(.enabled)
                                 .padding(.horizontal, 15)
                                 .padding(.vertical, 11)
-                                .background(Color(uiColor: .secondarySystemBackground))
+                                .background(Color(uiColor: .amoledSecondarySystemBackground))
                                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                                 .contextMenu {
                                     Button {
@@ -1478,7 +1478,7 @@ private struct ChatMessageRow: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(13)
-                .background(Color(uiColor: .secondarySystemBackground))
+                .background(Color(uiColor: .amoledSecondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -1671,7 +1671,7 @@ private struct DualChatMessageRow: View {
                             .textSelection(.enabled)
                             .padding(.horizontal, 15)
                             .padding(.vertical, 11)
-                            .background(Color(uiColor: .secondarySystemBackground))
+                            .background(Color(uiColor: .amoledSecondarySystemBackground))
                             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                             .contextMenu {
                                 Button {
@@ -1898,7 +1898,7 @@ private struct DualResponseColumn: View {
             responseContent
         }
         .padding(14)
-        .background(Color(uiColor: .secondarySystemBackground).opacity(0.65))
+        .background(Color(uiColor: .amoledSecondarySystemBackground).opacity(0.65))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 

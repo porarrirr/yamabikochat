@@ -56,7 +56,7 @@ struct ProjectInstructionsSheet: View {
                             .padding(.vertical, 14)
                             .background(
                                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                                    .fill(Color(uiColor: .tertiarySystemFill))
+                                    .fill(Color(uiColor: .amoledTertiarySystemFill))
                             )
                             .foregroundStyle(.primary)
                     }
@@ -65,7 +65,7 @@ struct ProjectInstructionsSheet: View {
                     .padding(.bottom, 16)
                 }
             }
-            .background(Color(uiColor: .systemBackground).ignoresSafeArea())
+            .background(Color(uiColor: .amoledSystemBackground).ignoresSafeArea())
             .navigationTitle(L10n.text("指示"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -79,7 +79,7 @@ struct ProjectInstructionsSheet: View {
                             .padding(7)
                             .background(
                                 Circle()
-                                    .fill(Color(uiColor: .secondarySystemFill))
+                                    .fill(Color(uiColor: .amoledSecondarySystemFill))
                             )
                     }
                     .buttonStyle(.plain)

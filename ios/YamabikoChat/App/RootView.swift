@@ -171,12 +171,13 @@ struct RootView: View {
             .environmentObject(container)
             .environmentObject(appState)
         }
+        .amoledPresentation()
         .preferredColorScheme(resolvedColorScheme)
         .tint(resolvedTintColor)
         .overlay {
             if privacyCoverVisible {
                 ZStack {
-                    Color(uiColor: .systemBackground).ignoresSafeArea()
+                    Color(uiColor: .amoledSystemBackground).ignoresSafeArea()
                     VStack(spacing: 12) {
                         Image(systemName: "lock.shield.fill")
                             .font(.system(size: 44))

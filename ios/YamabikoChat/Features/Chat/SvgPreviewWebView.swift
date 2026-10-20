@@ -408,7 +408,7 @@ struct SvgDiagramView: View {
 
                     if !expanded, measuredHeight > inlineMaximumHeight {
                         LinearGradient(
-                            colors: [.clear, Color(uiColor: .secondarySystemBackground)],
+                            colors: [.clear, Color(uiColor: .amoledSecondarySystemBackground)],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -426,7 +426,7 @@ struct SvgDiagramView: View {
                 }
             }
         }
-        .background(Color(uiColor: expanded ? .systemBackground : .secondarySystemBackground))
+        .background(Color(uiColor: expanded ? .amoledSystemBackground : .amoledSecondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: expanded ? 0 : 12, style: .continuous))
     }
 }

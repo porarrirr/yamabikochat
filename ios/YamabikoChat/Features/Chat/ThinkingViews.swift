@@ -248,7 +248,7 @@ private struct ToolActivityStepCard: View, Equatable {
                 if let duration = formattedDuration {
                     Text(duration)
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color(uiColor: .amoledTertiaryLabel))
                 }
                 statusBadge
             }
@@ -320,7 +320,7 @@ private struct ToolActivityStepCard: View, Equatable {
             }
         }
         .padding(10)
-        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Color.amoledSubtleSurface(lightOpacity: 0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     @ViewBuilder
@@ -420,7 +420,7 @@ private struct ToolActivityValueBlock: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
-                .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .background(Color.amoledSubtleSurface(lightOpacity: 0.045), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
     }
 }

@@ -29,10 +29,10 @@ struct CatalogProviderPickerField: View {
             HStack {
                 Text(L10n.text(title))
                 Spacer()
-                Text(selectedLabel).foregroundStyle(.secondary).lineLimit(1)
+                Text(selectedLabel).foregroundStyle(Color(uiColor: .amoledSecondaryLabel)).lineLimit(1)
                 Image(systemName: "chevron.forward")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color(uiColor: .amoledSecondaryLabel))
             }
             .contentShape(Rectangle())
         }
@@ -97,7 +97,7 @@ private struct CatalogProviderListView: View {
     }
 
     var body: some View {
-        List {
+        AMOLEDList {
             Section("YamabikoChat") {
                 ForEach(filteredBuiltIns) { provider in providerRow(provider.key, provider.title, nil) }
             }
@@ -149,7 +149,7 @@ struct CatalogModelPickerField: View {
             HStack {
                 Text(L10n.text(title))
                 Spacer()
-                Text(selectedLabel).foregroundStyle(.secondary).lineLimit(1)
+                Text(selectedLabel).foregroundStyle(Color(uiColor: .amoledSecondaryLabel)).lineLimit(1)
             }
         }
     }

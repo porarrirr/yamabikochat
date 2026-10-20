@@ -7,7 +7,7 @@ struct FusionDetailSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            AMOLEDList {
                 overviewSection
                 pipelineSection
                 panelSection

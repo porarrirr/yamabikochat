@@ -44,7 +44,7 @@ struct ProjectListScreen: View {
 
             bottomSearchBar
         }
-        .background(Color(uiColor: .systemBackground).ignoresSafeArea())
+        .background(Color(uiColor: .amoledSystemBackground).ignoresSafeArea())
         .sheet(isPresented: $isCreateProjectPresented) {
             CreateProjectSheet(viewModel: viewModel) { title, instructions in
                 guard let projectId = viewModel.createProject(title: title, instructions: instructions) else {
@@ -121,7 +121,7 @@ struct ProjectListScreen: View {
                     .frame(width: 36, height: 36)
                     .background(
                         Circle()
-                            .fill(Color(uiColor: .secondarySystemFill))
+                            .fill(Color(uiColor: .amoledSecondarySystemFill))
                     )
             }
             .buttonStyle(.plain)
@@ -142,7 +142,7 @@ struct ProjectListScreen: View {
                     .frame(width: 36, height: 36)
                     .background(
                         Circle()
-                            .fill(Color(uiColor: .secondarySystemFill))
+                            .fill(Color(uiColor: .amoledSecondarySystemFill))
                     )
             }
             .buttonStyle(.plain)
@@ -287,12 +287,12 @@ struct ProjectListScreen: View {
             .padding(.vertical, 10)
             .background(
                 Capsule()
-                    .fill(Color(uiColor: .secondarySystemFill))
+                    .fill(Color(uiColor: .amoledSecondarySystemFill))
             )
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
         }
-        .background(Color(uiColor: .systemBackground))
+        .background(Color(uiColor: .amoledSystemBackground))
     }
 
     private func beginProjectDeletion(_ project: ProjectListEntry) {

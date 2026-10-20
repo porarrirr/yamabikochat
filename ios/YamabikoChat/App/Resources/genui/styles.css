@@ -36,9 +36,9 @@
 html[data-theme='dark'],
 [data-theme='dark'] {
     color-scheme: dark;
-    --surface: #212121;
-    --soft: #242424;
-    --surface-soft: #282828;
+    --surface: #000;
+    --soft: #171717;
+    --surface-soft: #242424;
     --surface-elevated: #333;
     --text: #fff;
     --muted: #cdcdcd;

@@ -273,7 +273,7 @@ struct GenUIInlineMapView: View {
             .overlay(alignment: .bottomLeading) {
                 if let status = model.status {
                     Text(status).font(.caption).padding(8)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        .background(AMOLEDMaterial(material: .regularMaterial), in: RoundedRectangle(cornerRadius: 8))
                         .padding(8)
                 }
             }

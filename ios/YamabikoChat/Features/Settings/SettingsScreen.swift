@@ -73,6 +73,7 @@ struct SettingsScreen: View {
         NavigationStack(path: $navigationPath) {
             settingsIndex
             .navigationTitle("設定")
+            .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: SettingsCategory.self) { category in
                 SettingsDetailScreen(
                     viewModel: viewModel,
@@ -114,7 +115,7 @@ struct SettingsScreen: View {
     }
 
     private var settingsIndex: some View {
-        Form {
+        AMOLEDForm {
             Section {
                 ForEach(SettingsCategory.allCases) { category in
                     NavigationLink(value: category) {
@@ -122,7 +123,7 @@ struct SettingsScreen: View {
                             Text(category.title)
                             Text(category.subtitle)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color(uiColor: .amoledSecondaryLabel))
                         }
                         .padding(.vertical, 4)
                     }
@@ -147,7 +148,7 @@ private struct SettingsDetailScreen: View {
     @State private var panelPendingDeletion: PanelModelConfig?
 
     var body: some View {
-        Form {
+        AMOLEDForm {
             switch category {
             case .connection:
                 connectionCategoryContent
@@ -462,7 +463,7 @@ private struct SettingsDetailScreen: View {
 
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color(uiColor: .amoledTertiaryLabel))
                 }
                 .contentShape(Rectangle())
             }
@@ -1014,7 +1015,7 @@ private struct SettingsDetailScreen: View {
                     Image(systemName: "sparkles")
                         .font(.title3.weight(.medium))
                         .frame(width: 44, height: 44)
-                        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color.amoledSubtleSurface(lightOpacity: 0.05), in: RoundedRectangle(cornerRadius: 12))
                         .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -1049,7 +1050,7 @@ private struct SettingsDetailScreen: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 48)
                     .padding(.vertical, 4)
-                    .foregroundStyle(Color(uiColor: .systemBackground))
+                    .foregroundStyle(Color(uiColor: .amoledSystemBackground))
                     .background(Color.primary, in: RoundedRectangle(cornerRadius: 14))
                     .contentShape(RoundedRectangle(cornerRadius: 14))
                 }
@@ -1109,7 +1110,7 @@ private struct SettingsDetailScreen: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
-                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                    .background(Color.amoledSubtleSurface(lightOpacity: 0.05), in: RoundedRectangle(cornerRadius: 12))
                 }
             }
             .padding(.vertical, 6)
@@ -1125,7 +1126,7 @@ private struct SettingsDetailScreen: View {
                         .font(.title3.weight(.medium))
                         .foregroundStyle(.primary)
                         .frame(width: 44, height: 44)
-                        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color.amoledSubtleSurface(lightOpacity: 0.05), in: RoundedRectangle(cornerRadius: 12))
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text("ChatGPT プラン")
@@ -1161,7 +1162,7 @@ private struct SettingsDetailScreen: View {
                     HStack(spacing: 10) {
                         if viewModel.isCodexAuthActionRunning {
                             ProgressView()
-                                .tint(Color(uiColor: .systemBackground))
+                                .tint(Color(uiColor: .amoledSystemBackground))
                         }
                         Text(viewModel.isCodexAuthActionRunning ? "接続中…" :
                             viewModel.codexAuthState.isLoggedIn ? "ChatGPTに再接続" : "ChatGPTに接続")
@@ -1172,7 +1173,7 @@ private struct SettingsDetailScreen: View {
                         }
                     }
                     .frame(maxWidth: .infinity, minHeight: 48)
-                    .foregroundStyle(Color(uiColor: .systemBackground))
+                    .foregroundStyle(Color(uiColor: .amoledSystemBackground))
                     .background(Color.primary, in: RoundedRectangle(cornerRadius: 14))
                     .contentShape(RoundedRectangle(cornerRadius: 14))
                 }
@@ -1215,7 +1216,7 @@ private struct SettingsDetailScreen: View {
             if let trailingImage {
                 Image(systemName: trailingImage)
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color(uiColor: .amoledTertiaryLabel))
             }
         }
         .frame(minHeight: 48)
@@ -1804,7 +1805,7 @@ private struct GlobalProviderPresetManagementScreen: View {
     }
 
     var body: some View {
-        Form {
+        AMOLEDForm {
             Section {
                 if presets.isEmpty {
                     ContentUnavailableView(
@@ -1893,7 +1894,7 @@ private struct SettingsStatusFooter: View {
                     .accessibilityLabel(Text(L10n.text("エラーを閉じる")))
                 }
                 .padding(.horizontal, 12)
-                .background(.regularMaterial)
+                .background(AMOLEDMaterial(material: .regularMaterial))
                 .accessibilityElement(children: .combine)
             }
         }
@@ -1908,7 +1909,7 @@ private struct AgentSkillDetailScreen: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            AMOLEDForm {
                 if let skill = viewModel.installedAgentSkills.first(where: { $0.manifest.name == skillName }) {
                     agentSkillSection(skill)
                 }
