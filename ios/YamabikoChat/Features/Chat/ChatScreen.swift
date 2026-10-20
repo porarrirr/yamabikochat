@@ -520,7 +520,7 @@ struct ChatScreen: View {
                 }
             )
             .overlay {
-                if viewModel.timelineStore.orderedIDs.isEmpty {
+                if viewModel.timelineStore.orderedIDs.isEmpty, viewModel.isSecretConversation {
                     ChatEmptyState(
                         title: emptyStateTitle,
                         systemImage: emptyStateSystemImage
