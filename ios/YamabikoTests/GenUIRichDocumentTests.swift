@@ -6,6 +6,48 @@ import WebKit
 
 final class GenUIRichDocumentTests: XCTestCase {
     @MainActor
+    func testWebKitHeightFittingDoesNotReexecuteGeneratedCode() async throws {
+        let document = GenUIDocument(title: "Resize", code: """
+        window.renderCount = (window.renderCount || 0) + 1;
+        return DIL.h('col', {}, ...Array.from({length: 12}, (_, i) =>
+            DIL.h('col', {},
+                DIL.h('card', {}, DIL.h('text', {}, '比較項目 ' + i),
+                    DIL.h('text', {}, '電池・静音・互換性。購入前に機種の仕様を確認してください。')),
+                DIL.h('text', {}, '↓'))));
+        """)
+        let html = try XCTUnwrap(GenUIRichWebView.Coordinator.html(document: document, snapshot: nil, dark: false))
+        let rendered = expectation(description: "Initial render")
+        let recorder = GenUIRenderRecorder(expectation: rendered)
+        let configuration = WKWebViewConfiguration()
+        configuration.userContentController.add(recorder, name: "genui")
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 300), configuration: configuration)
+        defer { configuration.userContentController.removeScriptMessageHandler(forName: "genui") }
+        webView.loadHTMLString(html, baseURL: nil)
+        await fulfillment(of: [rendered], timeout: 15)
+
+        // Allow WebKit to deliver real viewport resize events and render work.
+        let settle = """
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return {count: window.renderCount, width: innerWidth, height: innerHeight,
+            contentHeight: Math.ceil(document.body.getBoundingClientRect().height)};
+        """
+        let initial = try await webView.callAsyncJavaScript(settle, arguments: [:], in: nil, contentWorld: .page) as? [String: Int]
+        XCTAssertGreaterThan(try XCTUnwrap(initial?["contentHeight"]), 1000)
+        for height in [800, 1600, 300] {
+            webView.frame.size.height = CGFloat(height)
+            let result = try await webView.callAsyncJavaScript(settle, arguments: [:], in: nil, contentWorld: .page) as? [String: Int]
+            XCTAssertEqual(result?["height"], height)
+            XCTAssertEqual(result?["count"], initial?["count"], "Native height fitting must not restart GenUI flowcharts")
+            XCTAssertEqual(result?["contentHeight"], initial?["contentHeight"])
+        }
+        webView.frame.size.width = 640
+        let result = try await webView.callAsyncJavaScript(settle, arguments: [:], in: nil, contentWorld: .page) as? [String: Int]
+        XCTAssertEqual(result?["width"], 640)
+        XCTAssertGreaterThan(try XCTUnwrap(result?["count"]), try XCTUnwrap(initial?["count"]))
+        XCTAssertNil(recorder.error)
+    }
+
+    @MainActor
     func testLottieUpdatesStayMountedAndUseCurrentCallbacks() async throws {
         let result = try await runRichRuntimeScript(#"""
         const mounts=[], destroyed=[], speeds=[];

@@ -3620,7 +3620,17 @@
         queueRender();
     };
     document.documentElement.dataset.theme = global.__GENUI_THEME__ || 'light';
-    global.addEventListener('resize', queueRender);
+    // The native timeline fits the WKWebView to the height reported above.
+    // That frame change also emits resize: rendering again would feed native
+    // height measurement back into generated code and chart construction.
+    // Only a new width requires a responsive render (rotation/split view).
+    let viewportWidth = global.innerWidth;
+    global.addEventListener('resize', () => {
+        const width = global.innerWidth;
+        if (width === viewportWidth) return;
+        viewportWidth = width;
+        queueRender();
+    });
     global.addEventListener('pagehide', () =>
         hooks.forEach((list) => list.forEach((s) => s.cleanup?.())),
     );

@@ -54,6 +54,32 @@ test('Node import exposes vocabulary without installing browser globals', () => 
     assert.equal(new Set(api.componentNames).size, api.componentNames.length);
 });
 
+test('native height fitting does not rerender generated content but width changes do', () => {
+    const listeners = {};
+    const app = mount({code: "window.renderCount = (window.renderCount || 0) + 1; return DIL.h('text', {}, 'Chart ' + window.renderCount);"}, 320, {}, context => {
+        context.addEventListener = (type, callback) => { listeners[type] = callback; };
+    });
+    app.flush();
+    assert.equal(app.context.renderCount, 1);
+    const content = app.root.firstElementChild;
+    for (const height of [60, 800, 1600, 800]) {
+        app.context.innerHeight = height;
+        listeners.resize();
+        app.flush();
+    }
+    assert.equal(app.context.renderCount, 1, 'WKWebView height feedback must not rebuild charts');
+    assert.equal(app.root.firstElementChild, content);
+
+    app.context.innerWidth = 640;
+    listeners.resize();
+    app.flush();
+    assert.equal(app.context.renderCount, 2, 'Rotation and split-view width changes still render');
+    app.context.innerWidth = 320;
+    listeners.resize();
+    app.flush();
+    assert.equal(app.context.renderCount, 3);
+});
+
 test('text interpolation is literal and does not evaluate data as code', () => {
     assert.equal(api.interpolate('Hello {{name}}: {{n}}', {name:'Tokyo', n:0}), 'Hello Tokyo: 0');
     assert.equal(api.interpolate('{{missing}}', {}), '');
