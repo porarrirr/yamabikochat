@@ -600,13 +600,18 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         collectionView.layoutIfNeeded()
         switch followState {
         case .followingTail:
+            clearViewportCompensation()
             pinToTail()
         case .detached:
-            guard let anchor,
-                  let index = configuredIDs.firstIndex(of: anchor.id),
-                  let attributes = collectionView.layoutAttributesForItem(at: IndexPath(item: index, section: 0))
-            else { return }
-            let targetY = attributes.frame.minY - anchor.offset
+            // A shrinking row can leave the viewport entirely inside temporary
+            // bottom compensation. There is then no visible row to anchor, but
+            // completion must still remove the inset and clamp to real content.
+            var targetY = lockedOffsetY ?? collectionView.contentOffset.y
+            if let anchor,
+               let index = configuredIDs.firstIndex(of: anchor.id),
+               let attributes = collectionView.layoutAttributesForItem(at: IndexPath(item: index, section: 0)) {
+                targetY = attributes.frame.minY - anchor.offset
+            }
             if !clampsToContentBounds {
                 viewportLockTargetY = lockedOffsetY ?? targetY
                 maintainViewportLockIfNeeded()

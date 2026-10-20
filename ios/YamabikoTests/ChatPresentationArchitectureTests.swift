@@ -1710,6 +1710,72 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testStreamCompletionRemovesWhitespaceWhenViewportContainsNoRows() async throws {
+        let store = ChatTimelineStore()
+        store.update(messages: (1...24).map {
+            timelineMessage(id: Int64($0), text: String(repeating: "Message \($0) line\n", count: 4))
+        })
+        let controller = configuredTimelineController(store: store, scrollRequest: 1)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        await settleTimeline(controller)
+        let collectionView = try XCTUnwrap(findCollectionView(in: controller.view))
+
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 24,
+            text: String(repeating: "A long streaming paragraph.\n\n", count: 100),
+            thinking: "",
+            toolActivity: nil,
+            isFinal: false
+        ))
+        await settleTimeline(controller)
+
+        controller.scrollViewWillBeginDragging(collectionView)
+        collectionView.setContentOffset(
+            CGPoint(x: 0, y: max(
+                -collectionView.adjustedContentInset.top,
+                maximumContentOffset(in: collectionView) - 150
+            )),
+            animated: false
+        )
+        controller.scrollViewDidScroll(collectionView)
+        controller.scrollViewDidEndDragging(collectionView, willDecelerate: false)
+
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 24,
+            text: "Shorter streaming answer",
+            thinking: "",
+            toolActivity: nil,
+            isFinal: false
+        ))
+        await settleTimeline(controller)
+        XCTAssertGreaterThan(
+            collectionView.contentInset.bottom,
+            0,
+            "The fixture must create temporary viewport compensation"
+        )
+
+        XCTAssertTrue(collectionView.indexPathsForVisibleItems.isEmpty,
+                      "The detached viewport is inside the temporary bottom inset")
+        store.applyStreamingSnapshot(ChatStreamingSnapshot(
+            targetId: 24,
+            text: "Shorter streaming answer",
+            thinking: "",
+            toolActivity: nil,
+            isFinal: true
+        ))
+        await settleTimeline(controller)
+
+        XCTAssertEqual(collectionView.contentInset.bottom, 0, accuracy: 0.5)
+        XCTAssertLessThanOrEqual(
+            collectionView.contentOffset.y,
+            maximumContentOffset(in: collectionView) + 0.5,
+            "Completion must remove compensation even when there is no visible row to anchor"
+        )
+    }
+
+    @MainActor
     func testLeavingConversationRemovesTemporaryBottomWhitespace() async throws {
         let store = ChatTimelineStore()
         store.update(messages: (1...24).map {
