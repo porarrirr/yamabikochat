@@ -821,7 +821,7 @@ private struct NativeMarkdownBlockView: View {
                 NativeCodeBlock(language: "mermaid", code: source)
             }
         case let .math(_, markdown):
-            MathMarkdownView(markdownText: markdown, isStreaming: false)
+            MathMarkdownView(markdownText: markdown, onLayoutChange: onContentLayoutChange)
         case let .quote(_, blocks):
             HStack(alignment: .top, spacing: 12) {
                 Capsule()

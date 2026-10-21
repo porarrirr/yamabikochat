@@ -99,6 +99,12 @@ enum AppStoreScreenshotDemoSeeder {
             let conversationId = try chatRepository.createConversation(title: "表面積の計算 TeX Fixture")
             _ = try conversations.insertMessage(ChatMessage(
                 conversationId: conversationId,
+                role: "user",
+                text: "サブエージェントを使ってみてください。球の表面積の求め方３種類をそれぞれにやらせて",
+                createdAtMs: Int64(Date().timeIntervalSince1970 * 1000) - 1
+            ))
+            _ = try conversations.insertMessage(ChatMessage(
+                conversationId: conversationId,
                 role: "model",
                 text: mathRenderingFixtureText,
                 createdAtMs: Int64(Date().timeIntervalSince1970 * 1000)

@@ -381,17 +381,15 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
 
     private func applyIntrinsicHeight(_ height: CGFloat, rowID: String) {
         guard height.isFinite, height > 0, configuredIDs.contains(rowID) else { return }
-        // GenUI's asynchronous WebKit size can outgrow the hosting view's cached
-        // fitted height. This preference measures the complete row, including its
-        // native content; commit it so the cell's hit area matches what is drawn.
-        if store?.row(id: rowID)?.hasGenUIContent == true {
+        let row = store?.row(id: rowID)
+        // Completed Markdown (including MathJax) can outgrow UIKit's cached
+        // hosting size. This preference measures the complete SwiftUI row, so
+        // commit it directly to keep its first and last blocks inside the cell.
+        // Active streams still use the current hosting-cell measurement: a late
+        // preference from an older token frame must not replace the newer height.
+        if row?.hasGenUIContent == true || row?.streamingSnapshot?.isFinal != false {
             pendingMeasuredCellHeights[rowID] = ceil(height)
         }
-        // For other rows the SwiftUI preference is a layout-completion signal, not the
-        // authoritative collection-cell height. A delayed preference from an
-        // older streaming frame can otherwise overwrite a newer full-cell
-        // measurement with the inner Markdown height. Measure the hosting cell
-        // at consumption time so the layout always commits current content.
         prepareForRowContentChange(rowID: rowID, kind: .normalUpdate)
         finishPresentationMeasurement(rowID: rowID)
     }
@@ -1139,7 +1137,7 @@ private struct ChatTimelineRowView: View {
                         onEditUserMessage: onEditUserMessage,
                         onSelectUserMessageText: onSelectUserMessageText,
                         onMarkdownLayoutChange: shouldReportIntrinsicHeight
-                            ? onContentLayoutChange
+                            ? store.contentLayoutDidChange
                             : {}
                     )
                 case let .dual(message):
@@ -1172,7 +1170,7 @@ private struct ChatTimelineRowView: View {
         .transaction { transaction in
             transaction.animation = nil
         }
-        .onChange(of: store.genUILayoutRevision) { _, _ in
+        .onChange(of: store.contentLayoutRevision) { _, _ in
             // Child WebKit state alone does not invalidate UIHostingConfiguration's
             // cached fitting size when UIKit self-sizing is disabled. Remeasure
             // after the row's observed layout revision has reached SwiftUI.

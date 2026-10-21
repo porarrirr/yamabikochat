@@ -708,6 +708,7 @@ struct MathMarkdownView: View {
 
     let markdownText: String
     var isStreaming: Bool = false
+    var onLayoutChange: (() -> Void)? = nil
     @Environment(\.colorScheme) private var colorScheme
     @State private var contentHeight: CGFloat = minimumHeight
 
@@ -719,6 +720,9 @@ struct MathMarkdownView: View {
             measuredHeight: $contentHeight
         )
         .frame(height: max(Self.minimumHeight, contentHeight))
+        .onChange(of: contentHeight) { _, _ in
+            onLayoutChange?()
+        }
         .onChange(of: colorScheme) { _, _ in
             contentHeight = Self.minimumHeight
         }

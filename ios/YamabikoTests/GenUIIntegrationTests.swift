@@ -230,11 +230,11 @@ final class GenUIIntegrationTests: XCTestCase {
     func testGenUIHeightInvalidatesTheOwningRowAndSurvivesReuse() {
         let row = makeTimelineRow()
         let state = row.genUIState(id: "reference", document: GenUIReferenceFixture.document)
-        let revision = row.genUILayoutRevision
+        let revision = row.contentLayoutRevision
         state.richHeight = 1100
-        XCTAssertEqual(row.genUILayoutRevision, revision + 1)
+        XCTAssertEqual(row.contentLayoutRevision, revision + 1)
         state.richHeight = 1100
-        XCTAssertEqual(row.genUILayoutRevision, revision + 1)
+        XCTAssertEqual(row.contentLayoutRevision, revision + 1)
         XCTAssertEqual(row.genUIState(id: "reference", document: GenUIReferenceFixture.document).richHeight, 1100)
     }
 

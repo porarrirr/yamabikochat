@@ -190,13 +190,15 @@ final class MathRenderingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["chat-history-button"].waitForExistence(timeout: 20))
         let webView = app.webViews.firstMatch
         XCTAssertTrue(webView.waitForExistence(timeout: 20))
-        for index in 0..<5 {
-            let attachment = XCTAttachment(screenshot: app.screenshot())
-            attachment.name = "Surface area TeX page \(index)"
-            attachment.lifetime = .keepAlways
-            add(attachment)
-            if index < 2 { app.swipeDown() }
-            else if index < 4 { app.swipeUp() }
-        }
+        for _ in 0..<6 { app.swipeDown() }
+        let beginning = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "サブエージェント3つに、")
+        ).firstMatch
+        XCTAssertTrue(beginning.waitForExistence(timeout: 10))
+        XCTAssertTrue(beginning.isHittable, "The response beginning must be visible below the user bubble")
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "Surface area response beginning below user message"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }

@@ -23,13 +23,17 @@ final class ChatTimelineRowStore: ObservableObject, Identifiable {
     private var renderedMarkdownBlocks: [NativeMarkdownBlock] = []
     // Keep interaction state with the message rather than a recycled hosting cell.
     private var genUIStates: [String: GenUIState] = [:]
-    @Published private(set) var genUILayoutRevision = 0
+    @Published private(set) var contentLayoutRevision = 0
+
+    func contentLayoutDidChange() {
+        contentLayoutRevision += 1
+    }
 
     func genUIState(id: String, document: GenUIDocument) -> GenUIState {
         if let state = genUIStates[id], state.document.isRich && document.isRich { state.document = document; return state }
         if let state = genUIStates[id], state.document == document { return state }
         let state = GenUIState(document: document)
-        state.onLayoutChange = { [weak self] in self?.genUILayoutRevision += 1 }
+        state.onLayoutChange = { [weak self] in self?.contentLayoutDidChange() }
         genUIStates[id] = state
         return state
     }

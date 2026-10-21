@@ -16,6 +16,64 @@ final class MathMarkdownViewTests: XCTestCase {
     }
 
     @MainActor
+    func testMathParagraphRemainsVisibleBelowUserMessage() async throws {
+        let source = AppStoreScreenshotDemoSeeder.mathRenderingFixtureText
+        let expectedBlocks = NativeMarkdownParser.parse(source).filter {
+            if case .math = $0 { return true }
+            return false
+        }.count
+        let store = ChatTimelineStore()
+        store.update(messages: [
+            FullChatMessage(id: 1, message: ChatMessage(id: 1, conversationId: 1, role: "user", text: "球の表面積を説明してください", createdAtMs: 1), thinkingStream: nil, variants: []),
+            FullChatMessage(id: 2, message: ChatMessage(id: 2, conversationId: 1, role: "model", text: source, createdAtMs: 2), thinkingStream: nil, variants: [])
+        ])
+        let controller = ChatTimelineViewController()
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        controller.configure(store: store, scrollToLatestRequest: 0, regeneratableMessageID: nil,
+            fusionDebugModeEnabled: false, dualSplitLayout: "VERTICAL", dualSplitRatio: 0.5,
+            fusionTraceForMessage: { _ in nil }, onRoute: { _ in }, onPreviousVariant: { _ in },
+            onNextVariant: { _ in }, onBranch: { _ in }, onRegenerate: {}, onAskChatWithSelection: { _ in },
+            onEditUserMessage: { _ in }, onSelectUserMessageText: { _ in })
+        func webViews(_ view: UIView) -> [WKWebView] {
+            (view as? WKWebView).map { [$0] } ?? view.subviews.flatMap(webViews)
+        }
+        let expectedEquations = source.components(separatedBy: #"\("#).count - 1
+            + source.components(separatedBy: #"\["#).count - 1
+        var rendered = false
+        for _ in 0..<100 {
+            controller.view.layoutIfNeeded()
+            let views = webViews(controller.view)
+            if views.count == expectedBlocks {
+                var equations = 0
+                for view in views {
+                    equations += (try? await view.evaluateJavaScript("document.querySelectorAll('mjx-container svg').length")) as? Int ?? 0
+                }
+                rendered = equations == expectedEquations
+                if rendered { break }
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertTrue(rendered)
+        try await Task.sleep(for: .milliseconds(300))
+        controller.view.layoutIfNeeded()
+        for view in webViews(controller.view) {
+            var ancestor = view.superview
+            while ancestor != nil, !(ancestor is UICollectionViewCell) { ancestor = ancestor?.superview }
+            let cell = try XCTUnwrap(ancestor as? UICollectionViewCell)
+            let frameInCell = view.convert(view.bounds, to: cell)
+            XCTAssertGreaterThanOrEqual(frameInCell.minY, -1, "Math paragraph must not start above its clipped chat cell")
+            XCTAssertLessThanOrEqual(frameInCell.maxY, cell.bounds.maxY + 1, "Math paragraph must fit inside its chat cell")
+            let top = try await view.evaluateJavaScript("document.getElementById('yamabiko-markdown').getBoundingClientRect().top") as? Double
+            XCTAssertGreaterThanOrEqual(try XCTUnwrap(top), -1)
+        }
+    }
+
+    @MainActor
     private func assertMathRenders(_ source: String) async throws {
         let expectedCount = source.components(separatedBy: #"\("#).count - 1
             + source.components(separatedBy: #"\["#).count - 1
