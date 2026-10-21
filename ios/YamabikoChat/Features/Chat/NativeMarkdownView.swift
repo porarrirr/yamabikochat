@@ -599,7 +599,6 @@ extension EnvironmentValues {
 struct NativeMarkdownView: View {
     let markdownText: String
     var isStreaming = false
-    var mathRenderingEnabled = true
     var preparsedBlocks: [NativeMarkdownBlock]? = nil
     var onFinalParse: (() -> Void)? = nil
     var onOpenMermaid: ((_ blockID: String, _ source: String) -> Void)? = nil
@@ -612,21 +611,19 @@ struct NativeMarkdownView: View {
     private struct ParseRequest: Hashable {
         let source: String
         let isStreaming: Bool
-        let mathRenderingEnabled: Bool
     }
 
     private var parseRequest: ParseRequest {
         ParseRequest(
             source: markdownText,
-            isStreaming: isStreaming,
-            mathRenderingEnabled: mathRenderingEnabled
+            isStreaming: isStreaming
         )
     }
 
     var body: some View {
         let hasCompletedFinalParse = !isStreaming && parsedRequest == parseRequest
         let cachedBlocks = isStreaming ? nil : presentationCache?.blocks(
-            for: markdownText, rendersMath: mathRenderingEnabled
+            for: markdownText, rendersMath: true
         )
         // State can outlive a content replacement. Never draw another source's
         // blocks while the new source is waiting for its asynchronous parse.
@@ -664,7 +661,7 @@ struct NativeMarkdownView: View {
             let request = parseRequest
             guard parsedRequest != request else { return }
             if !request.isStreaming,
-               presentationCache?.blocks(for: request.source, rendersMath: request.mathRenderingEnabled) != nil {
+               presentationCache?.blocks(for: request.source, rendersMath: true) != nil {
                 return
             }
             // Streaming blocks are already published atomically with the snapshot.
@@ -678,13 +675,13 @@ struct NativeMarkdownView: View {
             } else {
                 result = await NativeMarkdownBlockCache.shared.blocks(
                     for: source,
-                    rendersMath: request.mathRenderingEnabled
+                    rendersMath: true
                 )
                 incrementalParser.reset()
             }
             guard !Task.isCancelled, request == parseRequest else { return }
             if !request.isStreaming {
-                presentationCache?.insert(result, for: source, rendersMath: request.mathRenderingEnabled)
+                presentationCache?.insert(result, for: source, rendersMath: true)
             }
             var transaction = Transaction()
             transaction.animation = nil
@@ -824,7 +821,7 @@ private struct NativeMarkdownBlockView: View {
                 NativeCodeBlock(language: "mermaid", code: source)
             }
         case let .math(_, markdown):
-            MathMarkdownView(markdownText: markdown, mathRenderingEnabled: true, isStreaming: false)
+            MathMarkdownView(markdownText: markdown, isStreaming: false)
         case let .quote(_, blocks):
             HStack(alignment: .top, spacing: 12) {
                 Capsule()

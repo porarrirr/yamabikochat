@@ -769,16 +769,16 @@ final class SettingsViewModelTests: XCTestCase {
         let fixture = try makeFixture()
         let viewModel = SettingsViewModel()
         viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
-        viewModel.settings.mathRenderingEnabled.toggle()
-        let expected = viewModel.settings.mathRenderingEnabled
+        viewModel.settings.isStreamingEnabled.toggle()
+        let expected = viewModel.settings.isStreamingEnabled
 
         let saved = expectation(for: NSPredicate { _, _ in
-            (try? fixture.repository.loadSettings().mathRenderingEnabled) == expected
+            (try? fixture.repository.loadSettings().isStreamingEnabled) == expected
         }, evaluatedWith: nil)
         await fulfillment(of: [saved], timeout: 2)
 
         XCTAssertEqual(
-            try fixture.repository.loadSettings().mathRenderingEnabled,
+            try fixture.repository.loadSettings().isStreamingEnabled,
             expected
         )
     }

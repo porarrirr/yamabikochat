@@ -62,7 +62,7 @@ struct SettingsScreen: View {
             case .conversation:
                 return "プロンプト・モード"
             case .display:
-                return "テーマ・プリセット・数式"
+                return "テーマ・プリセット"
             case .management:
                 return "使用状況・診断"
             }
@@ -350,7 +350,6 @@ private struct SettingsDetailScreen: View {
         Group {
             appearanceSection
             globalProviderPresetManagementSection
-            mathRenderingSection
             chatStatsSection
         }
     }
@@ -516,15 +515,6 @@ private struct SettingsDetailScreen: View {
                 }
             }
 
-        }
-    }
-
-    private var mathRenderingSection: some View {
-        Section("数式") {
-            Toggle("数式レンダリング", isOn: Binding(
-                get: { viewModel.settings.mathRenderingEnabled },
-                set: { viewModel.settings.mathRenderingEnabled = $0 }
-            ))
         }
     }
 

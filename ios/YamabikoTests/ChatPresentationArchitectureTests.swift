@@ -2383,7 +2383,6 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             store: store,
             scrollToLatestRequest: scrollRequest,
             regeneratableMessageID: nil,
-            mathRenderingEnabled: true,
             fusionDebugModeEnabled: false,
             dualSplitLayout: "VERTICAL",
             dualSplitRatio: 0.5,

@@ -4,8 +4,7 @@ import UIKit
 import Foundation
 
 enum MathMarkdownNormalizer {
-    static func normalizeEscapedMathIfNeeded(_ markdown: String, mathRenderingEnabled: Bool) -> String {
-        guard mathRenderingEnabled else { return markdown }
+    static func normalizeEscapedMathIfNeeded(_ markdown: String) -> String {
         guard containsMathDelimitersOutsideCode(markdown) else { return markdown }
 
         let unescaped = normalizeEscapedSequencesOutsideCode(markdown)
@@ -149,53 +148,45 @@ enum MathMarkdownHTMLBuilder {
         codeBackgroundColor: String,
         borderColor: String,
         linkColor: String,
-        mathRenderingEnabled: Bool,
         mathJaxScriptTag: String,
         copyButtonLabel: String = "コピー",
         copiedButtonLabel: String = "コピー済み"
     ) -> String {
-        let mathSetupScript: String
-        let mathTypesetScript: String
         let copyLabelSetupScript = """
           <script>
             window.__yamabikoCopyButtonLabel = \(copyButtonLabel.jsonStringLiteral);
             window.__yamabikoCopiedButtonLabel = \(copiedButtonLabel.jsonStringLiteral);
           </script>
         """
-        if mathRenderingEnabled {
-            mathSetupScript = """
-              <script>
-                window.MathJax = {
-                  tex: {
-                    inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
-                    displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
-                    processEscapes: true,
-                    processEnvironments: true,
-                    packages: {'[-]': ['require']}
-                  },
-                  svg: { fontCache: 'global' },
-                  options: { enableMenu: false }
-                };
-                window.__yamabikoMathJaxOnError = function() {
-                  if (window.console && window.console.warn) {
-                    window.console.warn('MathJax script failed to load.');
-                  }
-                  if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();
-                };
-              </script>
-              \(mathJaxScriptTag)
-            """
-            mathTypesetScript = """
-                  if (window.MathJax && window.MathJax.typesetPromise) {
-                    window.MathJax.typesetPromise([root]).then(finish).catch(finish);
-                  } else {
-                    finish();
-                  }
-            """
-        } else {
-            mathSetupScript = ""
-            mathTypesetScript = "finish();"
-        }
+        let mathSetupScript = """
+          <script>
+            window.MathJax = {
+              tex: {
+                inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+                displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
+                processEscapes: true,
+                processEnvironments: true,
+                packages: {'[-]': ['require']}
+              },
+              svg: { fontCache: 'global' },
+              options: { enableMenu: false }
+            };
+            window.__yamabikoMathJaxOnError = function() {
+              if (window.console && window.console.warn) {
+                window.console.warn('MathJax script failed to load.');
+              }
+              if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();
+            };
+          </script>
+          \(mathJaxScriptTag)
+        """
+        let mathTypesetScript = """
+              if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise([root]).then(finish).catch(finish);
+              } else {
+                finish();
+              }
+        """
 
         return """
         <html>
@@ -219,6 +210,8 @@ enum MathMarkdownHTMLBuilder {
               -webkit-font-smoothing: antialiased;
             }
             #yamabiko-markdown {
+              /* Include display-math margins in the height reported to SwiftUI. */
+              display: flow-root;
               max-width: 100%;
             }
             #yamabiko-markdown > :first-child { margin-top: 0; }
@@ -622,14 +615,9 @@ struct MathJaxLoadPlan {
 
 enum MathJaxLoadPlanner {
     static func plan(
-        mathRenderingEnabled: Bool,
         localScriptURL: URL?,
         logger: (String) -> Void = { _ in }
     ) -> MathJaxLoadPlan {
-        guard mathRenderingEnabled else {
-            return MathJaxLoadPlan(scriptTag: "", baseURL: nil)
-        }
-
         let onErrorHandler = "window.__yamabikoMathJaxOnError && window.__yamabikoMathJaxOnError();"
         if let localScriptURL {
             return MathJaxLoadPlan(
@@ -638,7 +626,7 @@ enum MathJaxLoadPlanner {
             )
         }
 
-        logger("MathJax local script missing; math rendering disabled for this message.")
+        logger("MathJax local script missing; cannot render math for this message.")
         return MathJaxLoadPlan(
             scriptTag: "",
             baseURL: nil
@@ -719,7 +707,6 @@ struct MathMarkdownView: View {
     private static let minimumHeight: CGFloat = 44
 
     let markdownText: String
-    var mathRenderingEnabled: Bool = true
     var isStreaming: Bool = false
     @Environment(\.colorScheme) private var colorScheme
     @State private var contentHeight: CGFloat = minimumHeight
@@ -727,15 +714,11 @@ struct MathMarkdownView: View {
     var body: some View {
         MathMarkdownWebView(
             markdownText: markdownText,
-            mathRenderingEnabled: mathRenderingEnabled,
             isStreaming: isStreaming,
             colorScheme: colorScheme,
             measuredHeight: $contentHeight
         )
         .frame(height: max(Self.minimumHeight, contentHeight))
-        .onChange(of: mathRenderingEnabled) { _, _ in
-            contentHeight = Self.minimumHeight
-        }
         .onChange(of: colorScheme) { _, _ in
             contentHeight = Self.minimumHeight
         }
@@ -744,13 +727,11 @@ struct MathMarkdownView: View {
 
 struct MathMarkdownInputSignature: Equatable {
     let markdownText: String
-    let mathRenderingEnabled: Bool
     let isStreaming: Bool
     let colorScheme: ColorScheme
 }
 
 struct MathMarkdownDocumentSignature: Equatable {
-    let mathRenderingEnabled: Bool
     let colorScheme: ColorScheme
     let mathJaxScriptTag: String
     let copyButtonLabel: String
@@ -758,7 +739,6 @@ struct MathMarkdownDocumentSignature: Equatable {
 
     fileprivate var cacheKey: NSString {
         [
-            mathRenderingEnabled ? "math" : "plain",
             colorScheme == .dark ? "dark" : "light",
             mathJaxScriptTag,
             copyButtonLabel,
@@ -789,7 +769,6 @@ enum MathMarkdownDocumentCache {
 
 private struct MathMarkdownWebView: UIViewRepresentable {
     let markdownText: String
-    let mathRenderingEnabled: Bool
     let isStreaming: Bool
     let colorScheme: ColorScheme
     @Binding var measuredHeight: CGFloat
@@ -1332,19 +1311,14 @@ private struct MathMarkdownWebView: UIViewRepresentable {
 
         let inputSignature = MathMarkdownInputSignature(
             markdownText: markdownText,
-            mathRenderingEnabled: mathRenderingEnabled,
             isStreaming: isStreaming,
             colorScheme: colorScheme
         )
         guard context.coordinator.beginUpdate(inputSignature) else { return }
 
-        let normalizedMarkdown = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
-            markdownText,
-            mathRenderingEnabled: mathRenderingEnabled
-        )
+        let normalizedMarkdown = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(markdownText)
         let localMathJaxURL = MathMarkdownResourceResolver.mathJaxScriptURL(in: .main)
         let mathJaxLoadPlan = MathJaxLoadPlanner.plan(
-            mathRenderingEnabled: mathRenderingEnabled,
             localScriptURL: localMathJaxURL
         ) { message in
             MathMarkdownDiagnostics.logWarning(message)
@@ -1356,7 +1330,6 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         let linkColor = colorScheme == .dark ? "#70A7FF" : "#1F64E0"
 
         let documentSignature = MathMarkdownDocumentSignature(
-            mathRenderingEnabled: mathRenderingEnabled,
             colorScheme: colorScheme,
             mathJaxScriptTag: mathJaxLoadPlan.scriptTag,
             copyButtonLabel: L10n.text("コピー"),
@@ -1370,7 +1343,6 @@ private struct MathMarkdownWebView: UIViewRepresentable {
                 codeBackgroundColor: codeBackgroundColor,
                 borderColor: borderColor,
                 linkColor: linkColor,
-                mathRenderingEnabled: mathRenderingEnabled,
                 mathJaxScriptTag: mathJaxLoadPlan.scriptTag,
                 copyButtonLabel: documentSignature.copyButtonLabel,
                 copiedButtonLabel: documentSignature.copiedButtonLabel

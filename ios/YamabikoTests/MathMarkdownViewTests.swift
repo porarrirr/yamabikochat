@@ -1,9 +1,85 @@
 import XCTest
+import SwiftUI
+import WebKit
 import JavaScriptCore
 @testable import YamabikoChat
 
 final class MathMarkdownViewTests: XCTestCase {
-    func testBuildHTMLIncludesMathJaxWhenEnabled() {
+    @MainActor
+    func testMathRendersInActualWebView() async throws {
+        try await assertMathRenders(AppStoreScreenshotDemoSeeder.mathRenderingFixtureText)
+    }
+
+    @MainActor
+    func testStandaloneFractionFitsWebViewHeight() async throws {
+        try await assertMathRenders(#"\[S=\frac{dV}{dr}=\frac{d}{dr}\left(\frac{4}{3}\pi r^3\right)=4\pi r^2.\]"#)
+    }
+
+    @MainActor
+    private func assertMathRenders(_ source: String) async throws {
+        let expectedCount = source.components(separatedBy: #"\("#).count - 1
+            + source.components(separatedBy: #"\["#).count - 1
+        let mathBlocks = NativeMarkdownParser.parse(source).compactMap { block -> String? in
+            guard case let .math(_, markdown) = block else { return nil }
+            return markdown
+        }.joined(separator: "\n")
+        XCTAssertEqual(mathBlocks.components(separatedBy: #"\("#).count - 1
+            + mathBlocks.components(separatedBy: #"\["#).count - 1, expectedCount)
+        let controller = UIHostingController(rootView: ScrollView { MathMarkdownView(markdownText: source) })
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        func webViews(_ view: UIView) -> [WKWebView] {
+            (view as? WKWebView).map { [$0] } ?? view.subviews.flatMap(webViews)
+        }
+        var count = 0
+        var state = ""
+        var outsideViewport = -1
+        for _ in 0..<100 {
+            controller.view.layoutIfNeeded()
+            let views = webViews(controller.view)
+            count = 0
+            for webView in views {
+                count += (try? await webView.evaluateJavaScript("document.querySelectorAll('mjx-container svg').length")) as? Int ?? 0
+                state = String(describing: try? await webView.evaluateJavaScript("JSON.stringify({math:typeof window.MathJax, viewport:innerHeight, root:document.getElementById('yamabiko-markdown').getBoundingClientRect().toJSON(), svg:Array.from(document.querySelectorAll('mjx-container svg')).map(s=>s.getBoundingClientRect().toJSON())})")) + " frame=\(webView.frame)"
+                if count == expectedCount {
+                    outsideViewport = (try await webView.evaluateJavaScript("""
+                        Array.from(document.querySelectorAll('mjx-container svg')).filter(svg => {
+                            const box = svg.getBoundingClientRect();
+                            return box.top < -1 || box.bottom > window.innerHeight + 1;
+                        }).length
+                        """)) as? Int ?? -1
+                    let clipped = try await webView.evaluateJavaScript("""
+                        Array.from(document.querySelectorAll('mjx-container[display="true"]')).filter(container => {
+                            const svg = container.querySelector('svg').getBoundingClientRect();
+                            const box = container.getBoundingClientRect();
+                            return svg.top < box.top - 1 || svg.bottom > box.bottom + 1;
+                        }).length
+                        """) as? Int
+                    XCTAssertEqual(clipped, 0, "Display equations must fit their scroll containers")
+                    let errors = try await webView.evaluateJavaScript("document.querySelectorAll('mjx-merror').length") as? Int
+                    XCTAssertEqual(errors, 0)
+                }
+
+            }
+            if count == expectedCount, outsideViewport == 0 { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "Math rendering in iOS simulator"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        XCTAssertEqual(count, expectedCount, state)
+        XCTAssertEqual(outsideViewport, 0, "All equations must fit inside the measured WebView height: \(state)")
+    }
+
+    func testBuildHTMLIncludesMathJax() {
         let html = MathMarkdownHTMLBuilder.buildHTML(
             markdownPayload: "\"hello\"",
             markdownRendererScript: "window.yamabikoRenderMarkdown = function(){ return ''; };",
@@ -11,7 +87,6 @@ final class MathMarkdownViewTests: XCTestCase {
             codeBackgroundColor: "#111111",
             borderColor: "#222222",
             linkColor: "#333333",
-            mathRenderingEnabled: true,
             mathJaxScriptTag: "<script src=\"tex-svg.js\"></script>"
         )
 
@@ -22,23 +97,6 @@ final class MathMarkdownViewTests: XCTestCase {
         XCTAssertTrue(html.contains("options: { enableMenu: false }"))
         XCTAssertTrue(html.contains("Content-Security-Policy"))
         XCTAssertTrue(html.contains("connect-src 'none'"))
-    }
-
-    func testBuildHTMLOmitsMathJaxWhenDisabled() {
-        let html = MathMarkdownHTMLBuilder.buildHTML(
-            markdownPayload: "\"hello\"",
-            markdownRendererScript: "window.yamabikoRenderMarkdown = function(){ return ''; };",
-            bodyTextColor: "#000000",
-            codeBackgroundColor: "#111111",
-            borderColor: "#222222",
-            linkColor: "#333333",
-            mathRenderingEnabled: false,
-            mathJaxScriptTag: "<script src=\"tex-svg.js\"></script>"
-        )
-
-        XCTAssertFalse(html.contains("window.MathJax ="))
-        XCTAssertFalse(html.contains("tex-svg.js"))
-        XCTAssertFalse(html.contains("typesetPromise([root])"))
     }
 
     func testResolveResourceURLPrefersMathJaxSubdirectory() {
@@ -160,32 +218,16 @@ final class MathMarkdownViewTests: XCTestCase {
         XCTAssertEqual(normalized, expected)
     }
 
-    func testNormalizeEscapedMathIfNeededWhenDisabledReturnsOriginal() {
+    func testNormalizeEscapedMathIfNeededNormalizes() {
         let input = #"本文 \$sum$"#
-        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
-            input,
-            mathRenderingEnabled: false
-        )
-
-        XCTAssertEqual(normalized, input)
-    }
-
-    func testNormalizeEscapedMathIfNeededWhenEnabledNormalizes() {
-        let input = #"本文 \$sum$"#
-        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
-            input,
-            mathRenderingEnabled: true
-        )
+        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(input)
 
         XCTAssertEqual(normalized, #"本文 $sum$"#)
     }
 
     func testNormalizeEscapedMathIfNeededNormalizesEscapedSequencesWhenMathPresent() {
         let input = #"1行目\\n\\(a+b\\) と \\$sum_{k=1}^{n}k\\$"#
-        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
-            input,
-            mathRenderingEnabled: true
-        )
+        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(input)
 
         let expected = """
         1行目
@@ -196,10 +238,7 @@ final class MathMarkdownViewTests: XCTestCase {
 
     func testNormalizeEscapedMathIfNeededDoesNotNormalizeEscapedSequencesWithoutMath() {
         let input = #"line1\\nline2"#
-        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
-            input,
-            mathRenderingEnabled: true
-        )
+        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(input)
 
         XCTAssertEqual(normalized, input)
     }
@@ -211,10 +250,7 @@ final class MathMarkdownViewTests: XCTestCase {
 ```
 本文 \\(x+y\\)
 """#
-        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
-            input,
-            mathRenderingEnabled: true
-        )
+        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(input)
 
         let expected = #"""
 ```text
@@ -232,10 +268,7 @@ final class MathMarkdownViewTests: XCTestCase {
 ```
 line1\\nline2
 """#
-        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(
-            input,
-            mathRenderingEnabled: true
-        )
+        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(input)
 
         XCTAssertEqual(normalized, input)
     }
@@ -244,7 +277,6 @@ line1\\nline2
         let localURL = URL(fileURLWithPath: "/tmp/mathjax/tex-svg.js")
 
         let plan = MathJaxLoadPlanner.plan(
-            mathRenderingEnabled: true,
             localScriptURL: localURL
         )
 
@@ -252,11 +284,10 @@ line1\\nline2
         XCTAssertEqual(plan.baseURL, localURL.deletingLastPathComponent())
     }
 
-    func testMathJaxLoadPlannerDisablesRenderingWhenLocalScriptMissing() {
+    func testMathJaxLoadPlannerReportsMissingLocalScript() {
         var logs: [String] = []
 
         let plan = MathJaxLoadPlanner.plan(
-            mathRenderingEnabled: true,
             localScriptURL: nil,
             logger: { message in
                 logs.append(message)

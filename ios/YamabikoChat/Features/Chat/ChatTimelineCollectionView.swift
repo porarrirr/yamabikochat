@@ -8,7 +8,6 @@ struct ChatTimelineCollectionView: UIViewControllerRepresentable {
     @Binding var unreadCount: Int
     let scrollToLatestRequest: Int
     let regeneratableMessageID: Int64?
-    let mathRenderingEnabled: Bool
     let fusionDebugModeEnabled: Bool
     let dualSplitLayout: String
     let dualSplitRatio: Double
@@ -39,7 +38,6 @@ struct ChatTimelineCollectionView: UIViewControllerRepresentable {
             store: store,
             scrollToLatestRequest: scrollToLatestRequest,
             regeneratableMessageID: regeneratableMessageID,
-            mathRenderingEnabled: mathRenderingEnabled,
             fusionDebugModeEnabled: fusionDebugModeEnabled,
             dualSplitLayout: dualSplitLayout,
             dualSplitRatio: dualSplitRatio,
@@ -83,7 +81,6 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var userScrollGeneration = 0
     private var lastUserDrivenOffsetY: CGFloat?
     private var previousRegeneratableMessageID: Int64?
-    private var previousMathRenderingEnabled = true
     private var previousFusionDebugModeEnabled = false
     private var previousDualSplitLayout = "VERTICAL"
     private var previousDualSplitRatio = 0.5
@@ -91,7 +88,6 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var lastPublishedFollowState: (following: Bool, unread: Int)?
 
     var regeneratableMessageID: Int64?
-    var mathRenderingEnabled = true
     var fusionDebugModeEnabled = false
     var dualSplitLayout = "VERTICAL"
     var dualSplitRatio = 0.5
@@ -149,7 +145,6 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                 ChatTimelineRowView(
                     store: row,
                     regeneratableMessageID: self.regeneratableMessageID,
-                    mathRenderingEnabled: self.mathRenderingEnabled,
                     fusionDebugModeEnabled: self.fusionDebugModeEnabled,
                     dualSplitLayout: self.dualSplitLayout,
                     dualSplitRatio: self.dualSplitRatio,
@@ -225,7 +220,6 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         store: ChatTimelineStore,
         scrollToLatestRequest: Int,
         regeneratableMessageID: Int64?,
-        mathRenderingEnabled: Bool,
         fusionDebugModeEnabled: Bool,
         dualSplitLayout: String,
         dualSplitRatio: Double,
@@ -270,17 +264,14 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         }
         self.store = store
         let regeneratableMessageChanged = previousRegeneratableMessageID != regeneratableMessageID
-        let mathRenderingChanged = previousMathRenderingEnabled != mathRenderingEnabled
         let fusionDebugModeChanged = previousFusionDebugModeEnabled != fusionDebugModeEnabled
         let dualLayoutChanged = previousDualSplitLayout != dualSplitLayout
             || previousDualSplitRatio != dualSplitRatio
         previousRegeneratableMessageID = regeneratableMessageID
-        previousMathRenderingEnabled = mathRenderingEnabled
         previousFusionDebugModeEnabled = fusionDebugModeEnabled
         previousDualSplitLayout = dualSplitLayout
         previousDualSplitRatio = dualSplitRatio
         self.regeneratableMessageID = regeneratableMessageID
-        self.mathRenderingEnabled = mathRenderingEnabled
         self.fusionDebugModeEnabled = fusionDebugModeEnabled
         self.dualSplitLayout = dualSplitLayout
         self.dualSplitRatio = dualSplitRatio
@@ -303,7 +294,6 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         }
 
         let shouldReconfigure = regeneratableMessageChanged
-            || mathRenderingChanged
             || fusionDebugModeChanged
             || dualLayoutChanged
         apply(
@@ -1089,7 +1079,6 @@ final class ChatTimelineCollectionCell: UICollectionViewCell {
 private struct ChatTimelineRowView: View {
     @ObservedObject var store: ChatTimelineRowStore
     let regeneratableMessageID: Int64?
-    let mathRenderingEnabled: Bool
     let fusionDebugModeEnabled: Bool
     let dualSplitLayout: String
     let dualSplitRatio: Double
@@ -1140,7 +1129,6 @@ private struct ChatTimelineRowView: View {
                         streamingSnapshot: store.streamingSnapshot,
                         streamingMarkdownBlocks: store.streamingMarkdownBlocks,
                         canRegenerate: regeneratableMessageID == message.id,
-                        mathRenderingEnabled: mathRenderingEnabled,
                         fusionDebugModeEnabled: fusionDebugModeEnabled,
                         fusionTrace: fusionTraceForMessage(message.message),
                         onRoute: onRoute,
@@ -1157,7 +1145,6 @@ private struct ChatTimelineRowView: View {
                 case let .dual(message):
                     DualChatMessageRow(
                         message: message,
-                        mathRenderingEnabled: mathRenderingEnabled,
                         splitLayout: dualSplitLayout,
                         splitRatio: dualSplitRatio,
                         onRoute: onRoute,
@@ -1243,7 +1230,6 @@ struct ChatMessageRow: View {
     let streamingSnapshot: ChatStreamingSnapshot?
     let streamingMarkdownBlocks: [NativeMarkdownBlock]?
     let canRegenerate: Bool
-    let mathRenderingEnabled: Bool
     let fusionDebugModeEnabled: Bool
     let fusionTrace: FusionTrace?
     let onRoute: (ChatWorkspaceRoute) -> Void
@@ -1341,7 +1327,7 @@ struct ChatMessageRow: View {
                         ProviderRotationNoticeView(notice: notice)
                     }
                     if !toolSteps.compactMap(\.subagent).isEmpty {
-                        SubagentFleetView(runs: toolSteps.compactMap(\.subagent), mathRenderingEnabled: mathRenderingEnabled, onLayoutChange: onMarkdownLayoutChange)
+                        SubagentFleetView(runs: toolSteps.compactMap(\.subagent), onLayoutChange: onMarkdownLayoutChange)
                     }
                     if !toolSteps.filter({ $0.subagent == nil }).isEmpty {
                         ChatRunSummaryButton(steps: toolSteps.filter { $0.subagent == nil }) {
@@ -1382,7 +1368,6 @@ struct ChatMessageRow: View {
                         NativeMarkdownView(
                             markdownText: responseText,
                             isStreaming: isStreaming,
-                            mathRenderingEnabled: mathRenderingEnabled,
                             preparsedBlocks: streamingMarkdownBlocks,
                             onFinalParse: onMarkdownLayoutChange,
                             onOpenMermaid: { blockID, source in
@@ -1399,7 +1384,6 @@ struct ChatMessageRow: View {
                                 NativeMarkdownView(
                                     markdownText: markdown,
                                     isStreaming: isStreaming,
-                                    mathRenderingEnabled: mathRenderingEnabled,
                                     preparsedBlocks: nil,
                                     onFinalParse: onMarkdownLayoutChange,
                                     onOpenMermaid: { blockID, source in
@@ -1661,7 +1645,6 @@ private struct ChatMessageActions: View {
 
 private struct DualChatMessageRow: View {
     let message: DualChatMessage
-    let mathRenderingEnabled: Bool
     let splitLayout: String
     let splitRatio: Double
     let onRoute: (ChatWorkspaceRoute) -> Void
@@ -1762,7 +1745,6 @@ private struct DualChatMessageRow: View {
             title: title,
             presentation: presentation,
             messageID: message.id ?? message.createdAtMs,
-            mathRenderingEnabled: mathRenderingEnabled,
             onRoute: onRoute
         )
     }
@@ -1868,7 +1850,6 @@ private struct DualResponseColumn: View {
     let title: String
     let presentation: DualResponsePresentation
     let messageID: Int64
-    let mathRenderingEnabled: Bool
     let onRoute: (ChatWorkspaceRoute) -> Void
 
     private var thinkingText: String? {
@@ -1885,7 +1866,7 @@ private struct DualResponseColumn: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             if !presentation.toolSteps.compactMap(\.subagent).isEmpty {
-                SubagentFleetView(runs: presentation.toolSteps.compactMap(\.subagent), mathRenderingEnabled: mathRenderingEnabled)
+                SubagentFleetView(runs: presentation.toolSteps.compactMap(\.subagent))
             }
             if !presentation.toolSteps.filter({ $0.subagent == nil }).isEmpty {
                 ChatRunSummaryButton(steps: presentation.toolSteps.filter { $0.subagent == nil }) {
@@ -1932,7 +1913,6 @@ private struct DualResponseColumn: View {
             if !presentation.text.isEmpty {
                 NativeMarkdownView(
                     markdownText: presentation.text,
-                    mathRenderingEnabled: mathRenderingEnabled,
                     onOpenMermaid: { blockID, source in
                         onRoute(.mermaidViewer(
                             id: "\(messageID)-\(title)-\(blockID)",
@@ -1951,7 +1931,6 @@ private struct DualResponseColumn: View {
             } else {
                 NativeMarkdownView(
                     markdownText: presentation.text.trimmedNonEmpty ?? L10n.text("応答がありません"),
-                    mathRenderingEnabled: mathRenderingEnabled,
                     onOpenMermaid: { blockID, source in
                         onRoute(.mermaidViewer(
                             id: "\(messageID)-\(title)-\(blockID)",

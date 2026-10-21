@@ -477,7 +477,6 @@ struct ChatScreen: View {
                 regeneratableMessageID: viewModel.canRegenerateLastAssistant
                     ? viewModel.fullMessages.last?.id
                     : nil,
-                mathRenderingEnabled: viewModel.settings.mathRenderingEnabled,
                 fusionDebugModeEnabled: viewModel.settings.fusionDebugModeEnabled,
                 dualSplitLayout: viewModel.settings.dualSplitLayout,
                 dualSplitRatio: viewModel.settings.dualSplitRatio,

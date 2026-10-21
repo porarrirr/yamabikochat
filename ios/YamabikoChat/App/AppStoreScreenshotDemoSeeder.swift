@@ -1,6 +1,53 @@
 import Foundation
 
 enum AppStoreScreenshotDemoSeeder {
+    static let mathRenderingFixtureText = #"""
+        サブエージェント3つに、それぞれ別の導き方を依頼しました。3つの回答をまとめると、球の半径を \(r\)、表面積を \(S\) として、いずれも
+
+        \[
+        \boxed{S=4\pi r^2}
+        \]
+
+        になります。
+
+        ### 1. 球面を薄い帯に分けて足し合わせる
+        球の中心から高さ \(z\) にある細い帯の面積を考えます。断面の円の半径を \(\rho\)、帯の球面に沿った幅を \(ds\) とすると、断面の関係から \(\rho^2+z^2=r^2\)、また \(ds=\frac{r}{\rho}dz\) です。帯の面積は円周×幅なので、
+
+        \[
+        dS=2\pi\rho\,ds=2\pi r\,dz.
+        \]
+
+        球の高さ全体 \(-r\) から \(r\) まで足すと、
+
+        \[
+        S=\int_{-r}^{r}2\pi r\,dz=4\pi r^2.
+        \]
+
+        ### 2. 球帯の面積を使う
+        球を高さ \(dy\) の薄い輪切りにします。その輪切りの円周は \(2\pi\sqrt{r^2-y^2}\) です。球面に沿った幅は \(ds=\frac{r}{\sqrt{r^2-y^2}}dy\) なので、薄い球帯の面積は
+
+        \[
+        dA=2\pi\sqrt{r^2-y^2}\,ds=2\pi r\,dy.
+        \]
+
+        これを球の高さ全体にわたって積分すれば、
+
+        \[
+        S=\int_{-r}^{r}2\pi r\,dy=4\pi r^2.
+        \]
+
+        ### 3. 球の体積を半径で微分する
+        半径 \(r\) の球の体積は \(V(r)=\frac{4}{3}\pi r^3\) です。半径を少しだけ増やしたときの体積の増加は、表面積×半径の増加分に相当するため、表面積は体積を半径で微分して求められます。
+
+        \[
+        S=\frac{dV}{dr}
+        =\frac{d}{dr}\left(\frac{4}{3}\pi r^3\right)
+        =4\pi r^2.
+        \]
+
+        **使い分けの目安：** 1と2は球面を細い帯に分ける考え方で、3は球の体積の公式を知っているときに使える方法です。直径 \(d\) が与えられた場合は \(r=d/2\) を代入して、\(S=\pi d^2\) です。
+        """#
+
     static var isEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains("-AppStoreScreenshotDemo")
     }
@@ -44,6 +91,20 @@ enum AppStoreScreenshotDemoSeeder {
             settings.subagents = SubagentSettings()
         }
         _ = try chatRepository.saveSettings(settings)
+
+        if ProcessInfo.processInfo.arguments.contains("-MathRenderingFixture") {
+            settings.isDualModeEnabled = false
+            settings.themeMode = ProcessInfo.processInfo.arguments.contains("-MathDarkFixture") ? "DARK" : "LIGHT"
+            _ = try chatRepository.saveSettings(settings)
+            let conversationId = try chatRepository.createConversation(title: "表面積の計算 TeX Fixture")
+            _ = try conversations.insertMessage(ChatMessage(
+                conversationId: conversationId,
+                role: "model",
+                text: mathRenderingFixtureText,
+                createdAtMs: Int64(Date().timeIntervalSince1970 * 1000)
+            ))
+            return
+        }
 
         let baseTime = Int64(Date().timeIntervalSince1970 * 1000)
         if ProcessInfo.processInfo.arguments.contains("-ChatTextSelectionFixture") {

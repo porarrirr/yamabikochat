@@ -165,3 +165,38 @@ final class ConversationDrawerUITests: XCTestCase {
         )
     }
 }
+
+final class MathRenderingUITests: XCTestCase {
+    func testDisplaySettingsHasNoMathRenderingToggle() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppStoreScreenshotDemo", "-ScreenshotScene", "settings-appearance", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["表示"].waitForExistence(timeout: 20))
+        XCTAssertFalse(app.switches["数式レンダリング"].exists)
+        app.swipeUp()
+        XCTAssertFalse(app.switches["数式レンダリング"].exists)
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Display settings without math toggle"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    func testSurfaceAreaMathInChat() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppStoreScreenshotDemo", "-ScreenshotScene", "chat", "-MathRenderingFixture", "-MathDarkFixture", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        app.launch()
+        XCTAssertTrue(app.buttons["chat-history-button"].waitForExistence(timeout: 20))
+        let webView = app.webViews.firstMatch
+        XCTAssertTrue(webView.waitForExistence(timeout: 20))
+        for index in 0..<5 {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = "Surface area TeX page \(index)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            if index < 2 { app.swipeDown() }
+            else if index < 4 { app.swipeUp() }
+        }
+    }
+}

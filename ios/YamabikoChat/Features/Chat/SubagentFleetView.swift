@@ -2,7 +2,6 @@ import SwiftUI
 
 struct SubagentFleetView: View {
     let runs: [SubagentRun]
-    var mathRenderingEnabled = true
     var onLayoutChange: () -> Void = {}
     @State private var expanded = false
     @State private var selection: String?
@@ -64,7 +63,7 @@ struct SubagentFleetView: View {
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.primary.opacity(0.06)))
         .sheet(isPresented: Binding(get: { selection != nil }, set: { if !$0 { selection = nil } })) {
             if let run = runs.first(where: { $0.id == selection }) {
-                SubagentDetailSheet(run: run, mathRenderingEnabled: mathRenderingEnabled)
+                SubagentDetailSheet(run: run)
             }
         }
         .sheet(isPresented: $showAll) {
@@ -73,7 +72,7 @@ struct SubagentFleetView: View {
                     NavigationLink(value: run.id) { SubagentRunRow(run: run) }
                 }
                 .navigationDestination(for: String.self) { id in
-                    if let run = runs.first(where: { $0.id == id }) { SubagentDetailContent(run: run, mathRenderingEnabled: mathRenderingEnabled) }
+                    if let run = runs.first(where: { $0.id == id }) { SubagentDetailContent(run: run) }
                 }
                 .navigationTitle("サブエージェント")
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("閉じる") { showAll = false } } }
@@ -119,12 +118,11 @@ private struct SubagentStatusIcon: View {
 
 private struct SubagentDetailSheet: View {
     let run: SubagentRun
-    let mathRenderingEnabled: Bool
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            SubagentDetailContent(run: run, mathRenderingEnabled: mathRenderingEnabled)
+            SubagentDetailContent(run: run)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("閉じる") { dismiss() } } }
         }
         .presentationDetents([.large])
@@ -135,7 +133,6 @@ private struct SubagentDetailSheet: View {
 private struct SubagentDetailContent: View {
     let run: SubagentRun
     @State private var tab = 0
-    let mathRenderingEnabled: Bool
     @State private var route: ChatWorkspaceRoute?
 
     var body: some View {
@@ -216,7 +213,7 @@ private struct SubagentDetailContent: View {
                 message: ChatMessage(conversationId: 0, role: role, text: text),
                 thinkingStream: nil, variants: []),
             streamingSnapshot: nil, streamingMarkdownBlocks: nil,
-            canRegenerate: false, mathRenderingEnabled: mathRenderingEnabled,
+            canRegenerate: false,
             fusionDebugModeEnabled: false, fusionTrace: nil,
             onRoute: { route = $0 }, onPreviousVariant: { _ in }, onNextVariant: { _ in },
             onBranch: { _ in }, onRegenerate: {}, onEditUserMessage: { _ in },

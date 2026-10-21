@@ -464,7 +464,6 @@ final class ChatPerformancePolicyTests: XCTestCase {
     func testMarkdownDocumentCacheBuildsIdenticalDocumentOnce() {
         let unique = UUID().uuidString
         let signature = MathMarkdownDocumentSignature(
-            mathRenderingEnabled: false,
             colorScheme: .dark,
             mathJaxScriptTag: unique,
             copyButtonLabel: "Copy",

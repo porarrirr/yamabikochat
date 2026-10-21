@@ -125,7 +125,6 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var selectedSystemPromptPreset: String?
 
     var isStreamingEnabled: Bool
-    var mathRenderingEnabled: Bool
     var clientWebSearchToolEnabled: Bool
     var pythonToolEnabled: Bool
     var genUIToolEnabled: Bool
@@ -280,7 +279,6 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         selectedSystemPromptPreset = nil
 
         isStreamingEnabled = true
-        mathRenderingEnabled = true
         clientWebSearchToolEnabled = false
         pythonToolEnabled = true
         genUIToolEnabled = true

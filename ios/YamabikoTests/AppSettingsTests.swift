@@ -3,6 +3,25 @@ import GRDB
 @testable import YamabikoChat
 
 final class AppSettingsTests: XCTestCase {
+    func testRetiredMathPreferenceDoesNotAffectSettings() throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let repository = SettingsRepository(dbQueue: database)
+        let original = AppSettings().normalizedForPersistence()
+        try repository.save(original)
+
+        // Existing databases may still contain the old disabled preference.
+        try database.write { db in
+            try db.execute(sql: "UPDATE settings SET mathRenderingEnabled = 0 WHERE id = 1")
+        }
+        let loaded = try repository.load()
+        XCTAssertEqual(loaded, original)
+        let encoded = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(loaded)) as? [String: Any])
+        XCTAssertNil(encoded["mathRenderingEnabled"])
+        try repository.save(loaded)
+        XCTAssertEqual(try repository.load(), original)
+    }
+
     func testNormalizationIsStableAcrossSaveAndReload() throws {
         let database = try DatabaseQueue()
         try AppDatabase.migrator.migrate(database)
