@@ -160,6 +160,36 @@ entitled physical device. Default automated tests use synthetic native events an
 do not contact PCC. They cover bridge authentication, request matching, usage,
 errors, cancellation, settings persistence, images and transcript roles.
 
+Tool-schema preflight does not need an entitled device, Apple Intelligence, or
+PCC quota. Run these checks before distributing a build with new tools:
+
+```sh
+npm test --prefix ios/PiRuntime
+cd ios
+xcodebuild -project YamabikoChat.xcodeproj -scheme YamabikoChat \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro,OS=27.0' \
+  CODE_SIGNING_ALLOWED=NO ASSETCATALOG_COMPILER_APPICON_NAME= \
+  -only-testing:YamabikoTests/PCCNativeToolsTests \
+  -only-testing:YamabikoTests/SubagentNativeRuntimeTests \
+  -only-testing:YamabikoTests/GenUIIntegrationTests test
+```
+
+The Node integration test checks every tool in actual bundled Pi requests for
+PCC and other providers. Pi's `allowedToolNames` permits the mobile inventory plus
+`subagent`, excluding upstream desktop contact/supervisor/background tools.
+All providers receive the mobile delegation schema and concise mobile usage;
+desktop options, tool descriptions and system-prompt appendices are omitted.
+The upstream intercom bridge and background wait tool are disabled through their
+configuration, so children do not receive instructions to contact a supervisor.
+The mobile guide action returns only mobile usage. In particular,
+`contact_supervisor.interview` is an open JSON object that PCC cannot represent;
+exposing it previously prevented even a plain greeting from reaching Apple.
+The simulator tests compile the shared app inventory, installed-skill tools,
+and Pi's subagent schema with Apple's real SDK and open a deterministic local
+session with all tools enabled. Add built-in tools to
+`LocalToolRegistry.builtInExecutors` so both app registration and preflight pick
+them up. CI runs both suites automatically; no live PCC opt-in is required.
+
 Sources:
 - https://developer.apple.com/documentation/foundationmodels/privatecloudcomputelanguagemodel
 - https://developer.apple.com/documentation/foundationmodels/generationoptions/maximumresponsetokens

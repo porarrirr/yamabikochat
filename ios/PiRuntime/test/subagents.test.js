@@ -23,7 +23,14 @@ const mobileTools = [
 ];
 const parentPolicy = "PARENT_POLICY: Answer in Japanese. Preserve unrelated files. Today's date: 2026-10-21.";
 
+function assertNoDesktopSurface(body) {
+  const surface = JSON.stringify([wireTools(body), wireSystem(body)]);
+  assert.doesNotMatch(surface, /contact_supervisor|subagent_supervisor|bg_wait|interactive_shell|external-cli-agent-profiles|worktree|async:true/,
+    "Unavailable desktop tools and instructions must not consume mobile context");
+}
+
 function assertMobileLoadout(body) {
+  assertNoDesktopSurface(body);
   for (const { payload } of mobileTools) {
     const tool = wireTools(body).find(tool => tool.name === payload.name);
     assert.ok(tool, `Missing initial declaration: ${payload.name}`);
@@ -111,7 +118,8 @@ test("bundled mobile subagents preserve delegation across providers and native P
     if (isParent && !isResult) {
       const prompt = JSON.stringify(body.messages);
       const role = prompt.match(/launch-mobile-role:([a-z-]+)/)?.[1];
-      const params = prompt.includes("launch-mobile-profiles")
+      const params = prompt.includes("launch-mobile-guide") ? { action: "guide" }
+        : prompt.includes("launch-mobile-profiles")
         ? { tasks: [0, 1, 2, 3, 4].map(index => ({ agent: `mobile-wire-${index}`, task: `Report profile-${index}` })) }
         : role ? { agent: role, task: "Inspect the supplied evidence and return findings inline." }
         : prompt.includes("launch-mobile-default") ? { agent: "delegate", task: "Report the default model" }
@@ -225,6 +233,7 @@ test("bundled mobile subagents preserve delegation across providers and native P
         buffered = buffered.slice(newline + 1);
         events.push(event);
         if (event.type !== "pcc_request") continue;
+        assertNoDesktopSurface({ tools: event.pcc.context.tools, system: event.pcc.context.systemPrompt });
         assert.ok(event.subagentId);
         childIDs.add(event.subagentId);
         assert.equal(event.pcc.reasoningLevel, "deep");
@@ -301,6 +310,7 @@ test("bundled mobile subagents preserve delegation across providers and native P
         buffered = buffered.slice(newline + 1);
         events.push(event);
         if (event.type !== "pcc_request") continue;
+        assertNoDesktopSurface({ tools: event.pcc.context.tools, system: event.pcc.context.systemPrompt });
         const identity = { runId, requestId: event.requestId };
         if (event.subagentId) {
           assert.ok(!event.pcc.context.tools.some(tool => tool.name === "subagent"), "children must not delegate recursively");
@@ -319,10 +329,16 @@ test("bundled mobile subagents preserve delegation across providers and native P
         const definition = event.pcc.context.tools.find(tool => tool.name === "subagent");
         if (mode === "disabled") {
           assert.equal(definition, undefined);
+          assert.deepEqual(event.pcc.context.tools.map(tool => tool.name).sort(), mobileTools.map(tool => tool.payload.name).sort());
           await post("/v1/pcc-event", { ...identity, type: "completed", text: "Delegation disabled", usage });
           continue;
         }
         assert.ok(definition, JSON.stringify(event));
+        // Validate the complete live declaration set, not only subagent's
+        // hand-picked schema. Eager upstream tools previously leaked an open
+        // contact_supervisor.interview object and broke every PCC request.
+        assert.deepEqual(event.pcc.context.tools.map(tool => tool.name).sort(),
+          [...mobileTools.map(tool => tool.payload.name), "subagent"].sort());
         assert.deepEqual(definition.parameters, JSON.parse(JSON.stringify(pccSubagentParameters)));
         const toolCall = { id: "parent-delegate", name: "subagent", argumentsJSON: JSON.stringify({
           tasks: [1, 2].map(index => ({ agent: "delegate", task: mode === "error" ? "force-child-error" : `Report child ${index}` })), async: false
@@ -379,6 +395,11 @@ test("bundled mobile subagents preserve delegation across providers and native P
   assert.ok(children.every(child => child.model === "mobile-test" && child.provider.startsWith("yamabiko-custom-") && child.effort === "off"));
   assert.ok(peak >= 2, "children should execute concurrently");
   assert.equal(requests.length, 5, "one parent tool turn, three child turns, one parent final turn");
+  for (const request of requests) assertNoDesktopSurface(request);
+  assert.deepEqual(wireTools(requests[0]).map(tool => tool.name).sort(),
+    ["subagent"]);
+  assert.deepEqual(wireTools(requests[0]).find(tool => tool.name === "subagent").parameters,
+    JSON.parse(JSON.stringify(pccSubagentParameters)), "Non-PCC parents also expose only the mobile schema");
   assert.ok(!JSON.stringify(requests[0].messages).includes("You are an expert coding assistant operating inside pi"), "the SDK must not replace an empty mobile chat prompt with its desktop persona");
   assert.ok(events.some(event => event.type === "subagent_update" && event.subagent.status === "running"));
   assert.ok(!body.includes("test-key"), "credentials must not enter persisted progress");
@@ -406,7 +427,18 @@ test("bundled mobile subagents preserve delegation across providers and native P
     assert.ok(wireSystem(captured).includes("You are an iOS subagent."));
     assert.ok(!wireSystem(captured).includes("You are an expert coding assistant operating inside pi"));
   }
+  for (const captured of requests) assertNoDesktopSurface(captured);
   assert.ok(!profileBody.includes("profile-secret"));
+
+  const guideStart = requests.length;
+  const guideBody = await (await submit("launch-mobile-guide", config, mobileTools, crypto.randomUUID(), parentPolicy)).text();
+  assert.ok(guideBody.trim().split("\n").map(JSON.parse).some(event => event.type === "completed"), guideBody);
+  const guideRequests = requests.slice(guideStart);
+  assert.equal(guideRequests.length, 2, "guide is local and must not launch a child");
+  const guideResult = JSON.stringify(guideRequests[1].messages.filter(message => message.role === "tool"));
+  assert.ok(guideResult.includes("iOS delegation:"), guideResult);
+  assert.doesNotMatch(guideResult, /contact_supervisor|bg_wait|worktree|external-cli|async:true/);
+  for (const captured of guideRequests) assertNoDesktopSurface(captured);
 
   for (const role of ["scout", "researcher", "evidence-auditor", "worker", "reviewer", "oracle", "delegate"]) {
     const start = requests.length;

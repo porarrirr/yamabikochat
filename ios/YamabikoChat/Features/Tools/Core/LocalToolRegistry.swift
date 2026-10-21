@@ -9,6 +9,17 @@ struct LocalToolRegistry: Sendable {
     private let executors: [String: any LocalToolExecutor]
     private let webResearch: WebResearchSession
 
+    /// The app and offline PCC contract tests share this inventory so adding a
+    /// built-in tool also adds its schema to the simulator validation.
+    static func builtInExecutors(
+        reader: FetchUrlTool = FetchUrlTool(),
+        python: PythonExecuteTool = PythonExecuteTool(),
+        editor: StrReplaceEditorTool = StrReplaceEditorTool(),
+        questions: AskUserQuestionTool = AskUserQuestionTool(coordinator: UserQuestionCoordinator())
+    ) -> [any LocalToolExecutor] {
+        [WebSearchTool(reader: reader), reader, python, editor, questions, GenUITool(), GenUIReferenceTool()]
+    }
+
     init(executors: [any LocalToolExecutor]) {
         webResearch = WebResearchSession()
         self.executors = Dictionary(

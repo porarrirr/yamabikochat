@@ -14,6 +14,8 @@ const directory = path.join(mobileAgentDir, "extensions", "subagent");
 fs.mkdirSync(directory, { recursive: true });
 fs.writeFileSync(path.join(directory, "config.json"), JSON.stringify({
   asyncByDefault: false,
+  intercomBridge: { mode: "off" },
+  waitTool: { enabled: false },
   defaultSubagentContext: "fresh",
   toolActivation: "eager",
   maxSubagentDepth: 1,

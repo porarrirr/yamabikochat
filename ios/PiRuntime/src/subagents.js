@@ -21,7 +21,7 @@ const failure = (code, message = code) => Object.assign(new Error(message), { co
 const identity = model => `${model.provider}/${model.id}`;
 const errorResult = error => ({ content: [{ type: "text", text: `${error.code || "subagent_error"}: ${error.message}` }], details: { error: error.code || "subagent_error" }, isError: true });
 
-// PCC's native schema supports this explicit mobile subset. Execution still
+// Every provider exposes the same explicit mobile subset. Execution still
 // delegates to the registered pi-subagents tool, including validation and limits.
 export const pccSubagentParameters = Type.Unsafe(pccSubagentSchema);
 
@@ -39,7 +39,7 @@ function mobileRolePrompt(role) {
   return [
     "You are an iOS subagent. Complete only the task assigned by the parent agent.",
     MOBILE_ROLES[role],
-    "Use only tools declared for this session and follow their exact parameter schemas. If a required capability is unavailable, report that limitation. Desktop shell commands, extensions, and worktrees are unavailable.",
+    "Use only tools declared for this session and follow their exact parameter schemas. If a required capability is unavailable, report that limitation.",
     "When web_search is available, supply query (a string). Use fetch_url, when available, to inspect original sources. Follow the declared schemas for optional search and source-reading parameters.",
     "When file tools are available, use str_replace_editor to inspect or edit workspace files and python_execute for Python execution. Respect the assigned role's no-edit constraints. Do not claim execution or validation without actual results.",
     "Return the complete result in your final response. Do not create internal progress or handoff files unless the assigned task explicitly requests them."
@@ -122,7 +122,12 @@ async function sessionHost({ agent, modelRuntime, cwd, systemPrompt, tools, hook
     agent, modelRuntime, cwd, settingsManager, resourceLoader, sessionManager,
     baseToolsOverride: Object.fromEntries(tools.map(tool => [tool.name, tool])),
     initialActiveToolNames: tools.map(tool => tool.name),
-    ...(allowExtensionTools ? {} : { allowedToolNames: [] })
+    // Upstream also registers desktop supervisor/contact/bg_wait tools. Mobile
+    // children run synchronously through the host above, so these file/process
+    // channels are unavailable (contact_supervisor also has an open JSON object
+    // that Apple's GenerationSchema cannot represent). Use Pi's declaration
+    // allowlist instead of leaking every eagerly registered extension tool.
+    allowedToolNames: [...tools.map(tool => tool.name), ...(allowExtensionTools ? ["subagent"] : [])]
   });
   const startupErrors = [];
   try {
@@ -184,7 +189,7 @@ setChildSessionFactory({
       const childRuntime = mobileModelRuntime([entry, ...owner.entries.filter(item => identity(item.model) !== identity(entry.model))], owner.streams, owner.getAuth, owner.getProvider);
       session = await sessionHost({ agent, modelRuntime: childRuntime, cwd: owner.cwd,
         systemPrompt: [owner.parentSystemPrompt, launch.systemPrompt, launch.appendSystemPrompt].filter(Boolean).join("\n\n"),
-        tools, hooks: launch.hooks, sessionManager: manager, allowExtensionTools: entry.toolCall !== false });
+        tools, hooks: launch.hooks, sessionManager: manager, allowExtensionTools: false });
     } catch (error) {
       progress.finish("failed", { error: error.message });
       throw error;
@@ -288,8 +293,14 @@ export async function createMobileSubagentsHost({ agent, config, resolve, stream
           return definition => {
             if (definition.name !== "subagent") return target.registerTool(definition);
             target.registerTool({ ...definition,
-              ...(parent.model.provider === "apple-pcc" ? { parameters: pccSubagentParameters } : {}),
-              description: definition.description + "\nOn iOS execution is in-process (async:false). Use only the provided mobile tools; shell, desktop extensions and worktrees are unavailable. "
+              parameters: pccSubagentParameters,
+              promptSnippet: "Delegate an authorized task to an iOS child agent, or independent tasks in parallel; use async:false.",
+              promptGuidelines: [],
+              description: "Delegate only when the user or applicable instructions authorize it. "
+                + "One child: {agent,task}; parallel children: {tasks:[{agent,task},...]}. Use async:false and await the returned results. "
+                + "Roles: " + Object.keys(MOBILE_ROLES).join(", ") + ". "
+                + "Use only the declared tools. After a failure, report it without switching execution paths. "
+                + "Actions: list, status, guide (mobile usage). "
                 + "No model specified means the parent model, unless the user selected a default profile. Configured model profiles: "
                 + entries.map(entry => `${entry.id} (${entry.name}): ${identity(entry.model)}:${entry.config.thinkingLevel || "off"}`).join(", ")
                 + unavailable.map(profile => `; unavailable ${profile.id}: ${profile.reason}`).join(""),
@@ -300,6 +311,12 @@ export async function createMobileSubagentsHost({ agent, config, resolve, stream
                     throw failure("subagent_mobile_feature_unsupported", "iOS supports in-process children only (async:false), without desktop processes, worktrees, custom directories or extensions");
                   }
                   if (params.action && !["list", "status", "guide"].includes(params.action)) throw failure("subagent_mobile_action_unsupported", params.action);
+                  if (params.action === "guide") return { content: [{ type: "text", text:
+                    "iOS delegation: {agent,task,async:false} or {tasks:[{agent,task},...],async:false}. "
+                    + "Roles: " + Object.keys(MOBILE_ROLES).join(", ") + ". "
+                    + "Optional model selects a configured profile; omit it to inherit the selected default. "
+                    + "Children return results in this call and use only their declared tools. Actions: list, status."
+                  }] };
                   const agents = params.agent ? [params.agent] : (params.tasks || params.chain?.flatMap(step => step.parallel || [step]) || []).map(task => task.agent);
                   const hasProfileAgent = agents.length > 0 && agents.every(agent => agent?.startsWith("mobile-"));
                   const requestedID = params.model || (!hasProfileAgent && !params.action ? config.subagents.defaultModelID : undefined);
@@ -329,13 +346,10 @@ export async function createMobileSubagentsHost({ agent, config, resolve, stream
         }));
         // An empty mobile system prompt must stay empty: SDK's default prefix
         // otherwise turns an ordinary chat into a desktop coding assistant.
-        // Keep only the original prompt and the extension's declared sections.
+        // Mobile usage lives in the tool declaration. Upstream appendices and
+        // agent catalogs describe desktop/background features; do not send them.
         pi.on("before_agent_start", event => {
-          event.systemPromptOptions.forceSystemPrompt = [
-            parentSystemPrompt, event.systemPromptOptions.appendSystemPrompt,
-            ...Object.entries(event.systemPromptOptions.sections).filter(([, text]) => text)
-              .map(([name, text]) => `<${name}>\n${text}\n</${name}>`)
-          ].filter(Boolean).join("\n\n");
+          event.systemPromptOptions.forceSystemPrompt = parentSystemPrompt;
         });
       }]
     }));

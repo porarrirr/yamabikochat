@@ -95,10 +95,9 @@ final class PCCNativeToolsTests: XCTestCase {
 
     func testAllLocalToolSchemasCompileWithTheAppleSDK() throws {
         guard #available(iOS 27.0, *) else { throw XCTSkip("Requires iOS 27") }
-        let definitions = [WebSearchTool().definition, FetchUrlTool().definition,
-                           PythonExecuteTool().definition, StrReplaceEditorTool().definition,
-                           AskUserQuestionTool.definition,
-                           ToolDefinition(name: "activate_skill", description: "Skill", parametersJSON: #"{"type":"object","properties":{"name":{"type":"string","enum":["sample"]}},"required":["name"],"additionalProperties":false}"#)]
+        let definitions = LocalToolRegistry.builtInExecutors().map {
+            $0.definition.name == GenUITool.name ? GenUITool.nativeDefinition : $0.definition
+        }
         for definition in definitions {
             let schema = try JSONDecoder().decode(JSONValue.self, from: Data(definition.parametersJSON.utf8))
             XCTAssertNoThrow(try PCCNativeToolSchema.make(schema, name: definition.name), definition.name)
@@ -107,6 +106,43 @@ final class PCCNativeToolsTests: XCTestCase {
         XCTAssertThrowsError(try PCCNativeToolSchema.make(unsupported, name: "unsupported")) {
             XCTAssertEqual(($0 as? PCCFailure)?.code, "pcc_tool_schema_unsupported")
         }
+    }
+
+    func testCompleteMobileToolLoadoutReachesAppleSessionWithoutPCCOrDevice() async throws {
+        guard #available(iOS 27.0, *) else { throw XCTSkip("Requires iOS 27") }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("sample")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try "---\nname: sample\ndescription: Offline contract fixture\n---\nRead sources.".write(
+            to: source.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        let repository = AgentSkillRepository(rootURL: root.appendingPathComponent("installed"))
+        _ = try repository.install(repository.inspect(sourceURL: source), trusted: true, allowReplacement: false)
+        let definitions = LocalToolRegistry.builtInExecutors().map {
+            $0.definition.name == GenUITool.name ? GenUITool.nativeDefinition : $0.definition
+        } + AgentSkillTools.definitions(repository: repository)
+        XCTAssertTrue(definitions.contains { $0.name == AgentSkillTools.activateName })
+        XCTAssertTrue(definitions.contains { $0.name == AgentSkillTools.readResourceName })
+        var tools = try definitions.map { definition in
+            PCCNativeRequest.ToolDefinition(name: definition.name, description: definition.description,
+                parameters: try JSONDecoder().decode(JSONValue.self, from: Data(definition.parametersJSON.utf8)))
+        }
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "pcc-subagent-schema", withExtension: "json"))
+        tools.append(.init(name: "subagent", description: "Delegate through Pi",
+                           parameters: try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: url))))
+        for tool in tools {
+            XCTAssertNoThrow(try PCCNativeToolSchema.make(tool.parameters, name: tool.name), tool.name)
+        }
+        let events = PCCEventCollector()
+        try await PCCSDK.execute(.init(context: .init(messages: [.init(role: "user", content: .string("Hello"))], tools: tools),
+                                       reasoningLevel: "moderate", contextSize: 32_768),
+                                 runID: UUID().uuidString, requestID: "loadout", using: PCCScriptedModel(toolCount: 0), executeTool: { _ in
+            XCTFail("This preflight must not execute tools")
+            throw PCCFailure(code: "unexpected_tool")
+        }, send: { await events.append($0) })
+        let captured = await events.events
+        XCTAssertEqual(captured.last?.type, "completed")
+        XCTAssertEqual(captured.last?.text, "Hello")
     }
 
     func testNativeToolLoopRetainsResultsForFollowUpWithoutCallingThemAgain() async throws {
