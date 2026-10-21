@@ -1040,18 +1040,61 @@ final class ChatRepository {
         )
     }
 
+    func compactContext(conversationId: Int64) async throws {
+        let settings = try settings.load()
+        guard !settings.isDualModeEnabled, !settings.isFusionModeEnabled, !settings.isAutoConversationEnabled,
+              let conversation = try conversations.fetchConversation(id: conversationId) else {
+            throw ProviderClientError.parseFailure(L10n.text("通常のチャットで compaction を実行してください。"))
+        }
+        let source = try conversations.fetchProviderHistory(conversationId: conversationId).flatMap(\.providerMessages)
+        guard !source.isEmpty else { throw ProviderClientError.parseFailure("There is no conversation to compact") }
+        let digest = try ConversationContextCheckpoint.digest(source)
+        let request = try await buildProviderRequest(conversation: conversation, settings: settings, conversationId: conversationId)
+        let response = try await providers.compact(request: request, providerID: conversation.apiProvider)
+        try Task.checkCancellation()
+        let current = try conversations.fetchProviderHistory(conversationId: conversationId).flatMap(\.providerMessages)
+        guard try ConversationContextCheckpoint.digest(current) == digest,
+              let latest = try conversations.fetchConversation(id: conversationId),
+              latest.model == conversation.model, latest.apiProvider == conversation.apiProvider,
+              latest.systemPrompt == conversation.systemPrompt,
+              let messages = response.providerTranscript, !messages.isEmpty else {
+            throw ProviderClientError.parseFailure(L10n.text("会話が変更されたため compaction を保存しませんでした。"))
+        }
+        try conversations.saveContextCheckpoint(ConversationContextCheckpoint(
+            provider: conversation.apiProvider, model: conversation.model, systemPrompt: conversation.systemPrompt,
+            sourceCount: source.count, sourceDigest: digest, messages: messages, usage: response.usage
+        ), conversationId: conversationId)
+        await recordTokenUsageIfAvailable(provider: conversation.apiProvider, model: conversation.model,
+                                         usage: response.usage, conversationId: conversationId, requestType: "compaction")
+    }
+
+    func compactedContextUsage(conversationId: Int64) throws -> ContextUsage? {
+        guard let conversation = try conversations.fetchConversation(id: conversationId),
+              let checkpoint = try conversations.contextCheckpoint(conversationId: conversationId) else { return nil }
+        let source = try conversations.fetchProviderHistory(conversationId: conversationId).flatMap(\.providerMessages)
+        guard source.count == checkpoint.sourceCount,
+              try checkpoint.applying(to: source, conversation: conversation) != nil,
+              let tokens = checkpoint.usage?.contextTokens, let window = checkpoint.usage?.contextWindow else { return nil }
+        return ContextUsage(usedTokens: tokens, contextWindow: window, isCompactedEstimate: true)
+    }
+
     private func buildProviderRequest(
         conversation: Conversation,
         settings: AppSettings,
         conversationId: Int64,
         providerMessages: [ProviderRequestMessage]? = nil
     ) async throws -> ProviderRequest {
-        let resolvedMessages: [ProviderRequestMessage]
+        var resolvedMessages: [ProviderRequestMessage]
         if let providerMessages {
             resolvedMessages = providerMessages
         } else {
             let history = try conversations.fetchProviderHistory(conversationId: conversationId)
             resolvedMessages = history.flatMap(\.providerMessages)
+        }
+
+        if let checkpoint = try conversations.contextCheckpoint(conversationId: conversationId),
+           let compacted = try checkpoint.applying(to: resolvedMessages, conversation: conversation) {
+            resolvedMessages = compacted
         }
 
         let resolvedSettings = try await requestSettingsResolver.resolve(

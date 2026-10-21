@@ -631,3 +631,12 @@
 
 /* OpenRouter settings */
 "推論の強さ" = "推理强度";
+
+/* Manual context compaction */
+"Compacting…" = "正在压缩…";
+"Compaction" = "Compaction";
+"圧縮後の推定: %@ / %@ token" = "压缩后估算：%@ / %@ token";
+"Pi で会話を要約し、以後の送信コンテキストを圧縮します。" = "Pi 会总结对话，减少后续消息使用的上下文。";
+"このモデルは Pi compaction に対応していません。" = "此模型不支持 Pi 上下文压缩。";
+"通常のチャットで compaction を実行してください。" = "请在普通聊天中执行上下文压缩。";
+"会話が変更されたため compaction を保存しませんでした。" = "对话已更改，因此未保存压缩结果。";

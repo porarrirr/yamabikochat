@@ -229,6 +229,7 @@
 		9C8DF35292A9094BBC4AC80B /* DualChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AC5A236291207F4B1999405 /* DualChatScreen.swift */; };
 		9D11FA68F7CC97BDB594A056 /* GenUIToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7534D926F8D18EAB4B8663C2 /* GenUIToolTests.swift */; };
 		9D7C2B06F31E113ADE630CD2 /* MarkdownIt-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = D5A36D93DF833CAF4892C08C /* MarkdownIt-LICENSE.txt */; };
+		9DB6E2D406BA3CCCAB2BA3EB /* ContextCompactionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8B58D9B95BEF186025EF0D9 /* ContextCompactionTests.swift */; };
 		9DDD92F6311397EE7798ECBE /* DiagnosticsLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43C7CD5EB5CC05FED3F202A /* DiagnosticsLogger.swift */; };
 		9E7BFE2D1890C97E49D9E2D2 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 2FCAAB02A789F81BADB57372 /* Localizable.strings */; };
 		9EFE66AD7151E071A14BEB4A /* LLMProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E39A438B710CF8BB0B6199 /* LLMProvider.swift */; };
@@ -753,6 +754,7 @@
 		D46CCE25F2EA651BD3340B2D /* ConversationReadPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationReadPolicyTests.swift; sourceTree = "<group>"; };
 		D5A36D93DF833CAF4892C08C /* MarkdownIt-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "MarkdownIt-LICENSE.txt"; sourceTree = "<group>"; };
 		D6012B61691A11858B0918E5 /* ConversationListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListViewModel.swift; sourceTree = "<group>"; };
+		D8B58D9B95BEF186025EF0D9 /* ContextCompactionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextCompactionTests.swift; sourceTree = "<group>"; };
 		D9225E9EF05048004FD622C2 /* GenUIReferenceCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenUIReferenceCatalog.swift; sourceTree = "<group>"; };
 		D940C0C6628F08BF5EAA8CC9 /* FusionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionServiceTests.swift; sourceTree = "<group>"; };
 		D9BBFB9640224552D9061787 /* lottie-light.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "lottie-light.js"; sourceTree = "<group>"; };
@@ -1400,6 +1402,7 @@
 				2D1F62C990CF31694BEDB4D7 /* ChatWorkspacePrimaryActionTests.swift */,
 				DAFDD85248048C3957F322E9 /* ClinePassModelCatalogTests.swift */,
 				EB6C374B2CCFE747D360F0E5 /* CodexModelCatalogTests.swift */,
+				D8B58D9B95BEF186025EF0D9 /* ContextCompactionTests.swift */,
 				7E59950BDA2949DB27D548BF /* ConversationDrawerTests.swift */,
 				C85B736400C8EA1CD72350C7 /* ConversationExportTests.swift */,
 				47940928BCA24ACBA0867772 /* ConversationListViewModelTests.swift */,
@@ -1871,6 +1874,7 @@
 				B23163A567B4D7F0FC01268C /* ChatWorkspacePrimaryActionTests.swift in Sources */,
 				0059E7825461EE27D25050CE /* ClinePassModelCatalogTests.swift in Sources */,
 				AE4099C0922B2FCFADE32493 /* CodexModelCatalogTests.swift in Sources */,
+				9DB6E2D406BA3CCCAB2BA3EB /* ContextCompactionTests.swift in Sources */,
 				5C20B18B9E27318157266BCE /* ConversationDrawerTests.swift in Sources */,
 				3AB10AF6FF6E194E647A3C9A /* ConversationExportTests.swift in Sources */,
 				7E687F15AA9ED90CC7CABE7B /* ConversationListViewModelTests.swift in Sources */,

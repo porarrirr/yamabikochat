@@ -14,6 +14,7 @@ final class ChatViewModel: ObservableObject {
     @Published var inputText: String = ""
     @Published private(set) var speechAudioLevels = SpeechAudioLevelHistory().values
     @Published var isSending: Bool = false
+    @Published private(set) var isCompacting = false
     @Published var isAutoConversationRunning: Bool = false
     @Published var isAutoConversationPaused: Bool = false
     @Published var autoConversationStatus: String?
@@ -144,6 +145,7 @@ final class ChatViewModel: ObservableObject {
             .sink { [weak self] in
                 self?.fullMessages = $0
                 self?.timelineStore.update(messages: $0)
+                self?.rebuildContextUsage()
             }
             .store(in: &cancellables)
 
@@ -223,6 +225,33 @@ final class ChatViewModel: ObservableObject {
               !settings.isFusionModeEnabled,
               !settings.isAutoConversationEnabled else { return nil }
         return contextUsage
+    }
+
+    var canCompactContext: Bool {
+        repository != nil && !isSending && !isCompacting && visibleContextUsage != nil && !fullMessages.isEmpty
+    }
+
+    func compactContext() {
+        guard canCompactContext, let repository else { return }
+        isCompacting = true
+        isSending = true
+        errorMessage = nil
+        activeSendTask = Task { [self] in
+            defer {
+                isCompacting = false
+                isSending = false
+                activeSendTask = nil
+            }
+            do {
+                try await repository.compactContext(conversationId: conversationID)
+                rebuildContextUsage()
+            } catch {
+                if !Task.isCancelled {
+                    errorMessage = error.localizedDescription
+                    DiagnosticsLogger.log("Context compaction failed", category: .chat, error: error)
+                }
+            }
+        }
     }
 
     var hasConversationContent: Bool {
@@ -1471,7 +1500,8 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func rebuildContextUsage() {
-        contextUsage = ContextUsage(record: latestTokenUsageRecord)
+        contextUsage = (try? repository?.compactedContextUsage(conversationId: conversationID))
+            ?? ContextUsage(record: latestTokenUsageRecord)
     }
 
     var chatStatsGroups: [String] {

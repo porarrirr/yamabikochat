@@ -9842,7 +9842,71 @@ var init_overflow = __esm({
 function buildProviderErrorPattern(patterns) {
   return new RegExp(patterns.join("|"), "i");
 }
-var NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN, RETRYABLE_PROVIDER_ERROR_PATTERN;
+function retryDelayMs(policy, attempt) {
+  const delay2 = policy.baseDelayMs * 2 ** Math.max(0, attempt - 1);
+  const safeDelay = Number.isSafeInteger(delay2) ? delay2 : Number.MAX_SAFE_INTEGER;
+  return Math.min(safeDelay, policy.maxAgentDelayMs ?? DEFAULT_MAX_AGENT_RETRY_DELAY_MS);
+}
+function sleep(ms, signal) {
+  return new Promise((resolve7, reject) => {
+    if (signal?.aborted) {
+      reject(new RetrySleepAbortError());
+      return;
+    }
+    const timeout = setTimeout(resolve7, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timeout);
+      reject(new RetrySleepAbortError());
+    }, { once: true });
+  });
+}
+async function retryAssistantCall(produce, policy, signal, callbacks) {
+  const maxAttempts = policy?.enabled ? policy.maxRetries : 0;
+  let attempt = 0;
+  let lastRetry;
+  for (; ; ) {
+    const response = await produce();
+    if (response.stopReason === "aborted") {
+      if (lastRetry)
+        await callbacks?.onRetryFinished?.(false, lastRetry.attempt);
+      return response;
+    }
+    if (response.stopReason !== "error") {
+      if (lastRetry)
+        await callbacks?.onRetryFinished?.(true, lastRetry.attempt);
+      return response;
+    }
+    if (attempt >= maxAttempts || !isRetryableAssistantError(response)) {
+      if (lastRetry)
+        await callbacks?.onRetryFinished?.(false, lastRetry.attempt, response.errorMessage);
+      return response;
+    }
+    attempt++;
+    lastRetry = { attempt, errorMessage: response.errorMessage || "Unknown error" };
+    const delayMs = retryDelayMs(policy, attempt);
+    await callbacks?.onRetryScheduled?.(attempt, maxAttempts, delayMs, lastRetry.errorMessage);
+    try {
+      await sleep(delayMs, signal);
+    } catch (error) {
+      await callbacks?.onRetryFinished?.(false, attempt, lastRetry.errorMessage);
+      if (error instanceof RetrySleepAbortError) {
+        const { errorMessage: _errorMessage, ...rest } = response;
+        return { ...rest, stopReason: "aborted" };
+      }
+      throw error;
+    }
+    await callbacks?.onRetryAttemptStart?.();
+  }
+}
+function isRetryableAssistantError(message2) {
+  if (message2.stopReason !== "error" || !message2.errorMessage)
+    return false;
+  const errorMessage5 = message2.errorMessage;
+  if (NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN.test(errorMessage5))
+    return false;
+  return RETRYABLE_PROVIDER_ERROR_PATTERN.test(errorMessage5);
+}
+var NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN, RETRYABLE_PROVIDER_ERROR_PATTERN, DEFAULT_MAX_AGENT_RETRY_DELAY_MS, RetrySleepAbortError;
 var init_retry = __esm({
   "node_modules/@earendil-works/pi-ai/dist/utils/retry.js"() {
     NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN = buildProviderErrorPattern([
@@ -9929,6 +9993,12 @@ var init_retry = __esm({
       "subscription_sharing_usage_unavailable",
       "subscription_sharing_user_unavailable"
     ]);
+    DEFAULT_MAX_AGENT_RETRY_DELAY_MS = 6e4;
+    RetrySleepAbortError = class extends Error {
+      constructor() {
+        super("Aborted");
+      }
+    };
   }
 });
 
@@ -17141,8 +17211,10 @@ var init_dist = __esm({
     init_json_parse();
     init_overflow();
     init_retry();
+    init_text();
     init_transcript();
     init_typebox_helpers();
+    init_uuid();
     init_validation();
   }
 });
@@ -19491,10 +19563,10 @@ var init_values = __esm({
 });
 
 // node_modules/openai/internal/utils/sleep.mjs
-var sleep;
+var sleep2;
 var init_sleep = __esm({
   "node_modules/openai/internal/utils/sleep.mjs"() {
-    sleep = (ms, ...signals) => new Promise((resolve7, reject) => {
+    sleep2 = (ms, ...signals) => new Promise((resolve7, reject) => {
       const activeSignals = [...new Set(signals.filter((signal) => signal != null))];
       let timeout;
       let settled = false;
@@ -33540,7 +33612,7 @@ async function pollWithResponse(retrieve, intermediateStatuses, terminalStatuses
         }
       }
       const signal = options && Object.prototype.propertyIsEnumerable.call(options, "signal") ? options.signal : void 0;
-      await (signal ? sleepUntilAborted(sleepInterval, signal) : sleep(sleepInterval));
+      await (signal ? sleepUntilAborted(sleepInterval, signal) : sleep2(sleepInterval));
     } else if (terminalStatuses.includes(status)) {
       return data;
     }
@@ -34358,7 +34430,7 @@ async function waitForFileProcessing(resource, id, pollInterval, maxWait) {
   const start = performance.now();
   let file = await resource.retrieve(id);
   while (!file.status || !terminalStates.has(file.status)) {
-    await sleep(pollInterval);
+    await sleep2(pollInterval);
     file = await resource.retrieve(id);
     if (performance.now() - start > maxWait) {
       throw new APIConnectionTimeoutError({
@@ -39052,7 +39124,7 @@ var init_client = __esm({
         } else {
           const retrySignals = requestSignal3 === options.signal ? [requestSignal3] : [requestSignal3, options.signal];
           try {
-            await sleep(timeoutMillis, ...retrySignals);
+            await sleep2(timeoutMillis, ...retrySignals);
           } catch (error) {
             const abortedSignal = retrySignals.find((signal) => signal?.aborted);
             if (abortedSignal) {
@@ -41744,10 +41816,10 @@ var init_values2 = __esm({
 });
 
 // node_modules/@anthropic-ai/sdk/internal/utils/sleep.mjs
-var sleep2;
+var sleep3;
 var init_sleep2 = __esm({
   "node_modules/@anthropic-ai/sdk/internal/utils/sleep.mjs"() {
-    sleep2 = (ms, signal) => new Promise((resolve7) => {
+    sleep3 = (ms, signal) => new Promise((resolve7) => {
       if (signal?.aborted)
         return resolve7();
       const onAbort = () => {
@@ -46515,7 +46587,7 @@ var init_poller = __esm({
                 const wait = applyJitter(backoff2(attempt));
                 log.warn("poll failed, backing off", { error: String(e2), backoff_ms: wait });
                 attempt++;
-                await sleep2(wait, __classPrivateFieldGet3(this, _WorkPoller_controller, "f").signal);
+                await sleep3(wait, __classPrivateFieldGet3(this, _WorkPoller_controller, "f").signal);
                 continue;
               }
               attempt = 0;
@@ -46523,7 +46595,7 @@ var init_poller = __esm({
                 if (__classPrivateFieldGet3(this, _WorkPoller_drain, "f"))
                   return;
                 idle.onEmptyPoll();
-                await sleep2(jitter(1e3, 3e3), __classPrivateFieldGet3(this, _WorkPoller_controller, "f").signal);
+                await sleep3(jitter(1e3, 3e3), __classPrivateFieldGet3(this, _WorkPoller_controller, "f").signal);
                 continue;
               }
               idle.onClaim();
@@ -46970,7 +47042,7 @@ var init_SessionToolRunner = __esm({
             });
           }
           ctrl.signal.throwIfAborted();
-          await sleep2(backoff3, ctrl.signal);
+          await sleep3(backoff3, ctrl.signal);
           backoff3 = Math.min(backoff3 * 2, STREAM_BACKOFF_CAP_MS);
         }
       }, _SessionToolRunner_reconcile = /**
@@ -47222,7 +47294,7 @@ var init_SessionToolRunner = __esm({
               backoff_ms: waitMs,
               error: String(e2)
             });
-            await sleep2(waitMs, ctrl.signal);
+            await sleep3(waitMs, ctrl.signal);
           }
         }
         __classPrivateFieldGet3(this, _SessionToolRunner_logger, "f").error("failed to send tool result", {
@@ -47235,7 +47307,7 @@ var init_SessionToolRunner = __esm({
       async function _SessionToolRunner_drain2() {
         if (__classPrivateFieldGet3(this, _SessionToolRunner_inFlightCount, "f") === 0)
           return;
-        await Promise.race([new Promise((r2) => __classPrivateFieldSet2(this, _SessionToolRunner_onIdle, r2, "f")), sleep2(DRAIN_TIMEOUT_MS)]);
+        await Promise.race([new Promise((r2) => __classPrivateFieldSet2(this, _SessionToolRunner_onIdle, r2, "f")), sleep3(DRAIN_TIMEOUT_MS)]);
         __classPrivateFieldSet2(this, _SessionToolRunner_onIdle, null, "f");
         if (__classPrivateFieldGet3(this, _SessionToolRunner_inFlightCount, "f") > 0) {
           __classPrivateFieldGet3(this, _SessionToolRunner_logger, "f").warn("drain timeout exceeded");
@@ -49621,7 +49693,7 @@ async function heartbeatLoop(client, work, lease, logger, requestOptions, onLeas
   };
   await beat();
   while (!lease.signal.aborted) {
-    await sleep2(intervalMs, lease.signal);
+    await sleep3(intervalMs, lease.signal);
     lease.signal.throwIfAborted();
     await beat();
   }
@@ -58466,7 +58538,7 @@ var init_client2 = __esm({
             const maxRetries = options.maxRetries ?? this.maxRetries;
             timeoutMillis = this.calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries);
           }
-          await sleep2(timeoutMillis, options.signal ?? void 0);
+          await sleep3(timeoutMillis, options.signal ?? void 0);
           return this.makeRequest(options, retriesRemaining - 1, requestLogID);
         }
         calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries) {
@@ -98700,7 +98772,7 @@ async function uploadBlobInternal(file, uploadUrl, apiClient, httpOptions) {
         break;
       }
       retryCount++;
-      await sleep3(currentDelayMs);
+      await sleep4(currentDelayMs);
       currentDelayMs = currentDelayMs * DELAY_MULTIPLIER;
     }
     offset += chunkSize;
@@ -98717,7 +98789,7 @@ async function getBlobStat(file) {
   const fileStat = { size: file.size, type: file.type };
   return fileStat;
 }
-function sleep3(ms) {
+function sleep4(ms) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
 }
 function resolveCloudFlag(options) {
@@ -106127,7 +106199,7 @@ var init_node3 = __esm({
                 break;
               }
               retryCount++;
-              await sleep3(currentDelayMs);
+              await sleep4(currentDelayMs);
               currentDelayMs = currentDelayMs * DELAY_MULTIPLIER;
             }
             offset += bytesRead;
@@ -108749,7 +108821,7 @@ function validateRetryDelayMs(delayMs, options) {
   }
   return delayMs;
 }
-function sleep4(ms, signal) {
+function sleep5(ms, signal) {
   return new Promise((resolve7, reject) => {
     if (signal?.aborted) {
       reject(new Error("Request was aborted"));
@@ -109817,7 +109889,7 @@ var init_openai_codex_responses = __esm({
               if (attempt < maxRetries && isRetryableError2(response.status, errorText)) {
                 const retryAfterDelayMs = getRetryAfterDelayMs(response.headers);
                 const delayMs = retryAfterDelayMs === void 0 ? BASE_DELAY_MS * 2 ** attempt : validateRetryDelayMs(retryAfterDelayMs, options);
-                await sleep4(delayMs, options?.signal);
+                await sleep5(delayMs, options?.signal);
                 continue;
               }
               const fakeResponse = new Response(errorText, {
@@ -109835,7 +109907,7 @@ var init_openai_codex_responses = __esm({
               lastError = error instanceof Error ? error : new Error(String(error));
               if (attempt < maxRetries && !(lastError instanceof RetryDelayExceededError) && !lastError.message.includes("usage limit")) {
                 const delayMs = BASE_DELAY_MS * 2 ** attempt;
-                await sleep4(delayMs, options?.signal);
+                await sleep5(delayMs, options?.signal);
                 continue;
               }
               throw lastError;
@@ -112083,6 +112155,10 @@ function streamSimple10(model, context, options) {
   }
   const provider = resolveApiProvider(model.api);
   return provider.streamSimple(model, transcript, withEnvApiKey(model, options));
+}
+async function completeSimple(model, context, options) {
+  const s2 = streamSimple10(model, context, options);
+  return s2.result();
 }
 var apiProviderRegistry, BUILTIN_APIS, builtinApiProviderInstances, compatModels, AMBIENT_AUTH_MARKER;
 var init_compat = __esm({
@@ -136054,8 +136130,89 @@ var init_zip = __esm({
 });
 
 // node_modules/@earendil-works/pi-coding-agent/dist/core/messages.js
+function bashExecutionToText(msg) {
+  let text = `Ran \`${msg.command}\`
+`;
+  if (msg.output) {
+    text += `\`\`\`
+${msg.output}
+\`\`\``;
+  } else {
+    text += "(no output)";
+  }
+  if (msg.cancelled) {
+    text += "\n\n(command cancelled)";
+  } else if (msg.exitCode !== null && msg.exitCode !== void 0 && msg.exitCode !== 0) {
+    text += `
+
+Command exited with code ${msg.exitCode}`;
+  }
+  if (msg.truncated && msg.fullOutputPath) {
+    text += `
+
+[Output truncated. Full output: ${msg.fullOutputPath}]`;
+  }
+  return text;
+}
+function convertToLlm(messages) {
+  return messages.map((m3) => {
+    switch (m3.role) {
+      case "bashExecution":
+        if (m3.excludeFromContext) {
+          return void 0;
+        }
+        return {
+          role: "user",
+          content: [{ type: "text", text: bashExecutionToText(m3) }],
+          timestamp: m3.timestamp
+        };
+      case "custom": {
+        const content = typeof m3.content === "string" ? [{ type: "text", text: m3.content }] : m3.content;
+        return {
+          role: "user",
+          content,
+          timestamp: m3.timestamp
+        };
+      }
+      case "branchSummary":
+        return {
+          role: "user",
+          content: [{ type: "text", text: BRANCH_SUMMARY_PREFIX + m3.summary + BRANCH_SUMMARY_SUFFIX }],
+          timestamp: m3.timestamp
+        };
+      case "compactionSummary":
+        return {
+          role: "user",
+          content: [
+            { type: "text", text: COMPACTION_SUMMARY_PREFIX + m3.summary + COMPACTION_SUMMARY_SUFFIX }
+          ],
+          timestamp: m3.timestamp
+        };
+      case "system":
+      case "user":
+      case "assistant":
+      case "toolResult":
+        return m3;
+      default:
+        const _exhaustiveCheck = m3;
+        return void 0;
+    }
+  }).filter((m3) => m3 !== void 0);
+}
+var COMPACTION_SUMMARY_PREFIX, COMPACTION_SUMMARY_SUFFIX, BRANCH_SUMMARY_PREFIX, BRANCH_SUMMARY_SUFFIX;
 var init_messages5 = __esm({
   "node_modules/@earendil-works/pi-coding-agent/dist/core/messages.js"() {
+    COMPACTION_SUMMARY_PREFIX = `The conversation history before this point was compacted into the following summary:
+
+<summary>
+`;
+    COMPACTION_SUMMARY_SUFFIX = `
+</summary>`;
+    BRANCH_SUMMARY_PREFIX = `The following is a summary of a branch that this conversation came back from:
+
+<summary>
+`;
+    BRANCH_SUMMARY_SUFFIX = `</summary>`;
   }
 });
 
@@ -136096,20 +136253,287 @@ var init_usage_totals = __esm({
 });
 
 // node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/utils.js
+function truncateForSummary(text, maxChars) {
+  if (text.length <= maxChars)
+    return text;
+  const truncatedChars = text.length - maxChars;
+  return `${text.slice(0, maxChars)}
+
+[... ${truncatedChars} more characters truncated]`;
+}
+function serializeConversation(messages) {
+  const parts = [];
+  for (const msg of messages) {
+    if (msg.role === "user") {
+      const content = contentText(msg.content, "");
+      if (content)
+        parts.push(`[User]: ${content}`);
+    } else if (msg.role === "assistant") {
+      const thinkingParts = [];
+      const toolCalls = [];
+      for (const block of msg.content) {
+        if (block.type === "thinking") {
+          thinkingParts.push(block.thinking);
+        } else if (block.type === "toolCall") {
+          const args = block.arguments;
+          const argsStr = Object.entries(args).map(([k2, v2]) => `${k2}=${JSON.stringify(v2)}`).join(", ");
+          toolCalls.push(`${block.name}(${argsStr})`);
+        }
+      }
+      if (thinkingParts.length > 0) {
+        parts.push(`[Assistant thinking]: ${thinkingParts.join("\n")}`);
+      }
+      if (msg.content.some((block) => block.type === "text")) {
+        parts.push(`[Assistant]: ${contentText(msg.content)}`);
+      }
+      if (toolCalls.length > 0) {
+        parts.push(`[Assistant tool calls]: ${toolCalls.join("; ")}`);
+      }
+    } else if (msg.role === "toolResult") {
+      const content = contentText(msg.content, "");
+      if (content) {
+        parts.push(`[Tool result]: ${truncateForSummary(content, TOOL_RESULT_MAX_CHARS)}`);
+      }
+    }
+  }
+  return parts.join("\n\n");
+}
+var TOOL_RESULT_MAX_CHARS, SUMMARIZATION_SYSTEM_PROMPT;
 var init_utils6 = __esm({
   "node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/utils.js"() {
+    init_dist();
+    TOOL_RESULT_MAX_CHARS = 2e3;
+    SUMMARIZATION_SYSTEM_PROMPT = `You are a context summarization assistant. Your task is to read a conversation between a user and an AI assistant, then produce a structured summary following the exact format specified.
+
+Do NOT continue the conversation. Do NOT respond to any questions in the conversation. ONLY output the structured summary.`;
   }
 });
 
 // node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js
-var UPDATE_SUMMARIZATION_INSTRUCTIONS, UPDATE_SUMMARIZATION_PROMPT;
+function calculateContextTokens2(usage2) {
+  return usage2.totalTokens || usage2.input + usage2.output + usage2.cacheRead + usage2.cacheWrite;
+}
+function getAssistantUsage(msg) {
+  if (msg.role === "assistant" && "usage" in msg) {
+    const assistantMsg = msg;
+    if (assistantMsg.stopReason !== "aborted" && assistantMsg.stopReason !== "error" && assistantMsg.usage && calculateContextTokens2(assistantMsg.usage) > 0) {
+      return assistantMsg.usage;
+    }
+  }
+  return void 0;
+}
+function getLastAssistantUsageInfo2(messages) {
+  for (let i2 = messages.length - 1; i2 >= 0; i2--) {
+    const usage2 = getAssistantUsage(messages[i2]);
+    if (usage2)
+      return { usage: usage2, index: i2 };
+  }
+  return void 0;
+}
+function estimateContextTokens2(messages) {
+  const usageInfo = getLastAssistantUsageInfo2(messages);
+  if (!usageInfo) {
+    let estimated = 0;
+    for (const message2 of messages) {
+      estimated += estimateTokens(message2);
+    }
+    return {
+      tokens: estimated,
+      usageTokens: 0,
+      trailingTokens: estimated,
+      lastUsageIndex: null
+    };
+  }
+  const usageTokens = calculateContextTokens2(usageInfo.usage);
+  let trailingTokens = 0;
+  for (let i2 = usageInfo.index + 1; i2 < messages.length; i2++) {
+    trailingTokens += estimateTokens(messages[i2]);
+  }
+  return {
+    tokens: usageTokens + trailingTokens,
+    usageTokens,
+    trailingTokens,
+    lastUsageIndex: usageInfo.index
+  };
+}
+function estimateTextAndImageContentChars2(content) {
+  if (typeof content === "string") {
+    return content.length;
+  }
+  let chars = 0;
+  for (const block of content) {
+    if (block.type === "text" && block.text) {
+      chars += block.text.length;
+    } else if (block.type === "image") {
+      chars += ESTIMATED_IMAGE_CHARS2;
+    }
+  }
+  return chars;
+}
+function estimateTokens(message2) {
+  let chars = 0;
+  switch (message2.role) {
+    case "system": {
+      const system = message2;
+      chars = estimateTextAndImageContentChars2(system.content);
+      if (system.sections) {
+        for (const section of Object.values(system.sections)) {
+          if (section)
+            chars += section.length;
+        }
+      }
+      if (system.toolsAdded)
+        chars += JSON.stringify(system.toolsAdded).length;
+      return Math.ceil(chars / 4);
+    }
+    case "user": {
+      chars = estimateTextAndImageContentChars2(message2.content);
+      return Math.ceil(chars / 4);
+    }
+    case "assistant": {
+      const assistant = message2;
+      for (const block of assistant.content) {
+        if (block.type === "text") {
+          chars += block.text.length;
+        } else if (block.type === "thinking") {
+          chars += block.thinking.length;
+        } else if (block.type === "toolCall") {
+          chars += block.name.length + JSON.stringify(block.arguments).length;
+        }
+      }
+      return Math.ceil(chars / 4);
+    }
+    case "custom":
+    case "toolResult": {
+      chars = estimateTextAndImageContentChars2(message2.content);
+      return Math.ceil(chars / 4);
+    }
+    case "bashExecution": {
+      chars = message2.command.length + message2.output.length;
+      return Math.ceil(chars / 4);
+    }
+    case "branchSummary":
+    case "compactionSummary": {
+      chars = message2.summary.length;
+      return Math.ceil(chars / 4);
+    }
+  }
+  return 0;
+}
+function getSummarizationFailure(response, label) {
+  if (response.stopReason === "error") {
+    return `${label} failed: ${response.errorMessage || "Unknown error"}`;
+  }
+  if (response.stopReason === "length") {
+    return `${label} failed: generation hit the token cap and the summary is incomplete`;
+  }
+  return void 0;
+}
+function createSummarizationOptions(model, maxTokens, apiKey, headers, env2, signal, thinkingLevel, sessionId) {
+  const options = { maxTokens, signal, apiKey, headers, env: env2, sessionId };
+  if (model.reasoning && thinkingLevel && thinkingLevel !== "off") {
+    options.reasoning = thinkingLevel;
+  }
+  return options;
+}
+async function completeSummarization(model, context, options, streamFn, retry2, callbacks) {
+  const requestOptions = {
+    ...options,
+    cacheRetention: "none",
+    sessionId: options.sessionId ?? uuidv7()
+  };
+  const produce = async () => streamFn ? (await streamFn(model, context, requestOptions)).result() : completeSimple(model, context, requestOptions);
+  return retryAssistantCall(produce, retry2, requestOptions.signal, callbacks);
+}
+function buildSummarizationContext(promptText) {
+  return normalizeContext({
+    systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: [{ type: "text", text: promptText }],
+        timestamp: Date.now()
+      }
+    ]
+  });
+}
+async function generateSummaryWithUsage(currentMessages, model, reserveTokens, apiKey, headers, signal, customInstructions, previousSummary, thinkingLevel, streamFn, env2, retry2, callbacks, sessionId) {
+  const maxTokens = Math.min(Math.floor(0.8 * reserveTokens), model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);
+  let basePrompt = previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
+  if (customInstructions) {
+    basePrompt = `${basePrompt}
+
+Additional focus: ${customInstructions}`;
+  }
+  const llmMessages = convertToLlm(currentMessages);
+  const conversationText = serializeConversation(llmMessages);
+  let promptText = `<conversation>
+${conversationText}
+</conversation>
+
+`;
+  if (previousSummary) {
+    promptText += `<previous-summary>
+${previousSummary}
+</previous-summary>
+
+`;
+  }
+  promptText += basePrompt;
+  const completionOptions = createSummarizationOptions(model, maxTokens, apiKey, headers, env2, signal, thinkingLevel, sessionId);
+  const response = await completeSummarization(model, buildSummarizationContext(promptText), completionOptions, streamFn, retry2, callbacks);
+  const failure2 = getSummarizationFailure(response, "Summarization");
+  if (failure2) {
+    throw new Error(failure2);
+  }
+  if (response.content.some((block) => block.type === "toolCall")) {
+    throw new Error("Summarization attempted to call a tool");
+  }
+  const textContent = contentText(response.content);
+  return { text: textContent, usage: response.usage };
+}
+var ESTIMATED_IMAGE_CHARS2, SUMMARIZATION_PROMPT, UPDATE_SUMMARIZATION_INSTRUCTIONS, UPDATE_SUMMARIZATION_PROMPT;
 var init_compaction = __esm({
   "node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js"() {
+    init_dist();
     init_compat();
     init_messages5();
     init_session_manager();
     init_usage_totals();
     init_utils6();
+    ESTIMATED_IMAGE_CHARS2 = 4800;
+    SUMMARIZATION_PROMPT = `The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
+
+Use this EXACT format:
+
+## Goal
+[What is the user trying to accomplish? Can be multiple items if the session covers different tasks.]
+
+## Constraints & Preferences
+- [Any constraints, preferences, or requirements mentioned by user]
+- [Or "(none)" if none were mentioned]
+
+## Progress
+### Done
+- [x] [Completed tasks/changes]
+
+### In Progress
+- [ ] [Current work]
+
+### Blocked
+- [Issues preventing progress, if any]
+
+## Key Decisions
+- **[Decision]**: [Brief rationale]
+
+## Next Steps
+1. [Ordered list of what should happen next]
+
+## Critical Context
+- [Any data, examples, or references needed to continue]
+- [Or "(none)" if not applicable]
+
+Keep each section concise. Preserve exact file paths, function names, and error messages.`;
     UPDATE_SUMMARIZATION_INSTRUCTIONS = `Update the existing structured summary with new information. RULES:
 - PRESERVE all existing information from the previous summary
 - ADD new progress, decisions, and context from the new messages
@@ -167061,7 +167485,7 @@ var init_abort4 = __esm({
 // node_modules/@earendil-works/pi-coding-agent/dist/core/auth-storage.js
 import { existsSync as existsSync3, mkdirSync, readFileSync as readFileSync2, writeFileSync } from "fs";
 import { dirname as dirname5, join as join7 } from "path";
-import { setTimeout as sleep7 } from "timers/promises";
+import { setTimeout as sleep8 } from "timers/promises";
 var import_proper_lockfile2, AUTH_FILE_WRITE_OPTIONS, FileAuthStorageBackend;
 var init_auth_storage = __esm({
   "node_modules/@earendil-works/pi-coding-agent/dist/core/auth-storage.js"() {
@@ -167151,9 +167575,9 @@ var init_auth_storage = __esm({
             retry2++;
             const delayMs = Math.min(Math.round(baseDelayMs * (1 + Math.random())), remainingMs);
             if (signal)
-              await sleep7(delayMs, void 0, { signal });
+              await sleep8(delayMs, void 0, { signal });
             else
-              await sleep7(delayMs);
+              await sleep8(delayMs);
             continue;
           }
           if (signal?.aborted) {
@@ -181699,7 +182123,7 @@ var anthropicOAuth = {
 init_github_copilot_models();
 
 // node_modules/@earendil-works/pi-ai/dist/utils/sleep.js
-function sleep5(ms, signal) {
+function sleep6(ms, signal) {
   return new Promise((resolve7, reject) => {
     signal.throwIfAborted();
     const onAbort = () => {
@@ -181872,7 +182296,7 @@ async function fetchWithRateLimitRetry(url, init, signal, retryPolicy) {
     if (retryDeadline !== void 0 && delayMs >= retryDeadline - Date.now())
       return response;
     await response.body?.cancel();
-    await sleep5(delayMs, requestSignal3);
+    await sleep6(delayMs, requestSignal3);
   }
 }
 async function fetchGitHubCopilotModels(copilotToken, enterpriseDomain, signal, retryPolicy) {
@@ -182269,7 +182693,7 @@ async function refreshToken(oauthHost, refreshTokenValue, signal) {
   let lastError;
   for (let attempt = 0; attempt <= REFRESH_MAX_RETRIES; attempt++) {
     if (attempt > 0) {
-      await sleep5(1e3 * 2 ** (attempt - 1), signal);
+      await sleep6(1e3 * 2 ** (attempt - 1), signal);
     }
     if (signal.aborted) {
       throw new Error("Kimi Code token refresh aborted");
@@ -184431,7 +184855,7 @@ async function loginDeviceCode(callbacks) {
   }
   let interval = Math.max(1, device.interval ?? 5);
   const deadline = Date.now() + Math.max(device.expires_in, 60) * 1e3;
-  const sleep8 = (ms) => {
+  const sleep9 = (ms) => {
     if (signal?.aborted) return Promise.reject(outcomeToError({ kind: "cancelled" }));
     return new Promise((resolve7, reject) => {
       const onAbort = () => {
@@ -184446,7 +184870,7 @@ async function loginDeviceCode(callbacks) {
     });
   };
   for (; ; ) {
-    await sleep8(interval * 1e3);
+    await sleep9(interval * 1e3);
     if (Date.now() > deadline) {
       throw new XaiOAuthError(
         "xAI device code expired. Restart /login.",
@@ -186540,6 +186964,57 @@ function customStreamOptions(config) {
   };
 }
 
+// src/compaction.js
+init_dist7();
+init_compaction();
+async function compactContext({ messages, model, config, streamFn, signal }) {
+  if (!messages.length) throw new Error("There is no conversation to compact");
+  const checkedStream = async (...args) => {
+    const stream12 = await streamFn(...args);
+    return { result: async () => {
+      const message2 = await stream12.result();
+      if (message2.stopReason !== "stop") {
+        throw new Error(message2.errorMessage || `Pi compaction did not finish: ${message2.stopReason}`);
+      }
+      return message2;
+    } };
+  };
+  const { text, usage: usage2 } = await generateSummaryWithUsage(
+    messages,
+    model,
+    Math.min(16384, model.contextWindow),
+    config.apiKey,
+    void 0,
+    signal,
+    void 0,
+    void 0,
+    config.thinkingLevel,
+    checkedStream,
+    config.env,
+    { enabled: false, maxRetries: 0, baseDelayMs: 0 }
+  );
+  signal?.throwIfAborted();
+  const compacted = convertToLlm([{
+    role: "compactionSummary",
+    summary: text,
+    tokensBefore: estimateContextTokens2(messages).tokens,
+    timestamp: Date.now()
+  }]);
+  return {
+    text,
+    usage: {
+      ...providerUsage(usage2),
+      contextTokens: estimateContextTokens2(compacted).tokens,
+      contextWindow: model.contextWindow
+    },
+    providerTranscript: compacted.map((message2) => ({
+      role: "user",
+      content: message2.content.filter((part) => part.type === "text").map((part) => part.text).join("\n"),
+      attachments: []
+    }))
+  };
+}
+
 // src/main.js
 var port = Number(process.argv[2]);
 var token = process.argv[3];
@@ -187668,6 +188143,31 @@ async function runAgent(envelope, res) {
     model: model.id
   };
   const report = (stage, message2, metadata) => diagnostic(res, runId, stage, message2, metadata);
+  if (request.metadata?.contextOperation === "compact") {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    const heartbeat2 = setInterval(() => send(res, { type: "heartbeat" }), STREAM_HEARTBEAT_INTERVAL_MS);
+    res.on("close", abort);
+    runs.set(runId, { abort, state: { model } });
+    try {
+      report("compaction_start", "Pi context compaction starting");
+      const response = await withPCCBridge({ runId, send: (event) => send(res, event) }, () => compactContext({
+        messages: messagesFrom(request, model),
+        model,
+        config: resolvedConfig,
+        streamFn: standardStreamFunction({ ...request, tools: [] }, resolvedConfig, report, () => {
+        }),
+        signal: controller.signal
+      }));
+      report("compaction_complete", "Pi context compaction completed");
+      send(res, { type: "completed", response });
+    } finally {
+      clearInterval(heartbeat2);
+      res.off("close", abort);
+      runs.delete(runId);
+    }
+    return;
+  }
   report("received", "Pi runtime accepted request", {
     contractVersion: String(RUNTIME_CONTRACT_VERSION),
     api: model.api,

@@ -109,6 +109,45 @@ private final class ThrowingPiStreamSpy: @unchecked Sendable {
 }
 
 final class PiAgentGatewayTests: XCTestCase {
+    func testCompactionUsesPiConfigurationWithoutToolsOrSkillContext() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.setCredential("sarashina-key", for: .sarashina)
+        let pi = PiStreamSpy { request, config in
+            XCTAssertEqual(request.metadata["contextOperation"], "compact")
+            XCTAssertTrue(request.tools.isEmpty)
+            XCTAssertNil(request.skillContext)
+            XCTAssertEqual(config.provider, "sarashina")
+            return [.completed(ProviderResponse(text: "summary", providerTranscript: [
+                ProviderRequestMessage(role: "user", content: "summary")
+            ]))]
+        }
+        let gateway = ProviderGateway(settingsRepository: SettingsRepository(dbQueue: database), credentialStore: credentials, piStream: pi.stream)
+        let response = try await gateway.compact(request: ProviderRequest(
+            model: "sarashina3-mini", messages: [ProviderRequestMessage(role: "user", content: "question")],
+            tools: [ProviderTool(type: "function", payload: ["name": "test"])]
+        ), providerID: LLMProvider.sarashina.rawValue)
+        XCTAssertEqual(response.text, "summary")
+        XCTAssertEqual(pi.calls.count, 1)
+    }
+
+    func testCompactionFailureDoesNotRetry() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        try credentials.setCredential("sarashina-key", for: .sarashina)
+        let pi = PiStreamSpy { _, _ in throw URLError(.networkConnectionLost) }
+        let gateway = ProviderGateway(settingsRepository: SettingsRepository(dbQueue: database), credentialStore: credentials, piStream: pi.stream)
+        do {
+            _ = try await gateway.compact(request: ProviderRequest(model: "sarashina3-mini", messages: []), providerID: LLMProvider.sarashina.rawValue)
+            XCTFail("Expected compaction failure")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .networkConnectionLost)
+        }
+        XCTAssertEqual(pi.calls.count, 1)
+    }
+
     func testCustomEndpointUsesExplicitConfigurationAndPresetCredential() async throws {
         let database = try DatabaseQueue()
         try AppDatabase.migrator.migrate(database)

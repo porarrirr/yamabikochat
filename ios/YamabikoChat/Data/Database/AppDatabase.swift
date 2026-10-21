@@ -1031,6 +1031,12 @@ enum AppDatabase {
                 t.add(column: "genUIToolEnabled", .boolean).notNull().defaults(to: true)
             }
         }
+        migrator.registerMigration("v32_context_compaction") { db in
+            try db.create(table: "conversation_context_checkpoints") { t in
+                t.column("conversationId", .integer).primaryKey().references("conversations", onDelete: .cascade)
+                t.column("payload", .text).notNull()
+            }
+        }
         return migrator
     }
 

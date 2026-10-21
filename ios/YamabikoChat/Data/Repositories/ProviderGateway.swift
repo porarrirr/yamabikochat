@@ -94,6 +94,27 @@ final class ProviderGateway {
         localToolFactory?() ?? localTools
     }
 
+    func compact(request: ProviderRequest, providerID: String) async throws -> ProviderResponse {
+        // Use the same Pi model/auth configuration, without gateway rotation or local tools.
+        if knownProvider(providerID) == .appleIntelligence, request.model != AppleIntelligenceModelCatalog.pccModel {
+            throw ProviderClientError.parseFailure(L10n.text("このモデルは Pi compaction に対応していません。"))
+        }
+        var request = request
+        request.metadata["contextOperation"] = "compact"
+        request.tools = []
+        request.skillContext = nil
+        let config = try await configuration(providerID: providerID, request: request, settings: settingsRepository.load())
+        let stream = try await piStream(request, config, LocalToolRegistry(executors: []))
+        var response: ProviderResponse?
+        for try await event in stream {
+            if case let .completed(value) = event { response = value }
+        }
+        guard let response, response.providerTranscript?.isEmpty == false else {
+            throw ProviderClientError.parseFailure("Pi compaction returned no context")
+        }
+        return response
+    }
+
     func generate(request: ProviderRequest, provider: LLMProvider) async throws -> ProviderResponse {
         try await generate(request: request, providerID: provider.rawValue)
     }

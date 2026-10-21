@@ -1,6 +1,30 @@
 import Foundation
 import Combine
 import GRDB
+import CryptoKit
+
+struct ConversationContextCheckpoint: Codable, Sendable {
+    var provider: String
+    var model: String
+    var systemPrompt: String?
+    var sourceCount: Int
+    var sourceDigest: String
+    var messages: [ProviderRequestMessage]
+    var usage: ProviderUsage?
+
+    static func digest(_ messages: [ProviderRequestMessage]) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return SHA256.hash(data: try encoder.encode(messages)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    func applying(to source: [ProviderRequestMessage], conversation: Conversation) throws -> [ProviderRequestMessage]? {
+        guard provider == conversation.apiProvider, model == conversation.model,
+              systemPrompt == conversation.systemPrompt, source.count >= sourceCount,
+              try Self.digest(Array(source.prefix(sourceCount))) == sourceDigest else { return nil }
+        return messages + source.dropFirst(sourceCount)
+    }
+}
 
 // DatabaseQueue serializes database access and is safe to share across tasks.
 final class ConversationRepository: @unchecked Sendable {
@@ -9,6 +33,26 @@ final class ConversationRepository: @unchecked Sendable {
 
     init(dbQueue: DatabaseQueue) {
         self.dbQueue = dbQueue
+    }
+
+    func saveContextCheckpoint(_ checkpoint: ConversationContextCheckpoint, conversationId: Int64) throws {
+        try dbQueue.write { db in
+            guard let conversation = try Conversation.fetchOne(db, key: conversationId) else {
+                throw ProviderClientError.parseFailure("Conversation not found")
+            }
+            var json = String(decoding: try JSONEncoder().encode(checkpoint), as: UTF8.self)
+            if conversation.isSecret { json = try secretVault.seal(json, conversationID: conversationId) }
+            try db.execute(sql: "INSERT OR REPLACE INTO conversation_context_checkpoints (conversationId, payload) VALUES (?, ?)", arguments: [conversationId, json])
+        }
+    }
+
+    func contextCheckpoint(conversationId: Int64) throws -> ConversationContextCheckpoint? {
+        try dbQueue.read { db in
+            guard let conversation = try Conversation.fetchOne(db, key: conversationId),
+                  var json = try String.fetchOne(db, sql: "SELECT payload FROM conversation_context_checkpoints WHERE conversationId = ?", arguments: [conversationId]) else { return nil }
+            if conversation.isSecret { json = try secretVault.open(json, conversationID: conversationId) }
+            return try JSONDecoder().decode(ConversationContextCheckpoint.self, from: Data(json.utf8))
+        }
     }
 
     func createConversation(

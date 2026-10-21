@@ -918,7 +918,8 @@ struct ChatScreen: View {
 
                 HStack(spacing: 6) {
                     if let contextUsage = viewModel.visibleContextUsage {
-                        ContextUsageMeter(usage: contextUsage)
+                        ContextUsageMeter(usage: contextUsage, isCompacting: viewModel.isCompacting,
+                                          canCompact: viewModel.canCompactContext, compact: viewModel.compactContext)
                     }
                     composerCollapsedVoiceButton
                 }
@@ -936,7 +937,8 @@ struct ChatScreen: View {
                     composerPlusMenuButton
                     Spacer(minLength: 4)
                     if let contextUsage = viewModel.visibleContextUsage {
-                        ContextUsageMeter(usage: contextUsage)
+                        ContextUsageMeter(usage: contextUsage, isCompacting: viewModel.isCompacting,
+                                          canCompact: viewModel.canCompactContext, compact: viewModel.compactContext)
                     }
                     if showsReasoningEffortMeter {
                         composerReasoningEffortButton
@@ -1206,6 +1208,9 @@ struct ChatScreen: View {
 
     private struct ContextUsageMeter: View {
         let usage: ContextUsage
+        let isCompacting: Bool
+        let canCompact: Bool
+        let compact: () -> Void
         @State private var showsDetails = false
 
         var body: some View {
@@ -1239,12 +1244,24 @@ struct ChatScreen: View {
                     Text("\(usage.percent)%")
                         .font(.title2.monospacedDigit().bold())
                     Text(L10n.format(
-                        "最新リクエスト: %@ / %@ token",
+                        usage.isCompactedEstimate ? "圧縮後の推定: %@ / %@ token" : "最新リクエスト: %@ / %@ token",
                         ChatStatsFormatter.tokens(Int64(usage.usedTokens)),
                         ChatStatsFormatter.tokens(Int64(usage.contextWindow))
                     ))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    Divider()
+                    Button(action: compact) {
+                        HStack {
+                            if isCompacting { ProgressView().controlSize(.small) }
+                            Text(L10n.text(isCompacting ? "Compacting…" : "Compaction"))
+                        }
+                    }
+                    .disabled(!canCompact)
+                    .accessibilityIdentifier("context-compaction-button")
+                    Text(L10n.text("Pi で会話を要約し、以後の送信コンテキストを圧縮します。"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(16)
                 .presentationCompactAdaptation(.popover)

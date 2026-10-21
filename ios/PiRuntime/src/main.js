@@ -20,6 +20,7 @@ import { applyExplicitSkillInvocations } from "./skill-context.js";
 import { createChatGPTPlanPlugin, CHATGPT_PLAN_PROVIDER, chatGPTPlanPayload, chatGPTPlanCompleted } from "./chatgpt-plan-plugin.js";
 import { installSarashinaProvider, sarashinaResolution } from "./sarashina-provider.js";
 import { CUSTOM_PROVIDER, customProviderResolution, customStreamOptions } from "./custom-provider.js";
+import { compactContext } from "./compaction.js";
 
 const port = Number(process.argv[2]);
 const token = process.argv[3];
@@ -1239,6 +1240,28 @@ async function runAgent(envelope, res) {
     model: model.id
   };
   const report = (stage, message, metadata) => diagnostic(res, runId, stage, message, metadata);
+  if (request.metadata?.contextOperation === "compact") {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    const heartbeat = setInterval(() => send(res, { type: "heartbeat" }), STREAM_HEARTBEAT_INTERVAL_MS);
+    res.on("close", abort);
+    runs.set(runId, { abort, state: { model } });
+    try {
+      report("compaction_start", "Pi context compaction starting");
+      const response = await withPCCBridge({ runId, send: event => send(res, event) }, () => compactContext({
+        messages: messagesFrom(request, model), model, config: resolvedConfig,
+        streamFn: standardStreamFunction({ ...request, tools: [] }, resolvedConfig, report, () => {}),
+        signal: controller.signal
+      }));
+      report("compaction_complete", "Pi context compaction completed");
+      send(res, { type: "completed", response });
+    } finally {
+      clearInterval(heartbeat);
+      res.off("close", abort);
+      runs.delete(runId);
+    }
+    return;
+  }
   report("received", "Pi runtime accepted request", {
     contractVersion: String(RUNTIME_CONTRACT_VERSION),
     api: model.api,

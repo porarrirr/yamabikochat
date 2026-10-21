@@ -66,6 +66,13 @@ struct ConversationStats: Equatable, Sendable {
 struct ContextUsage: Equatable, Sendable {
     let usedTokens: Int
     let contextWindow: Int
+    var isCompactedEstimate = false
+
+    init(usedTokens: Int, contextWindow: Int, isCompactedEstimate: Bool = false) {
+        self.usedTokens = usedTokens
+        self.contextWindow = contextWindow
+        self.isCompactedEstimate = isCompactedEstimate
+    }
 
     init?(record: TokenUsageRecord?) {
         guard let record,
