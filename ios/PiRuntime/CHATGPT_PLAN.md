@@ -56,6 +56,10 @@ settings open. The ChatGPT model picker also offers a manual refresh that update
 both sources, with loading and failure states. New discovery results replace the
 displayed list and reasoning cache without changing the saved model selection;
 superseded requests and results from a signed-out account are discarded.
+Capability resolution also restores the account catalog through Pi before resolving
+a saved model. The persisted native picker cache cannot substitute for the runtime's
+account authorization after an engine restart; catalog failures stop resolution.
+
 
 Pi's `onPayload` hook applies the official preview contract: `store=false`,
 `stream=true`, developer instructions and namespaced local function/custom tools.

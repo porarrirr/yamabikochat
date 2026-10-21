@@ -6,6 +6,10 @@ import path from "node:path";
 
 export const mobileAgentDir = path.join(os.tmpdir(), `yamabiko-pi-subagents-${process.pid}`);
 process.env.PI_CODING_AGENT_DIR = mobileAgentDir;
+// Mobile ships its extensions and agents. Never discover/install global npm packages.
+// Pi's offline flag affects package discovery, not provider inference.
+process.env.PI_OFFLINE = "1";
+process.env.YAMABIKO_PI_MOBILE = "1";
 const directory = path.join(mobileAgentDir, "extensions", "subagent");
 fs.mkdirSync(directory, { recursive: true });
 fs.writeFileSync(path.join(directory, "config.json"), JSON.stringify({

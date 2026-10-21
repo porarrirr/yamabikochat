@@ -920,6 +920,13 @@ final class ProviderGateway {
         } else {
             catalogContract = nil
         }
+        if provider == .codexAuth, forModelResolution, let codexAuthRepository {
+            // The runtime catalog is account-scoped and disappears on engine restart.
+            // A persisted picker cache cannot authorize runtime model resolution.
+            _ = try await codexAuthRepository.models(contracts: CodexModelCatalog.modelsDevContracts(
+                from: modelsDevCatalogRepository?.provider(for: .modelsDev("openai"))
+            ))
+        }
         return PiAgentConfiguration(
             provider: piProvider,
             model: normalizedModel(request.model, provider: provider),

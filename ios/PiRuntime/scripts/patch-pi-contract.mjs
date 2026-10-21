@@ -49,3 +49,15 @@ patch('pi-ai/dist/api/openai-completions.js', '        defaultHeaders: headers,'
             ...(model.provider === "azure-openai-responses" && apiKey ? { "api-key": apiKey } : {}),
             ...headers,
         },`);
+
+// pi-subagents starts a Git baseline promise even with its watchdog disabled.
+// iOS cannot spawn processes; preserve the upstream unavailable-baseline result
+// before creating a promise that would reject without an observer.
+const subagentsPackage = JSON.parse(fs.readFileSync(new URL('../pi-subagents/package.json', root)));
+if (subagentsPackage.version !== '0.79.2') throw new Error(`Review mobile subagents patch for ${subagentsPackage.version}`);
+for (const name of ['captureWatchdogDiffBaseline', 'startWatchdogDiffBaselineCapture']) {
+  patch('../pi-subagents/src/watchdog/diff-tool.js',
+    `export function ${name}(cwd) {`,
+    `export function ${name}(cwd) {
+    if (process.env.YAMABIKO_PI_MOBILE === "1") return ${name.startsWith('start') ? 'Promise.resolve(undefined)' : 'undefined'};`);
+}

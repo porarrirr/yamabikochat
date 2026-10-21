@@ -139,10 +139,19 @@ test("bundled pi-subagents executes three real Pi child sessions and reports the
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "yamabiko-subagents-test-"));
   fs.copyFileSync(new URL("../bundle/main.js", import.meta.url), path.join(root, "main.mjs"));
   fs.cpSync(new URL("../bundle/PiAssets", import.meta.url), path.join(root, "PiAssets"), { recursive: true });
-  const child = spawn(process.execPath, [path.join(root, "main.mjs"), String(port), "subagent-test"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+  const sandbox = path.join(root, "ios-sandbox.mjs");
+  fs.writeFileSync(sandbox, `
+    import { ChildProcess } from "node:child_process";
+    import fs from "node:fs";
+    ChildProcess.prototype.spawn = function () {
+      fs.appendFileSync(${JSON.stringify(path.join(root, "spawn-attempts.log"))}, "spawn attempted\\n");
+      throw Object.assign(new Error("spawn EPERM"), { code: "EPERM" });
+    };
+  `);
+  const child = spawn(process.execPath, ["--import", sandbox, path.join(root, "main.mjs"), String(port), "subagent-test"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
   let logs = "";
   child.stderr.on("data", chunk => { logs += chunk; });
-  t.after(async () => { child.kill(); await once(child, "exit"); fs.rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { if (child.exitCode === null) { child.kill(); await once(child, "exit"); } fs.rmSync(root, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${port}`;
   const headers = { authorization: "Bearer subagent-test", "content-type": "application/json" };
   for (let attempt = 0; ; attempt++) {
@@ -295,4 +304,6 @@ test("bundled pi-subagents executes three real Pi child sessions and reports the
   await (await submit("launch-mobile-inherit", config, [], crypto.randomUUID(), "Keep this mobile conversation persona unchanged.")).text();
   assert.ok(JSON.stringify(requests[customStart].messages).includes("Keep this mobile conversation persona unchanged."));
   assert.ok(!JSON.stringify(requests[customStart].messages).includes("You are an expert coding assistant operating inside pi"));
+  assert.equal(fs.existsSync(path.join(root, "spawn-attempts.log")), false,
+    "Mobile parent and child sessions must not attempt desktop subprocess discovery");
 });

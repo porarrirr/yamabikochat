@@ -82,6 +82,13 @@ data URLs. `PiAssets` includes built-in agent definitions, guides, manifests, SD
 theme data, and the exact Acorn dependency required by the upstream workflow worker.
 XcodeGen copies that folder alongside `main.js`; bootstrap caching checks both.
 No package installation, CLI process or code download occurs on the device.
+The host sets Pi's `PI_OFFLINE` flag to disable global npm/skill-package discovery;
+provider inference still uses the normal network path. The version-checked
+`patch-pi-contract.mjs` patch makes Git watchdog baselines unavailable in the mobile
+host before any subprocess or rejected promise is created. Desktop behavior outside
+the mobile host is unchanged. Integration tests deny subprocess spawning with
+`EPERM` and assert that parent/child sessions never attempt it.
+
 
 Required checks when changing this integration or upgrading the plugin:
 

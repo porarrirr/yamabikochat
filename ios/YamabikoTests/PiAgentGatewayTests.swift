@@ -1226,11 +1226,29 @@ final class PiAgentGatewayTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "PiAgentGatewayTests.\(UUID().uuidString)"))
         let catalog = ModelsDevCatalogRepository(defaults: defaults, cacheURL: cacheURL)
         let capturedConfigurations = LockedConfigurationBox()
+        let catalogConfigurations = LockedConfigurationBox()
+        let credentials = PiGatewayCredentialStore()
+        let auth = CodexAuthRepository(
+            credentialStore: credentials,
+            loginHandler: { host, _, _ in chatGPTResolution(hostID: host) },
+            resolveHandler: { _, _, _ in chatGPTResolution() },
+            catalogHandler: { _, contracts in
+                catalogConfigurations.append([PiAgentConfiguration(
+                    provider: "openai-chatgpt", model: "gpt-6.1-sol",
+                    catalogContract: contracts["gpt-6.1-sol"]
+                )])
+                return [PiCodexModel(id: "gpt-6.1-sol", name: "Sol", supported: true)]
+            }
+        )
+        _ = await auth.loginWithBrowser()
         let gateway = ProviderGateway(
             settingsRepository: SettingsRepository(dbQueue: database),
-            credentialStore: PiGatewayCredentialStore(),
+            credentialStore: credentials,
+            codexAuthRepository: auth,
             modelsDevCatalogRepository: catalog,
             piModelResolver: { configurations in
+                XCTAssertEqual(catalogConfigurations.all.count, capturedConfigurations.all.count + 1,
+                               "Restore the account catalog before every runtime resolution, including after restart")
                 capturedConfigurations.append(configurations)
                 return configurations.map { _ in PiModelResolution(supported: true, input: ["text", "image"]) }
             }
@@ -1238,10 +1256,44 @@ final class PiAgentGatewayTests: XCTestCase {
 
         _ = try await gateway.modelSupportsVision(provider: "CODEX_AUTH", model: "gpt-6.1-sol")
 
+        // Even a fresh native picker cache must not skip runtime catalog restoration.
+        _ = try await gateway.modelSupportsVision(provider: "CODEX_AUTH", model: "gpt-6.1-sol")
+        XCTAssertEqual(catalogConfigurations.all.count, 2)
+        XCTAssertEqual(catalogConfigurations.all.first?.catalogContract?.provenance, "provider")
         let configuration = try XCTUnwrap(capturedConfigurations.all.first)
         XCTAssertEqual(configuration.provider, "openai-chatgpt")
         XCTAssertEqual(configuration.catalogContract?.provenance, "provider")
         XCTAssertEqual(configuration.catalogContract?.reasoningEfforts, ["low", "medium", "high", "xhigh", "max"])
+    }
+
+    func testChatGPTCatalogFailureStopsCapabilityResolution() async throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let credentials = PiGatewayCredentialStore()
+        let auth = CodexAuthRepository(
+            credentialStore: credentials,
+            loginHandler: { host, _, _ in chatGPTResolution(hostID: host) },
+            resolveHandler: { _, _, _ in chatGPTResolution() },
+            catalogHandler: { _, _ in
+                throw ProviderClientError.parseFailure("chatgpt_catalog_invalid")
+            }
+        )
+        _ = await auth.loginWithBrowser()
+        let gateway = ProviderGateway(
+            settingsRepository: SettingsRepository(dbQueue: database),
+            credentialStore: credentials,
+            codexAuthRepository: auth,
+            piModelResolver: { _ in
+                XCTFail("Do not resolve from an absent or stale account catalog")
+                return []
+            }
+        )
+        do {
+            _ = try await gateway.modelSupportsVision(provider: "CODEX_AUTH", model: "gpt-6-luna")
+            XCTFail("Expected the catalog error")
+        } catch ProviderClientError.parseFailure(let reason) {
+            XCTAssertEqual(reason, "chatgpt_catalog_invalid")
+        }
     }
 
     func testOpenCodeGoMuseSparkUsesResponsesAPI() async throws {

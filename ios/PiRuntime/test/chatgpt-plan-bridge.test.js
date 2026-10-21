@@ -13,6 +13,10 @@ for (const [incompleteReason, terminalTurn, compaction = false] of [[null, 2], [
   const mock = path.join(root, "mock.mjs");
   const joseURL = new URL("../node_modules/jose/dist/webapi/index.js", import.meta.url).href;
   fs.writeFileSync(mock, `
+    import { ChildProcess } from "node:child_process";
+    ChildProcess.prototype.spawn = function () {
+      throw Object.assign(new Error("spawn EPERM"), { code: "EPERM" });
+    };
     import {generateKeyPair,exportJWK,SignJWT} from ${JSON.stringify(joseURL)};
     const {publicKey,privateKey}=await generateKeyPair('RS256');
     const jwk={...await exportJWK(publicKey),alg:'RS256',kid:'bridge'};
@@ -147,6 +151,10 @@ test("bundled Pi SIWC run executes a models.dev contract slug through openai-res
   const mock = path.join(root, "mock.mjs");
   const joseURL = new URL("../node_modules/jose/dist/webapi/index.js", import.meta.url).href;
   fs.writeFileSync(mock, `
+    import { ChildProcess } from "node:child_process";
+    ChildProcess.prototype.spawn = function () {
+      throw Object.assign(new Error("spawn EPERM"), { code: "EPERM" });
+    };
     import {generateKeyPair,exportJWK,SignJWT} from ${JSON.stringify(joseURL)};
     const {publicKey,privateKey}=await generateKeyPair('RS256');
     const jwk={...await exportJWK(publicKey),alg:'RS256',kid:'bridge'};
