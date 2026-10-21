@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SubagentFleetView: View {
     let runs: [SubagentRun]
+    var mathRenderingEnabled = true
     var onLayoutChange: () -> Void = {}
     @State private var expanded = false
     @State private var selection: String?
@@ -63,7 +64,7 @@ struct SubagentFleetView: View {
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.primary.opacity(0.06)))
         .sheet(isPresented: Binding(get: { selection != nil }, set: { if !$0 { selection = nil } })) {
             if let run = runs.first(where: { $0.id == selection }) {
-                SubagentDetailSheet(run: run)
+                SubagentDetailSheet(run: run, mathRenderingEnabled: mathRenderingEnabled)
             }
         }
         .sheet(isPresented: $showAll) {
@@ -72,7 +73,7 @@ struct SubagentFleetView: View {
                     NavigationLink(value: run.id) { SubagentRunRow(run: run) }
                 }
                 .navigationDestination(for: String.self) { id in
-                    if let run = runs.first(where: { $0.id == id }) { SubagentDetailContent(run: run) }
+                    if let run = runs.first(where: { $0.id == id }) { SubagentDetailContent(run: run, mathRenderingEnabled: mathRenderingEnabled) }
                 }
                 .navigationTitle("サブエージェント")
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("閉じる") { showAll = false } } }
@@ -118,11 +119,12 @@ private struct SubagentStatusIcon: View {
 
 private struct SubagentDetailSheet: View {
     let run: SubagentRun
+    let mathRenderingEnabled: Bool
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            SubagentDetailContent(run: run)
+            SubagentDetailContent(run: run, mathRenderingEnabled: mathRenderingEnabled)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("閉じる") { dismiss() } } }
         }
         .presentationDetents([.large])
@@ -133,7 +135,8 @@ private struct SubagentDetailSheet: View {
 private struct SubagentDetailContent: View {
     let run: SubagentRun
     @State private var tab = 0
-    @State private var taskExpanded = false
+    let mathRenderingEnabled: Bool
+    @State private var route: ChatWorkspaceRoute?
 
     var body: some View {
         ScrollView {
@@ -155,12 +158,6 @@ private struct SubagentDetailContent: View {
                         if let tokens = run.usage?.totalTokens { Text("· \(tokens) tokens") }
                     }.font(.caption).foregroundStyle(.secondary)
                 }
-                DisclosureGroup("依頼内容", isExpanded: $taskExpanded) {
-                    Text(run.task).font(.subheadline).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                }
-                if !taskExpanded {
-                    Text(run.task).font(.subheadline).foregroundStyle(.secondary).lineLimit(3)
-                }
                 if let error = run.error, !error.isEmpty {
                     Label(error, systemImage: "exclamationmark.triangle")
                         .font(.callout).foregroundStyle(.orange).textSelection(.enabled)
@@ -170,6 +167,8 @@ private struct SubagentDetailContent: View {
                     Text("処理履歴（\(run.events.count)）").tag(1)
                 }.pickerStyle(.segmented)
                 if tab == 0 {
+                    messageRow(role: "user", text: run.task)
+                        .accessibilityIdentifier("subagent-prompt")
                     if let artifacts = run.artifacts, !artifacts.isEmpty {
                         MessageAttachmentList(attachments: artifacts.map { ChatAttachmentItem(rawValue: $0.path) }, isOutgoing: false)
                     }
@@ -178,8 +177,7 @@ private struct SubagentDetailContent: View {
                         Label(run.status == .running ? "出力を待っています。処理履歴で現在の動作を確認できます。" : "テキスト出力はありません。処理履歴を確認してください。", systemImage: "text.bubble")
                             .font(.callout).foregroundStyle(.secondary).padding(.vertical, 18)
                     } else {
-                        Text(run.output).font(.body).textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        messageRow(role: "assistant", text: run.output)
                             .accessibilityIdentifier("subagent-output")
                     }
                 } else {
@@ -207,7 +205,23 @@ private struct SubagentDetailContent: View {
             .padding(18)
         }
         .background(Color(uiColor: .amoledSystemBackground))
+        .sheet(item: $route) { ChatWorkspaceRouteSheet(route: $0) }
         .navigationTitle(run.agent)
         .navigationBarTitleDisplayMode(.inline)
     }
+
+    private func messageRow(role: String, text: String) -> some View {
+        ChatMessageRow(
+            message: FullChatMessage(id: role == "user" ? 0 : 1,
+                message: ChatMessage(conversationId: 0, role: role, text: text),
+                thinkingStream: nil, variants: []),
+            streamingSnapshot: nil, streamingMarkdownBlocks: nil,
+            canRegenerate: false, mathRenderingEnabled: mathRenderingEnabled,
+            fusionDebugModeEnabled: false, fusionTrace: nil,
+            onRoute: { route = $0 }, onPreviousVariant: { _ in }, onNextVariant: { _ in },
+            onBranch: { _ in }, onRegenerate: {}, onEditUserMessage: { _ in },
+            onSelectUserMessageText: { _ in }, onMarkdownLayoutChange: {}, isReadOnly: true
+        )
+    }
+
 }

@@ -15,10 +15,13 @@ final class SubagentUITests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         capture("subagents-expanded")
         row.tap()
-        let output = app.staticTexts["subagent-output"]
+        let output = app.textViews.containing(NSPredicate(format: "value CONTAINS %@", "実装確認の途中結果")).firstMatch
         XCTAssertTrue(output.waitForExistence(timeout: 5))
-        XCTAssertTrue(output.label.contains("実装確認の途中結果"))
+        XCTAssertTrue((output.value as? String)?.contains("実装確認の途中結果") == true)
         XCTAssertTrue(app.staticTexts["Effort: medium"].exists)
+        XCTAssertTrue(app.staticTexts["実装確認を担当してください。確認した根拠と具体的な結果を日本語で報告してください。"].exists)
+        XCTAssertFalse(app.buttons["再生成"].isHittable)
+        XCTAssertFalse(app.buttons["分岐"].isHittable)
         capture("subagents-detail")
         app.segmentedControls.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "処理履歴")).firstMatch.tap()
         XCTAssertTrue(app.staticTexts["fetch_url"].waitForExistence(timeout: 5))
@@ -37,11 +40,8 @@ final class SubagentUITests: XCTestCase {
         let row = app.buttons["subagent-row-fixture-1"]
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.tap()
-        let output = app.staticTexts["subagent-output"]
-        XCTAssertTrue(output.waitForExistence(timeout: 5))
-        let updated = NSPredicate(format: "label CONTAINS %@", "ライブ更新の結果")
-        expectation(for: updated, evaluatedWith: output)
-        waitForExpectations(timeout: 20)
+        let output = app.textViews.containing(NSPredicate(format: "value CONTAINS %@", "ライブ更新の結果")).firstMatch
+        XCTAssertTrue(output.waitForExistence(timeout: 20))
         capture("subagents-detail-live")
     }
 
@@ -50,8 +50,9 @@ final class SubagentUITests: XCTestCase {
         app.launchArguments = ["-AppStoreScreenshotDemo", "-SubagentFixture", "-ScreenshotScene", "settings-dual", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
         app.launch()
         let settings = app.buttons["settings-subagents"]
-        XCTAssertTrue(settings.waitForExistence(timeout: 15))
-        for _ in 0..<5 where !settings.isHittable { app.swipeUp() }
+        XCTAssertTrue(app.navigationBars["会話"].waitForExistence(timeout: 15))
+        for _ in 0..<8 where !settings.isHittable { app.swipeUp() }
+        XCTAssertTrue(settings.exists)
         settings.tap()
         XCTAssertTrue(app.switches["subagents-enabled"].waitForExistence(timeout: 5))
         capture("subagents-settings")
@@ -69,6 +70,14 @@ final class SubagentUITests: XCTestCase {
         XCTAssertTrue(app.buttons["high"].waitForExistence(timeout: 5))
         app.buttons["high"].tap()
         capture("subagents-model-effort")
+        let delete = app.buttons["subagent-profile-delete"]
+        for _ in 0..<5 where !delete.isHittable { app.swipeUp() }
+        XCTAssertTrue(delete.exists)
+        delete.tap()
+        app.buttons["削除"].tap()
+        XCTAssertTrue(app.buttons["subagent-profile-add"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["モデル設定 1"].exists)
+        capture("subagents-model-deleted")
     }
 
     private func launch(live: Bool = false) -> XCUIApplication {

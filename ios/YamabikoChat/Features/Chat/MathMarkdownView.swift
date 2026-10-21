@@ -55,7 +55,7 @@ enum MathMarkdownNormalizer {
             .replacingOccurrences(of: #"\\$"#, with: #"\$"#)
     }
 
-    private static func transformOutsideCode(_ markdown: String, transform: (String) -> String) -> String {
+    static func transformOutsideCode(_ markdown: String, transform: (String) -> String) -> String {
         guard !markdown.isEmpty else { return markdown }
 
         var output = ""

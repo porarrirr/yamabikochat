@@ -87,15 +87,41 @@ enum NativeMarkdownParser {
         rendersMath: Bool,
         offsets: SourceOffsetMap
     ) -> [NativeMarkdownBlock] {
-        parent.children.enumerated().flatMap { index, child in
-            let fallbackPath = "\(path)-\(index)"
-            return parseBlock(
-                child,
-                path: offsets.blockID(for: child, fallbackPath: fallbackPath),
-                rendersMath: rendersMath,
-                offsets: offsets
-            )
+        let children = Array(parent.children)
+        var result: [NativeMarkdownBlock] = []
+        var index = 0
+        while index < children.count {
+            let child = children[index]
+            let path = offsets.blockID(for: child, fallbackPath: "\(path)-\(index)")
+            // A display equation may contain blank lines, which CommonMark splits
+            // into separate paragraphs. Preserve that entire source span for MathJax.
+            if rendersMath, child is Paragraph,
+               let source = offsets.sourceText(for: child),
+               let closing = displayMathClosingDelimiter(source),
+               !containsMath(source) {
+                var end = index + 1
+                while end < children.count, children[end] is Paragraph {
+                    if let combined = offsets.sourceText(from: child, through: children[end]),
+                       combined.contains(closing), containsMath(combined) {
+                        result.append(.math(id: path, markdown: combined))
+                        index = end + 1
+                        break
+                    }
+                    end += 1
+                }
+                if index == end + 1 { continue }
+            }
+            result += parseBlock(child, path: path, rendersMath: rendersMath, offsets: offsets)
+            index += 1
         }
+        return result
+    }
+
+    private static func displayMathClosingDelimiter(_ source: String) -> String? {
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix(#"\["#) { return #"\]"# }
+        if trimmed.hasPrefix("$$") { return "$$" }
+        return nil
     }
 
     private static func parseBlock(
@@ -105,8 +131,8 @@ enum NativeMarkdownParser {
         offsets: SourceOffsetMap
     ) -> [NativeMarkdownBlock] {
         if let paragraph = markup as? Paragraph {
-            if rendersMath, containsMath(paragraph.plainText) {
-                return [.math(id: path, markdown: paragraph.plainText)]
+            if rendersMath, let source = offsets.sourceText(for: paragraph), containsMath(source) {
+                return [.math(id: path, markdown: source)]
             }
             return [.paragraph(id: path, text: inlineText(paragraph))]
         }
@@ -166,16 +192,29 @@ enum NativeMarkdownParser {
     }
 
     fileprivate struct SourceOffsetMap {
+        let source: String
         let lineStartUTF8Offsets: [Int]
         let baseUTF8Offset: Int
 
         init(source: String, baseUTF8Offset: Int) {
+            self.source = source
             var starts = [0]
             for (index, byte) in source.utf8.enumerated() where byte == 0x0A {
                 starts.append(index + 1)
             }
             lineStartUTF8Offsets = starts
             self.baseUTF8Offset = baseUTF8Offset
+        }
+
+        func sourceText(for markup: Markup) -> String? {
+            sourceText(from: markup, through: markup)
+        }
+
+        func sourceText(from first: Markup, through last: Markup) -> String? {
+            guard let start = first.range?.lowerBound, let end = last.range?.upperBound,
+                  let lower = utf8Offset(for: start), let upper = utf8Offset(for: end),
+                  lower <= upper, upper <= source.utf8.count else { return nil }
+            return String(decoding: source.utf8.dropFirst(lower).prefix(upper - lower), as: UTF8.self)
         }
 
         func blockID(for markup: Markup, fallbackPath: String) -> String {
@@ -196,6 +235,15 @@ enum NativeMarkdownParser {
     }
 
     private static func containsMath(_ value: String) -> Bool {
+        var mathSource = ""
+        _ = MathMarkdownNormalizer.transformOutsideCode(value) { segment in
+            mathSource += segment
+            return segment
+        }
+        return containsMathOutsideCode(mathSource)
+    }
+
+    private static func containsMathOutsideCode(_ value: String) -> Bool {
         guard value.utf8.contains(0x24) || value.utf8.contains(0x5C) else { return false }
         return hasOrderedPair(opening: "$$", closing: "$$", in: value)
             || inlineMathRegex.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) != nil

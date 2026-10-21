@@ -479,6 +479,13 @@ line1\\nline2
         XCTAssertTrue(result.contains("<p>| a | b | | nope | nope |</p>"))
     }
 
+    func testDisplayMathWithBlankLinesStaysInOneTextNode() throws {
+        for equation in [#"\["# + "\n\nx^2 < y\n\n" + #"\]"#, "$$\n\nx^2 < y\n\n$$"] {
+            let html = try renderMarkdownWithJavaScript(equation)
+            XCTAssertEqual(html, "<p>" + equation.replacingOccurrences(of: "<", with: "&lt;") + "</p>")
+        }
+    }
+
     private func loadMarkdownRendererSource() throws -> String {
         let testDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         let rendererURL = testDirectory

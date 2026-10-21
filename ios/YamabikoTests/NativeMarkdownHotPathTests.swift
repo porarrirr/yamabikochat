@@ -22,8 +22,8 @@ final class NativeMarkdownHotPathTests: XCTestCase {
     }
 
     func testMathDetectionPreservesDollarAndLiteralBackslashDelimiters() throws {
-        // Markdown consumes one level of backslash escaping before math detection.
-        for source in ["式 $x^2$ です", "式 $$x^2$$ です", #"式 \\[x^2\\] です"#, #"式 \\(x^2\\) です"#] {
+        // Detect delimiters before CommonMark consumes escapes.
+        for source in ["式 $x^2$ です", "式 $$x^2$$ です", #"式 \\[x^2\\] です"#, #"式 \\(x^2\\) です"#, #"式 \(x^2\) です"#, #"式 \[x^2\] です"#] {
             guard case .math = try XCTUnwrap(NativeMarkdownParser.parse(source).first) else {
                 return XCTFail("Expected math for \(source)")
             }
@@ -31,11 +31,28 @@ final class NativeMarkdownHotPathTests: XCTestCase {
                 return XCTFail("Streaming must defer math rendering")
             }
         }
-        for source in ["普通の本文", "Price: $5 and $10", "Unclosed $x", #"Escaped \$5"#, #"式 \[x^2\] です"#] {
+        for source in ["普通の本文", "Price: $5 and $10", "Unclosed $x", #"Escaped \$5"#, #"`$x^2$`"#, #"`\[x\]`"#] {
             guard case .paragraph = try XCTUnwrap(NativeMarkdownParser.parse(source).first) else {
                 return XCTFail("Unexpected math for \(source)")
             }
         }
+    }
+
+    func testDisplayMathPreservesBlankLinesCommandsAndSurroundingMarkdown() throws {
+        let equation = #"\["# + "\n\ndS=2" + #"\pi r^2\cos\theta\,d\theta"# + "\n\n" + #"\]"#
+        let blocks = NativeMarkdownParser.parse("**球の面積**\n\n" + equation + "\n\n終わり")
+        XCTAssertEqual(blocks.count, 3)
+        guard case let .math(_, markdown) = blocks[1] else { return XCTFail("Expected display math") }
+        XCTAssertEqual(markdown, equation)
+        guard case .paragraph = blocks[2] else { return XCTFail("Expected following paragraph") }
+    }
+
+    func testMathPreservesMarkdownFormattingAndEscapesInOriginalSource() throws {
+        let source = #"**公式** \(4\pi r^2\) と `code`"#
+        guard case let .math(_, markdown) = try XCTUnwrap(NativeMarkdownParser.parse(source).first) else {
+            return XCTFail("Expected inline math")
+        }
+        XCTAssertEqual(markdown, source)
     }
 
     @MainActor

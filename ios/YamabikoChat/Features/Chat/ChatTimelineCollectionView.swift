@@ -1238,7 +1238,7 @@ private struct ChatTimelineTopPinnedLayout: Layout {
     }
 }
 
-private struct ChatMessageRow: View {
+struct ChatMessageRow: View {
     let message: FullChatMessage
     let streamingSnapshot: ChatStreamingSnapshot?
     let streamingMarkdownBlocks: [NativeMarkdownBlock]?
@@ -1254,6 +1254,8 @@ private struct ChatMessageRow: View {
     let onEditUserMessage: (String) -> Void
     let onSelectUserMessageText: (String) -> Void
     let onMarkdownLayoutChange: () -> Void
+
+    var isReadOnly = false
 
     private var isUser: Bool { message.message.role == "user" }
     private var isStreaming: Bool { streamingSnapshot?.isFinal == false }
@@ -1314,15 +1316,19 @@ private struct ChatMessageRow: View {
                                     } label: {
                                         Label(L10n.text("コピーする"), systemImage: "doc.on.doc")
                                     }
-                                    Button {
-                                        onEditUserMessage(responseText)
-                                    } label: {
-                                        Label(L10n.text("編集する"), systemImage: "pencil")
+                                    if !isReadOnly {
+                                        Button {
+                                            onEditUserMessage(responseText)
+                                        } label: {
+                                            Label(L10n.text("編集する"), systemImage: "pencil")
+                                        }
                                     }
-                                    Button {
-                                        onSelectUserMessageText(responseText)
-                                    } label: {
-                                        Label(L10n.text("テキストを選択する"), systemImage: "selection.pin.in.out")
+                                    if !isReadOnly {
+                                        Button {
+                                            onSelectUserMessageText(responseText)
+                                        } label: {
+                                            Label(L10n.text("テキストを選択する"), systemImage: "selection.pin.in.out")
+                                        }
                                     }
                                 }
                         }
@@ -1335,7 +1341,7 @@ private struct ChatMessageRow: View {
                         ProviderRotationNoticeView(notice: notice)
                     }
                     if !toolSteps.compactMap(\.subagent).isEmpty {
-                        SubagentFleetView(runs: toolSteps.compactMap(\.subagent), onLayoutChange: onMarkdownLayoutChange)
+                        SubagentFleetView(runs: toolSteps.compactMap(\.subagent), mathRenderingEnabled: mathRenderingEnabled, onLayoutChange: onMarkdownLayoutChange)
                     }
                     if !toolSteps.filter({ $0.subagent == nil }).isEmpty {
                         ChatRunSummaryButton(steps: toolSteps.filter { $0.subagent == nil }) {
@@ -1438,7 +1444,8 @@ private struct ChatMessageRow: View {
                             onPreviousVariant: onPreviousVariant,
                             onNextVariant: onNextVariant,
                             onBranch: onBranch,
-                            onRegenerate: onRegenerate
+                            onRegenerate: onRegenerate,
+                            isReadOnly: isReadOnly
                         )
                     }
                 }
@@ -1614,12 +1621,16 @@ private struct ChatMessageActions: View {
     let onBranch: (Int64) -> Void
     let onRegenerate: () -> Void
 
+    var isReadOnly = false
+
     var body: some View {
         HStack(spacing: 2) {
             actionButton("doc.on.doc", label: L10n.text("コピー")) {
                 UIPasteboard.general.string = copyText
             }
-            actionButton("arrow.branch", label: L10n.text("分岐")) { onBranch(message.id) }
+            if !isReadOnly {
+                actionButton("arrow.branch", label: L10n.text("分岐")) { onBranch(message.id) }
+            }
             if canRegenerate {
                 actionButton("arrow.clockwise", label: L10n.text("再生成"), action: onRegenerate)
             }
@@ -1874,7 +1885,7 @@ private struct DualResponseColumn: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             if !presentation.toolSteps.compactMap(\.subagent).isEmpty {
-                SubagentFleetView(runs: presentation.toolSteps.compactMap(\.subagent))
+                SubagentFleetView(runs: presentation.toolSteps.compactMap(\.subagent), mathRenderingEnabled: mathRenderingEnabled)
             }
             if !presentation.toolSteps.filter({ $0.subagent == nil }).isEmpty {
                 ChatRunSummaryButton(steps: presentation.toolSteps.filter { $0.subagent == nil }) {

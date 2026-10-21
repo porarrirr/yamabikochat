@@ -401,6 +401,15 @@
       return key;
     });
 
+    // Keep display TeX in one text node even when it contains blank lines.
+    // Fenced code has already been extracted, so it remains literal.
+    var displayMath = [];
+    source = source.replace(/(^|\n)[ \t]*(\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$)[ \t]*(?=\n|$)/g, function(_, prefix, math) {
+      var key = "@@DISPLAY_MATH_" + displayMath.length + "@@";
+      displayMath.push("<p>" + escapeHtml(math) + "</p>");
+      return prefix + key;
+    });
+
     var lines = source.split("\n");
     var htmlParts = [];
     var paragraphBuffer = [];
@@ -419,6 +428,13 @@
 
       if (isBlank(line)) {
         flushParagraph();
+        i += 1;
+        continue;
+      }
+
+      if (/^@@DISPLAY_MATH_\d+@@$/.test(trimmed)) {
+        flushParagraph();
+        htmlParts.push(displayMath[Number(trimmed.replace(/\D/g, ""))] || "");
         i += 1;
         continue;
       }

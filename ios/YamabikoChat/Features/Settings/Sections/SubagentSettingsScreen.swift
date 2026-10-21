@@ -63,7 +63,12 @@ private struct SubagentSettingsScreen: View {
             Section {
                 ForEach(options.wrappedValue.models) { profile in
                     NavigationLink {
-                        SubagentProfileEditor(viewModel: viewModel, profile: profileBinding(profile.id))
+                        SubagentProfileEditor(viewModel: viewModel, profile: profileBinding(profile.id)) {
+                            var updated = options.wrappedValue
+                            updated.models.removeAll { $0.id == profile.id }
+                            if updated.defaultModelID == profile.id { updated.defaultModelID = nil }
+                            options.wrappedValue = updated
+                        }
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(profile.name).foregroundStyle(.primary)
@@ -74,11 +79,6 @@ private struct SubagentSettingsScreen: View {
                             }
                         }
                     }
-                }
-                .onDelete { offsets in
-                    let deleted = offsets.map { options.wrappedValue.models[$0].id }
-                    options.wrappedValue.models.remove(atOffsets: offsets)
-                    if deleted.contains(options.wrappedValue.defaultModelID ?? "") { options.wrappedValue.defaultModelID = nil }
                 }
                 Button {
                     var profile = SubagentModelProfile()
@@ -127,6 +127,9 @@ private struct SubagentProfileEditor: View {
     @EnvironmentObject private var container: AppContainer
     @ObservedObject var viewModel: SettingsViewModel
     @Binding var profile: SubagentModelProfile
+    let onDelete: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmsDeletion = false
     @State private var pccLevel: String?
     @State private var supportedEfforts: [String] = []
     @State private var resolutionError: String?
@@ -168,8 +171,18 @@ private struct SubagentProfileEditor: View {
             } footer: {
                 Text("モデルが対応する推論レベルを指定してください。非対応の組み合わせは実行せず、理由を表示します。")
             }
+            Section {
+                Button("モデル設定を削除", role: .destructive) { confirmsDeletion = true }
+                    .accessibilityIdentifier("subagent-profile-delete")
+            }
             Section("チャットでの指定") {
                 Text("「\(profile.name) で調査して」のように依頼できます。")
+            }
+        }
+        .confirmationDialog("このモデル設定を削除しますか？", isPresented: $confirmsDeletion, titleVisibility: .visible) {
+            Button("削除", role: .destructive) {
+                dismiss()
+                onDelete()
             }
         }
         .navigationTitle(profile.name)
