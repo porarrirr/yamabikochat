@@ -4,6 +4,66 @@ import UIKit
 @testable import YamabikoChat
 
 final class PCCNativeToolsTests: XCTestCase {
+    func testGreetingWithQuestionToolEnabledReachesTheNativeSession() async throws {
+        guard #available(iOS 27.0, *) else { throw XCTSkip("Requires iOS 27") }
+        let definition = AskUserQuestionTool.definition
+        let schema = try JSONDecoder().decode(JSONValue.self, from: Data(definition.parametersJSON.utf8))
+        let context = PCCNativeRequest.Context(messages: [.init(role: "user", content: .string("こんにちは"))], tools: [
+            .init(name: definition.name, description: definition.description, parameters: schema)
+        ])
+        let events = PCCEventCollector()
+        try await PCCSDK.execute(.init(context: context, reasoningLevel: "moderate", contextSize: 32_768),
+                                 runID: "greeting", requestID: "request", using: PCCScriptedModel(toolCount: 0), executeTool: { _ in
+            throw PCCFailure(code: "unexpected_tool")
+        }, send: { await events.append($0) })
+        let captured = await events.events
+        XCTAssertEqual(captured.last?.type, "completed")
+        XCTAssertEqual(captured.last?.text, "Hello")
+    }
+
+    func testQuestionSchemaPreservesNonWhitespaceConstraintsInAppleSchema() throws {
+        guard #available(iOS 27.0, *) else { throw XCTSkip("Requires iOS 27") }
+        let source = try JSONDecoder().decode(JSONValue.self, from: Data(AskUserQuestionTool.definition.parametersJSON.utf8))
+        let schema = try PCCNativeToolSchema.make(source, name: AskUserQuestionTool.name)
+        let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(schema))
+        func patterns(in value: Any) -> [String] {
+            if let object = value as? [String: Any] {
+                return (object["pattern"] as? String).map { [$0] } ?? object.values.flatMap { patterns(in: $0) }
+            }
+            return (value as? [Any])?.flatMap { patterns(in: $0) } ?? []
+        }
+        let constraints = patterns(in: encoded)
+        // id, question and option label all retain their validation constraints.
+        XCTAssertEqual(constraints.count, 3)
+        for pattern in constraints {
+            let regex = try Regex<AnyRegexOutput>(pattern)
+            for text in ["", " ", "\n\t ", "\u{3000}"] {
+                XCTAssertNil(try text.wholeMatch(of: regex), "Invalid text accepted: \(text.debugDescription)")
+            }
+            for text in ["question_1", "Choose an option", "日本語の質問ですか？", "\n 続けますか？ \n", "✅"] {
+                XCTAssertNotNil(try text.wholeMatch(of: regex), "Valid text rejected: \(text.debugDescription)")
+            }
+        }
+    }
+
+    func testUnsupportedStringConstraintsStillFailWithoutBeingDiscarded() throws {
+        guard #available(iOS 27.0, *) else { throw XCTSkip("Requires iOS 27") }
+        for json in [
+            #"{"type":"string","minLength":-1}"#,
+            #"{"type":"string","minLength":1.5}"#,
+            #"{"type":"string","minLength":"1"}"#,
+            #"{"type":"string","minLength":2}"#,
+            #"{"type":"string","pattern":"x+"}"#,
+            #"{"type":"string","pattern":true}"#,
+            #"{"type":"string","minLength":1,"enum":["a"]}"#
+        ] {
+            let source = try JSONDecoder().decode(JSONValue.self, from: Data(json.utf8))
+            XCTAssertThrowsError(try PCCNativeToolSchema.make(source, name: "unsupported"), json) {
+                XCTAssertEqual(($0 as? PCCFailure)?.code, "pcc_tool_schema_unsupported")
+            }
+        }
+    }
+
     func testAllLocalToolSchemasCompileWithTheAppleSDK() throws {
         guard #available(iOS 27.0, *) else { throw XCTSkip("Requires iOS 27") }
         let definitions = [WebSearchTool().definition, FetchUrlTool().definition,

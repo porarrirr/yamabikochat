@@ -57,7 +57,7 @@ enum PCCNativeToolSchema {
         switch type {
         case "object": permitted = ["properties", "required", "additionalProperties"]
         case "array": permitted = ["items", "minItems", "maxItems"]
-        case "string": permitted = ["enum"]
+        case "string": permitted = ["enum", "minLength", "pattern"]
         case "integer", "number": permitted = ["minimum", "maximum"]
         case "boolean": permitted = []
         default: throw PCCFailure(code: "pcc_tool_schema_unsupported")
@@ -106,13 +106,32 @@ enum PCCNativeToolSchema {
             return .init(arrayOf: try node(items, name: name + "_item"),
                          minimumElements: try integer("minItems"), maximumElements: try integer("maxItems"))
         case "string":
+            // The local question tool uses JSON Schema's unanchored \\S plus
+            // minLength: 1. Apple's pattern guide constrains the whole string,
+            // so preserve text on either side, including newlines. Only this
+            // verified subset is accepted; arbitrary JSON/ECMA regexes must not
+            // be interpreted as Swift regexes with potentially different meaning.
+            let minimumLength = try integer("minLength") ?? 0
+            guard (0...1).contains(minimumLength),
+                  fields["pattern"] == nil || fields["pattern"] == .string(#"\S"#) else {
+                throw PCCFailure(code: "pcc_tool_schema_unsupported")
+            }
             if let choices = fields["enum"] {
                 guard case .array(let values) = choices, !values.isEmpty else { throw PCCFailure(code: "pcc_tool_schema_unsupported") }
                 let strings = try values.map { value -> String in
-                    guard case .string(let text) = value else { throw PCCFailure(code: "pcc_tool_schema_unsupported") }
+                    guard case .string(let text) = value,
+                          fields["minLength"] == nil, fields["pattern"] == nil else {
+                        throw PCCFailure(code: "pcc_tool_schema_unsupported")
+                    }
                     return text
                 }
                 return .init(type: String.self, guides: [.anyOf(strings)])
+            }
+            if fields["pattern"] != nil {
+                return .init(type: String.self, guides: [.pattern(try Regex<AnyRegexOutput>(#"[\s\S]*\S[\s\S]*"#))])
+            }
+            if minimumLength == 1 {
+                return .init(type: String.self, guides: [.pattern(try Regex<AnyRegexOutput>(#"[\s\S]+"#))])
             }
             return .init(type: String.self)
         case "integer":
