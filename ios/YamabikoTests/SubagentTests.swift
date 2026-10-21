@@ -84,6 +84,34 @@ final class SubagentTests: XCTestCase {
         XCTAssertEqual(activity.payload.subagents.first?.output, "途中の結果")
     }
 
+    func testPCCChildConfigurationAndBridgeAuthorization() async throws {
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue)
+        let gateway = ProviderGateway(settingsRepository: SettingsRepository(dbQueue: queue), credentialStore: SubagentCredentialStore())
+        let profile = SubagentModelProfile(id: "pcc", name: "PCC", provider: "APPLE_INTELLIGENCE",
+            model: AppleIntelligenceModelCatalog.pccModel, effort: "high")
+        let child = try await gateway.subagentConfiguration(profile, settings: AppSettings())
+        XCTAssertEqual(child.provider, "apple-pcc")
+        XCTAssertEqual(child.model, AppleIntelligenceModelCatalog.pccModel)
+        XCTAssertEqual(child.thinkingLevel, "high")
+        XCTAssertNil(child.apiKey)
+        XCTAssertNil(child.subagents)
+        var parent = PiAgentConfiguration(provider: "openai", model: "gpt-5.5",
+            subagents: PiSubagentOptions(enabled: true, models: [.init(id: "pcc", name: "PCC", configuration: child)]))
+        XCTAssertTrue(PiAgentRuntime.hasNativePCC(parent))
+        XCTAssertTrue(PiAgentRuntime.authorizesPCC(parent, subagentID: "child"))
+        XCTAssertFalse(PiAgentRuntime.authorizesPCC(parent, subagentID: nil))
+        parent.subagents?.enabled = false
+        XCTAssertFalse(PiAgentRuntime.hasNativePCC(parent))
+        XCTAssertFalse(PiAgentRuntime.authorizesPCC(parent, subagentID: "child"))
+        var onDevice = profile
+        onDevice.model = AppleIntelligenceModelCatalog.displayModel
+        do {
+            _ = try await gateway.subagentConfiguration(onDevice, settings: AppSettings())
+            XCTFail("On-device Apple Intelligence must remain unsupported")
+        } catch { XCTAssertTrue(error.localizedDescription.contains("subagent_native_apple_bridge_unsupported")) }
+    }
+
     func testGatewayAttachesExplicitProfileAndDoesNotEnableSubagentsForInternalRequests() async throws {
         let queue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(queue)

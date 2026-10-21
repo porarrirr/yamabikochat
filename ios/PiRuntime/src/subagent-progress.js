@@ -38,7 +38,9 @@ export function createSubagentProgress({ id, agent, task, model, thinkingLevel, 
         const update = event.assistantMessageEvent;
         if (update?.type === "text_delta") {
           state.activity = "回答を作成中";
-          const output = state.output + update.delta;
+          const output = event.message?.provider === "apple-pcc"
+            ? event.message.content?.filter(part => part.type === "text").map(part => part.text).join("\n") ?? ""
+            : state.output + update.delta;
           state.outputTruncated ||= Buffer.byteLength(output, "utf8") > OUTPUT_LIMIT;
           state.output = clipped(output, OUTPUT_LIMIT);
         } else if (update?.type === "thinking_delta" || update?.type === "thinking_start") {

@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "properties": {
+    "agent": {
+      "type": "string",
+      "description": "Role or configured mobile profile name"
+    },
+    "task": {
+      "type": "string",
+      "description": "Task for a single child"
+    },
+    "model": {
+      "type": "string",
+      "description": "Configured model profile ID or inherit; optional :effort suffix"
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "agent",
+          "task"
+        ],
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "list",
+        "status",
+        "guide"
+      ]
+    },
+    "async": {
+      "type": "boolean",
+      "description": "Must be false on iOS"
+    }
+  },
+  "additionalProperties": false
+}

@@ -99,6 +99,33 @@ counts on an entitled physical device.
 
 Reference: https://developer.apple.com/documentation/foundationmodels/optimizing-key-value-caching-in-language-model-sessions
 
+## PCC subagent profiles
+
+PCC can be selected as a child model in subagent settings, including when the
+parent uses another provider. The native capability is attached to each PCC
+profile before Pi resolves it; an unavailable PCC profile remains unavailable
+with its resolver reason. On-device Apple Intelligence children remain unsupported.
+
+Children run through the existing Pi AgentSession and PCC provider bridge. Each
+child has a separate native session identity. Native tool activity carries the
+child ID, and activity call IDs are namespaced without changing Apple's native
+transcript IDs. Parent cancellation reaches every pending native child request.
+PCC snapshot revisions replace the child's displayed partial answer.
+
+PCC parents can also delegate. The registered Pi `subagent` tool exposes an
+explicit native-compatible mobile schema (single task, parallel tasks, configured
+model selection and read-only list/status/guide actions). The exact schema is
+shared with SDK tests. Apple's native loop announces the call, then an
+authenticated callback executes that registered Pi tool inside the captured
+parent session scope. Only matching, live, previously announced calls can execute,
+and each call is consumed once. Results return to Apple's loop and transcript;
+Pi never receives an executable duplicate. Children inherit PCC or use the user's
+configured profile without protocol/model fallback.
+
+Delegation does not hold the native local-tool queue, allowing PCC children to
+use local tools. Parent cancellation, native failure and native timeout cancel the
+Pi delegation signal and its children. Disabling subagents removes the tool.
+
 ## Audited Pi 1.0.2 extension
 
 `npm ci` applies `scripts/patch-pi-contract.mjs`, with version and exact-source

@@ -7,7 +7,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createSubagentProgress } from "../src/subagent-progress.js";
-import { selectSubagentModel, mobileModelRuntime } from "../src/subagents.js";
+import { selectSubagentModel, mobileModelRuntime, pccSubagentParameters } from "../src/subagents.js";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 
@@ -89,7 +89,7 @@ test("subagent progress snapshots retain actions and bounded output, and settle 
   unicode.dispose();
 });
 
-test("bundled pi-subagents executes three real Pi child sessions and reports their contents", { timeout: 30000 }, async t => {
+test("bundled mobile subagents preserve delegation across providers and native PCC", { timeout: 30000 }, async t => {
   let active = 0;
   let peak = 0;
   const requests = [];
@@ -201,6 +201,171 @@ test("bundled pi-subagents executes three real Pi child sessions and reports the
     runId, config: configuration,
     request: { messages: [{ role: "user", content: prompt, attachments: [] }], tools, metadata: {}, systemPrompt }
   }) });
+  // A non-Apple parent delegates to native PCC through the same Pi host.
+  const pccConfig = { ...config, subagents: { enabled: true, defaultModelID: "pcc", models: [{
+    id: "pcc", name: "PCC", configuration: {
+      contractVersion: 2, provider: "apple-pcc", model: "PrivateCloudComputeLanguageModel", thinkingLevel: "high",
+      nativePCC: { version: 2, available: true, contextSize: 32768 }
+    }
+  }] } };
+  for (const mode of ["success", "error", "cancel"]) {
+    const runId = `pcc-children-${mode}`;
+    const response = await submit("launch-mobile-children", pccConfig, mobileTools, runId, parentPolicy);
+    const events = [];
+    const childIDs = new Set();
+    let buffered = "";
+    const postNative = body => fetch(`${base}/v1/pcc-event`, {
+      method: "POST", headers, body: JSON.stringify(body)
+    });
+    for await (const chunk of response.body) {
+      buffered += Buffer.from(chunk).toString("utf8");
+      let newline;
+      while ((newline = buffered.indexOf("\n")) >= 0) {
+        const event = JSON.parse(buffered.slice(0, newline));
+        buffered = buffered.slice(newline + 1);
+        events.push(event);
+        if (event.type !== "pcc_request") continue;
+        assert.ok(event.subagentId);
+        childIDs.add(event.subagentId);
+        assert.equal(event.pcc.reasoningLevel, "deep");
+        assert.ok(event.pcc.context.systemPrompt.includes(parentPolicy));
+        assertMobileLoadout({ tools: event.pcc.context.tools });
+        const identity = { runId, requestId: event.requestId };
+        if (mode === "cancel") {
+          await fetch(`${base}/v1/abort`, { method: "POST", headers, body: JSON.stringify({ runId }) });
+          continue;
+        }
+        if (mode === "error") {
+          assert.equal((await postNative({ ...identity, type: "error", message: "Quota reached", errorCode: "pcc_quota_limit_reached" })).status, 200);
+          continue;
+        }
+        const toolCall = { id: "same-native-id", name: "web_search", argumentsJSON: '{"query":"evidence"}' };
+        for (const native of [
+          { type: "tool_start", toolCall },
+          { type: "tool_end", toolCall, toolResult: { callId: toolCall.id, name: toolCall.name, content: "Evidence", isError: false } },
+          { type: "snapshot", text: "Draft A", usage: { inputTokens: 4, cachedInputTokens: 1, outputTokens: 5, reasoningTokens: 1 } },
+          { type: "completed", text: "Revised PCC result", transcript: '{"entries":[]}', usage: { inputTokens: 4, cachedInputTokens: 1, outputTokens: 5, reasoningTokens: 1 } }
+        ]) assert.equal((await postNative({ ...identity, ...native })).status, 200);
+      }
+    }
+    if (mode === "cancel") {
+      assert.ok(events.some(event => event.type === "pcc_cancel"));
+      assert.equal(events.at(-1).type, "error");
+      const finalChildren = new Map(events.filter(event => event.type === "subagent_update").map(event => [event.subagent.id, event.subagent]));
+      assert.ok([...finalChildren.values()].every(child => child.status !== "running"));
+      continue;
+    }
+    const result = events.find(event => event.type === "completed")?.response;
+    assert.ok(result, JSON.stringify(events));
+    assert.ok(childIDs.size > 0);
+    if (mode !== "cancel") assert.equal(childIDs.size, 3);
+    assert.ok(result.subagents.every(child => child.provider === "apple-pcc" && child.effort === "high"));
+    if (mode === "success") {
+      assert.ok(result.subagents.every(child => child.status === "completed" && child.output === "Revised PCC result"));
+      const toolEvents = events.filter(event => event.type === "tool_start" && event.name === "web_search");
+      assert.equal(new Set(toolEvents.map(event => event.toolCallId)).size, 3);
+      assert.ok(toolEvents.every(event => childIDs.has(event.subagentId)));
+      assert.ok(!events.some(event => event.type === "tool_request"), "native calls must never execute twice");
+    } else if (mode === "error") {
+      assert.ok(result.subagents.every(child => child.status === "failed" && child.error.includes("Quota reached")));
+    }
+  }
+  // Apple owns the parent's tool loop; its announced subagent call re-enters
+  // the registered Pi extension with the captured parent session/credentials.
+  for (const mode of ["inherit", "configured", "error", "cancel", "disabled", "unsupported"]) {
+    const runId = `pcc-parent-${mode}`;
+    const parent = { ...pccConfig.subagents.models[0].configuration,
+      subagents: mode === "configured" || mode === "error"
+        ? { enabled: true, defaultModelID: "custom", models: [{ id: "custom", name: "Custom",
+            configuration: { ...config, subagents: undefined } }] }
+        : { enabled: true, models: [] }
+    };
+    if (mode === "disabled") parent.subagents.enabled = false;
+    if (mode === "unsupported") parent.subagents = { enabled: true, defaultModelID: "unavailable", models: [{
+      id: "unavailable", name: "Unavailable PCC", configuration: { ...parent, subagents: undefined,
+        nativePCC: { version: 2, available: false, reason: "pcc_quota_limit_reached" } }
+    }] };
+    const response = await submit("Delegate from PCC", parent, mobileTools, runId, parentPolicy);
+    const events = [];
+    const callbacks = [];
+    let buffered = "";
+    const post = (path, body, auth = headers) => fetch(`${base}${path}`, {
+      method: "POST", headers: auth, body: JSON.stringify(body)
+    });
+    const usage = { inputTokens: 8, cachedInputTokens: 0, outputTokens: 4, reasoningTokens: 1 };
+    for await (const chunk of response.body) {
+      buffered += Buffer.from(chunk).toString("utf8");
+      let newline;
+      while ((newline = buffered.indexOf("\n")) >= 0) {
+        const event = JSON.parse(buffered.slice(0, newline));
+        buffered = buffered.slice(newline + 1);
+        events.push(event);
+        if (event.type !== "pcc_request") continue;
+        const identity = { runId, requestId: event.requestId };
+        if (event.subagentId) {
+          assert.ok(!event.pcc.context.tools.some(tool => tool.name === "subagent"), "children must not delegate recursively");
+          if (mode === "cancel") {
+            await post("/v1/abort", { runId });
+          } else {
+            const toolCall = { id: "child-native", name: "web_search", argumentsJSON: '{"query":"evidence"}' };
+            for (const native of [
+              { type: "tool_start", toolCall },
+              { type: "tool_end", toolCall, toolResult: { callId: toolCall.id, name: toolCall.name, content: "Evidence", isError: false } },
+              { type: "completed", text: "PCC child result", transcript: '{"entries":[]}', usage }
+            ]) assert.equal((await post("/v1/pcc-event", { ...identity, ...native })).status, 200);
+          }
+          continue;
+        }
+        const definition = event.pcc.context.tools.find(tool => tool.name === "subagent");
+        if (mode === "disabled") {
+          assert.equal(definition, undefined);
+          await post("/v1/pcc-event", { ...identity, type: "completed", text: "Delegation disabled", usage });
+          continue;
+        }
+        assert.ok(definition, JSON.stringify(event));
+        assert.deepEqual(definition.parameters, JSON.parse(JSON.stringify(pccSubagentParameters)));
+        const toolCall = { id: "parent-delegate", name: "subagent", argumentsJSON: JSON.stringify({
+          tasks: [1, 2].map(index => ({ agent: "delegate", task: mode === "error" ? "force-child-error" : `Report child ${index}` })), async: false
+        }) };
+        const invocation = { ...identity, toolCall };
+        assert.equal((await post("/v1/pcc-tool", invocation, {})).status, 401);
+        assert.equal((await post("/v1/pcc-tool", { ...invocation, runId: "wrong" })).status, 404);
+        assert.equal((await post("/v1/pcc-tool", invocation)).status, 403, "unannounced call");
+        await post("/v1/pcc-event", { ...identity, type: "tool_start", toolCall });
+        assert.equal((await post("/v1/pcc-tool", { ...invocation, toolCall: { ...toolCall, argumentsJSON: '{}' } })).status, 403);
+        const callback = (async () => {
+          const result = await post("/v1/pcc-tool", invocation);
+          assert.equal(result.status, 200);
+          const toolResult = await result.json();
+          if (mode === "cancel") return;
+          assert.ok(toolResult.content.includes(mode === "inherit" ? "PCC child result" : mode === "error" ? "rejected" : mode === "unsupported" ? "pcc_quota_limit_reached" : "Child result"), JSON.stringify(toolResult));
+          assert.equal((await post("/v1/pcc-tool", invocation)).status, 403, "duplicate invocation");
+          await post("/v1/pcc-event", { ...identity, type: "tool_end", toolCall, toolResult });
+          await post("/v1/pcc-event", { ...identity, type: "completed", text: "Parent received children", transcript: '{"entries":[]}', usage });
+        })();
+        callbacks.push(callback);
+      }
+    }
+    await Promise.all(callbacks);
+    const children = new Map(events.filter(event => event.type === "subagent_update").map(event => [event.subagent.id, event.subagent]));
+    if (mode === "disabled") {
+      assert.equal(children.size, 0);
+      assert.equal(events.find(event => event.type === "completed")?.response.text, "Delegation disabled");
+      continue;
+    }
+    assert.equal(children.size, mode === "unsupported" ? 0 : 2, JSON.stringify(events));
+    assert.ok([...children.values()].every(child => child.status === (mode === "error" ? "failed" : mode === "cancel" ? "cancelled" : "completed")));
+    if (mode === "cancel") {
+      assert.equal(events.at(-1).type, "error");
+      assert.ok(events.some(event => event.type === "pcc_cancel" && !event.subagentId));
+    } else {
+      const result = events.find(event => event.type === "completed")?.response;
+      assert.equal(result?.text, "Parent received children", JSON.stringify(events));
+      assert.equal(result.toolCalls.filter(call => call.name === "subagent").length, 1, "Apple's completed call must not be re-executed by Pi");
+      assert.equal(events.filter(event => event.type === "pcc_request" && !event.subagentId).length, 1);
+    }
+  }
+  requests.length = 0;
   const response = await submit("launch-mobile-children");
   const body = await response.text();
   const events = body.trim().split("\n").map(JSON.parse);

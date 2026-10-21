@@ -786,8 +786,9 @@ final class ProviderGateway {
 
     func subagentConfiguration(_ profile: SubagentModelProfile, settings: AppSettings, forModelResolution: Bool = false) async throws -> PiAgentConfiguration {
         if !forModelResolution, let error = profile.validationError { throw ProviderClientError.parseFailure(error) }
-        if profile.provider.caseInsensitiveCompare("APPLE_INTELLIGENCE") == .orderedSame {
-            throw ProviderClientError.parseFailure("subagent_native_apple_bridge_unsupported: Apple Intelligenceの子セッションには未対応です")
+        if profile.provider.caseInsensitiveCompare("APPLE_INTELLIGENCE") == .orderedSame,
+           profile.model != AppleIntelligenceModelCatalog.pccModel {
+            throw ProviderClientError.parseFailure("subagent_native_apple_bridge_unsupported: オンデバイスのApple Intelligenceの子セッションには未対応です")
         }
         var childSettings = settings
         if let name = profile.endpointPresetName { childSettings.selectedOpenAICompatPreset = name }

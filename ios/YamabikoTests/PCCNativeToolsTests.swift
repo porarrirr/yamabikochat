@@ -4,6 +4,35 @@ import UIKit
 @testable import YamabikoChat
 
 final class PCCNativeToolsTests: XCTestCase {
+    func testSubagentSchemaAndNativeContinuationUseTheExactPiContract() async throws {
+        guard #available(iOS 27.0, *) else { throw XCTSkip("Requires iOS 27") }
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "pcc-subagent-schema", withExtension: "json"))
+        let schema = try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: url))
+        XCTAssertNoThrow(try PCCNativeToolSchema.make(schema, name: "subagent"))
+        let events = PCCEventCollector()
+        let calls = PCCCallCollector()
+        let context = PCCNativeRequest.Context(messages: [.init(role: "user", content: .string("Delegate"))], tools: [
+            .init(name: "subagent", description: "Delegate through Pi", parameters: schema)
+        ])
+        try await PCCSDK.execute(.init(context: context, reasoningLevel: "moderate", contextSize: 32_768),
+                                 runID: "parent", requestID: "request", using: PCCScriptedModel(subagent: true), executeTool: { call in
+            await calls.append(call)
+            XCTAssertEqual(call.name, "subagent")
+            let args = try JSONDecoder().decode(JSONValue.self, from: Data(call.argumentsJSON.utf8))
+            XCTAssertEqual(args, .object(["agent": .string("delegate"), "task": .string("Inspect evidence"), "async": .bool(false)]))
+            return ToolResult(callId: call.id, name: call.name, content: "Child completed")
+        }, send: { await events.append($0) })
+        let captured = await events.events
+        XCTAssertEqual(captured.last?.text, "Child completed")
+        XCTAssertEqual(captured.filter { $0.type == "tool_start" }.count, 1)
+        XCTAssertEqual(captured.filter { $0.type == "tool_end" }.count, 1)
+        let executed = await calls.calls
+        XCTAssertEqual(executed.count, 1)
+        let encoded = try XCTUnwrap(captured.last?.transcript)
+        let transcript = try JSONDecoder().decode(Transcript.self, from: Data(encoded.utf8))
+        XCTAssertTrue(transcript.contains { if case .toolOutput = $0 { return true }; return false })
+    }
+
     func testGreetingWithQuestionToolEnabledReachesTheNativeSession() async throws {
         guard #available(iOS 27.0, *) else { throw XCTSkip("Requires iOS 27") }
         let definition = AskUserQuestionTool.definition
@@ -310,6 +339,7 @@ private actor PCCCallCollector {
 private struct PCCScriptedModel: LanguageModel {
     var capabilities: LanguageModelCapabilities { .init([.toolCalling, .reasoning, .guidedGeneration, .vision]) }
     var toolCount = 1
+    var subagent = false
     var executorConfiguration: Int { toolCount }
 
     struct Executor: LanguageModelExecutor {
@@ -339,7 +369,9 @@ private struct PCCScriptedModel: LanguageModel {
                 await channel.send(.response(action: .appendText(text, tokenCount: 3)))
                 await channel.send(.response(action: .updateUsage(input: .init(totalTokenCount: 12, cachedTokenCount: 0), output: .init(totalTokenCount: 3, reasoningTokenCount: 0))))
             } else {
-                await channel.send(.toolCalls(action: .toolCall(id: "sdk-call-\(results.count)", name: results.isEmpty ? "lookup" : "calculate", action: .appendArguments(#"{"query":"test"}"#, tokenCount: 4))))
+                let name = model.subagent ? "subagent" : results.isEmpty ? "lookup" : "calculate"
+                let arguments = model.subagent ? #"{"agent":"delegate","task":"Inspect evidence","async":false}"# : #"{"query":"test"}"#
+                await channel.send(.toolCalls(action: .toolCall(id: "sdk-call-\(results.count)", name: name, action: .appendArguments(arguments, tokenCount: 4))))
                 await channel.send(.toolCalls(action: .updateUsage(input: .init(totalTokenCount: 5, cachedTokenCount: 0), output: .init(totalTokenCount: 4, reasoningTokenCount: 0))))
             }
         }

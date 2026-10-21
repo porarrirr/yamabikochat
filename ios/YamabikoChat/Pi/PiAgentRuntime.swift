@@ -680,8 +680,17 @@ actor PiAgentRuntime {
         #endif
         let (endpoint, token) = try await startIfNeeded(requestID: runID)
         var configuration = configuration
-        if configuration.provider == "apple-pcc", configuration.catalogContract == nil {
-            configuration.nativePCC = await PCCProviderClient.capability()
+        if Self.hasNativePCC(configuration) {
+            let capability = await PCCProviderClient.capability()
+            if configuration.provider == "apple-pcc", configuration.catalogContract == nil {
+                configuration.nativePCC = capability
+            }
+            if let profiles = configuration.subagents?.models {
+                for index in profiles.indices where profiles[index].configuration?.provider == "apple-pcc"
+                    && profiles[index].configuration?.catalogContract == nil {
+                    configuration.subagents?.models[index].configuration?.nativePCC = capability
+                }
+            }
         }
         let piRequest = try Self.makeRequest(request, strictImageAttachments: configuration.provider == "apple-pcc")
         let envelope = PiRunEnvelope(runId: runID, request: piRequest, config: configuration)
@@ -801,7 +810,7 @@ actor PiAgentRuntime {
                                 succeeded: event.succeeded ?? false
                             )
                         case "pcc_request":
-                            guard configuration.provider == "apple-pcc", event.runId == runID,
+                            guard Self.authorizesPCC(configuration, subagentID: event.subagentId), event.runId == runID,
                                   let requestID = event.requestId, let nativeRequest = event.pcc,
                                   pccTasks[requestID] == nil else {
                                 throw ProviderClientError.parseFailure("Invalid PCC bridge request")
@@ -809,21 +818,36 @@ actor PiAgentRuntime {
                             pccTasks[requestID] = Task {
                                 do {
                                     var scopedRequest = nativeRequest
-                                    scopedRequest.sessionID = request.metadata["promptCacheKey"]?.trimmedNonEmpty
+                                    scopedRequest.sessionID = event.subagentId ?? request.metadata["promptCacheKey"]?.trimmedNonEmpty
                                     try await PCCProviderClient.execute(scopedRequest, runID: runID, requestID: requestID, executeTool: { nativeCall in
+                                        if nativeCall.name == "subagent" {
+                                            guard configuration.subagents?.enabled == true, event.subagentId == nil,
+                                                  nativeRequest.context.tools?.contains(where: { $0.name == "subagent" }) == true else {
+                                                throw PCCFailure(code: "pcc_tool_not_authorized")
+                                            }
+                                            // Do not hold the local side-effect queue while children run:
+                                            // PCC children may need that same queue to finish their tools.
+                                            return try await Self.executePCCSubagent(nativeCall, runID: runID,
+                                                requestID: requestID, endpoint: endpoint, token: token)
+                                        }
                                         guard request.tools.contains(where: { $0.type == "function" && $0.payload["name"] == nativeCall.name }) else {
                                             throw PCCFailure(code: "pcc_tool_not_authorized")
                                         }
-                                        let call = try Self.localToolCall(id: nativeCall.id, name: nativeCall.name,
+                                        let callID = event.subagentId.map { "\($0):\(nativeCall.id)" } ?? nativeCall.id
+                                        let call = try Self.localToolCall(id: callID, name: nativeCall.name,
                                                                         arguments: nativeCall.argumentsJSON, request: request)
                                         return try await pccToolRunner.run {
                                             try Task.checkCancellation()
                                             let createdAtMs = Int64(Date().timeIntervalSince1970 * 1_000)
-                                            continuation.yield(.toolActivity(ToolActivityEvent(phase: .started, call: call, result: nil, createdAtMs: createdAtMs)))
+                                            continuation.yield(.toolActivity(ToolActivityEvent(phase: .started, call: call, result: nil, createdAtMs: createdAtMs, ownerSubagentID: event.subagentId)))
                                             let result = await tools.execute(call: call)
                                             try Task.checkCancellation()
-                                            continuation.yield(.toolActivity(ToolActivityEvent(phase: .finished, call: call, result: result, createdAtMs: createdAtMs)))
-                                            return result
+                                            continuation.yield(.toolActivity(ToolActivityEvent(phase: .finished, call: call, result: result, createdAtMs: createdAtMs, ownerSubagentID: event.subagentId)))
+                                            // Native transcript IDs remain Apple's originals; activity IDs
+                                            // include the child identity to avoid cross-child collisions.
+                                            var nativeResult = result
+                                            nativeResult.callId = nativeCall.id
+                                            return nativeResult
                                         }
                                     }) { nativeEvent in
                                         try await Self.submitPCCEvent(nativeEvent, endpoint: endpoint, token: token)
@@ -990,6 +1014,41 @@ actor PiAgentRuntime {
             }
         }
         return ToolCall(id: id, name: name, argumentsJSON: arguments, providerMetadata: providerMetadata)
+    }
+
+    static func hasNativePCC(_ configuration: PiAgentConfiguration) -> Bool {
+        (configuration.provider == "apple-pcc" && configuration.catalogContract == nil)
+            || (configuration.subagents?.enabled == true && configuration.subagents?.models.contains {
+                $0.unsupportedReason == nil && $0.configuration?.provider == "apple-pcc" && $0.configuration?.catalogContract == nil
+            } == true)
+    }
+
+    static func authorizesPCC(_ configuration: PiAgentConfiguration, subagentID: String?) -> Bool {
+        if subagentID != nil {
+            return configuration.subagents?.enabled == true && hasNativePCC(configuration)
+        }
+        return configuration.provider == "apple-pcc" && configuration.catalogContract == nil
+    }
+
+    private static func executePCCSubagent(_ call: ToolCall, runID: String, requestID: String,
+                                          endpoint: URL, token: String) async throws -> ToolResult {
+        struct Invocation: Encodable {
+            var runId: String
+            var requestId: String
+            var toolCall: ToolCall
+        }
+        var request = URLRequest(url: endpoint.appendingPathComponent("v1/pcc-tool"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 300
+        request.httpBody = try JSONEncoder().encode(Invocation(runId: runID, requestId: requestID, toolCall: call))
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try Task.checkCancellation()
+        guard let http = response as? HTTPURLResponse else { throw ProviderClientError.invalidResponse }
+        if http.statusCode == 404 { throw CancellationError() }
+        guard http.statusCode == 200 else { throw PCCFailure(code: "pcc_tool_not_authorized") }
+        return try JSONDecoder().decode(ToolResult.self, from: data)
     }
 
     private static func submitPCCEvent(_ event: PCCNativeEvent, endpoint: URL, token: String) async throws {

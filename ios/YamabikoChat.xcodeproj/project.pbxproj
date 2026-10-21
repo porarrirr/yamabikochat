@@ -27,6 +27,7 @@
 		03532725DD2B55909FB526E9 /* ChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEE1F7C1D36E90F3AC5C8C74 /* ChatScreen.swift */; };
 		0620DCA91095429645CA2478 /* ShareExtensionStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5581D0A0748802A7F82685FC /* ShareExtensionStrings.swift */; };
 		06872ECCFAD394292A44A8F7 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DDFDE867E825EB89B66D36A /* ChatViewModel.swift */; };
+		06DFE6A88AA2C2F7581BCB36 /* pcc-subagent-schema.json in Resources */ = {isa = PBXBuildFile; fileRef = 2F623FB064520A2558D9D639 /* pcc-subagent-schema.json */; };
 		0776A15CFEB49CDA726E2495 /* ChatViewModelAttachmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 544B698E62EDD214009B7D7A /* ChatViewModelAttachmentTests.swift */; };
 		07780AF1ED09B05153F8E7FB /* ConversationSpotlightIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3514A664AE42F8BFB8AD037 /* ConversationSpotlightIndexer.swift */; };
 		0874DFCCF9B6CAF9750364AF /* ShareImportFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4A9C812D9D73FCE829CA50E /* ShareImportFlowTests.swift */; };
@@ -523,6 +524,7 @@
 		2ECE967CBAB3BDDC5E028715 /* ReasoningExtractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReasoningExtractionTests.swift; sourceTree = "<group>"; };
 		2ECF80CEF579F07A3B1E23A6 /* ShortcutModelOptionsBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutModelOptionsBuilder.swift; sourceTree = "<group>"; };
 		2F24E32C72E6148FCB826148 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		2F623FB064520A2558D9D639 /* pcc-subagent-schema.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "pcc-subagent-schema.json"; sourceTree = "<group>"; };
 		30635B4EFB5F8EA938318536 /* mermaid.min.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = mermaid.min.js; sourceTree = "<group>"; };
 		30C87143D0BE6FBCA48B6232 /* ProjectInstructionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectInstructionsSheet.swift; sourceTree = "<group>"; };
 		318066D32E1B6D4FC5C655AD /* ShareExtensionItemLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionItemLoader.swift; sourceTree = "<group>"; };
@@ -896,6 +898,15 @@
 				2BFEB9F0CBAF7C9FA7C152C5 /* AskUserQuestionTool.swift */,
 			);
 			path = Question;
+			sourceTree = "<group>";
+		};
+		0EC93067AD44073DEDF267CD /* src */ = {
+			isa = PBXGroup;
+			children = (
+				2F623FB064520A2558D9D639 /* pcc-subagent-schema.json */,
+			);
+			name = src;
+			path = PiRuntime/src;
 			sourceTree = "<group>";
 		};
 		100B8DE2230EC4A242017198 /* Database */ = {
@@ -1387,6 +1398,7 @@
 				51E62B32E9D9EE006423BC12 /* PiAssets */,
 				A9DD513C8D5F8F8424F4FC6C /* bundle */,
 				31D9F643B9813B86EF385F87 /* Resources */,
+				0EC93067AD44073DEDF267CD /* src */,
 				C0D22E507300EA558774E904 /* YamabikoChat */,
 				9B051ED65D3F969F44C66D30 /* YamabikoShareExtension */,
 				D0C44008F19DBFAFA5D062EA /* YamabikoTests */,
@@ -1745,6 +1757,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				63C9F2743F9BF86C7ECDA389 /* openrouter-glm-5-2-endpoints.json in Resources */,
+				06DFE6A88AA2C2F7581BCB36 /* pcc-subagent-schema.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

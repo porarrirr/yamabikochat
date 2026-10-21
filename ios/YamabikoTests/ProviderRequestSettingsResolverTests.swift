@@ -285,6 +285,7 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         settings.pythonToolEnabled = true
         let enabled = try await resolver.resolve(settings: settings, provider: "APPLE_INTELLIGENCE", model: AppleIntelligenceModelCatalog.pccModel)
         XCTAssertEqual(enabled.metadata["supportsClientTools"], "true")
+        XCTAssertEqual(enabled.metadata["subagentsEnabled"], "true")
         XCTAssertTrue(enabled.tools.containsWebSearchTool)
         XCTAssertTrue(enabled.tools.contains { $0.payload["name"] == FetchUrlTool.name })
         XCTAssertTrue(enabled.tools.contains { $0.payload["name"] == PythonExecuteTool.name })
@@ -354,6 +355,7 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
             model: "enabled"
         )
         XCTAssertEqual(enabled.metadata["supportsClientTools"], "true")
+        XCTAssertEqual(enabled.metadata["subagentsEnabled"], "true")
         XCTAssertTrue(enabled.tools.containsWebSearchTool)
     }
 

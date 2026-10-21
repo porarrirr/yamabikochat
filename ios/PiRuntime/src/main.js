@@ -1,4 +1,4 @@
-import { PCC_PROVIDER, pccResolution, withPCCBridge, receivePCCEvent } from "./pcc-provider.js";
+import { PCC_PROVIDER, pccResolution, withPCCBridge, withPCCSubagentBridge, receivePCCEvent, executePCCTool } from "./pcc-provider.js";
 import { providerUsage, aggregateUsage as sumUsage } from "./usage-contract.js";
 import { createGenuiPreviewPublisher } from "./genui-preview.js";
 import { createEventRecorder } from "./event-recording.js";
@@ -7,6 +7,7 @@ import { installRuntimeLifecycle } from "./runtime-lifecycle.js";
 import fs from "node:fs";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { createModels, createProvider, envApiKeyAuth, InMemoryCredentialStore, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
+import { validateToolArguments } from "@earendil-works/pi-ai/utils/validation";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import { Type } from "typebox";
@@ -1330,13 +1331,16 @@ async function runAgent(envelope, res) {
         return { model: child.model, toolCall: child.resolution.toolCall,
           config: { ...childConfig, catalogProvider: childConfig.provider, provider: child.model.provider, model: child.model.id, api: child.model.api } };
       },
-      streams: (entry, childID) => standardStreamFunction({
-        ...(childID ? {
-          messages: [], tools: effectiveRequest.tools.filter(tool => tool.type === "function"), timeoutInterval: effectiveRequest.timeoutInterval
-        } : effectiveRequest),
-        // Each child gets a stable, separate provider cache/session identity.
-        metadata: { ...(childID ? {} : effectiveRequest.metadata), promptCacheKey: childID || effectiveRequest.metadata?.promptCacheKey, codexSessionId: childID || effectiveRequest.metadata?.codexSessionId }
-      }, entry.config, report, () => {}),
+      streams: (entry, childID) => {
+        const stream = standardStreamFunction({
+          ...(childID ? {
+            messages: [], tools: effectiveRequest.tools.filter(tool => tool.type === "function"), timeoutInterval: effectiveRequest.timeoutInterval
+          } : effectiveRequest),
+          // Each child gets a stable, separate provider cache/session identity.
+          metadata: { ...(childID ? {} : effectiveRequest.metadata), promptCacheKey: childID || effectiveRequest.metadata?.promptCacheKey, codexSessionId: childID || effectiveRequest.metadata?.codexSessionId }
+        }, entry.config, report, () => {});
+        return (model, context, options) => withPCCSubagentBridge(childID, () => stream(model, context, options));
+      },
       getProvider: provider => runtimeModels.getProvider(provider),
       getAuth: (entry, options) => runtimeModels.getAuth(entry.model, { ...options, apiKey: entry.config.apiKey, env: normalizedProviderEnvironment(entry.config.catalogProvider || entry.config.provider, entry.config.env) }),
       publish: subagent => { if (!res.writableEnded && !res.destroyed) send(res, { type: "subagent_update", subagent }); },
@@ -1408,12 +1412,21 @@ async function runAgent(envelope, res) {
     if (config.subagents?.enabled && resolution.toolCall) subagentHost = await prepareSubagentHost();
     if (abortRequested || res.destroyed) throw Object.assign(new Error("Pi run aborted during extension startup"), { code: "aborted" });
     report("agent_start", "Pi agent execution starting");
-    await withPCCBridge({ runId, send: event => {
-      if (event.type === "tool_start" || event.type === "tool_end") {
-        recorder.record({ ...event, type: `pcc_${event.type}` });
+    await withPCCBridge({ runId,
+      executeTool: async (call, signal) => {
+        signal?.throwIfAborted();
+        const tool = agent.state.tools.find(tool => tool.name === call.name && tool.name === "subagent");
+        if (!subagentHost || !tool) throw new Error("pcc_tool_not_authorized");
+        const args = validateToolArguments(tool, { type: "toolCall", id: call.id, name: call.name, arguments: JSON.parse(call.argumentsJSON) });
+        return tool.execute(call.id, args, signal);
+      },
+      send: event => {
+        if (event.type === "tool_start" || event.type === "tool_end") {
+          recorder.record({ ...event, type: `pcc_${event.type}` });
+        }
+        send(res, event);
       }
-      send(res, event);
-    } }, () => subagentHost ? subagentHost.run() : agent.continue());
+    }, () => subagentHost ? subagentHost.run() : agent.continue());
     const last = runAssistants.at(-1);
     report("provider_result", "Pi provider stream finished", {
       stopReason: last?.stopReason || "missing",
@@ -1576,6 +1589,15 @@ const handleRequest = async (req, res) => {
     if (req.method === "POST" && req.url === "/v1/auth/resolve") {
       const value = await body(req);
       return json(res, 200, await resolveOAuth(value.provider, value.credential, Boolean(value.force)));
+    }
+    if (req.method === "POST" && req.url === "/v1/pcc-tool") {
+      const value = await body(req);
+      try {
+        const result = await executePCCTool(value);
+        return json(res, result ? 200 : 404, result || { error: "unknown PCC request" });
+      } catch (error) {
+        return json(res, 403, { error: error.code || error.message });
+      }
     }
     if (req.method === "POST" && req.url === "/v1/pcc-event") {
       const event = await body(req);

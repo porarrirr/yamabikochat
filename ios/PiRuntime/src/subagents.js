@@ -11,6 +11,8 @@ import { registerAgent } from "pi-subagents/agents";
 // package exports. Only the mobile host changes; Pi owns sessions and execution.
 import { setChildSessionFactory } from "../node_modules/pi-subagents/src/runs/shared/child-session.js";
 import { createSubagentProgress } from "./subagent-progress.js";
+import { Type } from "typebox";
+import pccSubagentSchema from "./pcc-subagent-schema.json" with { type: "json" };
 import { aggregateUsage } from "./usage-contract.js";
 
 const owners = new AsyncLocalStorage();
@@ -18,6 +20,10 @@ const EFFORTS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "ma
 const failure = (code, message = code) => Object.assign(new Error(message), { code });
 const identity = model => `${model.provider}/${model.id}`;
 const errorResult = error => ({ content: [{ type: "text", text: `${error.code || "subagent_error"}: ${error.message}` }], details: { error: error.code || "subagent_error" }, isError: true });
+
+// PCC's native schema supports this explicit mobile subset. Execution still
+// delegates to the registered pi-subagents tool, including validation and limits.
+export const pccSubagentParameters = Type.Unsafe(pccSubagentSchema);
 
 const MOBILE_ROLES = {
   scout: "Inspect the task's relevant files and evidence. Return a concise map of entry points, data flow, constraints, and open questions. Do not modify source files.",
@@ -282,6 +288,7 @@ export async function createMobileSubagentsHost({ agent, config, resolve, stream
           return definition => {
             if (definition.name !== "subagent") return target.registerTool(definition);
             target.registerTool({ ...definition,
+              ...(parent.model.provider === "apple-pcc" ? { parameters: pccSubagentParameters } : {}),
               description: definition.description + "\nOn iOS execution is in-process (async:false). Use only the provided mobile tools; shell, desktop extensions and worktrees are unavailable. "
                 + "No model specified means the parent model, unless the user selected a default profile. Configured model profiles: "
                 + entries.map(entry => `${entry.id} (${entry.name}): ${identity(entry.model)}:${entry.config.thinkingLevel || "off"}`).join(", ")

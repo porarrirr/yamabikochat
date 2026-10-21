@@ -8,11 +8,29 @@ const nativeScope = new AsyncLocalStorage();
 const pending = new Map();
 export const withPCCBridge = (bridge, action) => nativeScope.run(bridge, action);
 
+// Preserve the parent's authenticated bridge while keeping child tool IDs and
+// native session identities separate, including simultaneous PCC children.
+export function withPCCSubagentBridge(subagentId, action) {
+  const bridge = nativeScope.getStore();
+  if (!bridge || !subagentId) return action();
+  return withPCCBridge({ ...bridge, send: event => bridge.send({ ...event, subagentId,
+    ...(event.toolCallId ? { toolCallId: `${subagentId}:${event.toolCallId}` } : {})
+  }) }, action);
+}
+
 export function receivePCCEvent(event) {
   const entry = pending.get(event.requestId);
   if (!entry || entry.runId !== event.runId) return false;
   entry.deliver(event);
   return true;
+}
+
+// Only a call already announced by this live native request may re-enter Pi.
+// Consume it before awaiting so a repeated HTTP callback cannot launch twice.
+export async function executePCCTool({ runId, requestId, toolCall }) {
+  const entry = pending.get(requestId);
+  if (!entry || entry.runId !== runId) return undefined;
+  return entry.executeTool(toolCall);
 }
 
 export function pccResolution(config, models) {
@@ -60,10 +78,12 @@ export function appleUsage(value) {
 function streamPCC(model, context, options = {}) {
   const stream = createAssistantMessageEventStream();
   const bridge = nativeScope.getStore();
+  const inScope = AsyncLocalStorage.snapshot();
   const output = { role: 'assistant', api: model.api, provider: model.provider, model: model.id,
     content: [], usage: unknownUsage(), stopReason: 'pending', timestamp: Date.now() };
   const requestId = crypto.randomUUID();
   let finished = false;
+  const toolController = new AbortController();
   let timer;
   const nativeCalls = new Map();
   const nativeTools = context.tools ?? getCurrentTools(context.messages ?? []);
@@ -80,6 +100,7 @@ function streamPCC(model, context, options = {}) {
   function finish(error) {
     if (finished) return;
     finished = true;
+    toolController.abort();
     clearTimeout(timer);
     options.signal?.removeEventListener('abort', abort);
     pending.delete(requestId);
@@ -116,7 +137,26 @@ function streamPCC(model, context, options = {}) {
       if (options.maxTokens != null) payload.maximumResponseTokens = options.maxTokens;
       const prepared = await options.onPayload?.(payload, model) ?? payload;
       if (options.signal?.aborted) { abort(); return; }
-      pending.set(requestId, { runId: bridge.runId, deliver(event) {
+      pending.set(requestId, { runId: bridge.runId,
+        async executeTool(call) {
+          const entry = nativeCalls.get(call?.id);
+          if (!entry || entry.completed || entry.dispatched || call.name !== 'subagent' ||
+              call.name !== entry.call.name || call.argumentsJSON !== entry.call.argumentsJSON || !bridge.executeTool) {
+            throw Object.assign(new Error('pcc_tool_not_authorized'), { code: 'pcc_tool_not_authorized' });
+          }
+          entry.dispatched = true;
+          return inScope(async () => {
+            try {
+              const result = await bridge.executeTool(call, toolController.signal);
+              return { callId: call.id, name: call.name,
+                content: result.content?.filter(part => part.type === 'text').map(part => part.text).join('\n') || '',
+                isError: Boolean(result.isError) };
+            } catch (error) {
+              return { callId: call.id, name: call.name, content: error.message, isError: true };
+            }
+          });
+        },
+        deliver(event) {
         try {
           if (event.type === 'error') {
             finish(Object.assign(new Error(event.message || 'PCC failed'), { code: event.errorCode }));

@@ -3,7 +3,7 @@ import test from 'node:test';
 import { Agent } from '@earendil-works/pi-agent-core';
 import { createModels, calculateCost, createAssistantMessageEventStream } from '@earendil-works/pi-ai';
 import { calculateContextTokens } from '@earendil-works/pi-ai/utils/estimate';
-import { PCC_PROVIDER, PCC_MODEL, pccResolution, withPCCBridge, receivePCCEvent, appleUsage, unknownUsage } from '../src/pcc-provider.js';
+import { PCC_PROVIDER, PCC_MODEL, pccResolution, withPCCBridge, receivePCCEvent, executePCCTool, appleUsage, unknownUsage } from '../src/pcc-provider.js';
 import { providerUsage, aggregateUsage } from '../src/usage-contract.js';
 
 const config = { provider: PCC_PROVIDER, model: PCC_MODEL, nativePCC: { version: 1, available: true, contextSize: 32768 } };
@@ -236,4 +236,34 @@ test('cancellation during native tool execution rejects late tool results', asyn
   } }, () => models.streamSimple(model, { messages: [], tools: [{ name: 'web_search' }] }, { reasoning: 'medium', signal: controller.signal }).result());
   assert.equal(output.stopReason, 'aborted');
   assert.equal(receivePCCEvent({ ...request, type: 'tool_end', toolCall: call }), false);
+});
+
+
+test('native parent failure cancels a delegated tool and expires its callback authorization', async () => {
+  const { models, model } = setup();
+  let cancelled = false;
+  let invocation;
+  let execution;
+  const result = withPCCBridge({ runId: 'native-failure',
+    executeTool: (_call, signal) => new Promise(resolve => {
+      signal.addEventListener('abort', () => {
+        cancelled = true;
+        resolve({ content: [{ type: 'text', text: 'cancelled' }], isError: true });
+      }, { once: true });
+    }),
+    send(event) {
+      if (event.type !== 'pcc_request') return;
+      const toolCall = { id: 'delegate', name: 'subagent', argumentsJSON: '{}' };
+      invocation = { runId: event.runId, requestId: event.requestId, toolCall };
+      receivePCCEvent({ ...invocation, type: 'tool_start' });
+      execution = executePCCTool(invocation);
+      receivePCCEvent({ ...invocation, type: 'error', message: 'Native session failed', errorCode: 'pcc_generation_failed' });
+    }
+  }, () => models.streamSimple(model, { messages: [{ role: 'user', content: 'Delegate' }],
+    tools: [{ name: 'subagent', description: 'Delegate', parameters: { type: 'object', properties: {} } }]
+  }, { reasoning: 'high' }).result());
+  assert.equal((await result).errorCode, 'pcc_generation_failed');
+  assert.equal((await execution).isError, true);
+  assert.equal(cancelled, true);
+  assert.equal(await executePCCTool(invocation), undefined);
 });

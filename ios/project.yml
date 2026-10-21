@@ -148,6 +148,8 @@ targets:
     deploymentTarget: 17.0
     sources:
       - path: YamabikoTests
+      - path: PiRuntime/src/pcc-subagent-schema.json
+        buildPhase: resources
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.porarri.yamabikochat.ios.tests
       GENERATE_INFOPLIST_FILE: YES
