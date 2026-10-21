@@ -25,6 +25,19 @@ transcripts do not enter the parent's tool history. AsyncLocalStorage scopes
 credentials, selected profiles and cleanup to the invoking parent; completing
 one conversation cannot cancel another conversation's children.
 
+AgentSession owns each child's initial prompt and tool loadout. The host does not
+seed unpersisted Agent-only declarations: Pi records the declarations in the
+SessionManager transcript before projecting the first provider request. Children
+receive the original mobile system prompt (user instructions, tool guidance, and
+date), followed by their role instructions and Pi's child boundary. Parent-only
+extension orchestration instructions are not copied into fresh children.
+
+The seven built-in roles use official agent overrides with iOS-specific prompts
+and inline output. Research instructions match `web_search`'s `query` parameter
+and `fetch_url`; file and execution guidance uses the available mobile tools.
+Named model profiles use the same mobile delegate instructions. Unsupported
+desktop tool names and automatic desktop handoff-file destinations are not used.
+
 The bridge passes explicit user configuration to Pi, without synthesizing models
 or selecting a protocol in Swift. Model-level metadata is preserved. Different
 contracts for the same Pi identity are rejected as `subagent_model_identity_conflict`.
@@ -52,7 +65,8 @@ subagents are disabled on that parent path and Apple profiles report
 worktrees, detached processes, schedules, workflow scripts and nested subagents
 are unavailable in this mobile host. Calls requesting unsupported execution return
 a typed reason. In-process children use fresh task context by default. The parent
-must include the relevant information in the delegated task.
+must include relevant conversation evidence in the delegated task; shared system
+instructions are inherited separately.
 
 ## Progress and presentation
 

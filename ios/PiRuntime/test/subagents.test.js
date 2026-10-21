@@ -11,6 +11,31 @@ import { selectSubagentModel, mobileModelRuntime } from "../src/subagents.js";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 
+const wireTools = body => (body.tools || []).flatMap(tool => tool.functionDeclarations || [tool.function || tool]);
+const wireSystem = body => JSON.stringify([
+  ...(body.messages || body.input || []).filter(message => ["system", "developer"].includes(message.role)),
+  body.system, body.instructions, body.systemInstruction
+]);
+const mobileTools = [
+  { type: "function", payload: { name: "web_search", description: "Search public sources", parameters: JSON.stringify({ type: "object", properties: { query: { type: "string" } }, required: ["query"], additionalProperties: false }) } },
+  { type: "function", payload: { name: "fetch_url", description: "Read an original source", parameters: JSON.stringify({ type: "object", properties: { url: { type: "string" } }, required: ["url"], additionalProperties: false }) } },
+  { type: "function", payload: { name: "str_replace_editor", description: "Inspect and edit workspace files", parameters: JSON.stringify({ type: "object", properties: { command: { type: "string" }, path: { type: "string" } }, required: ["command", "path"] }) } }
+];
+const parentPolicy = "PARENT_POLICY: Answer in Japanese. Preserve unrelated files. Today's date: 2026-10-21.";
+
+function assertMobileLoadout(body) {
+  for (const { payload } of mobileTools) {
+    const tool = wireTools(body).find(tool => tool.name === payload.name);
+    assert.ok(tool, `Missing initial declaration: ${payload.name}`);
+    assert.equal(tool.description, payload.description);
+    const expected = JSON.parse(payload.parameters);
+    // Pi's non-strict Anthropic adapter projects type/properties/required only.
+    if (tool.input_schema) delete expected.additionalProperties;
+    assert.deepEqual(tool.parameters || tool.input_schema || tool.parametersJsonSchema, expected, body.model || body.url);
+  }
+  assert.ok(!wireTools(body).some(tool => ["bash", "read", "write", "edit", "subagent"].includes(tool.name)));
+}
+
 test("child inheritance and effort validation preserve every Pi built-in identity and protocol", () => {
   const catalog = builtinModels();
   const protocols = new Set();
@@ -85,8 +110,10 @@ test("bundled pi-subagents executes three real Pi child sessions and reports the
     const chunk = (delta, finish_reason = null) => res.write(`data: ${JSON.stringify({ id: `test-${requests.length}`, object: "chat.completion.chunk", model: body.model, choices: [{ index: 0, delta, finish_reason }] })}\n\n`);
     if (isParent && !isResult) {
       const prompt = JSON.stringify(body.messages);
+      const role = prompt.match(/launch-mobile-role:([a-z-]+)/)?.[1];
       const params = prompt.includes("launch-mobile-profiles")
         ? { tasks: [0, 1, 2, 3, 4].map(index => ({ agent: `mobile-wire-${index}`, task: `Report profile-${index}` })) }
+        : role ? { agent: role, task: "Inspect the supplied evidence and return findings inline." }
         : prompt.includes("launch-mobile-default") ? { agent: "delegate", task: "Report the default model" }
         : prompt.includes("launch-mobile-inherit") ? { agent: "delegate", task: "Report the inherited model", model: "inherit" }
         : prompt.includes("launch-mobile-error") ? { agent: "delegate", task: "force-child-error" }
@@ -98,8 +125,14 @@ test("bundled pi-subagents executes three real Pi child sessions and reports the
       chunk({ role: "assistant", content: "All three children finished." });
       chunk({}, "stop");
     } else if (JSON.stringify(body).includes("use-mobile-probe") && last.role !== "tool") {
-      chunk({ role: "assistant", tool_calls: [{ index: 0, id: "probe-call", type: "function", function: { name: "mobile_probe", arguments: '{"query":"Inspect evidence"}' } }] });
-      chunk({}, "tool_calls");
+      // A real model needs the declaration before it can discover this tool.
+      if (wireTools(body).some(tool => tool.name === "mobile_probe")) {
+        chunk({ role: "assistant", tool_calls: [{ index: 0, id: "probe-call", type: "function", function: { name: "mobile_probe", arguments: '{"query":"Inspect evidence"}' } }] });
+        chunk({}, "tool_calls");
+      } else {
+        chunk({ role: "assistant", content: "No mobile probe was declared." });
+        chunk({}, "stop");
+      }
     } else {
       active++;
       peak = Math.max(peak, active);
@@ -192,7 +225,7 @@ test("bundled pi-subagents executes three real Pi child sessions and reports the
         ...(protocol === "anthropic-messages" ? { thinkingBudget: 2048 } : {}) } }
   }));
   const configured = { ...config, subagents: { enabled: true, models: profiles } };
-  const profileBody = await (await submit("launch-mobile-profiles", configured)).text();
+  const profileBody = await (await submit("launch-mobile-profiles", configured, mobileTools, crypto.randomUUID(), parentPolicy)).text();
   const profileResult = profileBody.trim().split("\n").map(JSON.parse).find(event => event.type === "completed");
   assert.ok(profileResult, profileBody + logs);
   assert.equal(profileResult.response.subagents.length, 5, profileBody);
@@ -203,8 +236,30 @@ test("bundled pi-subagents executes three real Pi child sessions and reports the
     const captured = requests.find(request => request.model === `wire-${index}` || request.url.includes(`/wire-${index}:`));
     assert.ok(captured, JSON.stringify(requests));
     assert.ok(captured.authorization.endsWith(`profile-secret-${index}`), JSON.stringify(captured));
+    assertMobileLoadout(captured);
+    assert.ok(wireSystem(captured).includes(parentPolicy));
+    assert.ok(wireSystem(captured).includes("You are an iOS subagent."));
+    assert.ok(!wireSystem(captured).includes("You are an expert coding assistant operating inside pi"));
   }
   assert.ok(!profileBody.includes("profile-secret"));
+
+  for (const role of ["scout", "researcher", "evidence-auditor", "worker", "reviewer", "oracle", "delegate"]) {
+    const start = requests.length;
+    const resultBody = await (await submit(`launch-mobile-role:${role}`, config, mobileTools, crypto.randomUUID(), parentPolicy)).text();
+    const result = resultBody.trim().split("\n").map(JSON.parse).find(event => event.type === "completed");
+    assert.equal(result?.response.subagents[0]?.status, "completed", resultBody);
+    const child = requests[start + 1];
+    assertMobileLoadout(child);
+    const prompt = wireSystem(child);
+    assert.ok(prompt.includes(parentPolicy), role);
+    assert.ok(prompt.includes("You are an iOS subagent."), role);
+    assert.ok(prompt.includes("supply query (a string)"), role);
+    assert.ok(prompt.includes("Do not propose or run subagents"), "Pi's child boundary must remain in force");
+    for (const desktopInstruction of ["fetch_content", "get_search_content", "source_check", "`queries`", "Use `bash`", "expert coding assistant operating inside pi"]) {
+      assert.ok(!prompt.includes(desktopInstruction), `${role}: ${desktopInstruction}`);
+    }
+    assert.ok(!JSON.stringify(child.messages.at(-1)).includes("Write your findings to exactly this path"));
+  }
 
   const defaultConfig = { ...configured, subagents: { ...configured.subagents, defaultModelID: "wire-3" } };
   for (const [prompt, expectedModel, effort] of [["launch-mobile-default", "wire-3", "high"], ["launch-mobile-inherit", "mobile-test", "off"]]) {
@@ -262,14 +317,24 @@ test("bundled pi-subagents executes three real Pi child sessions and reports the
   const textOnlyWire = requests.filter(request => request.model === "wire-0").at(-1);
   assert.ok(!textOnlyWire.tools?.length, "catalog tool_call:false must suppress native and extension tools");
 
+  const concurrentStart = requests.length;
+  const concurrentPolicies = ["CONVERSATION_A_POLICY", "CONVERSATION_B_POLICY"];
   const concurrentBodies = await Promise.all([
-    submit("launch-mobile-default", { ...configured, subagents: { ...configured.subagents, defaultModelID: "wire-0" } }).then(response => response.text()),
-    submit("launch-mobile-children", defaultConfig).then(response => response.text())
+    submit("launch-mobile-default", { ...configured, subagents: { ...configured.subagents, defaultModelID: "wire-0" } }, [], crypto.randomUUID(), concurrentPolicies[0]).then(response => response.text()),
+    submit("launch-mobile-children", defaultConfig, [], crypto.randomUUID(), concurrentPolicies[1]).then(response => response.text())
   ]);
   for (const [index, resultBody] of concurrentBodies.entries()) {
     const result = resultBody.trim().split("\n").map(JSON.parse).find(event => event.type === "completed");
     assert.equal(result?.response.subagents.length, index === 0 ? 1 : 3, resultBody);
     assert.ok(result.response.subagents.every(run => run.status === "completed" && run.model === (index === 0 ? "wire-0" : "wire-3")), resultBody);
+  }
+  const concurrentChildren = requests.slice(concurrentStart).filter(request =>
+    request.model === "wire-0" || request.url.includes("/wire-3:"));
+  assert.equal(concurrentChildren.length, 4);
+  for (const child of concurrentChildren) {
+    const index = child.model === "wire-0" ? 0 : 1;
+    assert.ok(wireSystem(child).includes(concurrentPolicies[index]));
+    assert.ok(!wireSystem(child).includes(concurrentPolicies[1 - index]), "concurrent parents must not share system instructions");
   }
 
   const cancelResponse = await submit("launch-mobile-native", config, [{ type: "function", payload: {
@@ -304,6 +369,7 @@ test("bundled pi-subagents executes three real Pi child sessions and reports the
   await (await submit("launch-mobile-inherit", config, [], crypto.randomUUID(), "Keep this mobile conversation persona unchanged.")).text();
   assert.ok(JSON.stringify(requests[customStart].messages).includes("Keep this mobile conversation persona unchanged."));
   assert.ok(!JSON.stringify(requests[customStart].messages).includes("You are an expert coding assistant operating inside pi"));
+  assert.ok(wireSystem(requests[customStart + 1]).includes("Keep this mobile conversation persona unchanged."));
   assert.equal(fs.existsSync(path.join(root, "spawn-attempts.log")), false,
     "Mobile parent and child sessions must not attempt desktop subprocess discovery");
 });

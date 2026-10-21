@@ -19,6 +19,27 @@ const failure = (code, message = code) => Object.assign(new Error(message), { co
 const identity = model => `${model.provider}/${model.id}`;
 const errorResult = error => ({ content: [{ type: "text", text: `${error.code || "subagent_error"}: ${error.message}` }], details: { error: error.code || "subagent_error" }, isError: true });
 
+const MOBILE_ROLES = {
+  scout: "Inspect the task's relevant files and evidence. Return a concise map of entry points, data flow, constraints, and open questions. Do not modify source files.",
+  researcher: "Research the assigned question. Prefer primary sources, check dates and contradictions, distinguish evidence from inference, and cite sources actually inspected. Report missing evidence and stop when the question is answered.",
+  "evidence-auditor": "Verify the supplied claims against original sources. Report each claim's support, contradictions, uncertainty, and citations. Do not modify files.",
+  worker: "Carry out the assigned implementation using focused edits. Inspect files before changing them, preserve unrelated content, and validate the affected behavior with available execution tools. Report actual changes and validation limits.",
+  reviewer: "Review the supplied work without modifying files. Report actionable findings with severity, evidence, affected locations, and concrete proposed corrections. Report any validation you could not perform.",
+  oracle: "Analyze the assigned problem and recommend a concrete approach with evidence, assumptions, and tradeoffs. Do not modify files.",
+  delegate: "Complete the assigned task and return findings and concrete results to the parent agent."
+};
+
+function mobileRolePrompt(role) {
+  return [
+    "You are an iOS subagent. Complete only the task assigned by the parent agent.",
+    MOBILE_ROLES[role],
+    "Use only tools declared for this session and follow their exact parameter schemas. If a required capability is unavailable, report that limitation. Desktop shell commands, extensions, and worktrees are unavailable.",
+    "When web_search is available, supply query (a string). Use fetch_url, when available, to inspect original sources. Follow the declared schemas for optional search and source-reading parameters.",
+    "When file tools are available, use str_replace_editor to inspect or edit workspace files and python_execute for Python execution. Respect the assigned role's no-edit constraints. Do not claim execution or validation without actual results.",
+    "Return the complete result in your final response. Do not create internal progress or handoff files unless the assigned task explicitly requests them."
+  ].filter(Boolean).join("\n\n");
+}
+
 export function selectSubagentModel(reference, entries, parent, defaultID) {
   let value = reference || defaultID || identity(parent.model);
   let effort;
@@ -143,7 +164,10 @@ setChildSessionFactory({
       : launch.storage.kind === "dir" ? SessionManager.create(owner.cwd, launch.storage.sessionDir)
       : SessionManager.inMemory(owner.cwd);
     const agent = new Agent({
-      initialState: { model: entry.model, thinkingLevel: entry.config.thinkingLevel || "off", systemPrompt: launch.systemPrompt || "", tools, messages: manager.buildSessionContext().messages },
+      // AgentSession owns the prompt and loadout. Seeding Agent-only declarations
+      // here makes Pi diff against a baseline absent from SessionManager, whose
+      // canonical request projection would then omit the initial native tools.
+      initialState: { model: entry.model, thinkingLevel: entry.config.thinkingLevel || "off", messages: manager.buildSessionContext().messages },
       convertToLlm,
       streamFn: owner.streams(entry, id),
       toolExecution: "parallel",
@@ -153,7 +177,7 @@ setChildSessionFactory({
     try {
       const childRuntime = mobileModelRuntime([entry, ...owner.entries.filter(item => identity(item.model) !== identity(entry.model))], owner.streams, owner.getAuth, owner.getProvider);
       session = await sessionHost({ agent, modelRuntime: childRuntime, cwd: owner.cwd,
-        systemPrompt: [launch.systemPrompt, launch.appendSystemPrompt].filter(Boolean).join("\n\n"),
+        systemPrompt: [owner.parentSystemPrompt, launch.systemPrompt, launch.appendSystemPrompt].filter(Boolean).join("\n\n"),
         tools, hooks: launch.hooks, sessionManager: manager, allowExtensionTools: entry.toolCall !== false });
     } catch (error) {
       progress.finish("failed", { error: error.message });
@@ -226,14 +250,15 @@ export async function createMobileSubagentsHost({ agent, config, resolve, stream
   }
   const cwd = fs.mkdtempSync(path.join(mobileAgentDir, "session-"));
   fs.mkdirSync(path.join(cwd, ".pi"));
-  // Official agent overrides give desktop roles the native mobile tool loadout.
+  // Use official overrides for both the mobile loadout and role instructions.
   const defaultEntry = entries.find(entry => entry.id === config.subagents.defaultModelID) || parent;
-  const agentOverrides = Object.fromEntries(["scout", "researcher", "evidence-auditor", "worker", "reviewer", "oracle", "delegate"].map(name => [name, {
+  const agentOverrides = Object.fromEntries(Object.keys(MOBILE_ROLES).map(name => [name, {
+    systemPrompt: mobileRolePrompt(name), systemPromptMode: "replace", output: false, outputMode: "inline",
     tools: defaultEntry.toolCall === false ? [] : tools.map(tool => tool.name), model: identity(defaultEntry.model), thinking: defaultEntry.config.thinkingLevel || "off"
   }]));
   fs.writeFileSync(path.join(cwd, ".pi", "settings.json"), JSON.stringify({ subagents: { agentOverrides } }));
   const owner = {
-    parent, entries, defaultEntry, cwd, tools, children: new Set(), progress: new Map(), lifecycle: { closed: false },
+    parent, parentSystemPrompt, entries, defaultEntry, cwd, tools, children: new Set(), progress: new Map(), lifecycle: { closed: false },
     streams, publish, finishTurn, makeChildTools, getAuth, getProvider,
     modelRuntime: mobileModelRuntime(entries, streams, getAuth, getProvider)
   };
@@ -291,7 +316,7 @@ export async function createMobileSubagentsHost({ agent, config, resolve, stream
         for (const entry of entries.slice(1)) registrations.push(registerAgent({ pi: mobileAPI,
           name: `mobile-${entry.id.toLowerCase().replace(/[^a-z0-9-]/g, "")}`,
           definition: { description: `${entry.name}: ${identity(entry.model)} (${entry.config.thinkingLevel || "off"})`,
-            systemPrompt: "Complete the assigned task using the available iOS tools. Return your findings and concrete results to the parent agent.",
+            systemPrompt: mobileRolePrompt("delegate"), systemPromptMode: "replace",
             tools: entry.toolCall === false ? [] : tools.map(tool => tool.name), model: identity(entry.model), thinking: entry.config.thinkingLevel || "off",
             defaultContext: "fresh", defaultAsync: false, allowNestedSubagents: false }
         }));
