@@ -344,7 +344,9 @@ struct RootView: View {
                 ? GenUIRichDemoFixture.title : GenUIDemoFixture.title
             let genUIFixtureID = ProcessInfo.processInfo.arguments.contains("-GenUIFixture") || ProcessInfo.processInfo.arguments.contains("-GenUIRichFixture")
                 ? screenshotConversations.first(where: { $0.title == genUITitle })?.id : nil
-            if let conversationID = launch.conversationID ?? genUIFixtureID ?? screenshotConversations.first?.id {
+            let subagentFixtureID = ProcessInfo.processInfo.arguments.contains("-SubagentFixture")
+                ? screenshotConversations.first(where: { $0.title == SubagentDemoFixture.title })?.id : nil
+            if let conversationID = launch.conversationID ?? subagentFixtureID ?? genUIFixtureID ?? screenshotConversations.first?.id {
                 selectConversation(id: conversationID)
             }
         case .temporaryChat:

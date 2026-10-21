@@ -273,7 +273,8 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
             "codexPromptCacheEnabled": "false",
             "codexReasoningSummary": "detailed",
             "codexVerbosity": "high",
-            "supportsClientTools": "true"
+            "supportsClientTools": "true",
+            "subagentsEnabled": "true"
         ])
     }
 

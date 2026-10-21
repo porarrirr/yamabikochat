@@ -1,10 +1,10 @@
 # Pi runtime npm production licenses
 
 Generated from `ios/PiRuntime/package-lock.json`.
-Includes production peer dependencies installed for `pi-grok`; the Pi CLI is not imported into the mobile bundle.
-The root esbuild development dependency is not listed.
+Includes Pi Coding Agent and pi-subagents, used by the embedded mobile extension host.
+Build-only development dependencies are not listed.
 
-Count: 148 packages.
+Count: 153 packages.
 
 | Package | Version | License |
 | --- | --- | --- |
@@ -65,6 +65,7 @@ Count: 148 packages.
 | `@esbuild/win32-ia32` | 0.28.2 | MIT |
 | `@esbuild/win32-x64` | 0.28.2 | MIT |
 | `@google/genai` | 2.21.0 | Apache-2.0 |
+| `@js-temporal/polyfill` | 0.5.1 | ISC |
 | `@protobufjs/aspromise` | 1.1.2 | BSD-3-Clause |
 | `@protobufjs/base64` | 1.1.2 | BSD-3-Clause |
 | `@protobufjs/codegen` | 2.0.5 | BSD-3-Clause |
@@ -84,6 +85,7 @@ Count: 148 packages.
 | `@stablelib/base64` | 1.0.1 | MIT |
 | `@types/node` | 26.6.3 | MIT |
 | `@types/retry` | 0.12.0 | MIT |
+| `acorn` | 8.18.0 | MIT |
 | `agent-base` | 7.1.4 | MIT |
 | `agent-base` | 9.0.0 | MIT |
 | `balanced-match` | 4.0.4 | MIT |
@@ -119,6 +121,7 @@ Count: 148 packages.
 | `isexe` | 2.0.0 | ISC |
 | `jiti` | 2.7.0 | MIT |
 | `jose` | 6.2.12 | MIT |
+| `jsbi` | 4.3.2 | Apache-2.0 |
 | `json-bigint` | 1.0.0 | MIT |
 | `json-schema-to-ts` | 3.1.1 | MIT |
 | `jwa` | 2.0.1 | MIT |
@@ -135,6 +138,7 @@ Count: 148 packages.
 | `partial-json` | 0.1.7 | MIT |
 | `path-key` | 3.1.1 | MIT |
 | `pi-grok` | 0.10.1 | MIT |
+| `pi-subagents` | 0.79.2 | MIT |
 | `proper-lockfile` | 4.1.2 | MIT |
 | `protobufjs` | 7.6.6 | BSD-3-Clause |
 | `proxy-agent-negotiate` | 1.1.0 | MIT |
@@ -155,4 +159,5 @@ Count: 148 packages.
 | `web-streams-polyfill` | 3.3.3 | MIT |
 | `which` | 2.0.2 | ISC |
 | `ws` | 8.21.3 | MIT |
+| `yaml` | 2.8.3 | ISC |
 | `yaml` | 2.9.0 | ISC |

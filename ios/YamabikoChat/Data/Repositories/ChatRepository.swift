@@ -1281,7 +1281,7 @@ final class ChatRepository {
         activity.piExecution = response.piExecution ?? activity.piExecution
         if activity.hasPersistableContent {
             try target.persistToolActivity(activity)
-            try target.persistAttachments(activity.attachmentPaths)
+            try target.persistAttachments(activity.parentAttachmentPaths)
         }
     }
 

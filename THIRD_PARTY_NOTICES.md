@@ -14,6 +14,8 @@ Production npm packages pulled in by the Pi Agent runtime are listed in [third_p
 | Mermaid (`mermaid.min.js`) | 11.17.2 (`sha256:581ed7d74bd9048d0e3a91363927d72ef22942d7722546b27f7cc29e35390eb8`) | MIT | Chat diagram rendering | https://github.com/mermaid-js/mermaid |
 | `@earendil-works/pi-agent-core` | 1.0.2 | MIT | Pi Agent runtime | https://www.npmjs.com/package/@earendil-works/pi-agent-core |
 | `@earendil-works/pi-ai` | 1.0.2 | MIT | Pi Agent runtime | https://www.npmjs.com/package/@earendil-works/pi-ai |
+| `@earendil-works/pi-coding-agent` | 1.0.2 | MIT | Embedded Pi session and extension host | https://www.npmjs.com/package/@earendil-works/pi-coding-agent |
+| `pi-subagents` | 0.79.2 | MIT | Subagent delegation and parallel workflows | https://github.com/nicobailon/pi-subagents |
 | `pi-grok` | 0.10.1 (`8b304e65c088f84ccb932959d97739245fe47d97`) | MIT | SuperGrok / xAI helper | https://github.com/stnly/pi-grok |
 | `typebox` | 1.3.27 | MIT | Pi runtime schemas | https://www.npmjs.com/package/typebox |
 | NodeMobile / nodejs-mobile | 24.18.0-0 | Node.js composite (see file) | Embedded Node.js (XCFramework) | https://github.com/gmaclennan/nodejs-mobile (Node.js terms: https://github.com/JaneaSystems/nodejs-mobile) |
@@ -61,7 +63,11 @@ licenses screen.
 
 The bundled `PiRuntime/bundle/main.js` is produced from the production dependencies in `ios/PiRuntime/package-lock.json`. Those packages are MIT, Apache-2.0, BSD-3-Clause, ISC, BlueOak-1.0.0, or 0BSD. See [third_party/npm-licenses.md](third_party/npm-licenses.md) for package names, versions, and SPDX identifiers.
 
-`esbuild` is used only at build time and is not redistributed in the app.
+The root `esbuild` development dependency is used only at build time. Production
+transitive packages are included in the npm inventory above; desktop compiler
+integrations are not executed by the mobile host.
+
+The pi-subagents copyright and license are retained in `legal/PI_SUBAGENTS_LICENSE.txt` and [third_party/pi-subagents-LICENSE.txt](third_party/pi-subagents-LICENSE.txt).
 
 ## License texts
 

@@ -142,6 +142,7 @@ final class ProviderGateway {
         guard var response = completed else {
             throw ProviderClientError.parseFailure("Pi agent stream ended without completion")
         }
+        for run in response.subagents ?? [] { toolActivity.applySubagent(run) }
         if response.reasoningSummary == nil { response.reasoningSummary = reasoning.trimmedNonEmpty }
         if let providerTranscript = response.providerTranscript {
             toolActivity.providerTranscript = providerTranscript
@@ -758,6 +759,49 @@ final class ProviderGateway {
     }
 
     private func configuration(
+        providerID: String,
+        request: ProviderRequest,
+        settings: AppSettings,
+        geminiAPIKeyOverride: String? = nil,
+        forModelResolution: Bool = false
+    ) async throws -> PiAgentConfiguration {
+        var config = try await baseConfiguration(providerID: providerID, request: request, settings: settings,
+            geminiAPIKeyOverride: geminiAPIKeyOverride, forModelResolution: forModelResolution)
+        guard !forModelResolution, request.metadata["subagentsEnabled"] == "true", settings.subagents.enabled else { return config }
+        var profiles: [PiSubagentModel] = []
+        for profile in settings.subagents.models {
+            do {
+                let child = try await subagentConfiguration(profile, settings: settings)
+                profiles.append(PiSubagentModel(id: profile.id, name: profile.name, configuration: child))
+            } catch {
+                let reason = error.localizedDescription
+                DiagnosticsLogger.log("Subagent profile unavailable", category: .network,
+                    metadata: ["profile": profile.id, "provider": profile.provider, "model": profile.model], error: error)
+                profiles.append(PiSubagentModel(id: profile.id, name: profile.name, configuration: nil, unsupportedReason: reason))
+            }
+        }
+        config.subagents = PiSubagentOptions(enabled: true, defaultModelID: settings.subagents.defaultModelID, models: profiles)
+        return config
+    }
+
+    func subagentConfiguration(_ profile: SubagentModelProfile, settings: AppSettings, forModelResolution: Bool = false) async throws -> PiAgentConfiguration {
+        if !forModelResolution, let error = profile.validationError { throw ProviderClientError.parseFailure(error) }
+        if profile.provider.caseInsensitiveCompare("APPLE_INTELLIGENCE") == .orderedSame {
+            throw ProviderClientError.parseFailure("subagent_native_apple_bridge_unsupported: Apple Intelligenceの子セッションには未対応です")
+        }
+        var childSettings = settings
+        if let name = profile.endpointPresetName { childSettings.selectedOpenAICompatPreset = name }
+        var config = try await baseConfiguration(providerID: profile.provider,
+            request: ProviderRequest(model: profile.model, messages: []), settings: childSettings, forModelResolution: forModelResolution)
+        config.thinkingLevel = forModelResolution ? nil : profile.effort
+        if !forModelResolution, config.customEndpoint != nil {
+            config.customEndpoint?.reasoningEffort = profile.effort
+            if profile.effort == "off" { config.customEndpoint?.thinkingBudget = nil }
+        }
+        return config
+    }
+
+    private func baseConfiguration(
         providerID: String,
         request: ProviderRequest,
         settings: AppSettings,

@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import net from "node:net";
 import test from "node:test";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 
 async function availablePort() {
   const server = net.createServer();
@@ -365,7 +366,8 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
     input: ["text", "image"],
     contextWindow: 1048576,
     maxTokens: 131072,
-    toolCall: false
+    toolCall: false,
+    supportedThinkingLevels: ["minimal", "low", "medium", "high", "xhigh"]
   });
   assert.equal(result.models[1].reason, "pi_provider_missing");
   assert.equal(result.models[2].reason, "pi_model_missing");
@@ -400,7 +402,8 @@ test("resolves verified OpenCode Go routes and returns typed contract conflicts"
     input: ["text"],
     contextWindow: 262144,
     maxTokens: 262144,
-    toolCall: true
+    toolCall: true,
+    supportedThinkingLevels: ["off", "minimal", "low", "medium", "high"]
   });
   assert.equal(result.models[18].supported, true);
   assert.equal(result.models[18].api, "openai-responses");
@@ -481,6 +484,7 @@ test("bundled runtime preserves every built-in chat model across native and cata
         assert.equal(resolution.api, api, identity);
         assert.equal(resolution.reasoning, model.reasoning, identity);
         assert.deepEqual(resolution.input, model.input, identity);
+        assert.deepEqual(resolution.supportedThinkingLevels, getSupportedThinkingLevels(model), identity);
         assert.equal(resolution.contextWindow, model.contextWindow, identity);
         assert.equal(resolution.maxTokens, model.maxTokens, identity);
       }

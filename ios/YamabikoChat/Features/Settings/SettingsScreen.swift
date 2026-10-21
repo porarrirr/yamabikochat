@@ -337,6 +337,7 @@ private struct SettingsDetailScreen: View {
     private var conversationCategoryContent: some View {
         Group {
             systemPromptTabContent
+            SubagentSettingsSection(viewModel: viewModel)
             dualTabContent
             FusionModeSettingsSection(viewModel: viewModel, onRequestPanelDeletion: { panel in
                 panelPendingDeletion = panel

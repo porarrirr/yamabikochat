@@ -17,6 +17,13 @@ struct ChatStreamingPersistenceCoordinator {
     private var lastFlushNs: UInt64 = 0
     private var latestText: String = ""
     private var latestThinking: String = ""
+    private var lastActivityCheckpointMs: Int64 = 0
+
+    mutating func shouldCheckpointActivity(at time: Int64, terminal: Bool) -> Bool {
+        guard terminal || time - lastActivityCheckpointMs >= 1_000 else { return false }
+        lastActivityCheckpointMs = time
+        return true
+    }
 
     mutating func apply(
         text: String?,
@@ -295,7 +302,11 @@ enum ChatStreamSession {
             )
         case let .toolActivity(event):
             toolActivity.apply(event)
-            if event.phase == .finished, let result = event.result {
+            if (event.subagent != nil || event.ownerSubagentID != nil),
+               coordinator.shouldCheckpointActivity(at: event.createdAtMs, terminal: event.phase == .finished) {
+                try target.persistToolActivity(toolActivity)
+            }
+            if event.ownerSubagentID == nil, event.phase == .finished, let result = event.result {
                 try target.persistAttachments(result.artifacts.map(\.path))
             }
             publishStreamingSnapshot(
@@ -321,6 +332,7 @@ enum ChatStreamSession {
             }
             try target.persistToolActivity(toolActivity)
         case let .completed(response):
+            for run in response.subagents ?? [] { toolActivity.applySubagent(run) }
             finalUsage = response.usage ?? finalUsage
             finalUsageSamples = response.usageSamples ?? finalUsageSamples
             finalToolCalls = response.toolCalls

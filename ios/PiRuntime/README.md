@@ -7,9 +7,10 @@ Pi's schema dependency so the bundle uses one schema implementation. `src/main.j
 is the only JavaScript entry point and exposes an authenticated loopback NDJSON
 bridge used by `PiAgentRuntime.swift`.
 
-`pi-coding-agent` is pinned to 1.0.2 as a build dependency to satisfy `pi-grok`'s
-peer dependency without installing a second, older Pi dependency tree. The CLI
-is not imported into the mobile bundle. `pi-grok` remains at its audited commit.
+`pi-coding-agent` is pinned to 1.0.2 as a runtime dependency. Its `AgentSession`
+and extension APIs host `pi-subagents` 0.79.2 in-process. The CLI is never launched.
+`pi-grok` remains at its audited commit. See [SUBAGENTS.md](SUBAGENTS.md) for the
+user-approved mobile host integration and its validation boundary.
 
 Pi 1.0 removed `formatSkillInvocation` from Agent Core. The user authorized a
 prompt-formatting-only compatibility exception on 2026-10-04. `src/skill-context.js`
@@ -46,4 +47,10 @@ upstream revision requires a fresh review.
 Run `../scripts/bootstrap-pi-runtime.sh` after changing dependencies or the entry point.
 The script installs from `package-lock.json`, rebuilds `bundle/main.js`, and downloads the
 NodeMobile XCFramework when it is not already present. Runtime packages are bundled at build
-time; the app never downloads or executes JavaScript after distribution.
+time; the app never downloads JavaScript after distribution. `bundle/PiAssets`
+contains the pinned package data and the Acorn parser that the upstream workflow
+worker loads through `createRequire`; it must be shipped beside `main.js`.
+
+The entire `bundle/` directory is generated and ignored by Git. Run `ios/bootstrap.sh`
+from the repository root before opening a fresh checkout in Xcode. `npm test`
+automatically rebuilds the bundle before running the runtime tests.

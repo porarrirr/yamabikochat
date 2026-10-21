@@ -57,6 +57,7 @@ struct ProviderResponse: Codable, Sendable, Equatable {
     /// Exact Pi Agent execution snapshot returned by the bundled runtime.
     /// Authentication material is excluded by the runtime before serialization.
     var piExecution: JSONValue? = nil
+    var subagents: [SubagentRun]? = nil
 }
 
 struct ProviderRotationNotice: Codable, Sendable, Equatable, Identifiable {

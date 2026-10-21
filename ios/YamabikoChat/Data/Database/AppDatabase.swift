@@ -1115,6 +1115,18 @@ enum AppDatabase {
                 }
             }
             try db.execute(sql: "DELETE FROM chat_stream_checkpoints")
+            // An iOS process cannot retain a child session across a cold launch.
+            // Keep its partial output and mark only unfinished child records interrupted.
+            for row in try Row.fetchAll(db, sql: "SELECT id, stepsJSON FROM chat_message_tool_activity WHERE stepsJSON LIKE '%\"subagent\":%' AND stepsJSON LIKE '%\"running\"%'") {
+                let id: Int64 = row["id"]
+                let json: String = row["stepsJSON"]
+                guard let data = json.data(using: .utf8), let steps = try? JSONDecoder().decode([ToolActivityStep].self, from: data) else { continue }
+                var payload = ToolActivityPayload(steps: steps)
+                guard payload.subagents.contains(where: { $0.status == .running }) else { continue }
+                payload.failRunning(message: "アプリの終了によりサブエージェントの実行が中断されました")
+                let encoded = String(decoding: try JSONEncoder().encode(payload.steps), as: UTF8.self)
+                try db.execute(sql: "UPDATE chat_message_tool_activity SET stepsJSON = ? WHERE id = ?", arguments: [encoded, id])
+            }
         }
     }
 

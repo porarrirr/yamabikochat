@@ -48,6 +48,9 @@ targets:
           - App/Resources/Info.plist
       - path: PiRuntime/bundle/main.js
         buildPhase: resources
+      - path: PiRuntime/bundle/PiAssets
+        type: folder
+        buildPhase: resources
       - path: YamabikoChat/Python/Resources/yamabiko_runtime.py
         buildPhase: resources
     resources:
@@ -91,6 +94,7 @@ targets:
           - $(SRCROOT)/../THIRD_PARTY_NOTICES.md
           - $(SRCROOT)/../third_party/nodejs-mobile/LICENSE
           - $(SRCROOT)/../third_party/npm-licenses.md
+          - $(SRCROOT)/../third_party/pi-subagents-LICENSE.txt
           - $(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses
           - $(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notonastaliqurdu.txt
           - $(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notosansarabic.txt
@@ -103,6 +107,7 @@ targets:
           - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/THIRD_PARTY_NOTICES.md
           - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/NODEJS_LICENSE.txt
           - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/npm-licenses.md
+          - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/PI_SUBAGENTS_LICENSE.txt
           - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/NOTO_FONTS_LICENSES.txt
     postCompileScripts:
       - name: Process Python libraries

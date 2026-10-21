@@ -1,0 +1,113 @@
+import XCTest
+import GRDB
+@testable import YamabikoChat
+
+private final class SubagentCredentialStore: SecureCredentialStore {
+    var values: [String: String] = [:]
+    func saveSecret(_ value: String?, key: String) throws { values[key] = value }
+    func readSecret(key: String) throws -> String? { values[key] }
+    func deleteSecret(key: String) throws { values.removeValue(forKey: key) }
+}
+
+final class SubagentTests: XCTestCase {
+    private func run(status: SubagentRun.Status = .running, updatedAt: Int64 = 10) -> SubagentRun {
+        SubagentRun(id: "child-1", agent: "調査", task: "公式資料を調べる", provider: "openai", model: "model",
+            effort: "high", status: status, activity: "fetch_url を実行中", startedAtMs: 1,
+            updatedAtMs: updatedAt, finishedAtMs: status == .running ? nil : updatedAt,
+            output: "途中の結果", outputTruncated: false,
+            events: [.init(id: "event-1", kind: "tool_start", title: "fetch_url", detail: "https://example.org", createdAtMs: 2)],
+            eventsTruncated: false, usage: nil, error: nil)
+    }
+
+    func testSettingsDefaultToParentAndPreserveUnknownExtraFieldsAndUnavailableSelection() throws {
+        var settings = AppSettings()
+        XCTAssertTrue(settings.subagents.enabled)
+        XCTAssertNil(settings.subagents.defaultModelID)
+        settings.extraJSON = #"{"anotherSetting":{"enabled":true}}"#
+        let profile = SubagentModelProfile(id: "saved", name: "調査用", provider: "MODELS_DEV:example", model: "retired-model", effort: "xhigh")
+        settings.subagents = SubagentSettings(enabled: true, defaultModelID: "saved", models: [profile])
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        XCTAssertEqual(decoded.subagents.models, [profile])
+        XCTAssertEqual(decoded.subagents.defaultModelID, "saved")
+        XCTAssertTrue(decoded.extraJSON.contains("anotherSetting"))
+        var disabled = decoded.subagents
+        disabled.enabled = false
+        settings.subagents = disabled
+        XCTAssertEqual(settings.subagents.models, [profile])
+        XCTAssertEqual(settings.subagents.defaultModelID, "saved")
+    }
+
+    func testProgressIsIdempotentPersistsDetailsAndDoesNotPolluteParentTranscript() throws {
+        var payload = ToolActivityPayload()
+        payload.applySubagent(run())
+        payload.applySubagent(run(status: .completed, updatedAt: 20))
+        payload.applySubagent(run(updatedAt: 30))
+        XCTAssertEqual(payload.steps.count, 1)
+        XCTAssertEqual(payload.subagents.first?.status, .completed)
+        XCTAssertTrue(payload.providerTranscript.isEmpty)
+        let decoded = try JSONDecoder().decode(ToolActivityPayload.self, from: JSONEncoder().encode(payload))
+        XCTAssertEqual(decoded.subagents.first?.task, "公式資料を調べる")
+        XCTAssertEqual(decoded.subagents.first?.events.first?.detail, "https://example.org")
+        XCTAssertEqual(decoded.subagents.first?.output, "途中の結果")
+        let legacy = try JSONDecoder().decode(ToolActivityPayload.self, from: Data(#"{"steps":[]}"#.utf8))
+        XCTAssertTrue(legacy.subagents.isEmpty)
+    }
+
+    func testChildNativeResultsRemainInDetailsAndSurviveSubsequentSnapshots() {
+        var payload = ToolActivityPayload()
+        payload.applySubagent(run())
+        let artifact = ToolArtifact(path: "/output/result.csv", name: "result.csv", mime: "text/csv", size: 8)
+        payload.apply(ToolActivityEvent(phase: .finished,
+            call: ToolCall(id: "native-tool", name: PythonExecuteTool.name, argumentsJSON: "{}"),
+            result: ToolResult(callId: "native-tool", name: PythonExecuteTool.name, content: "done", artifacts: [artifact]),
+            createdAtMs: 15, ownerSubagentID: "child-1"))
+        payload.applySubagent(run(status: .completed, updatedAt: 20))
+        XCTAssertEqual(payload.subagents.first?.artifacts, [artifact])
+        XCTAssertEqual(payload.attachmentPaths, [artifact.path])
+        XCTAssertTrue(payload.parentAttachmentPaths.isEmpty)
+        XCTAssertEqual(payload.steps.count, 1)
+        XCTAssertTrue(payload.providerTranscript.isEmpty)
+    }
+
+    func testColdLaunchMarksUnfinishedChildrenInterruptedAndRetainsTheirOutput() throws {
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue)
+        let conversations = ConversationRepository(dbQueue: queue)
+        let conversation = try conversations.createConversation(title: "Subagents", model: "model", provider: "OPENAI")
+        let message = try conversations.insertMessage(ChatMessage(conversationId: conversation, role: "assistant", text: "Working"))
+        var payload = ToolActivityPayload()
+        payload.applySubagent(run())
+        try conversations.saveToolActivity(messageId: message, variantId: nil, payload: payload)
+        try AppDatabase.recoverStreamCheckpoints(in: queue)
+        let activity = try queue.read { db in try XCTUnwrap(ChatMessageToolActivity.fetchOne(db)) }
+        XCTAssertEqual(activity.payload.subagents.first?.status, .cancelled)
+        XCTAssertEqual(activity.payload.subagents.first?.output, "途中の結果")
+    }
+
+    func testGatewayAttachesExplicitProfileAndDoesNotEnableSubagentsForInternalRequests() async throws {
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue)
+        let repository = SettingsRepository(dbQueue: queue)
+        var settings = try repository.load()
+        settings.subagents = SubagentSettings(enabled: true, defaultModelID: "research", models: [
+            SubagentModelProfile(id: "research", name: "調査用", provider: "OPENAI", model: "gpt-5.5", effort: "high")
+        ])
+        try repository.save(settings)
+        let credentials = SubagentCredentialStore()
+        try credentials.setCredential("parent-secret", for: .sarashina)
+        try credentials.setCredential("child-secret", for: .openAI)
+        let spy = PiStreamSpy { _, _ in [.completed(ProviderResponse(text: "done"))] }
+        let gateway = ProviderGateway(settingsRepository: repository, credentialStore: credentials, piStream: spy.stream)
+        _ = try await gateway.generate(request: ProviderRequest(model: "sarashina3-mini", messages: [.init(role: "user", content: "hello")], metadata: ["subagentsEnabled": "true"]), providerID: "SARASHINA")
+        let parent = try XCTUnwrap(spy.calls.first?.configuration)
+        XCTAssertEqual(parent.apiKey, "parent-secret")
+        let child = try XCTUnwrap(parent.subagents?.models.first?.configuration)
+        XCTAssertEqual(child.provider, "openai")
+        XCTAssertEqual(child.model, "gpt-5.5")
+        XCTAssertEqual(child.thinkingLevel, "high")
+        XCTAssertEqual(child.apiKey, "child-secret")
+        XCTAssertNil(child.subagents)
+        _ = try await gateway.generate(request: ProviderRequest(model: "sarashina3-mini", messages: [.init(role: "user", content: "title")]), providerID: "SARASHINA")
+        XCTAssertNil(spy.calls.last?.configuration.subagents)
+    }
+}

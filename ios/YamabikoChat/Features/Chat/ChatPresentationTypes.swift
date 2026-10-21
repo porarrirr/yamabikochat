@@ -294,7 +294,7 @@ struct DualResponsePresentation: Equatable {
     }
 
     var attachmentPaths: [String] {
-        toolActivity?.attachmentPaths ?? []
+        toolActivity?.parentAttachmentPaths ?? []
     }
 }
 

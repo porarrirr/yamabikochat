@@ -118,6 +118,8 @@ final class ProviderRequestSettingsResolver {
         )
         let supportsClientTools = supportsClientTools(provider: provider, model: model)
         metadata["supportsClientTools"] = supportsClientTools ? "true" : "false"
+        metadata["subagentsEnabled"] = toolScope == .all && settings.subagents.enabled && supportsClientTools
+            && provider.uppercased() != LLMProvider.appleIntelligence.rawValue ? "true" : "false"
         if let contextWindow = modelService.resolveContextLength(modelID: model, providerID: provider) {
             metadata["contextWindow"] = String(contextWindow)
         }

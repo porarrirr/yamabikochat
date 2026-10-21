@@ -1334,9 +1334,12 @@ private struct ChatMessageRow: View {
                     ForEach(rotationNotices) { notice in
                         ProviderRotationNoticeView(notice: notice)
                     }
-                    if !toolSteps.isEmpty {
-                        ChatRunSummaryButton(steps: toolSteps) {
-                            onRoute(.runInspector(messageID: message.id, steps: toolSteps))
+                    if !toolSteps.compactMap(\.subagent).isEmpty {
+                        SubagentFleetView(runs: toolSteps.compactMap(\.subagent), onLayoutChange: onMarkdownLayoutChange)
+                    }
+                    if !toolSteps.filter({ $0.subagent == nil }).isEmpty {
+                        ChatRunSummaryButton(steps: toolSteps.filter { $0.subagent == nil }) {
+                            onRoute(.runInspector(messageID: message.id, steps: toolSteps.filter { $0.subagent == nil }))
                         }
                     }
                     if let thinkingText {
@@ -1870,9 +1873,12 @@ private struct DualResponseColumn: View {
             Text(title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            if !presentation.toolSteps.isEmpty {
-                ChatRunSummaryButton(steps: presentation.toolSteps) {
-                    onRoute(.runInspector(messageID: messageID, steps: presentation.toolSteps))
+            if !presentation.toolSteps.compactMap(\.subagent).isEmpty {
+                SubagentFleetView(runs: presentation.toolSteps.compactMap(\.subagent))
+            }
+            if !presentation.toolSteps.filter({ $0.subagent == nil }).isEmpty {
+                ChatRunSummaryButton(steps: presentation.toolSteps.filter { $0.subagent == nil }) {
+                    onRoute(.runInspector(messageID: messageID, steps: presentation.toolSteps.filter { $0.subagent == nil }))
                 }
             }
             if let thinkingText {

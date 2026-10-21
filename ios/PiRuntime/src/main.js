@@ -6,7 +6,7 @@ import http from "node:http";
 import { installRuntimeLifecycle } from "./runtime-lifecycle.js";
 import fs from "node:fs";
 import { Agent } from "@earendil-works/pi-agent-core";
-import { createModels, createProvider, envApiKeyAuth, InMemoryCredentialStore } from "@earendil-works/pi-ai";
+import { createModels, createProvider, envApiKeyAuth, InMemoryCredentialStore, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import { Type } from "typebox";
@@ -23,6 +23,7 @@ import { CUSTOM_PROVIDER, customProviderResolution, customStreamOptions } from "
 import { installAzureProvider, azureCatalogResolution, azureExecutionModel, azureStreamOptions } from "./azure-provider.js";
 import { installCatalogProviderAdapters, verifiedCatalogResolution, verifiedExecutionModel, verifiedStreamOptions, catalogProviderEnvironment, verifiedCatalogModelSource } from "./catalog-provider-contracts.js";
 import { compactContext } from "./compaction.js";
+import { createMobileSubagentsHost } from "./subagents.js";
 
 const port = Number(process.argv[2]);
 const token = process.argv[3];
@@ -1054,7 +1055,7 @@ function standardStreamFunction(request, config, report, captureProviderRequest)
   });
 }
 
-function makeTools(request, runId, res) {
+function makeTools(request, runId, res, subagentId) {
   return (request.tools || []).filter((tool) => tool.type === "function").map((tool) => {
     let schema = {};
     try { schema = JSON.parse(tool.payload?.parameters || "{}"); } catch {}
@@ -1066,7 +1067,9 @@ function makeTools(request, runId, res) {
       executionMode: tool.payload?.name === "python_execute" ? "sequential" : "parallel",
       execute: async (toolCallId, params, signal) => {
         const requestId = crypto.randomUUID();
-        send(res, { type: "tool_request", runId, requestId, toolCallId, name: tool.payload?.name, arguments: params });
+        send(res, { type: "tool_request", runId, requestId,
+          toolCallId: subagentId ? `${subagentId}:${toolCallId}` : toolCallId,
+          subagentId, name: tool.payload?.name, arguments: params });
         return await new Promise((resolve, reject) => {
           const abort = () => { pendingTools.delete(requestId); reject(new Error("Tool execution aborted")); };
           if (signal?.aborted) { abort(); return; }
@@ -1313,8 +1316,38 @@ async function runAgent(envelope, res) {
     maxRetryDelayMs: 60000
   });
   const initialMessageCount = agent.state.messages.length;
-  runs.set(runId, agent);
-  const abortDisconnectedRun = () => { if (!res.writableEnded) agent.abort(); };
+  let subagentHost;
+  const prepareSubagentHost = () => createMobileSubagentsHost({
+      agent, config: resolvedConfig, tools: agent.state.tools,
+      makeChildTools: id => makeTools(effectiveRequest, runId, res, id),
+      resolve: async childConfig => {
+        if (childConfig.provider === CHATGPT_PLAN_PROVIDER) {
+          const credential = await authCredentials.read(CHATGPT_PLAN_PROVIDER);
+          if (!credential || credential.access !== childConfig.apiKey) throw Object.assign(new Error("ChatGPT account credentials must be resolved before execution"), { code: "chatgpt_reconnect_required" });
+          await chatGPTPlan.catalog(credential, AbortSignal.timeout(30_000), childConfig.catalogContract ? { [childConfig.model]: childConfig.catalogContract } : {});
+        }
+        const child = resolveModel(childConfig);
+        return { model: child.model, toolCall: child.resolution.toolCall,
+          config: { ...childConfig, catalogProvider: childConfig.provider, provider: child.model.provider, model: child.model.id, api: child.model.api } };
+      },
+      streams: (entry, childID) => standardStreamFunction({
+        ...(childID ? {
+          messages: [], tools: effectiveRequest.tools.filter(tool => tool.type === "function"), timeoutInterval: effectiveRequest.timeoutInterval
+        } : effectiveRequest),
+        // Each child gets a stable, separate provider cache/session identity.
+        metadata: { ...(childID ? {} : effectiveRequest.metadata), promptCacheKey: childID || effectiveRequest.metadata?.promptCacheKey, codexSessionId: childID || effectiveRequest.metadata?.codexSessionId }
+      }, entry.config, report, () => {}),
+      getProvider: provider => runtimeModels.getProvider(provider),
+      getAuth: (entry, options) => runtimeModels.getAuth(entry.model, { ...options, apiKey: entry.config.apiKey, env: normalizedProviderEnvironment(entry.config.catalogProvider || entry.config.provider, entry.config.env) }),
+      publish: subagent => { if (!res.writableEnded && !res.destroyed) send(res, { type: "subagent_update", subagent }); },
+      report,
+      finishTurn: childConfig => childConfig.provider === CHATGPT_PLAN_PROVIDER
+        ? ({ message }) => chatGPTPlanCompleted(message) ? undefined : { action: "end" } : undefined
+    });
+  let abortRequested = false;
+  const abort = () => { abortRequested = true; agent.abort(); };
+  runs.set(runId, { abort, state: agent.state });
+  const abortDisconnectedRun = () => { if (!res.writableEnded) abort(); };
   res.on("close", abortDisconnectedRun);
   res.on("error", abortDisconnectedRun);
   // URLSession applies an idle timeout to the loopback NDJSON bridge. Providers
@@ -1372,13 +1405,15 @@ async function runAgent(envelope, res) {
     }
   });
   try {
+    if (config.subagents?.enabled && resolution.toolCall) subagentHost = await prepareSubagentHost();
+    if (abortRequested || res.destroyed) throw Object.assign(new Error("Pi run aborted during extension startup"), { code: "aborted" });
     report("agent_start", "Pi agent execution starting");
     await withPCCBridge({ runId, send: event => {
       if (event.type === "tool_start" || event.type === "tool_end") {
         recorder.record({ ...event, type: `pcc_${event.type}` });
       }
       send(res, event);
-    } }, () => agent.continue());
+    } }, () => subagentHost ? subagentHost.run() : agent.continue());
     const last = runAssistants.at(-1);
     report("provider_result", "Pi provider stream finished", {
       stopReason: last?.stopReason || "missing",
@@ -1394,6 +1429,7 @@ async function runAgent(envelope, res) {
       : null;
     const generatedMessages = agent.state.messages.slice(initialMessageCount);
     const response = finalResponse(runAssistants, contextEstimate, generatedMessages, config.provider);
+    if (subagentHost) response.subagents = subagentHost.snapshots();
     response.piExecution = piExecutionSnapshot({
       agent,
       effectiveRequest,
@@ -1427,6 +1463,10 @@ async function runAgent(envelope, res) {
     });
     throw error;
   } finally {
+    try { await subagentHost?.dispose(); }
+    catch (error) {
+      if (!res.writableEnded && !res.destroyed) report("subagent_cleanup_error", "Subagent host cleanup failed", { error: error?.message || String(error) });
+    }
     previews.dispose();
     res.off("close", abortDisconnectedRun);
     res.off("error", abortDisconnectedRun);
@@ -1471,7 +1511,12 @@ const handleRequest = async (req, res) => {
       return json(res, 200, {
         contractVersion: RUNTIME_CONTRACT_VERSION,
         models: configs.map((config) => {
-          try { return resolutionFor(config); }
+          try {
+            const resolution = resolutionFor(config);
+            if (!resolution.supported) return resolution;
+            const model = runtimeModels.getModel(resolution.provider, resolution.model);
+            return { ...resolution, supportedThinkingLevels: getSupportedThinkingLevels(model) };
+          }
           catch (error) {
             return {
               supported: false,

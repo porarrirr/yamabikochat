@@ -70,7 +70,6 @@ jobs:
       - name: Verify provider contracts and Pi bundle
         run: |
           npm run check:contracts --prefix ios/PiRuntime
-          git diff --exit-code -- ios/PiRuntime/bundle/main.js
           (cd ios/PiRuntime && npm test)
           python3 -m unittest ios/PythonTests/test_yamabiko_runtime.py
           for test_script in ios/scripts/test-*.sh; do

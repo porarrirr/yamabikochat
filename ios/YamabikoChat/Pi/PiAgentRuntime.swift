@@ -16,6 +16,20 @@ struct PiAgentConfiguration: Codable, Sendable {
     var catalogContract: PiCatalogModelContract? = nil
     var thinkingLevel: String?
     var mcpAuthorizationToken: String? = nil
+    var subagents: PiSubagentOptions? = nil
+}
+
+struct PiSubagentOptions: Codable, Sendable {
+    var enabled: Bool
+    var defaultModelID: String?
+    var models: [PiSubagentModel]
+}
+
+struct PiSubagentModel: Codable, Sendable {
+    var id: String
+    var name: String
+    var configuration: PiAgentConfiguration?
+    var unsupportedReason: String? = nil
 }
 
 struct PiCatalogModelContract: Codable, Sendable {
@@ -34,6 +48,7 @@ struct PiCatalogModelContract: Codable, Sendable {
 }
 
 struct PiModelResolution: Codable, Equatable, Sendable {
+    var supportedThinkingLevels: [String]? = nil
     var supported: Bool
     var reason: String?
     var provider: String?
@@ -144,6 +159,8 @@ private struct PiRunEnvelope: Codable, Sendable {
 }
 
 private struct PiRuntimeEvent: Decodable {
+    var subagent: SubagentRun?
+    var subagentId: String?
     var pcc: PCCNativeRequest?
     var type: String
     var runId: String?
@@ -741,6 +758,13 @@ actor PiAgentRuntime {
                         case "reasoning_delta":
                             if event.delta?.trimmedNonEmpty != nil { metrics.observeToken(at: event.timeMs ?? nowMs()) }
                             continuation.yield(.reasoningDelta(event.delta ?? ""))
+                        case "subagent_update":
+                            guard let run = event.subagent else { throw ProviderClientError.parseFailure("Pi emitted an invalid subagent update") }
+                            continuation.yield(.toolActivity(ToolActivityEvent(
+                                phase: run.status == .running ? .started : .finished,
+                                call: ToolCall(id: "subagent-\(run.id)", name: "subagent", argumentsJSON: "{}"),
+                                result: nil, createdAtMs: run.updatedAtMs, subagent: run
+                            )))
                         case "answer_start":
                             continuation.yield(.answerStart)
                         case "llm_start":
@@ -831,7 +855,7 @@ actor PiAgentRuntime {
                                     phase: .started,
                                     call: call,
                                     result: nil,
-                                    createdAtMs: createdAtMs
+                                    createdAtMs: createdAtMs, ownerSubagentID: event.subagentId
                                 )))
                             }
                             toolTasks.append(Task {
@@ -842,7 +866,7 @@ actor PiAgentRuntime {
                                             phase: .finished,
                                             call: call,
                                             result: result,
-                                            createdAtMs: createdAtMs
+                                            createdAtMs: createdAtMs, ownerSubagentID: event.subagentId
                                         )))
                                     }
                                     try await Self.submitToolResult(

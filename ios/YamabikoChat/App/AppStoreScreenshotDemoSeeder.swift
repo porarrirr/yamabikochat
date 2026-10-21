@@ -27,7 +27,7 @@ enum AppStoreScreenshotDemoSeeder {
         var settings = try chatRepository.loadSettings()
         settings.themeMode = isReasoningEffortFixture || ProcessInfo.processInfo.arguments.contains("-GenUIDarkFixture") ? "DARK" : "LIGHT"
         settings.dynamicColorEnabled = true
-        settings.isDualModeEnabled = !isReasoningEffortFixture && !isGenUIFixture
+        settings.isDualModeEnabled = !isReasoningEffortFixture && !isGenUIFixture && !ProcessInfo.processInfo.arguments.contains("-SubagentFixture")
         settings.isFusionModeEnabled = false
         settings.isAutoConversationEnabled = false
         settings.apiProvider = isReasoningEffortFixture ? "CODEX_AUTH" : "OPENROUTER"
@@ -38,6 +38,11 @@ enum AppStoreScreenshotDemoSeeder {
         settings.dualModelA = "gpt-4o-mini"
         settings.dualProviderB = "GEMINI"
         settings.dualModelB = "gemini-2.5-flash-preview"
+        if ProcessInfo.processInfo.arguments.contains("-SubagentFixture") {
+            settings.apiProvider = "GEMINI"
+            settings.defaultModel = "gemini-2.5-flash"
+            settings.subagents = SubagentSettings()
+        }
         _ = try chatRepository.saveSettings(settings)
 
         let baseTime = Int64(Date().timeIntervalSince1970 * 1000)
@@ -183,6 +188,9 @@ enum AppStoreScreenshotDemoSeeder {
         }
         if ProcessInfo.processInfo.arguments.contains("-GenUIRichFixture") {
             try GenUIRichDemoFixture.seed(chatRepository: chatRepository, conversations: conversations, timestamp: baseTime + 600_000)
+        }
+        if ProcessInfo.processInfo.arguments.contains("-SubagentFixture") {
+            try SubagentDemoFixture.seed(chatRepository: chatRepository, conversations: conversations, timestamp: baseTime + 700_000)
         }
     }
 }

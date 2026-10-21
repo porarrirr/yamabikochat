@@ -107,6 +107,7 @@ struct ToolActivityStep: Codable, Sendable, Equatable, Identifiable {
     var artifactNames: [String]? = nil
     var durationMs: Int64? = nil
     var genUIDocument: GenUIDocument? = nil
+    var subagent: SubagentRun? = nil
 
     var isWebActivity: Bool {
         toolName == WebSearchTool.name || toolName == FetchUrlTool.name
@@ -129,6 +130,8 @@ struct ToolActivityEvent: Sendable, Equatable {
     var call: ToolCall
     var result: ToolResult?
     var createdAtMs: Int64
+    var subagent: SubagentRun? = nil
+    var ownerSubagentID: String? = nil
 }
 
 struct ToolActivityPayload: Codable, Sendable, Equatable {
@@ -172,7 +175,46 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
             || piExecution != nil || !rotationNotices.isEmpty
     }
 
+    var subagents: [SubagentRun] { steps.compactMap(\.subagent) }
+
+    var parentAttachmentPaths: [String] {
+        let childPaths = Set(subagents.flatMap { ($0.artifacts ?? []).map(\.path) })
+        return attachmentPaths.filter { !childPaths.contains($0) }
+    }
+
+    mutating func applySubagent(_ run: SubagentRun) {
+        var step = run.step
+        if let index = steps.firstIndex(where: { $0.id == step.id }) {
+            // Terminal records cannot regress when a delayed running snapshot arrives.
+            if let previous = steps[index].subagent,
+               previous.updatedAtMs > run.updatedAtMs || (previous.status != .running && run.status == .running) { return }
+            step.round = steps[index].round
+            if step.subagent?.artifacts == nil { step.subagent?.artifacts = steps[index].subagent?.artifacts }
+            steps[index] = step
+        } else {
+            step.round = (steps.map(\.round).max() ?? 0) + 1
+            steps.append(step)
+        }
+    }
+
     mutating func apply(_ event: ToolActivityEvent) {
+        if let run = event.subagent {
+            applySubagent(run)
+            return
+        }
+        if let ownerID = event.ownerSubagentID {
+            if event.phase == .finished, let result = event.result,
+               let index = steps.firstIndex(where: { $0.subagent?.id == ownerID }) {
+                var artifacts = steps[index].subagent?.artifacts ?? []
+                for artifact in result.artifacts {
+                    artifacts.removeAll { $0.name == artifact.name }
+                    artifacts.append(artifact)
+                    if !attachmentPaths.contains(artifact.path) { attachmentPaths.append(artifact.path) }
+                }
+                steps[index].subagent?.artifacts = artifacts
+            }
+            return
+        }
         var step = Self.step(for: event)
         if let index = steps.firstIndex(where: { $0.id == step.id }) {
             step.round = steps[index].round
@@ -242,6 +284,13 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
 
     mutating func failRunning(message: String) {
         for index in steps.indices where steps[index].status == .running {
+            if var run = steps[index].subagent {
+                run.status = .cancelled
+                run.activity = "中断"
+                run.error = message
+                run.finishedAtMs = Int64(Date().timeIntervalSince1970 * 1_000)
+                steps[index].subagent = run
+            }
             steps[index].status = .failed
             steps[index].errorMessage = message
         }

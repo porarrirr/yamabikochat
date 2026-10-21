@@ -48,6 +48,7 @@ Pods/
 .swiftpm/
 ios/Vendor/
 node_modules/
+ios/PiRuntime/bundle/
 
 # Python generated files
 __pycache__/
