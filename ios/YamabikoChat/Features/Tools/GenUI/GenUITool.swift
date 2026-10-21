@@ -5,7 +5,7 @@ struct GenUITool: LocalToolExecutor {
     static let definition = ToolDefinition(
         name: name,
         description: """
-        Persist interactive UI. Use for explicit GenUI requests. Retry validation errors. Supply title and exactly one of ui/code/components. Do not infer chart type from IDs/titles; set chartType. Do not repeat UI.
+        Persist UI. Follow the system category rules. Retry validation errors. Supply title and exactly one of ui/code/components. Do not infer chart type from IDs/titles; set chartType. Convey key facts in text.
         """ + "\n" + usageGuide + "\nInteractive code example:\n" + interactiveDiagramExample + "\nBasic element properties:\n" + GenUIDocument.coreComponentGuide,
         parametersJSON: #"""
         {

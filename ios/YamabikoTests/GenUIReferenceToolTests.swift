@@ -12,10 +12,12 @@ final class GenUIReferenceToolTests: XCTestCase {
     func testGuidePreservesRuntimeContractsWithoutDumpingTheCatalog() async throws {
         let object = try await lookup(#"{"componentName":"@guide"}"#)
         let guide = try XCTUnwrap(object["guide"] as? String)
-        XCTAssertTrue(guide.contains("DIL.useState/useMemo/useEffect"))
-        XCTAssertTrue(guide.contains("4px per unit"))
-        XCTAssertTrue(guide.contains("original CEL parser/evaluator"))
-        XCTAssertTrue(guide.contains("Never manufacture missing live data"))
+        for hook in ["useState", "useEffect", "useMemo"] {
+            XCTAssertTrue(guide.contains(hook), hook)
+        }
+        XCTAssertTrue(guide.contains("4px/unit"))
+        XCTAssertTrue(guide.contains("$-props:CEL"))
+        XCTAssertTrue(guide.contains("Never invent data") || guide.contains("Never fabricate live data"))
         XCTAssertFalse(guide.contains(GenUIDocument.componentGuide))
     }
 

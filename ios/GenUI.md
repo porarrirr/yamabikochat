@@ -7,6 +7,27 @@ conversation settings and model capability checks. Apple PCC retains its public
 SDK JSON-string `document` envelope; both envelope and direct arguments reach
 the same validator.
 
+## Usage policy
+
+`SystemPromptComposer.genUIToolInstructions` owns the category and presentation
+policy; tool descriptions retain concise invocation guidance. These instructions
+are included only when GenUI is enabled for the conversation.
+
+- Weather, currency/unit conversions, current time, and sports require widget
+  search on each relevant request and display when a suitable widget is usable.
+- Maps require search/display for three or more recommendations in the same
+  region or route display.
+- Product comparisons are recommended uses; data analysis uses charts when
+  helpful. General questions and writing normally use text.
+- Search with `genui_reference(componentName:"*", query:...)`, inspect the chosen
+  contract, and render with `genui`. Searches match component-name substrings and
+  do not retrieve live data. Reuse previously retrieved exact contracts.
+- If no suitable widget, verified data, or supported functionality is available,
+  answer in text and explain material limitations. Never fabricate live data.
+- There is no usage quota. Prefer one widget per purpose, avoid duplication and
+  decoration, and use forms only to collect multiple required inputs together.
+  Convey key facts in text alongside the UI without repeating its full contents.
+
 ## Original component implementation
 
 The app bundles all 283 recovered generated component sources, 2,511 original

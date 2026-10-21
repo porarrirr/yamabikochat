@@ -5,7 +5,7 @@ final class SystemPromptComposerTests: XCTestCase {
     func testGenUIInstructionsAreIncludedOnlyWhenToolIsProvided() {
         let enabled = SystemPromptComposer.composeForAPI(nil, enablesGenUIInstructions: true)
         let disabled = SystemPromptComposer.composeForAPI(nil)
-        XCTAssertTrue(enabled?.contains("Use genui when") == true)
+        XCTAssertTrue(enabled?.contains("Use genui to supplement text answers") == true)
         XCTAssertTrue(enabled?.contains("genui_reference with componentName:\"*\"") == true)
         XCTAssertTrue(enabled?.contains("Reuse retrieved guidance from conversation history") == true)
         XCTAssertFalse(enabled?.contains("tool definition lists supported component names") == true)
@@ -17,7 +17,7 @@ final class SystemPromptComposerTests: XCTestCase {
         XCTAssertTrue(enabled?.contains("defaults to a line chart") == true)
         XCTAssertTrue(enabled?.contains("chartType:\"pie\"") == true)
         XCTAssertTrue(enabled?.contains("Never call a line chart a pie chart") == true)
-        XCTAssertFalse(disabled?.contains("Use genui when") == true)
+        XCTAssertFalse(disabled?.contains("Use genui to supplement text answers") == true)
     }
 
     func testExplanationsKeepEssentialContentVisibleWithoutMandatoryWidgets() throws {
@@ -29,7 +29,7 @@ final class SystemPromptComposerTests: XCTestCase {
             "Do not turn every section into an accordion",
             "Use tabs or segmented controls only for meaningful alternative views or modes",
             "Use ui or code for explanatory layouts",
-            "do not automatically repeat or summarize it"
+            "convey the key answer and important facts in text as well"
         ] {
             XCTAssertTrue(prompt.contains(guidance), guidance)
         }
@@ -37,6 +37,34 @@ final class SystemPromptComposerTests: XCTestCase {
         XCTAssertFalse(prompt.contains("For rich documents use segmented-control"))
         XCTAssertFalse(GenUITool.definition.description.contains("After success, briefly explain the UI"))
         XCTAssertTrue(GenUITool.definition.description.contains("Use basic elements directly for ordinary layouts"))
+    }
+
+    func testGenUICategoryPolicyIncludesRequiredSearchFallbackAndRestrainedPresentation() throws {
+        let prompt = try XCTUnwrap(SystemPromptComposer.composeForAPI(nil, enablesGenUIInstructions: true))
+        for guidance in [
+            "Weather (current conditions or forecasts), currency/unit conversions, and current time in any region",
+            "Sports (scores, standings, or player information): widget search is required",
+            "recommending three or more places in the same region or showing a route",
+            "Product comparisons: GenUI is recommended",
+            "Data analysis: use charts",
+            "GenUI is normally unnecessary",
+            "Search on each relevant request, but reuse exact contracts",
+            "If no suitable widget is available",
+            "required verified data or supported functionality is unavailable, answer normally in text",
+            "Never invent data or backend actions to satisfy a required category",
+            "Do not set a usage percentage or call-count target",
+            "one best widget per purpose",
+            "Use forms only when multiple required pieces of information must be collected together",
+            "use cards only when they help organize information",
+            "images when visual information helps answer the question",
+            "convey the key answer and important facts in text as well"
+        ] {
+            XCTAssertTrue(prompt.contains(guidance), guidance)
+        }
+        XCTAssertTrue(GenUITool.definition.description.contains("Follow the system category rules"))
+        XCTAssertTrue(GenUIReferenceTool.definition.description.contains("Search widget names for required GenUI categories"))
+        XCTAssertFalse(prompt.contains("add only useful context that the UI does not already convey"))
+        XCTAssertFalse(GenUITool.definition.description.contains("Do not repeat UI."))
     }
 
     func testExplicitGenUIRequestsRequireRenderedUIAndErrorRecovery() throws {
