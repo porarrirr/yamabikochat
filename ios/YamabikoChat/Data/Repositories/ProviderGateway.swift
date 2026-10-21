@@ -900,7 +900,7 @@ final class ProviderGateway {
             throw ProviderClientError.parseFailure("models.dev provider or model is unavailable: \(providerID)/\(request.model)")
         }
         var env: [String: String] = [:]
-        for field in catalog.env where !forModelResolution {
+        for field in catalog.connectionFields where !forModelResolution {
             let key = modelsDevFieldKey(providerID: providerID, fieldName: field)
             try migrateLegacyCredentialIfNeeded(providerID: providerID, destinationKey: key)
             if let value = try credentialStore.readSecret(key: key)?.trimmedNonEmpty { env[field] = value }

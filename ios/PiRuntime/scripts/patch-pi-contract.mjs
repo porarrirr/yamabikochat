@@ -37,3 +37,15 @@ patch('pi-agent-core/dist/agent-loop.js', 'await failToolCallsFromTruncatedMessa
 patch('pi-agent-core/dist/agent-loop.js', 'async function failToolCallsFromTruncatedMessage(toolCalls, emit) {', 'async function failToolCallsFromTruncatedMessage(toolCalls, emit, reason) {');
 patch('pi-agent-core/dist/agent-loop.js', 'result: createErrorToolResult(`Tool call "${toolCall.name}" was not executed: the response hit the output token limit, so its arguments may be truncated. Re-issue the tool call with complete arguments.`),', 'result: createErrorToolResult(reason === "unknown" ? `Tool call "${toolCall.name}" was not executed: the provider did not report a termination reason, so argument completeness is unknown.` : `Tool call "${toolCall.name}" was not executed: the response hit the output token limit, so its arguments may be truncated. Re-issue the tool call with complete arguments.`),');
 patch('pi-agent-core/dist/agent-loop.js', '    return { messages, terminate: false };\n}\n/**\n * Execute tool calls', '    return { messages, terminate: reason === "unknown" };\n}\n/**\n * Execute tool calls');
+
+// Microsoft Foundry's catalog /models route requires a version and api-key.
+// Keep request construction, transport, streaming, usage, and errors in Pi.
+patch('pi-ai/dist/api/openai-completions.js', '        baseURL: model.baseUrl,\n        dangerouslyAllowBrowser: true,', `        baseURL: model.baseUrl,
+        ...(model.provider === "azure-openai-responses" && new URL(model.baseUrl).pathname === "/models" ? {
+            defaultQuery: { "api-version": "2024-05-01-preview" },
+        } : {}),
+        dangerouslyAllowBrowser: true,`);
+patch('pi-ai/dist/api/openai-completions.js', '        defaultHeaders: headers,', `        defaultHeaders: {
+            ...(model.provider === "azure-openai-responses" && apiKey ? { "api-key": apiKey } : {}),
+            ...headers,
+        },`);

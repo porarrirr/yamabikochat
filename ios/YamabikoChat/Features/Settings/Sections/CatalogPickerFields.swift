@@ -285,6 +285,7 @@ private struct CatalogModelListView: View {
         switch reason {
         case "pi_provider_missing": "Piにプロバイダー定義がありません"
         case "pi_provider_ambiguous": "models.devとPiのプロバイダー対応を一意に特定できません"
+        case "model_operation_unsupported": "埋め込み専用モデルのため会話には使用できません"
         case "pi_model_missing": "Piにモデル定義がありません"
         case "pi_protocol_missing": "Piにこのモデルのプロトコル定義がありません"
         case "protocol_conflict": "models.devとPiのプロトコルが一致しません"

@@ -1,175 +1,65 @@
 #!/usr/bin/env python3
-"""Fail when YamabikoChat's OpenCode Go routes drift from the official contract."""
-
-from __future__ import annotations
-
+"""Check current Go endpoints through the same catalog registration used by iOS."""
 import json
-import re
-import sys
-import urllib.request
+import subprocess
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
-CONTRACT_URL = (
-    "https://raw.githubusercontent.com/anomalyco/opencode/"
-    "dev/services/www/src/docs/content/console/go.mdx"
-)
-MODELS_DEV_URL = "https://models.dev/api.json"
-SWIFT_CATALOG = ROOT / "ios/YamabikoChat/Shared/OpenCodeGoModelCatalog.swift"
-PI_RUNTIME = ROOT / "ios/PiRuntime/src/main.js"
+CONTRACT_URL = "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/www/src/docs/content/console/go.mdx"
 
-ENDPOINT_TO_ROUTE = {
-    "chat/completions": "chatCompletions",
-    "responses": "responses",
-    "messages": "messages",
-}
-NPM_TO_ROUTE = {
-    "@ai-sdk/openai-compatible": "chatCompletions",
-    "@ai-sdk/openai": "responses",
-    "@ai-sdk/anthropic": "messages",
-}
-PI_API_TO_ROUTE = {
-    "openai-completions": "chatCompletions",
-    "openai-responses": "responses",
-    "anthropic-messages": "messages",
-}
-SHAPE_TO_ROUTE = {
-    "completions": "chatCompletions",
-    "responses": "responses",
-    "messages": "messages",
-}
+def load_url(url):
+    return subprocess.run(["curl", "--fail", "--silent", "--show-error", "--location", "--max-time", "30",
+                           "-A", "Mozilla/5.0 YamabikoChat-contract-check", url], check=True, capture_output=True, text=True).stdout
 
-
-def official_routes(document: str) -> dict[str, str]:
-    routes: dict[str, str] = {}
+def official_routes(document):
+    packages = {"@ai-sdk/openai": "openai-responses", "@ai-sdk/openai-compatible": "openai-completions",
+                "@ai-sdk/anthropic": "anthropic-messages", "@ai-sdk/google": "google-generative-ai"}
+    routes = {}
     for line in document.splitlines():
-        if not line.startswith("|") or "https://opencode.ai/zen/go/v1/" not in line:
-            continue
+        if not line.startswith("|") or "https://opencode.ai/inference/go/" not in line: continue
         cells = [cell.strip().strip("`") for cell in line.strip().strip("|").split("|")]
-        if len(cells) < 4:
-            continue
-        model_id = cells[1]
-        endpoint = cells[2].rstrip("/").rsplit("/", 1)[-1]
-        if endpoint == "completions" and cells[2].rstrip("/").endswith("chat/completions"):
-            endpoint = "chat/completions"
-        route = ENDPOINT_TO_ROUTE.get(endpoint)
-        if route is None:
-            raise ValueError(f"Unsupported official endpoint for {model_id}: {cells[2]}")
-        routes[model_id] = route
-    if not routes:
-        raise ValueError("No OpenCode Go endpoint rows were found in the official documentation")
+        if len(cells) >= 4:
+            routes[cells[1]] = {"api": packages[cells[3]], "endpoint": cells[2]}
+    assert routes, "No current OpenCode Go endpoints found"
     return routes
 
+def main():
+    expected = official_routes(load_url(CONTRACT_URL))
+    catalog = json.loads(load_url("https://models.dev/catalog.json"))["providers"]["opencode-go"]
+    configs = []
+    for model_id, route in expected.items():
+        model = catalog["models"][model_id]
+        provider = model.get("provider", {})
+        configs.append({"provider": "opencode-go", "model": model_id, "catalogContract": {
+            "providerName": catalog["name"], "npm": provider.get("npm", catalog["npm"]),
+            "api": provider.get("api", catalog.get("api")), "shape": provider.get("shape"),
+            "provenance": "model" if provider else "provider", "name": model["name"],
+            "reasoning": model.get("reasoning"), "toolCall": model.get("tool_call"),
+            "input": model["modalities"]["input"], "contextWindow": model["limit"]["context"],
+            "maxTokens": model["limit"]["output"]}, "expected": route})
+    script = """
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import { builtinModels } from '@earendil-works/pi-ai/providers/all';
+import { installCatalogProviderAdapters, verifiedCatalogResolution } from './src/catalog-provider-contracts.js';
+const models = builtinModels(); installCatalogProviderAdapters(models);
+for (const config of JSON.parse(fs.readFileSync(0, 'utf8'))) {
+  const r = verifiedCatalogResolution(config, models);
+  assert.equal(r?.supported, true, config.model);
+  assert.equal(r.api, config.expected.api, config.model);
+  const m = models.getModel(r.provider, r.model);
+  const endpoint = r.api === 'anthropic-messages' ? `${m.baseUrl}/v1/messages`
+    : r.api === 'openai-responses' ? `${m.baseUrl}/responses`
+    : r.api === 'openai-completions' ? `${m.baseUrl}/chat/completions`
+    : `${m.baseUrl}/models/${m.id}`;
+  assert.equal(endpoint, config.expected.endpoint, config.model);
+}
+"""
+    subprocess.run(["node", "--input-type=module", "-e", script], input=json.dumps(configs), cwd=ROOT / "ios/PiRuntime", text=True, check=True)
+    # Both Swift catalog decoding and the native gateway preserve the model contract.
+    native = (ROOT / "ios/YamabikoChat/Data/Repositories/ProviderGateway.swift").read_text()
+    for field in ("npm", "api", "shape"):
+        assert f"{field}: model.providerContract?.{field}" in native, f"Native {field} mapping drift"
+    print(f"OpenCode Go current official endpoints match Pi and native catalog forwarding ({len(configs)} models)")
 
-def swift_routes(source: str) -> dict[str, str]:
-    return dict(
-        re.findall(
-            r'OpenCodeGoModel\(id: "([^"]+)", displayName: "[^"]+", '
-            r'endpointKind: \.([A-Za-z]+)',
-            source,
-        )
-    )
-
-
-def pi_routes(source: str) -> dict[str, str]:
-    routes = {}
-    for model_id, api in re.findall(
-        r'\{ id: "([^"]+)", api: "([^"]+)" \}',
-        source,
-    ):
-        route = PI_API_TO_ROUTE.get(api)
-        if route is None:
-            raise ValueError(f"Unsupported Pi API for {model_id}: {api}")
-        routes[model_id] = route
-    if not routes:
-        raise ValueError("No verified OpenCode Go routes were found in Pi Runtime")
-    return routes
-
-
-def models_dev_routes(document: dict) -> dict[str, str]:
-    provider = document["opencode-go"]
-    default_npm = provider["npm"]
-    routes = {}
-    for model_id, model in provider["models"].items():
-        contract = model.get("provider") or {}
-        shape = contract.get("shape")
-        if shape in SHAPE_TO_ROUTE:
-            routes[model_id] = SHAPE_TO_ROUTE[shape]
-            continue
-        npm = contract.get("npm", default_npm)
-        route = NPM_TO_ROUTE.get(npm)
-        if route is not None:
-            routes[model_id] = route
-    return routes
-
-
-def describe_diff(expected: dict[str, str], actual: dict[str, str]) -> list[str]:
-    problems: list[str] = []
-    missing = sorted(expected.keys() - actual.keys())
-    extra = sorted(actual.keys() - expected.keys())
-    changed = sorted(
-        model_id
-        for model_id in expected.keys() & actual.keys()
-        if expected[model_id] != actual[model_id]
-    )
-    if missing:
-        problems.append(f"missing models: {', '.join(missing)}")
-    if extra:
-        problems.append(f"models absent from official contract: {', '.join(extra)}")
-    for model_id in changed:
-        problems.append(
-            f"wrong route for {model_id}: expected {expected[model_id]}, got {actual[model_id]}"
-        )
-    return problems
-
-
-def load_url(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "YamabikoChat-contract-check"})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return response.read()
-
-
-def main() -> int:
-    try:
-        expected = official_routes(load_url(CONTRACT_URL).decode("utf-8"))
-    except Exception as error:
-        print(f"Unable to load the official OpenCode Go contract: {error}", file=sys.stderr)
-        return 2
-    try:
-        catalog_routes = models_dev_routes(json.loads(load_url(MODELS_DEV_URL)))
-    except Exception as error:
-        print(f"Unable to load the models.dev OpenCode Go catalog: {error}", file=sys.stderr)
-        return 2
-
-    platforms = {
-        "iOS": swift_routes(SWIFT_CATALOG.read_text()),
-        "Pi": pi_routes(PI_RUNTIME.read_text()),
-    }
-    failed = False
-    for platform, actual in platforms.items():
-        problems = describe_diff(expected, actual)
-        if problems:
-            failed = True
-            print(f"{platform} OpenCode Go catalog is out of date:", file=sys.stderr)
-            for problem in problems:
-                print(f"  - {problem}", file=sys.stderr)
-    if failed:
-        return 1
-
-    catalog_problems = describe_diff(
-        expected,
-        {model_id: route for model_id, route in catalog_routes.items() if model_id in expected},
-    )
-    for problem in catalog_problems:
-        print(
-            f"::warning title=models.dev OpenCode Go contract drift::{problem}",
-            file=sys.stderr,
-        )
-
-    print(f"OpenCode Go contract verified for {len(expected)} models on iOS and Pi.")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+if __name__ == "__main__": main()

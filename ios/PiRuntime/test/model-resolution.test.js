@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { spawn } from "node:child_process";
@@ -509,4 +510,50 @@ test("bundled runtime resolves every explicit custom protocol and both Sarashina
   protocols.forEach((protocol, index) => { assert.equal(result.models[index].supported, true); assert.equal(result.models[index].api, protocol); assert.equal(result.models[index].source, "user_configured"); });
   for (const resolution of result.models.slice(protocols.length, protocols.length + 6)) { assert.equal(resolution.supported, true); assert.equal(resolution.api, "openai-completions"); assert.equal(resolution.source, "verified_official_contract"); assert.equal(resolution.maxTokens, 8000); }
   assert.equal(result.models[protocols.length + 6].reason, "custom_protocol_required");
+});
+
+
+test("bundled runtime resolves every Azure model-level route from native catalog configurations", async (context) => {
+  const fixture = JSON.parse(fs.readFileSync(new URL("fixtures/azure-models.json", import.meta.url)));
+  const port = await availablePort(), token = "azure-resolution-test";
+  const child = spawn(process.execPath, [new URL("../bundle/main.js", import.meta.url).pathname, String(port), token]);
+  context.after(() => child.kill());
+  const baseURL = `http://127.0.0.1:${port}`;
+  await waitUntilReady(baseURL, token);
+  for (const provider of ["azure", "azure-openai-responses"]) {
+    const configs = Object.values(fixture).map(m => ({ contractVersion: 2, provider, model: m.id,
+      catalogContract: { ...m.provider, provenance: "model", name: m.name, reasoning: m.reasoning,
+        input: m.modalities.input, contextWindow: m.limit.context, maxTokens: m.limit.output, toolCall: m.tool_call } }));
+    configs.push({ contractVersion: 2, provider, model: "gpt-chat-latest", catalogContract: {
+      npm: "@ai-sdk/azure", provenance: "provider", name: "GPT Chat Latest", reasoning: true,
+      input: ["text", "image", "pdf"], contextWindow: 400000, maxTokens: 128000, toolCall: true
+    } });
+    const result = await resolveModels(baseURL, token, configs);
+    for (const [i, config] of configs.entries()) {
+      assert.equal(result.models[i].supported, true, JSON.stringify(result.models[i]));
+      assert.equal(result.models[i].model, config.model);
+      assert.equal(result.models[i].maxTokens, config.catalogContract.maxTokens);
+    }
+  }
+});
+
+
+test("bundled runtime resolves verified provider routes and preserves built-ins afterwards", async (context) => {
+  const fixtures = JSON.parse(fs.readFileSync(new URL("fixtures/verified-provider-models.json", import.meta.url)));
+  const port = await availablePort(), token = "verified-catalog-resolution-test";
+  const child = spawn(process.execPath, [new URL("../bundle/main.js", import.meta.url).pathname, String(port), token]);
+  context.after(() => child.kill());
+  const baseURL = `http://127.0.0.1:${port}`;
+  await waitUntilReady(baseURL, token);
+  const result = await resolveModels(baseURL, token, fixtures.map(f => f.config));
+  for (const [i, fixture] of fixtures.entries()) {
+    assert.equal(result.models[i].supported, true, JSON.stringify(result.models[i]));
+    assert.equal(result.models[i].api, fixture.expected.api);
+    assert.equal(result.models[i].provider, fixture.expected.provider);
+  }
+  for (const provider of builtinProviders().filter(p => ["amazon-bedrock", "opencode", "zai", "minimax-cn"].includes(p.id))) {
+    const models = provider.getModels();
+    const restored = await resolveModels(baseURL, token, models.map(m => ({ contractVersion: 2, provider: provider.id, model: m.id })));
+    assert.deepEqual(restored.models.map(m => [m.supported, m.api]), models.map(m => [true, m.api]), provider.id);
+  }
 });

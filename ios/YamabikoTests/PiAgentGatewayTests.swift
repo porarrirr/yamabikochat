@@ -585,6 +585,57 @@ final class PiAgentGatewayTests: XCTestCase {
         XCTAssertEqual(headers["X-Title"], "yamabikochat")
     }
 
+    func testAzurePassesModelLevelRoutesAndEntraCredentialToPi() async throws {
+        for (id, npm, path) in [
+            ("claude-mythos-5", "@ai-sdk/anthropic", "anthropic/v1"),
+            ("deepseek-v4-pro", "@ai-sdk/openai-compatible", "models")
+        ] {
+            let database = try DatabaseQueue()
+            try AppDatabase.migrator.migrate(database)
+            let credentials = PiGatewayCredentialStore()
+            try credentials.saveSecret("my-resource", key: "models_dev_azure_AZURE_RESOURCE_NAME")
+            try credentials.saveSecret("test-entra", key: "models_dev_azure_AZURE_AUTH_TOKEN")
+            let cacheURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("models-dev-azure-\(UUID().uuidString).json")
+            defer { try? FileManager.default.removeItem(at: cacheURL) }
+            let endpoint = "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/\(path)"
+            let model = CatalogModel(
+                id: id, name: id, reasoning: true, reasoningOptions: [], toolCall: false,
+                inputModalities: ["text"], outputModalities: ["text"],
+                limits: CatalogLimits(context: 1000000, output: 128000), cost: CatalogCost(),
+                providerContract: CatalogModelProviderContract(npm: npm, api: endpoint, provenance: "model")
+            )
+            let provider = CatalogProvider(
+                id: "azure", name: "Azure", npm: "@ai-sdk/azure",
+                env: ["AZURE_RESOURCE_NAME", "AZURE_API_KEY"], models: [model]
+            )
+            try JSONEncoder().encode([provider]).write(to: cacheURL)
+            let suite = "PiAgentGatewayTests.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let catalog = ModelsDevCatalogRepository(defaults: defaults, cacheURL: cacheURL)
+            let pi = PiStreamSpy()
+            let gateway = ProviderGateway(
+                settingsRepository: SettingsRepository(dbQueue: database), credentialStore: credentials,
+                modelsDevCatalogRepository: catalog, piStream: pi.stream
+            )
+            _ = try await gateway.stream(
+                request: ProviderRequest(model: id, messages: [ProviderRequestMessage(role: "user", content: "hello")]),
+                providerID: "MODELS_DEV:azure"
+            )
+            let config = try XCTUnwrap(pi.calls.first?.configuration)
+            XCTAssertEqual(config.provider, "azure")
+            XCTAssertEqual(config.model, id)
+            XCTAssertEqual(config.env["AZURE_AUTH_TOKEN"], "test-entra")
+            XCTAssertEqual(config.env["AZURE_RESOURCE_NAME"], "my-resource")
+            XCTAssertEqual(config.catalogContract?.npm, npm)
+            XCTAssertEqual(config.catalogContract?.api, endpoint)
+            XCTAssertEqual(config.catalogContract?.provenance, "model")
+            XCTAssertEqual(config.catalogContract?.toolCall, false)
+            XCTAssertNil(config.apiKey)
+        }
+    }
+
     func testModelsDevAttributionHeadersAreScopedToOpenRouter() async throws {
         for providerID in ["openrouter", "openai"] {
             let database = try DatabaseQueue()

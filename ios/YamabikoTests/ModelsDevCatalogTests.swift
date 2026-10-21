@@ -15,6 +15,36 @@ final class ModelsDevCatalogTests: XCTestCase {
         XCTAssertEqual(providers[0].models[0].supportedReasoningEfforts, ["low", "high"])
     }
 
+    func testAzurePreservesModelRoutesAndExposesOptionalEntraCredential() throws {
+        let data = Data(#"""
+        {"providers":{"azure":{"name":"Azure","npm":"@ai-sdk/azure",
+        "env":["AZURE_RESOURCE_NAME","AZURE_API_KEY"],"models":{
+          "claude-fable-5":{"name":"Claude Fable 5","reasoning":true,"tool_call":true,
+            "modalities":{"input":["text","image","pdf"],"output":["text"]},
+            "limit":{"context":1000000,"output":128000},
+            "provider":{"npm":"@ai-sdk/anthropic","api":"https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"}},
+          "deepseek-v4-pro":{"name":"DeepSeek V4 Pro","reasoning":true,"tool_call":false,
+            "modalities":{"input":["text"],"output":["text"]},
+            "limit":{"context":1000000,"output":384000},
+            "provider":{"npm":"@ai-sdk/openai-compatible","api":"https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/models"}}
+        }}}}
+        """#.utf8)
+        let provider = try XCTUnwrap(ModelsDevCatalogRepository.parseCatalog(data).first)
+        XCTAssertEqual(provider.env, ["AZURE_RESOURCE_NAME", "AZURE_API_KEY"])
+        XCTAssertEqual(provider.connectionFields, provider.env + ["AZURE_AUTH_TOKEN"])
+        XCTAssertEqual(provider.reference.persistedID, "MODELS_DEV:azure")
+        let claude = try XCTUnwrap(provider.models.first { $0.id == "claude-fable-5" })
+        XCTAssertEqual(claude.providerContract?.npm, "@ai-sdk/anthropic")
+        XCTAssertEqual(claude.providerContract?.api, "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1")
+        XCTAssertEqual(claude.providerContract?.provenance, "model")
+        XCTAssertEqual(claude.inputModalities, ["text", "image", "pdf"])
+        let deepseek = try XCTUnwrap(provider.models.first { $0.id == "deepseek-v4-pro" })
+        XCTAssertEqual(deepseek.providerContract?.npm, "@ai-sdk/openai-compatible")
+        XCTAssertEqual(deepseek.providerContract?.api, "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/models")
+        XCTAssertEqual(deepseek.limits.output, 384000)
+        XCTAssertEqual(deepseek.toolCall, false)
+    }
+
     func testProviderReferenceRoundTripsWithoutGeminiNormalization() {
         let reference = ProviderReference.modelsDev("Acme")
         XCTAssertEqual(reference.persistedID, "MODELS_DEV:acme")

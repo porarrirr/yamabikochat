@@ -20,6 +20,8 @@ import { applyExplicitSkillInvocations } from "./skill-context.js";
 import { createChatGPTPlanPlugin, CHATGPT_PLAN_PROVIDER, chatGPTPlanPayload, chatGPTPlanCompleted } from "./chatgpt-plan-plugin.js";
 import { installSarashinaProvider, sarashinaResolution } from "./sarashina-provider.js";
 import { CUSTOM_PROVIDER, customProviderResolution, customStreamOptions } from "./custom-provider.js";
+import { installAzureProvider, azureCatalogResolution, azureExecutionModel, azureStreamOptions } from "./azure-provider.js";
+import { installCatalogProviderAdapters, verifiedCatalogResolution, verifiedExecutionModel, verifiedStreamOptions, catalogProviderEnvironment, verifiedCatalogModelSource } from "./catalog-provider-contracts.js";
 import { compactContext } from "./compaction.js";
 
 const port = Number(process.argv[2]);
@@ -171,7 +173,9 @@ function installSuperGrokProvider() {
   for (const model of models) VERIFIED_MODEL_SOURCES.set(`xai-oauth/${model.id}`, "verified_official_contract");
 }
 
+installAzureProvider(runtimeModels);
 installVerifiedOpenCodeGoContracts();
+installCatalogProviderAdapters(runtimeModels);
 installSuperGrokProvider();
 installSarashinaProvider(runtimeModels);
 
@@ -513,16 +517,7 @@ function sharesProviderIdentity(config, provider) {
 }
 
 function normalizedProviderEnvironment(catalogProviderId, env) {
-  const normalized = { ...(env || {}) };
-  if (catalogProviderId === "azure") {
-    normalized.AZURE_OPENAI_API_KEY ||= normalized.AZURE_API_KEY;
-    normalized.AZURE_OPENAI_RESOURCE_NAME ||= normalized.AZURE_RESOURCE_NAME;
-  }
-  if (catalogProviderId === "google-vertex") {
-    normalized.GOOGLE_CLOUD_PROJECT ||= normalized.GOOGLE_VERTEX_PROJECT;
-    normalized.GOOGLE_CLOUD_LOCATION ||= normalized.GOOGLE_VERTEX_LOCATION;
-  }
-  return normalized;
+  return catalogProviderEnvironment(catalogProviderId, env);
 }
 
 function normalizedURL(value) {
@@ -658,6 +653,12 @@ function resolutionFor(config) {
   if (config.contractVersion !== RUNTIME_CONTRACT_VERSION) {
     throw new Error(`Pi runtime contract mismatch: expected ${RUNTIME_CONTRACT_VERSION}, received ${config.contractVersion ?? "missing"}`);
   }
+  if (["azure", "azure-openai-responses"].includes(config.provider)) {
+    const azure = azureCatalogResolution(config, runtimeModels);
+    if (azure) return azure;
+  }
+  const verified = verifiedCatalogResolution(config, runtimeModels);
+  if (verified) return verified;
   if (config.provider === CUSTOM_PROVIDER) return customProviderResolution(config, runtimeModels);
   if (config.provider === "sarashina") return sarashinaResolution(config, runtimeModels);
   if (config.provider === CHATGPT_PLAN_PROVIDER) {
@@ -806,7 +807,7 @@ function resolutionFor(config) {
     provider: model.provider,
     model: model.id,
     api: model.api,
-    source: model.provider === CHATGPT_PLAN_PROVIDER ? chatGPTPlan.modelSource(model.id) : VERIFIED_MODEL_SOURCES.get(`${model.provider}/${model.id}`) || "pi_builtin",
+    source: model.provider === CHATGPT_PLAN_PROVIDER ? chatGPTPlan.modelSource(model.id) : verifiedCatalogModelSource(model) || VERIFIED_MODEL_SOURCES.get(`${model.provider}/${model.id}`) || "pi_builtin",
     reasoning: model.reasoning,
     input: model.input,
     contextWindow: model.contextWindow,
@@ -820,7 +821,7 @@ function resolveModel(config) {
   if (!resolution.supported) {
     throw Object.assign(new Error(`Unsupported model contract (${resolution.reason}): ${config.provider}/${config.model}`), { code: resolution.reason });
   }
-  return { model: runtimeModels.getModel(resolution.provider, resolution.model), resolution };
+  return { model: verifiedExecutionModel(azureExecutionModel(runtimeModels.getModel(resolution.provider, resolution.model), config), config), resolution };
 }
 
 function contentFor(message) {
@@ -1020,6 +1021,8 @@ function standardStreamFunction(request, config, report, captureProviderRequest)
     timeoutMs: timeoutMs(request),
     reasoning: config.thinkingLevel,
     ...customStreamOptions(config),
+    ...azureStreamOptions(config),
+    ...verifiedStreamOptions(config),
     ...(config.catalogProvider === "sarashina" || config.provider === "sarashina" ? { toolChoice: "auto" } : {}),
     ...(config.provider === PCC_PROVIDER && request.metadata?.max_output_tokens
       ? { maxTokens: Number(request.metadata.max_output_tokens) } : {}),

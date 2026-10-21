@@ -1556,7 +1556,7 @@ private struct SettingsDetailScreen: View {
     @ViewBuilder
     private func modelsDevConnectionSection(_ provider: CatalogProvider) -> some View {
         Section("\(provider.name) 接続設定") {
-            ForEach(provider.env, id: \.self) { field in
+            ForEach(provider.connectionFields, id: \.self) { field in
                 let draftKey = modelsDevDraftKey(providerID: provider.id, fieldName: field)
                 let binding = Binding(
                     get: { modelsDevFieldDrafts[draftKey] ?? viewModel.modelsDevField(providerID: provider.id, fieldName: field) },
@@ -1573,11 +1573,15 @@ private struct SettingsDetailScreen: View {
                     TextField(field, text: binding, axis: field == "GOOGLE_APPLICATION_CREDENTIALS" ? .vertical : .horizontal)
                 }
             }
+            if provider.id == "azure" {
+                Text("AZURE_AUTH_TOKEN は Entra ID 認証用です。Mythos では必須、ほかのモデルでは API キーも使用できます。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if let api = provider.api {
                 Text(api).font(.caption2).foregroundStyle(.secondary)
             }
             Button("接続設定をKeychainへ保存") {
-                let fields = Dictionary(uniqueKeysWithValues: provider.env.map { field in
+                let fields = Dictionary(uniqueKeysWithValues: provider.connectionFields.map { field in
                     let key = modelsDevDraftKey(providerID: provider.id, fieldName: field)
                     return (field, modelsDevFieldDrafts[key] ?? viewModel.modelsDevField(providerID: provider.id, fieldName: field))
                 })

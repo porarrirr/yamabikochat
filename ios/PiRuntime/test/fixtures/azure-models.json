@@ -1,0 +1,544 @@
+{
+  "kimi-k2.6": {
+    "id": "kimi-k2.6",
+    "name": "Kimi K2.6",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 262144,
+      "output": 262144
+    },
+    "provider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/models"
+    }
+  },
+  "kimi-k2.7-code": {
+    "id": "kimi-k2.7-code",
+    "name": "Kimi K2.7 Code",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 262144,
+      "output": 262144
+    },
+    "provider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/models"
+    }
+  },
+  "claude-mythos-5": {
+    "id": "claude-mythos-5",
+    "name": "Claude Mythos 5",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 128000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "claude-sonnet-4-6": {
+    "id": "claude-sonnet-4-6",
+    "name": "Claude Sonnet 4.6",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 64000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "claude-fable-5": {
+    "id": "claude-fable-5",
+    "name": "Claude Fable 5",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 128000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "claude-haiku-4-5": {
+    "id": "claude-haiku-4-5",
+    "name": "Claude Haiku 4.5",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 200000,
+      "output": 64000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "kimi-k2.5": {
+    "id": "kimi-k2.5",
+    "name": "Kimi K2.5",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 262144,
+      "output": 262144
+    },
+    "provider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/models"
+    }
+  },
+  "deepseek-v4.1-flash": {
+    "id": "deepseek-v4.1-flash",
+    "name": "DeepSeek-V4.1-Flash",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 128000
+    },
+    "provider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/models"
+    }
+  },
+  "deepseek-v4-pro": {
+    "id": "deepseek-v4-pro",
+    "name": "DeepSeek-V4-Pro",
+    "attachment": false,
+    "reasoning": true,
+    "tool_call": false,
+    "modalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 384000
+    },
+    "provider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/models"
+    }
+  },
+  "claude-fable-5-1": {
+    "id": "claude-fable-5-1",
+    "name": "Claude Fable 5.1",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 128000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "claude-opus-4-7": {
+    "id": "claude-opus-4-7",
+    "name": "Claude Opus 4.7",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 128000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "claude-sonnet-5-5": {
+    "id": "claude-sonnet-5-5",
+    "name": "Claude Sonnet 5.5",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 128000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "claude-opus-4-8": {
+    "id": "claude-opus-4-8",
+    "name": "Claude Opus 4.8",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 128000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "claude-sonnet-4-5": {
+    "id": "claude-sonnet-4-5",
+    "name": "Claude Sonnet 4.5",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 200000,
+      "output": 64000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "claude-opus-4-6": {
+    "id": "claude-opus-4-6",
+    "name": "Claude Opus 4.6",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 128000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "deepseek-v4-flash": {
+    "id": "deepseek-v4-flash",
+    "name": "DeepSeek-V4-Flash",
+    "attachment": false,
+    "reasoning": true,
+    "tool_call": false,
+    "modalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 384000
+    },
+    "provider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/models"
+    }
+  },
+  "claude-opus-4-5": {
+    "id": "claude-opus-4-5",
+    "name": "Claude Opus 4.5",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 200000,
+      "output": 64000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "claude-opus-5": {
+    "id": "claude-opus-5",
+    "name": "Claude Opus 5",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 128000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "claude-opus-5-5": {
+    "id": "claude-opus-5-5",
+    "name": "Claude Opus 5.5",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 128000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "claude-opus-4-1": {
+    "id": "claude-opus-4-1",
+    "name": "Claude Opus 4.1",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 200000,
+      "output": 32000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "claude-haiku-5-5": {
+    "id": "claude-haiku-5-5",
+    "name": "Claude Haiku 5.5",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 128000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  },
+  "claude-sonnet-5": {
+    "id": "claude-sonnet-5",
+    "name": "Claude Sonnet 5",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "modalities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "limit": {
+      "context": 1000000,
+      "output": 128000
+    },
+    "provider": {
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+    }
+  }
+}

@@ -40556,9 +40556,15 @@ function createClient(model, context, apiKey, optionsHeaders, fetch3, sessionId,
   return new OpenAI({
     apiKey,
     baseURL: model.baseUrl,
+    ...model.provider === "azure-openai-responses" && new URL(model.baseUrl).pathname === "/models" ? {
+      defaultQuery: { "api-version": "2024-05-01-preview" }
+    } : {},
     dangerouslyAllowBrowser: true,
     fetch: fetch3,
-    defaultHeaders: headers
+    defaultHeaders: {
+      ...model.provider === "azure-openai-responses" && apiKey ? { "api-key": apiKey } : {},
+      ...headers
+    }
   });
 }
 function buildParams(model, context, options, compat = getCompat(model), cacheRetention = resolveCacheRetention(options?.cacheRetention, options?.env), grammarToolInputProperties = createGrammarToolInputProperties(getDeclaredTools(context.messages), compat.supportsOpenAIGrammarTools)) {
@@ -186965,6 +186971,297 @@ function customStreamOptions(config) {
   };
 }
 
+// src/azure-provider.js
+init_dist();
+init_anthropic_messages();
+init_openai_completions();
+init_azure_openai_responses2();
+var AZURE_PROVIDER = "azure-openai-responses";
+var AZURE_ROUTES = {
+  "@ai-sdk/anthropic": { api: "anthropic-messages", path: "anthropic/v1" },
+  "@ai-sdk/openai-compatible": { api: "openai-completions", path: "models" }
+};
+var AZURE_ADAPTIVE_MODELS = /* @__PURE__ */ new Set([
+  "claude-fable-5",
+  "claude-fable-5-1",
+  "claude-haiku-5-5",
+  "claude-mythos-5",
+  "claude-mythos-5-1",
+  "claude-mythos-preview",
+  "claude-opus-4-6",
+  "claude-opus-4-7",
+  "claude-opus-4-8",
+  "claude-opus-5",
+  "claude-opus-5-5",
+  "claude-sonnet-4-6",
+  "claude-sonnet-5",
+  "claude-sonnet-5-5"
+]);
+var mandatoryThinking = /* @__PURE__ */ new Set(["claude-fable-5", "claude-fable-5-1", "claude-mythos-5", "claude-mythos-5-1", "claude-mythos-preview"]);
+var entraOnly = /* @__PURE__ */ new Set(["claude-mythos-5", "claude-mythos-5-1", "claude-mythos-preview"]);
+function installAzureProvider(models) {
+  const original = models.getProvider(AZURE_PROVIDER);
+  if (!original) throw new Error("Pi Azure provider is required");
+  const extended = createProvider({
+    id: original.id,
+    name: original.name,
+    models: original.getModels(),
+    auth: { apiKey: {
+      ...original.auth.apiKey,
+      resolve: async (context) => {
+        const token2 = await context.ctx.env("AZURE_AUTH_TOKEN");
+        if (token2) return { auth: { headers: { Authorization: `Bearer ${token2}` } }, source: "AZURE_AUTH_TOKEN" };
+        return original.auth.apiKey.resolve(context);
+      }
+    } },
+    api: { "azure-openai-responses": azure_openai_responses_exports, "anthropic-messages": anthropic_messages_exports, "openai-completions": openai_completions_exports }
+  });
+  models.setProvider({ ...original, auth: extended.auth, stream: extended.stream, streamSimple: extended.streamSimple });
+}
+function azureCatalogResolution(config, models) {
+  if (["cohere-embed-v3-english", "cohere-embed-v3-multilingual", "cohere-embed-v-4-0", "cohere-embed-v4-0"].includes(config.model)) {
+    return { supported: false, reason: "model_operation_unsupported", provider: config.provider, model: config.model };
+  }
+  const contract = config.catalogContract;
+  const verifiedResponse = config.model === "gpt-chat-latest" && contract?.npm === "@ai-sdk/azure";
+  if (!contract || !contract.npm && !contract.api && !contract.shape || contract.npm === "@ai-sdk/azure" && !verifiedResponse) return null;
+  const fail2 = (reason) => ({ supported: false, reason, provider: config.provider, model: config.model });
+  if (!(verifiedResponse ? ["model", "provider", "official_provider_catalog"] : ["model", "official_provider_catalog"]).includes(contract.provenance)) return fail2("catalog_contract_ambiguous");
+  const route = verifiedResponse ? { api: "azure-openai-responses" } : AZURE_ROUTES[contract.npm];
+  if (!route) return fail2("catalog_contract_ambiguous");
+  if (contract.shape && contract.shape !== (verifiedResponse ? "responses" : route.api === "anthropic-messages" ? "messages" : "completions")) return fail2("protocol_conflict");
+  const template = `https://\${AZURE_RESOURCE_NAME}.services.ai.azure.com/${route.path}`;
+  if (verifiedResponse ? Boolean(contract.api) : contract.api?.replace(/\/+$/, "") !== template) return fail2("endpoint_conflict");
+  if (!contract.name?.trim() || typeof contract.reasoning !== "boolean" || !Array.isArray(contract.input) || !contract.input.includes("text") || !Number.isSafeInteger(contract.contextWindow) || contract.contextWindow <= 0 || !Number.isSafeInteger(contract.maxTokens) || contract.maxTokens <= 0) return fail2("catalog_contract_incomplete");
+  const model = {
+    id: config.model,
+    name: contract.name,
+    provider: AZURE_PROVIDER,
+    api: route.api,
+    baseUrl: verifiedResponse ? models.getModel(AZURE_PROVIDER, "gpt-5.2").baseUrl : contract.api,
+    reasoning: contract.reasoning,
+    input: contract.input,
+    contextWindow: contract.contextWindow,
+    maxTokens: contract.maxTokens,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    ...verifiedResponse ? { thinkingLevelMap: { off: null } } : {},
+    ...route.api === "openai-completions" ? { compat: {
+      // Fields accepted by the versioned Foundry Model Inference REST contract.
+      supportsStore: false,
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: false,
+      supportsUsageInStreaming: false,
+      maxTokensField: "max_tokens"
+    } } : {},
+    ...AZURE_ADAPTIVE_MODELS.has(config.model) ? { compat: { forceAdaptiveThinking: true } } : {}
+  };
+  const provider = models.getProvider(AZURE_PROVIDER);
+  const existing = provider.getModels().filter((entry) => entry.id !== model.id);
+  models.setProvider({ ...provider, getModels: () => [...existing, model] });
+  return {
+    supported: true,
+    provider: model.provider,
+    model: model.id,
+    api: model.api,
+    source: "verified_official_contract",
+    reasoning: model.reasoning,
+    input: model.input,
+    contextWindow: model.contextWindow,
+    maxTokens: model.maxTokens,
+    toolCall: contract.toolCall === true
+  };
+}
+function azureExecutionModel(model, config) {
+  if (model.provider !== AZURE_PROVIDER || !model.baseUrl.includes("${AZURE_RESOURCE_NAME}")) return model;
+  const resource = config.env?.AZURE_RESOURCE_NAME || config.env?.AZURE_OPENAI_RESOURCE_NAME;
+  if (!resource || !/^[a-zA-Z0-9][a-zA-Z0-9-]*$/.test(resource)) {
+    throw Object.assign(new Error("Azure resource name is missing or invalid"), { code: "azure_resource_name_required" });
+  }
+  if (entraOnly.has(model.id) && !config.env?.AZURE_AUTH_TOKEN) {
+    throw Object.assign(new Error("This Azure model requires an Entra ID token (AZURE_AUTH_TOKEN)"), { code: "azure_entra_id_required" });
+  }
+  const baseUrl = model.baseUrl.replace("${AZURE_RESOURCE_NAME}", resource).replace(/\/+$/, "");
+  return { ...model, baseUrl: model.api === "anthropic-messages" ? baseUrl.replace(/\/v1\/?$/, "") : baseUrl };
+}
+function azureStreamOptions(config) {
+  if (config.provider === AZURE_PROVIDER && config.api === "azure-openai-responses") {
+    const token2 = config.env?.AZURE_AUTH_TOKEN;
+    return {
+      ...config.model === "gpt-chat-latest" ? { reasoning: void 0 } : {},
+      ...token2 ? { apiKey: token2, headers: { ...config.headers, Authorization: `Bearer ${token2}`, "api-key": null } } : {}
+    };
+  }
+  return config.provider === AZURE_PROVIDER && mandatoryThinking.has(config.model) ? { reasoning: config.thinkingLevel || "high" } : {};
+}
+
+// src/catalog-provider-contracts.js
+init_dist();
+init_openai_completions();
+init_openai_responses();
+init_anthropic_messages();
+init_google_generative_ai();
+init_opencode_headers();
+var registryBaselines = /* @__PURE__ */ new WeakMap();
+var verifiedModels = /* @__PURE__ */ new WeakSet();
+var verifiedCatalogModelSource = (model) => verifiedModels.has(model) ? "verified_official_contract" : null;
+var openCodePackages = {
+  "@ai-sdk/openai-compatible": "openai-completions",
+  "@ai-sdk/openai": "openai-responses",
+  "@ai-sdk/anthropic": "anthropic-messages",
+  "@ai-sdk/google": "google-generative-ai"
+};
+var shapes = { responses: "openai-responses", completions: "openai-completions", messages: "anthropic-messages" };
+var routes = {
+  "opencode": { provider: "opencode", openCode: "https://opencode.ai/inference" },
+  "opencode-go": { provider: "opencode-go", openCode: "https://opencode.ai/inference/go" },
+  "minimax-cn": { provider: "minimax-cn", api: "anthropic-messages", npm: "@ai-sdk/anthropic", baseUrl: "https://api.minimax.cn/anthropic/v1" },
+  "minimax-cn-coding-plan": { provider: "minimax-cn", api: "anthropic-messages", npm: "@ai-sdk/anthropic", baseUrl: "https://api.minimax.cn/anthropic/v1" },
+  "zai": { provider: "zai", api: "openai-completions", npm: "@ai-sdk/openai-compatible", baseUrl: "https://api.z.ai/api/paas/v4" },
+  "zai-coding-plan": { provider: "zai", api: "openai-completions", npm: "@ai-sdk/openai-compatible", baseUrl: "https://api.z.ai/api/coding/paas/v4" }
+};
+var PROVIDER_ENV_ALIASES = {
+  "azure": { AZURE_OPENAI_API_KEY: "AZURE_API_KEY", AZURE_OPENAI_RESOURCE_NAME: "AZURE_RESOURCE_NAME" },
+  "alibaba-token-plan": { QWEN_TOKEN_PLAN_API_KEY: "ALIBABA_TOKEN_PLAN_API_KEY" },
+  "alibaba-token-plan-cn": { QWEN_TOKEN_PLAN_CN_API_KEY: "ALIBABA_TOKEN_PLAN_API_KEY" },
+  "minimax-cn": { MINIMAX_CN_API_KEY: "MINIMAX_API_KEY" },
+  "minimax-cn-coding-plan": { MINIMAX_CN_API_KEY: "MINIMAX_API_KEY" },
+  "zai": { ZAI_API_KEY: "ZHIPU_API_KEY" },
+  "zai-coding-plan": { ZAI_API_KEY: "ZHIPU_API_KEY" },
+  "zhipuai-coding-plan": { ZAI_CODING_CN_API_KEY: "ZHIPU_API_KEY" },
+  "github-copilot": { COPILOT_GITHUB_TOKEN: "GITHUB_TOKEN" },
+  "meta": { META_API_KEY: "META_MODEL_API_KEY" },
+  "xiaomi-token-plan-ams": { XIAOMI_TOKEN_PLAN_AMS_API_KEY: "XIAOMI_API_KEY" },
+  "xiaomi-token-plan-cn": { XIAOMI_TOKEN_PLAN_CN_API_KEY: "XIAOMI_API_KEY" },
+  "xiaomi-token-plan-sgp": { XIAOMI_TOKEN_PLAN_SGP_API_KEY: "XIAOMI_API_KEY" },
+  "cloudflare-ai-gateway": { CLOUDFLARE_API_KEY: "CLOUDFLARE_API_TOKEN" },
+  "google-vertex": { GOOGLE_CLOUD_PROJECT: "GOOGLE_VERTEX_PROJECT", GOOGLE_CLOUD_LOCATION: "GOOGLE_VERTEX_LOCATION" }
+};
+function catalogProviderEnvironment(provider, env2) {
+  const result = { ...env2 || {} };
+  for (const [piName, catalogName] of Object.entries(PROVIDER_ENV_ALIASES[provider] || {})) {
+    if (!result[piName] && result[catalogName]) result[piName] = result[catalogName];
+  }
+  return result;
+}
+function installCatalogProviderAdapters(models) {
+  const providerBaselines = /* @__PURE__ */ new Map();
+  registryBaselines.set(models, providerBaselines);
+  const googleOptions = (options) => ({ ...options, headers: {
+    ...options?.apiKey ? { Authorization: `Bearer ${options.apiKey}` } : {},
+    ...options?.headers
+  } });
+  for (const id of /* @__PURE__ */ new Set([...Object.values(routes).map((r2) => r2.provider), "amazon-bedrock"])) {
+    providerBaselines.set(id, models.getModels(id));
+  }
+  for (const id of ["opencode", "opencode-go", "amazon-bedrock"]) {
+    const original = models.getProvider(id);
+    if (!original) throw new Error(`Required Pi provider is missing: ${id}`);
+    const adapters = {
+      "openai-completions": openai_completions_exports,
+      "openai-responses": openai_responses_exports,
+      "anthropic-messages": {
+        stream: (model, context, options) => stream3(model, context, { ...googleOptions(options), headers: { ...googleOptions(options).headers, "x-api-key": null } }),
+        streamSimple: (model, context, options) => streamSimple2(model, context, { ...googleOptions(options), headers: { ...googleOptions(options).headers, "x-api-key": null } })
+      },
+      "google-generative-ai": {
+        stream: (model, context, options) => stream6(model, context, googleOptions(options)),
+        streamSimple: (model, context, options) => streamSimple5(model, context, googleOptions(options))
+      }
+    };
+    const api = id.startsWith("opencode") ? Object.fromEntries(Object.entries(adapters).map(([kind, streams]) => [kind, withOpenCodeSessionHeader(streams)])) : adapters;
+    const extended = createProvider({ id, name: original.name, auth: original.auth, models: original.getModels(), api });
+    models.setProvider({
+      ...original,
+      stream: (model, context, options) => model.api === "bedrock-converse-stream" ? original.stream(model, context, options) : extended.stream(model, context, options),
+      streamSimple: (model, context, options) => model.api === "bedrock-converse-stream" ? original.streamSimple(model, context, options) : extended.streamSimple(model, context, options)
+    });
+  }
+}
+function verifiedCatalogResolution(config, models) {
+  const providerBaselines = registryBaselines.get(models);
+  const contract = config.catalogContract;
+  if (!contract?.npm && !contract?.api && !contract?.shape) {
+    const builtin = providerBaselines?.get(config.provider)?.find((m3) => m3.id === config.model);
+    const provider2 = builtin && models.getProvider(config.provider);
+    if (provider2 && models.getModel(config.provider, config.model) !== builtin) {
+      const others2 = provider2.getModels().filter((m3) => m3.id !== builtin.id);
+      models.setProvider({ ...provider2, getModels: () => [...others2, builtin] });
+    }
+  }
+  if (!contract || !["model", "provider", "official_provider_catalog"].includes(contract.provenance)) return null;
+  const rule = routes[config.provider];
+  const ordinaryBedrock = config.provider === "amazon-bedrock" && contract.npm === "@ai-sdk/amazon-bedrock";
+  const mantle = config.provider === "amazon-bedrock" && contract.npm === "@ai-sdk/amazon-bedrock/mantle";
+  if (!rule && !mantle && !ordinaryBedrock) return null;
+  if (!contract.name?.trim() || typeof contract.reasoning !== "boolean" || !contract.input?.includes("text") || !Number.isSafeInteger(contract.contextWindow) || contract.contextWindow <= 0 || !Number.isSafeInteger(contract.maxTokens) || contract.maxTokens <= 0) return null;
+  const fail2 = (reason) => ({ supported: false, reason, provider: config.provider, model: config.model });
+  let api, baseUrl = contract.api?.replace(/\/+$/, ""), providerId = rule?.provider || "amazon-bedrock";
+  if (mantle) {
+    api = shapes[contract.shape];
+    if (!["openai-completions", "openai-responses"].includes(api)) return fail2("catalog_contract_ambiguous");
+    if (!["https://bedrock-mantle.${AWS_REGION}.api.aws/v1", "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1"].includes(baseUrl)) return fail2("endpoint_conflict");
+  } else if (ordinaryBedrock) {
+    if (models.getModel("amazon-bedrock", config.model)) return null;
+    api = "bedrock-converse-stream";
+    if (contract.api) return null;
+    baseUrl = models.getModels("amazon-bedrock").find((m3) => m3.api === api)?.baseUrl;
+    if (!baseUrl) return fail2("pi_protocol_missing");
+  } else if (rule.openCode) {
+    if (contract.provenance === "provider") return null;
+    api = config.provider === "opencode" && config.model === "mistral-large-4" && contract.npm === "@ai-sdk/mistral" ? "openai-completions" : openCodePackages[contract.npm];
+    if (!api) return null;
+    const path9 = api === "anthropic-messages" ? "anthropic/v1" : api === "google-generative-ai" ? "google/v1beta" : "openai/v1";
+    if (baseUrl !== `${rule.openCode}/${path9}`) return null;
+  } else {
+    api = rule.api;
+    if (contract.npm !== rule.npm || baseUrl !== rule.baseUrl) return null;
+  }
+  if (contract.shape && shapes[contract.shape] !== api) return fail2("protocol_conflict");
+  const provider = models.getProvider(providerId);
+  if (!provider) return fail2("pi_provider_missing");
+  const original = providerBaselines?.get(providerId)?.find((m3) => m3.id === config.model && m3.api === api);
+  const model = {
+    ...original,
+    id: config.model,
+    name: contract.name,
+    provider: providerId,
+    api,
+    baseUrl: api === "anthropic-messages" ? baseUrl.replace(/\/v1$/, "") : baseUrl,
+    reasoning: contract.reasoning,
+    input: contract.input,
+    contextWindow: contract.contextWindow,
+    maxTokens: contract.maxTokens,
+    cost: original?.cost || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  };
+  verifiedModels.add(model);
+  const others = provider.getModels().filter((m3) => m3.id !== model.id);
+  models.setProvider({ ...provider, getModels: () => [...others, model] });
+  return {
+    supported: true,
+    provider: providerId,
+    model: model.id,
+    api,
+    source: "verified_official_contract",
+    reasoning: model.reasoning,
+    input: model.input,
+    contextWindow: model.contextWindow,
+    maxTokens: model.maxTokens,
+    toolCall: contract.toolCall === true
+  };
+}
+function verifiedExecutionModel(model, config) {
+  if (model.provider !== "amazon-bedrock" || !model.baseUrl?.includes("${AWS_REGION}")) return model;
+  const region = config.env?.AWS_REGION;
+  if (!region || !/^[a-z0-9-]+$/.test(region)) throw Object.assign(new Error("AWS_REGION is required"), { code: "aws_region_required" });
+  if (!config.apiKey && !config.env?.AWS_BEARER_TOKEN_BEDROCK) {
+    throw Object.assign(new Error("Pi's OpenAI adapter requires a Bedrock API key (AWS_BEARER_TOKEN_BEDROCK) for Mantle"), { code: "bedrock_mantle_bearer_token_required" });
+  }
+  return { ...model, baseUrl: model.baseUrl.replace("${AWS_REGION}", region) };
+}
+function verifiedStreamOptions(config) {
+  return config.provider === "amazon-bedrock" && ["openai-responses", "openai-completions"].includes(config.api) ? { apiKey: config.apiKey || config.env?.AWS_BEARER_TOKEN_BEDROCK } : {};
+}
+
 // src/compaction.js
 init_dist7();
 init_compaction();
@@ -187146,7 +187443,9 @@ function installSuperGrokProvider() {
   }));
   for (const model of models) VERIFIED_MODEL_SOURCES.set(`xai-oauth/${model.id}`, "verified_official_contract");
 }
+installAzureProvider(runtimeModels);
 installVerifiedOpenCodeGoContracts();
+installCatalogProviderAdapters(runtimeModels);
 installSuperGrokProvider();
 installSarashinaProvider(runtimeModels);
 var AUTH_PROVIDER_IDS = {
@@ -187453,16 +187752,7 @@ function sharesProviderIdentity(config, provider) {
   );
 }
 function normalizedProviderEnvironment(catalogProviderId, env2) {
-  const normalized = { ...env2 || {} };
-  if (catalogProviderId === "azure") {
-    normalized.AZURE_OPENAI_API_KEY ||= normalized.AZURE_API_KEY;
-    normalized.AZURE_OPENAI_RESOURCE_NAME ||= normalized.AZURE_RESOURCE_NAME;
-  }
-  if (catalogProviderId === "google-vertex") {
-    normalized.GOOGLE_CLOUD_PROJECT ||= normalized.GOOGLE_VERTEX_PROJECT;
-    normalized.GOOGLE_CLOUD_LOCATION ||= normalized.GOOGLE_VERTEX_LOCATION;
-  }
-  return normalized;
+  return catalogProviderEnvironment(catalogProviderId, env2);
 }
 function normalizedURL(value) {
   if (typeof value !== "string" || !value.trim() || value.includes("${")) return null;
@@ -187583,6 +187873,12 @@ function resolutionFor(config) {
   if (config.contractVersion !== RUNTIME_CONTRACT_VERSION) {
     throw new Error(`Pi runtime contract mismatch: expected ${RUNTIME_CONTRACT_VERSION}, received ${config.contractVersion ?? "missing"}`);
   }
+  if (["azure", "azure-openai-responses"].includes(config.provider)) {
+    const azure = azureCatalogResolution(config, runtimeModels);
+    if (azure) return azure;
+  }
+  const verified = verifiedCatalogResolution(config, runtimeModels);
+  if (verified) return verified;
   if (config.provider === CUSTOM_PROVIDER) return customProviderResolution(config, runtimeModels);
   if (config.provider === "sarashina") return sarashinaResolution(config, runtimeModels);
   if (config.provider === CHATGPT_PLAN_PROVIDER) {
@@ -187723,7 +188019,7 @@ function resolutionFor(config) {
     provider: model.provider,
     model: model.id,
     api: model.api,
-    source: model.provider === CHATGPT_PLAN_PROVIDER ? chatGPTPlan.modelSource(model.id) : VERIFIED_MODEL_SOURCES.get(`${model.provider}/${model.id}`) || "pi_builtin",
+    source: model.provider === CHATGPT_PLAN_PROVIDER ? chatGPTPlan.modelSource(model.id) : verifiedCatalogModelSource(model) || VERIFIED_MODEL_SOURCES.get(`${model.provider}/${model.id}`) || "pi_builtin",
     reasoning: model.reasoning,
     input: model.input,
     contextWindow: model.contextWindow,
@@ -187736,7 +188032,7 @@ function resolveModel(config) {
   if (!resolution.supported) {
     throw Object.assign(new Error(`Unsupported model contract (${resolution.reason}): ${config.provider}/${config.model}`), { code: resolution.reason });
   }
-  return { model: runtimeModels.getModel(resolution.provider, resolution.model), resolution };
+  return { model: verifiedExecutionModel(azureExecutionModel(runtimeModels.getModel(resolution.provider, resolution.model), config), config), resolution };
 }
 function contentFor(message2) {
   const blocks = [];
@@ -187933,6 +188229,8 @@ function standardStreamFunction(request, config, report, captureProviderRequest)
     timeoutMs: timeoutMs(request),
     reasoning: config.thinkingLevel,
     ...customStreamOptions(config),
+    ...azureStreamOptions(config),
+    ...verifiedStreamOptions(config),
     ...config.catalogProvider === "sarashina" || config.provider === "sarashina" ? { toolChoice: "auto" } : {},
     ...config.provider === PCC_PROVIDER && request.metadata?.max_output_tokens ? { maxTokens: Number(request.metadata.max_output_tokens) } : {},
     sessionId,

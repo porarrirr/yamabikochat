@@ -147,6 +147,12 @@ struct CatalogProvider: Codable, Identifiable, Equatable, Sendable {
     var documentationURL: String?
     var models: [CatalogModel]
 
+    // Mythos on Foundry requires Entra ID; other Azure models also accept API keys.
+    // Keep upstream env metadata intact and expose the optional credential separately.
+    var connectionFields: [String] {
+        id == "azure" && !env.contains("AZURE_AUTH_TOKEN") ? env + ["AZURE_AUTH_TOKEN"] : env
+    }
+
     var reference: ProviderReference { .modelsDev(id) }
 
     func matches(_ query: String) -> Bool {
