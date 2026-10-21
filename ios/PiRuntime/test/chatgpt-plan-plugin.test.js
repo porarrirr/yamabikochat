@@ -3,6 +3,7 @@ import test from "node:test";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { createModels, InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import { createChatGPTPlanPlugin, CHATGPT_PLAN_PROVIDER, chatGPTPlanPayload, chatGPTPlanCompleted, parseChatGPTCallback, startChatGPTCallback } from "../src/chatgpt-plan-plugin.js";
+import { compactContext } from "../src/compaction.js";
 
 const issuer = "https://auth.openai.com";
 const hostId = "urn:uuid:12345678-1234-4123-8123-123456789abc";
@@ -197,9 +198,52 @@ for (const [device, userAgent, hasAppLink] of [
   } finally { listener.close(); }
 });
 
+for (const id of ["gpt-6-luna", "gpt-6-sol"]) {
+  test(`SIWC compaction uses Pi's Responses adapter without unsupported cache options: ${id}`, async () => {
+    const h = await harness({ catalog: [{ slug: id, display_name: id, visibility: "list" }] });
+    const credential = await h.login();
+    await h.plugin.catalog(credential, new AbortController().signal);
+    const model = h.models.getModel(CHATGPT_PLAN_PROVIDER, id);
+    let requests = 0;
+    const response = await compactContext({
+      messages: [{ role: "user", content: "Compare the CPUs and preserve the constraints", timestamp: 1 }],
+      model, config: { apiKey: credential.access },
+      streamFn: (selected, context, options) => h.models.streamSimple(selected, context, {
+        ...options, onPayload: chatGPTPlanPayload,
+        fetch: async (url, init) => {
+          requests++;
+          assert.equal(String(url), "https://api.openai.com/v1/responses");
+          const body = JSON.parse(init.body);
+          // Reproduce the device's HTTP 400 instead of allowing an invalid request.
+          if ("prompt_cache_options" in body) return Response.json({
+            message: "prompt_cache_options is not supported on this model",
+            type: "invalid_request_error", param: "prompt_cache_options", code: "invalid_parameter"
+          }, { status: 400 });
+          assert.equal(body.store, false);
+          assert.equal(body.stream, true);
+          assert.match(JSON.stringify(body.input), /Compare the CPUs/);
+          const item = { type: "message", id: "summary", role: "assistant", status: "completed",
+            content: [{ type: "output_text", text: "CPU comparison constraints", annotations: [] }] };
+          const events = [
+            { type: "response.output_item.done", output_index: 0, item },
+            { type: "response.completed", response: { id: "compact", status: "completed", output: [item],
+              usage: { input_tokens: 100, output_tokens: 10, total_tokens: 110 } } }
+          ];
+          return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(""), {
+            headers: { "content-type": "text/event-stream" }
+          });
+        }
+      })
+    });
+    assert.equal(requests, 1);
+    assert.match(response.providerTranscript[0].content, /CPU comparison constraints/);
+    assert.equal(response.usage.inputTokens, 100);
+  });
+}
+
 test("SIWC payload uses preview fields and groups local tools; hosted unsupported tools fail", () => {
   const payload = chatGPTPlanPayload({ input: [{ role: "system", content: "system" }], temperature: 0.2, max_output_tokens: 300,
-    previous_response_id: "prior", store: true, stream: false,
+    previous_response_id: "prior", prompt_cache_options: { mode: "explicit" }, store: true, stream: false,
     tools: [{ type: "function", name: "local", parameters: {} }, { type: "web_search" }] });
   assert.equal(payload.input[0].role, "developer");
   assert.equal(payload.store, false);
@@ -207,6 +251,7 @@ test("SIWC payload uses preview fields and groups local tools; hosted unsupporte
   assert.equal(payload.max_output_tokens, undefined);
   assert.equal(payload.temperature, undefined);
   assert.equal(payload.previous_response_id, undefined);
+  assert.equal(payload.prompt_cache_options, undefined);
   assert.equal(payload.tools[1].type, "namespace");
   assert.equal(payload.tools[1].tools[0].name, "local");
   for (const type of ["tool_search", "mcp", "image_generation", "code_interpreter"]) {

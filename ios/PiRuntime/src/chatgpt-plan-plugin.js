@@ -519,6 +519,11 @@ export function createChatGPTPlanPlugin({
 // implement a stream or tool loop. Unsupported requested tools fail explicitly.
 export function chatGPTPlanPayload(payload) {
   const value = { ...payload, store: false, stream: true };
+  // Pi's one-off summaries request cacheRetention: "none", which API-key
+  // models serialize as prompt_cache_options: { mode: "explicit" }. SIWC
+  // rejects that optional control (HTTP 400, observed with gpt-6-luna).
+  // Keep this route-specific restriction here, without changing Pi's models.
+  delete value.prompt_cache_options;
   for (const field of ["background", "conversation", "max_output_tokens", "max_tool_calls", "metadata", "moderation", "multi_agent", "prompt", "prompt_cache_retention", "safety_identifier", "temperature", "top_logprobs", "top_p", "truncation", "user", "previous_response_id"]) delete value[field];
   if (!Array.isArray(value.input)) throw failure("chatgpt_input_invalid", "ChatGPT plan requires an input array");
   value.input = value.input.map(item => item.role === "system" ? { ...item, role: "developer" } : item);

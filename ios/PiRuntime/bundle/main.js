@@ -186816,6 +186816,7 @@ function createChatGPTPlanPlugin({
 }
 function chatGPTPlanPayload(payload) {
   const value = { ...payload, store: false, stream: true };
+  delete value.prompt_cache_options;
   for (const field2 of ["background", "conversation", "max_output_tokens", "max_tool_calls", "metadata", "moderation", "multi_agent", "prompt", "prompt_cache_retention", "safety_identifier", "temperature", "top_logprobs", "top_p", "truncation", "user", "previous_response_id"]) delete value[field2];
   if (!Array.isArray(value.input)) throw failure("chatgpt_input_invalid", "ChatGPT plan requires an input array");
   value.input = value.input.map((item) => item.role === "system" ? { ...item, role: "developer" } : item);

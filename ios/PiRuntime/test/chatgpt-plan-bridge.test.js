@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-for (const [incompleteReason, terminalTurn] of [[null, 2], ["max_output_tokens", 2], ["content_filter", 2], ["max_output_tokens", 1]]) test(`bundled Pi SIWC tool loop terminal status: ${incompleteReason ?? "completed"}, turn ${terminalTurn}`, { timeout: 20_000 }, async t => {
+for (const [incompleteReason, terminalTurn, compaction = false] of [[null, 2], ["max_output_tokens", 2], ["content_filter", 2], ["max_output_tokens", 1], [null, 1, true]]) test(`bundled Pi SIWC ${compaction ? "compaction" : "tool loop"} terminal status: ${incompleteReason ?? "completed"}, turn ${terminalTurn}`, { timeout: 20_000 }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "yamabiko-siwc-bridge-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const mock = path.join(root, "mock.mjs");
@@ -33,11 +33,13 @@ for (const [incompleteReason, terminalTurn] of [[null, 2], ["max_output_tokens",
       if(value==='https://api.openai.com/v1/models')return Response.json({models:[{slug:'future-model',display_name:'Future',visibility:'list'},{slug:'gpt-6-sol',display_name:'Account Sol',visibility:'list'}]});
       if(value==='https://api.openai.com/v1/responses') {
         const payload=JSON.parse(options.body);
+        if(payload.prompt_cache_options!==undefined)return Response.json({message:'prompt_cache_options is not supported on this model',type:'invalid_request_error',param:'prompt_cache_options',code:'invalid_parameter'},{status:400});
         if(!payload.stream||payload.store!==false||payload.temperature!==undefined||payload.max_output_tokens!==undefined)throw new Error('Wrong SIWC preview payload');
-        if(payload.tools?.[0]?.type!=='namespace')throw new Error('Local tools must be namespaced');
+        if(!${compaction}&&payload.tools?.[0]?.type!=='namespace')throw new Error('Local tools must be namespaced');
+        if(${compaction}&&!JSON.stringify(payload.input).includes('<conversation>'))throw new Error('Expected Pi summarization context');
         responses++;
         if(responses>${terminalTurn})throw new Error("Unexpected inference after terminal response");
-        const item=responses===1?{type:'function_call',id:'fc_bridge',call_id:'call_bridge',name:'local_echo',namespace:'yamabiko',arguments:'{}',status:'completed'}:{type:'message',id:'msg_bridge',role:'assistant',status:'completed',content:[{type:'output_text',text:'Hello from ChatGPT plan',annotations:[]}]};
+        const item=!${compaction}&&responses===1?{type:'function_call',id:'fc_bridge',call_id:'call_bridge',name:'local_echo',namespace:'yamabiko',arguments:'{}',status:'completed'}:{type:'message',id:'msg_bridge',role:'assistant',status:'completed',content:[{type:'output_text',text:'Hello from ChatGPT plan',annotations:[]}]};
         const incompleteReason=${JSON.stringify(incompleteReason)};
         const events=[{type:'response.created',response:{id:'resp_bridge',status:'in_progress'}},{type:'response.output_item.added',output_index:0,item:{...item,arguments:responses===1?'':undefined}},{type:'response.output_item.done',output_index:0,item},{type:incompleteReason && responses>=${terminalTurn}?'response.incomplete':'response.completed',response:{id:'resp_bridge',status:incompleteReason && responses>=${terminalTurn}?'incomplete':'completed',...(incompleteReason && responses>=${terminalTurn}?{incomplete_details:{reason:incompleteReason}}:{}),output:[item],usage:{input_tokens:2,output_tokens:1,total_tokens:3}}}];
         return new Response(events.map(e=>'event: '+e.type+'\\ndata: '+JSON.stringify(e)+'\\n\\n').join(''),{headers:{'content-type':'text/event-stream'}});
@@ -109,6 +111,10 @@ for (const [incompleteReason, terminalTurn] of [[null, 2], ["max_output_tokens",
     runId: "siwc-run", config: { contractVersion: 2, provider: "openai-chatgpt", model: "gpt-6-sol", apiKey: credential.access },
     request: { messages: [{ role: "user", content: "hello", attachments: [] }], systemPrompt: "Be helpful", tools: [{ type: "function", payload: { name: "local_echo", description: "Local echo", parameters: '{"type":"object","properties":{}}' } }], metadata: { temperature: "0.2" } }
   };
+  if (compaction) {
+    envelope.request.tools = [];
+    envelope.request.metadata.contextOperation = "compact";
+  }
   for await (const event of events(await post("/v1/run", envelope))) {
     if (event.type === "error") failure = event;
     if (event.type === "llm_end") llmSuccess.push(event.succeeded);
@@ -127,7 +133,8 @@ for (const [incompleteReason, terminalTurn] of [[null, 2], ["max_output_tokens",
   } else {
     assert.equal(failure, undefined);
     assert.equal(completed.text, "Hello from ChatGPT plan");
-    assert.deepEqual(llmSuccess, [true, true]);
+    assert.deepEqual(llmSuccess, compaction ? [] : [true, true]);
+    if (compaction) assert.match(completed.providerTranscript[0].content, /<summary>\nHello from ChatGPT plan/);
   }
   assert.equal((await post("/v1/auth/revoke", { provider: "chatgpt", credential })).status, 200);
   const afterLogout = await (await post("/v1/models/resolve", { models: [{ contractVersion: 2, provider: "openai-chatgpt", model: "gpt-6-sol" }] })).json();
@@ -160,6 +167,7 @@ test("bundled Pi SIWC run executes a models.dev contract slug through openai-res
       if(value==='https://api.openai.com/v1/responses') {
         const payload=JSON.parse(options.body);
         if(payload.model!=='yamabiko-test-unbundled-model'||!payload.stream||payload.store!==false)throw new Error('Wrong SIWC preview payload');
+        if(payload.prompt_cache_options!==undefined)throw new Error('Unsupported SIWC cache options');
         const item={type:'message',id:'msg_bridge',role:'assistant',status:'completed',content:[{type:'output_text',text:'Hello from ChatGPT plan',annotations:[]}]};
         const events=[{type:'response.created',response:{id:'resp_bridge',status:'in_progress'}},{type:'response.output_item.done',output_index:0,item},{type:'response.completed',response:{id:'resp_bridge',status:'completed',output:[item],usage:{input_tokens:2,output_tokens:1,total_tokens:3}}}];
         return new Response(events.map(e=>'event: '+e.type+'\\ndata: '+JSON.stringify(e)+'\\n\\n').join(''),{headers:{'content-type':'text/event-stream'}});
@@ -238,4 +246,12 @@ test("bundled Pi SIWC run executes a models.dev contract slug through openai-res
   assert.equal(failure, undefined);
   assert.equal(completed.text, "Hello from ChatGPT plan");
   assert.equal(completed.piExecution.resolution.source, "models_dev_contract");
+  completed = undefined;
+  envelope.runId = "siwc-contract-compact";
+  envelope.request.metadata = { contextOperation: "compact" };
+  for await (const event of events(await post("/v1/run", envelope))) {
+    assert.notEqual(event.type, "error", event.message);
+    if (event.type === "completed") completed = event.response;
+  }
+  assert.match(completed.providerTranscript[0].content, /<summary>\nHello from ChatGPT plan/);
 });
