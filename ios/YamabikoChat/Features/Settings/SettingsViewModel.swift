@@ -85,7 +85,8 @@ final class SettingsViewModel: ObservableObject {
         repository: ChatRepository,
         credentialStore: SecureCredentialStore,
         modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
-        skillRepository: AgentSkillRepository? = nil
+        skillRepository: AgentSkillRepository? = nil,
+        automaticallyRefreshCodexAuth: Bool = true
     ) {
         guard self.repository == nil else { return }
         self.repository = repository
@@ -211,8 +212,8 @@ final class SettingsViewModel: ObservableObject {
 
         setupAutoSave()
 
-        Task {
-            await refreshCodexAuth(force: false)
+        if automaticallyRefreshCodexAuth {
+            Task { await refreshCodexAuth(force: false) }
         }
     }
 
@@ -1433,7 +1434,8 @@ final class SettingsViewModel: ObservableObject {
 
     private func loadCurrentProviderAPIKey() {
         guard let credentialStore else { return }
-        guard let provider = credentialProvider(for: settings.apiProvider) else {
+        guard !["CODEX_AUTH", "SUPERGROK", "APPLE_INTELLIGENCE"].contains(settings.apiProvider.uppercased()),
+              let provider = credentialProvider(for: settings.apiProvider) else {
             isHydratingFromPersistence = true
             apiKeyDraft = ""
             isHydratingFromPersistence = false

@@ -134,9 +134,12 @@ struct SettingsScreen: View {
 }
 
 // Model/usage updates should redraw the detail, without rebuilding navigation.
-private struct SettingsDetailScreen: View {
+struct SettingsDetailScreen: View {
     @ObservedObject var viewModel: SettingsViewModel
     let category: SettingsScreen.SettingsCategory
+    var onboardingStep: OnboardingConnectionStep? = nil
+    var onOnboardingContinue: (() -> Void)? = nil
+    var isOnboardingFinishing = false
     @Binding var hasPrefetchedConnectionCatalogs: Bool
     @Binding var modelsDevFieldDrafts: [String: String]
     #if DEBUG
@@ -148,19 +151,42 @@ private struct SettingsDetailScreen: View {
 
     var body: some View {
         AMOLEDForm {
-            switch category {
-            case .connection:
-                connectionCategoryContent
-            case .conversation:
-                conversationCategoryContent
-            case .display:
-                displayCategoryContent
-            case .management:
-                managementCategoryContent
+            if let onboardingStep {
+                onboardingContent(onboardingStep)
+                if let onOnboardingContinue {
+                    Section {
+                        Button(action: onOnboardingContinue) {
+                            HStack(spacing: 10) {
+                                if isOnboardingFinishing { ProgressView() }
+                                Text(onboardingStep == .model ? "チャットを開く" : "次へ")
+                                    .font(.headline)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 28)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.roundedRectangle(radius: 14))
+                        .controlSize(.large)
+                        .disabled(isOnboardingFinishing)
+                        .accessibilityIdentifier("onboarding-continue")
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    }
+                }
+            } else {
+                switch category {
+                case .connection:
+                    connectionCategoryContent
+                case .conversation:
+                    conversationCategoryContent
+                case .display:
+                    displayCategoryContent
+                case .management:
+                    managementCategoryContent
+                }
             }
         }
         .onDisappear { viewModel.flushPendingSettingsSave() }
-        .navigationTitle(category.title)
+        .navigationTitle(onboardingStep?.title ?? category.title)
         .navigationBarTitleDisplayMode(.inline)
         .task {
             if category == .connection, !hasPrefetchedConnectionCatalogs {
@@ -261,16 +287,13 @@ private struct SettingsDetailScreen: View {
                 openCodeGoUsageSection
             }
 
-            if currentModelsDevProvider == nil,
-               currentProviderKey != "CODEX_AUTH", currentProviderKey != "SUPERGROK", currentProviderKey != "APPLE_INTELLIGENCE", currentProviderKey != "OPENAI_COMPAT" {
-                Section("APIキー") {
-                    SecureField(currentProviderAPIKeyLabel, text: $viewModel.apiKeyDraft)
-                }
-            }
+            providerConnectionContent
+        }
+    }
 
-            if let provider = currentModelsDevProvider {
-                modelsDevConnectionSection(provider)
-            }
+    private var providerConnectionContent: some View {
+        Group {
+            providerCredentialContent
 
             if isGeminiProvider {
                 geminiRotationSection
@@ -299,6 +322,34 @@ private struct SettingsDetailScreen: View {
                 superGrokAuthSection
             }
             superGrokProviderSettingsSection
+        }
+    }
+
+    private var providerCredentialContent: some View {
+        Group {
+            if currentModelsDevProvider == nil,
+               currentProviderKey != "CODEX_AUTH", currentProviderKey != "SUPERGROK", currentProviderKey != "APPLE_INTELLIGENCE", currentProviderKey != "OPENAI_COMPAT" {
+                Section("APIキー") {
+                    SecureField(currentProviderAPIKeyLabel, text: $viewModel.apiKeyDraft)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+            }
+
+            if let provider = currentModelsDevProvider {
+                modelsDevConnectionSection(provider)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func onboardingContent(_ step: OnboardingConnectionStep) -> some View {
+        switch step {
+        case .credentials:
+            providerCredentialContent
+            if currentProviderKey == "OPENAI_COMPAT" { openAICompatSection }
+        case .model:
+            Section("モデル") { providerModelEditor }
         }
     }
 
@@ -1090,8 +1141,8 @@ private struct SettingsDetailScreen: View {
         Section {
             VStack(alignment: .leading, spacing: 20) {
                 HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                        .font(.title3.weight(.medium))
+                    ChatGPTBrandIcon()
+                        .frame(width: 24, height: 24)
                         .foregroundStyle(.primary)
                         .frame(width: 44, height: 44)
                         .background(Color.amoledSubtleSurface(lightOpacity: 0.05), in: RoundedRectangle(cornerRadius: 12))
@@ -1131,6 +1182,9 @@ private struct SettingsDetailScreen: View {
                         if viewModel.isCodexAuthActionRunning {
                             ProgressView()
                                 .tint(Color(uiColor: .amoledSystemBackground))
+                        }
+                        if !viewModel.isCodexAuthActionRunning {
+                            ChatGPTBrandIcon(inverse: true).frame(width: 21, height: 21)
                         }
                         Text(viewModel.isCodexAuthActionRunning ? "接続中…" :
                             viewModel.codexAuthState.isLoggedIn ? "ChatGPTに再接続" : "ChatGPTに接続")

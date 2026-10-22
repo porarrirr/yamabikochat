@@ -22,9 +22,18 @@ protocol SecureCredentialStore {
     func deleteSecret(key: String) throws
 }
 
-enum KeychainStoreError: Error {
+enum KeychainStoreError: LocalizedError {
     case unexpectedStatus(OSStatus)
     case invalidEncoding
+
+    var errorDescription: String? {
+        switch self {
+        case .unexpectedStatus:
+            L10n.text("認証情報にアクセスできませんでした。アプリを開き直して、もう一度お試しください。")
+        case .invalidEncoding:
+            L10n.text("保存済みの認証情報を読み取れません。接続設定をやり直してください。")
+        }
+    }
 }
 
 final class KeychainStore: SecureCredentialStore {

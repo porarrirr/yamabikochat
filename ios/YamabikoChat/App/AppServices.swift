@@ -14,6 +14,7 @@ final class AppServices {
         return instance
     }
 
+    let onboardingStore: OnboardingStateStore
     let dbQueue: DatabaseQueue
     let credentialStore: SecureCredentialStore
 
@@ -33,6 +34,9 @@ final class AppServices {
 
     private init() throws {
         DiagnosticsLogger.initialize()
+        // Migrations insert default settings even on a brand-new installation.
+        let hadDatabase = FileManager.default.fileExists(atPath: try AppDatabase.databaseURL().path)
+        onboardingStore = OnboardingStateStore(hasExistingInstallation: hadDatabase)
         dbQueue = try AppDatabase.makeDatabaseQueue()
 
         credentialStore = KeychainStore()

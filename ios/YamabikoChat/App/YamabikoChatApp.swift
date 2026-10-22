@@ -53,13 +53,21 @@ private struct AppBootstrapView: View {
 private struct AppRootHost: View {
     @StateObject private var container: AppContainer
     @StateObject private var appState = AppState()
+    @StateObject private var onboarding: OnboardingViewModel
 
     init(services: AppServices) {
         _container = StateObject(wrappedValue: AppContainer(services: services))
+        _onboarding = StateObject(wrappedValue: OnboardingViewModel(store: services.onboardingStore))
     }
 
     var body: some View {
-        RootView()
+        Group {
+            if onboarding.isCompleted || AppStoreScreenshotRouting.isEnabled {
+                RootView()
+            } else {
+                OnboardingScreen(viewModel: onboarding, settings: onboarding.settings)
+            }
+        }
             .environmentObject(container)
             .environmentObject(appState)
             .onOpenURL { url in

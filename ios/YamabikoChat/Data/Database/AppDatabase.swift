@@ -2,15 +2,21 @@ import Foundation
 import GRDB
 
 enum AppDatabase {
-    static func makeDatabaseQueue() throws -> DatabaseQueue {
-        let fileManager = FileManager.default
+    static func databaseURL(fileManager: FileManager = .default) throws -> URL {
         let supportURL = try fileManager.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
             appropriateFor: nil,
-            create: true
+            create: false
         )
-        let directoryURL = supportURL.appendingPathComponent("YamabikoChat", isDirectory: true)
+        return supportURL.appendingPathComponent("YamabikoChat", isDirectory: true)
+            .appendingPathComponent("yamabiko.sqlite")
+    }
+
+    static func makeDatabaseQueue() throws -> DatabaseQueue {
+        let fileManager = FileManager.default
+        let dbURL = try databaseURL(fileManager: fileManager)
+        let directoryURL = dbURL.deletingLastPathComponent()
         try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         try fileManager.setAttributes(
             [.protectionKey: FileProtectionType.complete],
@@ -20,7 +26,6 @@ enum AppDatabase {
         directoryValues.isExcludedFromBackup = true
         var protectedDirectoryURL = directoryURL
         try protectedDirectoryURL.setResourceValues(directoryValues)
-        let dbURL = directoryURL.appendingPathComponent("yamabiko.sqlite")
 
         var configuration = Configuration()
         configuration.foreignKeysEnabled = true

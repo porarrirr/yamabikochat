@@ -4,16 +4,19 @@ struct CatalogProviderPickerField: View {
     @Binding var providerID: String
     private let catalogProviders: [CatalogProviderOption]
     var title: String = "API Provider"
+    var excludedProviderIDs: Set<String> = []
     @State private var isProviderPickerPresented = false
 
     init(
         providerID: Binding<String>,
         catalogProviders: [CatalogProvider],
-        title: String = "API Provider"
+        title: String = "API Provider",
+        excludedProviderIDs: Set<String> = []
     ) {
         _providerID = providerID
         self.catalogProviders = catalogProviders.map(CatalogProviderOption.init)
         self.title = title
+        self.excludedProviderIDs = excludedProviderIDs
     }
 
     private var selectedLabel: String {
@@ -43,6 +46,7 @@ struct CatalogProviderPickerField: View {
                 CatalogProviderListView(
                     selectedProviderID: providerID,
                     catalogProviders: catalogProviders,
+                    excludedProviderIDs: excludedProviderIDs,
                     onSelect: { providerID = $0 }
                 )
                 .toolbar {
@@ -60,7 +64,7 @@ struct CatalogProviderPickerField: View {
     }
 }
 
-private struct CatalogProviderOption: Identifiable, Equatable {
+struct CatalogProviderOption: Identifiable, Equatable {
     let id: String
     let name: String
     let persistedID: String
@@ -77,21 +81,26 @@ private struct CatalogProviderOption: Identifiable, Equatable {
     }
 }
 
-private struct CatalogProviderListView: View {
+struct CatalogProviderListView: View {
     @Environment(\.dismiss) private var dismiss
     let selectedProviderID: String
     let catalogProviders: [CatalogProviderOption]
+    var excludedProviderIDs: Set<String> = []
+    var dismissOnSelection = true
+    var title = "プロバイダー"
     let onSelect: (String) -> Void
     @State private var query = ""
 
     private var filteredBuiltIns: [ProviderDisplay] {
         ProviderCatalog.options.filter {
-            query.isEmpty || $0.key.localizedCaseInsensitiveContains(query) || $0.title.localizedCaseInsensitiveContains(query)
+            !excludedProviderIDs.contains($0.key.uppercased()) &&
+            (query.isEmpty || $0.key.localizedCaseInsensitiveContains(query) || $0.title.localizedCaseInsensitiveContains(query))
         }
     }
 
     private var filteredCatalog: [CatalogProviderOption] {
         catalogProviders.filter { provider in
+            !excludedProviderIDs.contains(provider.persistedID.uppercased()) &&
             ModelsDevMergedProvider.isSelectableCatalogProvider(provider.id) && provider.matches(query)
         }
     }
@@ -107,7 +116,7 @@ private struct CatalogProviderListView: View {
                 }
             }
         }
-        .navigationTitle("プロバイダー")
+        .navigationTitle(title)
         .searchable(text: $query, prompt: "プロバイダーを検索")
     }
 
@@ -115,7 +124,7 @@ private struct CatalogProviderListView: View {
     private func providerRow(_ id: String, _ title: String, _ subtitle: String?) -> some View {
         Button {
             onSelect(id)
-            dismiss()
+            if dismissOnSelection { dismiss() }
         } label: {
             HStack {
                 VStack(alignment: .leading) {
