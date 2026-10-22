@@ -829,6 +829,12 @@ struct MathMarkdownView: View {
         .onChange(of: contentHeight) { _, _ in
             onLayoutChange?()
         }
+        .onChange(of: hasRenderedContent) { _, _ in
+            // Removing the placeholder can change the row's height even when
+            // WebKit's measured height has not changed.
+            onLayoutChange?()
+        }
+        .transaction { $0.animation = nil }
         .onChange(of: colorScheme) { _, _ in
             hasRenderedContent = false
         }
@@ -896,6 +902,15 @@ enum MathMarkdownDocumentFileStore {
     }
 }
 
+private final class MathMarkdownWKWebView: WKWebView {
+    var onViewportLayout: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onViewportLayout?()
+    }
+}
+
 private struct MathMarkdownWebView: UIViewRepresentable {
     let markdownText: String
     let isStreaming: Bool
@@ -930,7 +945,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
 
         let config = YamabikoWebKitSupport.makeConfiguration(userContentController: contentController)
 
-        let webView = WKWebView(frame: .zero, configuration: config)
+        let webView = MathMarkdownWKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.isOpaque = false
         webView.backgroundColor = .clear
@@ -1019,6 +1034,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         private var pendingIsStreaming = false
         private var lastRenderedMarkdownPayload: String?
         private var lastRenderWasStreaming = false
+        private var pendingRevealToken = 0
 
         init(parent: MathMarkdownWebView) {
             self.parent = parent
@@ -1086,9 +1102,9 @@ private struct MathMarkdownWebView: UIViewRepresentable {
 
             guard message.name == Self.heightMessageName else { return }
             if let value = message.body as? NSNumber {
-                apply(height: CGFloat(truncating: value))
+                apply(height: CGFloat(truncating: value), in: message.webView)
             } else if let value = message.body as? Double {
-                apply(height: CGFloat(value))
+                apply(height: CGFloat(value), in: message.webView)
             }
         }
 
@@ -1131,6 +1147,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
             pendingRenderToken += 1
             let token = pendingLoadToken
             didFinishInitialLoad = false
+            pendingRevealToken += 1
             let documentURL = resourceDirectory.flatMap {
                 try? MathMarkdownDocumentFileStore.documentURL(for: html, in: $0)
             }
@@ -1190,17 +1207,54 @@ private struct MathMarkdownWebView: UIViewRepresentable {
             }
         }
 
-        private func apply(height rawHeight: CGFloat) {
+        private func apply(height rawHeight: CGFloat, in webView: WKWebView?) {
+            guard rawHeight.isFinite, rawHeight > 0 else { return }
             let clamped = max(44, rawHeight.rounded(.up))
-            DispatchQueue.main.async {
+            let loadToken = pendingLoadToken
+            DispatchQueue.main.async { [weak self, weak webView] in
+                guard let self, loadToken == self.pendingLoadToken else { return }
                 var transaction = Transaction()
                 transaction.animation = nil
                 withTransaction(transaction) {
                     if abs(self.parent.measuredHeight - clamped) > 1 {
                         self.parent.measuredHeight = clamped
                     }
-                    self.parent.hasRenderedContent = true
                 }
+                guard !self.parent.hasRenderedContent, let webView else { return }
+                self.pendingRevealToken += 1
+                let revealToken = self.pendingRevealToken
+                // First let SwiftUI apply the measured viewport. A DOM height
+                // message alone says nothing about WebKit's composited pixels.
+                // A snapshot waits for those pixels before we remove the text.
+                guard let webView = webView as? MathMarkdownWKWebView else { return }
+                var snapshotInFlight = false
+                webView.onViewportLayout = { [weak self, weak webView] in
+                    guard let self, let webView,
+                          revealToken == self.pendingRevealToken,
+                          loadToken == self.pendingLoadToken,
+                          !snapshotInFlight,
+                          webView.bounds.width > 0,
+                          webView.bounds.height >= clamped - 1 else { return }
+                    snapshotInFlight = true
+                    let configuration = WKSnapshotConfiguration()
+                    configuration.rect = CGRect(
+                        x: 0, y: 0, width: webView.bounds.width,
+                        height: min(webView.bounds.height, 128)
+                    )
+                    webView.takeSnapshot(with: configuration) { [weak self, weak webView] image, _ in
+                        snapshotInFlight = false
+                        guard let self, image != nil,
+                              revealToken == self.pendingRevealToken,
+                              loadToken == self.pendingLoadToken else { return }
+                        webView?.onViewportLayout = nil
+                        var transaction = Transaction()
+                        transaction.animation = nil
+                        withTransaction(transaction) {
+                            self.parent.hasRenderedContent = true
+                        }
+                    }
+                }
+                webView.setNeedsLayout()
             }
         }
     }

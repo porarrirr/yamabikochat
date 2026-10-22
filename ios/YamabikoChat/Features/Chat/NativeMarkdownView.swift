@@ -644,7 +644,7 @@ struct NativeMarkdownView: View {
                 hasRenderedBlocks: !renderedBlocks.isEmpty,
                 sourceIsEmpty: markdownText.isEmpty
             ) {
-                SelectableChatText(text: AttributedString(markdownText), style: .body)
+                NativeMarkdownMathPlaceholder(markdownText: markdownText)
             } else {
                 ForEach(NativeMarkdownRenderGroup.groups(
                     for: renderedBlocks,
@@ -777,16 +777,18 @@ enum NativeMarkdownRenderGroup: Identifiable, Equatable {
     }
 }
 
-/// Preserve the native Markdown layout while the first math document is prepared.
-/// Parsing without math guarantees that this placeholder cannot create WebViews.
+/// SwiftUI text has a usable height on the first layout pass, including while
+/// UIKit is fitting a new timeline cell. Keep it visible until WebKit has painted.
 struct NativeMarkdownMathPlaceholder: View {
     let markdownText: String
 
     var body: some View {
-        NativeMarkdownGroupedBlocksView(
-            blocks: NativeMarkdownParser.parse(markdownText, rendersMath: false),
-            isStreaming: true
-        )
+        Text((try? AttributedString(
+            markdown: markdownText,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(markdownText))
+        .font(.body)
+        .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
     }

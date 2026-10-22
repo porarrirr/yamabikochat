@@ -92,6 +92,15 @@ final class MathMarkdownViewTests: XCTestCase {
         try await assertMathRenders(AppStoreScreenshotDemoSeeder.mathRenderingFixtureText)
     }
 
+    @MainActor
+    func testMathHasTextHeightOnFirstLayoutBeforeWebKitLoads() {
+        let source = Array(repeating: "数式の準備中も本文を表示します。$x^2 + y^2 = r^2$", count: 20)
+            .joined(separator: "\n")
+        let host = UIHostingController(rootView: MathMarkdownView(markdownText: source))
+        let size = host.sizeThatFits(in: CGSize(width: 390, height: CGFloat.greatestFiniteMagnitude))
+        XCTAssertGreaterThan(size.height, 400, "The first layout must fit the text, rather than an empty 44-point WebView")
+    }
+
     private static let dollarMathListFixture = #"""
     **手法:** 半円を $x$ 軸の周りに回転させます。
 
@@ -234,12 +243,21 @@ final class MathMarkdownViewTests: XCTestCase {
         var count = 0
         var state = ""
         var outsideViewport = -1
+        var visibleWebViews = 0
         for _ in 0..<100 {
             controller.view.layoutIfNeeded()
             let views = webViews(controller.view)
             count = 0
             outsideViewport = 0
+            visibleWebViews = 0
             for webView in views {
+                var ancestor: UIView? = webView
+                var isVisible = true
+                while let view = ancestor {
+                    if view.isHidden || view.alpha < 0.99 || view.layer.opacity < 0.99 { isVisible = false }
+                    ancestor = view.superview
+                }
+                if isVisible { visibleWebViews += 1 }
                 count += (try? await webView.evaluateJavaScript("document.querySelectorAll('mjx-container svg').length")) as? Int ?? 0
                 state = String(describing: try? await webView.evaluateJavaScript("JSON.stringify({math:typeof window.MathJax, viewport:innerHeight, root:document.getElementById('yamabiko-markdown').getBoundingClientRect().toJSON(), svg:Array.from(document.querySelectorAll('mjx-container svg')).map(s=>s.getBoundingClientRect().toJSON())})")) + " frame=\(webView.frame)"
                 if count > 0 {
@@ -262,7 +280,7 @@ final class MathMarkdownViewTests: XCTestCase {
                 }
 
             }
-            if count == expectedCount, outsideViewport == 0 { break }
+            if count == expectedCount, outsideViewport == 0, visibleWebViews == views.count { break }
             try await Task.sleep(for: .milliseconds(100))
         }
         let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
@@ -273,6 +291,7 @@ final class MathMarkdownViewTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
         XCTAssertEqual(count, expectedCount, state)
+        XCTAssertEqual(visibleWebViews, webViews(controller.view).count, "Painted equations must replace the initial text")
         XCTAssertEqual(outsideViewport, 0, "All equations must fit inside the measured WebView height: \(state)")
     }
 
