@@ -77,8 +77,8 @@ assert "files" not in json.load(open(sys.argv[1]))
 PY
 "$phase" > "$root/release-reuse.log"
 [[ "$(wc -l < "$PACKAGING_LOG" | tr -d ' ')" == 16 ]]
-# A newer local SDK must not block ordinary Release device builds. Archives
-# must still run the SDK guard before touching the packaged product or cache.
+# A newer local SDK must not block device builds or local archives. App Store
+# distribution validates the finished bundle separately before export.
 mkdir -p "$PROJECT_DIR/Vendor/PythonSitePackages/iphoneos-arm64"
 cp "$packages/module.py" "$PROJECT_DIR/Vendor/PythonSitePackages/iphoneos-arm64/"
 cat > "$PROJECT_DIR/scripts/validate-active-app-store-sdk.sh" <<'FIXTURE'
@@ -93,11 +93,6 @@ export DEBUG_INFORMATION_FORMAT=dwarf
 "$phase" > "$root/device-release.log"
 [[ "$(wc -l < "$PACKAGING_LOG" | tr -d ' ')" == 18 ]]
 for configuration in Debug Release; do
-  if ACTION=install CONFIGURATION="$configuration" "$phase" > "$root/archive.log" 2>&1; then
-    echo "Archive must enforce the App Store SDK contract" >&2
-    exit 1
-  fi
-  grep -q 'Unsupported App Store build SDK' "$root/archive.log"
-  [[ "$(wc -l < "$PACKAGING_LOG" | tr -d ' ')" == 18 ]]
+  ACTION=install CONFIGURATION="$configuration" "$phase" > "$root/archive.log" 2>&1
 done
 echo "Python packaging cache integration tests passed"

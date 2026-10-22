@@ -32,6 +32,11 @@ settings participate in the cache key. Its stamp lives in Xcode's target
 temporary directory, so a clean build repackages Python. Release builds reuse
 existing framework dSYMs only when their UUIDs match the binaries.
 
+Local builds and archives do not enforce the App Store SDK ceiling. The IPA
+and TestFlight workflows check the finished app and embedded binaries with
+`scripts/validate-app-sdk-versions.sh` before packaging or export. App Store
+distribution still requires the toolchain specified in `app-store-build.env`.
+
 Xcode's `YamabikoBuildMetadata` dependency generates the app and share extension
 Info.plist inputs together before processing or embedding. Both use the same
 build timestamp; unchanged versions preserve the generated files' timestamps.

@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$EFFECTIVE_PLATFORM_NAME" == "-iphoneos" && "${ACTION:-}" == "install" ]]; then
-  # Archive builds must fail before packaging or signing when the selected
-  # toolchain would stamp an App Store-rejected SDK into bundled extensions.
-  # Xcode uses ACTION=install for archives; ordinary Release device builds
-  # use ACTION=build and may use a newer SDK for local development.
-  "$PROJECT_DIR/scripts/validate-active-app-store-sdk.sh"
-fi
+# Local archives also serve development and ad-hoc distribution. Enforce the
+# App Store SDK policy in distribution workflows before export, where
+# validate-app-sdk-versions.sh checks the app and every embedded binary.
 
 if [[ "$EFFECTIVE_PLATFORM_NAME" == "-iphoneos" ]]; then
   python_packages_slice="iphoneos-arm64"
