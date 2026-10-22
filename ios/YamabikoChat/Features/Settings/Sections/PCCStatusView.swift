@@ -61,21 +61,23 @@ struct PCCStatusView: View {
     var refreshKey: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if !status.capability.available {
-                Text(status.capability.reason == "pcc_checking" ? L10n.text("Checking Private Cloud Compute…") : PCCProviderClient.message(for: status.capability.reason ?? "pcc_unavailable"))
-                    .foregroundStyle(.secondary)
-            } else if status.limitReached {
-                Text("Private Cloud Compute: daily usage limit reached").foregroundStyle(.red)
-            } else if status.approachingLimit {
-                Text("Private Cloud Compute: nearing daily usage limit").foregroundStyle(.orange)
-            } else {
-                Text("Private Cloud Compute is available").foregroundStyle(.secondary)
+        Group {
+            if !status.capability.available || status.limitReached || status.approachingLimit || status.resetDate != nil || status.canIncreaseLimit {
+                VStack(alignment: .leading, spacing: 4) {
+                    if !status.capability.available {
+                        Text(status.capability.reason == "pcc_checking" ? L10n.text("Checking Private Cloud Compute…") : PCCProviderClient.message(for: status.capability.reason ?? "pcc_unavailable"))
+                            .foregroundStyle(.secondary)
+                    } else if status.limitReached {
+                        Text("Private Cloud Compute: daily usage limit reached").foregroundStyle(.red)
+                    } else if status.approachingLimit {
+                        Text("Private Cloud Compute: nearing daily usage limit").foregroundStyle(.orange)
+                    }
+                    if let date = status.resetDate {
+                        Text(L10n.format("Usage limit resets: %@", date.formatted(date: .abbreviated, time: .shortened)))
+                    }
+                    if status.canIncreaseLimit { Button("Show usage limit options") { status.showOptions() } }
+                }
             }
-            if let date = status.resetDate {
-                Text(L10n.format("Usage limit resets: %@", date.formatted(date: .abbreviated, time: .shortened)))
-            }
-            if status.canIncreaseLimit { Button("Show usage limit options") { status.showOptions() } }
         }
         .font(.caption)
         .task(id: refreshKey) { await status.refresh() }

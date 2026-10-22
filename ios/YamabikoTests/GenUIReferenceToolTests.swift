@@ -15,9 +15,9 @@ final class GenUIReferenceToolTests: XCTestCase {
         for hook in ["useState", "useEffect", "useMemo"] {
             XCTAssertTrue(guide.contains(hook), hook)
         }
-        XCTAssertTrue(guide.contains("4px/unit"))
-        XCTAssertTrue(guide.contains("$-props:CEL"))
-        XCTAssertTrue(guide.contains("Never invent data") || guide.contains("Never fabricate live data"))
+        XCTAssertTrue(guide.contains("4px per unit"))
+        XCTAssertTrue(guide.contains("Properties prefixed with $ evaluate CEL"))
+        XCTAssertTrue(guide.contains("Supply verified data"))
         XCTAssertFalse(guide.contains(GenUIDocument.componentGuide))
     }
 

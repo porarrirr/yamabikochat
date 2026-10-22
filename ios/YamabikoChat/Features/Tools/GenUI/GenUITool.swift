@@ -5,7 +5,7 @@ struct GenUITool: LocalToolExecutor {
     static let definition = ToolDefinition(
         name: name,
         description: """
-        Save UI. Follow the system category rules. Supply title and exactly one of ui/code/components. Correct validation errors. Do not infer chart type from IDs/titles; set chartType. Convey key facts in text.
+        Save a UI document. Follow the system category rules. Supply a title and exactly one of ui, code, or components. If validation fails, correct the reported errors before retrying. Do not infer chart type from IDs/titles; set chartType explicitly. Include key facts in the text response as well.
         """ + "\n" + usageGuide + "\nInteractive code example:\n" + interactiveDiagramExample + "\nBasic element properties:\n" + GenUIDocument.coreComponentGuide,
         parametersJSON: #"""
         {
@@ -577,10 +577,19 @@ struct GenUITool: LocalToolExecutor {
     )
     // This core is fixed. Retrieved template/alias details are appended only as tool results.
     static let usageGuide = """
-        Use basic elements directly for ordinary layouts. Templates/aliases: search genui_reference(componentName:"*",query:...), read exact name. props:{__state:verifiedData}; no backend actions. Never invent data/success.
-        code returns DIL.h(type,props,...children), __dil.jsx or DIL.render. Hooks:useState/useEffect/useMemo/useRef/useTheme/useBreakpoint. State:JSON. Math:JavaScript/Math.pow. No imports/JSX/remote scripts; AI:Pi.
-        Hooks:const [m,setM]=DIL.useState(...); value:m,onChange:setM; derive content from m. Object setState NEVER updates hooks. Document state:state:{m:...}; bind:"m"/{{m}} or state.m; onChange:{type:"setState",key:"m",value:"$value"}. External actions:gestures. Each:items/of,itemName,indexName. Scope:values. Show:when,Show.Else. $-props:CEL, e.g. "$value":"price * quantity".
-        Process:list {connector:true,marker:"none"} with separate list-item {label,description}. Comparison:grid {minChildWidth:160}. Text retains newlines; preserveWhitespace:true retains spaces. Text sizes use sm/md/lg/xl. Spacing:4px/unit; gap:2 default. Padding/margin:numbers/CSS/edge objects. Colors:tokens or {light,dark}. markdown {text}:prose/code. Chart.content:{chartType:"bar",data:[{label:"A",score:12}],xKey:"label",series:[{dataKey:"score",label:"Score"}]}; use exact data keys. Media:HTTPS. MapWidgetV2:supplied places.
+        Use basic elements directly for ordinary layouts. For templates or aliases, search genui_reference(componentName:"*",query:...), then read the exact name's contract. Supply verified data in props.__state matching that contract; template backend actions are unsupported.
+
+        Renderers: ui is a component tree; code is a JavaScript function body returning nodes with DIL.h(type, props, ...children), __dil.jsx, or DIL.render. JSX syntax, imports, and remote scripts are unavailable. Available hooks: DIL.useState/useEffect/useMemo/useRef/useTheme/useBreakpoint. Use JavaScript arithmetic and Math.min/Math.max/Math.abs/Math.round/Math.pow in code. Legacy components use their separate =expression language.
+
+        Keep state JSON serializable. In code, const [mode,setMode]=DIL.useState(initial) pairs value:mode with onChange:setMode; derive dependent content from mode. An object setState action writes document state and cannot change a hook variable. For document state, initialize state:{mode:...}, read with bind:"mode", {{mode}}, or state.mode, and write with onChange:{type:"setState",key:"mode",value:"$value"}. External actions require user gestures.
+
+        Tree helpers: Each uses items/of, itemName and indexName; Scope uses values; Show uses when and Show.Else. Properties prefixed with $ evaluate CEL, for example "$value":"price * quantity".
+
+        Processes: list {connector:true,marker:"none"} with separate list-item {label,description}. Comparisons: grid {minChildWidth:160}. Text sizes use sm/md/lg/xl. Text preserves newlines; preserveWhitespace:true also preserves spaces. Spacing is 4px per unit; default gap is 2. Padding/margin accept numbers, CSS strings, or edge objects. Colors accept theme tokens or {light,dark}. Use markdown {text} for prose or code.
+
+        Charts: set the type and match data keys explicitly. Legacy kind:"chart" defaults to a line chart; chartType:"pie" requires one series of finite nonnegative values with a positive total. Rich Chart uses props.content, for example {chartType:"bar",data:[{label:"A",score:12}],xKey:"label",series:[{dataKey:"score",label:"Score"}]} or {chartType:"pie",data:[{name:"A",value:40},{name:"B",value:60}],nameKey:"name",valueKey:"value"}.
+
+        Media requires HTTPS URLs. MapWidgetV2 displays supplied places on a native map: points and origin accept a title/name, address, or query resolved by Apple MapKit. Prefer a specific place name with city/address; coordinates are optional. Routes require show_route. A widget does not retrieve or verify live data by itself.
         """
     // Concrete examples teach visual structure and meaningful local state together.
     static let interactiveDiagramExample = #"""

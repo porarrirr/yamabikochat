@@ -5,18 +5,19 @@ final class SystemPromptComposerTests: XCTestCase {
     func testGenUIInstructionsAreIncludedOnlyWhenToolIsProvided() {
         let enabled = SystemPromptComposer.composeForAPI(nil, enablesGenUIInstructions: true)
         let disabled = SystemPromptComposer.composeForAPI(nil)
+        let runtimeGuidance = GenUITool.definition.description
         XCTAssertTrue(enabled?.contains("Use genui to supplement text answers") == true)
         XCTAssertTrue(enabled?.contains("genui_reference with componentName:\"*\"") == true)
         XCTAssertTrue(enabled?.contains("Reuse retrieved guidance from conversation history") == true)
         XCTAssertFalse(enabled?.contains("tool definition lists supported component names") == true)
         XCTAssertTrue(enabled?.contains("Inputs update locally") == true)
         XCTAssertTrue(enabled?.contains("Prefer code for interactive calculations") == true)
-        XCTAssertTrue(enabled?.contains("Math.min/Math.max/Math.abs/Math.round/Math.pow") == true)
+        XCTAssertTrue(runtimeGuidance.contains("Math.min/Math.max/Math.abs/Math.round/Math.pow"))
         XCTAssertTrue(enabled?.contains("legacy formula language applies only to components") == true)
         XCTAssertTrue(enabled?.contains("Actual capacity depends on device memory") == true)
-        XCTAssertTrue(enabled?.contains("defaults to a line chart") == true)
-        XCTAssertTrue(enabled?.contains("chartType:\"pie\"") == true)
-        XCTAssertTrue(enabled?.contains("Never call a line chart a pie chart") == true)
+        XCTAssertTrue(runtimeGuidance.contains("defaults to a line chart"))
+        XCTAssertTrue(runtimeGuidance.contains("chartType:\"pie\""))
+        XCTAssertTrue(runtimeGuidance.contains("match data keys explicitly"))
         XCTAssertFalse(disabled?.contains("Use genui to supplement text answers") == true)
     }
 
@@ -25,7 +26,6 @@ final class SystemPromptComposerTests: XCTestCase {
         for guidance in [
             "A simple definition, explanation, or worked example can be answered directly in Markdown",
             "visible without extra taps",
-            "an explanation of powers should show the meaning, base/exponent, and worked examples together",
             "Do not turn every section into an accordion",
             "Use tabs or segmented controls only for meaningful alternative views or modes",
             "Use ui or code for explanatory layouts",
@@ -78,7 +78,7 @@ final class SystemPromptComposerTests: XCTestCase {
 
     func testExplanationsDescribeVisualStructureAndMeaningfulControls() throws {
         let prompt = try XCTUnwrap(SystemPromptComposer.composeForAPI(nil, enablesGenUIInstructions: true))
-        for guidance in ["Do not concatenate numbered stages and Unicode arrows", "recompute the result", "keeping the entire flow visible", "minChildWidth:160"] {
+        for guidance in ["Do not concatenate numbered stages and Unicode arrows", "recompute the result", "Keep the entire flow visible", "minChildWidth:160"] {
             XCTAssertTrue(prompt.contains(guidance), guidance)
         }
         XCTAssertTrue(GenUITool.definition.description.contains("list-item {label,description}"))
@@ -259,7 +259,7 @@ final class SystemPromptComposerTests: XCTestCase {
         )
 
         XCTAssertTrue(composed?.contains("Use ask_user_question only when") == true)
-        XCTAssertTrue(composed?.contains("stable id") == true)
+        XCTAssertTrue(AskUserQuestionTool.definition.description.contains("stable id"))
         XCTAssertTrue(composed?.contains("only when there is a justified recommendation") == true)
         XCTAssertTrue(composed?.contains("If the user cancels") == true)
         XCTAssertTrue(composed?.hasSuffix("Today's date: 2026/06/27") == true)

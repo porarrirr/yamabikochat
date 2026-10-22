@@ -6,11 +6,11 @@ struct PythonExecuteTool: LocalToolExecutor {
     let definition = ToolDefinition(
         name: Self.name,
         description: """
-        Execute Python 3.14 locally in a stateful namespace scoped to the current provider execution. The current working directory is the same workspace exposed by str_replace_editor as /workspace. A project execution starts with a fresh workspace containing copies of the files added by the user; those files are not injected into the message context. Both relative paths such as src/main.js and literal virtual paths such as /workspace/src/main.js address that workspace.
+        Execute Python 3.14 locally in a stateful namespace scoped to the current provider execution. Variables persist between calls in that execution; reset=true clears the namespace while preserving workspace files. The current working directory is the same workspace exposed by str_replace_editor as /workspace. A project execution starts with a fresh workspace containing copies of the files added by the user; those files are not injected into the message context. Both relative paths such as src/main.js and literal virtual paths such as /workspace/src/main.js address that workspace.
 
         NumPy, Matplotlib, and Pillow are bundled for local data analysis and image generation. Matplotlib includes Noto fonts for Japanese, Simplified Chinese, Hindi, Arabic, Bengali, Urdu, Latin, and Cyrillic text; use native-language labels directly without probing system fonts. Japanese is the default CJK style. For localized Han or Urdu forms, set `fontfamily="Noto Sans SC"` or `fontfamily="Noto Nastaliq Urdu"` on that text.
 
-        Files created or updated in the workspace or ./outputs/ are automatically returned to the user as visible artifacts; open Matplotlib figures are automatically saved as PNG. Network, subprocess, and shell access are disabled. Files attached to the chat are copied into the current workspace.
+        Files created or updated in the workspace or ./outputs/ are automatically returned to the user as visible artifacts; open Matplotlib figures are automatically saved as PNG. Network, subprocess, and shell access are disabled. Inspect returned status, stdout/stderr, and artifacts before reporting results; a failed execution may have produced only some of the intended outputs.
         """,
         parametersJSON: #"{"type":"object","properties":{"code":{"type":"string","description":"Python source code to execute"},"reset":{"type":"boolean","description":"Reset the current execution's Python namespace before running code; workspace files are preserved"}},"required":["code"],"additionalProperties":false}"#
     )

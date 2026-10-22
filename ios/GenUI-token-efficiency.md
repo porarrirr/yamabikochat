@@ -72,6 +72,12 @@ estimates before adding the system prompt, reference tool, other tools or histor
 Provider tokenizer and minimum-length changes still require production measurement;
 byte counts and deterministic prefixes cannot prove an actual cache-hit rate.
 
+Definition size is a measurement, not a fixed acceptance limit. There is no
+GenUI-specific 22,000-byte or 212-character contract. Tests protect the separation
+of core guidance from the on-demand catalog directly, rather than imposing an
+absolute byte ceiling or a ratio to the catalog size. Necessary instructions may
+grow independently of the catalog; byte counts do not represent model token limits.
+
 Unit tests assert identical serialized tool definitions before and after guide,
 search, primitive and template retrieval, across scoped registries and executor
 ordering. An additional offline check passed the evaluated definitions through

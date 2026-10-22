@@ -322,7 +322,7 @@ final class WebSearchToolTests: XCTestCase {
         let description = WebSearchTool().definition.description
         XCTAssertTrue(description.contains("Stable explanations and transformations of user-supplied content usually do not need search"))
         XCTAssertTrue(description.contains("Reuse passages already returned"))
-        XCTAssertTrue(description.contains("After a transient error, retry only when there is a reasonable prospect of success"))
+        XCTAssertTrue(SystemPromptComposer.agenticWebSearchInstructions.contains("After a transient error, retry only when there is a reasonable prospect of success"))
         XCTAssertFalse(description.contains("externally verifiable information"))
         XCTAssertFalse(description.contains("After two approaches"))
     }

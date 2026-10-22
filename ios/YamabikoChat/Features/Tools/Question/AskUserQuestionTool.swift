@@ -134,7 +134,9 @@ struct AskUserQuestionTool: LocalToolExecutor {
 
     static let definition = ToolDefinition(
         name: name,
-        description: "Ask a concise question only when missing information materially affects the answer or an action requires the user's authorization. Use available context first; state a reasonable assumption for minor ambiguities. Send one or more questions with unique non-empty ids and non-empty question text. Options are optional; omit them for a free-text question. Use the user's language. Cancellation is not an answer or authorization.",
+        description: """
+        Ask the user for missing information or authorization when needed to continue. Send related questions together with unique non-empty ids (stable id values let you match answers to questions) and non-empty question text. Use the user's language for questions and options. Omit options for free text; set multi_select=true only when multiple choices may be selected. Inspect the returned answer or cancellation before continuing dependent work. Cancellation is not an answer or authorization.
+        """,
         parametersJSON: #"""
         {
           "type": "object",

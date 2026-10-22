@@ -5,8 +5,14 @@ struct GenUIReferenceTool: LocalToolExecutor {
     static let name = "genui_reference"
     static let definition = ToolDefinition(
         name: name,
-        description: "Search widget names for required GenUI categories; otherwise read documentation on demand. Reuse exact component contracts from history. Search finds name substrings, not live data; inspect the selected contract before rendering with genui. componentName:@guide returns runtime/binding/layout guidance. componentName:* searches all supported names using optional case-insensitive query, offset and maxResults (default 32, maximum 64). A specific name returns its properties; original templates also return actual recovered source and observed state fields. Populate __state with verified data matching that source; backend actions are unsupported. sourceOffset and maxCharacters page template sources. This read-only tool does not change the advertised tools.",
-        parametersJSON: #"{"type":"object","properties":{"componentName":{"type":"string","description":"@guide, *, or an exact supported component name"},"query":{"type":"string","description":"Substring of a component name; only for *"},"offset":{"type":"integer","minimum":0},"maxResults":{"type":"integer","minimum":1,"maximum":64},"sourceOffset":{"type":"integer","minimum":0},"maxCharacters":{"type":"integer","minimum":1,"maximum":65536}},"required":["componentName"],"additionalProperties":false}"#
+        description: """
+        Search widget names for required GenUI categories or retrieve component documentation on demand. This tool returns contracts, not live data, and does not render a UI. Reuse exact contracts already in history.
+
+        componentName:"*" searches supported names by case-insensitive substring query, not by semantic meaning. Results use offset and maxResults (default 32, maximum 64); pass nextOffset as offset for the next page. An empty result means no name matched; try another name term if needed.
+
+        An exact componentName returns accepted properties. Original templates also return recovered source and observed state fields: inspect these before rendering with genui, and supply verified data in props.__state matching the source. Backend actions are unsupported. To continue a template source, pass nextOffset as sourceOffset with the same componentName; maxCharacters controls page length. componentName:"@guide" returns runtime, state-binding, and layout guidance.
+        """,
+        parametersJSON: #"{"type":"object","properties":{"componentName":{"type":"string","description":"@guide, *, or an exact supported component name"},"query":{"type":"string","description":"Substring of a component name; only for *"},"offset":{"type":"integer","minimum":0,"description":"Name-search offset for componentName:*; continue with the returned nextOffset."},"maxResults":{"type":"integer","minimum":1,"maximum":64},"sourceOffset":{"type":"integer","minimum":0,"description":"Character offset for an exact template source; continue with the returned nextOffset."},"maxCharacters":{"type":"integer","minimum":1,"maximum":65536}},"required":["componentName"],"additionalProperties":false}"#
     )
     var definition: ToolDefinition { Self.definition }
 
