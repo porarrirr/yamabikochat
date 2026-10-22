@@ -53,7 +53,7 @@ struct ChatModelPickerSheet: View {
                     }
                 }
             }
-            .searchable(text: $searchQuery, prompt: L10n.text("モデルまたはProviderを検索"))
+            .pinnedListSearch(text: $searchQuery, prompt: L10n.text("モデルまたはProviderを検索"))
             .navigationTitle(L10n.text("モデルを選択"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -106,7 +106,7 @@ private struct OpenRouterModelListView: View {
         }
         .navigationTitle(L10n.text(titleKey))
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $searchQuery, prompt: L10n.text("モデル検索"))
+        .pinnedListSearch(text: $searchQuery, prompt: L10n.text("モデル検索"))
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button(L10n.text("閉じる")) {

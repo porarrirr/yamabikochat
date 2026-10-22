@@ -116,8 +116,14 @@ struct CatalogProviderListView: View {
                 }
             }
         }
+        .overlay {
+            if filteredBuiltIns.isEmpty && filteredCatalog.isEmpty {
+                ContentUnavailableView.search(text: query)
+            }
+        }
         .navigationTitle(title)
-        .searchable(text: $query, prompt: "プロバイダーを検索")
+        .navigationBarTitleDisplayMode(.inline)
+        .pinnedListSearch(text: $query, prompt: L10n.text("プロバイダーを検索"))
     }
 
     @ViewBuilder
@@ -247,7 +253,8 @@ private struct CatalogModelListView: View {
             if filtered.isEmpty { ContentUnavailableView.search(text: query) }
         }
         .navigationTitle(provider.name)
-        .searchable(text: $query, prompt: "モデルを検索")
+        .navigationBarTitleDisplayMode(.inline)
+        .pinnedListSearch(text: $query, prompt: L10n.text("モデルを検索"))
         .task(id: "\(provider.id):\(provider.models.count)") {
             do {
                 let configs = provider.models.map { model in

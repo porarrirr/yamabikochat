@@ -92,6 +92,7 @@
 		339387CAE62CED1415E19F59 /* cutils.c in Sources */ = {isa = PBXBuildFile; fileRef = D34CA0467E3C47F7773271C2 /* cutils.c */; };
 		36B850189A87463DEF0229FE /* GenUIDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 470C9C8A0CC044FFF5DA8210 /* GenUIDocument.swift */; };
 		3841881EDF31F3A3A8ABE6CD /* AutoConversationTriggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F78E25D8F74B8F031620DD9 /* AutoConversationTriggerTests.swift */; };
+		38A9E6E51748DE853981B7CA /* PinnedListSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB67AF4FCD909DB4AE47BF6B /* PinnedListSearch.swift */; };
 		3AB10AF6FF6E194E647A3C9A /* ConversationExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C85B736400C8EA1CD72350C7 /* ConversationExportTests.swift */; };
 		3AC1C812E003A00A8DA8CA60 /* StrReplaceEditorTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DADE100421C82B3DE8AC73D /* StrReplaceEditorTool.swift */; };
 		3B85342C06EEE33A7A4FE9F7 /* SharePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E5EC327A302F432B8A4083 /* SharePayload.swift */; };
@@ -755,6 +756,7 @@
 		D9225E9EF05048004FD622C2 /* GenUIReferenceCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenUIReferenceCatalog.swift; sourceTree = "<group>"; };
 		D9BBFB9640224552D9061787 /* lottie-light.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "lottie-light.js"; sourceTree = "<group>"; };
 		DAFDD85248048C3957F322E9 /* ClinePassModelCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinePassModelCatalogTests.swift; sourceTree = "<group>"; };
+		DB67AF4FCD909DB4AE47BF6B /* PinnedListSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedListSearch.swift; sourceTree = "<group>"; };
 		DB870EF06AABC09F6C08A140 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		DEC38E13D3AF3B3D3F73C082 /* GenUICELBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GenUICELBridge.h; sourceTree = "<group>"; };
 		DEE1F7C1D36E90F3AC5C8C74 /* ChatScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatScreen.swift; sourceTree = "<group>"; };
@@ -1007,6 +1009,7 @@
 				7AFADAD85FDF09DED54072D8 /* GeminiModelUtils.swift */,
 				1B03D691C10949EDBFCACB34 /* L10n.swift */,
 				C60224F6EBCC6491A82E063D /* OpenCodeGoModelCatalog.swift */,
+				DB67AF4FCD909DB4AE47BF6B /* PinnedListSearch.swift */,
 				BB55024341507549B0165D92 /* ProviderDisplay.swift */,
 				8B6E2D7336CBFE76C5EA5B81 /* ScrollablePlainTextView.swift */,
 				C0E5EC327A302F432B8A4083 /* SharePayload.swift */,
@@ -2106,6 +2109,7 @@
 				AFC8574367F3592A757FFDD0 /* PCCStatusView.swift in Sources */,
 				AA8DCC77B7AF53AE101C5313 /* PiAgentRuntime.swift in Sources */,
 				10FF1A71E46475590469FFC7 /* PiNodeRunner.mm in Sources */,
+				38A9E6E51748DE853981B7CA /* PinnedListSearch.swift in Sources */,
 				333522FBE741F1A6684D3A53 /* ProjectDetailScreen.swift in Sources */,
 				F3D33D7954F9EF5403FE3B31 /* ProjectInstructionsSheet.swift in Sources */,
 				A1BE8E825189F03FFCE98E7C /* ProjectListScreen.swift in Sources */,
