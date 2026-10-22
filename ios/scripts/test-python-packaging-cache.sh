@@ -25,7 +25,7 @@ cat > "$PROJECT_DIR/Vendor/Python.xcframework/build/utils.sh" <<'FIXTURE'
 install_python() {
   echo packaged >> "$PACKAGING_LOG"
   mkdir -p "$CODESIGNING_FOLDER_PATH/python/lib" "$CODESIGNING_FOLDER_PATH/Frameworks/test.framework"
-  cp "$PROJECT_DIR/Vendor/PythonSitePackages/iphonesimulator-arm64/module.py" "$CODESIGNING_FOLDER_PATH/python/lib/module.py"
+  cp "$PROJECT_DIR/Vendor/PythonSitePackages/$python_packages_slice/module.py" "$CODESIGNING_FOLDER_PATH/python/lib/module.py"
   printf 'binary\n' > "$CODESIGNING_FOLDER_PATH/Frameworks/test.framework/test"
   printf 'origin\n' > "$CODESIGNING_FOLDER_PATH/Frameworks/test.framework/test.origin"
 }
@@ -77,4 +77,27 @@ assert "files" not in json.load(open(sys.argv[1]))
 PY
 "$phase" > "$root/release-reuse.log"
 [[ "$(wc -l < "$PACKAGING_LOG" | tr -d ' ')" == 16 ]]
+# A newer local SDK must not block ordinary Release device builds. Archives
+# must still run the SDK guard before touching the packaged product or cache.
+mkdir -p "$PROJECT_DIR/Vendor/PythonSitePackages/iphoneos-arm64"
+cp "$packages/module.py" "$PROJECT_DIR/Vendor/PythonSitePackages/iphoneos-arm64/"
+cat > "$PROJECT_DIR/scripts/validate-active-app-store-sdk.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+echo 'Unsupported App Store build SDK' >&2
+exit 1
+FIXTURE
+chmod +x "$PROJECT_DIR/scripts/validate-active-app-store-sdk.sh"
+export EFFECTIVE_PLATFORM_NAME=-iphoneos
+export ACTION=build
+export DEBUG_INFORMATION_FORMAT=dwarf
+"$phase" > "$root/device-release.log"
+[[ "$(wc -l < "$PACKAGING_LOG" | tr -d ' ')" == 18 ]]
+for configuration in Debug Release; do
+  if ACTION=install CONFIGURATION="$configuration" "$phase" > "$root/archive.log" 2>&1; then
+    echo "Archive must enforce the App Store SDK contract" >&2
+    exit 1
+  fi
+  grep -q 'Unsupported App Store build SDK' "$root/archive.log"
+  [[ "$(wc -l < "$PACKAGING_LOG" | tr -d ' ')" == 18 ]]
+done
 echo "Python packaging cache integration tests passed"

@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$EFFECTIVE_PLATFORM_NAME" == "-iphoneos" && "$CONFIGURATION" == "Release" ]]; then
+if [[ "$EFFECTIVE_PLATFORM_NAME" == "-iphoneos" && "${ACTION:-}" == "install" ]]; then
   # Archive builds must fail before packaging or signing when the selected
   # toolchain would stamp an App Store-rejected SDK into bundled extensions.
+  # Xcode uses ACTION=install for archives; ordinary Release device builds
+  # use ACTION=build and may use a newer SDK for local development.
   "$PROJECT_DIR/scripts/validate-active-app-store-sdk.sh"
 fi
 
