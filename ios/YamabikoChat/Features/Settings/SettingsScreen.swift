@@ -150,39 +150,11 @@ struct SettingsDetailScreen: View {
     @State private var selectedAgentSkill: InstalledAgentSkill?
 
     var body: some View {
-        AMOLEDForm {
-            if let onboardingStep {
-                onboardingContent(onboardingStep)
-                if let onOnboardingContinue {
-                    Section {
-                        Button(action: onOnboardingContinue) {
-                            HStack(spacing: 10) {
-                                if isOnboardingFinishing { ProgressView() }
-                                Text(onboardingStep == .model ? "チャットを開く" : "次へ")
-                                    .font(.headline)
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 28)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.roundedRectangle(radius: 14))
-                        .controlSize(.large)
-                        .disabled(isOnboardingFinishing)
-                        .accessibilityIdentifier("onboarding-continue")
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                    }
-                }
+        Group {
+            if onboardingStep == .model {
+                onboardingModelSelection
             } else {
-                switch category {
-                case .connection:
-                    connectionCategoryContent
-                case .conversation:
-                    conversationCategoryContent
-                case .display:
-                    displayCategoryContent
-                case .management:
-                    managementCategoryContent
-                }
+                settingsForm
             }
         }
         .onDisappear { viewModel.flushPendingSettingsSave() }
@@ -222,6 +194,105 @@ struct SettingsDetailScreen: View {
         }
         .sheet(item: $selectedAgentSkill) { skill in
             AgentSkillDetailScreen(viewModel: viewModel, skillName: skill.manifest.name)
+        }
+    }
+
+    private var settingsForm: some View {
+        AMOLEDForm {
+            if let onboardingStep {
+                onboardingContent(onboardingStep)
+                if let onOnboardingContinue {
+                    Section {
+                        Button(action: onOnboardingContinue) {
+                            HStack(spacing: 10) {
+                                if isOnboardingFinishing { ProgressView() }
+                                Text(onboardingStep == .model ? "チャットを開く" : "次へ")
+                                    .font(.headline)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 28)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.roundedRectangle(radius: 14))
+                        .controlSize(.large)
+                        .disabled(isOnboardingFinishing)
+                        .accessibilityIdentifier("onboarding-continue")
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    }
+                }
+            } else {
+                switch category {
+                case .connection:
+                    connectionCategoryContent
+                case .conversation:
+                    conversationCategoryContent
+                case .display:
+                    displayCategoryContent
+                case .management:
+                    managementCategoryContent
+                }
+            }
+        }
+    }
+
+    private var onboardingModelBinding: Binding<String> {
+        Binding(
+            get: { viewModel.settings.defaultModel },
+            set: { viewModel.setDefaultModel($0) }
+        )
+    }
+
+    private var onboardingModelSelection: some View {
+        Group {
+            if currentProviderKey == "OPENROUTER" {
+                OpenRouterModelListView(
+                    titleKey: "モデルを選ぶ",
+                    model: onboardingModelBinding,
+                    models: viewModel.openRouterModels,
+                    isLoading: viewModel.openRouterModelsLoading,
+                    onRefresh: { Task { await viewModel.refreshOpenRouterModels(force: false) } },
+                    dismissOnSelection: false,
+                    error: viewModel.openRouterModelsError
+                )
+            } else if let provider = currentCatalogModelProvider,
+                      currentProviderKey != "OPENAI_COMPAT", currentProviderKey != "SARASHINA" {
+                CatalogModelListView(
+                    modelID: onboardingModelBinding,
+                    provider: provider,
+                    dismissOnSelection: false,
+                    title: "モデルを選ぶ"
+                )
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("更新") { viewModel.refreshModelsDevCatalog() }
+                    }
+                }
+            } else {
+                AMOLEDForm {
+                    Section("モデル") {
+                        providerModelEditor
+                            .pickerStyle(.inline)
+                    }
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let onOnboardingContinue {
+                Button(action: onOnboardingContinue) {
+                    HStack(spacing: 10) {
+                        if isOnboardingFinishing { ProgressView() }
+                        Text("チャットを開く").font(.headline)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 28)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: 14))
+                .controlSize(.large)
+                .disabled(isOnboardingFinishing || viewModel.settings.defaultModel.trimmedNonEmpty == nil)
+                .accessibilityIdentifier("onboarding-continue")
+                .padding(20)
+                .background(Color(uiColor: .amoledSystemGroupedBackground))
+            }
         }
     }
 

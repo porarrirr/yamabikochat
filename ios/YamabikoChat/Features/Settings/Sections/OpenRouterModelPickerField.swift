@@ -55,7 +55,7 @@ struct OpenRouterModelPickerField: View {
     }
 }
 
-private struct OpenRouterModelListView: View {
+struct OpenRouterModelListView: View {
     @Environment(\.dismiss) private var dismiss
 
     let titleKey: String
@@ -63,6 +63,8 @@ private struct OpenRouterModelListView: View {
     let models: [SimpleModel]
     let isLoading: Bool
     let onRefresh: () -> Void
+    var dismissOnSelection = true
+    var error: String? = nil
 
     @State private var searchQuery = ""
 
@@ -81,7 +83,7 @@ private struct OpenRouterModelListView: View {
                 List(filteredModels) { item in
                     Button {
                         model = item.id
-                        dismiss()
+                        if dismissOnSelection { dismiss() }
                     } label: {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 4) {
@@ -107,10 +109,23 @@ private struct OpenRouterModelListView: View {
         .navigationTitle(L10n.text(titleKey))
         .navigationBarTitleDisplayMode(.inline)
         .pinnedListSearch(text: $searchQuery, prompt: L10n.text("モデル検索"))
+        .safeAreaInset(edge: .bottom) {
+            if isLoading {
+                ProgressView(L10n.text("読み込み中..."))
+                    .padding(8)
+            } else if let error, !error.isEmpty {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(8)
+            }
+        }
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(L10n.text("閉じる")) {
-                    dismiss()
+            if dismissOnSelection {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(L10n.text("閉じる")) {
+                        dismiss()
+                    }
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {

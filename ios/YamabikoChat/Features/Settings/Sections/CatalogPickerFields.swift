@@ -208,10 +208,12 @@ struct ModelsDevReasoningEffortPicker: View {
     }
 }
 
-private struct CatalogModelListView: View {
+struct CatalogModelListView: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var modelID: String
     let provider: CatalogProvider
+    var dismissOnSelection = true
+    var title: String? = nil
     @State private var query = ""
     @State private var resolutions: [String: PiModelResolution] = [:]
     @State private var resolutionError: String?
@@ -223,7 +225,7 @@ private struct CatalogModelListView: View {
             let resolution = resolutions[model.id]
             Button {
                 modelID = model.id
-                dismiss()
+                if dismissOnSelection { dismiss() }
             } label: {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 3) {
@@ -252,7 +254,7 @@ private struct CatalogModelListView: View {
         .overlay {
             if filtered.isEmpty { ContentUnavailableView.search(text: query) }
         }
-        .navigationTitle(provider.name)
+        .navigationTitle(title ?? provider.name)
         .navigationBarTitleDisplayMode(.inline)
         .pinnedListSearch(text: $query, prompt: L10n.text("モデルを検索"))
         .task(id: "\(provider.id):\(provider.models.count)") {
