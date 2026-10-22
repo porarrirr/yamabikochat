@@ -92,7 +92,18 @@ final class ChatTimelineRowStore: ObservableObject, Identifiable {
             let markdownSource = ExtractedFenceRemover.remove(
                 from: responseText, ranges: artifacts.map { ($0.startIndex, $0.endIndex) }
             )
-            renderedMarkdownBlocks = markdownParser.streamingBlocks(for: markdownSource)
+            if snapshot.isFinal {
+                // Publish the completed representation with the final snapshot.
+                // A recycled/cancelled SwiftUI task must not leave the row using
+                // the streaming parser, which intentionally renders TeX literally.
+                renderedMarkdownBlocks = NativeMarkdownParser.parse(markdownSource)
+                markdownPresentationCache.insert(renderedMarkdownBlocks, for: markdownSource, rendersMath: true)
+                // A later regeneration reuses this row. Do not let the streaming
+                // parser resume from prefix state that predates the final parse.
+                markdownParser.reset()
+            } else {
+                renderedMarkdownBlocks = markdownParser.streamingBlocks(for: markdownSource)
+            }
             renderedResponseText = responseText
         }
         streamingPresentation = StreamingPresentation(snapshot: snapshot, markdownBlocks: renderedMarkdownBlocks)

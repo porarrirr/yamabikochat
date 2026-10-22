@@ -54,20 +54,11 @@ enum MathMarkdownWebResourceLoader {
         let cacheDirectory = cacheRoot.appendingPathComponent(cacheDirectoryName, isDirectory: true)
         do {
             try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-            let resourceNames = try fileManager.contentsOfDirectory(atPath: sourceDirectory.path)
-            for resourceName in resourceNames {
-                let sourceURL = sourceDirectory.appendingPathComponent(resourceName)
-                var isDirectory: ObjCBool = false
-                guard fileManager.fileExists(atPath: sourceURL.path, isDirectory: &isDirectory), !isDirectory.boolValue else {
-                    continue
-                }
-
-                let destinationURL = cacheDirectory.appendingPathComponent(resourceName)
-                if fileManager.fileExists(atPath: destinationURL.path) {
-                    continue
-                }
-                try fileManager.copyItem(at: sourceURL, to: destinationURL)
-            }
+            try synchronizeResources(
+                from: sourceDirectory,
+                to: cacheDirectory,
+                fileManager: fileManager
+            )
             return cacheDirectory
         } catch {
             DiagnosticsLogger.log(
@@ -77,5 +68,55 @@ enum MathMarkdownWebResourceLoader {
             )
             return sourceDirectory
         }
+    }
+
+    /// Caches can survive an app update and can be purged at any time. Keep the
+    /// copy identical to the bundle instead of trusting an existing filename.
+    static func synchronizeResources(
+        from sourceDirectory: URL,
+        to destinationDirectory: URL,
+        fileManager: FileManager = .default
+    ) throws {
+        let resourceNames = try fileManager.contentsOfDirectory(atPath: sourceDirectory.path)
+        for resourceName in resourceNames {
+            let sourceURL = sourceDirectory.appendingPathComponent(resourceName)
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: sourceURL.path, isDirectory: &isDirectory),
+                  !isDirectory.boolValue
+            else { continue }
+
+            let destinationURL = destinationDirectory.appendingPathComponent(resourceName)
+            guard needsCopy(
+                from: sourceURL,
+                to: destinationURL,
+                fileManager: fileManager
+            ) else { continue }
+
+            let temporaryURL = destinationDirectory
+                .appendingPathComponent(".\(resourceName).tmp", isDirectory: false)
+            try? fileManager.removeItem(at: temporaryURL)
+            try fileManager.copyItem(at: sourceURL, to: temporaryURL)
+            if fileManager.fileExists(atPath: destinationURL.path) {
+                try? fileManager.removeItem(at: destinationURL)
+            }
+            try fileManager.moveItem(at: temporaryURL, to: destinationURL)
+        }
+    }
+
+    private static func needsCopy(
+        from sourceURL: URL,
+        to destinationURL: URL,
+        fileManager: FileManager
+    ) -> Bool {
+        guard fileManager.fileExists(atPath: destinationURL.path) else { return true }
+        guard let sourceAttributes = try? fileManager.attributesOfItem(atPath: sourceURL.path),
+              let destinationAttributes = try? fileManager.attributesOfItem(atPath: destinationURL.path),
+              let sourceSize = sourceAttributes[.size] as? NSNumber,
+              let destinationSize = destinationAttributes[.size] as? NSNumber
+        else { return true }
+        guard sourceSize == destinationSize else { return true }
+        let sourceDate = sourceAttributes[.modificationDate] as? Date
+        let destinationDate = destinationAttributes[.modificationDate] as? Date
+        return sourceDate != destinationDate
     }
 }

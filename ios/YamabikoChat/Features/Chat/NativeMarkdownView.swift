@@ -633,11 +633,14 @@ struct NativeMarkdownView: View {
         )
         // State can outlive a content replacement. Never draw another source's
         // blocks while the new source is waiting for its asynchronous parse.
-        let currentBlocks = parsedRequest == parseRequest ? blocks : []
+        // Completing a stream changes the request mode, not its source. Keep
+        // that source's existing layout until the final parse is ready.
+        let hasParsedSource = parsedRequest?.source == markdownText
+        let currentBlocks = hasParsedSource ? blocks : []
         let renderedBlocks = hasCompletedFinalParse ? blocks : (cachedBlocks ?? preparsedBlocks ?? currentBlocks)
         VStack(alignment: .leading, spacing: 12) {
             if NativeMarkdownPresentationPolicy.showsInitialRawText(
-                hasParsedRequest: cachedBlocks != nil || preparsedBlocks != nil || parsedRequest == parseRequest,
+                hasParsedRequest: cachedBlocks != nil || preparsedBlocks != nil || hasParsedSource,
                 hasRenderedBlocks: !renderedBlocks.isEmpty,
                 sourceIsEmpty: markdownText.isEmpty
             ) {
@@ -771,6 +774,21 @@ enum NativeMarkdownRenderGroup: Identifiable, Equatable {
         }
         flushSelectableBlocks()
         return result
+    }
+}
+
+/// Preserve the native Markdown layout while the first math document is prepared.
+/// Parsing without math guarantees that this placeholder cannot create WebViews.
+struct NativeMarkdownMathPlaceholder: View {
+    let markdownText: String
+
+    var body: some View {
+        NativeMarkdownGroupedBlocksView(
+            blocks: NativeMarkdownParser.parse(markdownText, rendersMath: false),
+            isStreaming: true
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

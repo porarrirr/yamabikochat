@@ -2,6 +2,7 @@ import SwiftUI
 import WebKit
 import UIKit
 import Foundation
+import CryptoKit
 
 enum MathMarkdownNormalizer {
     static func normalizeEscapedMathIfNeeded(_ markdown: String) -> String {
@@ -160,6 +161,49 @@ enum MathMarkdownHTMLBuilder {
         """
         let mathSetupScript = """
           <script>
+            window.__yamabikoMathJaxLoadFailed = \(mathJaxScriptTag.isEmpty ? "true" : "false");
+            // A single document owns one startup. Every render waits for this
+            // promise instead of guessing from script-load timing.
+            window.__yamabikoMathJaxReady = new Promise(function(resolve, reject) {
+              var settled = false;
+              function complete() {
+                if (settled) return;
+                settled = true;
+                resolve();
+              }
+              function fail(reason) {
+                if (settled) return;
+                settled = true;
+                reject(reason);
+              }
+              window.__yamabikoMathJaxReadyResolve = complete;
+              window.__yamabikoMathJaxReadyReject = fail;
+              setTimeout(function() { fail(new Error('MathJax startup timed out')); }, 8000);
+              var deadline = Date.now() + 8000;
+              function check() {
+                if (settled) return;
+                var math = window.MathJax;
+                if (math && math.startup && math.startup.promise &&
+                    typeof math.startup.promise.then === 'function') {
+                  math.startup.promise.then(complete, fail);
+                  return;
+                }
+                if (math && typeof math.typesetPromise === 'function') {
+                  complete();
+                  return;
+                }
+                if (window.__yamabikoMathJaxLoadFailed) {
+                  fail(new Error('MathJax failed to load'));
+                  return;
+                }
+                if (Date.now() > deadline) {
+                  fail(new Error('MathJax did not start'));
+                  return;
+                }
+                setTimeout(check, 10);
+              }
+              check();
+            });
             window.MathJax = {
               tex: {
                 inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
@@ -168,12 +212,17 @@ enum MathMarkdownHTMLBuilder {
                 processEnvironments: true,
                 packages: {'[-]': ['require']}
               },
+              startup: { typeset: false },
               svg: { fontCache: 'global' },
               options: { enableMenu: false }
             };
             window.__yamabikoMathJaxOnError = function() {
+              window.__yamabikoMathJaxLoadFailed = true;
               if (window.console && window.console.warn) {
                 window.console.warn('MathJax script failed to load.');
+              }
+              if (window.__yamabikoMathJaxReadyReject) {
+                window.__yamabikoMathJaxReadyReject(new Error('MathJax failed to load'));
               }
               if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();
             };
@@ -181,11 +230,15 @@ enum MathMarkdownHTMLBuilder {
           \(mathJaxScriptTag)
         """
         let mathTypesetScript = """
-              if (window.MathJax && window.MathJax.typesetPromise) {
-                window.MathJax.typesetPromise([root]).then(finish).catch(finish);
-              } else {
-                finish();
-              }
+              // Waiting for MathJax's own startup promise avoids treating raw
+              // TeX as a finished render while the engine is still loading.
+              return window.__yamabikoMathJaxReady.then(function() {
+                var math = window.MathJax;
+                if (!math || typeof math.typesetPromise !== 'function') {
+                  throw new Error('MathJax is unavailable');
+                }
+                return math.typesetPromise([root]);
+              }).then(finish);
         """
 
         return """
@@ -209,13 +262,13 @@ enum MathMarkdownHTMLBuilder {
               word-break: break-word;
               -webkit-font-smoothing: antialiased;
             }
-            #yamabiko-markdown {
+            .yamabiko-markdown {
               /* Include display-math margins in the height reported to SwiftUI. */
               display: flow-root;
               max-width: 100%;
             }
-            #yamabiko-markdown > :first-child { margin-top: 0; }
-            #yamabiko-markdown > :last-child { margin-bottom: 0; }
+            .yamabiko-markdown > :first-child { margin-top: 0; }
+            .yamabiko-markdown > :last-child { margin-bottom: 0; }
             strong { font-weight: 650; }
             em { font-style: italic; }
             mjx-container {
@@ -357,7 +410,7 @@ enum MathMarkdownHTMLBuilder {
           </style>
         </head>
         <body>
-          <div id=\"yamabiko-markdown\"></div>
+          <div id=\"yamabiko-markdown\" class=\"yamabiko-markdown\"></div>
           <script>
             (function() {
               var source = \(markdownPayload);
@@ -366,6 +419,8 @@ enum MathMarkdownHTMLBuilder {
               var copyLabel = window.__yamabikoCopyButtonLabel || 'Copy';
               var copiedLabel = window.__yamabikoCopiedButtonLabel || 'Copied';
               var renderGeneration = 0;
+              var renderQueue = Promise.resolve();
+              window.__yamabikoContentReady = false;
               function setCopyButtonLabel(button, label) {
                 if (!button) return;
                 button.textContent = label;
@@ -510,26 +565,56 @@ enum MathMarkdownHTMLBuilder {
                 renderGeneration += 1;
                 var generation = renderGeneration;
                 source = String(nextSource || '');
-                if (shouldTypeset && window.MathJax && window.MathJax.typesetClear) {
-                  try {
-                    window.MathJax.typesetClear([root]);
-                  } catch (_) {}
-                }
-                if (typeof window.yamabikoRenderMarkdown === 'function') {
-                  root.innerHTML = window.yamabikoRenderMarkdown(source);
-                } else {
-                  root.textContent = source || '';
-                }
-                function finishRender() {
+                var renderSource = source;
+                // Keep the committed DOM visible while MathJax works. Serialize
+                // jobs because MathJax shares document state between renders.
+                renderQueue = renderQueue.then(function() {
                   if (generation !== renderGeneration) return;
-                  enableHorizontalScrollContainers();
-                  if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();
-                }
-                if (shouldTypeset) {
-                  typesetRenderedContent(root, finishRender);
-                } else {
-                  finishRender();
-                }
+                  var staging = document.createElement('div');
+                  staging.className = 'yamabiko-markdown';
+                  staging.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;top:0;left:0;';
+                  staging.style.width = root.getBoundingClientRect().width + 'px';
+                  if (typeof window.yamabikoRenderMarkdown === 'function') {
+                    staging.innerHTML = window.yamabikoRenderMarkdown(renderSource);
+                  } else {
+                    staging.textContent = renderSource;
+                  }
+                  document.body.appendChild(staging);
+                  return new Promise(function(resolve, reject) {
+                    function finishRender() {
+                      if (generation === renderGeneration) {
+                        if (window.MathJax && window.MathJax.typesetClear) {
+                          try { window.MathJax.typesetClear([root]); } catch (_) {}
+                        }
+                        root.replaceChildren.apply(root, Array.from(staging.childNodes));
+                        window.__yamabikoContentReady = renderSource.length > 0;
+                        enableHorizontalScrollContainers();
+                      } else if (window.MathJax && window.MathJax.typesetClear) {
+                        try { window.MathJax.typesetClear([staging]); } catch (_) {}
+                      }
+                      staging.remove();
+                      if (window.__yamabikoSendHeight) window.__yamabikoSendHeight();
+                      resolve();
+                    }
+                    if (shouldTypeset) {
+                      typesetRenderedContent(staging, finishRender).catch(function(error) {
+                        if (window.MathJax && window.MathJax.typesetClear) {
+                          try { window.MathJax.typesetClear([staging]); } catch (_) {}
+                        }
+                        staging.remove();
+                        reject(error);
+                      });
+                    } else {
+                      finishRender();
+                    }
+                  });
+                }).catch(function(error) {
+                  // Recover the queue so later content updates can still render.
+                  // Failed typesetting must never publish raw TeX as success.
+                  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mathRenderError) {
+                    window.webkit.messageHandlers.mathRenderError.postMessage(String(error && error.message || error));
+                  }
+                });
               };
               window.__yamabikoRenderSource(source, true);
             })();
@@ -647,6 +732,7 @@ enum MathMarkdownHeightScript {
         """
         (function() {
           var heightFrame = 0;
+          var heightTimer = 0;
           var lastPostedHeight = -1;
           function sendHeight() {
             if (window.__yamabikoEnableHorizontalScroll) {
@@ -657,6 +743,7 @@ enum MathMarkdownHeightScript {
             if (!body || !root || !window.webkit || !window.webkit.messageHandlers || !window.webkit.messageHandlers.\(messageName)) {
               return;
             }
+            if (!window.__yamabikoContentReady) return;
             var rect = root.getBoundingClientRect();
             var height = Math.max(
               root.scrollHeight || 0,
@@ -672,6 +759,15 @@ enum MathMarkdownHeightScript {
             window.webkit.messageHandlers.\(messageName).postMessage(roundedHeight);
           }
           function scheduleHeight() {
+            // A hidden or recycled cell can suspend requestAnimationFrame.
+            // Keep a timer fallback so a rendered math block still reports its
+            // height when the cell comes back on screen.
+            if (!heightTimer) {
+              heightTimer = setTimeout(function() {
+                heightTimer = 0;
+                sendHeight();
+              }, 50);
+            }
             if (heightFrame) return;
             heightFrame = requestAnimationFrame(function() {
               heightFrame = 0;
@@ -711,20 +807,30 @@ struct MathMarkdownView: View {
     var onLayoutChange: (() -> Void)? = nil
     @Environment(\.colorScheme) private var colorScheme
     @State private var contentHeight: CGFloat = minimumHeight
+    @State private var hasRenderedContent = false
 
     var body: some View {
-        MathMarkdownWebView(
-            markdownText: markdownText,
-            isStreaming: isStreaming,
-            colorScheme: colorScheme,
-            measuredHeight: $contentHeight
-        )
-        .frame(height: max(Self.minimumHeight, contentHeight))
+        ZStack(alignment: .topLeading) {
+            if !hasRenderedContent {
+                NativeMarkdownMathPlaceholder(markdownText: markdownText)
+            }
+            MathMarkdownWebView(
+                markdownText: markdownText,
+                isStreaming: isStreaming,
+                colorScheme: colorScheme,
+                measuredHeight: $contentHeight,
+                hasRenderedContent: $hasRenderedContent
+            )
+            .frame(height: max(Self.minimumHeight, contentHeight))
+            .opacity(hasRenderedContent ? 1 : 0)
+            .allowsHitTesting(hasRenderedContent)
+            .accessibilityHidden(!hasRenderedContent)
+        }
         .onChange(of: contentHeight) { _, _ in
             onLayoutChange?()
         }
         .onChange(of: colorScheme) { _, _ in
-            contentHeight = Self.minimumHeight
+            hasRenderedContent = false
         }
     }
 }
@@ -771,11 +877,31 @@ enum MathMarkdownDocumentCache {
     }
 }
 
+enum MathMarkdownDocumentFileStore {
+    /// `loadHTMLString` does not reliably grant a file base URL access to its
+    /// sibling MathJax script on every OS. A real document loaded with
+    /// `loadFileURL(_:allowingReadAccessTo:)` gives the renderer the same
+    /// subresource contract that Mermaid already uses.
+    static func documentURL(for html: String, in directory: URL) throws -> URL {
+        let digest = SHA256.hash(data: Data(html.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        let url = directory.appendingPathComponent("math-document-\(digest).html")
+        if let existing = try? String(contentsOf: url, encoding: .utf8),
+           existing == html {
+            return url
+        }
+        try html.write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+}
+
 private struct MathMarkdownWebView: UIViewRepresentable {
     let markdownText: String
     let isStreaming: Bool
     let colorScheme: ColorScheme
     @Binding var measuredHeight: CGFloat
+    @Binding var hasRenderedContent: Bool
     private static let markdownRendererScript: String = {
         MathMarkdownResourceResolver.markdownRendererScript(
             in: .main,
@@ -793,6 +919,7 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         let contentController = WKUserContentController()
         contentController.add(context.coordinator, name: Coordinator.heightMessageName)
         contentController.add(context.coordinator, name: Coordinator.copyMessageName)
+        contentController.add(context.coordinator, name: Coordinator.errorMessageName)
 
         let userScript = WKUserScript(
             source: MathMarkdownHeightScript.source(messageName: Coordinator.heightMessageName),
@@ -874,11 +1001,13 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         webView.navigationDelegate = nil
         webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.heightMessageName)
         webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.copyMessageName)
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.errorMessageName)
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         static let heightMessageName = "contentHeight"
         static let copyMessageName = "copyCodeBlock"
+        static let errorMessageName = "mathRenderError"
 
         var parent: MathMarkdownWebView
         var lastHTML: String?
@@ -944,6 +1073,10 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         }
 
         func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == Self.errorMessageName {
+                MathMarkdownDiagnostics.logWarning("MathMarkdown rendering failed: \(message.body)")
+                return
+            }
             if message.name == Self.copyMessageName {
                 if let codeText = message.body as? String {
                     UIPasteboard.general.string = codeText
@@ -998,15 +1131,25 @@ private struct MathMarkdownWebView: UIViewRepresentable {
             pendingRenderToken += 1
             let token = pendingLoadToken
             didFinishInitialLoad = false
+            let documentURL = resourceDirectory.flatMap {
+                try? MathMarkdownDocumentFileStore.documentURL(for: html, in: $0)
+            }
             DispatchQueue.main.async { [weak self, weak webView] in
                 guard let self, let webView, token == self.pendingLoadToken, self.lastHTML == html else {
                     return
                 }
-                YamabikoWebKitSupport.loadHTMLDocument(
-                    html,
-                    resourceDirectory: resourceDirectory,
-                    in: webView
-                )
+                if let documentURL, let resourceDirectory {
+                    webView.loadFileURL(
+                        documentURL,
+                        allowingReadAccessTo: resourceDirectory
+                    )
+                } else {
+                    YamabikoWebKitSupport.loadHTMLDocument(
+                        html,
+                        resourceDirectory: resourceDirectory,
+                        in: webView
+                    )
+                }
             }
         }
 
@@ -1050,8 +1193,14 @@ private struct MathMarkdownWebView: UIViewRepresentable {
         private func apply(height rawHeight: CGFloat) {
             let clamped = max(44, rawHeight.rounded(.up))
             DispatchQueue.main.async {
-                guard abs(self.parent.measuredHeight - clamped) > 1 else { return }
-                self.parent.measuredHeight = clamped
+                var transaction = Transaction()
+                transaction.animation = nil
+                withTransaction(transaction) {
+                    if abs(self.parent.measuredHeight - clamped) > 1 {
+                        self.parent.measuredHeight = clamped
+                    }
+                    self.parent.hasRenderedContent = true
+                }
             }
         }
     }

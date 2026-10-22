@@ -5,6 +5,88 @@ import JavaScriptCore
 @testable import YamabikoChat
 
 final class MathMarkdownViewTests: XCTestCase {
+    // Exact answer from the sphere-surface-area diagnostic export (2026-10-22).
+    private static let diagnosticAnswer = #"""
+    球の表面積の求め方の証明を3種類、サブエージェントを用いてまとめました。
+
+    ---
+
+    ### 1. 積分法（回転体の表面積）\#u{0020}\#u{0020}
+    **証明の概要**\#u{0020}\#u{0020}
+    半円 $y = \sqrt{r^2 - x^2}$ を $x$ 軸の周りに回転させた回転体の表面積として計算します。\#u{0020}\#u{0020}
+    表面積の公式：\#u{0020}\#u{0020}
+    $$S = 2\pi \int_{-r}^{r} y \sqrt{1 + \left(\frac{dy}{dx}\right)^2} \, dx$$\#u{0020}\#u{0020}
+
+    - $\frac{dy}{dx} = -\frac{x}{\sqrt{r^2 - x^2}}$\#u{0020}\#u{0020}
+    - $\sqrt{1 + \left(\frac{dy}{dx}\right)^2} = \frac{r}{\sqrt{r^2 - x^2}}$\#u{0020}\#u{0020}
+    - $y \cdot \sqrt{1 + \left(\frac{dy}{dx}\right)^2} = r$\#u{0020}\#u{0020}
+
+    したがって、\#u{0020}\#u{0020}
+    $$S = 2\pi \int_{-r}^{r} r \, dx = 2\pi r \cdot 2r = 4\pi r^2$$\#u{0020}\#u{0020}
+
+    ---
+
+    ### 2. 微小面積の積分（球面座標）\#u{0020}\#u{0020}
+    **証明の概要**\#u{0020}\#u{0020}
+    球面座標 $(R, \theta, \phi)$ で微小面積要素を求め、全表面を積分します。\#u{0020}\#u{0020}
+    座標：\#u{0020}\#u{0020}
+    - $x = R \sin\theta \cos\phi$\#u{0020}\#u{0020}
+    - $y = R \sin\theta \sin\phi$\#u{0020}\#u{0020}
+    - $z = R \cos\theta$\#u{0020}\#u{0020}
+
+    微小面積要素：\#u{0020}\#u{0020}
+    $$dA = R^2 \sin\theta \, d\theta \, d\phi$$\#u{0020}\#u{0020}
+
+    積分範囲：$\theta \in [0, \pi]$, $\phi \in [0, 2\pi]$\#u{0020}\#u{0020}
+    $$S = \int_0^{2\pi} \int_0^{\pi} R^2 \sin\theta \, d\theta \, d\phi = R^2 \cdot 2\pi \cdot 2 = 4\pi R^2$$\#u{0020}\#u{0020}
+
+    ---
+
+    ### 3. アルキメデスの方法（円柱との比較）\#u{0020}\#u{0020}
+    **証明の概要**\#u{0020}\#u{0020}
+    アルキメデスは、半径 $r$ の球を同じ半径・高さ $2r$ の円柱に内接させ、球の表面積が円柱の側面積に等しいことを示しました。\#u{0020}\#u{0020}
+
+    - 円柱の側面積：$2\pi r \cdot 2r = 4\pi r^2$\#u{0020}\#u{0020}
+    - 球の表面積を水平な微小帯に分割し、各帯の面積が円柱の対応する帯と等しいことを幾何学的に証明（断面の投影による等価性）。\#u{0020}\#u{0020}
+
+    結果：$S = 4\pi r^2$\#u{0020}\#u{0020}
+
+    ---
+
+    いずれの方法でも、球の表面積は $4\pi r^2$ となります。
+    """#
+
+    @MainActor
+    func testDiagnosticAnswerRendersAllEquationsInNativeMessageView() async throws {
+        try await assertMathRenders(Self.diagnosticAnswer, expectedEquationCount: 20, usesNativeView: true)
+    }
+
+    @MainActor
+    func testDiagnosticAnswerRendersAfterStreamCompletionAndViewRecreation() async throws {
+        let row = ChatTimelineRowStore(item: .message(FullChatMessage(
+            id: 130,
+            message: ChatMessage(id: 130, conversationId: 46, role: "model", text: "", createdAtMs: 1),
+            thinkingStream: nil, variants: []
+        )))
+        row.apply(snapshot: ChatStreamingSnapshot(targetId: 130, text: Self.diagnosticAnswer, thinking: "", isFinal: false))
+        try await assertMathRenders(Self.diagnosticAnswer, expectedEquationCount: 20, presentationRow: row)
+        // Recreate the host like a timeline cell coming back on screen.
+        try await assertMathRenders(Self.diagnosticAnswer, expectedEquationCount: 20, presentationRow: row)
+    }
+
+    private struct StreamingDiagnosticView: View {
+        @ObservedObject var row: ChatTimelineRowStore
+
+        var body: some View {
+            NativeMarkdownView(
+                markdownText: row.streamingSnapshot?.text ?? "",
+                isStreaming: row.streamingSnapshot?.isFinal == false,
+                preparsedBlocks: row.streamingMarkdownBlocks
+            )
+            .environment(\.markdownPresentationCache, row.markdownPresentationCache)
+        }
+    }
+
     @MainActor
     func testMathRendersInActualWebView() async throws {
         try await assertMathRenders(AppStoreScreenshotDemoSeeder.mathRenderingFixtureText)
@@ -42,7 +124,16 @@ final class MathMarkdownViewTests: XCTestCase {
 
     @MainActor
     func testMathParagraphRemainsVisibleBelowUserMessage() async throws {
-        let source = AppStoreScreenshotDemoSeeder.mathRenderingFixtureText
+        try await assertTimelineMathFits(AppStoreScreenshotDemoSeeder.mathRenderingFixtureText)
+    }
+
+    @MainActor
+    func testDiagnosticAnswerTimelineCellFitsAllMath() async throws {
+        try await assertTimelineMathFits(Self.diagnosticAnswer, expectedEquationCount: 20)
+    }
+
+    @MainActor
+    private func assertTimelineMathFits(_ source: String, expectedEquationCount: Int? = nil) async throws {
         let expectedBlocks = NativeMarkdownParser.parse(source).filter {
             if case .math = $0 { return true }
             return false
@@ -67,8 +158,8 @@ final class MathMarkdownViewTests: XCTestCase {
         func webViews(_ view: UIView) -> [WKWebView] {
             (view as? WKWebView).map { [$0] } ?? view.subviews.flatMap(webViews)
         }
-        let expectedEquations = source.components(separatedBy: #"\("#).count - 1
-            + source.components(separatedBy: #"\["#).count - 1
+        let expectedEquations = expectedEquationCount ?? (source.components(separatedBy: #"\("#).count - 1
+            + source.components(separatedBy: #"\["#).count - 1)
         var rendered = false
         for _ in 0..<100 {
             controller.view.layoutIfNeeded()
@@ -83,6 +174,13 @@ final class MathMarkdownViewTests: XCTestCase {
             }
             try await Task.sleep(for: .milliseconds(100))
         }
+        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "Timeline math rendering"
+        attachment.lifetime = .keepAlways
+        add(attachment)
         XCTAssertTrue(rendered)
         try await Task.sleep(for: .milliseconds(300))
         controller.view.layoutIfNeeded()
@@ -99,7 +197,7 @@ final class MathMarkdownViewTests: XCTestCase {
     }
 
     @MainActor
-    private func assertMathRenders(_ source: String, expectedEquationCount: Int? = nil, usesNativeView: Bool = false) async throws {
+    private func assertMathRenders(_ source: String, expectedEquationCount: Int? = nil, usesNativeView: Bool = false, presentationRow: ChatTimelineRowStore? = nil) async throws {
         let expectedCount = expectedEquationCount ?? (source.components(separatedBy: #"\("#).count - 1
             + source.components(separatedBy: #"\["#).count - 1)
         let mathBlocks = NativeMarkdownParser.parse(source).compactMap { block -> String? in
@@ -111,7 +209,9 @@ final class MathMarkdownViewTests: XCTestCase {
                 + mathBlocks.components(separatedBy: #"\["#).count - 1, expectedCount)
         }
         let controller = UIHostingController(rootView: ScrollView {
-            if usesNativeView {
+            if let presentationRow {
+                StreamingDiagnosticView(row: presentationRow)
+            } else if usesNativeView {
                 NativeMarkdownView(markdownText: source)
             } else {
                 MathMarkdownView(markdownText: source)
@@ -123,6 +223,11 @@ final class MathMarkdownViewTests: XCTestCase {
         window.rootViewController = controller
         window.makeKeyAndVisible()
         defer { window.isHidden = true; window.rootViewController = nil }
+        if let presentationRow, presentationRow.streamingSnapshot?.isFinal == false {
+            controller.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+            presentationRow.apply(snapshot: ChatStreamingSnapshot(targetId: 130, text: source, thinking: "", isFinal: true))
+        }
         func webViews(_ view: UIView) -> [WKWebView] {
             (view as? WKWebView).map { [$0] } ?? view.subviews.flatMap(webViews)
         }
@@ -194,6 +299,155 @@ final class MathMarkdownViewTests: XCTestCase {
         XCTAssertFalse(html.contains("@@"), html)
     }
 
+    @MainActor
+    func testMathWaitsForEngineStartupBeforeCommittingContent() async throws {
+        let html = MathMarkdownHTMLBuilder.buildHTML(
+            markdownPayload: #""$x^2$""#,
+            markdownRendererScript: "window.yamabikoRenderMarkdown = s => '<p>' + s + '</p>';",
+            bodyTextColor: "#000000", codeBackgroundColor: "#111111",
+            borderColor: "#222222", linkColor: "#333333",
+            mathJaxScriptTag: """
+            <script>
+            window.MathJax.startup.promise = new Promise(resolve => {
+              window.finishStartup = function() {
+                window.MathJax.typesetPromise = function(targets) {
+                  targets[0].textContent = 'rendered equation';
+                  return Promise.resolve();
+                };
+                resolve();
+              };
+            });
+            </script>
+            """
+        )
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 600))
+        webView.loadHTMLString(html, baseURL: nil)
+        for _ in 0..<100 {
+            if (try? await webView.evaluateJavaScript("typeof window.finishStartup === 'function'")) as? Bool == true { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let before = try await webView.evaluateJavaScript("document.getElementById('yamabiko-markdown').textContent") as? String
+        XCTAssertEqual(before, "", "Raw TeX must not count as a finished render while MathJax is starting")
+        _ = try await webView.evaluateJavaScript("window.finishStartup();")
+        let after = try await webView.evaluateJavaScript("document.getElementById('yamabiko-markdown').textContent") as? String
+        XCTAssertEqual(after, "rendered equation")
+    }
+
+    @MainActor
+    func testFailedTypesettingDoesNotPublishRawTeXAndNextRenderRecovers() async throws {
+        let html = MathMarkdownHTMLBuilder.buildHTML(
+            markdownPayload: #""$first$""#,
+            markdownRendererScript: "window.yamabikoRenderMarkdown = s => '<p>' + s + '</p>';",
+            bodyTextColor: "#000000", codeBackgroundColor: "#111111",
+            borderColor: "#222222", linkColor: "#333333",
+            mathJaxScriptTag: """
+            <script>
+            window.renderErrors = [];
+            window.webkit = {messageHandlers: {mathRenderError: {postMessage: function(error) {
+              window.renderErrors.push(error);
+            }}}};
+            window.MathJax.typesetPromise = function() { return Promise.reject(new Error('test failure')); };
+            </script>
+            """
+        )
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 600))
+        webView.loadHTMLString(html, baseURL: nil)
+        var errorCount = 0
+        for _ in 0..<100 {
+            errorCount = (try? await webView.evaluateJavaScript("window.renderErrors.length")) as? Int ?? 0
+            if errorCount > 0 { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(errorCount, 1, "Report typesetting failures to native diagnostics")
+        let failedText = try await webView.evaluateJavaScript("document.getElementById('yamabiko-markdown').textContent") as? String
+        XCTAssertEqual(failedText, "")
+        let ready = try await webView.evaluateJavaScript("window.__yamabikoContentReady") as? Bool
+        XCTAssertEqual(ready, false)
+        _ = try await webView.evaluateJavaScript("""
+            window.MathJax.typesetPromise = function(targets) {
+              targets[0].textContent = 'recovered equation';
+              return Promise.resolve();
+            };
+            window.__yamabikoRenderSource('$next$', true);
+            """)
+        let recoveredText = try await webView.evaluateJavaScript("document.getElementById('yamabiko-markdown').textContent") as? String
+        XCTAssertEqual(recoveredText, "recovered equation")
+        let roots = try await webView.evaluateJavaScript("document.querySelectorAll('.yamabiko-markdown').length") as? Int
+        XCTAssertEqual(roots, 1, "Failed staging roots must be removed")
+    }
+
+    @MainActor
+    func testFinalSnapshotPublishesMathBlocksBeforeViewTasksRun() throws {
+        let row = ChatTimelineRowStore(item: .message(FullChatMessage(
+            id: 130,
+            message: ChatMessage(id: 130, conversationId: 46, role: "model", text: "", createdAtMs: 1),
+            thinkingStream: nil, variants: []
+        )))
+        row.apply(snapshot: ChatStreamingSnapshot(targetId: 130, text: Self.diagnosticAnswer, thinking: "", isFinal: false))
+        XCTAssertFalse(try XCTUnwrap(row.streamingMarkdownBlocks).contains { if case .math = $0 { return true }; return false })
+        row.apply(snapshot: ChatStreamingSnapshot(targetId: 130, text: Self.diagnosticAnswer, thinking: "", isFinal: true))
+        let expected = NativeMarkdownParser.parse(Self.diagnosticAnswer)
+        XCTAssertEqual(row.streamingMarkdownBlocks, expected)
+        XCTAssertEqual(row.markdownPresentationCache.blocks(for: Self.diagnosticAnswer, rendersMath: true), expected)
+    }
+
+    @MainActor
+    func testMathUpdatesKeepCommittedContentUntilTypesettingCompletes() async throws {
+        let html = MathMarkdownHTMLBuilder.buildHTML(
+            markdownPayload: "\"first\"",
+            markdownRendererScript: "window.yamabikoRenderMarkdown = s => '<p>' + s + '</p>';",
+            bodyTextColor: "#000000", codeBackgroundColor: "#111111",
+            borderColor: "#222222", linkColor: "#333333",
+            mathJaxScriptTag: """
+            <script>
+            window.MathJax.typesetClear = function() {};
+            window.MathJax.typesetPromise = function(targets) {
+              return new Promise(resolve => {
+                window.finishTypesetting = function() {
+                  targets[0].textContent = 'typeset:' + targets[0].textContent;
+                  window.finishTypesetting = null;
+                  resolve();
+                };
+              });
+            };
+            </script>
+            """
+        )
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 600))
+        webView.loadHTMLString(html, baseURL: nil)
+        func waitForPendingTypeset() async throws {
+            for _ in 0..<100 {
+                if (try? await webView.evaluateJavaScript("typeof window.finishTypesetting === 'function'")) as? Bool == true {
+                    return
+                }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            XCTFail("Typesetting did not start")
+        }
+        func displayedText() async throws -> String {
+            try await webView.evaluateJavaScript("document.getElementById('yamabiko-markdown').textContent") as? String ?? ""
+        }
+        try await waitForPendingTypeset()
+        let initial = try await displayedText()
+        XCTAssertEqual(initial, "", "Unprocessed TeX must never be committed")
+        _ = try await webView.evaluateJavaScript("window.finishTypesetting();")
+        let first = try await displayedText()
+        XCTAssertEqual(first, "typeset:first")
+        _ = try await webView.evaluateJavaScript("window.__yamabikoRenderSource('second', true);")
+        try await waitForPendingTypeset()
+        let duringUpdate = try await displayedText()
+        XCTAssertEqual(duringUpdate, first, "Keep the previous output throughout asynchronous typesetting")
+        _ = try await webView.evaluateJavaScript("window.__yamabikoRenderSource('latest', true); window.finishTypesetting();")
+        try await waitForPendingTypeset()
+        let afterStaleRender = try await displayedText()
+        XCTAssertEqual(afterStaleRender, first, "A superseded render must not replace visible content")
+        _ = try await webView.evaluateJavaScript("window.finishTypesetting();")
+        let latest = try await displayedText()
+        XCTAssertEqual(latest, "typeset:latest")
+        let stagingCount = try await webView.evaluateJavaScript("document.querySelectorAll('.yamabiko-markdown').length") as? Int
+        XCTAssertEqual(stagingCount, 1)
+    }
+
     func testBuildHTMLIncludesMathJax() {
         let html = MathMarkdownHTMLBuilder.buildHTML(
             markdownPayload: "\"hello\"",
@@ -212,6 +466,32 @@ final class MathMarkdownViewTests: XCTestCase {
         XCTAssertTrue(html.contains("options: { enableMenu: false }"))
         XCTAssertTrue(html.contains("Content-Security-Policy"))
         XCTAssertTrue(html.contains("connect-src 'none'"))
+    }
+
+    func testResourceSynchronizationReplacesStaleCachedFiles() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let source = root.appendingPathComponent("source", isDirectory: true)
+        let destination = root.appendingPathComponent("destination", isDirectory: true)
+        try fileManager.createDirectory(at: source, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: root) }
+
+        try Data("new-script".utf8).write(to: source.appendingPathComponent("tex-svg.js"))
+        try Data("old".utf8).write(to: destination.appendingPathComponent("tex-svg.js"))
+
+        try MathMarkdownWebResourceLoader.synchronizeResources(
+            from: source,
+            to: destination,
+            fileManager: fileManager
+        )
+
+        let value = try String(
+            contentsOf: destination.appendingPathComponent("tex-svg.js"),
+            encoding: .utf8
+        )
+        XCTAssertEqual(value, "new-script", "A stale cache must be replaced from the bundle")
     }
 
     func testResolveResourceURLPrefersMathJaxSubdirectory() {
