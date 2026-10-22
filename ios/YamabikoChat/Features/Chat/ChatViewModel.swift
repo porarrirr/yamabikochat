@@ -930,11 +930,11 @@ final class ChatViewModel: ObservableObject {
     }
 
     var isSystemPromptDisabledForConversation: Bool {
-        conversationSystemPrompt?.nilIfBlank == nil
+        conversationSystemPrompt?.trimmedNonEmpty == nil
     }
 
     var isCustomSystemPromptActive: Bool {
-        activeSystemPromptPresetName?.nilIfBlank == nil && !isSystemPromptDisabledForConversation
+        activeSystemPromptPresetName?.trimmedNonEmpty == nil && !isSystemPromptDisabledForConversation
     }
 
     var workspaceTitleLabel: String {
@@ -1194,7 +1194,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     func applyCustomSystemPrompt() {
-        applySystemPrompt(settings.systemPrompt?.nilIfBlank, presetName: nil)
+        applySystemPrompt(settings.systemPrompt?.trimmedNonEmpty, presetName: nil)
     }
 
     func applySystemPromptPreset(name: String) {
@@ -1207,7 +1207,7 @@ final class ChatViewModel: ObservableObject {
         }
         guard let selectedPreset else { return }
 
-        applySystemPrompt(selectedPreset.prompt.nilIfBlank, presetName: selectedPreset.name)
+        applySystemPrompt(selectedPreset.prompt.trimmedNonEmpty, presetName: selectedPreset.name)
     }
 
     private func applySystemPrompt(_ prompt: String?, presetName: String?) {
@@ -1537,12 +1537,5 @@ final class ChatViewModel: ObservableObject {
             ))
         }
         return groups
-    }
-}
-
-private extension String {
-    var nilIfBlank: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

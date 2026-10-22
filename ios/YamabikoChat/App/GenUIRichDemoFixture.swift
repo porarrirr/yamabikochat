@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 enum GenUIRichDemoFixture {
@@ -3346,3 +3347,5 @@ enum GenUIRichDemoFixture {
     );
     """#
 }
+
+#endif

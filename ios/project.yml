@@ -19,6 +19,7 @@ packages:
     exactVersion: 0.6.0
 settings:
   SWIFT_VERSION: 5.10
+  SWIFT_STRICT_CONCURRENCY: targeted
   MARKETING_VERSION: 1.0.0
   CURRENT_PROJECT_VERSION: 7
 aggregateTargets:
@@ -86,6 +87,13 @@ targets:
       - target: YamabikoShareExtension
         embed: true
     preBuildScripts:
+      - name: Generate Markdown renderer fallback
+        script: python3 scripts/generate-markdown-renderer.py
+        inputFiles:
+          - $(SRCROOT)/scripts/generate-markdown-renderer.py
+          - $(SRCROOT)/YamabikoChat/App/Resources/mathjax/markdown-renderer.js
+        outputFiles:
+          - $(SRCROOT)/YamabikoChat/Features/Chat/MathMarkdownRendererSource.generated.swift
       - name: Copy legal notices
         script: scripts/copy-legal-notices.sh
         inputFiles:

@@ -615,6 +615,65 @@ final class ChatStreamSessionTests: XCTestCase {
         XCTAssertEqual(try recovered.fetchFullMessage(id: originalID), original)
     }
 
+    func testRecoveryWriteFailuresAreLoggedWithoutReplacingStreamError() async throws {
+        struct ExecutionFailure: Error {}
+        for isVariant in [false, true] {
+            for partialText in ["", "partial"] {
+                let dbQueue = try DatabaseQueue()
+                try AppDatabase.migrator.migrate(dbQueue)
+                let conversations = ConversationRepository(dbQueue: dbQueue)
+                let conversationID = try conversations.createConversation(title: "Recovery", model: "test", provider: "OPENAI")
+                let messageID = try conversations.insertMessage(
+                    ChatMessage(conversationId: conversationID, role: "model", text: "", createdAtMs: 1)
+                )
+                let variantID = isVariant
+                    ? try XCTUnwrap(conversations.insertMessageVariant(baseMessageId: messageID, text: "").id) : nil
+                try await dbQueue.write { db in
+                    // Checkpoint writes remain available until the execution fails.
+                    for table in ["chat_messages", "chat_message_variants"] {
+                        try db.execute(sql: "CREATE TRIGGER fail_\(table) BEFORE UPDATE ON \(table) BEGIN SELECT RAISE(ABORT, 'recovery write rejected'); END")
+                    }
+                    try db.execute(sql: "CREATE TRIGGER fail_checkpoint BEFORE DELETE ON chat_stream_checkpoints BEGIN SELECT RAISE(ABORT, 'recovery delete rejected'); END")
+                    try db.execute(sql: "CREATE TRIGGER fail_activity BEFORE INSERT ON \(ChatMessageToolActivity.databaseTableName) BEGIN SELECT RAISE(ABORT, 'recovery activity rejected'); END")
+                }
+                // A saved checkpoint ensures the DELETE trigger fires on empty output too.
+                try conversations.saveStreamCheckpoint(messageId: isVariant ? nil : messageID, variantId: variantID, text: "", thinking: "")
+                let stream = AsyncThrowingStream<ProviderStreamEvent, Error> { continuation in
+                    continuation.yield(.toolActivity(ToolActivityEvent(
+                        phase: .started, call: ToolCall(id: "test", name: "test", argumentsJSON: "{}"),
+                        result: nil, createdAtMs: 1
+                    )))
+                    if !partialText.isEmpty { continuation.yield(.textDelta(partialText)) }
+                    continuation.finish(throwing: ExecutionFailure())
+                }
+                // read() combines app and runtime files, so its previous length is not an append offset.
+                let logMarker = "Recovery test start: \(UUID().uuidString)"
+                DiagnosticsLogger.log(logMarker)
+                do {
+                    _ = try await ChatStreamSession.run(
+                        stream: stream, conversations: conversations,
+                        kind: variantID.map { .variant(variantId: $0, snapshotMessageId: messageID) } ?? .message(messageId: messageID),
+                        onStreamEvent: nil, onStreamingSnapshot: nil
+                    )
+                    XCTFail("Expected execution failure")
+                } catch is ExecutionFailure {
+                    let allLogs = DiagnosticsLogger.read()
+                    let markerRange = try XCTUnwrap(allLogs.range(of: logMarker))
+                    let logs = String(allLogs[markerRange.upperBound...])
+                    let identity = variantID.map { "variantId=\($0)" } ?? "messageId=\(messageID)"
+                    XCTAssertTrue(logs.contains(identity))
+                    XCTAssertTrue(logs.contains("operation=persistToolActivity"))
+                    if partialText.isEmpty {
+                        XCTAssertTrue(logs.contains("operation=writeErrorPlaceholder"))
+                        XCTAssertTrue(logs.contains("operation=discardCheckpoint"))
+                    } else {
+                        XCTAssertTrue(logs.contains("operation=commitCheckpoint"))
+                    }
+                }
+            }
+        }
+    }
+
     private func makeConversations() throws -> ConversationRepository {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)

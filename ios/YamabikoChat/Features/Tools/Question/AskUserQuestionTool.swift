@@ -69,11 +69,14 @@ enum AskUserQuestionError: LocalizedError, Equatable {
     }
 }
 
-final class UserQuestionCoordinator: ObservableObject, @unchecked Sendable {
+@MainActor
+final class UserQuestionCoordinator: ObservableObject {
     struct PendingRequest: Identifiable, Sendable, Equatable {
         var id: UUID
         var questions: [AskUserQuestionItem]
     }
+
+    nonisolated init() {}
 
     @Published private(set) var pending: PendingRequest?
 
@@ -84,7 +87,6 @@ final class UserQuestionCoordinator: ObservableObject, @unchecked Sendable {
 
     private var waiting: [WaitingRequest] = []
 
-    @MainActor
     func ask(questions: [AskUserQuestionItem]) async throws -> AskUserQuestionAnswer {
         try Task.checkCancellation()
         let request = PendingRequest(id: UUID(), questions: questions)
@@ -100,7 +102,6 @@ final class UserQuestionCoordinator: ObservableObject, @unchecked Sendable {
         }
     }
 
-    @MainActor
     func answer(_ answer: AskUserQuestionAnswer, requestID: UUID) {
         guard let index = waiting.firstIndex(where: { $0.request.id == requestID }) else { return }
         let continuation = waiting.remove(at: index).continuation
@@ -109,12 +110,10 @@ final class UserQuestionCoordinator: ObservableObject, @unchecked Sendable {
         presentNextIfNeeded()
     }
 
-    @MainActor
     func cancel(requestID: UUID) {
         cancel(requestID: requestID, error: AskUserQuestionError.cancelled)
     }
 
-    @MainActor
     private func cancel(requestID: UUID, error: Error) {
         guard let index = waiting.firstIndex(where: { $0.request.id == requestID }) else { return }
         let continuation = waiting.remove(at: index).continuation
@@ -123,7 +122,6 @@ final class UserQuestionCoordinator: ObservableObject, @unchecked Sendable {
         presentNextIfNeeded()
     }
 
-    @MainActor
     private func presentNextIfNeeded() {
         if pending == nil { pending = waiting.first?.request }
     }

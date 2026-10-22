@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 enum GenUIDemoFixture {
@@ -53,3 +54,5 @@ enum GenUIDemoFixture {
     }
     """#
 }
+
+#endif

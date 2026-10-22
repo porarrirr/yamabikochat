@@ -313,14 +313,9 @@ struct RootView: View {
 
     @MainActor
     private func applyScreenshotRoutingIfNeeded() async {
+        #if DEBUG
         guard let launch = AppStoreScreenshotRouting.launchConfiguration() else {
-            do {
-                if try appState.initializeConversationSelectionIfNeeded(repository: container.chatRepository) {
-                    setPreferredCompactColumn(.detail)
-                }
-            } catch {
-                DiagnosticsLogger.log("Initialize launch conversation failed", category: .chat, error: error)
-            }
+            initializeLaunchConversationSelection()
             return
         }
 
@@ -382,6 +377,20 @@ struct RootView: View {
         }
 
         try? await Task.sleep(nanoseconds: 500_000_000)
+        #else
+        initializeLaunchConversationSelection()
+        #endif
+    }
+
+    @MainActor
+    private func initializeLaunchConversationSelection() {
+        do {
+            if try appState.initializeConversationSelectionIfNeeded(repository: container.chatRepository) {
+                setPreferredCompactColumn(.detail)
+            }
+        } catch {
+            DiagnosticsLogger.log("Initialize launch conversation failed", category: .chat, error: error)
+        }
     }
 
     private func applySiriNavigation() {
