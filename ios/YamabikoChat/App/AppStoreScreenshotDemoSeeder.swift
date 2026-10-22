@@ -76,7 +76,6 @@ enum AppStoreScreenshotDemoSeeder {
         settings.themeMode = isReasoningEffortFixture || ProcessInfo.processInfo.arguments.contains("-GenUIDarkFixture") ? "DARK" : "LIGHT"
         settings.dynamicColorEnabled = true
         settings.isDualModeEnabled = !isReasoningEffortFixture && !isGenUIFixture && !ProcessInfo.processInfo.arguments.contains("-SubagentFixture")
-        settings.isFusionModeEnabled = false
         settings.isAutoConversationEnabled = false
         settings.apiProvider = isReasoningEffortFixture ? "CODEX_AUTH" : "OPENROUTER"
         settings.defaultModel = isReasoningEffortFixture ? "gpt-5.6-terra" : "openai/gpt-4o-mini"

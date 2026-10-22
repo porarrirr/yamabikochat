@@ -4,6 +4,26 @@ import ZIPFoundation
 @testable import YamabikoChat
 
 final class ConversationExportTests: XCTestCase {
+    func testHistoricalFusionDiagnosticsRemainExportable() throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database)
+        let repository = ConversationRepository(dbQueue: database)
+        let conversationID = try repository.createConversation(
+            title: "Historical", model: "saved-model", provider: "OPENAI", systemPrompt: nil
+        )
+        let trace = #"{"panelResults":[{"modelId":"saved-model","toolActivity":{"attachmentPaths":["/tmp/historical.txt"]},"piExecution":{"phase":"panel"}}],"judgeResult":{"piExecutions":[{"phase":"judge"}]},"synthesisResult":{"piExecution":{"phase":"synthesis"}},"finalAnswer":"Saved answer"}"#
+        try database.write { db in
+            try db.execute(
+                sql: "INSERT INTO fusion_traces (id, conversationId, preset, startedAtMs, failedModelsJSON, traceJSON, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                arguments: ["historical", conversationID, "custom", 1, "[]", trace, "completed"]
+            )
+        }
+        let snapshot = try repository.fetchDebugExport(conversationId: conversationID)
+        XCTAssertEqual(snapshot.fusionTraces.first?.traceJSON, trace)
+        XCTAssertEqual(snapshot.referencedFilePaths, ["/tmp/historical.txt"])
+        XCTAssertEqual(snapshot.piExecutions.map(\.source), ["fusion-panel", "fusion-judge", "fusion-synthesis"])
+    }
+
     func testDebugExportIncludesPiHistoryToolTranscriptMetricsAndFiles() throws {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)

@@ -145,7 +145,6 @@ private struct SettingsDetailScreen: View {
     @FocusState private var systemPromptFocusedField: SystemPromptSettingsSection.Field?
     @State private var showAgentSkillImporter = false
     @State private var selectedAgentSkill: InstalledAgentSkill?
-    @State private var panelPendingDeletion: PanelModelConfig?
 
     var body: some View {
         AMOLEDForm {
@@ -160,25 +159,6 @@ private struct SettingsDetailScreen: View {
                 managementCategoryContent
             }
         }
-        // Present from the Form: individual sections may be offscreen and unmounted.
-        .alert(
-            L10n.text("このパネルを削除しますか？"),
-            isPresented: Binding(
-                get: { panelPendingDeletion != nil },
-                set: { if !$0 { panelPendingDeletion = nil } }
-            ),
-            presenting: panelPendingDeletion
-        ) { panel in
-            Button(L10n.text("削除"), role: .destructive) {
-                guard let index = viewModel.fusionCustomPreset.panelModels.firstIndex(where: { $0.id == panel.id }) else { return }
-                viewModel.removeFusionPanel(at: index)
-                panelPendingDeletion = nil
-            }
-            Button(L10n.text("キャンセル"), role: .cancel) {
-                panelPendingDeletion = nil
-            }
-        }
-
         .onDisappear { viewModel.flushPendingSettingsSave() }
         .navigationTitle(category.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -339,9 +319,6 @@ private struct SettingsDetailScreen: View {
             systemPromptTabContent
             SubagentSettingsSection(viewModel: viewModel)
             dualTabContent
-            FusionModeSettingsSection(viewModel: viewModel, onRequestPanelDeletion: { panel in
-                panelPendingDeletion = panel
-            })
             AutoConversationSettingsSection(viewModel: viewModel)
         }
     }

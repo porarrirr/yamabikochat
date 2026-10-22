@@ -477,10 +477,8 @@ struct ChatScreen: View {
                 regeneratableMessageID: viewModel.canRegenerateLastAssistant
                     ? viewModel.fullMessages.last?.id
                     : nil,
-                fusionDebugModeEnabled: viewModel.settings.fusionDebugModeEnabled,
                 dualSplitLayout: viewModel.settings.dualSplitLayout,
                 dualSplitRatio: viewModel.settings.dualSplitRatio,
-                fusionTraceForMessage: { viewModel.fusionTrace(for: $0) },
                 onRoute: { workspaceRoute = $0 },
                 onPreviousVariant: { viewModel.showPrevVariant(messageId: $0) },
                 onNextVariant: { viewModel.showNextVariant(messageId: $0) },
@@ -804,7 +802,7 @@ struct ChatScreen: View {
                 .padding(.horizontal, 10)
             }
 
-            if viewModel.isSending, viewModel.fusionProgress == nil, viewModel.fusionAnalyzingStatus == nil {
+            if viewModel.isSending {
                 HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.mini)
@@ -815,21 +813,6 @@ struct ChatScreen: View {
                 .padding(.horizontal, 10)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("chat-generation-status")
-            }
-
-            if let fusionProgress = viewModel.fusionProgress {
-                FusionProgressView(snapshot: fusionProgress)
-            } else if let fusionStatus = viewModel.fusionAnalyzingStatus {
-                HStack(spacing: 5) {
-                    ProgressView()
-                        .controlSize(.mini)
-                    Text(fusionStatus)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
             }
 
             if !viewModel.skillAutocompleteSuggestions.isEmpty {
@@ -2002,7 +1985,6 @@ private extension View {
             }
     }
 }
-
 
 private struct AttachmentThumbnail: View {
     @Environment(\.displayScale) private var displayScale

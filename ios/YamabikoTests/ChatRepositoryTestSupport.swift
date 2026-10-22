@@ -20,7 +20,7 @@ final class ConversationTitleGeneratorSpy: ConversationTitleGenerating {
     }
 }
 
-struct FusionNoopPricingRepository: LiteLlmPricingEstimating {
+struct ChatTestNoopPricingRepository: LiteLlmPricingEstimating {
     func estimateCostUsd(
         provider: String,
         model: String,
@@ -65,14 +65,6 @@ enum ChatRepositoryTestSupport {
             superGrokAuthRepository: superGrokAuth,
             piStream: piStream
         )
-        let fusionTraceStore = FusionTraceStore(dbQueue: dbQueue)
-        let fusionService = FusionService(
-            settingsRepository: settings,
-            providerGateway: providers,
-            pricingRepository: pricingRepository ?? FusionNoopPricingRepository(),
-            traceStore: fusionTraceStore,
-            requestSettingsResolver: requestSettingsResolver
-        )
         return ChatRepository(
             conversations: conversations,
             settings: settings,
@@ -84,9 +76,7 @@ enum ChatRepositoryTestSupport {
             codexAuthRepository: codexAuth,
             superGrokAuthRepository: superGrokAuth,
             openCodeGoUsageRepository: openCodeGoUsageRepository,
-            pricingRepository: pricingRepository ?? FusionNoopPricingRepository(),
-            fusionService: fusionService,
-            fusionTraceStore: fusionTraceStore,
+            pricingRepository: pricingRepository ?? ChatTestNoopPricingRepository(),
             conversationTitleGenerator: conversationTitleGenerator
         )
     }

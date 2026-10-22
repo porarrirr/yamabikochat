@@ -956,33 +956,7 @@ final class SettingsViewModel: ObservableObject {
         settings.isDualModeEnabled = enabled
         if enabled {
             settings.isAutoConversationEnabled = false
-            settings.isFusionModeEnabled = false
         }
-    }
-
-    func setFusionModeEnabled(_ enabled: Bool) {
-        settings.isFusionModeEnabled = enabled
-        if enabled {
-            settings.isDualModeEnabled = false
-            settings.isAutoConversationEnabled = false
-            ensureFusionCustomPresetInitialized()
-        }
-    }
-
-    var fusionCustomPreset: FusionPresetDefinition {
-        settings.decodeFusionCustomPreset() ?? AppSettings.defaultFusionCustomPreset()
-    }
-
-    func ensureFusionCustomPresetInitialized() {
-        if settings.decodeFusionCustomPreset() == nil {
-            settings.fusionCustomPresetJSON = settings.encodeFusionCustomPreset(AppSettings.defaultFusionCustomPreset())
-        }
-    }
-
-    private func saveFusionCustomPreset(_ preset: FusionPresetDefinition) {
-        settings.fusionCustomPresetJSON = settings.encodeFusionCustomPreset(
-            AppSettings.normalizedFusionPresetDefinition(preset)
-        )
     }
 
     func initialModelForSlot(for provider: String) -> String {
@@ -995,75 +969,10 @@ final class SettingsViewModel: ObservableObject {
         return settings.providerModelMap()[provider.uppercased()] ?? ProviderCatalog.defaultModel(for: provider)
     }
 
-    func updateFusionPanelModel(at index: Int, provider: String, modelId: String) {
-        guard index >= 0 else { return }
-        var preset = fusionCustomPreset
-        guard index < preset.panelModels.count else { return }
-        preset.panelModels[index].provider = provider.uppercased()
-        preset.panelModels[index].modelId = modelId
-        saveFusionCustomPreset(preset)
-    }
-
-    func addFusionPanel() {
-        var preset = fusionCustomPreset
-        guard preset.panelModels.count < FusionPresetLoader.maxPanelModelCount else { return }
-        let template = preset.panelModels.last ?? PanelModelConfig(
-            modelId: "gemini-2.5-flash",
-            provider: "GEMINI",
-            temperature: nil,
-            timeoutMs: nil,
-            role: "panel"
-        )
-        var newPanel = template
-        newPanel.id = UUID()
-        preset.panelModels.append(newPanel)
-        saveFusionCustomPreset(preset)
-    }
-
-    func removeFusionPanel(at index: Int) {
-        var preset = fusionCustomPreset
-        guard preset.panelModels.count > 1, index >= 0, index < preset.panelModels.count else { return }
-        preset.panelModels.remove(at: index)
-        saveFusionCustomPreset(preset)
-    }
-
-    func updateFusionJudgeModel(provider: String, modelId: String) {
-        var preset = fusionCustomPreset
-        preset.judgeModel.provider = provider.uppercased()
-        preset.judgeModel.modelId = modelId
-        saveFusionCustomPreset(preset)
-    }
-
-    func updateFusionSynthesizerModel(provider: String, modelId: String) {
-        var preset = fusionCustomPreset
-        preset.synthesizerModel.provider = provider.uppercased()
-        preset.synthesizerModel.modelId = modelId
-        saveFusionCustomPreset(preset)
-    }
-
-    func applyFusionModelToAllSlots(provider: String, modelId: String) {
-        let normalizedProvider = provider.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        let normalizedModel = modelId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedProvider.isEmpty, !normalizedModel.isEmpty else { return }
-
-        var preset = fusionCustomPreset
-        for index in preset.panelModels.indices {
-            preset.panelModels[index].provider = normalizedProvider
-            preset.panelModels[index].modelId = normalizedModel
-        }
-        preset.judgeModel.provider = normalizedProvider
-        preset.judgeModel.modelId = normalizedModel
-        preset.synthesizerModel.provider = normalizedProvider
-        preset.synthesizerModel.modelId = normalizedModel
-        saveFusionCustomPreset(preset)
-        statusMessage = L10n.text("Fusionの全モデルに一括設定を適用しました")
-    }
-
     func setAutoConversationEnabled(_ enabled: Bool) {
         settings.isAutoConversationEnabled = enabled
         if enabled {
             settings.isDualModeEnabled = false
-            settings.isFusionModeEnabled = false
         }
     }
 

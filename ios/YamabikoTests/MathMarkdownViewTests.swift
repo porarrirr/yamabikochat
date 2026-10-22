@@ -223,8 +223,8 @@ final class MathMarkdownViewTests: XCTestCase {
         window.makeKeyAndVisible()
         defer { window.isHidden = true; window.rootViewController = nil }
         controller.configure(store: store, scrollToLatestRequest: 0, regeneratableMessageID: nil,
-            fusionDebugModeEnabled: false, dualSplitLayout: "VERTICAL", dualSplitRatio: 0.5,
-            fusionTraceForMessage: { _ in nil }, onRoute: { _ in }, onPreviousVariant: { _ in },
+            dualSplitLayout: "VERTICAL", dualSplitRatio: 0.5,
+            onRoute: { _ in }, onPreviousVariant: { _ in },
             onNextVariant: { _ in }, onBranch: { _ in }, onRegenerate: {}, onAskChatWithSelection: { _ in },
             onEditUserMessage: { _ in }, onSelectUserMessageText: { _ in })
         func webViews(_ view: UIView) -> [WKWebView] {

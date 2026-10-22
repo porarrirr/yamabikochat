@@ -115,7 +115,7 @@ final class SecretConversationVaultTests: XCTestCase {
             settings: settings,
             conversations: conversations,
             credentials: credentials,
-            pricingRepository: FusionNoopPricingRepository()
+            pricingRepository: ChatTestNoopPricingRepository()
         )
         let conversationID = try repository.createSecretConversation()
         defer { SecretConversationVault.shared.destroy(conversationID: conversationID) }

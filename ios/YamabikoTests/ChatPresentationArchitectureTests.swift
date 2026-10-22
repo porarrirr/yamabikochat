@@ -454,7 +454,7 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             let settings = mode.applying(to: AppSettings())
             XCTAssertEqual(ChatMode(settings: settings), mode)
             XCTAssertEqual(
-                [settings.isDualModeEnabled, settings.isFusionModeEnabled, settings.isAutoConversationEnabled]
+                [settings.isDualModeEnabled, settings.isAutoConversationEnabled]
                     .filter { $0 }
                     .count,
                 mode == .standard ? 0 : 1
@@ -2383,10 +2383,8 @@ final class ChatPresentationArchitectureTests: XCTestCase {
             store: store,
             scrollToLatestRequest: scrollRequest,
             regeneratableMessageID: nil,
-            fusionDebugModeEnabled: false,
             dualSplitLayout: "VERTICAL",
             dualSplitRatio: 0.5,
-            fusionTraceForMessage: { _ in nil },
             onRoute: { _ in },
             onPreviousVariant: { _ in },
             onNextVariant: { _ in },

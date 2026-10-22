@@ -111,7 +111,6 @@ enum ChatReasoningEffortPresentationPolicy {
 enum ChatMode: String, CaseIterable, Identifiable, Sendable {
     case standard
     case dual
-    case fusion
     case autoConversation
 
     var id: String { rawValue }
@@ -119,8 +118,6 @@ enum ChatMode: String, CaseIterable, Identifiable, Sendable {
     init(settings: AppSettings) {
         if settings.isDualModeEnabled {
             self = .dual
-        } else if settings.isFusionModeEnabled {
-            self = .fusion
         } else if settings.isAutoConversationEnabled {
             self = .autoConversation
         } else {
@@ -132,7 +129,6 @@ enum ChatMode: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .standard: L10n.text("通常")
         case .dual: L10n.text("デュアル")
-        case .fusion: L10n.text("Fusion")
         case .autoConversation: L10n.text("自動会話")
         }
     }
@@ -141,7 +137,6 @@ enum ChatMode: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .standard: "bubble.left.and.bubble.right"
         case .dual: "rectangle.split.2x1"
-        case .fusion: "sparkles.rectangle.stack"
         case .autoConversation: "arrow.triangle.2.circlepath"
         }
     }
@@ -149,7 +144,6 @@ enum ChatMode: String, CaseIterable, Identifiable, Sendable {
     func applying(to settings: AppSettings) -> AppSettings {
         var updated = settings
         updated.isDualModeEnabled = self == .dual
-        updated.isFusionModeEnabled = self == .fusion
         updated.isAutoConversationEnabled = self == .autoConversation
         return updated.normalizedForPersistence()
     }
@@ -166,7 +160,6 @@ enum ChatWorkspaceRoute: Identifiable {
     case modePicker
     case runInspector(messageID: Int64, steps: [ToolActivityStep])
     case thinkingInspector(messageID: Int64, text: String)
-    case fusionInspector(messageID: Int64, trace: FusionTrace, debugModeEnabled: Bool)
     case artifactViewer(id: String, block: ChatArtifactBlock)
     case mermaidViewer(id: String, source: String)
     case genUIMap(GenUIMapConfiguration)
@@ -178,7 +171,6 @@ enum ChatWorkspaceRoute: Identifiable {
         case .modePicker: "mode-picker"
         case let .runInspector(messageID, _): "run-\(messageID)"
         case let .thinkingInspector(messageID, _): "thinking-\(messageID)"
-        case let .fusionInspector(messageID, _, _): "fusion-\(messageID)"
         case let .artifactViewer(id, _): "artifact-\(id)"
         case let .mermaidViewer(id, _): "mermaid-\(id)"
         case let .genUIMap(configuration): "genui-map-\(configuration.id)"

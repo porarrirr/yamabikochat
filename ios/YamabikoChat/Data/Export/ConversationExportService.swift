@@ -69,7 +69,7 @@ struct ConversationDebugExport: Codable, Equatable {
     var messages: [ConversationMessageDebugExport]
     var dualMessages: [DualMessageDebugExport]
     var autoConversations: [AutoConversationDebugExport]
-    var fusionTraces: [FusionTraceRecord]
+    var fusionTraces: [LegacyFusionTraceRecord]
     var tokenUsageRecords: [TokenUsageRecord]
     var executionMetrics: [ConversationExecutionMetric]
     var piExecutions: [ConversationPiExecutionExport]

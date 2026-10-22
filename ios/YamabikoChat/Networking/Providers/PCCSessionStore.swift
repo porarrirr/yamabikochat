@@ -95,7 +95,7 @@ final class PCCSessionStore {
     func removeConversations(_ ids: Set<Int64>) {
         entries = entries.filter { key, _ in
             !ids.contains { id in
-                key == "conversation-\(id)" || key.hasPrefix("conversation-\(id)-") || key == "fusion-\(id)"
+                key == "conversation-\(id)" || key.hasPrefix("conversation-\(id)-")
             }
         }
         generation = UUID()

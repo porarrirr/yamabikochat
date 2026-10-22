@@ -134,11 +134,11 @@ final class AgentSkillRepositoryTests: XCTestCase {
             skillRepository: repository
         )
 
-        let panel = try await resolver.resolve(
+        let standard = try await resolver.resolve(
             settings: AppSettings(),
             provider: "OPENAI",
             model: "gpt-5.6",
-            toolScope: .fusionPanel(allowWebSearch: false)
+            toolScope: .all
         )
         let internalRequest = try await resolver.resolve(
             settings: AppSettings(),
@@ -147,8 +147,8 @@ final class AgentSkillRepositoryTests: XCTestCase {
             toolScope: .providerOnly
         )
 
-        XCTAssertTrue(panel.tools.contains { $0.payload["name"] == AgentSkillTools.activateName })
-        XCTAssertTrue(panel.tools.contains { $0.payload["name"] == AgentSkillTools.readResourceName })
+        XCTAssertTrue(standard.tools.contains { $0.payload["name"] == AgentSkillTools.activateName })
+        XCTAssertTrue(standard.tools.contains { $0.payload["name"] == AgentSkillTools.readResourceName })
         XCTAssertFalse(internalRequest.tools.contains { $0.payload["name"] == AgentSkillTools.activateName })
     }
 

@@ -34,8 +34,8 @@ final class ChatRenderingPerformanceTests: XCTestCase {
                 window.rootViewController = controller
                 window.makeKeyAndVisible()
                 controller.configure(store: store, scrollToLatestRequest: 1, regeneratableMessageID: nil,
-                    fusionDebugModeEnabled: false, dualSplitLayout: "VERTICAL", dualSplitRatio: 0.5,
-                    fusionTraceForMessage: { _ in nil }, onRoute: { _ in }, onPreviousVariant: { _ in },
+                    dualSplitLayout: "VERTICAL", dualSplitRatio: 0.5,
+                    onRoute: { _ in }, onPreviousVariant: { _ in },
                     onNextVariant: { _ in }, onBranch: { _ in }, onRegenerate: {}, onAskChatWithSelection: { _ in },
                     onEditUserMessage: { _ in }, onSelectUserMessageText: { _ in })
                 controller.view.layoutIfNeeded()

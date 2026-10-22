@@ -8,10 +8,8 @@ struct ChatTimelineCollectionView: UIViewControllerRepresentable {
     @Binding var unreadCount: Int
     let scrollToLatestRequest: Int
     let regeneratableMessageID: Int64?
-    let fusionDebugModeEnabled: Bool
     let dualSplitLayout: String
     let dualSplitRatio: Double
-    let fusionTraceForMessage: (ChatMessage) -> FusionTrace?
     let onRoute: (ChatWorkspaceRoute) -> Void
     let onPreviousVariant: (Int64) -> Void
     let onNextVariant: (Int64) -> Void
@@ -38,10 +36,8 @@ struct ChatTimelineCollectionView: UIViewControllerRepresentable {
             store: store,
             scrollToLatestRequest: scrollToLatestRequest,
             regeneratableMessageID: regeneratableMessageID,
-            fusionDebugModeEnabled: fusionDebugModeEnabled,
             dualSplitLayout: dualSplitLayout,
             dualSplitRatio: dualSplitRatio,
-            fusionTraceForMessage: fusionTraceForMessage,
             onRoute: onRoute,
             onPreviousVariant: onPreviousVariant,
             onNextVariant: onNextVariant,
@@ -81,17 +77,14 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var userScrollGeneration = 0
     private var lastUserDrivenOffsetY: CGFloat?
     private var previousRegeneratableMessageID: Int64?
-    private var previousFusionDebugModeEnabled = false
     private var previousDualSplitLayout = "VERTICAL"
     private var previousDualSplitRatio = 0.5
     private var isTimelineVisible = true
     private var lastPublishedFollowState: (following: Bool, unread: Int)?
 
     var regeneratableMessageID: Int64?
-    var fusionDebugModeEnabled = false
     var dualSplitLayout = "VERTICAL"
     var dualSplitRatio = 0.5
-    var fusionTraceForMessage: (ChatMessage) -> FusionTrace? = { _ in nil }
     var onRoute: (ChatWorkspaceRoute) -> Void = { _ in }
     var onPreviousVariant: (Int64) -> Void = { _ in }
     var onNextVariant: (Int64) -> Void = { _ in }
@@ -145,10 +138,8 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
                 ChatTimelineRowView(
                     store: row,
                     regeneratableMessageID: self.regeneratableMessageID,
-                    fusionDebugModeEnabled: self.fusionDebugModeEnabled,
                     dualSplitLayout: self.dualSplitLayout,
                     dualSplitRatio: self.dualSplitRatio,
-                    fusionTraceForMessage: self.fusionTraceForMessage,
                     onRoute: self.onRoute,
                     onPreviousVariant: self.onPreviousVariant,
                     onNextVariant: self.onNextVariant,
@@ -220,10 +211,8 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         store: ChatTimelineStore,
         scrollToLatestRequest: Int,
         regeneratableMessageID: Int64?,
-        fusionDebugModeEnabled: Bool,
         dualSplitLayout: String,
         dualSplitRatio: Double,
-        fusionTraceForMessage: @escaping (ChatMessage) -> FusionTrace?,
         onRoute: @escaping (ChatWorkspaceRoute) -> Void,
         onPreviousVariant: @escaping (Int64) -> Void,
         onNextVariant: @escaping (Int64) -> Void,
@@ -264,18 +253,14 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         }
         self.store = store
         let regeneratableMessageChanged = previousRegeneratableMessageID != regeneratableMessageID
-        let fusionDebugModeChanged = previousFusionDebugModeEnabled != fusionDebugModeEnabled
         let dualLayoutChanged = previousDualSplitLayout != dualSplitLayout
             || previousDualSplitRatio != dualSplitRatio
         previousRegeneratableMessageID = regeneratableMessageID
-        previousFusionDebugModeEnabled = fusionDebugModeEnabled
         previousDualSplitLayout = dualSplitLayout
         previousDualSplitRatio = dualSplitRatio
         self.regeneratableMessageID = regeneratableMessageID
-        self.fusionDebugModeEnabled = fusionDebugModeEnabled
         self.dualSplitLayout = dualSplitLayout
         self.dualSplitRatio = dualSplitRatio
-        self.fusionTraceForMessage = fusionTraceForMessage
         self.onRoute = onRoute
         self.onPreviousVariant = onPreviousVariant
         self.onNextVariant = onNextVariant
@@ -294,7 +279,6 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         }
 
         let shouldReconfigure = regeneratableMessageChanged
-            || fusionDebugModeChanged
             || dualLayoutChanged
         apply(
             ids: store.orderedIDs,
@@ -1077,10 +1061,8 @@ final class ChatTimelineCollectionCell: UICollectionViewCell {
 private struct ChatTimelineRowView: View {
     @ObservedObject var store: ChatTimelineRowStore
     let regeneratableMessageID: Int64?
-    let fusionDebugModeEnabled: Bool
     let dualSplitLayout: String
     let dualSplitRatio: Double
-    let fusionTraceForMessage: (ChatMessage) -> FusionTrace?
     let onRoute: (ChatWorkspaceRoute) -> Void
     let onPreviousVariant: (Int64) -> Void
     let onNextVariant: (Int64) -> Void
@@ -1127,8 +1109,6 @@ private struct ChatTimelineRowView: View {
                         streamingSnapshot: store.streamingSnapshot,
                         streamingMarkdownBlocks: store.streamingMarkdownBlocks,
                         canRegenerate: regeneratableMessageID == message.id,
-                        fusionDebugModeEnabled: fusionDebugModeEnabled,
-                        fusionTrace: fusionTraceForMessage(message.message),
                         onRoute: onRoute,
                         onPreviousVariant: onPreviousVariant,
                         onNextVariant: onNextVariant,
@@ -1228,8 +1208,6 @@ struct ChatMessageRow: View {
     let streamingSnapshot: ChatStreamingSnapshot?
     let streamingMarkdownBlocks: [NativeMarkdownBlock]?
     let canRegenerate: Bool
-    let fusionDebugModeEnabled: Bool
-    let fusionTrace: FusionTrace?
     let onRoute: (ChatWorkspaceRoute) -> Void
     let onPreviousVariant: (Int64) -> Void
     let onNextVariant: (Int64) -> Void
@@ -1412,12 +1390,6 @@ struct ChatMessageRow: View {
                         .accessibilityIdentifier("chat-response-progress")
                     }
 
-                    if let fusionTrace, !isStreaming {
-                        FusionMessageSummary(trace: fusionTrace) {
-                            showFusionDetails(fusionTrace)
-                        }
-                    }
-
                     if !isStreaming {
                         ChatMessageActions(
                             message: message,
@@ -1475,14 +1447,6 @@ struct ChatMessageRow: View {
             }
             .buttonStyle(.plain)
         }
-    }
-
-    private func showFusionDetails(_ trace: FusionTrace) {
-        onRoute(.fusionInspector(
-            messageID: message.id,
-            trace: trace,
-            debugModeEnabled: fusionDebugModeEnabled
-        ))
     }
 
     private var attachmentPaths: [String] {

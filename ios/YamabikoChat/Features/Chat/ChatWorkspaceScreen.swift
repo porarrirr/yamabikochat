@@ -113,14 +113,10 @@ struct ChatWorkspaceScreen: View {
 
     private var canSwitchChatModel: Bool {
         !viewModel.settings.isDualModeEnabled &&
-            !viewModel.settings.isAutoConversationEnabled &&
-            !viewModel.settings.isFusionModeEnabled
+            !viewModel.settings.isAutoConversationEnabled
     }
 
     private var modelSwitcherTitle: String {
-        if viewModel.settings.isFusionModeEnabled {
-            return L10n.text("Fusion")
-        }
         if viewModel.settings.isDualModeEnabled {
             return L10n.text("デュアルモード")
         }
@@ -146,8 +142,7 @@ struct ChatWorkspaceScreen: View {
 
     private func isActiveChatPreset(_ preset: ModelPreset) -> Bool {
         guard !viewModel.settings.isDualModeEnabled,
-              !viewModel.settings.isAutoConversationEnabled,
-              !viewModel.settings.isFusionModeEnabled
+              !viewModel.settings.isAutoConversationEnabled
         else {
             return false
         }

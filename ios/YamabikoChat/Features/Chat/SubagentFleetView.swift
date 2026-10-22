@@ -223,7 +223,6 @@ private struct SubagentDetailContent: View {
                 thinkingStream: nil, variants: []),
             streamingSnapshot: nil, streamingMarkdownBlocks: nil,
             canRegenerate: false,
-            fusionDebugModeEnabled: false, fusionTrace: nil,
             onRoute: { route = $0 }, onPreviousVariant: { _ in }, onNextVariant: { _ in },
             onBranch: { _ in }, onRegenerate: {}, onEditUserMessage: { _ in },
             onSelectUserMessageText: { _ in }, onMarkdownLayoutChange: {}, isReadOnly: true
@@ -253,7 +252,6 @@ private struct SubagentResponseView: View {
                 streamingSnapshot: store.streamingSnapshot,
                 streamingMarkdownBlocks: store.streamingMarkdownBlocks,
                 canRegenerate: false,
-                fusionDebugModeEnabled: false, fusionTrace: nil,
                 onRoute: onRoute, onPreviousVariant: { _ in }, onNextVariant: { _ in },
                 onBranch: { _ in }, onRegenerate: {}, onEditUserMessage: { _ in },
                 onSelectUserMessageText: { _ in },

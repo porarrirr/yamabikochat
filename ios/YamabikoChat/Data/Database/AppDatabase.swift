@@ -1037,6 +1037,16 @@ enum AppDatabase {
                 t.column("payload", .text).notNull()
             }
         }
+        // Keep historical columns and traces readable, but retire all Fusion settings.
+        migrator.registerMigration("v33_retire_fusion") { db in
+            try db.execute(sql: """
+                UPDATE settings SET isFusionModeEnabled = 0,
+                    fusionPresetName = '', fusionTaskType = '',
+                    fusionDebugModeEnabled = 0, fusionLogPromptsEnabled = 0,
+                    fusionCustomPresetJSON = ''
+                """)
+        }
+
         return migrator
     }
 

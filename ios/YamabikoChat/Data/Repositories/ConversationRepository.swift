@@ -368,7 +368,7 @@ final class ConversationRepository: @unchecked Sendable {
             try TokenUsageRecord
                 .filter(idArray.contains(Column("conversationId")))
                 .deleteAll(db)
-            try FusionTraceRecord
+            try LegacyFusionTraceRecord
                 .filter(idArray.contains(Column("conversationId")))
                 .deleteAll(db)
             try deleteAutoConversationsBoundToConversations(
@@ -1196,7 +1196,7 @@ final class ConversationRepository: @unchecked Sendable {
                 )
             }
 
-            let fusionTraces = try FusionTraceRecord
+            let fusionTraces = try LegacyFusionTraceRecord
                 .filter(Column("conversationId") == conversationId)
                 .order(Column("startedAtMs").asc)
                 .fetchAll(db)

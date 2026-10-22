@@ -21,12 +21,6 @@ final class ReviewRegressionTests: XCTestCase {
         }
     }
 
-    func testFusionRejectsNonImageAttachmentsExplicitly() throws {
-        XCTAssertThrowsError(try FusionService.validateAttachments(["/tmp/document.pdf"]))
-        XCTAssertThrowsError(try FusionService.validateAttachments(["/tmp/document.txt"]))
-        XCTAssertNoThrow(try FusionService.validateAttachments(["/tmp/photo.png"]))
-    }
-
     func testVisionUsesPiInputContractWithoutPricingOrCredentials() async throws {
         let db = try DatabaseQueue()
         try AppDatabase.migrator.migrate(db)

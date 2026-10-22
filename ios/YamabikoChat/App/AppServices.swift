@@ -27,8 +27,6 @@ final class AppServices {
     let codexAuthRepository: CodexAuthRepository
     let superGrokAuthRepository: SuperGrokAuthRepository
     let providerGateway: ProviderGateway
-    let fusionTraceStore: FusionTraceStore
-    let fusionService: FusionService
     let chatRepository: ChatRepository
     let sharePayloadStore: SharePayloadStore
     let userQuestionCoordinator: UserQuestionCoordinator
@@ -116,15 +114,6 @@ final class AppServices {
             localTools: localTools,
             localToolFactory: makeLocalTools
         )
-        fusionTraceStore = FusionTraceStore(dbQueue: dbQueue)
-        fusionService = FusionService(
-            settingsRepository: settingsRepository,
-            providerGateway: providerGateway,
-            pricingRepository: LiteLlmPricingRepository(),
-            traceStore: fusionTraceStore,
-            requestSettingsResolver: requestSettingsResolver,
-            skillRepository: skillRepository
-        )
         chatRepository = ChatRepository(
             conversations: conversationRepository,
             settings: settingsRepository,
@@ -136,8 +125,6 @@ final class AppServices {
             requestSettingsResolver: requestSettingsResolver,
             codexAuthRepository: codexAuthRepository,
             superGrokAuthRepository: superGrokAuthRepository,
-            fusionService: fusionService,
-            fusionTraceStore: fusionTraceStore,
             attachmentRepository: attachmentRepository
         )
         sharePayloadStore = SharePayloadStore()

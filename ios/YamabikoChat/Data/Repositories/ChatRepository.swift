@@ -36,9 +36,6 @@ final class ChatRepository {
     private let superGrokAuthRepository: SuperGrokAuthRepository
     private let openCodeGoUsageRepository: OpenCodeGoUsageRepository
     private let pricingRepository: any LiteLlmPricingEstimating
-    private let fusionService: FusionService
-    private let fusionTraceStore: FusionTraceStore
-    private let fusionOrchestrator: FusionOrchestrator
     private let editorWorkspaces: EditorWorkspaceStore
     private let projectWorkspaces: ProjectWorkspaceStore
     private let attachmentRepository: AttachmentRepository
@@ -57,9 +54,6 @@ final class ChatRepository {
         superGrokAuthRepository: SuperGrokAuthRepository,
         openCodeGoUsageRepository: OpenCodeGoUsageRepository? = nil,
         pricingRepository: any LiteLlmPricingEstimating = LiteLlmPricingRepository(),
-        fusionService: FusionService,
-        fusionTraceStore: FusionTraceStore,
-        fusionOrchestrator: FusionOrchestrator = FusionOrchestrator(),
         editorWorkspaces: EditorWorkspaceStore = .shared,
         projectWorkspaces: ProjectWorkspaceStore = .shared,
         attachmentRepository: AttachmentRepository = AttachmentRepository(),
@@ -78,9 +72,6 @@ final class ChatRepository {
         self.openCodeGoUsageRepository = openCodeGoUsageRepository
             ?? OpenCodeGoUsageRepository()
         self.pricingRepository = pricingRepository
-        self.fusionService = fusionService
-        self.fusionTraceStore = fusionTraceStore
-        self.fusionOrchestrator = fusionOrchestrator
         self.editorWorkspaces = editorWorkspaces
         self.projectWorkspaces = projectWorkspaces
         self.attachmentRepository = attachmentRepository
@@ -1042,7 +1033,7 @@ final class ChatRepository {
 
     func compactContext(conversationId: Int64) async throws {
         let settings = try settings.load()
-        guard !settings.isDualModeEnabled, !settings.isFusionModeEnabled, !settings.isAutoConversationEnabled,
+        guard !settings.isDualModeEnabled, !settings.isAutoConversationEnabled,
               let conversation = try conversations.fetchConversation(id: conversationId) else {
             throw ProviderClientError.parseFailure(L10n.text("通常のチャットで compaction を実行してください。"))
         }
@@ -1530,221 +1521,6 @@ final class ChatRepository {
         return modelRow
     }
 
-    func sendFusionMessage(
-        conversationId: Int64,
-        text: String,
-        attachments: [String] = [],
-        settingsOverride: AppSettings? = nil,
-        onFusionProgress: (@Sendable (FusionProgressSnapshot) -> Void)? = nil,
-        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
-        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
-    ) async throws -> SendMessageResult {
-        try await withConversationMetrics(conversationId: conversationId) {
-            try await self.sendFusionMessageMeasured(
-                conversationId: conversationId,
-                text: text,
-                attachments: attachments,
-                settingsOverride: settingsOverride,
-                onFusionProgress: onFusionProgress,
-                onStreamEvent: onStreamEvent,
-                onStreamingSnapshot: onStreamingSnapshot
-            )
-        }
-    }
-
-    private func sendFusionMessageMeasured(
-        conversationId: Int64,
-        text: String,
-        attachments: [String] = [],
-        settingsOverride: AppSettings?,
-        onFusionProgress: (@Sendable (FusionProgressSnapshot) -> Void)? = nil,
-        onStreamEvent: (@Sendable (ProviderStreamEvent) -> Void)? = nil,
-        onStreamingSnapshot: (@Sendable (ChatStreamingSnapshot) -> Void)? = nil
-    ) async throws -> SendMessageResult {
-        let bgGuard = BackgroundTaskGuard()
-        bgGuard.begin(name: "YamabikoChatFusion")
-        defer { bgGuard.end() }
-
-        let settings = try settingsOverride ?? self.settings.load()
-        guard settings.isFusionModeEnabled else {
-            throw ProviderClientError.parseFailure(L10n.text("Fusion モードが有効ではありません。"))
-        }
-        guard let conversation = try conversations.fetchConversation(id: conversationId) else {
-            throw ProviderClientError.parseFailure("Conversation not found")
-        }
-        guard !conversation.isSecret || attachments.isEmpty else {
-            throw ProviderClientError.parseFailure(
-                L10n.text("シークレットチャットでは添付ファイルを送信できません。")
-            )
-        }
-        let isFirstMessage = try conversations.isConversationEmpty(conversationId: conversationId)
-        let normalizedAttachments = attachments.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-
-        let allowWebSearchOverride: Bool? = settings.clientWebSearchToolEnabled ? nil : false
-        let fusionRequest: FusionRequest
-        do {
-            fusionRequest = try FusionPresetLoader.buildRequest(
-                userPrompt: text,
-                systemPrompt: conversation.systemPrompt,
-                allowWebSearchOverride: allowWebSearchOverride,
-                customPresetJSON: settings.fusionCustomPresetJSON
-            )
-        } catch {
-            DiagnosticsLogger.log("Fusion preset load failed", category: .fusion, error: error)
-            throw error
-        }
-
-        var history = try conversations.fetchProviderHistory(conversationId: conversationId)
-            .flatMap(\.providerMessages)
-        history.append(
-            ProviderRequestMessage(role: "user", content: text, attachments: normalizedAttachments)
-        )
-
-        let userMessageId = try conversations.insertMessage(
-            ChatMessage(
-                conversationId: conversationId,
-                role: "user",
-                text: text,
-                attachmentsJSON: encodeArray(normalizedAttachments)
-            )
-        )
-        let context = FusionContext(
-            fusionDepth: 0,
-            debugMode: settings.fusionDebugModeEnabled,
-            logPrompts: !conversation.isSecret && settings.fusionLogPromptsEnabled,
-            conversationId: conversationId,
-            projectId: conversation.projectId,
-            clientToolsAllowed: !conversation.isSecret
-        )
-
-        let judgeOutcome = try await fusionService.runThroughJudge(
-            request: fusionRequest,
-            context: context,
-            conversationHistory: history,
-            userAttachments: normalizedAttachments,
-            onProgress: onFusionProgress
-        )
-
-        for usage in judgeOutcome.panelTokenUsages {
-            await recordTokenUsageIfAvailable(
-                provider: usage.provider,
-                model: usage.model,
-                usage: usage.usage,
-                conversationId: conversationId,
-                requestType: usage.requestType
-            )
-        }
-        if let judgeUsage = judgeOutcome.judgeTokenUsage {
-            await recordTokenUsageIfAvailable(
-                provider: judgeUsage.provider,
-                model: judgeUsage.model,
-                usage: judgeUsage.usage,
-                conversationId: conversationId,
-                requestType: "fusion_judge"
-            )
-        }
-
-        let assistantMessageId = try conversations.insertMessage(
-            ChatMessage(
-                conversationId: conversationId,
-                role: "model",
-                text: "",
-                fusionTraceId: judgeOutcome.trace.requestId
-            )
-        )
-
-        let synthPanelChips = judgeOutcome.trace.panelResults.map { result in
-            FusionPanelChipStatus(
-                modelId: result.modelId,
-                provider: result.provider,
-                state: result.success ? .succeeded : .failed
-            )
-        }
-        onFusionProgress?(
-            FusionProgressSnapshot.phaseOnly(.synthesizer, panels: synthPanelChips)
-        )
-
-        let synthStarted = Date()
-        let stream = try await providers.stream(
-            request: judgeOutcome.synthesisRequest,
-            providerID: judgeOutcome.synthesizerModel.provider
-        )
-        let session = try await ChatStreamSession.run(
-            stream: stream,
-            conversations: conversations,
-            kind: .message(messageId: assistantMessageId),
-            onStreamEvent: onStreamEvent,
-            onStreamingSnapshot: onStreamingSnapshot
-        )
-        guard let finalText = session.text.trimmedNonEmpty else {
-            throw ProviderClientError.parseFailure(
-                L10n.text("Fusion synthesizer returned no answer text.")
-            )
-        }
-        let synthUsage = session.usage
-        let latencyMs = Int64(Date().timeIntervalSince(synthStarted) * 1000)
-        let cost = await pricingRepository.estimateCostUsd(
-            provider: judgeOutcome.synthesizerModel.provider,
-            model: judgeOutcome.synthesizerModel.modelId,
-            inputTokens: synthUsage?.inputTokens ?? 0,
-            outputTokens: synthUsage?.outputTokens ?? 0,
-            cachedInputTokens: synthUsage?.cachedInputTokens,
-            cacheCreationInputTokens: synthUsage?.cacheCreationInputTokens,
-            reasoningTokens: synthUsage?.reasoningTokens
-        )
-        let synthesisResult = SynthesisPhaseResult(
-            modelId: judgeOutcome.synthesizerModel.modelId,
-            provider: judgeOutcome.synthesizerModel.provider.uppercased(),
-            success: true,
-            content: finalText,
-            latencyMs: latencyMs,
-            inputTokens: synthUsage?.inputTokens,
-            outputTokens: synthUsage?.outputTokens,
-            cost: cost,
-            error: nil,
-            piExecution: session.toolActivity?.piExecution
-        )
-
-        await recordTokenUsageIfAvailable(
-            provider: judgeOutcome.synthesizerModel.provider,
-            model: judgeOutcome.synthesizerModel.modelId,
-            usage: synthUsage,
-            usageSamples: session.usageSamples,
-            conversationId: conversationId,
-            requestType: "fusion_synth"
-        )
-
-        let finalTrace = fusionOrchestrator.finalizeTrace(
-            trace: judgeOutcome.trace,
-            synthesisResult: synthesisResult,
-            finalAnswer: finalText,
-            logPrompts: context.logPrompts
-        )
-        try fusionTraceStore.save(trace: finalTrace, conversationId: conversationId)
-
-        await updateConversationTitleIfNeeded(
-            conversationId: conversationId,
-            firstPrompt: text,
-            firstResponse: finalText,
-            isFirstMessage: isFirstMessage
-        )
-
-        return SendMessageResult(
-            userMessageId: userMessageId,
-            assistantMessageId: assistantMessageId,
-            response: ProviderResponse(
-                text: finalText,
-                reasoningSummary: nil,
-                raw: nil,
-                usage: synthUsage,
-                toolCalls: []
-            )
-        )
-    }
-
-    func fetchFusionTrace(id: String) throws -> FusionTrace? {
-        try fusionTraceStore.fetch(id: id)
-    }
 
     func sendUserMessageOnly(
         conversationId: Int64,
@@ -2238,24 +2014,6 @@ final class ChatRepository {
             )
             let (supportsA, supportsB) = try await (modelA, modelB)
             return supportsA && supportsB
-        }
-        if settings.isFusionModeEnabled {
-            if let preset = try? FusionPresetLoader.resolveDefinition(
-                customPresetJSON: settings.fusionCustomPresetJSON
-            ) {
-                var allSupport = true
-                for panel in preset.panelModels {
-                    let supports = try await providers.modelSupportsVision(
-                        provider: panel.provider,
-                        model: panel.modelId
-                    )
-                    if !supports {
-                        allSupport = false
-                        break
-                    }
-                }
-                return allSupport
-            }
         }
         return try await providers.modelSupportsVision(
             provider: conversationProvider,

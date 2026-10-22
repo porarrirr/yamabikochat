@@ -506,8 +506,6 @@
 "Failed models" = "Modelos fallidos";
 "Fallback" = "Alternativa";
 "Final answer (logged)" = "Respuesta final (registrada)";
-"Fusion · %d/%d panels" = "Fusion · %d/%d paneles";
-"Fusion 詳細" = "Detalles de Fusion";
 "Judge raw JSON" = "JSON sin procesar del juez";
 "User prompt" = "Solicitud del usuario";
 "analyzing" = "analizando";

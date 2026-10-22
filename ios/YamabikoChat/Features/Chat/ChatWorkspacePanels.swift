@@ -29,8 +29,6 @@ struct ChatWorkspaceRouteSheet: View {
             ChatRunInspector(steps: steps)
         case let .thinkingInspector(_, text):
             ChatThinkingInspector(text: text)
-        case let .fusionInspector(_, trace, debugModeEnabled):
-            FusionDetailSheet(trace: trace, debugModeEnabled: debugModeEnabled)
         case let .artifactViewer(_, block):
             ChatArtifactViewer(block: block)
         case let .mermaidViewer(_, source):

@@ -47,14 +47,12 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         let dualB = try await containsEditor(context: .dualB)
         let autoA = try await containsEditor(context: .autoA)
         let autoB = try await containsEditor(context: .autoB)
-        let fusion = try await containsEditor(context: .default, scope: .fusionPanel(allowWebSearch: true))
         let nonPi = try await containsEditor(context: .default, provider: LLMProvider.appleIntelligence.rawValue)
         XCTAssertTrue(normal)
         XCTAssertTrue(dualA)
         XCTAssertTrue(dualB)
         XCTAssertFalse(autoA)
         XCTAssertFalse(autoB)
-        XCTAssertFalse(fusion)
         XCTAssertFalse(nonPi)
     }
 
@@ -215,21 +213,6 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
 
         XCTAssertTrue(resolved.tools.contains { $0.payload["name"] == WebSearchTool.name })
         XCTAssertTrue(resolved.tools.contains { $0.payload["name"] == PythonExecuteTool.name })
-    }
-
-    func testPythonToolIsOmittedFromFusionPanelScope() async throws {
-        let resolver = makeResolver()
-        var settings = AppSettings()
-        settings.pythonToolEnabled = true
-
-        let resolved = try await resolver.resolve(
-            settings: settings,
-            provider: "GEMINI",
-            model: "gemini-2.5-flash",
-            toolScope: .fusionPanel(allowWebSearch: true)
-        )
-
-        XCTAssertFalse(resolved.tools.contains { $0.payload["name"] == PythonExecuteTool.name })
     }
 
     func testClientWebSearchToolsAreAvailableForEveryPiProvider() async throws {

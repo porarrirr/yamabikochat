@@ -6,7 +6,7 @@
 
 **为 iPhone 与 iPad 打造的原生 AI 聊天工作台。**<br>
 一个提示词，多个模型 —— 并排比较回答、让模型互相辩论，<br>
-或将多个响应融合为一个最终结论。
+或将任务分配给子智能体。
 
 [English](README.md) · [日本語](README.ja.md) · **简体中文**
 
@@ -20,7 +20,7 @@
 
 ---
 
-**YamabikoChat**（山彦，意为"山谷回声"）是一个 SwiftUI 原生 AI 客户端，核心理念很简单：没有任何单一模型永远正确。与一个模型对话、让两个模型并排作答、让两个模型自主交谈，或运行完整的 面板 → 评判 → 合成 流水线 —— 一切尽在一个 App 中，在你的设备上完成。
+**YamabikoChat**（山彦，意为"山谷回声"）是一个 SwiftUI 原生 AI 客户端，核心理念很简单：没有任何单一模型永远正确。与一个模型对话、让两个模型并排作答、让两个模型自主交谈，或将任务分配给子智能体 —— 一切尽在一个 App 中，在你的设备上完成。
 
 > 仅支持 iOS 与 iPadOS。Android 版开发已结束，历史实现保留在 Git 记录中。默认开发分支为 `ios`。
 
@@ -41,7 +41,6 @@
 - **聊天** —— 经典的一对一对话，支持流式回答、编辑/重新生成与响应变体。
 - **双模型对比（Dual）** —— 同一提示词发送给两个模型，并排阅读两者的回答。
 - **自动对话** —— 选定两个模型、话题与回合数，旁观它们彼此交谈。
-- **Fusion** —— 问题并行发送给多个面板模型，评判模型生成结构化对比（共识、矛盾、独到见解、疑似错误），合成模型撰写最终回答。内置 quality / budget / fast 预设，并支持完全自定义 JSON。
 
 ### 提供商
 
@@ -76,7 +75,7 @@
 
 ### 为 iOS 与 iPadOS 而生
 
-- **Siri、快捷指令与 App Intents** —— 对 Siri 说"向 YamabikoChat 提问"即可免手动发问，或在快捷指令中运行已保存的模型 / Fusion 预设。
+- **Siri、快捷指令与 App Intents** —— 对 Siri 说"向 YamabikoChat 提问"即可免手动发问，或在快捷指令中运行已保存的模型预设。
 - **Spotlight** —— 会话标题被索引、可搜索；屏幕内容上下文让 Siri 能针对你正在查看的会话执行操作。
 - **私密会话** —— 完全排除在 Spotlight、Siri 与实体解析之外。
 - **共享扩展** —— 从任意 App 将文本直接发送到新会话。
@@ -130,7 +129,7 @@ Bootstrap 缓存、构建目标与 CI 详情见 [ios/README.md](ios/README.md)�
 | [ios/YamabikoTests/](ios/YamabikoTests/) | 单元测试 |
 | [ios/PiRuntime/](ios/PiRuntime/) | Pi Agents 运行时与 JS 测试 |
 | [ios/docs/](ios/docs/README.md) | 开发笔记与设计 QA 资料 |
-| [docs/](docs/README.md) | 公开网站 —— 隐私、支持、条款、Fusion 详解 |
+| [docs/](docs/README.md) | 公开网站 —— 隐私、支持、条款 |
 | `scripts/` | 上游提供商契约检查 |
 | `third_party/` | 第三方契约与许可声明 |
 

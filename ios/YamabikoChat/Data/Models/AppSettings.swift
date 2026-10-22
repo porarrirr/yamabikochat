@@ -193,11 +193,6 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var dualThinkingLevelB: String?
     var dualCodexReasoningEffortB: String?
 
-    var isFusionModeEnabled: Bool
-    var fusionPresetName: String
-    var fusionDebugModeEnabled: Bool
-    var fusionLogPromptsEnabled: Bool
-    var fusionCustomPresetJSON: String
 
     var isAutoConversationEnabled: Bool
     var autoModelA: String
@@ -347,11 +342,6 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         dualThinkingLevelB = nil
         dualCodexReasoningEffortB = nil
 
-        isFusionModeEnabled = false
-        fusionPresetName = "custom"
-        fusionDebugModeEnabled = false
-        fusionLogPromptsEnabled = false
-        fusionCustomPresetJSON = ""
 
         isAutoConversationEnabled = false
         autoModelA = "gemini-2.5-flash"
@@ -479,16 +469,9 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
         }
         if normalized.isDualModeEnabled {
             normalized.isAutoConversationEnabled = false
-            normalized.isFusionModeEnabled = false
         } else if normalized.isAutoConversationEnabled {
             normalized.isDualModeEnabled = false
-            normalized.isFusionModeEnabled = false
-        } else if normalized.isFusionModeEnabled {
-            normalized.isDualModeEnabled = false
-            normalized.isAutoConversationEnabled = false
         }
-        normalized.fusionPresetName = FusionPresetLoader.presetLabel
-        normalized.fusionCustomPresetJSON = normalized.normalizedFusionCustomPresetJSON()
         let layout = normalized.dualSplitLayout
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased()
@@ -827,19 +810,13 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
             providerDefaultModelsJSON = json
         }
 
-        let fusionPreset = decodeFusionCustomPreset()
-        let fusionModels = (fusionPreset?.panelModels ?? []) + [fusionPreset?.judgeModel, fusionPreset?.synthesizerModel].compactMap { $0 }
-        let fusionUsesPCC = fusionModels.contains {
-            $0.provider.caseInsensitiveCompare("APPLE_INTELLIGENCE") == .orderedSame &&
-                $0.modelId == AppleIntelligenceModelCatalog.pccModel
-        }
         let sideModels = [(dualProviderA, dualModelA), (dualProviderB, dualModelB),
                           (autoProviderA, autoModelA), (autoProviderB, autoModelB)]
         let sideUsesPCC = sideModels.contains { provider, model in
             provider.caseInsensitiveCompare("APPLE_INTELLIGENCE") == .orderedSame &&
                 model == AppleIntelligenceModelCatalog.pccModel
         }
-        let isPCCActive = sideUsesPCC || fusionUsesPCC || (apiProvider.uppercased() == "APPLE_INTELLIGENCE" && defaultModel == AppleIntelligenceModelCatalog.pccModel) ||
+        let isPCCActive = sideUsesPCC || (apiProvider.uppercased() == "APPLE_INTELLIGENCE" && defaultModel == AppleIntelligenceModelCatalog.pccModel) ||
             models["APPLE_INTELLIGENCE"] == AppleIntelligenceModelCatalog.pccModel
         let isOnDeviceActive = apiProvider.uppercased() == "APPLE_INTELLIGENCE" && defaultModel == AppleIntelligenceModelCatalog.displayModel
 

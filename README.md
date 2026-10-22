@@ -6,7 +6,7 @@
 
 **A native AI chat studio for iPhone and iPad.**<br>
 One prompt, many models — compare answers side by side, let models debate each other,<br>
-or fuse several responses into a single verdict.
+or delegate work to subagents.
 
 **English** · [日本語](README.ja.md) · [简体中文](README.zh-Hans.md)
 
@@ -20,7 +20,7 @@ or fuse several responses into a single verdict.
 
 ---
 
-**YamabikoChat** (山彦 — "mountain echo") is a SwiftUI-native AI client built around a simple idea: no single model is always right. Chat with one model, put two side by side, let two models hold a conversation on their own, or run a full panel → judge → synthesizer pipeline — all from one app, on your device.
+**YamabikoChat** (山彦 — "mountain echo") is a SwiftUI-native AI client built around a simple idea: no single model is always right. Chat with one model, put two side by side, let two models hold a conversation on their own, or delegate work to subagents — all from one app, on your device.
 
 > iOS and iPadOS only. Android development has ended; the previous implementation remains in Git history. The default development branch is `ios`.
 
@@ -41,7 +41,6 @@ or fuse several responses into a single verdict.
 - **Chat** — classic one-on-one with streaming answers, edit/regenerate, and response variants.
 - **Dual** — send one prompt to two models and read their answers side by side.
 - **Auto conversation** — choose two models, a topic, and a turn count, then watch them talk to each other.
-- **Fusion** — your question goes to a panel of models in parallel, a judge model produces a structured comparison (agreements, contradictions, unique insights, suspected errors), and a synthesizer writes the final answer. Ships with quality / budget / fast presets and full custom JSON.
 
 ### Providers
 
@@ -76,7 +75,7 @@ Model identity and execution are resolved by the embedded [Pi Agents runtime](io
 
 ### Built for iOS & iPadOS
 
-- **Siri, Shortcuts & App Intents** — ask Yamabiko hands-free, or run a saved model / Fusion preset from Shortcuts.
+- **Siri, Shortcuts & App Intents** — ask Yamabiko hands-free, or run a saved model preset from Shortcuts.
 - **Spotlight** — conversation titles are indexed and searchable; onscreen context lets Siri act on the chat you're looking at.
 - **Secret conversations** — excluded from Spotlight, Siri, and entity resolution entirely.
 - **Share extension** — send text from any app straight into a new chat.
@@ -130,7 +129,7 @@ See [ios/README.md](ios/README.md) for bootstrap caching, targets, and CI detail
 | [ios/YamabikoTests/](ios/YamabikoTests/) | Unit tests |
 | [ios/PiRuntime/](ios/PiRuntime/) | Pi Agents runtime and JS tests |
 | [ios/docs/](ios/docs/README.md) | Development notes and design QA evidence |
-| [docs/](docs/README.md) | Public website — privacy, support, terms, Fusion explainer |
+| [docs/](docs/README.md) | Public website — privacy, support, terms |
 | `scripts/` | Upstream provider contract checks |
 | `third_party/` | Third-party contracts and notices |
 

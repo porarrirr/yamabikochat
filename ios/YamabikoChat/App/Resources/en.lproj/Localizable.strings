@@ -450,12 +450,10 @@
 "Shortcuts: ${applicationName} に ${prompt} を聞く" = "Ask ${applicationName} about ${prompt}";
 "Shortcuts: ${prompt} を ${applicationName} で聞いて保存" = "Ask and save ${prompt} with ${applicationName}";
 "Shortcuts: ${applicationName} に ${prompt} を聞いて保存" = "Ask and save ${prompt} with ${applicationName}";
-"Fusion 詳細" = "Fusion Details";
 "パネル実行中 (%d/%d)" = "Running panels (%d/%d)";
 "ジャッジ中" = "Judging";
 "回答を合成中" = "Synthesizing answer";
 "フォールバックで回答中" = "Answering via fallback";
-"Fusion · %d/%d panels" = "Fusion · %d/%d panels";
 "低信頼" = "Low confidence";
 "中信頼" = "Medium confidence";
 "高信頼" = "High confidence";

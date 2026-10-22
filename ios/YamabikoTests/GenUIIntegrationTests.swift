@@ -47,7 +47,7 @@ final class GenUIIntegrationTests: XCTestCase {
             )
             XCTAssertEqual(containsGenUI(resolved.tools), context == .default || context == .dualA || context == .dualB)
         }
-        for scope: ProviderRequestToolScope in [.none, .providerOnly, .fusionPanel(allowWebSearch: true), .fusionPanel(allowWebSearch: false)] {
+        for scope: ProviderRequestToolScope in [.none, .providerOnly] {
             let resolved = try await resolver.resolve(
                 settings: settings(), provider: "OPENAI", model: "gpt-5.6", toolScope: scope
             )

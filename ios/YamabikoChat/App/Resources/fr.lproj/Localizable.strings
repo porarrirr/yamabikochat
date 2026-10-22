@@ -175,8 +175,6 @@
 "Failed models" = "Modèles en échec";
 "Fallback" = "Solution de repli";
 "Final answer (logged)" = "Réponse finale (journalisée)";
-"Fusion · %d/%d panels" = "Fusion · %d/%d panneaux";
-"Fusion 詳細" = "Détails de Fusion";
 "Judge raw JSON" = "JSON brut du juge";
 "User prompt" = "Requête utilisateur";
 "analyzing" = "analyse";

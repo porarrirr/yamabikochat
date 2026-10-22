@@ -3,6 +3,40 @@ import GRDB
 @testable import YamabikoChat
 
 final class AppSettingsTests: XCTestCase {
+    func testRetiringFusionPreservesConversationAndIgnoresLegacySettings() throws {
+        let database = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(database, upTo: "v32_context_compaction")
+        let repository = SettingsRepository(dbQueue: database)
+        try repository.save(AppSettings())
+        let conversations = ConversationRepository(dbQueue: database)
+        let conversationID = try conversations.createConversation(
+            title: "Historical Fusion", model: "saved-model", provider: "OPENAI", systemPrompt: nil
+        )
+        _ = try conversations.insertMessage(ChatMessage(
+            conversationId: conversationID, role: "model", text: "Saved answer", createdAtMs: 1
+        ))
+        try database.write { db in
+            try db.execute(sql: "UPDATE settings SET isFusionModeEnabled = 1, fusionCustomPresetJSON = '{invalid}' WHERE id = 1")
+        }
+
+        try AppDatabase.migrator.migrate(database)
+        let loaded = try repository.load()
+        XCTAssertEqual(ChatMode(settings: loaded), .standard)
+        let encoded = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(loaded)) as? [String: Any])
+        XCTAssertNil(encoded["isFusionModeEnabled"])
+        XCTAssertNil(encoded["fusionCustomPresetJSON"])
+        let savedText = try database.read { db in
+            try String.fetchOne(db, sql: "SELECT text FROM chat_messages WHERE conversationId = ?", arguments: [conversationID])
+        }
+        XCTAssertEqual(savedText, "Saved answer")
+        let legacyEnabled = try database.read { db in
+            try Bool.fetchOne(db, sql: "SELECT isFusionModeEnabled FROM settings WHERE id = 1")
+        }
+        XCTAssertEqual(legacyEnabled, false)
+        try repository.save(loaded)
+        XCTAssertEqual(try repository.load(), loaded)
+    }
+
     func testRetiredMathPreferenceDoesNotAffectSettings() throws {
         let database = try DatabaseQueue()
         try AppDatabase.migrator.migrate(database)
@@ -149,58 +183,6 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(normalized.providerModelMap()["OPENCODE_GO"], "glm-5.1")
     }
 
-    func testFusionNormalizationMigratesOnlyZaiLegacyModelIDs() {
-        func model(_ provider: String) -> PanelModelConfig {
-            PanelModelConfig(
-                modelId: "glm-5.1",
-                provider: provider,
-                temperature: nil,
-                timeoutMs: nil,
-                role: nil
-            )
-        }
-        var preset = AppSettings.defaultFusionCustomPreset()
-        preset.panelModels = [model("ZAI"), model("OPENCODE_GO")]
-        preset.judgeModel = model("ZAI")
-        preset.synthesizerModel = model("OPENCODE_GO")
-        let normalized = AppSettings.normalizedFusionPresetDefinition(preset)
-
-        XCTAssertEqual(normalized.panelModels[0].modelId, "glm-5.2")
-        XCTAssertEqual(normalized.panelModels[1].modelId, "glm-5.1")
-        XCTAssertEqual(normalized.judgeModel.modelId, "glm-5.2")
-        XCTAssertEqual(normalized.synthesizerModel.modelId, "glm-5.1")
-    }
-
-    func testFusionNormalizationRemovesLegacyOutputLimitFields() throws {
-        let current = AppSettings.defaultFusionCustomPreset()
-        let data = try JSONEncoder().encode(current)
-        var root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        root["maxPanelTokens"] = 4096
-        root["maxJudgeTokens"] = 2048
-        root["maxSynthesizerTokens"] = 4096
-        var panels = try XCTUnwrap(root["panelModels"] as? [[String: Any]])
-        panels[0]["maxTokens"] = 4096
-        root["panelModels"] = panels
-
-        var settings = AppSettings()
-        settings.fusionCustomPresetJSON = String(
-            data: try JSONSerialization.data(withJSONObject: root),
-            encoding: .utf8
-        ) ?? ""
-
-        let normalized = settings.normalizedForPersistence()
-        let normalizedData = try XCTUnwrap(normalized.fusionCustomPresetJSON.data(using: .utf8))
-        let normalizedRoot = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: normalizedData) as? [String: Any]
-        )
-        let normalizedPanels = try XCTUnwrap(normalizedRoot["panelModels"] as? [[String: Any]])
-
-        XCTAssertNil(normalizedRoot["maxPanelTokens"])
-        XCTAssertNil(normalizedRoot["maxJudgeTokens"])
-        XCTAssertNil(normalizedRoot["maxSynthesizerTokens"])
-        XCTAssertNil(normalizedPanels[0]["maxTokens"])
-    }
-
     func testFreshDatabaseMigrationPersistsCurrentSettingsSchema() throws {
         let dbQueue = try DatabaseQueue()
 
@@ -339,24 +321,6 @@ final class AppSettingsTests: XCTestCase {
             let normalized = settings.normalizedForPersistence()
 
             XCTAssertEqual(normalized.pccReasoningLevel, level)
-        }
-    }
-
-    func testFusionPCCReasoningSurvivesWithOnDevicePrimaryModel() throws {
-        for role in [FusionPhase.panel, .judge, .synthesizer] {
-            var settings = AppSettings()
-            settings.apiProvider = "APPLE_INTELLIGENCE"
-            settings.defaultModel = AppleIntelligenceModelCatalog.displayModel
-            settings.pccReasoningLevel = "deep"
-            var preset = AppSettings.defaultFusionCustomPreset()
-            let model = PanelModelConfig(modelId: AppleIntelligenceModelCatalog.pccModel, provider: "APPLE_INTELLIGENCE")
-            switch role {
-            case .panel: preset.panelModels[0] = model
-            case .judge: preset.judgeModel = model
-            case .synthesizer: preset.synthesizerModel = model
-            }
-            settings.fusionCustomPresetJSON = settings.encodeFusionCustomPreset(preset)
-            XCTAssertEqual(settings.normalizedForPersistence().pccReasoningLevel, "deep", "\(role)")
         }
     }
 
@@ -508,63 +472,6 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertTrue(normalized.pythonToolEnabled)
         XCTAssertTrue(normalized.genUIToolEnabled)
         XCTAssertTrue(normalized.geminiURLContextEnabled)
-    }
-
-    func testNormalizedForPersistenceEnforcesSingleModeAmongDualAutoFusion() {
-        var settings = AppSettings()
-        settings.isFusionModeEnabled = true
-        settings.isDualModeEnabled = true
-        settings.isAutoConversationEnabled = true
-
-        let normalized = settings.normalizedForPersistence()
-
-        XCTAssertTrue(normalized.isDualModeEnabled)
-        XCTAssertFalse(normalized.isAutoConversationEnabled)
-        XCTAssertFalse(normalized.isFusionModeEnabled)
-    }
-
-    func testNormalizedForPersistenceDisablesFusionWhenAutoIsEnabled() {
-        var settings = AppSettings()
-        settings.isFusionModeEnabled = true
-        settings.isAutoConversationEnabled = true
-
-        let normalized = settings.normalizedForPersistence()
-
-        XCTAssertTrue(normalized.isAutoConversationEnabled)
-        XCTAssertFalse(normalized.isFusionModeEnabled)
-    }
-
-    func testNormalizedForPersistenceKeepsFusionWhenOnlyFusionEnabled() {
-        var settings = AppSettings()
-        settings.isFusionModeEnabled = true
-        settings.fusionPresetName = "unknown"
-
-        let normalized = settings.normalizedForPersistence()
-
-        XCTAssertTrue(normalized.isFusionModeEnabled)
-        XCTAssertEqual(normalized.fusionPresetName, FusionPresetLoader.presetLabel)
-    }
-
-    func testNormalizedForPersistenceKeepsCustomFusionPreset() {
-        var settings = AppSettings()
-        settings.fusionPresetName = "quality"
-        settings.fusionCustomPresetJSON = ""
-
-        let normalized = settings.normalizedForPersistence()
-
-        XCTAssertEqual(normalized.fusionPresetName, FusionPresetLoader.presetLabel)
-        XCTAssertFalse(normalized.fusionCustomPresetJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        XCTAssertNotNil(normalized.decodeFusionCustomPreset())
-    }
-
-    func testNormalizedForPersistenceReplacesInvalidCustomFusionJSON() {
-        var settings = AppSettings()
-        settings.fusionCustomPresetJSON = "{not-json"
-
-        let normalized = settings.normalizedForPersistence()
-
-        XCTAssertEqual(normalized.fusionPresetName, FusionPresetLoader.presetLabel)
-        XCTAssertNotNil(normalized.decodeFusionCustomPreset())
     }
 
     func testPreferredProvidersListRespectsNormalizationAndSelectionMax() {

@@ -14,12 +14,11 @@ enum ProviderRequestSettingsResolverError: LocalizedError, Equatable {
 enum ProviderRequestToolScope: Sendable, Equatable {
     case all
     case providerOnly
-    case fusionPanel(allowWebSearch: Bool)
     case none
 
     var allowsProviderTools: Bool {
         switch self {
-        case .all, .providerOnly, .fusionPanel:
+        case .all, .providerOnly:
             return true
         case .none:
             return false
@@ -30,8 +29,6 @@ enum ProviderRequestToolScope: Sendable, Equatable {
         switch self {
         case .all:
             return true
-        case let .fusionPanel(allowWebSearch):
-            return allowWebSearch
         case .providerOnly, .none:
             return false
         }
@@ -41,8 +38,6 @@ enum ProviderRequestToolScope: Sendable, Equatable {
         switch self {
         case .all, .providerOnly:
             return true
-        case let .fusionPanel(allowWebSearch):
-            return allowWebSearch
         case .none:
             return false
         }
@@ -50,7 +45,7 @@ enum ProviderRequestToolScope: Sendable, Equatable {
 
     var allowsAgentSkills: Bool {
         switch self {
-        case .all, .fusionPanel:
+        case .all:
             return true
         case .providerOnly, .none:
             return false
@@ -61,7 +56,7 @@ enum ProviderRequestToolScope: Sendable, Equatable {
         switch self {
         case .all:
             return true
-        case .providerOnly, .fusionPanel, .none:
+        case .providerOnly, .none:
             return false
         }
     }

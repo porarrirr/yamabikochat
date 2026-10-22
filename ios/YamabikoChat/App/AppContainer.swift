@@ -15,7 +15,6 @@ final class AppContainer: ObservableObject {
     let modelsDevCatalogRepository: ModelsDevCatalogRepository
     let codexAuthRepository: CodexAuthRepository
     let providerGateway: ProviderGateway
-    let fusionService: FusionService
     let chatRepository: ChatRepository
     let sharePayloadStore: SharePayloadStore
     private let conversationSpotlightIndexer: ConversationSpotlightIndexer
@@ -33,7 +32,6 @@ final class AppContainer: ObservableObject {
         modelsDevCatalogRepository = services.modelsDevCatalogRepository
         codexAuthRepository = services.codexAuthRepository
         providerGateway = services.providerGateway
-        fusionService = services.fusionService
         chatRepository = services.chatRepository
         sharePayloadStore = services.sharePayloadStore
         userQuestionCoordinator = services.userQuestionCoordinator

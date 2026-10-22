@@ -19,8 +19,6 @@ final class ChatViewModel: ObservableObject {
     @Published var isAutoConversationPaused: Bool = false
     @Published var autoConversationStatus: String?
     @Published private(set) var generationStatus: String?
-    @Published var fusionStreamingStatus: String?
-    @Published var fusionProgress: FusionProgressSnapshot?
     @Published var errorMessage: String?
     var attachments: [AttachmentDraft] {
         get { composerStore.attachments }
@@ -222,7 +220,6 @@ final class ChatViewModel: ObservableObject {
 
     var visibleContextUsage: ContextUsage? {
         guard !settings.isDualModeEnabled,
-              !settings.isFusionModeEnabled,
               !settings.isAutoConversationEnabled else { return nil }
         return contextUsage
     }
@@ -331,10 +328,6 @@ final class ChatViewModel: ObservableObject {
         }
         switch attachmentRepository.validate(url: url) {
         case .valid:
-            if settings.isFusionModeEnabled, !attachmentRepository.requiresVision(url: url) {
-                errorMessage = L10n.text("Fusionで添付できるのは画像のみです。PDF・テキスト添付には対応していません。")
-                return false
-            }
             if attachmentRepository.requiresVision(url: url), !canAttachImages {
                 errorMessage = visionSupportError ?? L10n.text("このモデルは画像入力に対応していません。")
                 return false
@@ -404,8 +397,6 @@ final class ChatViewModel: ObservableObject {
         fullMessages = []
         dualMessages = []
         conversationSystemPrompt = nil
-        fusionStreamingStatus = nil
-        fusionProgress = nil
         generationStatus = nil
         errorMessage = nil
         attachments = []
@@ -450,12 +441,6 @@ final class ChatViewModel: ObservableObject {
             errorMessage = L10n.text("シークレットチャットでは添付ファイルを送信できません。")
             return
         }
-
-        if settings.isFusionModeEnabled,
-           attachments.contains(where: { attachmentRepository?.requiresVision(url: $0.url) != true }) {
-            errorMessage = L10n.text("Fusionで添付できるのは画像のみです。PDF・テキスト添付には対応していません。")
-            return
-        }
         let text = trimmedText
         inputText = ""
 
@@ -476,8 +461,6 @@ final class ChatViewModel: ObservableObject {
                 if self.activeSendID == runID {
                     self.clearStreamingState()
                     self.generationStatus = nil
-                    self.fusionStreamingStatus = nil
-                    self.fusionProgress = nil
                     self.isSending = false
                     self.activeSendID = nil
                     self.activeSendTask = nil
@@ -489,46 +472,7 @@ final class ChatViewModel: ObservableObject {
                 // causes the Pi runtime to look for a non-existent file.
                 let attachmentPaths = attachmentDrafts.map { $0.url.path }
 
-                if runSettings.isFusionModeEnabled {
-                    guard !text.isEmpty || !attachmentPaths.isEmpty else {
-                        errorMessage = L10n.text("Fusion モードでは本文または添付を入力してください。")
-                        attachments = attachmentDrafts
-                        return
-                    }
-                    fusionProgress = nil
-                    _ = try await repository.sendFusionMessage(
-                        conversationId: conversationID,
-                        text: text,
-                        attachments: attachmentPaths,
-                        settingsOverride: runSettings,
-                        onFusionProgress: { [self] snapshot in
-                            Task { @MainActor in
-                                guard self.activeSendID == runID else { return }
-                                self.fusionProgress = snapshot
-                            }
-                        },
-                        onStreamEvent: { [self] event in
-                            guard case let .reasoningDelta(delta) = event else { return }
-                            Task { @MainActor in
-                                guard self.activeSendID == runID else { return }
-                                let reasoningStatus = delta.isEmpty ? nil : L10n.text("推論中...")
-                                self.fusionStreamingStatus = reasoningStatus
-                                if var progress = self.fusionProgress {
-                                    progress.substatus = reasoningStatus
-                                    self.fusionProgress = progress
-                                }
-                            }
-                        },
-                        onStreamingSnapshot: { [self] snapshot in
-                            Task { @MainActor in
-                                guard self.activeSendID == runID else { return }
-                                self.handleStreamingSnapshot(snapshot)
-                            }
-                        }
-                    )
-                    fusionStreamingStatus = nil
-                    fusionProgress = nil
-                } else if runSettings.isDualModeEnabled {
+                if runSettings.isDualModeEnabled {
                     guard !text.isEmpty || !attachmentPaths.isEmpty else {
                         errorMessage = L10n.text("デュアルモードでは本文または添付を入力してください。")
                         attachments = attachmentDrafts
@@ -643,7 +587,6 @@ final class ChatViewModel: ObservableObject {
 
     var canRegenerateLastAssistant: Bool {
         !settings.isDualModeEnabled &&
-            !settings.isFusionModeEnabled &&
             !isSending &&
             fullMessages.last(where: { $0.message.role == "model" })?.id ==
             fullMessages.last?.id
@@ -657,10 +600,6 @@ final class ChatViewModel: ObservableObject {
         }
         guard !settings.isDualModeEnabled else {
             errorMessage = L10n.text("デュアルモードでは再生成できません。")
-            return
-        }
-        guard !settings.isFusionModeEnabled else {
-            errorMessage = L10n.text("Fusion モードでは再生成できません。")
             return
         }
         guard let lastAssistant = fullMessages.last(where: { $0.message.role == "model" }),
@@ -781,7 +720,6 @@ final class ChatViewModel: ObservableObject {
                     stopAutoConversation()
                 }
                 updated.isAutoConversationEnabled = false
-                updated.isFusionModeEnabled = false
             }
             try repository.saveSettings(updated)
         } catch {
@@ -808,92 +746,6 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    func toggleFusionMode() {
-        guard !isSending else { return }
-        guard let repository else {
-            errorMessage = L10n.text("チャット初期化中です。少し待ってから再試行してください。")
-            return
-        }
-        do {
-            var updated = settings
-            let enablingFusion = !updated.isFusionModeEnabled
-            updated.isFusionModeEnabled.toggle()
-            if updated.isFusionModeEnabled, enablingFusion {
-                if isAutoConversationRunning || isAutoConversationPaused {
-                    stopAutoConversation()
-                }
-                updated.isDualModeEnabled = false
-                updated.isAutoConversationEnabled = false
-            }
-            try repository.saveSettings(updated)
-        } catch {
-            errorMessage = error.localizedDescription
-            DiagnosticsLogger.log("Toggle fusion mode failed", category: .chat, error: error)
-        }
-    }
-
-    func fetchFusionTrace(id: String) -> FusionTrace? {
-        try? repository?.fetchFusionTrace(id: id)
-    }
-
-    func fusionTrace(for message: ChatMessage) -> FusionTrace? {
-        guard let traceId = message.fusionTraceId?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !traceId.isEmpty else {
-            return nil
-        }
-        return fetchFusionTrace(id: traceId)
-    }
-
-    var isFusionAnalyzing: Bool {
-        settings.isFusionModeEnabled && isSending && sessionController.isEmpty
-    }
-
-    var fusionActivePhaseLabel: String? {
-        guard let fusionProgress else { return nil }
-        switch fusionProgress.phase {
-        case .panel:
-            return L10n.format(
-                "panels %d/%d",
-                fusionProgress.completedPanelCount,
-                fusionProgress.totalPanelCount
-            )
-        case .judge:
-            return L10n.text("judging")
-        case .synthesizer:
-            return L10n.text("synthesizing")
-        }
-    }
-
-    var fusionAnalyzingStatus: String? {
-        if fusionProgress != nil {
-            return nil
-        }
-        if let fusionStreamingStatus, !fusionStreamingStatus.isEmpty {
-            return fusionStreamingStatus
-        }
-        return isFusionAnalyzing ? L10n.text("Fusion 分析中…") : nil
-    }
-
-    var fusionStatusLabel: String {
-        let panelCount = FusionPresetLoader.panelCount(customPresetJSON: settings.fusionCustomPresetJSON)
-        if panelCount > 0 {
-            return L10n.format("FUSION · %d panels", panelCount)
-        }
-        return "FUSION"
-    }
-
-    var fusionModelSummaryLabel: String? {
-        guard settings.isFusionModeEnabled else { return nil }
-        guard let definition = try? FusionPresetLoader.resolveDefinition(
-            customPresetJSON: settings.fusionCustomPresetJSON
-        ) else {
-            return nil
-        }
-        let judge = Self.shortModelLabel(definition.judgeModel.modelId)
-        let synth = Self.shortModelLabel(definition.synthesizerModel.modelId)
-        return L10n.format("judge: %@ · synth: %@", judge, synth)
-    }
-
     func toggleAutoConversation() {
         guard !isSending else { return }
         guard let repository else {
@@ -906,7 +758,6 @@ final class ChatViewModel: ObservableObject {
             updated.isAutoConversationEnabled.toggle()
             if updated.isAutoConversationEnabled, enablingAuto {
                 updated.isDualModeEnabled = false
-                updated.isFusionModeEnabled = false
             } else if !updated.isAutoConversationEnabled,
                       isAutoConversationRunning || isAutoConversationPaused {
                 stopAutoConversation()
@@ -941,9 +792,6 @@ final class ChatViewModel: ObservableObject {
         if isSecretConversation {
             return L10n.text("シークレット")
         }
-        if settings.isFusionModeEnabled {
-            return L10n.text("Fusion")
-        }
         if settings.isDualModeEnabled {
             return L10n.text("デュアル")
         }
@@ -972,18 +820,6 @@ final class ChatViewModel: ObservableObject {
                 : activeConversationModel
             let base = model.isEmpty ? provider : "\(provider) · \(Self.shortModelLabel(model))"
             return L10n.format("別の会話を開くと破棄 · %@", base)
-        }
-        if settings.isFusionModeEnabled {
-            var parts = [fusionStatusLabel]
-            if let modelSummary = fusionModelSummaryLabel {
-                parts.append(modelSummary)
-            }
-            if let phaseLabel = fusionActivePhaseLabel {
-                parts.append(phaseLabel)
-            } else if isFusionAnalyzing {
-                parts.append(L10n.text("analyzing"))
-            }
-            return parts.joined(separator: " · ")
         }
         if settings.isDualModeEnabled {
             return L10n.format(
@@ -1015,19 +851,6 @@ final class ChatViewModel: ObservableObject {
 
     var composerContextLabel: String {
         let secretPrefix = L10n.text("シークレット")
-        if settings.isFusionModeEnabled {
-            var parts = [fusionStatusLabel]
-            if let modelSummary = fusionModelSummaryLabel {
-                parts.append(modelSummary)
-            }
-            if let phaseLabel = fusionActivePhaseLabel {
-                parts.append(phaseLabel)
-            } else if isFusionAnalyzing {
-                parts.append(L10n.text("analyzing"))
-            }
-            let label = parts.joined(separator: " · ")
-            return isSecretConversation ? "\(secretPrefix) · \(label)" : label
-        }
         if settings.isDualModeEnabled {
             let label = L10n.format(
                 "DUAL · %@ %@ vs %@ %@",
