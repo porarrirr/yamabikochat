@@ -686,9 +686,11 @@ struct ChatScreen: View {
         }
         .sheet(item: $workspaceRoute) { route in
             ChatWorkspaceRouteSheet(route: route)
+                .secretChatCaptureProtected(viewModel.isSecretConversation || !viewModel.isConversationLoaded)
         }
         .sheet(item: $userMessageSelection) { selection in
             UserMessageTextSelectionSheet(text: selection.text)
+                .secretChatCaptureProtected(viewModel.isSecretConversation || !viewModel.isConversationLoaded)
         }
         .sheet(isPresented: Binding(
             get: { questionCoordinator.pending != nil },
@@ -696,6 +698,7 @@ struct ChatScreen: View {
         )) {
             AskUserQuestionCard(coordinator: questionCoordinator)
                 .padding(16)
+                .secretChatCaptureProtected(viewModel.isSecretConversation || !viewModel.isConversationLoaded)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }

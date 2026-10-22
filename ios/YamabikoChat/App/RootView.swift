@@ -54,7 +54,11 @@ struct RootView: View {
     @State private var themeColor = "BLUE_PURPLE"
     @State private var themeMode = "SYSTEM"
     @State private var keepSidebarAfterSecretDiscard = false
-    @State private var privacyCoverVisible = false
+    @State private var isScreenCaptured = UIScreen.main.isCaptured
+
+    private var privacyCoverVisible: Bool {
+        isSelectedConversationSecret && (scenePhase != .active || isScreenCaptured)
+    }
 
     private var settingsViewModel: SettingsViewModel { settingsStore.viewModel }
 
@@ -78,7 +82,7 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                privacyCoverVisible = isSelectedConversationSecret && UIScreen.main.isCaptured
+                isScreenCaptured = UIScreen.main.isCaptured
                 importSharePayloadIfNeeded()
                 Task {
                     do {
@@ -92,9 +96,6 @@ struct RootView: View {
                     }
                 }
             } else {
-                if isSelectedConversationSecret {
-                    privacyCoverVisible = true
-                }
                 if phase == .background {
                     discardSelectedSecretConversationIfNeeded()
                     SecretConversationVault.shared.destroyAll()
@@ -102,7 +103,7 @@ struct RootView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { _ in
-            privacyCoverVisible = isSelectedConversationSecret && UIScreen.main.isCaptured
+            isScreenCaptured = UIScreen.main.isCaptured
         }
         .onReceive(container.chatRepository.settingsPublisher()) { settings in
             applyAppearance(settings)

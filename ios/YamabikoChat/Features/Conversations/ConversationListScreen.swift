@@ -148,7 +148,12 @@ struct ConversationListScreen: View {
                             Button {
                                 createConversation(secret: false)
                             } label: {
-                                Label(L10n.text("新しいチャット"), systemImage: "square.and.pencil")
+                                // Keep the button content centered instead of inheriting
+                                // the surrounding List's leading icon column.
+                                HStack(spacing: 8) {
+                                    Image(systemName: "square.and.pencil")
+                                    Text(L10n.text("新しいチャット"))
+                                }
                             }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.small)

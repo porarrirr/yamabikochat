@@ -50,6 +50,7 @@ struct ChatWorkspaceScreen: View {
         }
         .siriConversationContext(id: conversationID, isSecret: viewModel.isSecretConversation || !viewModel.isConversationLoaded)
         .background(workspaceBackground.ignoresSafeArea())
+        .secretChatCaptureProtected(viewModel.isSecretConversation || !viewModel.isConversationLoaded)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
@@ -70,6 +71,7 @@ struct ChatWorkspaceScreen: View {
         }
         .sheet(item: $workspaceStore.presentedRoute) { route in
             workspaceSheet(for: route)
+                .secretChatCaptureProtected(viewModel.isSecretConversation || !viewModel.isConversationLoaded)
         }
     }
 
