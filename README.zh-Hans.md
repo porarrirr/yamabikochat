@@ -10,6 +10,8 @@
 
 [English](README.md) · [日本語](README.ja.md) · **简体中文**
 
+<a href="https://apps.apple.com/jp/app/yamabikochat-ai%E3%83%81%E3%83%A3%E3%83%83%E3%83%88/id6771687018"><img src="assets/readme/app-store-badge-zh.svg" alt="App Store 下载" width="180"></a>
+
 [![Release](https://img.shields.io/github/v/release/porarrirr/yamabikochat?include_prereleases&display_name=tag)](https://github.com/porarrirr/yamabikochat/releases)
 ![Platform](https://img.shields.io/badge/iOS_·_iPadOS-17%2B-blue)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
