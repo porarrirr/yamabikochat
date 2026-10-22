@@ -646,7 +646,9 @@ final class ChatStreamSessionTests: XCTestCase {
                     if !partialText.isEmpty { continuation.yield(.textDelta(partialText)) }
                     continuation.finish(throwing: ExecutionFailure())
                 }
-                let previousLogCount = DiagnosticsLogger.read().count
+                // read() combines app and runtime files, so its previous length is not an append offset.
+                let logMarker = "Recovery test start: \(UUID().uuidString)"
+                DiagnosticsLogger.log(logMarker)
                 do {
                     _ = try await ChatStreamSession.run(
                         stream: stream, conversations: conversations,
@@ -655,7 +657,9 @@ final class ChatStreamSessionTests: XCTestCase {
                     )
                     XCTFail("Expected execution failure")
                 } catch is ExecutionFailure {
-                    let logs = String(DiagnosticsLogger.read().dropFirst(previousLogCount))
+                    let allLogs = DiagnosticsLogger.read()
+                    let markerRange = try XCTUnwrap(allLogs.range(of: logMarker))
+                    let logs = String(allLogs[markerRange.upperBound...])
                     let identity = variantID.map { "variantId=\($0)" } ?? "messageId=\(messageID)"
                     XCTAssertTrue(logs.contains(identity))
                     XCTAssertTrue(logs.contains("operation=persistToolActivity"))

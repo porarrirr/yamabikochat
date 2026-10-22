@@ -37,7 +37,7 @@ enum AutoConversationTurnPolicy {
     private static let autoConversationUnlimitedTurnSafetyLimit = 100
     private static let autoConversationSessionDurationLimitMs: Int64 = 30 * 60 * 1_000
     private static let autoConversationEndRegexes: [NSRegularExpression] = [
-        try! NSRegularExpression(pattern: "(?:会話|議論|討論|対話)(?:を)?(?:(?:ここ|これ|以上)で)?終(?:了|わ)り(?:に)?(?:いたします|ます|ましょう|とします)", options: [.caseInsensitive]),
+        try! NSRegularExpression(pattern: "(?:会話|議論|討論|対話)(?:を)?(?:(?:ここ|これ|以上)で)?(?:終了|終わり)(?:に)?(?:いたします|します|しましょう|ます|ましょう|とします)", options: [.caseInsensitive]),
         try! NSRegularExpression(pattern: "これ(?:にて|で)(?:終(?:了|わ)り|終了)とさせていただきます", options: [.caseInsensitive]),
         try! NSRegularExpression(pattern: "(?:ここ|これ|以上|本件)(?:で|にて)(?:終(?:了|わ)り|終了)(?:とします|です)", options: [.caseInsensitive]),
         try! NSRegularExpression(pattern: "\\bend of (?:this )?(?:conversation|discussion)\\b", options: [.caseInsensitive]),

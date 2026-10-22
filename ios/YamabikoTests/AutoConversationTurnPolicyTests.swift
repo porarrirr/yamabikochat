@@ -37,10 +37,19 @@ final class AutoConversationTurnPolicyTests: XCTestCase {
 
     func testEndSignalNormalizationAndNaturalLanguage() {
         for (text, signal) in [(" [end] ", " \n"), ("DONE", "done"), ("会話を終了します", "custom"), ("This concludes our discussion", "custom")] {
-            XCTAssertTrue(AutoConversationTurnPolicy.containsAutoConversationEndSignal(text: text, configuredEndSignal: signal))
+            XCTAssertTrue(AutoConversationTurnPolicy.containsAutoConversationEndSignal(text: text, configuredEndSignal: signal), text)
         }
         XCTAssertFalse(AutoConversationTurnPolicy.containsAutoConversationEndSignal(text: "継続します", configuredEndSignal: "[END]"))
         XCTAssertFalse(AutoConversationTurnPolicy.containsAutoConversationEndSignal(text: " \n ", configuredEndSignal: ""))
+    }
+
+    func testJapaneseEndSignalsPreserveExistingPhrasings() {
+        for text in ["会話を終了します", "議論を終了いたします", "対話をここで終わりにします", "討論を終わりにしましょう", "会話を終わります"] {
+            XCTAssertTrue(AutoConversationTurnPolicy.containsAutoConversationEndSignal(text: text, configuredEndSignal: "[END]"), text)
+        }
+        for text in ["会話を終了しません", "会話を終了する方法を考えます", "議論を続けます"] {
+            XCTAssertFalse(AutoConversationTurnPolicy.containsAutoConversationEndSignal(text: text, configuredEndSignal: "[END]"), text)
+        }
     }
 
     private func message(id: Int64, speaker: AutoConversationSpeakerModel, turn: Int, content: String) -> AutoConversationMessage {

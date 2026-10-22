@@ -97,7 +97,7 @@ final class ModelsDevCatalogTests: XCTestCase {
     func testOnlyDedicatedProvidersRemainBuiltIn() {
         XCTAssertEqual(
             ProviderCatalog.options.map(\.key),
-            ["GEMINI", "OPENROUTER", "CODEX_AUTH", "SUPERGROK", "APPLE_INTELLIGENCE"]
+            ["GEMINI", "OPENROUTER", "CODEX_AUTH", "SUPERGROK", "APPLE_INTELLIGENCE", "OPENAI_COMPAT", "SARASHINA"]
         )
         XCTAssertEqual(ProviderCatalog.displayName(for: "MODELS_DEV:openai"), "openai")
     }
