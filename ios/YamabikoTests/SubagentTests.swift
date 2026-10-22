@@ -37,6 +37,48 @@ final class SubagentTests: XCTestCase {
         XCTAssertEqual(settings.subagents.defaultModelID, "saved")
     }
 
+    func testPCCProfileDefaultsAndExplicitSelectionsPreserveSavedEffort() throws {
+        var profile = SubagentModelProfile(provider: "APPLE_INTELLIGENCE", model: AppleIntelligenceModelCatalog.pccModel)
+        XCTAssertEqual(profile.effort, "medium")
+        XCTAssertEqual(SubagentModelProfile(provider: "OPENAI", model: "gpt-5.5").effort, "off")
+        XCTAssertEqual(SubagentModelProfile(provider: "APPLE_INTELLIGENCE", model: AppleIntelligenceModelCatalog.displayModel).effort, "off")
+        profile.effort = "off"
+        var settings = AppSettings()
+        settings.subagents = SubagentSettings(defaultModelID: profile.id, models: [profile])
+        let saved = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        XCTAssertEqual(saved.subagents.models.first?.effort, "off")
+        XCTAssertEqual(saved.subagents.defaultModelID, profile.id)
+        profile.initializePCCEffortIfNeeded()
+        XCTAssertEqual(profile.effort, "medium")
+        for effort in ["low", "medium", "high"] {
+            profile.effort = effort
+            profile.initializePCCEffortIfNeeded()
+            XCTAssertEqual(profile.effort, effort)
+        }
+    }
+
+    func testPCCEffortSelectionsPersistAndReachChildConfiguration() async throws {
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue)
+        let gateway = ProviderGateway(settingsRepository: SettingsRepository(dbQueue: queue), credentialStore: SubagentCredentialStore())
+        for (effort, label) in [("low", "Light"), ("medium", "Moderate"), ("high", "Deep")] {
+            var profile = SubagentModelProfile(provider: "APPLE_INTELLIGENCE", model: AppleIntelligenceModelCatalog.pccModel)
+            // The child picker binds directly to this persisted value.
+            profile.effort = effort
+            var settings = AppSettings()
+            settings.pccReasoningLevel = "light"
+            settings.subagents = SubagentSettings(models: [profile])
+            let saved = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+            let childProfile = try XCTUnwrap(saved.subagents.models.first)
+            let child = try await gateway.subagentConfiguration(childProfile, settings: saved)
+            XCTAssertEqual(child.thinkingLevel, effort)
+            XCTAssertEqual(AppleIntelligenceModelCatalog.effortDisplayName(childProfile.effort, provider: childProfile.provider, model: childProfile.model), label)
+            XCTAssertEqual(AppleIntelligenceModelCatalog.effortDisplayName(effort, provider: child.provider, model: child.model), label)
+        }
+        XCTAssertEqual(AppleIntelligenceModelCatalog.effortDisplayName("off", provider: "APPLE_INTELLIGENCE", model: AppleIntelligenceModelCatalog.pccModel), "off")
+        XCTAssertEqual(AppleIntelligenceModelCatalog.effortDisplayName("high", provider: "openai", model: "gpt-5.5"), "high")
+    }
+
     func testProgressIsIdempotentPersistsDetailsAndDoesNotPolluteParentTranscript() throws {
         var payload = ToolActivityPayload()
         payload.applySubagent(run())

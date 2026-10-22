@@ -8,6 +8,7 @@ struct ModelSlotForm: View {
     var providerPresets: [ModelPreset] = []
     var catalogProviders: [CatalogProvider] = []
     @Binding var pccReasoningLevel: String?
+    var showsPCCReasoning = true
     var codexModels: [PiCodexModel] = []
     var initialModel: (String) -> String = ProviderCatalog.defaultModel
     var onProviderPresetSelected: (ModelPreset) -> Void = { _ in }
@@ -82,7 +83,7 @@ struct ModelSlotForm: View {
             )
         } else if provider.caseInsensitiveCompare("APPLE_INTELLIGENCE") == .orderedSame {
             AppleIntelligenceModelPicker(model: $model)
-            if model == AppleIntelligenceModelCatalog.pccModel {
+            if model == AppleIntelligenceModelCatalog.pccModel && showsPCCReasoning {
                 Picker("PCC reasoning", selection: Binding(
                     get: { pccReasoningLevel ?? AppleIntelligenceModelCatalog.defaultPCCReasoningLevel },
                     set: { pccReasoningLevel = $0 }

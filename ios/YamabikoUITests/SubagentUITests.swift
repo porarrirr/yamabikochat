@@ -50,7 +50,13 @@ final class SubagentUITests: XCTestCase {
         app.launchArguments = ["-AppStoreScreenshotDemo", "-SubagentFixture", "-ScreenshotScene", "settings-dual", "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
         app.launch()
         let settings = app.buttons["settings-subagents"]
-        XCTAssertTrue(app.navigationBars["会話"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 15))
+        if !app.navigationBars["会話"].exists {
+            let conversation = app.staticTexts["会話"]
+            XCTAssertTrue(conversation.waitForExistence(timeout: 5))
+            conversation.tap()
+        }
+        XCTAssertTrue(app.navigationBars["会話"].waitForExistence(timeout: 5))
         for _ in 0..<8 where !settings.isHittable { app.swipeUp() }
         XCTAssertTrue(settings.exists)
         settings.tap()

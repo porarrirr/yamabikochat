@@ -216,9 +216,14 @@ test("bundled mobile subagents preserve delegation across providers and native P
       nativePCC: { version: 2, available: true, contextSize: 32768 }
     }
   }] } };
-  for (const mode of ["success", "error", "cancel"]) {
-    const runId = `pcc-children-${mode}`;
-    const response = await submit("launch-mobile-children", pccConfig, mobileTools, runId, parentPolicy);
+  for (const [mode, effort, reasoningLevel] of [
+    ["success", "low", "light"], ["success", "medium", "moderate"], ["success", "high", "deep"],
+    ["error", "high", "deep"], ["cancel", "high", "deep"]
+  ]) {
+    const runId = `pcc-children-${mode}-${effort}`;
+    const childConfig = structuredClone(pccConfig);
+    childConfig.subagents.models[0].configuration.thinkingLevel = effort;
+    const response = await submit("launch-mobile-children", childConfig, mobileTools, runId, parentPolicy);
     const events = [];
     const childIDs = new Set();
     let buffered = "";
@@ -236,7 +241,7 @@ test("bundled mobile subagents preserve delegation across providers and native P
         assertNoDesktopSurface({ tools: event.pcc.context.tools, system: event.pcc.context.systemPrompt });
         assert.ok(event.subagentId);
         childIDs.add(event.subagentId);
-        assert.equal(event.pcc.reasoningLevel, "deep");
+        assert.equal(event.pcc.reasoningLevel, reasoningLevel);
         assert.ok(event.pcc.context.systemPrompt.includes(parentPolicy));
         assertMobileLoadout({ tools: event.pcc.context.tools });
         const identity = { runId, requestId: event.requestId };
@@ -268,7 +273,7 @@ test("bundled mobile subagents preserve delegation across providers and native P
     assert.ok(result, JSON.stringify(events));
     assert.ok(childIDs.size > 0);
     if (mode !== "cancel") assert.equal(childIDs.size, 3);
-    assert.ok(result.subagents.every(child => child.provider === "apple-pcc" && child.effort === "high"));
+    assert.ok(result.subagents.every(child => child.provider === "apple-pcc" && child.effort === effort));
     if (mode === "success") {
       assert.ok(result.subagents.every(child => child.status === "completed" && child.output === "Revised PCC result"));
       const toolEvents = events.filter(event => event.type === "tool_start" && event.name === "web_search");
@@ -281,9 +286,12 @@ test("bundled mobile subagents preserve delegation across providers and native P
   }
   // Apple owns the parent's tool loop; its announced subagent call re-enters
   // the registered Pi extension with the captured parent session/credentials.
-  for (const mode of ["inherit", "configured", "error", "cancel", "disabled", "unsupported"]) {
-    const runId = `pcc-parent-${mode}`;
-    const parent = { ...pccConfig.subagents.models[0].configuration,
+  for (const [mode, effort, reasoningLevel] of [
+    ["inherit", "low", "light"], ["inherit", "medium", "moderate"], ["inherit", "high", "deep"],
+    ...["configured", "error", "cancel", "disabled", "unsupported"].map(mode => [mode, "high", "deep"])
+  ]) {
+    const runId = `pcc-parent-${mode}-${effort}`;
+    const parent = { ...pccConfig.subagents.models[0].configuration, thinkingLevel: effort,
       subagents: mode === "configured" || mode === "error"
         ? { enabled: true, defaultModelID: "custom", models: [{ id: "custom", name: "Custom",
             configuration: { ...config, subagents: undefined } }] }
@@ -311,6 +319,7 @@ test("bundled mobile subagents preserve delegation across providers and native P
         events.push(event);
         if (event.type !== "pcc_request") continue;
         assertNoDesktopSurface({ tools: event.pcc.context.tools, system: event.pcc.context.systemPrompt });
+        assert.equal(event.pcc.reasoningLevel, reasoningLevel);
         const identity = { runId, requestId: event.requestId };
         if (event.subagentId) {
           assert.ok(!event.pcc.context.tools.some(tool => tool.name === "subagent"), "children must not delegate recursively");
@@ -364,6 +373,9 @@ test("bundled mobile subagents preserve delegation across providers and native P
     }
     await Promise.all(callbacks);
     const children = new Map(events.filter(event => event.type === "subagent_update").map(event => [event.subagent.id, event.subagent]));
+    if (mode === "inherit") {
+      assert.ok([...children.values()].every(child => child.effort === effort));
+    }
     if (mode === "disabled") {
       assert.equal(children.size, 0);
       assert.equal(events.find(event => event.type === "completed")?.response.text, "Delegation disabled");

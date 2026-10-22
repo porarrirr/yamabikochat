@@ -8,6 +8,26 @@ struct SubagentModelProfile: Codable, Hashable, Identifiable, Sendable {
     var effort: String = "off"
     var endpointPresetName: String? = nil
 
+    init(id: String = UUID().uuidString, name: String = "サブエージェント",
+         provider: String = "GEMINI", model: String = "", effort: String? = nil,
+         endpointPresetName: String? = nil) {
+        self.id = id
+        self.name = name
+        self.provider = provider
+        self.model = model
+        self.effort = effort ?? (AppleIntelligenceModelCatalog.isPCC(provider: provider, model: model) ? "medium" : "off")
+        self.endpointPresetName = endpointPresetName
+    }
+
+    var isPCC: Bool { AppleIntelligenceModelCatalog.isPCC(provider: provider, model: model) }
+
+    /// Called only when the user explicitly selects PCC, never while loading saved profiles.
+    mutating func initializePCCEffortIfNeeded() {
+        if isPCC, AppleIntelligenceModelCatalog.pccReasoningLevel(forPiThinkingLevel: effort) == nil {
+            effort = "medium"
+        }
+    }
+
     var validationError: String? {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "名前を入力してください" }
         guard !provider.isEmpty, !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "プロバイダーとモデルを指定してください" }

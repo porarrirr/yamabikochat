@@ -72,7 +72,7 @@ private struct SubagentSettingsScreen: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(profile.name).foregroundStyle(.primary)
-                            Text("\(ProviderCatalog.displayName(for: profile.provider)) · \(profile.model) · \(profile.effort)")
+                            Text("\(ProviderCatalog.displayName(for: profile.provider)) · \(profile.model) · \(AppleIntelligenceModelCatalog.effortDisplayName(profile.effort, provider: profile.provider, model: profile.model))")
                                 .font(.caption).foregroundStyle(.secondary).lineLimit(2)
                             if let reason = reasons[profile.id] {
                                 Text(reason).font(.caption2).foregroundStyle(.orange).lineLimit(3)
@@ -81,10 +81,9 @@ private struct SubagentSettingsScreen: View {
                     }
                 }
                 Button {
-                    var profile = SubagentModelProfile()
-                    profile.name = "モデル設定 \(options.wrappedValue.models.count + 1)"
-                    profile.provider = viewModel.settings.apiProvider
-                    profile.model = viewModel.settings.defaultModel
+                    let profile = SubagentModelProfile(
+                        name: "モデル設定 \(options.wrappedValue.models.count + 1)",
+                        provider: viewModel.settings.apiProvider, model: viewModel.settings.defaultModel)
                     options.wrappedValue.models.append(profile)
                 } label: {
                     Label("モデル設定を追加", systemImage: "plus")
@@ -130,7 +129,6 @@ private struct SubagentProfileEditor: View {
     let onDelete: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var confirmsDeletion = false
-    @State private var pccLevel: String?
     @State private var supportedEfforts: [String] = []
     @State private var resolutionError: String?
 
@@ -141,7 +139,7 @@ private struct SubagentProfileEditor: View {
                     .accessibilityIdentifier("subagent-profile-name")
                 ModelSlotForm(providerTitleKey: "プロバイダー", provider: $profile.provider,
                     modelTitleKey: "モデル", model: $profile.model,
-                    catalogProviders: viewModel.modelsDevCatalogState.providers, pccReasoningLevel: $pccLevel,
+                    catalogProviders: viewModel.modelsDevCatalogState.providers, pccReasoningLevel: .constant(nil), showsPCCReasoning: false,
                     codexModels: viewModel.codexModels, initialModel: viewModel.initialModelForSlot,
                     openRouterModels: viewModel.openRouterModels, openRouterModelsLoading: viewModel.openRouterModelsLoading,
                     openRouterModelsError: viewModel.openRouterModelsError,
@@ -154,12 +152,12 @@ private struct SubagentProfileEditor: View {
                         ForEach(viewModel.settings.openAICompatPresets()) { preset in Text(preset.name).tag(preset.name) }
                     }
                 }
-                Picker("Effort（推論レベル）", selection: $profile.effort) {
+                Picker(profile.isPCC ? "PCC reasoning" : "Effort（推論レベル）", selection: $profile.effort) {
                     if !supportedEfforts.contains(profile.effort) {
                         Text("\(profile.effort)（非対応）").tag(profile.effort).disabled(true)
                     }
                     ForEach(supportedEfforts, id: \.self) { effort in
-                        Text(effort == "off" ? "off（推論なし）" : effort).tag(effort)
+                        Text(effort == "off" ? "off（推論なし）" : AppleIntelligenceModelCatalog.effortDisplayName(effort, provider: profile.provider, model: profile.model)).tag(effort)
                     }
                 }
                 .disabled(supportedEfforts.isEmpty)
@@ -187,6 +185,9 @@ private struct SubagentProfileEditor: View {
         }
         .navigationTitle(profile.name)
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: profile.isPCC) { _, isPCC in
+            if isPCC { profile.initializePCCEffortIfNeeded() }
+        }
         .task(id: profile) {
             do {
                 let config = try await container.providerGateway.subagentConfiguration(profile, settings: viewModel.settings, forModelResolution: true)

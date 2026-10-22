@@ -151,7 +151,7 @@ private struct SubagentDetailContent: View {
                     }
                     Text("\(run.provider) / \(run.model)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                     HStack {
-                        Text("Effort: \(run.effort)")
+                        Text("Effort: \(AppleIntelligenceModelCatalog.effortDisplayName(run.effort, provider: run.provider, model: run.model))")
                         if let tokens = run.usage?.totalTokens { Text("· \(tokens) tokens") }
                     }.font(.caption).foregroundStyle(.secondary)
                 }
