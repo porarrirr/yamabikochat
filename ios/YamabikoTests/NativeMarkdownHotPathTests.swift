@@ -28,7 +28,7 @@ final class NativeMarkdownHotPathTests: XCTestCase {
                 return XCTFail("Expected math for \(source)")
             }
             guard case .paragraph = try XCTUnwrap(NativeMarkdownParser.parse(source, rendersMath: false).first) else {
-                return XCTFail("Streaming must defer math rendering")
+                return XCTFail("Explicitly disabled math should remain native")
             }
         }
         for source in ["普通の本文", "Price: $5 and $10", "Unclosed $x", #"Escaped \$5"#, #"`$x^2$`"#, #"`\[x\]`"#] {
@@ -81,7 +81,7 @@ final class NativeMarkdownHotPathTests: XCTestCase {
         XCTAssertEqual(markdown, source)
     }
 
-    func testMathListsPreserveSourceAndDeferDuringStreaming() throws {
+    func testMathListsPreserveSourceAndRespectDisabledRendering() throws {
         for marker in ["1.", "-", "7."] {
             let source = "\(marker) **半径** $r$\n\n   $$\n   S = 4" + #"\pi r^2"# + "\n\n   $$\n\n\(marker) 次の項目"
             let blocks = NativeMarkdownParser.parse(source)
@@ -90,7 +90,7 @@ final class NativeMarkdownHotPathTests: XCTestCase {
             }
             XCTAssertEqual(markdown, source)
             guard case .list = try XCTUnwrap(NativeMarkdownParser.parse(source, rendersMath: false).first) else {
-                return XCTFail("Streaming should keep native lists")
+                return XCTFail("Explicitly disabled math should keep native lists")
             }
         }
         for source in ["1. `$r$`", "- 普通の本文", "1. Price: $5 and $10"] {
@@ -125,6 +125,66 @@ final class NativeMarkdownHotPathTests: XCTestCase {
                 return XCTFail("Expected complete display math: \(source)")
             }
             XCTAssertEqual(markdown, source)
+        }
+    }
+
+    @MainActor
+    func testStreamingRendersClosedMathBeforeAnswerFinishes() throws {
+        for (opening, closing) in [("$", "$"), ("$$", "$$"), (#"\("#, #"\)"#), (#"\["#, #"\]"#)] {
+            let parser = NativeMarkdownIncrementalParser()
+            let unfinished = "式 " + opening + "x^2"
+            XCTAssertFalse(parser.streamingBlocks(for: unfinished).contains {
+                if case .math = $0 { return true }
+                return false
+            })
+            if closing == "$$" {
+                XCTAssertFalse(parser.streamingBlocks(for: unfinished + "$").contains {
+                    if case .math = $0 { return true }
+                    return false
+                }, "A display equation needs both closing dollars")
+            }
+            let completed = unfinished + closing
+            guard case let .math(id, markdown) = try XCTUnwrap(parser.streamingBlocks(for: completed).first) else {
+                return XCTFail("Closed equation should render during streaming")
+            }
+            XCTAssertEqual(markdown, completed)
+            for suffix in ["\n\n次の段落", "\n\n次の段落\n\nさらに続く\n\n末尾"] {
+                let blocks = parser.streamingBlocks(for: completed + suffix)
+                XCTAssertEqual(blocks.first, .math(id: id, markdown: completed))
+                XCTAssertEqual(blocks, NativeMarkdownParser.parse(completed + suffix))
+            }
+        }
+    }
+
+    @MainActor
+    func testStreamingDisplayMathDoesNotFreezeAcrossBlankLines() {
+        for (opening, closing) in [("$$", "$$"), (#"\["#, #"\]"#)] {
+            let parser = NativeMarkdownIncrementalParser()
+            let source = "前文\n\n" + opening + "\n\na\n\nb\n\nc\n\nd\n\n" + closing + "\n\n続き\n\n末尾"
+            // Replay every token, including the individual closing delimiter bytes.
+            var partial = ""
+            for character in source {
+                partial.append(character)
+                XCTAssertEqual(parser.streamingBlocks(for: partial), NativeMarkdownParser.parse(partial), partial)
+            }
+            XCTAssertEqual(parser.streamingBlocks(for: source), NativeMarkdownParser.parse(source))
+        }
+    }
+
+    @MainActor
+    func testStreamingMathInListsAndCodeMatchesFreshParsing() {
+        for source in [
+            "1. 項目\n2. 続き\n3. $x^2$\n4. 末尾\n5. 追加",
+            "```tex\n$$x$$\n```\n\n`$x$`\n\nPrice: $5 and $10",
+            #"見出し \(x\)"# + "\n\n$$\na\n\nb\n\n$$\n\n次\n\n末尾"
+        ] {
+            let parser = NativeMarkdownIncrementalParser()
+            var partial = ""
+            for character in source {
+                partial.append(character)
+                XCTAssertEqual(parser.streamingBlocks(for: partial), NativeMarkdownParser.parse(partial), partial)
+            }
+            XCTAssertEqual(parser.streamingBlocks(for: "置き換え $y$"), NativeMarkdownParser.parse("置き換え $y$"))
         }
     }
 

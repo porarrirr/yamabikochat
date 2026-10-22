@@ -466,7 +466,7 @@ final class MathMarkdownViewTests: XCTestCase {
             thinkingStream: nil, variants: []
         )))
         row.apply(snapshot: ChatStreamingSnapshot(targetId: 130, text: Self.diagnosticAnswer, thinking: "", isFinal: false))
-        XCTAssertFalse(try XCTUnwrap(row.streamingMarkdownBlocks).contains { if case .math = $0 { return true }; return false })
+        XCTAssertTrue(try XCTUnwrap(row.streamingMarkdownBlocks).contains { if case .math = $0 { return true }; return false })
         row.apply(snapshot: ChatStreamingSnapshot(targetId: 130, text: Self.diagnosticAnswer, thinking: "", isFinal: true))
         let expected = NativeMarkdownParser.parse(Self.diagnosticAnswer)
         XCTAssertEqual(row.streamingMarkdownBlocks, expected)

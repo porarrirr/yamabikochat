@@ -59,7 +59,7 @@ enum NativeMarkdownParser {
         options: .caseInsensitive
     )
     private static let inlineMathRegex = try! NSRegularExpression(
-        pattern: #"(?<!\\)\$(?!\s)(?:\\.|[^\n$])+(?<!\s)(?<!\\)\$(?![A-Za-z0-9])"#
+        pattern: #"(?<![\\$])\$(?![\s$])(?:\\.|[^\n$])+(?<!\s)(?<!\\)\$(?![A-Za-z0-9$])"#
     )
 
     static func parse(
@@ -118,7 +118,7 @@ enum NativeMarkdownParser {
         return result
     }
 
-    private static func unclosedDisplayMathDelimiter(_ source: String) -> String? {
+    fileprivate static func unclosedDisplayMathDelimiter(_ source: String) -> String? {
         guard source.contains(#"\["#) || source.contains("$$") else { return nil }
         let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(source)
         var closing: String?
@@ -493,7 +493,7 @@ final class NativeMarkdownIncrementalParser {
         var tailBlocks = NativeMarkdownParser.blocks(
             in: document,
             source: tail,
-            rendersMath: false,
+            rendersMath: true,
             baseUTF8Offset: stablePrefixUTF8Count
         )
         if let partialList {
@@ -511,8 +511,13 @@ final class NativeMarkdownIncrementalParser {
         // Retain TWO blocks: an incomplete last line such as "#" can become
         // "#text" and merge back into the preceding list/quote on the next token.
         // Keep indentation before the boundary block, too (not just its AST range).
-        if !needsDocumentContext,
-           let boundary = Self.tailBoundary(in: document, source: tail, retainingBlocks: 2) {
+        // A display equation may span multiple CommonMark blocks. Never freeze
+        // an unfinished equation, or split a rejoined math block at an AST boundary.
+        let canConfirmTail = !needsDocumentContext
+            && NativeMarkdownParser.unclosedDisplayMathDelimiter(tail) == nil
+        if canConfirmTail,
+           let proposedBoundary = Self.tailBoundary(in: document, source: tail, retainingBlocks: 2),
+           let boundary = Self.mathSafeBoundary(proposedBoundary, blocks: tailBlocks, baseUTF8Offset: stablePrefixUTF8Count) {
             let absoluteBoundary = stablePrefixUTF8Count + boundary
             stableBlocks.append(contentsOf: tailBlocks.filter { block in
                 guard let offset = Int(block.id.dropFirst("block-".count)) else { return false }
@@ -520,7 +525,7 @@ final class NativeMarkdownIncrementalParser {
             })
             stablePrefixUTF8Count = absoluteBoundary
             partialList = nil
-        } else if !needsDocumentContext,
+        } else if canConfirmTail,
                   let boundary = Self.listTailBoundary(in: document, source: tail),
                   case let .list(id, ordered, start, rows) = tailBlocks.last {
             // A normal bulleted/numbered answer is one growing Markdown block.
@@ -558,6 +563,19 @@ final class NativeMarkdownIncrementalParser {
             return matches
         }
         return source.utf8.starts(with: prefix.utf8)
+    }
+
+    private static func mathSafeBoundary(_ boundary: Int, blocks: [NativeMarkdownBlock], baseUTF8Offset: Int) -> Int? {
+        var boundary = boundary
+        for block in blocks {
+            guard case let .math(id, markdown) = block,
+                  let absoluteStart = Int(id.dropFirst("block-".count)) else { continue }
+            let start = absoluteStart - baseUTF8Offset
+            if start < boundary, start + markdown.utf8.count > boundary {
+                boundary = start
+            }
+        }
+        return boundary > 0 ? boundary : nil
     }
 
     private static func tailBoundary(in document: Markdown.Document, source: String, retainingBlocks: Int) -> Int? {

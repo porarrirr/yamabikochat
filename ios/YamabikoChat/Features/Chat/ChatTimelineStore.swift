@@ -95,7 +95,7 @@ final class ChatTimelineRowStore: ObservableObject, Identifiable {
             if snapshot.isFinal {
                 // Publish the completed representation with the final snapshot.
                 // A recycled/cancelled SwiftUI task must not leave the row using
-                // the streaming parser, which intentionally renders TeX literally.
+                // a partial streaming representation after completion.
                 renderedMarkdownBlocks = NativeMarkdownParser.parse(markdownSource)
                 markdownPresentationCache.insert(renderedMarkdownBlocks, for: markdownSource, rendersMath: true)
                 // A later regeneration reuses this row. Do not let the streaming
