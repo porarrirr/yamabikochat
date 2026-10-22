@@ -9,7 +9,7 @@ on:
       - "THIRD_PARTY_NOTICES.md"
       - ".github/workflows/ios-ci.yml"
   push:
-    branches: [ ios ]
+    branches: [ main ]
     paths:
       - "ios/**"
       - "scripts/check-*.py"

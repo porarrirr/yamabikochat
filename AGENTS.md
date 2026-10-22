@@ -24,7 +24,7 @@
 - Current history mixes imperative summaries, Conventional Commit prefixes (`feat(...)`, `fix:`), and occasional emoji/Japanese titles. Keep messages short, specific, and consistent within a PR.
 - One logical change per commit when possible.
 - PRs should include: purpose, impacted areas, validation steps (commands run), linked issue, and UI screenshots for visible changes.
-- Canonical sync target for this workspace is `porarrirr/yamabikochat` on branch `ios`. Use this target when synchronization is requested.
+- Canonical sync target for this workspace is `porarrirr/yamabikochat` on branch `main`. Use this target when synchronization is requested.
 
 ## Security & Configuration Tips
 - Never commit secrets, signing certificates, provisioning profiles, or API keys.
