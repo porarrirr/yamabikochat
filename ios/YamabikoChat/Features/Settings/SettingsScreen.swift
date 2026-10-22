@@ -264,7 +264,10 @@ struct SettingsDetailScreen: View {
                 )
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("更新") { viewModel.refreshModelsDevCatalog() }
+                        Button { viewModel.refreshModelsDevCatalog() } label: {
+                            Label("更新", systemImage: "arrow.clockwise")
+                                .labelStyle(.iconOnly)
+                        }
                     }
                 }
             } else {
@@ -279,18 +282,21 @@ struct SettingsDetailScreen: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let onOnboardingContinue {
                 Button(action: onOnboardingContinue) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         if isOnboardingFinishing { ProgressView() }
-                        Text("チャットを開く").font(.headline)
+                        Text("チャットを開く").font(.body.weight(.medium))
                     }
-                    .frame(maxWidth: .infinity, minHeight: 28)
+                    .frame(maxWidth: .infinity, minHeight: 20)
+                    .foregroundStyle(Color(uiColor: .amoledSystemBackground))
                 }
                 .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.roundedRectangle(radius: 14))
+                .tint(.primary)
+                .buttonBorderShape(.roundedRectangle(radius: 10))
                 .controlSize(.large)
                 .disabled(isOnboardingFinishing || viewModel.settings.defaultModel.trimmedNonEmpty == nil)
                 .accessibilityIdentifier("onboarding-continue")
-                .padding(20)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
                 .background(Color(uiColor: .amoledSystemGroupedBackground))
             }
         }

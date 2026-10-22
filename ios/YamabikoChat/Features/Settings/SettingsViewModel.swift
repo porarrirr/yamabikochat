@@ -1264,6 +1264,10 @@ final class SettingsViewModel: ObservableObject {
             refreshDiagnosticsLog()
         }
         let result = await repository.loginCodexAuthWithBrowser()
+        guard !Task.isCancelled else {
+            statusMessage = nil
+            return
+        }
         switch result {
         case let .success(state):
             codexAuthState = state

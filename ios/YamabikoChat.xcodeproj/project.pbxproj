@@ -217,6 +217,7 @@
 		962D63DC04F87D3F8083C055 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */; };
 		98749CFF168F962BDDDD037B /* SettingsStringHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D9D7267F7551E4A0918A48 /* SettingsStringHelpers.swift */; };
 		9880DB8288477117138EAD91 /* EditProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76DB4ABDB7715C4B242909D0 /* EditProjectSheet.swift */; };
+		99469D4CB0E428295EDF37E7 /* ModelSelectionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24C65A7CDA7152349C0FE403 /* ModelSelectionRow.swift */; };
 		9956FF9B0D965DD8D01BA6BA /* SvgPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BD71648A1094DBA64CF4949 /* SvgPreviewCard.swift */; };
 		995F81C7CFF36042E58AE02C /* SecretChatCaptureProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B77F499A6ED98997FCE297 /* SecretChatCaptureProtection.swift */; };
 		9A4643F98030A10AB665492D /* SettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0034572985CEC32177512AA8 /* SettingsViewModelTests.swift */; };
@@ -486,6 +487,7 @@
 		208E2CC90EE2BA9175B46C66 /* ChatGPTBrandIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatGPTBrandIcon.swift; sourceTree = "<group>"; };
 		22F0C11892572A2CBD1C39E7 /* AttachmentRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentRepositoryTests.swift; sourceTree = "<group>"; };
 		246FB46BD98EF2A54ED6539A /* GenUIExpression.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenUIExpression.swift; sourceTree = "<group>"; };
+		24C65A7CDA7152349C0FE403 /* ModelSelectionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelSelectionRow.swift; sourceTree = "<group>"; };
 		250C00C07AEDED8FABE7AE06 /* WebSearchToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSearchToolTests.swift; sourceTree = "<group>"; };
 		25418095A457767B82727AED /* SvgCodeExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgCodeExtractor.swift; sourceTree = "<group>"; };
 		2559F5CDE33F1C6606E7C9D0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -1008,6 +1010,7 @@
 				CEAC567088AC21851EC5F65E /* GeminiModelCatalog.swift */,
 				7AFADAD85FDF09DED54072D8 /* GeminiModelUtils.swift */,
 				1B03D691C10949EDBFCACB34 /* L10n.swift */,
+				24C65A7CDA7152349C0FE403 /* ModelSelectionRow.swift */,
 				C60224F6EBCC6491A82E063D /* OpenCodeGoModelCatalog.swift */,
 				DB67AF4FCD909DB4AE47BF6B /* PinnedListSearch.swift */,
 				BB55024341507549B0165D92 /* ProviderDisplay.swift */,
@@ -2087,6 +2090,7 @@
 				9BD931169E39B228157F7725 /* MathMarkdownView.swift in Sources */,
 				CD45864AEF7F44B6F37E9E1C /* MermaidDiagramView.swift in Sources */,
 				4AF8DCF064E32B3DD82E1D65 /* ModelPreset.swift in Sources */,
+				99469D4CB0E428295EDF37E7 /* ModelSelectionRow.swift in Sources */,
 				46088AB60CFF9962B044D0DF /* ModelSlotForm.swift in Sources */,
 				ECDE193C2F8AA008090274F3 /* ModelsDevCatalog.swift in Sources */,
 				F96F8931673091505236216B /* ModelsDevCatalogRepository.swift in Sources */,

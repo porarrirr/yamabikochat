@@ -56,13 +56,13 @@ struct OnboardingScreen: View {
                         Button { viewModel.goBack() } label: {
                             Label("戻る", systemImage: "chevron.backward")
                         }
-                        .disabled(viewModel.isSigningInWithChatGPT || isFinishing)
+                        .disabled(isFinishing)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("あとで設定する") { finish(skip: true) }
+                    Button(viewModel.progress.step == .model ? "あとで" : "あとで設定する") { finish(skip: true) }
                         .font(.subheadline)
-                        .disabled(viewModel.isSigningInWithChatGPT || isFinishing)
+                        .disabled(isFinishing)
                         .accessibilityIdentifier("onboarding-skip")
                 }
             }
@@ -93,7 +93,11 @@ struct OnboardingScreen: View {
             if phase == .active { Task { await viewModel.refreshPCC() } }
             else { settings.flushPendingSettingsSave() }
         }
-        .onDisappear { settings.flushPendingSettingsSave() }
+        .onDisappear {
+            viewModel.cancelChatGPTSignIn()
+            settings.flushPendingSettingsSave()
+        }
+        .tint(.primary)
         .amoledPresentation()
     }
 
@@ -109,6 +113,10 @@ struct OnboardingScreen: View {
                         connectionCard("AppleのAIを使う（PCC）", icon: "apple.logo", connection: .pcc)
                     }
                     connectionCard("APIキーで接続", icon: "key", connection: .apiKey)
+                    if viewModel.isSigningInWithChatGPT {
+                        Button("サインインをキャンセル") { viewModel.cancelChatGPTSignIn() }
+                            .accessibilityIdentifier("onboarding-cancel-sign-in")
+                    }
                 }
             }
             .frame(maxWidth: 560, alignment: .leading)
@@ -150,7 +158,7 @@ struct OnboardingScreen: View {
             .contentShape(RoundedRectangle(cornerRadius: 20))
         }
         .buttonStyle(.plain)
-        .disabled(isFinishing || viewModel.isSigningInWithChatGPT)
+        .disabled(isFinishing)
         .accessibilityIdentifier("onboarding-connect-\(connection.rawValue)")
     }
 

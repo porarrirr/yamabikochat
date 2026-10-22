@@ -154,6 +154,7 @@ final class CodexAuthRepository {
 
     func loginWithBrowser() async -> Result<CodexAuthState, Error> {
         do {
+            try Task.checkCancellation()
             let (generation, host, registration) = try authLock.withLock {
                 guard !signingOut else { throw CancellationError() }
                 authGeneration += 1
@@ -165,6 +166,7 @@ final class CodexAuthRepository {
             }
             DiagnosticsLogger.log("Official ChatGPT authorization delegated to Pi plugin", category: .auth)
             let resolution = try await loginHandler(host, registration) { registration in
+                try Task.checkCancellation()
                 try self.authLock.withLock {
                     guard generation == self.authGeneration else { throw CancellationError() }
                     guard let id = registration.objectValue?["clientId"]?.stringValue, id != "dynamic_agent_client" else {
@@ -176,6 +178,7 @@ final class CodexAuthRepository {
                     try self.saveAccounts(accounts)
                 }
             }
+            try Task.checkCancellation()
             try commit(resolution, generation: generation)
             return .success(currentState())
         } catch {

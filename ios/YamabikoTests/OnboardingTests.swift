@@ -157,6 +157,73 @@ final class OnboardingTests: XCTestCase {
     }
 
     @MainActor
+    func testSelectingAnotherConnectionCancelsPendingLoginAndIgnoresLateCompletion() async throws {
+        for connection in [OnboardingProgress.Connection.apiKey, .pcc] {
+            let suite = "OnboardingTests.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let started = expectation(description: "Browser login started")
+            var completion: CheckedContinuation<Void, Never>?
+            let model = OnboardingViewModel(
+                store: OnboardingStateStore(defaults: defaults, hasExistingInstallation: false),
+                pccCapability: { PCCCapability(available: true, contextSize: 32_768) },
+                chatGPTSignIn: { _ in
+                    await withCheckedContinuation { completion = $0; started.fulfill() }
+                    XCTAssertTrue(Task.isCancelled)
+                }
+            )
+            await model.refreshPCC()
+            let login = Task { await model.signInWithChatGPT() }
+            await fulfillment(of: [started], timeout: 2)
+            XCTAssertTrue(model.isSigningInWithChatGPT)
+            model.select(connection)
+            XCTAssertFalse(model.isSigningInWithChatGPT)
+            let selection = model.progress
+            completion?.resume()
+            await login.value
+            XCTAssertEqual(model.progress, selection)
+            XCTAssertNil(model.presentedError)
+        }
+    }
+
+    @MainActor
+    func testPendingChatGPTLoginCanBeRestartedAndExplicitlyCancelled() async throws {
+        let suite = "OnboardingTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let firstStarted = expectation(description: "First login started")
+        let secondStarted = expectation(description: "Second login started")
+        var completions: [CheckedContinuation<Void, Never>] = []
+        let model = OnboardingViewModel(
+            store: OnboardingStateStore(defaults: defaults, hasExistingInstallation: false),
+            chatGPTSignIn: { _ in
+                await withCheckedContinuation {
+                    completions.append($0)
+                    if completions.count == 1 { firstStarted.fulfill() }
+                    else { secondStarted.fulfill() }
+                }
+                XCTAssertTrue(Task.isCancelled)
+            }
+        )
+        let first = Task { await model.signInWithChatGPT() }
+        await fulfillment(of: [firstStarted], timeout: 2)
+        let second = Task { await model.signInWithChatGPT() }
+        await Task.yield()
+        completions[0].resume()
+        await fulfillment(of: [secondStarted], timeout: 2)
+        await first.value
+        XCTAssertTrue(model.isSigningInWithChatGPT)
+        XCTAssertEqual(model.progress.step, .chatGPT)
+        model.cancelChatGPTSignIn()
+        XCTAssertFalse(model.isSigningInWithChatGPT)
+        XCTAssertEqual(model.progress.step, .choice)
+        completions[1].resume()
+        await second.value
+        XCTAssertEqual(model.progress.step, .choice)
+        XCTAssertNil(model.presentedError)
+    }
+
+    @MainActor
     func testInterruptedBrowserHandoffReturnsToChoicesOnRelaunch() throws {
         try withStore { store, _ in
             store.save(OnboardingProgress(step: .chatGPT, connection: .chatGPT))

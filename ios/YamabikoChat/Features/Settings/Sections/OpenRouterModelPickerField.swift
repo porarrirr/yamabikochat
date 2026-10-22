@@ -85,27 +85,21 @@ struct OpenRouterModelListView: View {
                         model = item.id
                         if dismissOnSelection { dismiss() }
                     } label: {
-                        HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.name)
-                                    .font(.subheadline)
-                                Text(item.id)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if item.id == model.trimmingCharacters(in: .whitespacesAndNewlines) {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(Color.accentColor)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
+                        ModelSelectionRow(
+                            name: item.name,
+                            isSelected: item.id == model.trimmingCharacters(in: .whitespacesAndNewlines)
+                        )
                     }
                     .buttonStyle(.plain)
+                    .listRowSeparator(.visible)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
         }
+        .background(Color(uiColor: .amoledSystemGroupedBackground))
         .navigationTitle(L10n.text(titleKey))
         .navigationBarTitleDisplayMode(.inline)
         .pinnedListSearch(text: $searchQuery, prompt: L10n.text("モデル検索"))
@@ -129,8 +123,9 @@ struct OpenRouterModelListView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button(L10n.text("更新")) {
-                    onRefresh()
+                Button(action: onRefresh) {
+                    Label(L10n.text("更新"), systemImage: "arrow.clockwise")
+                        .labelStyle(.iconOnly)
                 }
                 .disabled(isLoading)
             }

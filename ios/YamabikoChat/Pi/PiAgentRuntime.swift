@@ -566,67 +566,74 @@ actor PiAgentRuntime {
 
         let session = URLSession(configuration: .ephemeral)
         defer { session.invalidateAndCancel() }
-        let (bytes, response) = try await session.bytes(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw ProviderClientError.invalidResponse
-        }
-        for try await line in bytes.lines where !line.isEmpty {
-            let event = try JSONDecoder().decode(PiRuntimeEvent.self, from: Data(line.utf8))
-            switch event.type {
-            case "auth_registration":
-                guard let registration = event.registration, let requestID = event.requestId, let onRegistration else {
-                    throw ProviderClientError.parseFailure("Pi returned an unexpected ChatGPT registration")
-                }
-                try await onRegistration(registration)
-                var acknowledgement = URLRequest(url: endpoint.appendingPathComponent("v1/auth/registration"))
-                acknowledgement.httpMethod = "POST"
-                acknowledgement.httpBody = try JSONEncoder().encode(["requestId": requestID])
-                acknowledgement.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                acknowledgement.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                let (_, acknowledgementResponse) = try await URLSession(configuration: .ephemeral).data(for: acknowledgement)
-                guard (acknowledgementResponse as? HTTPURLResponse)?.statusCode == 200 else {
-                    throw ProviderClientError.parseFailure("ChatGPT registration acknowledgement failed")
-                }
-            case "auth_url":
-                guard let value = event.url, let url = URL(string: value) else {
-                    throw ProviderClientError.parseFailure("Pi OAuth returned an invalid authorization URL")
-                }
-                try await Self.openBrowser(url)
-            case "device_code":
-                guard let value = event.verificationUri,
-                      let url = URL(string: value),
-                      let userCode = event.userCode else {
-                    throw ProviderClientError.parseFailure("Pi OAuth returned an invalid device code")
-                }
-                await onDeviceCode?(
-                    SuperGrokDeviceCodeChallenge(
-                        verificationURI: value,
-                        userCode: userCode,
-                        browserURL: value
-                    )
-                )
-                try await Self.openBrowser(url)
-            case "auth_completed":
-                guard let credential = event.credential, let profile = event.profile else {
-                    throw ProviderClientError.parseFailure("Pi OAuth completed without credentials")
-                }
-                let object = credential.objectValue
-                guard let accessToken = object?["access"]?.stringValue else {
-                    throw ProviderClientError.parseFailure("Pi OAuth credential has no access token")
-                }
-                return PiOAuthResolution(
-                    credential: credential,
-                    accessToken: accessToken,
-                    accountId: object?["accountId"]?.stringValue ?? profile.accountId,
-                    profile: profile
-                )
-            case "error":
-                throw ProviderClientError.parseFailure(event.message ?? "Pi OAuth login failed")
-            default:
-                continue
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            let (bytes, response) = try await session.bytes(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw ProviderClientError.invalidResponse
             }
+            for try await line in bytes.lines where !line.isEmpty {
+                try Task.checkCancellation()
+                let event = try JSONDecoder().decode(PiRuntimeEvent.self, from: Data(line.utf8))
+                switch event.type {
+                case "auth_registration":
+                    guard let registration = event.registration, let requestID = event.requestId, let onRegistration else {
+                        throw ProviderClientError.parseFailure("Pi returned an unexpected ChatGPT registration")
+                    }
+                    try await onRegistration(registration)
+                    var acknowledgement = URLRequest(url: endpoint.appendingPathComponent("v1/auth/registration"))
+                    acknowledgement.httpMethod = "POST"
+                    acknowledgement.httpBody = try JSONEncoder().encode(["requestId": requestID])
+                    acknowledgement.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                    acknowledgement.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    let (_, acknowledgementResponse) = try await URLSession(configuration: .ephemeral).data(for: acknowledgement)
+                    guard (acknowledgementResponse as? HTTPURLResponse)?.statusCode == 200 else {
+                        throw ProviderClientError.parseFailure("ChatGPT registration acknowledgement failed")
+                    }
+                case "auth_url":
+                    guard let value = event.url, let url = URL(string: value) else {
+                        throw ProviderClientError.parseFailure("Pi OAuth returned an invalid authorization URL")
+                    }
+                    try await Self.openBrowser(url)
+                case "device_code":
+                    guard let value = event.verificationUri,
+                          let url = URL(string: value),
+                          let userCode = event.userCode else {
+                        throw ProviderClientError.parseFailure("Pi OAuth returned an invalid device code")
+                    }
+                    await onDeviceCode?(
+                        SuperGrokDeviceCodeChallenge(
+                            verificationURI: value,
+                            userCode: userCode,
+                            browserURL: value
+                        )
+                    )
+                    try await Self.openBrowser(url)
+                case "auth_completed":
+                    guard let credential = event.credential, let profile = event.profile else {
+                        throw ProviderClientError.parseFailure("Pi OAuth completed without credentials")
+                    }
+                    let object = credential.objectValue
+                    guard let accessToken = object?["access"]?.stringValue else {
+                        throw ProviderClientError.parseFailure("Pi OAuth credential has no access token")
+                    }
+                    return PiOAuthResolution(
+                        credential: credential,
+                        accessToken: accessToken,
+                        accountId: object?["accountId"]?.stringValue ?? profile.accountId,
+                        profile: profile
+                    )
+                case "error":
+                    throw ProviderClientError.parseFailure(event.message ?? "Pi OAuth login failed")
+                default:
+                    continue
+                }
+            }
+            throw ProviderClientError.parseFailure("Pi OAuth login ended without credentials")
+        } onCancel: {
+            // Closing the stream tells Pi to abort OAuth and release its listener.
+            session.invalidateAndCancel()
         }
-        throw ProviderClientError.parseFailure("Pi OAuth login ended without credentials")
     }
 
     func resolveOAuth(

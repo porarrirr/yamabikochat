@@ -57,6 +57,25 @@ final class AuthRepositoryTests: XCTestCase {
         XCTAssertNil(try store.readSecret(key: "codex_access_token"))
     }
 
+    func testCancelledLoginDoesNotPersistLateCredentialsAndCanRetry() async throws {
+        let store = PiAuthTestCredentialStore()
+        let repo = CodexAuthRepository(credentialStore: store, loginHandler: { host, _, _ in
+            // Simulate a provider returning a result after cancellation.
+            withUnsafeCurrentTask { $0?.cancel() }
+            return chatGPTResolution(hostID: host)
+        })
+        let result = await Task { await repo.loginWithBrowser() }.value
+        guard case let .failure(error) = result else { return XCTFail("Cancelled login succeeded") }
+        XCTAssertTrue(error is CancellationError)
+        XCTAssertFalse(repo.currentState().isLoggedIn)
+        XCTAssertNil(try store.readSecret(key: "pi_chatgpt_accounts_v1"))
+        let retry = CodexAuthRepository(credentialStore: store, loginHandler: { host, _, _ in
+            chatGPTResolution(hostID: host)
+        })
+        guard case .success = await retry.loginWithBrowser() else { return XCTFail("Retry failed") }
+        XCTAssertTrue(retry.currentState().planUsageEnabled)
+    }
+
     func testCodexResolutionPersistsRotatedPiCredential() async throws {
         let store = PiAuthTestCredentialStore()
         let repo = CodexAuthRepository(

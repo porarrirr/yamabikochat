@@ -11,6 +11,7 @@ private struct PinnedListSearchField: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             TextField(prompt, text: $text)
+                .font(.subheadline)
                 .textFieldStyle(.plain)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -33,10 +34,10 @@ private struct PinnedListSearchField: View {
         }
         .padding(.leading, 14)
         .padding(.trailing, text.isEmpty ? 14 : 0)
-        .frame(minHeight: 48)
-        .background(Color(uiColor: .amoledSecondarySystemFill), in: RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal, 20)
-        .padding(.vertical, 8)
+        .frame(minHeight: 44)
+        .background(Color(uiColor: .amoledTertiarySystemFill), in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
         .background(Color(uiColor: .amoledSystemGroupedBackground))
     }
 }

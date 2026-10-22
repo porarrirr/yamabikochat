@@ -68,6 +68,8 @@ final class OnboardingViewModel: ObservableObject {
     @Published private(set) var isSigningInWithChatGPT = false
     @Published var errorMessage: String?
     let settings = SettingsViewModel()
+    private var chatGPTSignInTask: Task<Void, Never>?
+    private var chatGPTSignInID: UUID?
     private let store: OnboardingStateStore
     private let pccCapability: () async -> PCCCapability
     private let chatGPTSignIn: (SettingsViewModel) async -> Void
@@ -91,9 +93,10 @@ final class OnboardingViewModel: ObservableObject {
         errorMessage ?? (progress.step == .choice ? nil : settings.errorMessage)
     }
 
-    func goBack() { errorMessage = nil; progress.goBack() }
+    func goBack() { cancelChatGPTSignIn(); errorMessage = nil; progress.goBack() }
 
     func select(_ connection: OnboardingProgress.Connection) {
+        cancelChatGPTSignIn()
         errorMessage = nil
         settings.errorMessage = nil
         switch connection {
@@ -113,12 +116,36 @@ final class OnboardingViewModel: ObservableObject {
         }
     }
 
+    func cancelChatGPTSignIn() {
+        guard chatGPTSignInID != nil else { return }
+        chatGPTSignInID = nil
+        chatGPTSignInTask?.cancel()
+        isSigningInWithChatGPT = false
+        if progress.step == .chatGPT { progress.step = .choice }
+        settings.errorMessage = nil
+        errorMessage = nil
+        DiagnosticsLogger.log("Onboarding ChatGPT authorization cancelled", category: .auth)
+    }
+
     func signInWithChatGPT() async {
-        guard !isSigningInWithChatGPT else { return }
-        isSigningInWithChatGPT = true
-        defer { isSigningInWithChatGPT = false }
         select(.chatGPT)
-        await chatGPTSignIn(settings)
+        let previousTask = chatGPTSignInTask
+        let id = UUID()
+        chatGPTSignInID = id
+        isSigningInWithChatGPT = true
+        let task = Task { @MainActor in
+            // Let the previous Pi connection close before starting another login.
+            await previousTask?.value
+            guard !Task.isCancelled else { return }
+            await chatGPTSignIn(settings)
+        }
+        chatGPTSignInTask = task
+        await task.value
+        // A cancelled attempt must not change a newer selection or login.
+        guard chatGPTSignInID == id else { return }
+        chatGPTSignInID = nil
+        chatGPTSignInTask = nil
+        isSigningInWithChatGPT = false
         guard settings.codexAuthState.planUsageEnabled else {
             progress.step = .choice
             errorMessage = settings.errorMessage ?? "ChatGPTプランの利用が許可されませんでした。"
@@ -188,6 +215,7 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     func finish(repository: ChatRepository, appState: AppState, skip: Bool = false) async {
+        cancelChatGPTSignIn()
         errorMessage = nil
         if !skip, progress.connection == .pcc {
             await refreshPCC()

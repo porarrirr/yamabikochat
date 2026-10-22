@@ -227,30 +227,21 @@ struct CatalogModelListView: View {
                 modelID = model.id
                 if dismissOnSelection { dismiss() }
             } label: {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(model.name)
-                        Text(model.id).font(.caption).foregroundStyle(.secondary)
-                        HStack {
-                            if let context = model.limits.context { Text("context \(context)") }
-                            if model.reasoning == true { Text("reasoning") }
-                            if model.toolCall == true { Text("tools") }
-                        }.font(.caption2).foregroundStyle(.secondary)
-                        if resolution?.supported == false {
-                            Text(unsupportedReason(resolution?.reason))
-                                .font(.caption2)
-                                .foregroundStyle(.orange)
-                        }
-                    }
-                    Spacer()
-                    if model.id == modelID { Image(systemName: "checkmark") }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+                ModelSelectionRow(
+                    name: model.name,
+                    isSelected: model.id == modelID,
+                    unavailableReason: resolution?.supported == false ? unsupportedReason(resolution?.reason) : nil
+                )
             }
             .buttonStyle(.plain)
+            .listRowSeparator(.visible)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
             .disabled(resolution?.supported != true)
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color(uiColor: .amoledSystemGroupedBackground))
         .overlay {
             if filtered.isEmpty { ContentUnavailableView.search(text: query) }
         }
