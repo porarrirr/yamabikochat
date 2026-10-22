@@ -55,6 +55,25 @@ final class NativeMarkdownHotPathTests: XCTestCase {
         XCTAssertEqual(markdown, source)
     }
 
+    func testMathListsPreserveSourceAndDeferDuringStreaming() throws {
+        for marker in ["1.", "-", "7."] {
+            let source = "\(marker) **半径** $r$\n\n   $$\n   S = 4" + #"\pi r^2"# + "\n\n   $$\n\n\(marker) 次の項目"
+            let blocks = NativeMarkdownParser.parse(source)
+            guard case let .math(_, markdown) = try XCTUnwrap(blocks.first) else {
+                return XCTFail("Expected math list for \(marker)")
+            }
+            XCTAssertEqual(markdown, source)
+            guard case .list = try XCTUnwrap(NativeMarkdownParser.parse(source, rendersMath: false).first) else {
+                return XCTFail("Streaming should keep native lists")
+            }
+        }
+        for source in ["1. `$r$`", "- 普通の本文", "1. Price: $5 and $10"] {
+            guard case .list = try XCTUnwrap(NativeMarkdownParser.parse(source).first) else {
+                return XCTFail("Non-math lists must remain native")
+            }
+        }
+    }
+
     @MainActor
     func testStreamingContextResetsAfterReferencesAndUnicodeReplacements() {
         let parser = NativeMarkdownIncrementalParser()

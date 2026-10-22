@@ -130,6 +130,12 @@ enum NativeMarkdownParser {
         rendersMath: Bool,
         offsets: SourceOffsetMap
     ) -> [NativeMarkdownBlock] {
+        // Lists flatten their children into attributed text below. Route the
+        // original source through MathJax before that loses TeX and block math.
+        if rendersMath, markup is OrderedList || markup is UnorderedList,
+           let source = offsets.sourceText(for: markup), containsMath(source) {
+            return [.math(id: path, markdown: source)]
+        }
         if let paragraph = markup as? Paragraph {
             if rendersMath, let source = offsets.sourceText(for: paragraph), containsMath(source) {
                 return [.math(id: path, markdown: source)]

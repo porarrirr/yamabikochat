@@ -10,6 +10,31 @@ final class MathMarkdownViewTests: XCTestCase {
         try await assertMathRenders(AppStoreScreenshotDemoSeeder.mathRenderingFixtureText)
     }
 
+    private static let dollarMathListFixture = #"""
+    **手法:** 半円を $x$ 軸の周りに回転させます。
+
+    1. **球の表現:** 半径 $r$ の球を、半円 $y = \sqrt{r^2 - x^2}$（$x \in [-r, r]$）として表します。
+
+    2. **表面積の公式:** $S = 2\pi \int_{-r}^{r} y \sqrt{1 + \left(\frac{dy}{dx}\right)^2}\,dx$。
+
+    3. **微分:** $\frac{dy}{dx} = -\frac{x}{\sqrt{r^2 - x^2}}$。
+
+    4. **被積分関数の簡略化:**
+
+       $$
+       \sqrt{1 + \left(\frac{dy}{dx}\right)^2}
+
+       = \frac{r}{\sqrt{r^2 - x^2}}
+       $$
+
+       したがって、$S = 4\pi r^2$。
+    """#
+
+    @MainActor
+    func testDollarMathListRendersInNativeMessageView() async throws {
+        try await assertMathRenders(Self.dollarMathListFixture, expectedEquationCount: 8, usesNativeView: true)
+    }
+
     @MainActor
     func testStandaloneFractionFitsWebViewHeight() async throws {
         try await assertMathRenders(#"\[S=\frac{dV}{dr}=\frac{d}{dr}\left(\frac{4}{3}\pi r^3\right)=4\pi r^2.\]"#)
@@ -74,16 +99,24 @@ final class MathMarkdownViewTests: XCTestCase {
     }
 
     @MainActor
-    private func assertMathRenders(_ source: String) async throws {
-        let expectedCount = source.components(separatedBy: #"\("#).count - 1
-            + source.components(separatedBy: #"\["#).count - 1
+    private func assertMathRenders(_ source: String, expectedEquationCount: Int? = nil, usesNativeView: Bool = false) async throws {
+        let expectedCount = expectedEquationCount ?? (source.components(separatedBy: #"\("#).count - 1
+            + source.components(separatedBy: #"\["#).count - 1)
         let mathBlocks = NativeMarkdownParser.parse(source).compactMap { block -> String? in
             guard case let .math(_, markdown) = block else { return nil }
             return markdown
         }.joined(separator: "\n")
-        XCTAssertEqual(mathBlocks.components(separatedBy: #"\("#).count - 1
-            + mathBlocks.components(separatedBy: #"\["#).count - 1, expectedCount)
-        let controller = UIHostingController(rootView: ScrollView { MathMarkdownView(markdownText: source) })
+        if expectedEquationCount == nil {
+            XCTAssertEqual(mathBlocks.components(separatedBy: #"\("#).count - 1
+                + mathBlocks.components(separatedBy: #"\["#).count - 1, expectedCount)
+        }
+        let controller = UIHostingController(rootView: ScrollView {
+            if usesNativeView {
+                NativeMarkdownView(markdownText: source)
+            } else {
+                MathMarkdownView(markdownText: source)
+            }
+        })
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
@@ -100,11 +133,12 @@ final class MathMarkdownViewTests: XCTestCase {
             controller.view.layoutIfNeeded()
             let views = webViews(controller.view)
             count = 0
+            outsideViewport = 0
             for webView in views {
                 count += (try? await webView.evaluateJavaScript("document.querySelectorAll('mjx-container svg').length")) as? Int ?? 0
                 state = String(describing: try? await webView.evaluateJavaScript("JSON.stringify({math:typeof window.MathJax, viewport:innerHeight, root:document.getElementById('yamabiko-markdown').getBoundingClientRect().toJSON(), svg:Array.from(document.querySelectorAll('mjx-container svg')).map(s=>s.getBoundingClientRect().toJSON())})")) + " frame=\(webView.frame)"
-                if count == expectedCount {
-                    outsideViewport = (try await webView.evaluateJavaScript("""
+                if count > 0 {
+                    outsideViewport += (try await webView.evaluateJavaScript("""
                         Array.from(document.querySelectorAll('mjx-container svg')).filter(svg => {
                             const box = svg.getBoundingClientRect();
                             return box.top < -1 || box.bottom > window.innerHeight + 1;
@@ -135,6 +169,29 @@ final class MathMarkdownViewTests: XCTestCase {
         add(attachment)
         XCTAssertEqual(count, expectedCount, state)
         XCTAssertEqual(outsideViewport, 0, "All equations must fit inside the measured WebView height: \(state)")
+    }
+
+    func testMathListRendererPreservesNumberingContinuationAndNestedBlocks() throws {
+        let source = #"""
+        7. **公式:** $S = 4\pi r^2$
+           続きの説明。
+
+           $$
+           \frac{r}{\sqrt{r^2-x^2}}
+
+           $$
+
+           - 内側 $r$
+
+        8. 次の項目 $x$
+        """#
+        let html = try renderMarkdownWithJavaScript(source)
+        XCTAssertTrue(html.hasPrefix("<ol start=\"7\"><li>"), html)
+        XCTAssertEqual(html.components(separatedBy: "<ol").count - 1, 1, html)
+        XCTAssertTrue(html.contains("<ul><li><p>内側 $r$</p></li></ul>"), html)
+        XCTAssertTrue(html.contains("</ul></li><li><p>次の項目 $x$</p></li></ol>"), html)
+        XCTAssertTrue(html.contains(#"\frac{r}{\sqrt{r^2-x^2}}"#), html)
+        XCTAssertFalse(html.contains("@@"), html)
     }
 
     func testBuildHTMLIncludesMathJax() {

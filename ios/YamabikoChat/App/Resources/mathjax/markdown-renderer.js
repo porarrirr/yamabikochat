@@ -244,27 +244,53 @@
     return "<p>" + applyInlineMarkdown(content) + "</p>";
   }
 
-  function parseList(lines, startIndex, ordered) {
+  function parseList(lines, startIndex, ordered, context) {
     var index = startIndex;
     var items = [];
-    var pattern = ordered ? /^\s*\d+\.\s+(.*)$/ : /^\s*[-*+]\s+(.*)$/;
+    var pattern = ordered ? /^(\s*)(\d+)[.)]\s+(.*)$/ : /^(\s*)[-*+]\s+(.*)$/;
+    var first = lines[startIndex].match(pattern);
+    var baseIndent = first[1].length;
+    var start = ordered ? Number(first[2]) : 1;
 
     while (index < lines.length) {
-      var line = lines[index];
-      var match = line.match(pattern);
-      if (!match) break;
-      items.push("<li>" + applyInlineMarkdown(match[1].trim()) + "</li>");
+      var match = lines[index].match(pattern);
+      if (!match || match[1].length !== baseIndent) break;
+      var content = ordered ? match[3] : match[2];
+      var contentIndent = lines[index].length - content.length;
+      var itemLines = [content];
       index += 1;
+      while (index < lines.length) {
+        if (isBlank(lines[index])) {
+          var next = index + 1;
+          while (next < lines.length && isBlank(lines[next])) next += 1;
+          if (next >= lines.length) break;
+          var nextIndent = lines[next].match(/^\s*/)[0].length;
+          if (nextIndent <= baseIndent) break;
+          itemLines.push("");
+          index += 1;
+          continue;
+        }
+        var indent = lines[index].match(/^\s*/)[0].length;
+        if (indent <= baseIndent) break;
+        itemLines.push(lines[index].slice(Math.min(indent, contentIndent)));
+        index += 1;
+      }
+      items.push("<li>" + renderBlocks(itemLines.join("\n"), context) + "</li>");
+      var following = index;
+      while (following < lines.length && isBlank(lines[following])) following += 1;
+      var sibling = following < lines.length && lines[following].match(pattern);
+      if (!sibling || sibling[1].length !== baseIndent) break;
+      index = following;
     }
 
     var tag = ordered ? "ol" : "ul";
     return {
-      html: "<" + tag + ">" + items.join("") + "</" + tag + ">",
+      html: "<" + tag + (ordered && start !== 1 ? ' start="' + start + '"' : "") + ">" + items.join("") + "</" + tag + ">",
       nextIndex: index
     };
   }
 
-  function parseBlockquote(lines, startIndex) {
+  function parseBlockquote(lines, startIndex, context) {
     var index = startIndex;
     var quoteLines = [];
 
@@ -276,7 +302,7 @@
     }
 
     return {
-      html: "<blockquote>" + renderBlocks(quoteLines.join("\n")) + "</blockquote>",
+      html: "<blockquote>" + renderBlocks(quoteLines.join("\n"), context) + "</blockquote>",
       nextIndex: index
     };
   }
@@ -384,9 +410,10 @@
     };
   }
 
-  function renderBlocks(input) {
+  function renderBlocks(input, context) {
     var source = String(input || "").replace(/\r\n?/g, "\n");
-    var codeBlocks = [];
+    context = context || { codeBlocks: [], displayMath: [] };
+    var codeBlocks = context.codeBlocks;
 
     source = source.replace(/```([^\n`]*)\n([\s\S]*?)```/g, function(_, language, code) {
       var key = "@@CODE_BLOCK_" + codeBlocks.length + "@@";
@@ -403,11 +430,11 @@
 
     // Keep display TeX in one text node even when it contains blank lines.
     // Fenced code has already been extracted, so it remains literal.
-    var displayMath = [];
-    source = source.replace(/(^|\n)[ \t]*(\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$)[ \t]*(?=\n|$)/g, function(_, prefix, math) {
+    var displayMath = context.displayMath;
+    source = source.replace(/(^|\n)([ \t]*)(\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$)[ \t]*(?=\n|$)/g, function(_, prefix, indent, math) {
       var key = "@@DISPLAY_MATH_" + displayMath.length + "@@";
       displayMath.push("<p>" + escapeHtml(math) + "</p>");
-      return prefix + key;
+      return prefix + indent + key;
     });
 
     var lines = source.split("\n");
@@ -465,7 +492,7 @@
 
       if (/^\s*>/.test(line)) {
         flushParagraph();
-        var quote = parseBlockquote(lines, i);
+        var quote = parseBlockquote(lines, i, context);
         htmlParts.push(quote.html);
         i = quote.nextIndex;
         continue;
@@ -481,7 +508,7 @@
 
       if (/^\s*[-*+]\s+/.test(line)) {
         flushParagraph();
-        var unordered = parseList(lines, i, false);
+        var unordered = parseList(lines, i, false, context);
         htmlParts.push(unordered.html);
         i = unordered.nextIndex;
         continue;
@@ -489,7 +516,7 @@
 
       if (/^\s*\d+\.\s+/.test(line)) {
         flushParagraph();
-        var ordered = parseList(lines, i, true);
+        var ordered = parseList(lines, i, true, context);
         htmlParts.push(ordered.html);
         i = ordered.nextIndex;
         continue;
