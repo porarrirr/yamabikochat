@@ -63,7 +63,6 @@ export function parseChatGPTCallback(url, pending) {
 }
 
 // Static and self-contained: never render callback values or load external assets.
-// Unmodified ChatGPT mark: https://developers.openai.com/assets/siwc/sign-in-buttons/chatgpt-logo-black.svg
 const CHATGPT_CALLBACK_HTML = `<!doctype html>
 <html lang="ja">
 <head>
@@ -71,111 +70,46 @@ const CHATGPT_CALLBACK_HTML = `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
   <meta name="referrer" content="no-referrer">
-  <title>ブラウザ認証完了 · YamabikoChat</title>
+  <title>ChatGPTの認証完了 · YamabikoChat</title>
   <style>
-    /* Visual emphasis: navy / charcoal / light gray / lime = 5 : 2.5 : 1.25 : 1.25. */
-    :root { color-scheme: dark; --navy: #131A34; --charcoal: #2F2F2F; --gray: #F5F5F5; --lime: #ADFF00; }
+    :root { color-scheme: dark; --navy: #131A34; --gray: #F5F5F5; --lime: #ADFF00; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; min-height: 100svh; padding: max(28px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); background: var(--navy); color: var(--gray); font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
-    .shell { max-width: 1040px; margin: 0 auto; }
-    header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-bottom: 24px; border-bottom: 1px solid rgb(245 245 245 / 20%); }
-    .brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 650; letter-spacing: -.4px; }
-    .brand svg { width: 30px; height: 30px; color: var(--lime); }
-    .header-label { color: rgb(245 245 245 / 65%); font-size: 10px; letter-spacing: 2px; }
-    .hero { display: grid; grid-template-columns: 1.35fr 1fr; align-items: center; gap: 48px; padding: 64px 0 56px; }
-    .eyebrow { display: flex; align-items: center; gap: 9px; margin: 0 0 24px; color: var(--lime); font-size: 11px; font-weight: 700; letter-spacing: 2px; }
-    .eyebrow::before { content: ""; width: 7px; height: 7px; background: var(--lime); border-radius: 50%; }
-    h1 { margin: 0; font-size: clamp(32px, 4.5vw, 52px); font-weight: 700; line-height: 1.4; letter-spacing: -1.8px; }
-    h1 span { color: var(--lime); }
-    .return-link { display: flex; align-items: center; justify-content: space-between; gap: 20px; width: 100%; max-width: 350px; margin-top: 28px; min-height: 60px; padding: 16px 20px; border: 1px solid var(--lime); border-radius: 4px; background: var(--lime); color: var(--navy); font-size: 14px; font-weight: 700; text-decoration: none; line-height: 1.5; }
-    .return-link span { font-size: 24px; line-height: 1; }
-    .return-link:hover { background: var(--gray); border-color: var(--gray); }
-    .return-link:focus-visible { outline: 3px solid var(--gray); outline-offset: 5px; }
-    .return-link:active { opacity: .8; }
-    .visual { position: relative; display: grid; place-items: center; aspect-ratio: 1; overflow: hidden; border: 1px solid rgb(245 245 245 / 16%); border-radius: 50%; background: repeating-linear-gradient(0deg, transparent 0 39px, rgb(245 245 245 / 5%) 39px 40px), repeating-linear-gradient(90deg, transparent 0 39px, rgb(245 245 245 / 5%) 39px 40px); }
-    .visual::before { content: ""; position: absolute; inset: 10%; border: 1px dashed rgb(173 255 0 / 45%); border-radius: 50%; }
-    .visual::after { content: ""; position: absolute; width: 9px; height: 9px; right: 13%; top: 24%; border-radius: 50%; background: var(--lime); box-shadow: 0 0 0 6px rgb(173 255 0 / 10%); }
-    .check { display: grid; place-items: center; width: 53%; aspect-ratio: 1; border-radius: 50%; background: #fff; color: #000; box-shadow: 0 0 0 12px rgb(173 255 0 / 7%); }
-    .check svg { width: 48%; height: 48%; }
-    .visual-label { position: absolute; bottom: 14%; font-size: 9px; letter-spacing: 2px; color: var(--gray); }
-    .next { display: grid; grid-template-columns: .85fr 1.8fr; background: var(--charcoal); border-radius: 8px; overflow: hidden; }
-    .next-heading { display: flex; flex-direction: column; justify-content: space-between; gap: 20px; padding: 28px; }
-    .section-label { margin: 0; color: var(--lime); font-size: 10px; letter-spacing: 2px; font-weight: 700; }
-    h2 { margin: 0; font-size: 21px; line-height: 1.6; letter-spacing: -.5px; }
-    ol { display: grid; grid-template-columns: 1fr 1fr; margin: 0; padding: 0; list-style: none; background: var(--gray); color: var(--navy); color-scheme: light; }
-    li { padding: 28px 24px; }
-    li + li { border-left: 1px solid rgb(19 26 52 / 15%); }
-    .step { display: block; margin-bottom: 20px; font-size: 12px; font-weight: 700; letter-spacing: 1px; }
-    h3 { margin: 0 0 10px; font-size: 15px; line-height: 1.5; }
-    li p { margin: 0; color: var(--charcoal); font-size: 12px; line-height: 1.9; }
-    footer { display: flex; justify-content: space-between; gap: 20px; padding-top: 24px; color: rgb(245 245 245 / 65%); font-size: 11px; line-height: 1.8; }
-    footer p { margin: 0; }
-    @media (max-width: 700px) {
-      .hero { gap: 20px; padding: 40px 0; grid-template-columns: 1fr; }
-      .hero-copy { position: relative; }
-      .eyebrow { margin-bottom: 20px; font-size: 10px; }
-      h1 { font-size: clamp(30px, 7vw, 44px); letter-spacing: -1px; }
-      .visual { grid-row: 1; width: 144px; justify-self: end; margin: 0 0 -72px; }
-      .visual-label { display: none; }
-      .check { box-shadow: 0 0 0 6px rgb(173 255 0 / 7%); }
-      .hero-copy { padding-top: 12px; }
-      .eyebrow { max-width: calc(100% - 150px); min-height: 40px; line-height: 1.8; }
-      .return-link { max-width: none; }
-      .next { grid-template-columns: 1fr; }
-      .next-heading { flex-direction: row; align-items: center; padding: 20px; }
-      h2 { font-size: 17px; }
-      li { padding: 22px 18px; }
-      .step { margin-bottom: 14px; }
-      footer { flex-direction: column; gap: 6px; padding-top: 20px; }
-      .header-label { font-size: 9px; letter-spacing: 1px; }
-    }
+    body { margin: 0; padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); background: var(--navy); color: var(--gray); font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
+    .shell { max-width: 440px; margin: 0 auto; }
+    header { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 650; }
+    header svg { width: 28px; height: 28px; flex-shrink: 0; color: var(--lime); }
+    main { padding-top: 40px; }
+    .success { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 20px; border-radius: 50%; background: rgb(173 255 0 / 12%); color: var(--lime); }
+    .success svg { width: 28px; height: 28px; }
+    h1 { margin: 0; font-size: 28px; line-height: 1.5; letter-spacing: -.6px; }
+    .instruction { margin: 20px 0 16px; font-size: 17px; line-height: 1.8; }
+    .return-link { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 72px; padding: 18px 16px; border: 2px solid var(--lime); border-radius: 14px; background: var(--lime); color: var(--navy); font-size: 20px; font-weight: 700; text-align: center; text-decoration: none; line-height: 1.5; box-shadow: 0 4px 0 #6b9e00; }
+    .return-link svg { width: 24px; height: 24px; flex-shrink: 0; }
+    .return-link:hover { background: #c5ff4d; border-color: #c5ff4d; }
+    .return-link:focus-visible { outline: 3px solid var(--gray); outline-offset: 6px; }
+    .return-link:active { transform: translateY(2px); box-shadow: 0 2px 0 #6b9e00; }
+    .hint { margin: 12px 0 0; color: #c4c9d8; font-size: 14px; line-height: 1.7; text-align: center; }
+    .fallback { margin: 32px 0 0; padding-top: 20px; border-top: 1px solid rgb(245 245 245 / 20%); color: #c4c9d8; font-size: 14px; line-height: 1.8; }
+    .fallback strong { display: block; margin-bottom: 6px; color: var(--gray); font-weight: 600; }
     @media (max-width: 350px) {
-      body { padding-left: 16px; padding-right: 16px; }
-      .header-label { display: none; }
-      .visual { width: 112px; margin-bottom: -62px; }
-      .eyebrow { max-width: calc(100% - 118px); }
-      .next-heading { padding: 18px; }
-      li { padding: 20px 14px; }
+      body { padding-left: 20px; padding-right: 20px; }
+      main { padding-top: 28px; }
+      h1 { font-size: 25px; }
+      .return-link { font-size: 18px; }
     }
   </style>
 </head>
 <body>
   <div class="shell">
     <header>
-      <div class="brand">
-        <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m3 25 10-18 5 9 3-5 8 14H3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m9 14 4 3 4-3" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-        YamabikoChat
-      </div>
-      <span class="header-label">CHATGPT SIGN IN</span>
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m3 25 10-18 5 9 3-5 8 14H3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m9 14 4 3 4-3" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      YamabikoChat
     </header>
-    <main>
-      <section class="hero" aria-labelledby="title">
-        <div class="hero-copy">
-          <p class="eyebrow">BROWSER AUTH COMPLETE</p>
-          <h1 id="title">認証が完了。<br><span>会話のつづきへ。</span></h1>
-          <!-- APP_RETURN_LINK -->
-        </div>
-        <div class="visual" aria-hidden="true">
-          <div class="check"><svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="21" height="21" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g id="ChatGPT logo &#226;&#128;&#148; original vector">
-<path id="Vector" d="M11.8102 19.1625C11.2327 19.1625 10.6841 19.0528 10.1643 18.8334C9.64459 18.6139 9.18259 18.3078 8.77834 17.9151C8.33944 18.0653 7.88322 18.1404 7.40967 18.1404C6.63582 18.1404 5.91972 17.9498 5.26137 17.5686C4.60302 17.1875 4.07172 16.6677 3.66747 16.0094C3.27477 15.351 3.07842 14.6176 3.07842 13.8091C3.07842 13.4742 3.12462 13.1103 3.21702 12.7176C2.75502 12.2903 2.39697 11.7994 2.14287 11.245C1.88877 10.679 1.76172 10.09 1.76172 9.47785C1.76172 8.85415 1.89454 8.25355 2.16019 7.67605C2.42584 7.09855 2.79544 6.6019 3.26899 6.1861C3.75409 5.75875 4.31427 5.46422 4.94952 5.30252C5.07657 4.64417 5.34222 4.05512 5.74647 3.53537C6.16227 3.00407 6.67047 2.58827 7.27107 2.28797C7.87167 1.98767 8.51269 1.83752 9.19414 1.83752C9.77164 1.83752 10.3203 1.94725 10.84 2.1667C11.3598 2.38615 11.8218 2.69222 12.226 3.08492C12.6649 2.93477 13.1211 2.8597 13.5947 2.8597C14.3685 2.8597 15.0846 3.05027 15.743 3.43142C16.4013 3.81257 16.9269 4.33232 17.3196 4.99067C17.7238 5.64902 17.9259 6.38245 17.9259 7.19095C17.9259 7.5259 17.8797 7.88973 17.7873 8.28242C18.2493 8.70977 18.6074 9.20643 18.8615 9.77238C19.1156 10.3268 19.2426 10.91 19.2426 11.5222C19.2426 12.1459 19.1098 12.7465 18.8442 13.324C18.5785 13.9015 18.2031 14.4039 17.718 14.8313C17.2445 15.2471 16.6901 15.5358 16.0548 15.6975C15.9278 16.3559 15.6564 16.9449 15.2406 17.4647C14.8363 17.996 14.3339 18.4118 13.7333 18.7121C13.1327 19.0124 12.4917 19.1625 11.8102 19.1625ZM7.53094 16.9969C8.10844 16.9969 8.61087 16.8756 9.03822 16.6331L12.2953 14.762C12.4108 14.6811 12.4686 14.5714 12.4686 14.4328V12.9429L8.27592 15.351C8.02182 15.5012 7.76772 15.5012 7.51362 15.351L4.23919 13.4626C4.23919 13.4973 4.23342 13.5377 4.22187 13.5839C4.22187 13.6301 4.22187 13.6994 4.22187 13.7918C4.22187 14.3808 4.36047 14.9237 4.63767 15.4203C4.92642 15.9054 5.32489 16.2866 5.83309 16.5638C6.34129 16.8525 6.90724 16.9969 7.53094 16.9969ZM7.70419 14.1729C7.77349 14.2076 7.83702 14.2249 7.89477 14.2249C7.95252 14.2249 8.01027 14.2076 8.06802 14.1729L9.36739 13.4279L5.19207 11.0024C4.93797 10.8523 4.81092 10.6271 4.81092 10.3268V6.56725C4.23342 6.82135 3.77142 7.21405 3.42492 7.74535C3.07842 8.2651 2.90517 8.8426 2.90517 9.47785C2.90517 10.0438 3.04954 10.5866 3.33829 11.1064C3.62704 11.6261 4.00242 12.0189 4.46442 12.2845L7.70419 14.1729ZM11.8102 18.0191C12.4224 18.0191 12.9768 17.8805 13.4734 17.6033C13.9701 17.3261 14.3628 16.9449 14.6515 16.4598C14.9403 15.9747 15.0846 15.4319 15.0846 14.8313V11.0891C15.0846 10.9505 15.0269 10.8465 14.9114 10.7772L13.5947 10.0149V14.8486C13.5947 15.1489 13.4676 15.3741 13.2135 15.5243L9.93912 17.4127C10.5051 17.817 11.1288 18.0191 11.8102 18.0191ZM12.4686 11.6781V9.32192L10.5108 8.21312L8.53579 9.32192V11.6781L10.5108 12.7869L12.4686 11.6781ZM7.40967 6.15145C7.40967 5.85115 7.53672 5.62592 7.79082 5.47577L11.0652 3.58735C10.4993 3.1831 9.87559 2.98097 9.19414 2.98097C8.58199 2.98097 8.02759 3.11957 7.53094 3.39677C7.03429 3.67397 6.64159 4.05512 6.35284 4.54022C6.07564 5.02532 5.93704 5.56817 5.93704 6.16878V9.89365C5.93704 10.0323 5.99479 10.142 6.11029 10.2228L7.40967 10.9851V6.15145ZM16.2108 14.4328C16.7883 14.1787 17.2445 13.786 17.5794 13.2547C17.9259 12.7234 18.0992 12.1459 18.0992 11.5222C18.0992 10.9562 17.9548 10.4134 17.6661 9.89365C17.3773 9.3739 17.0019 8.9812 16.5399 8.71555L13.3002 6.84445C13.2309 6.79825 13.1673 6.78092 13.1096 6.79248C13.0518 6.79248 12.9941 6.8098 12.9363 6.84445L11.637 7.5721L15.8296 10.0149C15.9567 10.0842 16.0491 10.1766 16.1068 10.2921C16.1761 10.3961 16.2108 10.5231 16.2108 10.6733V14.4328ZM12.7284 5.6317C12.9825 5.47 13.2366 5.47 13.4907 5.6317L16.7825 7.55477C16.7825 7.47393 16.7825 7.36997 16.7825 7.24292C16.7825 6.68852 16.6439 6.163 16.3667 5.66635C16.101 5.15815 15.7141 4.7539 15.2059 4.4536C14.7093 4.1533 14.1318 4.00315 13.4734 4.00315C12.8959 4.00315 12.3935 4.12442 11.9661 4.36697L8.70904 6.23808C8.59354 6.31892 8.53579 6.42865 8.53579 6.56725V8.0572L12.7284 5.6317Z" fill="black"/>
-</g>
-</svg></div>
-          <span class="visual-label">AUTH / COMPLETE</span>
-        </div>
-      </section>
-      <section class="next" aria-labelledby="next-title">
-        <div class="next-heading">
-          <p class="section-label">NEXT STEP</p>
-          <h2 id="next-title">あと少しで、<br>準備完了。</h2>
-        </div>
-        <ol>
-          <li><span class="step" aria-hidden="true">01 / RETURN</span><h3>アプリに戻る</h3><p>アプリ切り替え、または画面左上の「YamabikoChat」から戻ります。</p></li>
-          <li><span class="step" aria-hidden="true">02 / CHECK</span><h3>接続を確認する</h3><p>アプリの設定画面で、ChatGPTの接続状態を確認してください。</p></li>
-        </ol>
-      </section>
+    <main aria-labelledby="title">
+      <div class="success" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <h1 id="title">ChatGPTの認証が<br>完了しました</h1>
+      <!-- APP_RETURN_LINK -->
     </main>
-    <footer><p>接続が確認できたら、このタブは閉じてかまいません。</p><p>あなたの会話を、ここから。</p></footer>
   </div>
 </body>
 </html>`;
@@ -185,8 +119,11 @@ function chatGPTCallbackHTML(userAgent = "") {
   const supportsAppReturn = /iPhone|iPad|iPod|Macintosh/.test(userAgent);
   // This fixed link only foregrounds iOS; credentials still resolve through Pi.
   return CHATGPT_CALLBACK_HTML.replace("<!-- APP_RETURN_LINK -->", supportsAppReturn
-    ? '<a class="return-link" href="yamabikochat://auth/complete">YamabikoChatに戻る <span aria-hidden="true">↗</span></a>'
-    : "");
+    ? `<p class="instruction">下のボタンをタップして、<br>アプリに戻ってください。</p>
+      <a class="return-link" href="yamabikochat://auth/complete">YamabikoChatに戻る<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+      <p class="hint">「開く」と表示されたら、そのまま進んでください。</p>
+      <p class="fallback"><strong>ボタンで戻れない場合</strong>画面左上の「◀ YamabikoChat」、またはアプリ切り替えで戻れます。</p>`
+    : '<p class="instruction">YamabikoChatに戻って、接続状態を確認してください。</p>');
 }
 
 // Listener failure is a hard failure. There is no pasted-code or alternate flow.
