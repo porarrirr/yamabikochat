@@ -15,6 +15,14 @@ struct SubagentFleetView: View {
             .compactMap { $0 }.joined(separator: " · ")
     }
 
+    /// Pi sends snapshots for every parallel child in an interleaved stream.
+    /// Showing the most recently updated child made this line alternate between
+    /// "researcher 1", "researcher 2", ... on every token, so pin the first
+    /// running child instead. It advances only after that child finishes.
+    static func summaryRun(in runs: [SubagentRun]) -> SubagentRun? {
+        runs.first { $0.status == .running }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
@@ -31,7 +39,7 @@ struct SubagentFleetView: View {
                             Spacer(minLength: 0)
                             Text(summary).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                         }
-                        Text(runs.filter { $0.status == .running }.max(by: { $0.updatedAtMs < $1.updatedAtMs }).map { "\($0.agent) · \($0.activity)" } ?? "結果と処理履歴を確認")
+                        Text(Self.summaryRun(in: runs).map { "\($0.agent) · \($0.activity)" } ?? "結果と処理履歴を確認")
                             .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")

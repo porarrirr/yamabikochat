@@ -95,6 +95,31 @@ final class SubagentTests: XCTestCase {
         XCTAssertTrue(legacy.subagents.isEmpty)
     }
 
+    func testFleetSummaryStaysPinnedToOneChildWhileParallelSnapshotsInterleave() {
+        var first = run(updatedAt: 10)
+        first.id = "child-1"
+        first.agent = "researcher 1"
+        var second = run(updatedAt: 20)
+        second.id = "child-2"
+        second.agent = "researcher 2"
+        var third = run(updatedAt: 30)
+        third.id = "child-3"
+        third.agent = "researcher 3"
+        var fleet = [first, second, third]
+
+        XCTAssertEqual(SubagentFleetView.summaryRun(in: fleet)?.agent, "researcher 1")
+
+        // Newer snapshots from the other children must not steal the summary line.
+        fleet[1].updatedAtMs = 40
+        fleet[2].updatedAtMs = 50
+        XCTAssertEqual(SubagentFleetView.summaryRun(in: fleet)?.agent, "researcher 1")
+
+        // It advances only when the pinned child stops running.
+        fleet[0].status = .completed
+        XCTAssertEqual(SubagentFleetView.summaryRun(in: fleet)?.agent, "researcher 2")
+        XCTAssertNil(SubagentFleetView.summaryRun(in: [fleet[0]]))
+    }
+
     func testChildNativeResultsRemainInDetailsAndSurviveSubsequentSnapshots() {
         var payload = ToolActivityPayload()
         payload.applySubagent(run())
