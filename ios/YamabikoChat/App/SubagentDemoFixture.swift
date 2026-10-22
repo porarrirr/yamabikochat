@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 /// Deterministic UI test data; never used for normal conversations or model execution.
@@ -51,3 +52,5 @@ enum SubagentDemoFixture {
         }
     }
 }
+
+#endif

@@ -2274,51 +2274,7 @@ final class ChatRepository {
         return supports ? "true" : "false"
     }
 
-    private enum AutoSpeaker {
-        case a
-        case b
-
-        var modelLabel: String {
-            switch self {
-            case .a:
-                return "AI-A"
-            case .b:
-                return "AI-B"
-            }
-        }
-
-        var modelCode: AutoConversationSpeakerModel {
-            switch self {
-            case .a:
-                return .a
-            case .b:
-                return .b
-            }
-        }
-
-        var context: AppSettings.ReasoningContext {
-            switch self {
-            case .a:
-                return .autoA
-            case .b:
-                return .autoB
-            }
-        }
-    }
-
     private static let autoConversationTurnDelayNs: UInt64 = 2_000_000_000
-    private static let autoConversationUnlimitedTurnSafetyLimit = 100
-    private static let autoConversationSessionDurationLimitMs: Int64 = 30 * 60 * 1_000
-    private static let autoConversationEndRegexes: [NSRegularExpression] = [
-        try! NSRegularExpression(pattern: "(?:会話|議論|討論|対話)(?:を)?(?:(?:ここ|これ|以上)で)?終(?:了|わ)り(?:に)?(?:いたします|ます|ましょう|とします)", options: [.caseInsensitive]),
-        try! NSRegularExpression(pattern: "これ(?:にて|で)(?:終(?:了|わ)り|終了)とさせていただきます", options: [.caseInsensitive]),
-        try! NSRegularExpression(pattern: "(?:ここ|これ|以上|本件)(?:で|にて)(?:終(?:了|わ)り|終了)(?:とします|です)", options: [.caseInsensitive]),
-        try! NSRegularExpression(pattern: "\\bend of (?:this )?(?:conversation|discussion)\\b", options: [.caseInsensitive]),
-        try! NSRegularExpression(pattern: "\\bthis concludes (?:our )?(?:conversation|discussion)\\b", options: [.caseInsensitive]),
-        try! NSRegularExpression(pattern: "\\blet'?s end (?:the )?(?:conversation|discussion)\\b", options: [.caseInsensitive]),
-        try! NSRegularExpression(pattern: "\\bconversation (?:has )?(?:ended|is over)\\b", options: [.caseInsensitive])
-    ]
-
     private func runAutoConversationLoop(
         autoConversationId: Int64,
         progress: @escaping @Sendable (_ turn: Int, _ speaker: String, _ text: String) -> Void
@@ -2334,12 +2290,13 @@ final class ChatRepository {
             }
 
             let messages = try conversations.fetchAutoConversationMessages(autoConversationId: autoConversationId)
-            let (nextTurn, speaker) = determineAutoConversationNextStep(messages: messages)
+            let (nextTurn, speaker) = AutoConversationTurnPolicy.determineAutoConversationNextStep(messages: messages)
 
             let nowMs = Int64(Date().timeIntervalSince1970 * 1_000)
-            if autoConversation.maxTurns == 0,
-               nextTurn > Self.autoConversationUnlimitedTurnSafetyLimit ||
-                nowMs - autoConversation.createdAtMs >= Self.autoConversationSessionDurationLimitMs {
+            if AutoConversationTurnPolicy.reachedSafetyLimit(
+                maxTurns: autoConversation.maxTurns, nextTurn: nextTurn,
+                createdAtMs: autoConversation.createdAtMs, nowMs: nowMs
+            ) {
                 try appendAutoConversationSystemMessage(
                     autoConversation: autoConversation,
                     text: L10n.text("**[SYSTEM]**\n\n安全上限（100ターンまたは30分）に達したため、自動会話を停止しました。")
@@ -2383,7 +2340,7 @@ final class ChatRepository {
                 turnPrompt = autoConversation.systemPromptB
             }
 
-            let history = buildAutoConversationHistory(messages: messages, speaker: speaker)
+            let history = AutoConversationTurnPolicy.buildAutoConversationHistory(messages: messages, speaker: speaker)
             let currentSettings = try settings.load()
             let boundConversationID = autoConversation.boundChatConversationId
             let boundProjectID = try boundConversationID.flatMap {
@@ -2452,7 +2409,7 @@ final class ChatRepository {
             }
             autoConversation = latestConversation
 
-            let hasEndSignal = containsAutoConversationEndSignal(
+            let hasEndSignal = AutoConversationTurnPolicy.containsAutoConversationEndSignal(
                 text: responseText,
                 configuredEndSignal: autoConversation.endSignal
             )
@@ -2519,69 +2476,6 @@ final class ChatRepository {
 
             try Task.checkCancellation()
             try await Task.sleep(nanoseconds: Self.autoConversationTurnDelayNs)
-        }
-    }
-
-    private func determineAutoConversationNextStep(messages: [AutoConversationMessage]) -> (turn: Int, speaker: AutoSpeaker) {
-        let ordered = messages.sorted {
-            if $0.turnNumber == $1.turnNumber {
-                return ($0.id ?? 0) < ($1.id ?? 0)
-            }
-            return $0.turnNumber < $1.turnNumber
-        }
-        let lastModelMessage = ordered.last(where: {
-            $0.speakerModel == .a || $0.speakerModel == .b
-        })
-
-        guard let lastModelMessage else {
-            return (1, .a)
-        }
-        let nextSpeaker: AutoSpeaker = (lastModelMessage.speakerModel == .a) ? .b : .a
-        return (lastModelMessage.turnNumber + 1, nextSpeaker)
-    }
-
-    private func buildAutoConversationHistory(
-        messages: [AutoConversationMessage],
-        speaker: AutoSpeaker
-    ) -> [ProviderRequestMessage] {
-        let ordered = messages.sorted {
-            if $0.turnNumber == $1.turnNumber {
-                return ($0.id ?? 0) < ($1.id ?? 0)
-            }
-            return $0.turnNumber < $1.turnNumber
-        }
-        return ordered.compactMap { message in
-            let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !content.isEmpty else { return nil }
-            switch message.speakerModel {
-            case .user:
-                return ProviderRequestMessage(role: "user", content: content)
-            case .a, .b:
-                let role: String
-                switch (speaker, message.speakerModel) {
-                case (.a, .a), (.b, .b):
-                    role = "assistant"
-                default:
-                    role = "user"
-                }
-                return ProviderRequestMessage(role: role, content: content)
-            }
-        }
-    }
-
-    private func containsAutoConversationEndSignal(text: String, configuredEndSignal: String) -> Bool {
-        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return false }
-
-        let endSignal = configuredEndSignal.trimmingCharacters(in: .whitespacesAndNewlines)
-        let targetSignal = endSignal.isEmpty ? "[END]" : endSignal
-        if normalized.range(of: targetSignal, options: [.caseInsensitive, .widthInsensitive]) != nil {
-            return true
-        }
-
-        let range = NSRange(location: 0, length: (normalized as NSString).length)
-        return Self.autoConversationEndRegexes.contains { regex in
-            regex.firstMatch(in: normalized, options: [], range: range) != nil
         }
     }
 

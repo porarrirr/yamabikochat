@@ -70,6 +70,24 @@ struct ChatStreamSessionTarget {
         }
     }
 
+    /// Recovery writes must never replace the original execution error.
+    func recover(operation: String, _ write: () throws -> Void) {
+        do {
+            try write()
+        } catch {
+            let ids = checkpointIDs
+            var metadata = ["operation": operation, "snapshotMessageId": String(snapshotMessageId)]
+            if let id = ids.messageId { metadata["messageId"] = String(id) }
+            if let id = ids.variantId { metadata["variantId"] = String(id) }
+            DiagnosticsLogger.log(
+                "Stream failure recovery persistence failed",
+                category: .chat,
+                metadata: metadata,
+                error: error
+            )
+        }
+    }
+
     func persist(text: String, thinking: String) throws {
         switch kind {
         case let .message(messageId):
@@ -198,15 +216,17 @@ enum ChatStreamSession {
         } catch {
             toolActivity.failRunning(message: L10n.text("ツールの実行が中断されました"))
             if toolActivity.hasPersistableContent {
-                try? target.persistToolActivity(toolActivity)
+                target.recover(operation: "persistToolActivity") { try target.persistToolActivity(toolActivity) }
             }
             let errorText = UserFacingErrorFormatter.placeholder(for: error)
             let visibleText = fullText.isEmpty ? errorText : fullText + "\n\n" + errorText
             if fullText.isEmpty, reasoningText.isEmpty {
-                try? target.writeErrorPlaceholder(error)
-                try? target.discardCheckpoint()
+                target.recover(operation: "writeErrorPlaceholder") { try target.writeErrorPlaceholder(error) }
+                target.recover(operation: "discardCheckpoint") { try target.discardCheckpoint() }
             } else {
-                try? target.commitCheckpoint(text: visibleText, thinking: reasoningText)
+                target.recover(operation: "commitCheckpoint") {
+                    try target.commitCheckpoint(text: visibleText, thinking: reasoningText)
+                }
             }
             coordinator.apply(text: visibleText, thinking: nil, force: false) { _, _ in }
             publishStreamingSnapshot(

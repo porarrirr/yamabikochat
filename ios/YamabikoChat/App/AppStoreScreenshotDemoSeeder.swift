@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 enum AppStoreScreenshotDemoSeeder {
@@ -261,3 +262,5 @@ enum AppStoreScreenshotDemoSeeder {
         }
     }
 }
+
+#endif

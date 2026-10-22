@@ -323,7 +323,7 @@ final class SettingsViewModel: ObservableObject {
             for (name, value) in fields {
                 let key = modelsDevFieldKey(providerID: providerID, fieldName: name)
                 try credentialStore?.saveSecret(
-                    value.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+                    value.trimmingCharacters(in: .whitespacesAndNewlines).trimmedNonEmpty,
                     key: key
                 )
                 modelsDevFieldCache.removeValue(forKey: key)
@@ -360,7 +360,7 @@ final class SettingsViewModel: ObservableObject {
                 providerID: providerID,
                 fieldName: ModelsDevReasoningPreference.fieldName(modelID: modelID)
             )
-            try credentialStore?.saveSecret(normalized.nilIfBlank, key: key)
+            try credentialStore?.saveSecret(normalized.trimmedNonEmpty, key: key)
             modelsDevFieldCache.removeValue(forKey: key)
             errorMessage = nil
         } catch {
@@ -559,7 +559,7 @@ final class SettingsViewModel: ObservableObject {
     private func persistCredentialDrafts(includeMCP: Bool = true) throws {
         if includeMCP {
             try credentialStore?.saveSecret(
-                alibabaMCPAuthorizationTokenInput.nilIfBlank,
+                alibabaMCPAuthorizationTokenInput.trimmedNonEmpty,
                 key: AppConstants.alibabaMCPAuthorizationTokenKey
             )
         }
@@ -567,15 +567,15 @@ final class SettingsViewModel: ObservableObject {
         let providerKey = settings.apiProvider.uppercased()
         if providerKey != "CODEX_AUTH", providerKey != "SUPERGROK", providerKey != "APPLE_INTELLIGENCE",
            let provider = credentialProvider(for: providerKey) {
-            try credentialStore?.setCredential(apiKeyDraft.nilIfBlank, for: provider)
+            try credentialStore?.setCredential(apiKeyDraft.trimmedNonEmpty, for: provider)
         }
 
         if providerKey == "OPENAI_COMPAT",
            let repository,
-           let preset = settings.selectedOpenAICompatPreset?.nilIfBlank {
+           let preset = settings.selectedOpenAICompatPreset?.trimmedNonEmpty {
             let ok = repository.saveOpenAiCompatApiKey(
                 name: preset,
-                apiKey: openAICompatApiKeyInput.nilIfBlank
+                apiKey: openAICompatApiKeyInput.trimmedNonEmpty
             )
             if !ok {
                 throw NSError(
@@ -599,7 +599,7 @@ final class SettingsViewModel: ObservableObject {
             return
         }
         do {
-            try credentialStore.setCredential(apiKeyDraft.nilIfBlank, for: provider)
+            try credentialStore.setCredential(apiKeyDraft.trimmedNonEmpty, for: provider)
             statusMessage = L10n.text("APIキーを保存しました")
             loadCurrentProviderAPIKey()
         } catch {
@@ -677,7 +677,7 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func selectCustomEndpointPreset(_ name: String) {
-        settings.selectedOpenAICompatPreset = name.nilIfBlank
+        settings.selectedOpenAICompatPreset = name.trimmedNonEmpty
         if name.isEmpty { customEndpointDraft = OpenAICompatPreset(name: "", baseURL: "") }
         if let preset = openAICompatPresets.first(where: { $0.name == name }) {
             customEndpointDraft = preset
@@ -722,11 +722,11 @@ final class SettingsViewModel: ObservableObject {
 
     func saveSelectedOpenAICompatApiKey() {
         guard let repository else { return }
-        guard let preset = settings.selectedOpenAICompatPreset?.nilIfBlank else {
+        guard let preset = settings.selectedOpenAICompatPreset?.trimmedNonEmpty else {
             errorMessage = L10n.text("先にOPENAI_COMPATプリセットを選択してください")
             return
         }
-        let ok = repository.saveOpenAiCompatApiKey(name: preset, apiKey: openAICompatApiKeyInput.nilIfBlank)
+        let ok = repository.saveOpenAiCompatApiKey(name: preset, apiKey: openAICompatApiKeyInput.trimmedNonEmpty)
         if ok {
             statusMessage = L10n.text("OPENAI_COMPAT APIキーを保存しました")
             openAICompatApiKeyInput = ""
@@ -738,7 +738,7 @@ final class SettingsViewModel: ObservableObject {
 
     func loadSelectedOpenAICompatApiKey() {
         guard let repository else { return }
-        guard let preset = settings.selectedOpenAICompatPreset?.nilIfBlank else { return }
+        guard let preset = settings.selectedOpenAICompatPreset?.trimmedNonEmpty else { return }
         isHydratingFromPersistence = true
         openAICompatApiKeyInput = repository.peekOpenAiCompatApiKey(name: preset) ?? ""
         isHydratingFromPersistence = false
@@ -759,11 +759,11 @@ final class SettingsViewModel: ObservableObject {
 
     func addGeminiKeySlot() {
         guard let repository else { return }
-        guard let name = geminiKeySlotNameInput.nilIfBlank else {
+        guard let name = geminiKeySlotNameInput.trimmedNonEmpty else {
             errorMessage = L10n.text("キー名を入力してください")
             return
         }
-        guard let value = geminiKeySlotValueInput.nilIfBlank else {
+        guard let value = geminiKeySlotValueInput.trimmedNonEmpty else {
             errorMessage = L10n.text("APIキーを入力してください")
             return
         }
@@ -790,7 +790,7 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func addGeminiRotationModel(_ model: String) {
-        guard let trimmed = model.nilIfBlank else { return }
+        guard let trimmed = model.trimmedNonEmpty else { return }
         var models = settings.geminiRotationModelsList()
         guard !models.contains(trimmed) else { return }
         models.append(trimmed)
@@ -1084,7 +1084,7 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func selectSystemPromptPreset(_ name: String?) {
-        guard let selected = name?.nilIfBlank,
+        guard let selected = name?.trimmedNonEmpty,
               let preset = systemPromptPresets.first(where: {
                   $0.name.caseInsensitiveCompare(selected) == .orderedSame
               }) else { return }
@@ -1109,13 +1109,13 @@ final class SettingsViewModel: ObservableObject {
         var presets = systemPromptPresets
         let selectedIndex = presets.firstIndex { $0.name == settings.selectedSystemPromptPreset }
         let name: String
-        if let input = systemPromptPresetNameInput.nilIfBlank {
+        if let input = systemPromptPresetNameInput.trimmedNonEmpty {
             name = input
         } else if let selectedIndex {
             // Keep the preset identity while its name field is temporarily empty.
             name = presets[selectedIndex].name
         } else {
-            guard settings.systemPrompt?.nilIfBlank != nil else { return }
+            guard settings.systemPrompt?.trimmedNonEmpty != nil else { return }
             let base = "新しいプリセット"
             var candidate = base
             var suffix = 2
@@ -1160,7 +1160,7 @@ final class SettingsViewModel: ObservableObject {
 
     func removeSelectedSystemPromptPreset() {
         systemPromptPresetValidationMessage = nil
-        guard let selected = settings.selectedSystemPromptPreset?.nilIfBlank else { return }
+        guard let selected = settings.selectedSystemPromptPreset?.trimmedNonEmpty else { return }
         var presets = systemPromptPresets
         presets.removeAll { $0.name.caseInsensitiveCompare(selected) == .orderedSame }
 
@@ -1270,7 +1270,7 @@ final class SettingsViewModel: ObservableObject {
         openRouterEndpointQuantizations = []
         openRouterEndpointsLoading = false
         openRouterEndpointsError = nil
-        openRouterEndpointModelId = modelId?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+        openRouterEndpointModelId = modelId?.trimmingCharacters(in: .whitespacesAndNewlines).trimmedNonEmpty
     }
 
     func loginSuperGrokWithBrowser() async {
@@ -1511,7 +1511,7 @@ final class SettingsViewModel: ObservableObject {
     }
 
     private func syncSystemPromptPresetName() {
-        if let selected = settings.selectedSystemPromptPreset?.nilIfBlank {
+        if let selected = settings.selectedSystemPromptPreset?.trimmedNonEmpty {
             systemPromptPresetNameInput = selected
         } else {
             systemPromptPresetNameInput = ""
@@ -1589,11 +1589,4 @@ struct TokenUsageUiState: Equatable {
     var byModel: [TokenUsageByModel] = []
     var daily: [TokenUsageDailyPoint] = []
     var lastUpdated: Date?
-}
-
-private extension String {
-    var nilIfBlank: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
 }

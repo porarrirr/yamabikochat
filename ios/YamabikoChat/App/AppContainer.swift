@@ -38,9 +38,11 @@ final class AppContainer: ObservableObject {
         sharePayloadStore = services.sharePayloadStore
         userQuestionCoordinator = services.userQuestionCoordinator
 
+        #if DEBUG
         AppStoreScreenshotDemoSeeder.seedIfNeeded(
             chatRepository: chatRepository,
             conversations: conversationRepository
         )
+        #endif
     }
 }

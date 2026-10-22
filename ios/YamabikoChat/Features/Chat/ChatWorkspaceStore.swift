@@ -16,16 +16,9 @@ final class ChatWorkspaceStore: ObservableObject {
 
 @MainActor
 final class ChatComposerStore: ObservableObject {
-    /// Deprecated: Input text is now owned by ChatViewModel (@Published inputText).
-    /// Kept for backward compatibility; not used as Source of Truth.
-    @Published var inputText = ""
     @Published var attachments: [AttachmentDraft] = []
     @Published var isSpeechRecording = false
     @Published var canAttachImages = false
-
-    var hasContent: Bool {
-        !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
-    }
 }
 
 struct AttachmentDraft: Identifiable, Equatable {

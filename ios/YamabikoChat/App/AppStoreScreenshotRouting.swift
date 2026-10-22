@@ -20,7 +20,11 @@ enum AppStoreScreenshotRouting {
     }
 
     static var isEnabled: Bool {
+#if DEBUG
         ProcessInfo.processInfo.arguments.contains("-AppStoreScreenshotDemo")
+#else
+        false
+#endif
     }
 
     static func launchConfiguration() -> LaunchConfiguration? {

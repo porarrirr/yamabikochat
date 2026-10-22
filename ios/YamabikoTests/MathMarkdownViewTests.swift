@@ -214,6 +214,34 @@ final class MathMarkdownViewTests: XCTestCase {
         XCTAssertTrue(logs[0].contains("fallback"))
     }
 
+    func testGeneratedFallbackMatchesBundledRendererAndPreservesBlankLinesInMath() throws {
+        let bundled = MathMarkdownResourceResolver.markdownRendererScript(
+            fallbackScript: "",
+            logger: { _ in XCTFail("Bundled renderer must be present") }
+        )
+        XCTAssertEqual(MathMarkdownRendererSource.script, bundled)
+        for unavailableScript in [nil, "", "  "] as [String?] {
+            var warnings: [String] = []
+            let fallback = MathMarkdownResourceResolver.markdownRendererScript(
+                fallbackScript: MathMarkdownRendererSource.script,
+                lookup: { _, _, _ in URL(fileURLWithPath: "/missing.js") },
+                scriptLoader: { _ in unavailableScript },
+                logger: { warnings.append($0) }
+            )
+            XCTAssertEqual(warnings.count, 1)
+            let context = try XCTUnwrap(JSContext())
+            context.evaluateScript("var window = this;")
+            context.evaluateScript(fallback)
+            let render = try XCTUnwrap(context.objectForKeyedSubscript("yamabikoRenderMarkdown"))
+            for math in ["$$\nx = 1\n\ny = 2\n$$", #"\["# + "\nx = 1\n\ny = 2\n" + #"\]"#] {
+                let html = try XCTUnwrap(render.call(withArguments: [math])?.toString())
+                XCTAssertEqual(html.components(separatedBy: "<p>").count - 1, 1, html)
+                XCTAssertTrue(html.contains("x = 1"))
+                XCTAssertTrue(html.contains("y = 2"))
+            }
+        }
+    }
+
     func testMarkdownRendererScriptUsesLoadedScriptWhenAvailable() {
         let resolvedURL = URL(fileURLWithPath: "/tmp/mathjax/markdown-renderer.js")
         let rendererScript = "window.yamabikoRenderMarkdown = function(){ return '<p>ok</p>'; };"
