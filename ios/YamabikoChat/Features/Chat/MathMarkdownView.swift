@@ -5,6 +5,10 @@ import Foundation
 import CryptoKit
 
 enum MathMarkdownNormalizer {
+    private static let completeMathRegex = try! NSRegularExpression(
+        pattern: #"(?<!\\)(?:\\{1,2}\[[\s\S]*?\\{1,2}\]|\\{1,2}\([\s\S]*?\\{1,2}\)|\$\$[\s\S]*?\$\$|(?<!\$)\$(?!\$)[^\n$]+?(?<!\\)\$(?![A-Za-z0-9]))"#
+    )
+
     static func normalizeEscapedMathIfNeeded(_ markdown: String) -> String {
         guard containsMathDelimitersOutsideCode(markdown) else { return markdown }
 
@@ -44,6 +48,30 @@ enum MathMarkdownNormalizer {
     }
 
     private static func normalizeEscapedSequences(in text: String) -> String {
+        // Inside TeX, \\n is a row break followed by n, and \\[2pt]
+        // sets row spacing. Decode transport escapes only outside equations;
+        // only the outer math delimiters may need unescaping.
+        var output = ""
+        var cursor = text.startIndex
+        let matches = completeMathRegex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+        for match in matches {
+            guard let range = Range(match.range, in: text) else { continue }
+            output += normalizeTransportEscapes(String(text[cursor..<range.lowerBound]))
+            var equation = String(text[range])
+            for (escaped, delimiter) in [(#"\\("#, #"\("#), (#"\\["#, #"\["#)] where equation.hasPrefix(escaped) {
+                equation.replaceSubrange(equation.startIndex..<equation.index(equation.startIndex, offsetBy: escaped.count), with: delimiter)
+            }
+            for (escaped, delimiter) in [(#"\\)"#, #"\)"#), (#"\\]"#, #"\]"#)] where equation.hasSuffix(escaped) {
+                equation.replaceSubrange(equation.index(equation.endIndex, offsetBy: -escaped.count)..<equation.endIndex, with: delimiter)
+            }
+            output += equation
+            cursor = range.upperBound
+        }
+        output += normalizeTransportEscapes(String(text[cursor...]))
+        return output
+    }
+
+    private static func normalizeTransportEscapes(_ text: String) -> String {
         text
             .replacingOccurrences(of: #"\\n"#, with: "\n")
             .replacingOccurrences(of: #"\\r"#, with: "\r")

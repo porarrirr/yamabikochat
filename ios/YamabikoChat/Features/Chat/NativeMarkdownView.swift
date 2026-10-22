@@ -93,16 +93,17 @@ enum NativeMarkdownParser {
         while index < children.count {
             let child = children[index]
             let path = offsets.blockID(for: child, fallbackPath: "\(path)-\(index)")
-            // A display equation may contain blank lines, which CommonMark splits
-            // into separate paragraphs. Preserve that entire source span for MathJax.
-            if rendersMath, child is Paragraph,
+            // CommonMark can split display math at blank lines or interpret an
+            // equals line inside a matrix as a Setext heading. Rejoin the source
+            // before rendering, even when preceding prose contains inline math.
+            if rendersMath, child is Paragraph || child is Heading,
                let source = offsets.sourceText(for: child),
-               let closing = displayMathClosingDelimiter(source),
-               !containsMath(source) {
+               let closing = unclosedDisplayMathDelimiter(source) {
                 var end = index + 1
-                while end < children.count, children[end] is Paragraph {
+                while end < children.count {
                     if let combined = offsets.sourceText(from: child, through: children[end]),
-                       combined.contains(closing), containsMath(combined) {
+                       combined.contains(closing), unclosedDisplayMathDelimiter(combined) == nil,
+                       containsMath(combined) {
                         result.append(.math(id: path, markdown: combined))
                         index = end + 1
                         break
@@ -117,11 +118,31 @@ enum NativeMarkdownParser {
         return result
     }
 
-    private static func displayMathClosingDelimiter(_ source: String) -> String? {
-        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasPrefix(#"\["#) { return #"\]"# }
-        if trimmed.hasPrefix("$$") { return "$$" }
-        return nil
+    private static func unclosedDisplayMathDelimiter(_ source: String) -> String? {
+        guard source.contains(#"\["#) || source.contains("$$") else { return nil }
+        let normalized = MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(source)
+        var closing: String?
+        _ = MathMarkdownNormalizer.transformOutsideCode(normalized) { segment in
+            var cursor = segment.startIndex
+            while cursor < segment.endIndex {
+                let remaining = segment[cursor...]
+                if let delimiter = closing, remaining.hasPrefix(delimiter) {
+                    closing = nil
+                    cursor = segment.index(cursor, offsetBy: delimiter.count)
+                } else if closing == nil, remaining.hasPrefix(#"\["#) || remaining.hasPrefix("$$") {
+                    closing = remaining.hasPrefix("$$") ? "$$" : #"\]"#
+                    cursor = segment.index(cursor, offsetBy: 2)
+                } else if remaining.hasPrefix(#"\"#) {
+                    // Skip an escaped character, including an escaped delimiter.
+                    cursor = segment.index(after: cursor)
+                    if cursor < segment.endIndex { cursor = segment.index(after: cursor) }
+                } else {
+                    cursor = segment.index(after: cursor)
+                }
+            }
+            return segment
+        }
+        return closing
     }
 
     private static func parseBlock(
@@ -130,9 +151,11 @@ enum NativeMarkdownParser {
         rendersMath: Bool,
         offsets: SourceOffsetMap
     ) -> [NativeMarkdownBlock] {
-        // Lists flatten their children into attributed text below. Route the
-        // original source through MathJax before that loses TeX and block math.
-        if rendersMath, markup is OrderedList || markup is UnorderedList,
+        // These blocks otherwise flatten inline content or recursively parse
+        // source with quote prefixes. Preserve the complete original Markdown
+        // so the shared renderer can retain both structure and TeX.
+        if rendersMath, markup is OrderedList || markup is UnorderedList
+            || markup is Heading || markup is Markdown.Table || markup is BlockQuote,
            let source = offsets.sourceText(for: markup), containsMath(source) {
             return [.math(id: path, markdown: source)]
         }

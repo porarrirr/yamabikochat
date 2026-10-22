@@ -326,6 +326,14 @@ enum MathMarkdownRendererSource {
         if (text.charAt(0) === "|") text = text.slice(1);
         if (text.charAt(text.length - 1) === "|") text = text.slice(0, -1);
     
+        var codeTokens = [];
+        text = text.replace(/(`+)([\s\S]*?)\1(?!`)/g, function(code) {
+          var key = "@@YBTABLECODE" + codeTokens.length + "@@";
+          codeTokens.push(code);
+          return key;
+        });
+        var math = protectMathSegments(text);
+        text = math.text;
         var cells = [];
         var segmentStart = 0;
         for (var i = 0; i < text.length; i += 1) {
@@ -337,7 +345,9 @@ enum MathMarkdownRendererSource {
         cells.push(text.slice(segmentStart));
     
         return cells.map(function(cell) {
-          return cell.replace(/\\\|/g, "|").trim();
+          return cell.replace(/\\\|/g, "|").trim()
+            .replace(/@@YBMATH(\d+)@@/g, function(_, index) { return math.tokens[Number(index)] || ""; })
+            .replace(/@@YBTABLECODE(\d+)@@/g, function(_, index) { return codeTokens[Number(index)] || ""; });
         });
       }
     

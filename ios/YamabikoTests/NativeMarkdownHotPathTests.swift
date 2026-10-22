@@ -47,6 +47,32 @@ final class NativeMarkdownHotPathTests: XCTestCase {
         guard case .paragraph = blocks[2] else { return XCTFail("Expected following paragraph") }
     }
 
+    func testMatrixEqualityIsMathRatherThanSetextHeading() throws {
+        let source = #"""
+        点 \(P(\beta)\) を回転させると、
+        \[
+        \begin{pmatrix}
+        \cos(\alpha+\beta)\\
+        \sin(\alpha+\beta)
+        \end{pmatrix}
+        =
+        \begin{pmatrix}
+        \cos\beta\\
+        \sin\beta
+        \end{pmatrix}.
+        \]
+        """#
+        for fixture in [source, source.replacingOccurrences(of: #"\["#, with: "$$")
+            .replacingOccurrences(of: #"\]"#, with: "$$")] {
+            let blocks = NativeMarkdownParser.parse(fixture)
+            XCTAssertEqual(blocks.count, 1)
+            guard case let .math(_, markdown) = try XCTUnwrap(blocks.first) else {
+                return XCTFail("Matrix equality must preserve its original TeX, including the equals line")
+            }
+            XCTAssertEqual(markdown, fixture)
+        }
+    }
+
     func testMathPreservesMarkdownFormattingAndEscapesInOriginalSource() throws {
         let source = #"**公式** \(4\pi r^2\) と `code`"#
         guard case let .math(_, markdown) = try XCTUnwrap(NativeMarkdownParser.parse(source).first) else {
@@ -71,6 +97,34 @@ final class NativeMarkdownHotPathTests: XCTestCase {
             guard case .list = try XCTUnwrap(NativeMarkdownParser.parse(source).first) else {
                 return XCTFail("Non-math lists must remain native")
             }
+        }
+    }
+
+    func testHeadingsAndTablesRouteOriginalMathToRenderer() throws {
+        for source in [
+            #"### 公式 \(a^2+b^2=c^2\)"#,
+            "| 式 |\n| --- |\n| $x^2$ |"
+        ] {
+            guard case let .math(_, markdown) = try XCTUnwrap(NativeMarkdownParser.parse(source).first) else {
+                return XCTFail("Expected original math source: \(source)")
+            }
+            XCTAssertEqual(markdown, source)
+            XCTAssertFalse(NativeMarkdownParser.parse(source, rendersMath: false).contains {
+                if case .math = $0 { return true }
+                return false
+            })
+        }
+    }
+
+    func testDisplayMathSurvivesOtherCommonMarkBlockKinds() throws {
+        for interior in ["x\n---\ny", "x\n- y", "x\n\n    y", "x\n\n<div>\ny\n</div>"] {
+            let source = "\\[\n" + interior + "\n\\]"
+            let blocks = NativeMarkdownParser.parse(source)
+            XCTAssertEqual(blocks.count, 1, source)
+            guard case let .math(_, markdown) = try XCTUnwrap(blocks.first) else {
+                return XCTFail("Expected complete display math: \(source)")
+            }
+            XCTAssertEqual(markdown, source)
         }
     }
 

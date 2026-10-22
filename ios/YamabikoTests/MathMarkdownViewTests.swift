@@ -5,6 +5,69 @@ import JavaScriptCore
 @testable import YamabikoChat
 
 final class MathMarkdownViewTests: XCTestCase {
+    // Exact answer from the trigonometric-addition diagnostic export (2026-10-22).
+    private static let trigonometricDiagnosticAnswer = #"""
+    加法定理を三角関数の公式として、証明します。
+
+    \[
+    \sin(\alpha+\beta)=\sin\alpha\cos\beta+\cos\alpha\sin\beta
+    \]
+
+    \[
+    \cos(\alpha+\beta)=\cos\alpha\cos\beta-\sin\alpha\sin\beta
+    \]
+
+    単位円上で、角 \(t\) に対応する点を
+    \[
+    P(t)=(\cos t,\sin t)
+    \]
+    とします。角 \(\alpha\) だけ回転させる行列は
+    \[
+    R(\alpha)=
+    \begin{pmatrix}
+    \cos\alpha&-\sin\alpha\\
+    \sin\alpha&\cos\alpha
+    \end{pmatrix}
+    \]
+    です。
+
+    点 \(P(\beta)\) を角 \(\alpha\) だけ回転させると \(P(\alpha+\beta)\) になるので、
+    \[
+    \begin{pmatrix}
+    \cos(\alpha+\beta)\\
+    \sin(\alpha+\beta)
+    \end{pmatrix}
+    =
+    \begin{pmatrix}
+    \cos\alpha&-\sin\alpha\\
+    \sin\alpha&\cos\alpha
+    \end{pmatrix}
+    \begin{pmatrix}
+    \cos\beta\\
+    \sin\beta
+    \end{pmatrix}.
+    \]
+
+    右辺を計算すると、
+    \[
+    \begin{pmatrix}
+    \cos\alpha\cos\beta-\sin\alpha\sin\beta\\
+    \sin\alpha\cos\beta+\cos\alpha\sin\beta
+    \end{pmatrix}.
+    \]
+    成分を比べれば、上の2つの公式が得られます。
+    """#
+
+    @MainActor
+    func testTrigonometricDiagnosticAnswerRendersMatricesInNativeMessageView() async throws {
+        try await assertMathRenders(Self.trigonometricDiagnosticAnswer, expectedEquationCount: 11, usesNativeView: true)
+    }
+
+    @MainActor
+    func testTrigonometricDiagnosticAnswerFitsTimelineCell() async throws {
+        try await assertTimelineMathFits(Self.trigonometricDiagnosticAnswer, expectedEquationCount: 11)
+    }
+
     // Exact answer from the sphere-surface-area diagnostic export (2026-10-22).
     private static let diagnosticAnswer = #"""
     球の表面積の求め方の証明を3種類、サブエージェントを用いてまとめました。
@@ -957,6 +1020,53 @@ line1\\nline2
             let html = try renderMarkdownWithJavaScript(equation)
             XCTAssertEqual(html, "<p>" + equation.replacingOccurrences(of: "<", with: "&lt;") + "</p>")
         }
+    }
+
+    func testInlineCodeKeepsLiteralMathWhenOtherMathIsPresent() throws {
+        let html = try renderMarkdownWithJavaScript(#"`$x$` と \(y\)"#)
+        XCTAssertTrue(html.contains("<code>$x$</code>"), html)
+        XCTAssertFalse(html.contains("<code>@@"), html)
+    }
+
+    func testTableDoesNotSplitPipesInsideMathOrInlineCode() throws {
+        for value in [#"$|x|$"#, #"\(\left|x\right|\)"#, "`a|b`"] {
+            let html = try renderMarkdownWithJavaScript("| 式 | 説明 |\n| --- | --- |\n| " + value + " | 絶対値 |")
+            XCTAssertTrue(html.contains("<td>絶対値</td>"), html)
+            if value.hasPrefix("`") {
+                XCTAssertTrue(html.contains("<code>a|b</code>"), html)
+            } else {
+                XCTAssertTrue(html.contains(value), html)
+            }
+        }
+    }
+
+    func testNormalizationPreservesMatrixRowsStartingWithNRT() {
+        for row in ["n", "r", "t", "[2pt]n", #"\theta"#, #"\text{値}"#] {
+            for delimiters in [(#"\["#, #"\]"#), ("$$", "$$"), ("$", "$"), (#"\("#, #"\)"#)] {
+                let source = delimiters.0 + #"\begin{matrix}a\\"# + row + #"\end{matrix}"# + delimiters.1
+                XCTAssertEqual(MathMarkdownNormalizer.normalizeEscapedMathIfNeeded(source), source)
+            }
+        }
+    }
+
+    @MainActor
+    func testMathInHeadingsTablesAndBlockquotesRendersInNativeMessageView() async throws {
+        let source = #"""
+        ### 三平方の定理 \(a^2+b^2=c^2\)
+
+        | 式 | 説明 |
+        | --- | --- |
+        | $|x|$ | 絶対値 |
+        | \(\frac{a}{b}\) | 分数 |
+
+        > 行列の等式：
+        > \[
+        > \begin{pmatrix}a\\n\end{pmatrix}
+        > =
+        > \begin{pmatrix}a\\n\end{pmatrix}
+        > \]
+        """#
+        try await assertMathRenders(source, expectedEquationCount: 4, usesNativeView: true)
     }
 
     private func loadMarkdownRendererSource() throws -> String {
