@@ -29,7 +29,22 @@ enum SubagentDemoFixture {
                 effort: "medium", status: index == 0 ? .completed : .running,
                 activity: index == 0 ? "完了" : index == 1 ? "fetch_url を実行中" : "テスト結果を確認中",
                 startedAtMs: now - 12_000, updatedAtMs: now, finishedAtMs: index == 0 ? now : nil,
-                output: index == 0 ? "公式資料から、モデルの継承仕様を確認できました。" : "\(name)の途中結果です。既存の処理との接続を確認しています。",
+                output: index == 0 ? "公式資料から、モデルの継承仕様を確認できました。" : """
+                ## \(name)の確認結果
+
+                \(name)の途中結果です。既存の処理との接続を確認しています。
+
+                - **設定**：親のモデル設定を継承します。
+                - **表示**：[公式資料](https://pi.dev)と照合しています。
+
+                ```swift
+                let result = "確認中"
+                ```
+
+                | 項目 | 状態 |
+                | --- | --- |
+                | 接続 | 確認済み |
+                """,
                 outputTruncated: false,
                 events: [.init(id: "\(index)-started", kind: "started", title: "子セッションを開始", detail: "\(name)を開始しました", createdAtMs: now - 12_000),
                     .init(id: "\(index)-tool", kind: "tool_start", title: "fetch_url", detail: "https://pi.dev/packages/pi-subagents", createdAtMs: now - 4_000),

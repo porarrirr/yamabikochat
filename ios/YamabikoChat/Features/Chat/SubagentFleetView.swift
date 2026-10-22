@@ -182,7 +182,8 @@ private struct SubagentDetailContent: View {
                         Label(run.status == .running ? "出力を待っています。処理履歴で現在の動作を確認できます。" : "テキスト出力はありません。処理履歴を確認してください。", systemImage: "text.bubble")
                             .font(.callout).foregroundStyle(.secondary).padding(.vertical, 18)
                     } else {
-                        messageRow(role: "assistant", text: run.output)
+                        SubagentResponseView(run: run, onRoute: { route = $0 })
+                            .id(run.id)
                             .accessibilityIdentifier("subagent-output")
                     }
                 } else {
@@ -229,4 +230,57 @@ private struct SubagentDetailContent: View {
         )
     }
 
+}
+
+/// Use the main conversation's presentation state as well as its message view.
+/// In particular, live child output must not be reparsed as a completed answer
+/// on every progress snapshot.
+private struct SubagentResponseView: View {
+    let run: SubagentRun
+    let onRoute: (ChatWorkspaceRoute) -> Void
+    @StateObject private var store: ChatTimelineRowStore
+
+    init(run: SubagentRun, onRoute: @escaping (ChatWorkspaceRoute) -> Void) {
+        self.run = run
+        self.onRoute = onRoute
+        _store = StateObject(wrappedValue: ChatTimelineRowStore(subagent: run))
+    }
+
+    var body: some View {
+        if case let .message(message) = store.item {
+            ChatMessageRow(
+                message: message,
+                streamingSnapshot: store.streamingSnapshot,
+                streamingMarkdownBlocks: store.streamingMarkdownBlocks,
+                canRegenerate: false,
+                fusionDebugModeEnabled: false, fusionTrace: nil,
+                onRoute: onRoute, onPreviousVariant: { _ in }, onNextVariant: { _ in },
+                onBranch: { _ in }, onRegenerate: {}, onEditUserMessage: { _ in },
+                onSelectUserMessageText: { _ in },
+                onMarkdownLayoutChange: store.contentLayoutDidChange, isReadOnly: true
+            )
+            .environment(\.markdownPresentationCache, store.markdownPresentationCache)
+            .onChange(of: run) { _, updated in
+                store.apply(subagent: updated)
+            }
+        }
+    }
+}
+
+extension ChatTimelineRowStore {
+    convenience init(subagent: SubagentRun) {
+        self.init(item: .message(FullChatMessage(
+            id: 1,
+            message: ChatMessage(conversationId: 0, role: "assistant", text: ""),
+            thinkingStream: nil, variants: []
+        )))
+        apply(subagent: subagent)
+    }
+
+    func apply(subagent: SubagentRun) {
+        apply(snapshot: ChatStreamingSnapshot(
+            targetId: 1, text: subagent.output, thinking: "", toolActivity: nil,
+            isFinal: subagent.status != .running
+        ))
+    }
 }

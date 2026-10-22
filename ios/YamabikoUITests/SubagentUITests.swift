@@ -18,6 +18,10 @@ final class SubagentUITests: XCTestCase {
         let output = app.textViews.containing(NSPredicate(format: "value CONTAINS %@", "実装確認の途中結果")).firstMatch
         XCTAssertTrue(output.waitForExistence(timeout: 5))
         XCTAssertTrue((output.value as? String)?.contains("実装確認の途中結果") == true)
+        XCTAssertFalse((output.value as? String)?.contains("**設定**") == true)
+        let heading = app.textViews.containing(NSPredicate(format: "value CONTAINS %@", "実装確認の確認結果")).firstMatch
+        XCTAssertTrue(heading.exists)
+        XCTAssertFalse((heading.value as? String)?.contains("## ") == true)
         XCTAssertTrue(app.staticTexts["Effort: medium"].exists)
         XCTAssertTrue(app.staticTexts["実装確認を担当してください。確認した根拠と具体的な結果を日本語で報告してください。"].exists)
         XCTAssertFalse(app.buttons["再生成"].isHittable)

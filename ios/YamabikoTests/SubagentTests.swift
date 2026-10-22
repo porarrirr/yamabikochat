@@ -10,6 +10,54 @@ private final class SubagentCredentialStore: SecureCredentialStore {
 }
 
 final class SubagentTests: XCTestCase {
+    @MainActor
+    func testChildOutputUsesMainResponseStreamingPresentation() throws {
+        var child = run(status: .running)
+        child.output = "# 確認結果\n\n**重要**な結果\n\n- 項目\n\n```swift\nlet result ="
+        let store = ChatTimelineRowStore(subagent: child)
+        let parent = ChatTimelineRowStore(item: store.item)
+
+        for suffix in ["", " true\n```\n\n次の段落", "\n\n[資料](https://example.org)"] {
+            child.output += suffix
+            store.apply(subagent: child)
+            let snapshot = try XCTUnwrap(store.streamingSnapshot)
+            parent.apply(snapshot: snapshot)
+            XCTAssertFalse(snapshot.isFinal)
+            XCTAssertEqual(snapshot.text, child.output)
+            XCTAssertEqual(store.streamingMarkdownBlocks, parent.streamingMarkdownBlocks)
+            XCTAssertEqual(store.streamingMarkdownBlocks, NativeMarkdownParser.parse(child.output, rendersMath: false))
+        }
+
+        for status in [SubagentRun.Status.completed, .failed, .cancelled] {
+            child.status = status
+            store.apply(subagent: child)
+            let snapshot = try XCTUnwrap(store.streamingSnapshot)
+            parent.apply(snapshot: snapshot)
+            XCTAssertTrue(snapshot.isFinal)
+            XCTAssertEqual(snapshot.text, child.output)
+            XCTAssertEqual(store.streamingMarkdownBlocks, parent.streamingMarkdownBlocks)
+            XCTAssertFalse(try XCTUnwrap(store.streamingMarkdownBlocks).isEmpty)
+        }
+    }
+
+    @MainActor
+    func testChildCompletionExtractsArtifactsLikeMainResponse() throws {
+        var child = run(status: .running)
+        child.output = "# 結果\n\n```html\n<p>成果物</p>"
+        let store = ChatTimelineRowStore(subagent: child)
+        child.output += "\n```"
+        child.status = .completed
+        store.apply(subagent: child)
+
+        let artifacts = ChatArtifactPresentation.items(from: child.output, isStreaming: false)
+        XCTAssertEqual(artifacts.count, 1)
+        let markdown = ExtractedFenceRemover.remove(
+            from: child.output, ranges: artifacts.map { ($0.startIndex, $0.endIndex) }
+        )
+        XCTAssertEqual(store.streamingMarkdownBlocks, NativeMarkdownParser.parse(markdown, rendersMath: false))
+        XCTAssertTrue(try XCTUnwrap(store.streamingSnapshot).isFinal)
+    }
+
     private func run(status: SubagentRun.Status = .running, updatedAt: Int64 = 10) -> SubagentRun {
         SubagentRun(id: "child-1", agent: "調査", task: "公式資料を調べる", provider: "openai", model: "model",
             effort: "high", status: status, activity: "fetch_url を実行中", startedAtMs: 1,
