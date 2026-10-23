@@ -334,12 +334,17 @@ struct ChatComposerTextView: UIViewRepresentable {
 
     final class ComposerContainerView: UIView {
         let textView = ComposerTextView()
-        private lazy var measurementTextView = ComposerTextView()
+        /// Off-screen twin used only to answer `sizeThatFits`.
+        /// It is created eagerly so SwiftUI's measurement pass never allocates
+        /// UIKit objects, and it is never added to the view hierarchy so sizing
+        /// cannot invalidate the mounted editor.
+        private let measurementTextView = ComposerTextView()
         var onMoveToWindow: (() -> Void)?
         private let iconView = UIImageView()
         private let selectionLabel = UILabel()
         private let selectionContainer = UIView()
         private var selectedText: String?
+        private var appliedExclusionBounds: [CGRect] = []
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
@@ -401,9 +406,13 @@ struct ChatComposerTextView: UIViewRepresentable {
 
         func measuredSize(for width: CGFloat) -> CGSize {
             guard width.isFinite, width > 0 else { return .zero }
-            // SwiftUI probes several widths while laying out the keyboard transition.
-            // Never change the mounted view's bounds or force layout from sizeThatFits:
-            // that can invalidate the hosting stack while it is querying alignment.
+            // SwiftUI probes several widths while it lays out a keyboard transition.
+            // Measurement must stay side-effect free for the mounted hierarchy:
+            // changing `bounds` or calling `layoutIfNeeded()` from here re-enters
+            // UIKit layout while SwiftUI is still walking its layout engine cache.
+            // That invalidates the cache mid-traversal and crashes in
+            // `ViewLayoutEngine.sizeThatFits` with an over-released engine.
+            // Only the detached measuring view is mutated below.
             let measuringView = measurementTextView
             measuringView.font = textView.font
             measuringView.textContainerInset = textView.textContainerInset
@@ -430,13 +439,25 @@ struct ChatComposerTextView: UIViewRepresentable {
             ))]
         }
 
+        /// Applies exclusion paths only when they actually change. Reassigning an
+        /// identical path set on every layout pass makes TextKit rebuild the
+        /// editor's layout while SwiftUI is still resizing it for the keyboard.
+        private func setEditorExclusionPaths(_ paths: [UIBezierPath]) {
+            let bounds = paths.map(\.bounds)
+            guard bounds != appliedExclusionBounds else { return }
+            appliedExclusionBounds = bounds
+            textView.textContainer.exclusionPaths = paths
+        }
+
         override func layoutSubviews() {
             super.layoutSubviews()
-            textView.frame = bounds
+            if textView.frame != bounds {
+                textView.frame = bounds
+            }
 
             guard let selectedText, !selectedText.isEmpty, bounds.width > 0 else {
                 selectionContainer.frame = .zero
-                textView.textContainer.exclusionPaths = []
+                setEditorExclusionPaths([])
                 return
             }
 
@@ -457,7 +478,7 @@ struct ChatComposerTextView: UIViewRepresentable {
 
             // Reserve only the first line for the selection preview. The editor still
             // owns the full width, so subsequent question lines wrap across the card.
-            textView.textContainer.exclusionPaths = selectionExclusionPaths(for: bounds.width)
+            setEditorExclusionPaths(selectionExclusionPaths(for: bounds.width))
         }
 
         @objc private func focusTextView() {

@@ -372,6 +372,74 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testComposerMeasurementDoesNotLayOutMountedHierarchy() {
+        let container = ChatComposerTextView.ComposerContainerView()
+        container.frame = CGRect(x: 12, y: 20, width: 300, height: 60)
+        container.textView.text = String(repeating: "質問の本文 ", count: 12)
+
+        let host = LayoutPassCountingView(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        host.addSubview(container)
+        let root = UIViewController()
+        root.view.addSubview(host)
+        let window = UIWindow(frame: host.frame)
+        window.rootViewController = root
+        window.makeKeyAndVisible()
+        host.setNeedsLayout()
+        container.setNeedsLayout()
+        root.view.layoutIfNeeded()
+        XCTAssertGreaterThan(host.layoutPassCount, 0, "The probe must observe real layout passes")
+
+        // Reproduce what SwiftUI does while the keyboard resizes the root view: the
+        // mounted hierarchy still needs layout when the representable is measured.
+        let probe = LayoutPassCountingView(frame: CGRect(x: 0, y: 0, width: 24, height: 24))
+        container.addSubview(probe)
+        probe.setNeedsLayout()
+        container.setNeedsLayout()
+        let hostBaseline = host.layoutPassCount
+        let probeBaseline = probe.layoutPassCount
+
+        _ = container.measuredSize(for: 320)
+        _ = container.measuredSize(for: 240)
+
+        // Measuring must never flush the pending layout of the mounted hierarchy:
+        // doing so re-enters UIKit layout while SwiftUI walks its layout engines.
+        XCTAssertEqual(probe.layoutPassCount, probeBaseline)
+        XCTAssertEqual(host.layoutPassCount, hostBaseline)
+        XCTAssertEqual(container.bounds.size, CGSize(width: 300, height: 60))
+        XCTAssertEqual(container.textView.frame, container.bounds)
+
+        container.layoutIfNeeded()
+        XCTAssertGreaterThan(
+            probe.layoutPassCount,
+            probeBaseline,
+            "The probe must observe a forced layout pass"
+        )
+    }
+
+    @MainActor
+    func testComposerExclusionPathsFollowWidthAndSelectionAfterCaching() {
+        let container = ChatComposerTextView.ComposerContainerView()
+        container.frame = CGRect(x: 0, y: 0, width: 300, height: 80)
+        container.setSelectedText(String(repeating: "長い選択文", count: 10))
+        container.setNeedsLayout()
+        container.layoutIfNeeded()
+        let wide = container.textView.textContainer.exclusionPaths.map(\.bounds)
+        XCTAssertEqual(wide.count, 1)
+
+        container.frame.size = CGSize(width: 160, height: 80)
+        container.setNeedsLayout()
+        container.layoutIfNeeded()
+        let narrow = container.textView.textContainer.exclusionPaths.map(\.bounds)
+        XCTAssertEqual(narrow.count, 1)
+        XCTAssertLessThan(narrow[0].width, wide[0].width)
+
+        container.setSelectedText(nil)
+        container.setNeedsLayout()
+        container.layoutIfNeeded()
+        XCTAssertTrue(container.textView.textContainer.exclusionPaths.isEmpty)
+    }
+
+    @MainActor
     func testSelectedTextOnlyReservesSpaceOnFirstEditorLine() {
         let container = ChatComposerTextView.ComposerContainerView()
         container.frame = CGRect(x: 0, y: 0, width: 300, height: 80)
@@ -2587,5 +2655,15 @@ final class ChatPresentationArchitectureTests: XCTestCase {
         let current = visibleAnchor(in: collectionView)
         XCTAssertEqual(current?.indexPath, anchor.indexPath, file: file, line: line)
         XCTAssertEqual(current?.offset ?? .infinity, anchor.offset, accuracy: 0.5, file: file, line: line)
+    }
+}
+
+/// Records UIKit layout passes so tests can prove a code path does not force layout.
+private final class LayoutPassCountingView: UIView {
+    private(set) var layoutPassCount = 0
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        layoutPassCount += 1
     }
 }
