@@ -43,6 +43,16 @@ final class KeychainStore: SecureCredentialStore {
         self.service = service
     }
 
+    /// Upgrade dormant provider credentials as well as the currently selected account.
+    func hardenExistingSecrets() throws {
+        let query: [CFString: Any] = [kSecClass: kSecClassGenericPassword, kSecAttrService: service]
+        let status = SecItemUpdate(query as CFDictionary,
+                                   [kSecAttrAccessible: kSecAttrAccessibleWhenUnlockedThisDeviceOnly] as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainStoreError.unexpectedStatus(status)
+        }
+    }
+
     func saveSecret(_ value: String?, key: String) throws {
         if let value {
             guard let data = value.data(using: .utf8) else { throw KeychainStoreError.invalidEncoding }
@@ -55,7 +65,8 @@ final class KeychainStore: SecureCredentialStore {
 
             let attributes: [CFString: Any] = [
                 kSecValueData: data,
-                kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+                kSecAttrSynchronizable: false,
+                kSecAttrAccessible: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
             ]
 
             let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
@@ -98,7 +109,7 @@ final class KeychainStore: SecureCredentialStore {
         let updateQuery: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword, kSecAttrService: service, kSecAttrAccount: key
         ]
-        let update = SecItemUpdate(updateQuery as CFDictionary, [kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly] as CFDictionary)
+        let update = SecItemUpdate(updateQuery as CFDictionary, [kSecAttrAccessible: kSecAttrAccessibleWhenUnlockedThisDeviceOnly] as CFDictionary)
         guard update == errSecSuccess else { throw KeychainStoreError.unexpectedStatus(update) }
         return String(data: data, encoding: .utf8)
     }

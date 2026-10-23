@@ -182,6 +182,12 @@ enum ConversationExportMode: Sendable, Equatable {
 }
 
 enum ConversationExportService {
+    /// Called once at application startup; a prior process cannot still own a share sheet.
+    static func removeAbandonedExports(fileManager: FileManager = .default) throws {
+        let root = fileManager.temporaryDirectory.appendingPathComponent("YamabikoChatExports", isDirectory: true)
+        if fileManager.fileExists(atPath: root.path) { try fileManager.removeItem(at: root) }
+    }
+
     static func createArchive(
         snapshot: ConversationDebugExport,
         mode: ConversationExportMode = .standard,
@@ -189,16 +195,16 @@ enum ConversationExportService {
     ) throws -> URL {
         let exportRoot = fileManager.temporaryDirectory
             .appendingPathComponent("YamabikoChatExports", isDirectory: true)
-        try fileManager.createDirectory(at: exportRoot, withIntermediateDirectories: true)
+        try ProtectedFileStorage.createDirectory(exportRoot, fileManager: fileManager)
         purgeExpiredArchives(in: exportRoot, fileManager: fileManager)
 
         let identifier = UUID().uuidString
         let stagingURL = exportRoot.appendingPathComponent(identifier, isDirectory: true)
-        try fileManager.createDirectory(at: stagingURL, withIntermediateDirectories: true)
+        try ProtectedFileStorage.createDirectory(stagingURL, fileManager: fileManager)
         defer { try? fileManager.removeItem(at: stagingURL) }
 
         let filesURL = stagingURL.appendingPathComponent("files", isDirectory: true)
-        try fileManager.createDirectory(at: filesURL, withIntermediateDirectories: true)
+        try ProtectedFileStorage.createDirectory(filesURL, fileManager: fileManager)
 
         for trace in snapshot.fusionTraces {
             _ = try trace.fusionTrace()
@@ -212,7 +218,7 @@ enum ConversationExportService {
         let exportData = try mode == .standard
             ? encoder.encode(StandardConversationExport(export))
             : encoder.encode(export)
-        try exportData.write(to: stagingURL.appendingPathComponent("conversation.json"), options: .atomic)
+        try ProtectedFileStorage.write(exportData, to: stagingURL.appendingPathComponent("conversation.json"), fileManager: fileManager)
         if mode == .fullDiagnostics {
             try writePiSessions(piExecutions, at: stagingURL, encoder: encoder, fileManager: fileManager)
         }
@@ -234,11 +240,14 @@ enum ConversationExportService {
         reasoning, token metrics, and complete Pi diagnostics are excluded. files/ contains every
         referenced chat attachment and generated artifact.
         """
-        try Data(readme.utf8).write(to: stagingURL.appendingPathComponent("README.txt"), options: .atomic)
+        try ProtectedFileStorage.write(Data(readme.utf8), to: stagingURL.appendingPathComponent("README.txt"), fileManager: fileManager)
 
         let filename = safeFilename(snapshot.conversation.title)
         let suffix = mode == .fullDiagnostics ? "-diagnostics" : ""
         let archiveURL = exportRoot.appendingPathComponent("\(filename)\(suffix)-\(identifier.prefix(8)).zip")
+        try ProtectedFileStorage.protectExistingTree(stagingURL, fileManager: fileManager)
+        var completed = false
+        defer { if !completed { try? fileManager.removeItem(at: archiveURL) } }
         try fileManager.zipItem(
             at: stagingURL,
             to: archiveURL,
@@ -248,6 +257,8 @@ enum ConversationExportService {
         guard fileManager.fileExists(atPath: archiveURL.path) else {
             throw ConversationExportError.archiveCreationFailed
         }
+        try ProtectedFileStorage.protect(archiveURL, fileManager: fileManager)
+        completed = true
         return archiveURL
     }
 
@@ -351,6 +362,7 @@ enum ConversationExportService {
             let destinationURL = filesURL.appendingPathComponent(archiveName)
             do {
                 try fileManager.copyItem(at: sourceURL, to: destinationURL)
+                try ProtectedFileStorage.protect(destinationURL, fileManager: fileManager)
                 let size = try destinationURL.resourceValues(forKeys: [.fileSizeKey]).fileSize
                 records.append(ConversationExportFileRecord(
                     originalPath: originalPath,
@@ -387,7 +399,7 @@ enum ConversationExportService {
         fileManager: FileManager
     ) throws {
         let sessionsURL = stagingURL.appendingPathComponent("sessions", isDirectory: true)
-        try fileManager.createDirectory(at: sessionsURL, withIntermediateDirectories: true)
+        try ProtectedFileStorage.createDirectory(sessionsURL, fileManager: fileManager)
         var manifest: [PiSessionManifestRecord] = []
 
         for (offset, record) in executions.enumerated() {
@@ -398,7 +410,7 @@ enum ConversationExportService {
                 safeFilename(record.sourceId)
             )
             let directoryURL = sessionsURL.appendingPathComponent(directoryName, isDirectory: true)
-            try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+            try ProtectedFileStorage.createDirectory(directoryURL, fileManager: fileManager)
             try encoder.encode(PiDiagnosticSanitizer.sanitize(record.execution)).write(
                 to: directoryURL.appendingPathComponent("execution.json"),
                 options: .atomic

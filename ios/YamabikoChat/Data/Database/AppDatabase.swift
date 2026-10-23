@@ -37,10 +37,10 @@ enum AppDatabase {
         let queue = try DatabaseQueue(path: dbURL.path, configuration: configuration)
         let databaseMigrator = migrator
         let appliedMigrations = try queue.read { try databaseMigrator.appliedMigrations($0) }
-        if !appliedMigrations.contains("v34_redact_persisted_diagnostic_credentials") {
+        if !appliedMigrations.contains("v35_credential_boundary_security") {
             // Remove legacy diagnostic copies only for the app's actual database,
             // never while migrating an unrelated in-memory or imported database.
-            DiagnosticsLogger.clear()
+            try DiagnosticsLogger.removePersistedLogs()
             let oldExports = fileManager.temporaryDirectory.appendingPathComponent("YamabikoChatExports", isDirectory: true)
             try? fileManager.removeItem(at: oldExports)
         }
@@ -1083,6 +1083,8 @@ enum AppDatabase {
             }
         }
 
+        // Marker for the one-time removal of pre-hardening diagnostic files above.
+        migrator.registerMigration("v35_credential_boundary_security") { _ in }
         return migrator
     }
 

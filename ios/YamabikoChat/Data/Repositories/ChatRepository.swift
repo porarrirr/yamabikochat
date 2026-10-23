@@ -1107,6 +1107,7 @@ final class ChatRepository {
         var metadata = resolvedSettings.metadata
         if conversation.isSecret {
             metadata["supportsClientTools"] = "false"
+            metadata["subagentsEnabled"] = "false"
         }
         if conversation.apiProvider.uppercased() == "CODEX_AUTH" {
             let sessionId = try conversations.getOrCreateCodexSessionId(conversationId: conversationId)
@@ -1148,7 +1149,8 @@ final class ChatRepository {
             thinking: resolvedSettings.thinking,
             provider: resolvedSettings.routing,
             metadata: metadata,
-            skillContext: skillApplication.currentContext
+            skillContext: skillApplication.currentContext,
+            executionPolicy: conversation.isSecret ? .restricted : nil
         )
     }
 
@@ -2426,6 +2428,7 @@ final class ChatRepository {
         metadata["supportsVision"] = await visionMetadataFlag(provider: provider, model: model)
         if !clientToolsAllowed {
             metadata["supportsClientTools"] = "false"
+            metadata["subagentsEnabled"] = "false"
         }
         let baseMessages = messages ?? [ProviderRequestMessage(role: "user", content: text)]
         let skillApplication: AgentSkillPromptApplication
@@ -2453,7 +2456,8 @@ final class ChatRepository {
             thinking: resolvedSettings.thinking,
             provider: resolvedSettings.routing,
             metadata: metadata,
-            skillContext: skillApplication.currentContext
+            skillContext: skillApplication.currentContext,
+            executionPolicy: clientToolsAllowed ? nil : .restricted
         )
     }
 

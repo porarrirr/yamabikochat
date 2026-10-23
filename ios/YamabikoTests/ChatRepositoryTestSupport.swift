@@ -48,6 +48,7 @@ enum ChatRepositoryTestSupport {
         modelService: OpenRouterModelService? = nil,
         modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil,
         codexAuthRepository: CodexAuthRepository? = nil,
+        superGrokAuthRepository: SuperGrokAuthRepository? = nil,
         openCodeGoUsageRepository: OpenCodeGoUsageRepository? = nil,
         pricingRepository: (any LiteLlmPricingEstimating)? = nil,
         conversationTitleGenerator: any ConversationTitleGenerating = ConversationTitleGeneratorSpy()
@@ -58,10 +59,11 @@ enum ChatRepositoryTestSupport {
             modelsDevCatalogRepository: modelsDevCatalogRepository
         )
         let codexAuth = codexAuthRepository ?? CodexAuthRepository(credentialStore: credentials)
-        let superGrokAuth = SuperGrokAuthRepository(credentialStore: credentials)
+        let superGrokAuth = superGrokAuthRepository ?? SuperGrokAuthRepository(credentialStore: credentials)
         let providers = ProviderGateway(
             settingsRepository: settings,
             credentialStore: credentials,
+            codexAuthRepository: codexAuth,
             superGrokAuthRepository: superGrokAuth,
             piStream: piStream
         )

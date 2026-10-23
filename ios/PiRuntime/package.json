@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "node --check src/main.js",
-    "check:contracts": "python3 ../../scripts/check-opencode-go-contract.py && python3 ../../scripts/check-models-dev-pi-identities.py && python3 ../../scripts/check-pcc-contract.py && python3 ../../scripts/check-chatgpt-plan-contract.py && python3 ../../scripts/check-sarashina-contract.py && python3 ../../scripts/check-azure-contract.py && python3 ../../scripts/check-catalog-provider-contracts.py",
+    "check:contracts": "python3 ../../scripts/check-opencode-go-contract.py && python3 ../../scripts/check-models-dev-pi-identities.py && python3 ../../scripts/check-pcc-contract.py && python3 ../../scripts/check-chatgpt-plan-contract.py && python3 ../../scripts/check-supergrok-auth-contract.py && python3 ../../scripts/check-sarashina-contract.py && python3 ../../scripts/check-azure-contract.py && python3 ../../scripts/check-catalog-provider-contracts.py",
     "pretest": "npm run build",
     "test": "node --test test/*.test.js",
     "postinstall": "node scripts/patch-pi-contract.mjs"

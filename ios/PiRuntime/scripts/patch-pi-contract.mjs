@@ -1,6 +1,7 @@
 // Audited local contract extension for Pi 1.0.2. Fails closed on upstream drift.
 // This is applied by npm ci (postinstall), never by editing an installed bundle.
 import fs from 'node:fs';
+import './patch-pi-grok-security.mjs';
 const root = new URL('../node_modules/@earendil-works/', import.meta.url);
 for (const name of ['pi-ai', 'pi-agent-core']) {
   const pkg = JSON.parse(fs.readFileSync(new URL(`${name}/package.json`, root)));

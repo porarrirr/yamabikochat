@@ -1241,9 +1241,12 @@ final class SettingsViewModel: ObservableObject {
         case let .success(state):
             superGrokAuthState = state
             superGrokEmailInput = ""
-            statusMessage = L10n.text("SuperGrokからログアウトしました")
+            statusMessage = state.revocationUnconfirmed
+                ? L10n.text("この端末からログアウトしました。SuperGrokの接続解除を確認できませんでした。Grokのアカウント設定で接続済みアプリとセッションを確認してください。")
+                : L10n.text("SuperGrokの接続を解除してログアウトしました")
         case let .failure(error):
             recordFailure(error)
+            statusMessage = L10n.text("SuperGrokのログアウトを完了できませんでした。アプリを終了し、Grokのアカウント設定で接続済みアプリとセッションを確認してください。")
         }
     }
 

@@ -33,7 +33,8 @@ pipe is separate from TCP because iOS can reclaim a suspended listening socket w
 notifying Node (Apple TN2277). Lifecycle transitions are recorded in the runtime log.
 `npm test` covers repeated transitions, background startup, draining and active streams.
 
-Codex login and refresh use Pi's built-in `openai-codex` OAuth provider. SuperGrok login,
+ChatGPT login and refresh use the official SIWC provider extension described in
+[CHATGPT_PLAN.md](CHATGPT_PLAN.md). SuperGrok login,
 refresh, OIDC verification, proxy headers, request sanitization, and CLI proxy routing use
 `pi-grok`. OAuth credentials are returned to Swift and persisted in the iOS Keychain; they
 are not written to Pi's filesystem credential store.
@@ -54,3 +55,10 @@ worker loads through `createRequire`; it must be shipped beside `main.js`.
 The entire `bundle/` directory is generated and ignored by Git. Run `ios/bootstrap.sh`
 from the repository root before opening a fresh checkout in Xcode. `npm test`
 automatically rebuilds the bundle before running the runtime tests.
+
+Security boundaries are documented in [SECURITY.md](SECURITY.md). Secret conversations
+carry a host execution policy which disables all client tools and child agents before
+Pi loads extensions; the native gateway omits child credentials. The build applies
+`patch-pi-grok-security.mjs` to the pinned provider for state-checked callbacks,
+body-free parse errors and RFC 7009 revocation discovered from xAI's OIDC metadata.
+This uses the existing provider authentication path and never infers another endpoint.

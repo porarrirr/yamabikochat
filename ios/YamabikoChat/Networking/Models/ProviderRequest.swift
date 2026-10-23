@@ -92,6 +92,13 @@ struct ProviderRequestMessage: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+struct ProviderExecutionPolicy: Codable, Sendable, Equatable {
+    var allowsClientTools: Bool
+    var allowsSubagents: Bool
+
+    static let restricted = ProviderExecutionPolicy(allowsClientTools: false, allowsSubagents: false)
+}
+
 struct ProviderRequest: Codable, Sendable, Equatable {
     var model: String
     var messages: [ProviderRequestMessage]
@@ -104,6 +111,8 @@ struct ProviderRequest: Codable, Sendable, Equatable {
     var timeoutInterval: TimeInterval?
     /// Ephemeral user-priority Agent Skill context. Never persisted to chat storage.
     var skillContext: SkillRequestContext?
+    /// Host-enforced permission, independent of model capabilities and tool declarations.
+    var executionPolicy: ProviderExecutionPolicy?
 
     init(
         model: String,
@@ -115,7 +124,8 @@ struct ProviderRequest: Codable, Sendable, Equatable {
         provider: ProviderRoutingConfig? = nil,
         metadata: [String: String] = [:],
         timeoutInterval: TimeInterval? = nil,
-        skillContext: SkillRequestContext? = nil
+        skillContext: SkillRequestContext? = nil,
+        executionPolicy: ProviderExecutionPolicy? = nil
     ) {
         self.model = model
         self.messages = messages
@@ -127,5 +137,6 @@ struct ProviderRequest: Codable, Sendable, Equatable {
         self.metadata = metadata
         self.timeoutInterval = timeoutInterval
         self.skillContext = skillContext
+        self.executionPolicy = executionPolicy
     }
 }

@@ -29,7 +29,7 @@ protocol HTTPClientProtocol {
 struct URLSessionHTTPClient: HTTPClientProtocol {
     private let session: URLSession
 
-    init(session: URLSession = .shared) {
+    init(session: URLSession = CredentialHTTPTransport.shared) {
         self.session = session
     }
 

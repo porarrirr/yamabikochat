@@ -2,6 +2,32 @@ import XCTest
 @testable import YamabikoChat
 
 final class AttachmentRepositoryTests: XCTestCase {
+    func testGeneratedFilesArePrivateAndLegacyReferencesRemainProtectedAndDeletable() throws {
+        let manager = FileManager.default
+        let collection = "SecurityTest-\(UUID())"
+        let repository = AttachmentRepository()
+        let legacy = try manager.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            .appendingPathComponent("Generated Files/\(collection)", isDirectory: true)
+        defer { try? manager.removeItem(at: legacy) }
+        try manager.createDirectory(at: legacy, withIntermediateDirectories: true)
+        let old = legacy.appendingPathComponent("old.txt")
+        try Data("keep legacy content".utf8).write(to: old)
+        let new = try repository.persistGeneratedFile(data: Data("new content".utf8), filename: "new.txt", collection: collection)
+        defer { try? manager.removeItem(at: new.deletingLastPathComponent()) }
+        try repository.prepareProtectedStorage()
+        XCTAssertTrue(new.path.contains("Library/Application Support/YamabikoChat/GeneratedFiles/"))
+        XCTAssertFalse(new.path.contains("Documents/"))
+        XCTAssertEqual(try String(contentsOf: old), "keep legacy content")
+        for url in [old, new, legacy] {
+            XCTAssertEqual(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+        }
+        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "UIFileSharingEnabled") as? Bool, false)
+        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "LSSupportsOpeningDocumentsInPlace") as? Bool, false)
+        try repository.deleteOwnedFiles(paths: [old.path, new.path])
+        XCTAssertFalse(manager.fileExists(atPath: old.path))
+        XCTAssertFalse(manager.fileExists(atPath: new.path))
+    }
+
     func testPersistAttachmentCopiesFileIntoAppSupport() throws {
         let repo = AttachmentRepository()
         let dir = FileManager.default.temporaryDirectory

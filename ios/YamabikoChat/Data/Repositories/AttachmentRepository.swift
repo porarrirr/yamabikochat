@@ -19,6 +19,18 @@ final class AttachmentRepository: @unchecked Sendable {
         self.generatedFilesRootOverride = generatedFilesRootOverride
     }
 
+    func prepareProtectedStorage() throws {
+        let support = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                          appropriateFor: nil, create: true)
+        let roots = try [support.appendingPathComponent("YamabikoChat/Attachments", isDirectory: true),
+                         generatedFilesRoot()] + legacyGeneratedFilesRoots()
+        for root in roots {
+            try ProtectedFileStorage.protectExistingTree(root, fileManager: fileManager)
+        }
+        let staging = fileManager.temporaryDirectory.appendingPathComponent("YamabikoAttachmentStaging", isDirectory: true)
+        if fileManager.fileExists(atPath: staging.path) { try fileManager.removeItem(at: staging) }
+    }
+
     func requiresVision(url: URL) -> Bool {
         guard let type = UTType(filenameExtension: url.pathExtension.lowercased()) else {
             return false
@@ -65,7 +77,7 @@ final class AttachmentRepository: @unchecked Sendable {
             create: true
         )
         let directory = supportURL.appendingPathComponent("YamabikoChat/Attachments", isDirectory: true)
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try ProtectedFileStorage.createDirectory(directory, fileManager: fileManager)
 
         let destination = directory.appendingPathComponent(UUID().uuidString + "_" + url.lastPathComponent)
         if fileManager.fileExists(atPath: destination.path) {
@@ -79,6 +91,7 @@ final class AttachmentRepository: @unchecked Sendable {
         } catch {
             try fileManager.copyItem(at: stagedURL, to: destination)
         }
+        try ProtectedFileStorage.protect(destination, fileManager: fileManager)
         return destination
     }
 
@@ -94,21 +107,23 @@ final class AttachmentRepository: @unchecked Sendable {
 
     func deleteConversationArtifacts(conversationID: Int64, protecting paths: Set<String> = []) throws {
         try generatedFilesLock.withLock {
-            let root = try generatedFilesRoot()
+            let roots = try [generatedFilesRoot()] + legacyGeneratedFilesRoots()
             let collection = safeGeneratedName(
                 ConversationWorkspacePath.generatedFilesCollection(for: String(conversationID)),
                 fallback: "Chat"
             )
-            let directory = root.appendingPathComponent(collection, isDirectory: true)
-            if fileManager.fileExists(atPath: directory.path) {
-                let protected = paths.filter { $0.hasPrefix(directory.path + "/") }
-                if protected.isEmpty {
-                    try fileManager.removeItem(at: directory)
-                } else if let files = fileManager.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey]) {
-                    for case let file as URL in files {
-                        if try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true,
-                           !paths.contains(file.standardizedFileURL.path) {
-                            try fileManager.removeItem(at: file)
+            for root in roots {
+                let directory = root.appendingPathComponent(collection, isDirectory: true)
+                if fileManager.fileExists(atPath: directory.path) {
+                    let protected = paths.filter { $0.hasPrefix(directory.path + "/") }
+                    if protected.isEmpty {
+                        try fileManager.removeItem(at: directory)
+                    } else if let files = fileManager.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey]) {
+                        for case let file as URL in files {
+                            if try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true,
+                               !paths.contains(file.standardizedFileURL.path) {
+                                try fileManager.removeItem(at: file)
+                            }
                         }
                     }
                 }
@@ -126,9 +141,9 @@ final class AttachmentRepository: @unchecked Sendable {
                     isDirectory: true
                 )
             }
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            try ProtectedFileStorage.createDirectory(directory, fileManager: fileManager)
             let destination = uniqueDestination(directory: directory, filename: safeName)
-            try data.write(to: destination, options: [.atomic])
+            try ProtectedFileStorage.write(data, to: destination, fileManager: fileManager)
             return destination
         }
     }
@@ -163,24 +178,32 @@ final class AttachmentRepository: @unchecked Sendable {
             let destination = safeComponents.reduce(directory) { partial, component in
                 partial.appendingPathComponent(component)
             }
-            try fileManager.createDirectory(
-                at: destination.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try data.write(to: destination, options: [.atomic])
+            try ProtectedFileStorage.createDirectory(destination.deletingLastPathComponent(), fileManager: fileManager)
+            try ProtectedFileStorage.write(data, to: destination, fileManager: fileManager)
             return destination
         }
     }
 
     private func generatedFilesRoot() throws -> URL {
         if let generatedFilesRootOverride { return generatedFilesRootOverride }
-        let documents = try fileManager.url(
-            for: .documentDirectory,
+        let support = try fileManager.url(
+            for: .applicationSupportDirectory,
             in: .userDomainMask,
             appropriateFor: nil,
             create: true
         )
-        return documents.appendingPathComponent("Generated Files", isDirectory: true)
+        let root = support.appendingPathComponent("YamabikoChat/GeneratedFiles", isDirectory: true)
+        try ProtectedFileStorage.createDirectory(root, fileManager: fileManager)
+        return root
+    }
+
+    private func legacyGeneratedFilesRoots() throws -> [URL] {
+        guard generatedFilesRootOverride == nil else { return [] }
+        let documents = try fileManager.url(for: .documentDirectory, in: .userDomainMask,
+                                            appropriateFor: nil, create: false)
+        // Retain old absolute references without deleting or moving user documents.
+        // Documents is private too: file sharing is disabled in Info.plist.
+        return [documents.appendingPathComponent("Generated Files", isDirectory: true)]
     }
 
     private func isOwnedFile(_ url: URL) -> Bool {
@@ -191,7 +214,8 @@ final class AttachmentRepository: @unchecked Sendable {
             create: false
         ).appendingPathComponent("YamabikoChat/Attachments", isDirectory: true).standardizedFileURL
         let generated = try? generatedFilesRoot().standardizedFileURL
-        return [support, generated].compactMap { $0 }.contains { root in
+        let legacy = (try? legacyGeneratedFilesRoots()) ?? []
+        return ([support, generated].compactMap { $0 } + legacy).contains { root in
             url.path == root.path || url.path.hasPrefix(root.path + "/")
         }
     }
@@ -230,6 +254,7 @@ final class AttachmentRepository: @unchecked Sendable {
 
         let ext = url.pathExtension.isEmpty ? "tmp" : url.pathExtension
         let temporaryURL = fileManager.temporaryDirectory
+            .appendingPathComponent("YamabikoAttachmentStaging", isDirectory: true)
             .appendingPathComponent("yamabiko-attachment-\(UUID().uuidString)")
             .appendingPathExtension(ext)
 
@@ -241,7 +266,7 @@ final class AttachmentRepository: @unchecked Sendable {
                 if self.fileManager.fileExists(atPath: temporaryURL.path) {
                     try self.fileManager.removeItem(at: temporaryURL)
                 }
-                try self.fileManager.copyItem(at: coordinatedURL, to: temporaryURL)
+                try ProtectedFileStorage.write(Data(contentsOf: coordinatedURL), to: temporaryURL, fileManager: self.fileManager)
             } catch {
                 copyError = error
             }

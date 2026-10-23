@@ -11,4 +11,5 @@ struct SuperGrokAuthState: Equatable, Sendable {
     var email: String? = nil
     var lastRefreshISO8601: String? = nil
     var pendingDeviceCode: SuperGrokDeviceCodeChallenge? = nil
+    var revocationUnconfirmed: Bool = false
 }

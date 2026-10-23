@@ -55,6 +55,17 @@ enum DiagnosticsAppVersionHistory {
 }
 
 enum DiagnosticsLogger {
+    /// Also available in Release when upgrading an installation that once ran Debug.
+    static func removePersistedLogs(fileManager: FileManager = .default) throws {
+        guard let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
+        let directory = support.appendingPathComponent("YamabikoChat", isDirectory: true)
+        for name in ["yamabiko_diagnostics.log", "yamabiko_diagnostics.previous.log",
+                     "yamabiko_pi_runtime.log", "yamabiko_pi_runtime.previous.log"] {
+            let file = directory.appendingPathComponent(name)
+            if fileManager.fileExists(atPath: file.path) { try fileManager.removeItem(at: file) }
+        }
+    }
+
     #if DEBUG
     private static let fileName = "yamabiko_diagnostics.log"
     private static let previousFileName = "yamabiko_diagnostics.previous.log"

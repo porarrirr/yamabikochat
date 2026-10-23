@@ -4,6 +4,15 @@ enum AppGroupShareStorage {
     static let payloadQueueDirectoryName = "share_payloads"
     static let failedPayloadDirectoryName = "share_payloads_failed"
 
+    static func prepareProtectedStorage(appGroupIdentifier: String = AppConstants.appGroupIdentifier,
+                                        fileManager: FileManager = .default) throws {
+        guard let container = containerURL(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager) else { return }
+        for name in [payloadQueueDirectoryName, failedPayloadDirectoryName] {
+            try ProtectedFileStorage.protectExistingTree(container.appendingPathComponent(name, isDirectory: true),
+                                                        fileManager: fileManager)
+        }
+    }
+
     struct QueuedPayload: Equatable {
         let id: UUID
         let data: Data
@@ -45,7 +54,8 @@ enum AppGroupShareStorage {
             return false
         }
         do {
-            try fileManager.createDirectory(at: queueURL, withIntermediateDirectories: true)
+            try prepareProtectedStorage(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager)
+            try ProtectedFileStorage.createDirectory(queueURL, fileManager: fileManager)
             let fileURL = queueURL.appendingPathComponent(
                 String(
                     format: "%020llu-%@.json",
@@ -54,7 +64,7 @@ enum AppGroupShareStorage {
                 ),
                 isDirectory: false
             )
-            try data.write(to: fileURL, options: .atomic)
+            try ProtectedFileStorage.write(data, to: fileURL, fileManager: fileManager)
             SharePayloadDarwinNotifier.postChange()
             return true
         } catch {
@@ -89,6 +99,8 @@ enum AppGroupShareStorage {
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
         fileManager: FileManager = .default
     ) -> QueuedPayload? {
+        do { try prepareProtectedStorage(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager) }
+        catch { return nil }
         guard let queueURL = payloadQueueURL(appGroupIdentifier: appGroupIdentifier, fileManager: fileManager),
               let urls = try? fileManager.contentsOfDirectory(
                 at: queueURL,
@@ -138,11 +150,13 @@ enum AppGroupShareStorage {
         ) else { return false }
         let failedURL = containerURL.appendingPathComponent(failedPayloadDirectoryName, isDirectory: true)
         do {
-            try fileManager.createDirectory(at: failedURL, withIntermediateDirectories: true)
+            try ProtectedFileStorage.createDirectory(failedURL, fileManager: fileManager)
+            let destination = failedURL.appendingPathComponent(queued.fileURL.lastPathComponent)
             try fileManager.moveItem(
                 at: queued.fileURL,
-                to: failedURL.appendingPathComponent(queued.fileURL.lastPathComponent)
+                to: destination
             )
+            try ProtectedFileStorage.protect(destination, fileManager: fileManager)
             return true
         } catch {
             return false

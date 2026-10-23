@@ -53,6 +53,22 @@ private final class SettingsOpenCodeGoUsageHTTPClient: HTTPClientProtocol {
 
 final class SettingsViewModelTests: XCTestCase {
     @MainActor
+    func testSuperGrokLogoutCleanupFailureShowsAccountReviewGuidance() async throws {
+        let credentials = SettingsViewModelCredentialStore()
+        let auth = SuperGrokAuthRepository(credentialStore: credentials,
+            loginHandler: { _, _, _ in oauthResolution(accountID: nil) },
+            revokeHandler: { _ in throw URLError(.notConnectedToInternet) },
+            logoutHandler: { throw URLError(.cannotConnectToHost) })
+        _ = await auth.loginWithBrowser()
+        let fixture = try makeFixture(credentials: credentials, superGrokAuthRepository: auth)
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: credentials)
+        await viewModel.logoutSuperGrok()
+        XCTAssertEqual(viewModel.statusMessage, L10n.text("SuperGrokのログアウトを完了できませんでした。アプリを終了し、Grokのアカウント設定で接続済みアプリとセッションを確認してください。"))
+        XCTAssertNil(try credentials.readSecret(key: "pi_oauth_supergrok_v1"))
+    }
+
+    @MainActor
     func testTechnicalFailureIsHiddenAndInputGuidanceRemainsVisible() {
         let viewModel = SettingsViewModel()
         let error = NSError(domain: "DiagnosticOnly", code: 1,
@@ -855,6 +871,7 @@ final class SettingsViewModelTests: XCTestCase {
         openCodeGoUsageHTTPClient: HTTPClientProtocol? = nil,
         credentials: SettingsViewModelCredentialStore = SettingsViewModelCredentialStore(),
         codexAuthRepository: CodexAuthRepository? = nil,
+        superGrokAuthRepository: SuperGrokAuthRepository? = nil,
         modelsDevCatalogRepository: ModelsDevCatalogRepository? = nil
     ) throws -> (repository: ChatRepository, credentials: SettingsViewModelCredentialStore) {
         let dbQueue = try DatabaseQueue()
@@ -872,6 +889,7 @@ final class SettingsViewModelTests: XCTestCase {
             credentials: credentials,
             modelsDevCatalogRepository: modelsDevCatalogRepository,
             codexAuthRepository: codexAuthRepository,
+            superGrokAuthRepository: superGrokAuthRepository,
             openCodeGoUsageRepository: usageRepository
         )
 

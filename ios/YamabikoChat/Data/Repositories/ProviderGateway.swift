@@ -767,7 +767,10 @@ final class ProviderGateway {
     ) async throws -> PiAgentConfiguration {
         var config = try await baseConfiguration(providerID: providerID, request: request, settings: settings,
             geminiAPIKeyOverride: geminiAPIKeyOverride, forModelResolution: forModelResolution)
-        guard !forModelResolution, request.metadata["subagentsEnabled"] == "true", settings.subagents.enabled else { return config }
+        guard !forModelResolution, request.executionPolicy?.allowsClientTools != false,
+              request.executionPolicy?.allowsSubagents != false,
+              request.metadata["supportsClientTools"] != "false",
+              request.metadata["subagentsEnabled"] == "true", settings.subagents.enabled else { return config }
         var profiles: [PiSubagentModel] = []
         for profile in settings.subagents.models {
             do {

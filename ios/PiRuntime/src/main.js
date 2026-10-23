@@ -26,6 +26,9 @@ import { installCatalogProviderAdapters, verifiedCatalogResolution, verifiedExec
 import { compactContext } from "./compaction.js";
 import { createMobileSubagentsHost } from "./subagents.js";
 import { credentialFetch, diagnosticRedactor, withCredentialSecurity } from "./credential-security.js";
+import { enforceExecutionPolicy } from "./execution-policy.js";
+import { authFailure } from "./auth-security.js";
+import { OAuthOperations } from "./oauth-operations.js";
 
 // Applies to Pi's SDKs as well as OAuth. In particular, the Google SDK uses the
 // global transport rather than Pi's optional per-request fetch hook.
@@ -84,12 +87,17 @@ let activeAuthLogin = null;
 let activeAuthProvider = null;
 const authGenerations = new Map();
 const signedOutProviders = new Set();
+const oauthOperations = new OAuthOperations();
 const authGeneration = provider => authGenerations.get(provider) || 0;
 const loggedOut = () => Object.assign(new Error("OAuth session was signed out"), { code: "oauth_signed_out" });
 
 function stopOAuthProvider(provider) {
-  const providerId = authProviderId(provider);
   authGenerations.set(provider, authGeneration(provider) + 1);
+  quiesceOAuthProvider(provider);
+}
+
+function quiesceOAuthProvider(provider) {
+  const providerId = authProviderId(provider);
   signedOutProviders.add(providerId);
   if (activeAuthProvider === provider) activeAuthLogin?.abort(loggedOut());
   for (const run of runs.values()) if (run.providers?.has(providerId) || run.state.model.provider === providerId) run.abort();
@@ -454,7 +462,7 @@ async function resolveOAuth(provider, rawCredential, force) {
     const resolved = await authModels.getAuth(providerId);
     if (!resolved?.auth?.apiKey) throw new Error("Pi did not resolve Codex OAuth credentials");
   } else {
-    const expiresSoon = Date.now() + 5 * 60 * 1000 >= credential.expires;
+    const expiresSoon = force || Date.now() + 5 * 60 * 1000 >= credential.expires;
     if (expiresSoon) {
       credential = oauthCredential(await grokOAuth.refresh(credential));
       await authCredentials.modify(providerId, async () => {
@@ -1256,7 +1264,8 @@ function piExecutionSnapshot({ agent, effectiveRequest, providerRequests, events
 }
 
 async function runAgent(envelope, res) {
-  const { runId, request, config } = envelope;
+  const { runId } = envelope;
+  const { request, config } = enforceExecutionPolicy(envelope.request, envelope.config);
   if (config.provider === "xai-oauth") {
     const credential = await authCredentials.read("xai-oauth");
     if (!credential || credential.access !== config.apiKey) throw loggedOut();
@@ -1601,37 +1610,55 @@ const handleRequest = (req, res) => withCredentialSecurity(async () => {
     }
     if (req.method === "POST" && req.url === "/v1/auth/revoke") {
       const value = await body(req);
-      if (value.provider !== "chatgpt") throw new Error("Unsupported revocation provider");
-      stopOAuthProvider("chatgpt");
-      try {
-        await authCredentials.modify(CHATGPT_PLAN_PROVIDER, async current => {
-          const credential = current?.clientId === value.credential?.clientId ? current : value.credential;
-          await chatGPTPlan.revoke(credential, AbortSignal.timeout(30_000));
-          return current;
-        });
-      } finally {
-        await authCredentials.delete(CHATGPT_PLAN_PROVIDER);
-        chatGPTPlan.clearCatalog();
-      }
+      if (!["chatgpt", "supergrok"].includes(value.provider)) throw new Error("Unsupported revocation provider");
+      quiesceOAuthProvider(value.provider);
+      await oauthOperations.run(value.provider, async () => {
+        stopOAuthProvider(value.provider);
+        const providerID = authProviderId(value.provider);
+        try {
+          await authCredentials.modify(providerID, async current => {
+            const credential = value.provider === "chatgpt"
+              ? current?.clientId === value.credential?.clientId ? current : value.credential
+              : current || value.credential;
+            if (value.provider === "chatgpt") await chatGPTPlan.revoke(credential, AbortSignal.timeout(30_000));
+            else await grokOAuth.revoke(oauthCredential(credential), AbortSignal.timeout(30_000));
+            return current;
+          });
+        } finally {
+          await authCredentials.delete(providerID);
+          if (value.provider === "chatgpt") chatGPTPlan.clearCatalog();
+        }
+      });
       return json(res, 200, { ok: true });
     }
     if (req.method === "POST" && req.url === "/v1/auth/logout") {
       const value = await body(req);
       if (value.provider !== "supergrok") throw new Error("Unsupported local logout provider");
-      stopOAuthProvider(value.provider);
-      await authCredentials.delete(authProviderId(value.provider));
+      quiesceOAuthProvider(value.provider);
+      await oauthOperations.run(value.provider, async () => {
+        stopOAuthProvider(value.provider);
+        await authCredentials.delete(authProviderId(value.provider));
+      });
       return json(res, 200, { ok: true });
     }
     if (req.method === "POST" && req.url === "/v1/auth/login") {
       const value = await body(req);
       res.writeHead(200, { "content-type": "application/x-ndjson", "cache-control": "no-store" });
-      try { await loginOAuth(value.provider, value.method || "browser", res, value.context); res.end(); }
-      catch (error) { send(res, errorEvent(error)); res.end(); }
+      const generation = authGeneration(value.provider);
+      try {
+        await oauthOperations.run(value.provider, async () => {
+          if (generation !== authGeneration(value.provider)) throw loggedOut();
+          await loginOAuth(value.provider, value.method || "browser", res, value.context);
+        });
+        res.end();
+      }
+      catch (error) { send(res, errorEvent(authFailure(error))); res.end(); }
       return;
     }
     if (req.method === "POST" && req.url === "/v1/auth/resolve") {
       const value = await body(req);
-      return json(res, 200, await resolveOAuth(value.provider, value.credential, Boolean(value.force)));
+      return json(res, 200, await oauthOperations.run(value.provider,
+        () => resolveOAuth(value.provider, value.credential, Boolean(value.force))));
     }
     if (req.method === "POST" && req.url === "/v1/pcc-tool") {
       const value = await body(req);
@@ -1668,6 +1695,7 @@ const handleRequest = (req, res) => withCredentialSecurity(async () => {
     }
     json(res, 404, { error: "not found" });
   } catch (error) {
+    if (req.url?.startsWith("/v1/auth/") || req.url === "/v1/models/chatgpt") error = authFailure(error);
     if (!res.headersSent) json(res, 500, { error: error?.message || String(error) });
     else { send(res, errorEvent(error)); res.end(); }
   }

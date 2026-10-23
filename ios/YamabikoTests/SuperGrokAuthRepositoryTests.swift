@@ -41,6 +41,7 @@ final class SuperGrokAuthRepositoryTests: XCTestCase {
         let cleared = expectation(description: "runtime logout")
         let repo = SuperGrokAuthRepository(credentialStore: store,
             loginHandler: { _, _, _ in oauthResolution(accountID: nil) },
+            revokeHandler: { credential in XCTAssertTrue(credential.contains("refresh-token")) },
             logoutHandler: { cleared.fulfill() })
         guard case .success = await repo.loginWithBrowser() else { return XCTFail("login") }
         guard case .success = await repo.logout() else { return XCTFail("logout") }
@@ -53,10 +54,27 @@ final class SuperGrokAuthRepositoryTests: XCTestCase {
         let store = PiAuthTestCredentialStore()
         let repo = SuperGrokAuthRepository(credentialStore: store,
             loginHandler: { _, _, _ in oauthResolution(accountID: nil) },
+            revokeHandler: { _ in },
             logoutHandler: { throw URLError(.cannotConnectToHost) })
         _ = await repo.loginWithBrowser()
         guard case .failure = await repo.logout() else { return XCTFail("Runtime cleanup failure must be reported") }
         XCTAssertNil(try store.readSecret(key: "pi_oauth_supergrok_v1"))
         XCTAssertFalse(repo.currentState().isLoggedIn)
+    }
+
+    func testRevocationFailureStillCleansRuntimeAndKeychainAndReportsUnconfirmedState() async throws {
+        let store = PiAuthTestCredentialStore()
+        let cleanup = expectation(description: "runtime cleanup")
+        let repo = SuperGrokAuthRepository(credentialStore: store,
+            loginHandler: { _, _, _ in oauthResolution(accountID: nil) },
+            revokeHandler: { _ in throw URLError(.notConnectedToInternet) },
+            logoutHandler: { cleanup.fulfill() })
+        _ = await repo.loginWithBrowser()
+        guard case let .success(state) = await repo.logout() else { return XCTFail("Expected local sign-out") }
+        await fulfillment(of: [cleanup], timeout: 1)
+        XCTAssertTrue(state.revocationUnconfirmed)
+        XCTAssertFalse(state.isLoggedIn)
+        XCTAssertNil(try store.readSecret(key: "pi_oauth_supergrok_v1"))
+        XCTAssertNil(try store.readSecret(key: "supergrok_email"))
     }
 }

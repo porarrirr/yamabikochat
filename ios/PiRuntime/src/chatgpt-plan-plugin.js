@@ -7,6 +7,7 @@ import { createLocalJWKSet, jwtVerify } from "jose";
 import { createProvider, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
+import { safeOAuthCode } from "./auth-security.js";
 
 export const CHATGPT_PLAN_PROVIDER = "openai-chatgpt";
 export const CHATGPT_USAGE_URL = "https://chatgpt.com/settings/usage";
@@ -247,9 +248,10 @@ export function createChatGPTPlanPlugin({
     if (!response.ok) {
       let code = "chatgpt_request_failed";
       try { const body = await response.json(); code = body.error?.code || body.error || code; } catch {}
-      throw Object.assign(failure(typeof code === "string" ? code : "chatgpt_request_failed", `ChatGPT request failed (${response.status})`), { statusCode: response.status });
+      throw Object.assign(failure(safeOAuthCode(code), `ChatGPT request failed (${response.status})`), { statusCode: response.status });
     }
-    return response.json();
+    try { return await response.json(); }
+    catch { throw failure("chatgpt_response_invalid", "ChatGPT returned an invalid authentication response"); }
   }
   async function discovery(signal) {
     if (discoveryCache && now() < discoveryCache.expires) return discoveryCache.value;

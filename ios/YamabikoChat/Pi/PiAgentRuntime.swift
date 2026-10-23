@@ -270,6 +270,15 @@ enum PiOAuthProvider: String, Codable, Sendable {
     case codex
     case chatgpt
     case supergrok
+
+    func allowsAuthorizationURL(_ url: URL) -> Bool {
+        let hosts: Set<String> = self == .supergrok ? ["auth.x.ai", "accounts.x.ai"] : ["auth.openai.com"]
+        guard url.scheme?.lowercased() == "https", let host = url.host?.lowercased(), hosts.contains(host),
+              url.user == nil, url.password == nil, url.fragment == nil,
+              url.port == nil || url.port == 443 else { return false }
+        let fields = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        return !fields.contains { ["access_token", "refresh_token", "id_token"].contains($0.name.lowercased()) }
+    }
 }
 
 enum PiOAuthLoginMethod: String, Codable, Sendable {
@@ -351,7 +360,7 @@ actor PiAgentRuntime {
         endpoint: URL? = nil,
         token: String? = nil,
         readiness: PiRuntimeReadinessConfiguration = PiRuntimeReadinessConfiguration(),
-        healthClient: any PiRuntimeHealthClient = URLSession(configuration: .ephemeral)
+        healthClient: any PiRuntimeHealthClient = CredentialHTTPTransport.shared
     ) {
         self.endpoint = endpoint
         self.token = token
@@ -449,7 +458,7 @@ actor PiAgentRuntime {
         request.httpBody = try JSONEncoder().encode(PiModelResolutionEnvelope(models: configurations))
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
+        let (data, response) = try await CredentialHTTPTransport.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw ProviderClientError.invalidResponse }
         let resolved = try JSONDecoder().decode(PiModelResolutionResponse.self, from: data)
         guard resolved.contractVersion == 2 else {
@@ -477,7 +486,7 @@ actor PiAgentRuntime {
         let (endpoint, token) = try await startIfNeeded()
         var request = URLRequest(url: endpoint.appendingPathComponent("v1/models/codex"))
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
+        let (data, response) = try await CredentialHTTPTransport.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw ProviderClientError.invalidResponse }
         let catalog = try JSONDecoder().decode(PiCodexModelResponse.self, from: data)
         guard catalog.contractVersion == 2 else { throw ProviderClientError.parseFailure("Pi runtime contract mismatch") }
@@ -486,18 +495,17 @@ actor PiAgentRuntime {
 
     func chatGPTModels(credentialJSON: String, contracts: [String: PiCatalogModelContract]) async throws -> [PiCodexModel] {
         let (endpoint, token) = try await startIfNeeded()
-        let credential = try JSONDecoder().decode(JSONValue.self, from: Data(credentialJSON.utf8))
+        let credential = try Self.decodeAuthResponse(JSONValue.self, data: Data(credentialJSON.utf8))
         var request = URLRequest(url: endpoint.appendingPathComponent("v1/models/chatgpt"))
         request.httpMethod = "POST"
         request.httpBody = try JSONEncoder().encode(PiChatGPTCatalogRequest(credential: credential, contracts: contracts))
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
+        let (data, response) = try await CredentialHTTPTransport.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            let error = (try? JSONDecoder().decode([String: String].self, from: data)["error"]) ?? "ChatGPT model catalog unavailable"
-            throw ProviderClientError.parseFailure(error)
+            throw ProviderClientError.parseFailure("ChatGPT model catalog unavailable")
         }
-        let catalog = try JSONDecoder().decode(PiCodexModelResponse.self, from: data)
+        let catalog = try Self.decodeAuthResponse(PiCodexModelResponse.self, data: data)
         guard catalog.contractVersion == 2 else {
             throw ProviderClientError.parseFailure("Pi ChatGPT catalog contract mismatch")
         }
@@ -509,7 +517,7 @@ actor PiAgentRuntime {
         registrationJSON: String?,
         onRegistration: @escaping @Sendable (JSONValue) async throws -> Void
     ) async throws -> PiOAuthResolution {
-        let registration = try registrationJSON.map { try JSONDecoder().decode(JSONValue.self, from: Data($0.utf8)) }
+        let registration = try registrationJSON.map { try Self.decodeAuthResponse(JSONValue.self, data: Data($0.utf8)) }
         return try await loginOAuth(
             provider: .chatgpt, method: .browser,
             context: PiChatGPTLoginContext(hostId: hostID, registration: registration),
@@ -518,18 +526,22 @@ actor PiAgentRuntime {
     }
 
     func revokeChatGPT(credentialJSON: String) async throws {
-        cancelOAuthSessions(provider: "openai-chatgpt")
+        try await revokeOAuth(provider: .chatgpt, credentialJSON: credentialJSON)
+    }
+
+    func revokeOAuth(provider: PiOAuthProvider, credentialJSON: String) async throws {
+        guard provider == .chatgpt || provider == .supergrok else { throw ProviderClientError.invalidResponse }
+        cancelOAuthSessions(provider: provider == .chatgpt ? "openai-chatgpt" : "xai-oauth")
         let (endpoint, token) = try await startIfNeeded()
-        let credential = try JSONDecoder().decode(JSONValue.self, from: Data(credentialJSON.utf8))
+        let credential = try Self.decodeAuthResponse(JSONValue.self, data: Data(credentialJSON.utf8))
         var request = URLRequest(url: endpoint.appendingPathComponent("v1/auth/revoke"))
         request.httpMethod = "POST"
-        request.httpBody = try JSONEncoder().encode(["provider": JSONValue.string("chatgpt"), "credential": credential])
+        request.httpBody = try JSONEncoder().encode(["provider": JSONValue.string(provider.rawValue), "credential": credential])
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
+        let (_, response) = try await CredentialHTTPTransport.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            let error = (try? JSONDecoder().decode([String: String].self, from: data)["error"]) ?? "ChatGPT session revocation failed"
-            throw ProviderClientError.parseFailure(error)
+            throw ProviderClientError.parseFailure("OAuth session revocation was not confirmed")
         }
     }
 
@@ -543,7 +555,7 @@ actor PiAgentRuntime {
         request.httpBody = try JSONEncoder().encode(["provider": provider.rawValue])
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (_, response) = try await URLSession(configuration: .ephemeral).data(for: request)
+        let (_, response) = try await CredentialHTTPTransport.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw ProviderClientError.invalidResponse }
     }
 
@@ -584,7 +596,7 @@ actor PiAgentRuntime {
             }
         }
 
-        let session = URLSession(configuration: .ephemeral)
+        let session = CredentialHTTPTransport.makeSession()
         defer { session.invalidateAndCancel() }
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
@@ -594,7 +606,7 @@ actor PiAgentRuntime {
             }
             for try await line in bytes.lines where !line.isEmpty {
                 try Task.checkCancellation()
-                let event = try JSONDecoder().decode(PiRuntimeEvent.self, from: Data(line.utf8))
+                let event = try Self.decodeAuthResponse(PiRuntimeEvent.self, data: Data(line.utf8))
                 switch event.type {
                 case "auth_registration":
                     guard let registration = event.registration, let requestID = event.requestId, let onRegistration else {
@@ -606,18 +618,18 @@ actor PiAgentRuntime {
                     acknowledgement.httpBody = try JSONEncoder().encode(["requestId": requestID])
                     acknowledgement.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                     acknowledgement.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    let (_, acknowledgementResponse) = try await URLSession(configuration: .ephemeral).data(for: acknowledgement)
+                    let (_, acknowledgementResponse) = try await CredentialHTTPTransport.shared.data(for: acknowledgement)
                     guard (acknowledgementResponse as? HTTPURLResponse)?.statusCode == 200 else {
                         throw ProviderClientError.parseFailure("ChatGPT registration acknowledgement failed")
                     }
                 case "auth_url":
-                    guard let value = event.url, let url = URL(string: value) else {
+                    guard let value = event.url, let url = URL(string: value), provider.allowsAuthorizationURL(url) else {
                         throw ProviderClientError.parseFailure("Pi OAuth returned an invalid authorization URL")
                     }
                     try await Self.openBrowser(url)
                 case "device_code":
                     guard let value = event.verificationUri,
-                          let url = URL(string: value),
+                          let url = URL(string: value), provider.allowsAuthorizationURL(url),
                           let userCode = event.userCode else {
                         throw ProviderClientError.parseFailure("Pi OAuth returned an invalid device code")
                     }
@@ -644,7 +656,7 @@ actor PiAgentRuntime {
                         profile: profile
                     )
                 case "error":
-                    throw ProviderClientError.parseFailure(event.message ?? "Pi OAuth login failed")
+                    throw ProviderClientError.parseFailure("Pi OAuth authorization failed")
                 default:
                     continue
                 }
@@ -662,20 +674,18 @@ actor PiAgentRuntime {
         force: Bool
     ) async throws -> PiOAuthResolution {
         let (endpoint, token) = try await startIfNeeded()
-        let credential = try JSONDecoder().decode(JSONValue.self, from: Data(credentialJSON.utf8))
+        let credential = try Self.decodeAuthResponse(JSONValue.self, data: Data(credentialJSON.utf8))
         let envelope = PiOAuthResolveRequest(provider: provider, credential: credential, force: force)
         var request = URLRequest(url: endpoint.appendingPathComponent("v1/auth/resolve"))
         request.httpMethod = "POST"
         request.httpBody = try JSONEncoder().encode(envelope)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
+        let (data, response) = try await CredentialHTTPTransport.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            let message = (try? JSONDecoder().decode([String: String].self, from: data)["error"])
-                ?? "Pi OAuth refresh failed"
-            throw ProviderClientError.parseFailure(message)
+            throw ProviderClientError.parseFailure("Pi OAuth credential resolution failed")
         }
-        return try JSONDecoder().decode(PiOAuthResolution.self, from: data)
+        return try Self.decodeAuthResponse(PiOAuthResolution.self, data: data)
     }
 
     func stream(
@@ -727,7 +737,7 @@ actor PiAgentRuntime {
         urlRequest.httpBody = body
         urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let session = URLSession(configuration: .ephemeral)
+        let session = CredentialHTTPTransport.makeSession()
         oauthSessions[runID] = (Set([configuration.provider] + (configuration.subagents?.models.compactMap { $0.configuration?.provider } ?? [])), session)
         DiagnosticsLogger.log(
             "Pi runtime bridge request starting",
@@ -1072,7 +1082,7 @@ actor PiAgentRuntime {
         request.httpBody = try JSONEncoder().encode(Invocation(runId: runID, requestId: requestID, toolCall: call))
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await CredentialHTTPTransport.shared.data(for: request)
         try Task.checkCancellation()
         guard let http = response as? HTTPURLResponse else { throw ProviderClientError.invalidResponse }
         if http.statusCode == 404 { throw CancellationError() }
@@ -1086,7 +1096,7 @@ actor PiAgentRuntime {
         request.httpBody = try JSONEncoder().encode(event)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await CredentialHTTPTransport.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ProviderClientError.invalidResponse }
         if http.statusCode == 404 { throw CancellationError() }
         guard http.statusCode == 200 else {
@@ -1520,7 +1530,7 @@ actor PiAgentRuntime {
         request.httpBody = try JSONEncoder().encode(envelope)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await CredentialHTTPTransport.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
             throw ProviderClientError.invalidResponse
         }
@@ -1559,7 +1569,7 @@ actor PiAgentRuntime {
         request.timeoutInterval = 5
         let cleanupRequest = request
         await Task.detached {
-            _ = try? await URLSession.shared.data(for: cleanupRequest)
+            _ = try? await CredentialHTTPTransport.shared.data(for: cleanupRequest)
         }.value
     }
 
@@ -1571,6 +1581,11 @@ actor PiAgentRuntime {
 
     static func credentialJSONString(_ value: JSONValue) throws -> String {
         String(decoding: try JSONEncoder().encode(value), as: UTF8.self)
+    }
+
+    private static func decodeAuthResponse<T: Decodable>(_ type: T.Type, data: Data) throws -> T {
+        do { return try JSONDecoder().decode(type, from: data) }
+        catch { throw ProviderClientError.parseFailure("Pi returned an invalid authentication response") }
     }
 
     private static func openBrowser(_ url: URL) async throws {

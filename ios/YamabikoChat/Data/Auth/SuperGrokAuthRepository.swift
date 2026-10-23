@@ -62,6 +62,7 @@ final class SuperGrokAuthRepository {
     private let loginHandler: PiOAuthLoginHandler
     private let resolveHandler: PiOAuthResolveHandler
     private let logoutHandler: @Sendable () async throws -> Void
+    private let revokeHandler: @Sendable (String) async throws -> Void
     private let subject: CurrentValueSubject<SuperGrokAuthState, Never>
 
     init(
@@ -80,6 +81,9 @@ final class SuperGrokAuthRepository {
                 force: force
             )
         },
+        revokeHandler: @escaping @Sendable (String) async throws -> Void = { credential in
+            try await PiAgentRuntime.shared.revokeOAuth(provider: .supergrok, credentialJSON: credential)
+        },
         logoutHandler: @escaping @Sendable () async throws -> Void = {
             try await PiAgentRuntime.shared.logoutOAuth(provider: .supergrok)
         }
@@ -88,6 +92,7 @@ final class SuperGrokAuthRepository {
         self.loginHandler = loginHandler
         self.resolveHandler = resolveHandler
         self.logoutHandler = logoutHandler
+        self.revokeHandler = revokeHandler
         subject = CurrentValueSubject(Self.readState(credentialStore: credentialStore))
     }
 
@@ -105,13 +110,23 @@ final class SuperGrokAuthRepository {
 
     func logout() async -> Result<SuperGrokAuthState, Error> {
         do {
-            authLock.withLock {
+            let credential = try authLock.withLock {
+                let credential = try credentialStore.readSecret(key: Constants.credentialKey)
                 authGeneration += 1
                 signingOut = true
                 pendingResolution?.task.cancel()
                 pendingResolution = nil
+                return credential
             }
             defer { authLock.withLock { signingOut = false } }
+            var revocationUnconfirmed = false
+            if let credential {
+                do { try await revokeHandler(credential) }
+                catch {
+                    revocationUnconfirmed = true
+                    DiagnosticsLogger.log("SuperGrok remote revocation unconfirmed", category: .auth)
+                }
+            }
             var runtimeError: Error?
             do { try await logoutHandler() }
             catch { runtimeError = error; DiagnosticsLogger.log("SuperGrok runtime logout failed", category: .auth, error: error) }
@@ -125,7 +140,8 @@ final class SuperGrokAuthRepository {
                 ] {
                     try credentialStore.deleteSecret(key: key)
                 }
-                let updated = Self.readState(credentialStore: credentialStore)
+                var updated = Self.readState(credentialStore: credentialStore)
+                updated.revocationUnconfirmed = revocationUnconfirmed
                 subject.send(updated)
                 if let runtimeError { return .failure(runtimeError) }
                 return .success(updated)
@@ -171,6 +187,7 @@ final class SuperGrokAuthRepository {
 
     private func login(method: PiOAuthLoginMethod) async -> Result<SuperGrokAuthState, Error> {
         do {
+            try Task.checkCancellation()
             guard authLock.withLock({ !signingOut }) else { throw CancellationError() }
             DiagnosticsLogger.log("SuperGrok auth delegated to pi-grok", category: .auth)
             let generation = beginAuthOperation()
@@ -183,6 +200,7 @@ final class SuperGrokAuthRepository {
                     self.subject.send(pending)
                 }
             }
+            try Task.checkCancellation()
             try commit(resolution, generation: generation)
             let updated = currentState()
             return .success(updated)

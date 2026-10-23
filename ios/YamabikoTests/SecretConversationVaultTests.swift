@@ -3,6 +3,54 @@ import XCTest
 @testable import YamabikoChat
 
 final class SecretConversationVaultTests: XCTestCase {
+    func testSecretSingleAndDualRequestsNeverCarryChildCredentialsForChatGPTSuperGrokOrAPI() async throws {
+        for provider in ["OPENAI", "CODEX_AUTH", "SUPERGROK"] {
+            let queue = try DatabaseQueue()
+            try AppDatabase.migrator.migrate(queue)
+            let settingsRepo = SettingsRepository(dbQueue: queue)
+            let credentials = PiAuthTestCredentialStore()
+            try credentials.setCredential("synthetic-api-key", for: .openAI)
+            try credentials.setCredential("synthetic-child-key", for: .gemini)
+            let codex = CodexAuthRepository(credentialStore: credentials,
+                loginHandler: { host, _, _ in chatGPTResolution(hostID: host) },
+                resolveHandler: { _, _, _ in chatGPTResolution() })
+            let grok = SuperGrokAuthRepository(credentialStore: credentials,
+                loginHandler: { _, _, _ in oauthResolution(accountID: nil) },
+                resolveHandler: { _, _, _ in oauthResolution(accountID: nil) })
+            _ = await codex.loginWithBrowser()
+            _ = await grok.loginWithBrowser()
+            var settings = AppSettings()
+            settings.apiProvider = provider
+            settings.defaultModel = provider == "SUPERGROK" ? "grok-4.5" : "gpt-6-sol"
+            settings.dualProviderA = provider
+            settings.dualProviderB = provider
+            settings.dualModelA = settings.defaultModel
+            settings.dualModelB = settings.defaultModel
+            settings.subagents = SubagentSettings(enabled: true, defaultModelID: "child", models: [
+                SubagentModelProfile(id: "child", provider: "GEMINI", model: "gemini-2.5-flash")
+            ])
+            try settingsRepo.save(settings)
+            let spy = PiStreamSpy()
+            let repository = ChatRepositoryTestSupport.makeRepository(dbQueue: queue, settings: settingsRepo,
+                conversations: ConversationRepository(dbQueue: queue), credentials: credentials, piStream: spy.stream,
+                codexAuthRepository: codex, superGrokAuthRepository: grok)
+            let id = try repository.createSecretConversation()
+            defer { SecretConversationVault.shared.destroy(conversationID: id) }
+            _ = try await repository.sendMessage(conversationId: id, text: "synthetic private message", attachments: [])
+            _ = try await repository.sendDualMessage(conversationId: id, text: "synthetic dual private message")
+            XCTAssertEqual(spy.calls.count, 3, provider)
+            for call in spy.calls {
+                XCTAssertEqual(call.request.executionPolicy, .restricted, provider)
+                XCTAssertEqual(call.request.metadata["supportsClientTools"], "false")
+                XCTAssertEqual(call.request.metadata["subagentsEnabled"], "false")
+                XCTAssertTrue(call.request.tools.isEmpty)
+                XCTAssertNil(call.configuration.subagents)
+                let encoded = String(decoding: try JSONEncoder().encode(call.configuration), as: UTF8.self)
+                XCTAssertFalse(encoded.contains("synthetic-child-key"))
+            }
+        }
+    }
+
     func testDestroyingProcessKeyMakesCiphertextUnreadable() throws {
         let vault = SecretConversationVault.shared
         let conversationID = Int64.random(in: 1_000_000...Int64.max)

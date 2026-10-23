@@ -39,12 +39,17 @@ final class AppServices {
         onboardingStore = OnboardingStateStore(hasExistingInstallation: hadDatabase)
         dbQueue = try AppDatabase.makeDatabaseQueue()
 
-        credentialStore = KeychainStore()
+        let keychain = KeychainStore()
+        try keychain.hardenExistingSecrets()
+        credentialStore = keychain
         settingsRepository = SettingsRepository(dbQueue: dbQueue)
         let localConversationRepository = ConversationRepository(dbQueue: dbQueue)
         conversationRepository = localConversationRepository
         let localAttachmentRepository = AttachmentRepository()
         attachmentRepository = localAttachmentRepository
+        try localAttachmentRepository.prepareProtectedStorage()
+        try AppGroupShareStorage.prepareProtectedStorage()
+        try ConversationExportService.removeAbandonedExports()
         let staleSecretIDs = try localConversationRepository.secretConversationIDs()
         var staleSecretPaths: [String] = []
         for id in staleSecretIDs {

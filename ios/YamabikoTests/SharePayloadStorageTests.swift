@@ -28,6 +28,21 @@ final class SharePayloadStorageTests: XCTestCase {
         XCTAssertNil(AppGroupShareStorage.consumePayloadData())
     }
 
+    func testQueueAndQuarantineRemainExcludedFromBackup() throws {
+        let data = Data("private shared draft".utf8)
+        XCTAssertTrue(AppGroupShareStorage.writePayloadData(data))
+        let queue = try XCTUnwrap(AppGroupShareStorage.payloadQueueURL())
+        let file = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: queue, includingPropertiesForKeys: nil).first)
+        for url in [queue, file] {
+            XCTAssertEqual(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+        }
+        let pending = try XCTUnwrap(AppGroupShareStorage.peekPayload())
+        XCTAssertTrue(AppGroupShareStorage.quarantine(pending))
+        let failed = tempContainerURL.appendingPathComponent(AppGroupShareStorage.failedPayloadDirectoryName)
+        let quarantined = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: failed, includingPropertiesForKeys: nil).first)
+        XCTAssertEqual(try quarantined.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+    }
+
     func testSharePayloadPersisterUsesAppGroupFile() {
         try! SharePayloadPersister.save(text: "shared text", sourceApp: "Safari")
 

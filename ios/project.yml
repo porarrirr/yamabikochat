@@ -140,6 +140,7 @@ targets:
         includes:
           - AppConstants.swift
           - AppGroupShareStorage.swift
+          - ProtectedFileStorage.swift
           - SharePayload.swift
     resources:
       - path: YamabikoShareExtension/PrivacyInfo.xcprivacy

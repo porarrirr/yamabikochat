@@ -4,6 +4,16 @@ import ZIPFoundation
 @testable import YamabikoChat
 
 final class ConversationExportTests: XCTestCase {
+    func testStartupCleanupRemovesAbandonedZipAndStagingCopies() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("YamabikoChatExports", isDirectory: true)
+        let staging = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try ProtectedFileStorage.createDirectory(staging)
+        try ProtectedFileStorage.write(Data("private export".utf8), to: root.appendingPathComponent("abandoned.zip"))
+        try ProtectedFileStorage.write(Data("private staged export".utf8), to: staging.appendingPathComponent("conversation.json"))
+        try ConversationExportService.removeAbandonedExports()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
+        try ConversationExportService.removeAbandonedExports()
+    }
     func testHistoricalFusionDiagnosticsRemainExportable() throws {
         let database = try DatabaseQueue()
         try AppDatabase.migrator.migrate(database)
@@ -144,6 +154,7 @@ final class ConversationExportTests: XCTestCase {
         XCTAssertEqual(snapshot.executionMetrics.first?.turnId, "turn-1")
 
         let archiveURL = try ConversationExportService.createArchive(snapshot: snapshot, mode: .fullDiagnostics)
+        XCTAssertEqual(try archiveURL.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
         defer { try? FileManager.default.removeItem(at: archiveURL) }
         XCTAssertEqual(archiveURL.pathExtension, "zip")
 
