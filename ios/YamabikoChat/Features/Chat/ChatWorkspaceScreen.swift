@@ -24,29 +24,51 @@ struct ChatWorkspaceScreen: View {
     var onSelectConversation: ((Int64) -> Void)?
     @State private var exportedArchive: ConversationExportShareItem?
     @State private var isExporting = false
+    @State private var topBarMetrics = ChatTopBarMetrics()
     @StateObject private var workspaceStore = ChatWorkspaceStore()
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-
-            ChatScreen(
-                viewModel: viewModel,
-                questionCoordinator: container.userQuestionCoordinator,
-                onNavigateToConversation: { newConversationId in
-                    if let onSelectConversation {
-                        onSelectConversation(newConversationId)
+        ChatScreen(
+            viewModel: viewModel,
+            questionCoordinator: container.userQuestionCoordinator,
+            timelineTopInset: topBarMetrics.topOffset + topBarMetrics.height,
+            onNavigateToConversation: { newConversationId in
+                if let onSelectConversation {
+                    onSelectConversation(newConversationId)
+                } else {
+                    if reduceMotion {
+                        appState.selectedConversationID = newConversationId
                     } else {
-                        if reduceMotion {
+                        withAnimation(.easeOut(duration: 0.25)) {
                             appState.selectedConversationID = newConversationId
-                        } else {
-                            withAnimation(.easeOut(duration: 0.25)) {
-                                appState.selectedConversationID = newConversationId
-                            }
                         }
                     }
                 }
-            )
+            }
+        )
+        // The timeline runs edge to edge behind the header, so the messages
+        // scrolling underneath remain visible through it.
+        .ignoresSafeArea(.container, edges: .top)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            topBar
+                .background(alignment: .bottom) {
+                    ChatTopBarScrim()
+                        .frame(height: topBarMetrics.height + topBarMetrics.topOffset)
+                }
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(
+                            key: ChatTopBarMetricsKey.self,
+                            value: ChatTopBarMetrics(
+                                height: proxy.size.height,
+                                topOffset: proxy.frame(in: .global).minY
+                            )
+                        )
+                    }
+                )
+        }
+        .onPreferenceChange(ChatTopBarMetricsKey.self) { metrics in
+            topBarMetrics = metrics
         }
         .siriConversationContext(id: conversationID, isSecret: viewModel.isSecretConversation || !viewModel.isConversationLoaded)
         .background(workspaceBackground.ignoresSafeArea())
@@ -197,14 +219,10 @@ struct ChatWorkspaceScreen: View {
         .padding(.horizontal, 12)
         .padding(.top, 8)
         .padding(.bottom, 7)
-        .background(
-            Rectangle()
-                .fill(Color(uiColor: .amoledSystemBackground).opacity(0.98))
-                .overlay(alignment: .bottom) {
-                    Divider()
-                        .opacity(0.18)
-                }
-        )
+        .overlay(alignment: .bottom) {
+            Divider()
+                .opacity(0.18)
+        }
     }
 
     private var primaryAction: ChatWorkspacePrimaryAction {
@@ -429,6 +447,35 @@ struct ChatWorkspaceScreen: View {
 
     private func openConversationHistory() {
         appState.requestConversationSidebarReveal()
+    }
+}
+
+private struct ChatTopBarMetrics: Equatable {
+    var height: CGFloat = 0
+    /// Distance from the top of the window to the header. The scrim background
+    /// grows by this much so it also covers the status bar.
+    var topOffset: CGFloat = 0
+}
+
+private struct ChatTopBarMetricsKey: PreferenceKey {
+    static var defaultValue = ChatTopBarMetrics()
+
+    static func reduce(value: inout ChatTopBarMetrics, nextValue: () -> ChatTopBarMetrics) {
+        let next = nextValue()
+        guard next.height > 0 else { return }
+        value = next
+    }
+}
+
+// The header stays fully readable while the messages scrolled underneath it
+// remain visible. A UIKit blur cannot sample the SwiftUI-hosted timeline cells,
+// so the see-through comes from a translucent scrim instead.
+private struct ChatTopBarScrim: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Color(uiColor: .amoledSystemBackground)
+            .opacity(colorScheme == .dark ? 0.88 : 0.92)
     }
 }
 

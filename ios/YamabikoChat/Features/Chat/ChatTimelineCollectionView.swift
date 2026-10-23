@@ -7,6 +7,7 @@ struct ChatTimelineCollectionView: UIViewControllerRepresentable {
     @Binding var isFollowingTail: Bool
     @Binding var unreadCount: Int
     let scrollToLatestRequest: Int
+    let topOverlayInset: CGFloat
     let regeneratableMessageID: Int64?
     let dualSplitLayout: String
     let dualSplitRatio: Double
@@ -32,6 +33,7 @@ struct ChatTimelineCollectionView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ controller: ChatTimelineViewController, context: Context) {
+        controller.applyTimelineTopInset(topOverlayInset)
         controller.configure(
             store: store,
             scrollToLatestRequest: scrollToLatestRequest,
@@ -81,6 +83,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
     private var previousDualSplitRatio = 0.5
     private var isTimelineVisible = true
     private var lastPublishedFollowState: (following: Bool, unread: Int)?
+    private var timelineTopInset: CGFloat = 0
 
     var regeneratableMessageID: Int64?
     var dualSplitLayout = "VERTICAL"
@@ -107,6 +110,9 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         collectionView.backgroundColor = .amoledSystemBackground
         collectionView.alwaysBounceVertical = true
+        // The timeline sits behind the chat header, so its insets come from the
+        // workspace layout instead of UIKit's safe area adjustment.
+        collectionView.contentInsetAdjustmentBehavior = .never
         collectionView.keyboardDismissMode = .interactive
         collectionView.delegate = self
         // Streaming rows are measured explicitly in completePendingRowMeasurement().
@@ -165,6 +171,49 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         }
     }
 
+    /// Reserves room for the translucent header that floats above the timeline.
+    /// The header covers the status bar too, so the inset is measured from the
+    /// top of the window rather than from the scroll view's safe area.
+    func applyTimelineTopInset(_ inset: CGFloat) {
+        loadViewIfNeeded()
+        let clamped = max(0, inset)
+        let delta = clamped - timelineTopInset
+        guard abs(delta) > TailFollowPolicy.offsetTolerance else { return }
+        timelineTopInset = clamped
+        updateTimelineContentInsets()
+        guard collectionView.bounds.height > 0,
+              collectionView.contentSize.height > 0 else { return }
+        // Every row moved down by `delta`, so the same content stays visible.
+        collectionView.layoutIfNeeded()
+        let adjustedInset = collectionView.adjustedContentInset
+        let lowerBound = -adjustedInset.top
+        let upperBound = max(
+            lowerBound,
+            collectionView.contentSize.height - collectionView.bounds.height + adjustedInset.bottom
+        )
+        let target = TailFollowPolicy.restoredOffset(
+            anchorMinY: collectionView.contentOffset.y + delta,
+            offsetWithinViewport: 0,
+            lowerBound: lowerBound,
+            upperBound: upperBound
+        )
+        collectionView.setContentOffset(CGPoint(x: collectionView.contentOffset.x, y: target), animated: false)
+    }
+
+    private func updateTimelineContentInsets() {
+        guard let layout = collectionView.collectionViewLayout as? ChatTimelineLayout else { return }
+        let horizontal: CGFloat = collectionView.bounds.width >= 700 ? 28 : 18
+        let insets = UIEdgeInsets(
+            top: 20 + timelineTopInset,
+            left: horizontal,
+            bottom: 24,
+            right: horizontal
+        )
+        guard insets != layout.contentInsets else { return }
+        layout.contentInsets = insets
+        layout.invalidateLayout()
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         maintainViewportLockIfNeeded()
@@ -175,8 +224,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         lastViewportSize = viewportSize
         if widthChanged,
            let layout = collectionView.collectionViewLayout as? ChatTimelineLayout {
-            let horizontal: CGFloat = viewportSize.width >= 700 ? 28 : 18
-            layout.contentInsets = UIEdgeInsets(top: 20, left: horizontal, bottom: 24, right: horizontal)
+            updateTimelineContentInsets()
             layout.resetMeasuredHeights()
             layout.invalidateLayout()
         }

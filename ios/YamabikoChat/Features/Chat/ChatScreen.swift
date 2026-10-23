@@ -492,6 +492,7 @@ struct ChatScreen: View {
     @EnvironmentObject private var appState: AppState
     @ObservedObject var viewModel: ChatViewModel
     @ObservedObject var questionCoordinator: UserQuestionCoordinator
+    var timelineTopInset: CGFloat = 0
     var onNavigateToConversation: ((Int64) -> Void)? = nil
 
     @Environment(\.scenePhase) private var scenePhase
@@ -520,6 +521,7 @@ struct ChatScreen: View {
                 isFollowingTail: $isFollowingTail,
                 unreadCount: $unreadCount,
                 scrollToLatestRequest: scrollToLatestRequest,
+                topOverlayInset: timelineTopInset,
                 regeneratableMessageID: viewModel.canRegenerateLastAssistant
                     ? viewModel.fullMessages.last?.id
                     : nil,
